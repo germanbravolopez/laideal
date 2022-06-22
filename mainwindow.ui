@@ -145,6 +145,9 @@
     <property name="locale">
      <locale language="Spanish" country="Spain"/>
     </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QLabel" name="lbl_date_recep">
     <property name="geometry">

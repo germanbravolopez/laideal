@@ -12,7 +12,9 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    initial_settings();
+    db = QSqlDatabase::addDatabase("QSQLITE");
+    db.setDatabaseName("C:/Users/GERBRA/MyDocuments/LaIdeal/qt/laideal/laideal.db");
+    mainwindow_initial_settings();
 }
 
 MainWindow::~MainWindow()
@@ -20,7 +22,7 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::initial_settings()
+void MainWindow::mainwindow_initial_settings()
 {
     MainWindow::setWindowTitle("La Ideal");
     // Table settings
@@ -31,6 +33,23 @@ void MainWindow::initial_settings()
     set_service_to_cb();
     // Date settings
     ui->de_date_recep->setDate(QDate::currentDate());
+    // Set ticket number
+    QSqlQuery q;
+    db.open();
+    q.exec("SELECT MAX(n_recibo) FROM ingresos");
+    if (q.isSelect())
+    {
+        if(q.first())
+        {
+            ui->le_nr_ticket->setText(QString::number(q.value(0).toInt() + 1));
+        }
+        else
+            qDebug() << "Query is not available!";
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
 }
 
 void MainWindow::set_service_to_cb()
@@ -55,7 +74,6 @@ void MainWindow::on_pb_payment_toggled(bool checked)
         ui->pb_payment->setText("NO");
     }
 }
-
 
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 {
