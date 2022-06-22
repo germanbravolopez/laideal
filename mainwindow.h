@@ -22,6 +22,7 @@ public:
 
 private slots:
     void mainwindow_initial_settings();
+    void set_next_ticket_number();
     void set_service_to_cb();
     void reset_all_contents();
     void on_pb_payment_toggled(bool checked);

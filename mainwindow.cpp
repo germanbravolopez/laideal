@@ -33,16 +33,18 @@ void MainWindow::mainwindow_initial_settings()
     set_service_to_cb();
     // Date settings
     ui->de_date_recep->setDate(QDate::currentDate());
-    // Set ticket number
+    set_next_ticket_number();
+}
+
+void MainWindow::set_next_ticket_number()
+{
     QSqlQuery q;
     db.open();
     q.exec("SELECT MAX(n_recibo) FROM ingresos");
     if (q.isSelect())
     {
         if(q.first())
-        {
             ui->le_nr_ticket->setText(QString::number(q.value(0).toInt() + 1));
-        }
         else
             qDebug() << "Query is not available!";
     }
@@ -66,21 +68,15 @@ void MainWindow::set_service_to_cb()
 void MainWindow::on_pb_payment_toggled(bool checked)
 {
     if (checked)
-    {
         ui->pb_payment->setText("SI");
-    }
     else
-    {
         ui->pb_payment->setText("NO");
-    }
 }
 
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 {
     if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
-    {
         reset_all_contents();
-    }
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save))
     {
         // save_ticket();
@@ -95,8 +91,8 @@ void MainWindow::reset_all_contents()
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
     ui->le_phone->clear();
-    //update_ticket();
     ui->pb_payment->setChecked(false);
     ui->table_ticket->clearContents();
     set_service_to_cb();
+    set_next_ticket_number();
 }
