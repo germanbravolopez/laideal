@@ -35,6 +35,7 @@ void MainWindow::mainwindow_initial_settings()
     ui->de_date_recep->setDate(QDate::currentDate());
     set_next_ticket_number();
     populate_cb_client();
+    reset_all_contents();
 }
 
 void MainWindow::set_next_ticket_number()
