@@ -34,6 +34,7 @@ void MainWindow::mainwindow_initial_settings()
     // Date settings
     ui->de_date_recep->setDate(QDate::currentDate());
     set_next_ticket_number();
+    populate_cb_client();
 }
 
 void MainWindow::set_next_ticket_number()
@@ -52,6 +53,24 @@ void MainWindow::set_next_ticket_number()
         qDebug() << "Query is not Select!";
     q.clear();
     db.close();
+}
+
+void MainWindow::populate_cb_client()
+{
+    QSqlQuery q;
+    db.open();
+    QString query = QString::fromStdString("SELECT nombre FROM clientes");
+    q.exec(query);
+    if (q.isSelect())
+    {
+        while(q.next())
+            ui->cb_client->addItem(q.value(0).toString());
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    ui->cb_client->setCurrentText("");
 }
 
 void MainWindow::set_service_to_cb()
