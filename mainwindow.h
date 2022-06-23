@@ -22,12 +22,15 @@ public:
 
 private slots:
     void mainwindow_initial_settings();
+
     void set_next_ticket_number();
-    void populate_cb_client();
     void set_service_to_cb();
+    void populate_cb_client();
     void reset_all_contents();
+
     void on_pb_payment_toggled(bool checked);
     void on_bb_save_reset_clicked(QAbstractButton *button);
+    void on_cb_client_editTextChanged(const QString &arg1);
 
 private:
     Ui::MainWindow *ui;

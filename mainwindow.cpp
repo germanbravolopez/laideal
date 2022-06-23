@@ -39,8 +39,8 @@ void MainWindow::mainwindow_initial_settings()
 
 void MainWindow::set_next_ticket_number()
 {
-    QSqlQuery q;
     db.open();
+    QSqlQuery q;
     q.exec("SELECT MAX(n_recibo) FROM ingresos");
     if (q.isSelect())
     {
@@ -57,14 +57,15 @@ void MainWindow::set_next_ticket_number()
 
 void MainWindow::populate_cb_client()
 {
-    QSqlQuery q;
     db.open();
-    QString query = QString::fromStdString("SELECT nombre FROM clientes");
-    q.exec(query);
+    QSqlQuery q;
+    q.exec(QString::fromStdString("SELECT nombre FROM clientes"));
     if (q.isSelect())
     {
+        QStringList client_list;
         while(q.next())
-            ui->cb_client->addItem(q.value(0).toString());
+            client_list.append(q.value(0).toString());
+        ui->cb_client->addItems(client_list);
     }
     else
         qDebug() << "Query is not Select!";
@@ -82,6 +83,19 @@ void MainWindow::set_service_to_cb()
         comBox->addItem("Plancha");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
     }
+}
+
+void MainWindow::reset_all_contents()
+{
+    ui->cb_client->clearEditText();
+    ui->le_addr->clear();
+    ui->le_cost_total->clear();
+    ui->le_mobile->clear();
+    ui->le_phone->clear();
+    ui->pb_payment->setChecked(false);
+    ui->table_ticket->clearContents();
+    set_service_to_cb();
+    set_next_ticket_number();
 }
 
 void MainWindow::on_pb_payment_toggled(bool checked)
@@ -103,15 +117,48 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     }
 }
 
-void MainWindow::reset_all_contents()
+void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
-    ui->cb_client->clearEditText();
-    ui->le_addr->clear();
-    ui->le_cost_total->clear();
-    ui->le_mobile->clear();
-    ui->le_phone->clear();
-    ui->pb_payment->setChecked(false);
-    ui->table_ticket->clearContents();
-    set_service_to_cb();
-    set_next_ticket_number();
+    if (arg1 != "")
+    {
+        db.open();
+        // fill client phone
+        QSqlQuery q;
+        q.exec(QString::fromStdString("SELECT tel_fijo FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
+        if (q.isSelect())
+        {
+            if(q.first())
+                ui->le_phone->setText(q.value(0).toString());
+            else
+                qDebug() << "Query is not available!";
+        }
+        else
+            qDebug() << "Query is not Select!";
+        q.clear();
+        // fill client mobile
+        q.exec(QString::fromStdString("SELECT movil FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
+        if (q.isSelect())
+        {
+            if(q.first())
+                ui->le_mobile->setText(q.value(0).toString());
+            else
+                qDebug() << "Query is not available!";
+        }
+        else
+            qDebug() << "Query is not Select!";
+        q.clear();
+        // fill client address
+        q.exec(QString::fromStdString("SELECT direccion FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
+        if (q.isSelect())
+        {
+            if(q.first())
+                ui->le_addr->setText(q.value(0).toString());
+            else
+                qDebug() << "Query is not available!";
+        }
+        else
+            qDebug() << "Query is not Select!";
+        q.clear();
+        db.close();
+    }
 }
