@@ -30,12 +30,26 @@ void MainWindow::mainwindow_initial_settings()
     ui->table_ticket->setColumnWidth(TABLE_TICKET_CANT, 60);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_PREN, 400);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 110);
-    set_service_to_cb();
     // Date settings
     ui->de_date_recep->setDate(QDate::currentDate());
+    // Push button settings
+    ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+    reset_all_contents();
+}
+
+void MainWindow::reset_all_contents()
+{
+    ui->cb_client->clear();
+    ui->le_addr->clear();
+    ui->le_cost_total->clear();
+    ui->le_mobile->clear();
+    ui->le_phone->clear();
+    ui->pb_payment->setChecked(false);
+    ui->table_ticket->clearContents();
     set_next_ticket_number();
     populate_cb_client();
-    reset_all_contents();
+    set_service_to_cb();
+    set_garment_to_cb_and_populate();
 }
 
 void MainWindow::set_next_ticket_number()
@@ -86,25 +100,46 @@ void MainWindow::set_service_to_cb()
     }
 }
 
-void MainWindow::reset_all_contents()
+void MainWindow::set_garment_to_cb_and_populate()
 {
-    ui->cb_client->clearEditText();
-    ui->le_addr->clear();
-    ui->le_cost_total->clear();
-    ui->le_mobile->clear();
-    ui->le_phone->clear();
-    ui->pb_payment->setChecked(false);
-    ui->table_ticket->clearContents();
-    set_service_to_cb();
-    set_next_ticket_number();
+    // get garment from db to a string list
+    db.open();
+    QSqlQuery q;
+    q.exec(QString::fromStdString("SELECT nombre FROM prendas"));
+    QStringList garment_list;
+    if (q.isSelect())
+    {
+        while(q.next())
+            garment_list.append(q.value(0).toString());
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    // create cb for all garment and populate the list
+    for (int row=0; row < ui->table_ticket->rowCount(); row++)
+    {
+        QComboBox *comBoxPrenda = new QComboBox();
+        comBoxPrenda->setAutoFillBackground(true);
+        comBoxPrenda->setEditable(true);
+        comBoxPrenda->addItems(garment_list);
+        comBoxPrenda->setCurrentText("");
+        ui->table_ticket->setCellWidget(row, TABLE_TICKET_PREN, comBoxPrenda);
+    }
 }
 
 void MainWindow::on_pb_payment_toggled(bool checked)
 {
     if (checked)
+    {
         ui->pb_payment->setText("SI");
+        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
+    }
     else
+    {
         ui->pb_payment->setText("NO");
+        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+    }
 }
 
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)

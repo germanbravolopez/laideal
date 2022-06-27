@@ -26,6 +26,7 @@ private slots:
     void set_next_ticket_number();
     void set_service_to_cb();
     void populate_cb_client();
+    void set_garment_to_cb_and_populate();
     void reset_all_contents();
 
     void on_pb_payment_toggled(bool checked);
