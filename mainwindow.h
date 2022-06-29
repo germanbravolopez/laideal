@@ -32,6 +32,7 @@ private slots:
     void on_pb_payment_toggled(bool checked);
     void on_bb_save_reset_clicked(QAbstractButton *button);
     void on_cb_client_editTextChanged(const QString &arg1);
+    void on_table_ticket_cellChanged(int row, int column);
 
 private:
     Ui::MainWindow *ui;

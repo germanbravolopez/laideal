@@ -13,7 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/Users/GERBRA/MyDocuments/LaIdeal/qt/laideal/laideal.db");
+    db.setDatabaseName("C:/Users/GERBRA/AppData/Roaming/laideal/laideal.db");
     mainwindow_initial_settings();
 }
 
@@ -40,16 +40,16 @@ void MainWindow::mainwindow_initial_settings()
 void MainWindow::reset_all_contents()
 {
     ui->cb_client->clear();
-    ui->le_addr->clear();
-    ui->le_cost_total->clear();
-    ui->le_mobile->clear();
-    ui->le_phone->clear();
-    ui->pb_payment->setChecked(false);
     ui->table_ticket->clearContents();
     set_next_ticket_number();
     populate_cb_client();
     set_service_to_cb();
     set_garment_to_cb_and_populate();
+    ui->le_addr->clear();
+    ui->le_cost_total->clear();
+    ui->le_mobile->clear();
+    ui->le_phone->clear();
+    ui->pb_payment->setChecked(false);
 }
 
 void MainWindow::set_next_ticket_number()
@@ -124,6 +124,7 @@ void MainWindow::set_garment_to_cb_and_populate()
         comBoxPrenda->setEditable(true);
         comBoxPrenda->addItems(garment_list);
         comBoxPrenda->setCurrentText("");
+        comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_PREN, comBoxPrenda);
     }
 }
@@ -196,5 +197,49 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
             qDebug() << "Query is not Select!";
         q.clear();
         db.close();
+    }
+}
+
+void MainWindow::on_table_ticket_cellChanged(int row, int column)
+{
+    QSqlQuery q;
+    QString sql_query;
+
+    qDebug() << ui->table_ticket->cellWidget(row, column + 1)->whatsThis();
+    qDebug() << ui->table_ticket->findItems("cb_prenda_0", Qt::MatchCaseSensitive).data();
+            //->itemText(0).toStdString();
+    switch (column)
+    {
+        case TABLE_TICKET_CANT:
+            break;
+        case TABLE_TICKET_PREN:
+            // look the name of the garment in the db
+            db.open();
+            if (ui->table_ticket->item(row, column)->text().toStdString() == "Limpieza")
+            {
+                sql_query = "SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + ui->table_ticket->item(row, column)->text() + "%'";
+            }
+            else if (ui->table_ticket->item(row, column)->text().toStdString() == "Plancha")
+            {
+                sql_query = "SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + ui->table_ticket->item(row, column)->text() + "%'";
+            }
+            q.exec(sql_query);
+            if (q.isSelect())
+            {
+                if(q.first())
+                    ui->table_ticket->item(row, TABLE_TICKET_IMPO)->setText(q.value(0).toString());
+                else
+                    qDebug() << "Query is not available!";
+            }
+            else
+                qDebug() << "Query is not Select!";
+            q.clear();
+            break;
+        case TABLE_TICKET_TAMA:
+            break;
+        case TABLE_TICKET_SERV:
+            break;
+        case TABLE_TICKET_IMPO:
+            break;
     }
 }
