@@ -13,7 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/Users/GERBRA/AppData/Roaming/laideal/laideal.db");
+    db.setDatabaseName("C:/MyDocuments/TintoLaIdeal/laideal/laideal.db");
     mainwindow_initial_settings();
 }
 
