@@ -34,6 +34,8 @@ private slots:
     void on_cb_client_editTextChanged(const QString &arg1);
     void on_table_ticket_cellChanged(int row, int column);
 
+    void indexChanged(int index);
+
 private:
     Ui::MainWindow *ui;
 };

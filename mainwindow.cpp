@@ -13,7 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/MyDocuments/TintoLaIdeal/laideal/laideal.db");
+    db.setDatabaseName("C:/work/tintoreria/laideal/laideal.db");
     mainwindow_initial_settings();
 }
 
@@ -200,14 +200,26 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
     }
 }
 
+void MainWindow::indexChanged(int index)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << index;
+}
+
 void MainWindow::on_table_ticket_cellChanged(int row, int column)
 {
     QSqlQuery q;
     QString sql_query;
 
-    qDebug() << ui->table_ticket->cellWidget(row, column + 1)->whatsThis();
-    qDebug() << ui->table_ticket->findItems("cb_prenda_0", Qt::MatchCaseSensitive).data();
-            //->itemText(0).toStdString();
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+
+    connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN)),
+            SIGNAL(currentIndexChanged(int)),
+            this, SLOT(indexChanged(int)));
+
     switch (column)
     {
         case TABLE_TICKET_CANT:
