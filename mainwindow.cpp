@@ -13,7 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/work/tintoreria/laideal/laideal.db");
+    db.setDatabaseName("C:/work/personal_projects/tintoreria/laideal/laideal.db");
     mainwindow_initial_settings();
 }
 
@@ -126,7 +126,54 @@ void MainWindow::set_garment_to_cb_and_populate()
         comBoxPrenda->setCurrentText("");
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_PREN, comBoxPrenda);
+        // connect each ComboBox to a different function
+        if (row == 0) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_0(QString)));
+        } else if (row == 1) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(1, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_1(QString)));
+        } else if (row == 2) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(2, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_2(QString)));
+        } else if (row == 3) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(3, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_3(QString)));
+        } else if (row == 4) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(4, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_4(QString)));
+        } else if (row == 5) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(5, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_5(QString)));
+        } else if (row == 6) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(6, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_6(QString)));
+        } else if (row == 7) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(7, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_7(QString)));
+        } else if (row == 8) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(8, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_8(QString)));
+        } else if (row == 9) {
+            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(9, TABLE_TICKET_PREN)),
+                    SIGNAL(currentTextChanged(QString)),
+                    this, SLOT(textChanged_9(QString)));
+        }
     }
+}
+
+void MainWindow::get_garment_price()
+{
+
 }
 
 void MainWindow::on_pb_payment_toggled(bool checked)
@@ -156,6 +203,7 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
+    bool client_exists;
     if (arg1 != "")
     {
         db.open();
@@ -164,88 +212,57 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
         q.exec(QString::fromStdString("SELECT tel_fijo FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
         if (q.isSelect())
         {
-            if(q.first())
+            if (q.first()) {
                 ui->le_phone->setText(q.value(0).toString());
-            else
-                qDebug() << "Query is not available!";
-        }
-        else
-            qDebug() << "Query is not Select!";
-        q.clear();
-        // fill client mobile
-        q.exec(QString::fromStdString("SELECT movil FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
-        if (q.isSelect())
-        {
-            if(q.first())
-                ui->le_mobile->setText(q.value(0).toString());
-            else
-                qDebug() << "Query is not available!";
-        }
-        else
-            qDebug() << "Query is not Select!";
-        q.clear();
-        // fill client address
-        q.exec(QString::fromStdString("SELECT direccion FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
-        if (q.isSelect())
-        {
-            if(q.first())
-                ui->le_addr->setText(q.value(0).toString());
-            else
-                qDebug() << "Query is not available!";
-        }
-        else
-            qDebug() << "Query is not Select!";
-        q.clear();
-        db.close();
-    }
-}
-
-void MainWindow::indexChanged(int index)
-{
-    // Do something here on ComboBox index change
-    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN));
-    qDebug() << myCB->currentText();
-    qDebug() << index;
-}
-
-void MainWindow::on_table_ticket_cellChanged(int row, int column)
-{
-    QSqlQuery q;
-    QString sql_query;
-
-    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN));
-    qDebug() << myCB->currentText();
-
-    connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN)),
-            SIGNAL(currentIndexChanged(int)),
-            this, SLOT(indexChanged(int)));
-
-    switch (column)
-    {
-        case TABLE_TICKET_CANT:
-            break;
-        case TABLE_TICKET_PREN:
-            // look the name of the garment in the db
-            db.open();
-            if (ui->table_ticket->item(row, column)->text().toStdString() == "Limpieza")
-            {
-                sql_query = "SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + ui->table_ticket->item(row, column)->text() + "%'";
+                client_exists = 1;
+            } else {
+                qDebug() << "Client is not found in the database.";
+                client_exists = 0;
             }
-            else if (ui->table_ticket->item(row, column)->text().toStdString() == "Plancha")
-            {
-                sql_query = "SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + ui->table_ticket->item(row, column)->text() + "%'";
-            }
-            q.exec(sql_query);
+        }
+        else {
+            qDebug() << "Query is not Select!";
+            client_exists = 0;
+        }
+        q.clear();
+        if (client_exists) {
+            // fill client mobile
+            q.exec(QString::fromStdString("SELECT movil FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
             if (q.isSelect())
             {
-                if(q.first())
-                    ui->table_ticket->item(row, TABLE_TICKET_IMPO)->setText(q.value(0).toString());
+                if (q.first())
+                    ui->le_mobile->setText(q.value(0).toString());
                 else
                     qDebug() << "Query is not available!";
             }
             else
                 qDebug() << "Query is not Select!";
             q.clear();
+            // fill client address
+            q.exec(QString::fromStdString("SELECT direccion FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
+            if (q.isSelect())
+            {
+                if (q.first())
+                    ui->le_addr->setText(q.value(0).toString());
+                else
+                    qDebug() << "Query is not available!";
+            }
+            else
+                qDebug() << "Query is not Select!";
+            q.clear();
+        }
+        db.close();
+    }
+}
+
+void MainWindow::on_table_ticket_cellChanged(int row, int column)
+{
+    switch (column)
+    {
+        case TABLE_TICKET_CANT:
+            break;
+        case TABLE_TICKET_PREN:
+            // textChanged_X are created, this case is never accessed
             break;
         case TABLE_TICKET_TAMA:
             break;
@@ -254,4 +271,105 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         case TABLE_TICKET_IMPO:
             break;
     }
+}
+
+void MainWindow::textChanged_0(const QString &text)
+{
+    int garment_row = 0;
+    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
+    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_PREN));
+    // check garment is included in combobox
+    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
+    {
+        // look the name of the garment in the db
+        db.open();
+        QSqlQuery q;
+        if (cb_service->currentText() == "Limpieza")
+        {
+            qDebug() << text;
+            q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + text.toStdString() + "'"));
+        } else if (cb_service->currentText() == "Plancha")
+        {
+            q.exec(QString::fromStdString("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + text.toStdString() + "'"));
+        }
+        if (q.isSelect())
+        {
+            if (q.first()) {
+                //qDebug() << ui->table_ticket->item(garment_row, TABLE_TICKET_CANT)->text();
+                QString price = q.value(0).toString();
+                QTableWidgetItem *item = new QTableWidgetItem;
+                item->setText(price);
+                ui->table_ticket->setItem(garment_row, TABLE_TICKET_IMPO, item);
+            } else {
+                qDebug() << "Query is not available.";
+            }
+        }
+        else {
+            qDebug() << "Query is not Select!";
+        }
+        q.clear();
+    }
+}
+void MainWindow::textChanged_1(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(1, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_2(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(2, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_3(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(3, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_4(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(4, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_5(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(5, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_6(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(6, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_7(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(7, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_8(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(8, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
+}
+void MainWindow::textChanged_9(const QString &text)
+{
+    // Do something here on ComboBox index change
+    QComboBox *myCB = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(9, TABLE_TICKET_PREN));
+    qDebug() << myCB->currentText();
+    qDebug() << text;
 }
