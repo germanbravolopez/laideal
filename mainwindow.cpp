@@ -127,46 +127,58 @@ void MainWindow::set_garment_to_cb_and_populate()
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_PREN, comBoxPrenda);
         // connect each ComboBox to a different function
-        if (row == 0) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_0(QString)));
-        } else if (row == 1) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(1, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_1(QString)));
-        } else if (row == 2) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(2, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_2(QString)));
-        } else if (row == 3) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(3, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_3(QString)));
-        } else if (row == 4) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(4, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_4(QString)));
-        } else if (row == 5) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(5, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_5(QString)));
-        } else if (row == 6) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(6, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_6(QString)));
-        } else if (row == 7) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(7, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_7(QString)));
-        } else if (row == 8) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(8, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_8(QString)));
-        } else if (row == 9) {
-            connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(9, TABLE_TICKET_PREN)),
-                    SIGNAL(currentTextChanged(QString)),
-                    this, SLOT(textChanged_9(QString)));
+        switch (row)
+        {
+            case 0:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_0(QString)));
+                break;
+            case 1:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(1, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_1(QString)));
+                break;
+            case 2:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(2, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_2(QString)));
+                break;
+            case 3:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(3, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_3(QString)));
+                break;
+            case 4:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(4, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_4(QString)));
+                break;
+            case 5:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(5, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_5(QString)));
+                break;
+            case 6:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(6, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_6(QString)));
+                break;
+            case 7:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(7, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_7(QString)));
+                break;
+            case 8:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(8, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_8(QString)));
+                break;
+            case 9:
+                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(9, TABLE_TICKET_PREN)),
+                        SIGNAL(currentTextChanged(QString)),
+                        this, SLOT(textChanged_9(QString)));
+                break;
         }
     }
 }
@@ -257,9 +269,14 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 
 void MainWindow::on_table_ticket_cellChanged(int row, int column)
 {
+    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_PREN));
     switch (column)
     {
         case TABLE_TICKET_CANT:
+            if (cb_garment->currentText() != "")
+            {
+                qDebug() << cb_garment->currentText();
+            }
             break;
         case TABLE_TICKET_PREN:
             // textChanged_X are created, this case is never accessed
@@ -286,7 +303,7 @@ void MainWindow::textChanged_0(const QString &text)
         QSqlQuery q;
         if (cb_service->currentText() == "Limpieza")
         {
-            qDebug() << text;
+            //qDebug() << text;
             q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + text.toStdString() + "'"));
         } else if (cb_service->currentText() == "Plancha")
         {
@@ -295,11 +312,16 @@ void MainWindow::textChanged_0(const QString &text)
         if (q.isSelect())
         {
             if (q.first()) {
-                //qDebug() << ui->table_ticket->item(garment_row, TABLE_TICKET_CANT)->text();
-                QString price = q.value(0).toString();
-                QTableWidgetItem *item = new QTableWidgetItem;
-                item->setText(price);
-                ui->table_ticket->setItem(garment_row, TABLE_TICKET_IMPO, item);
+                QTableWidgetItem *cant(ui->table_ticket->item(garment_row, TABLE_TICKET_CANT));
+                if (cant)
+                {
+                    double price = cant->text().toFloat() * q.value(0).toString().toFloat();
+                    QTableWidgetItem *item = new QTableWidgetItem;
+                    item->setText(QString::number(price, 'f', 2));
+                    ui->table_ticket->setItem(garment_row, TABLE_TICKET_IMPO, item);
+                } else {
+                    qDebug() << "Cantidad is empty";
+                }
             } else {
                 qDebug() << "Query is not available.";
             }
