@@ -97,6 +97,10 @@ void MainWindow::set_service_to_cb()
         comBox->addItem("Limpieza");
         comBox->addItem("Plancha");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
+        // connect each ComboBox to a different function
+        connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
+                SIGNAL(currentTextChanged(QString)),
+                this, SLOT(cbServChanged(QString)));
     }
 }
 
@@ -127,74 +131,24 @@ void MainWindow::set_garment_to_cb_and_populate()
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_GARM, comBoxPrenda);
         // connect each ComboBox to a different function
-        switch (row)
-        {
-            case 0:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_0(QString)));
-                break;
-            case 1:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(1, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_1(QString)));
-                break;
-            case 2:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(2, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_2(QString)));
-                break;
-            case 3:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(3, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_3(QString)));
-                break;
-            case 4:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(4, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_4(QString)));
-                break;
-            case 5:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(5, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_5(QString)));
-                break;
-            case 6:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(6, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_6(QString)));
-                break;
-            case 7:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(7, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_7(QString)));
-                break;
-            case 8:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(8, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_8(QString)));
-                break;
-            case 9:
-                connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(9, TABLE_TICKET_GARM)),
-                        SIGNAL(currentTextChanged(QString)),
-                        this, SLOT(textChanged_9(QString)));
-                break;
-        }
+        connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM)),
+                SIGNAL(currentTextChanged(QString)),
+                this, SLOT(cbGarmChanged(QString)));
     }
 }
 
-void MainWindow::set_garment_price(int garment_row, std::string garment_text, QString service_text)
+void MainWindow::set_garment_price(int garment_row, QString garment_text, QString service_text)
 {
     db.open();
     QSqlQuery q;
     if (service_text == "Limpieza")
     {
         //qDebug() << text;
-        q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment_text + "'"));
+        q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
     }
     else if (service_text == "Plancha")
     {
-        q.exec(QString::fromStdString("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment_text + "'"));
+        q.exec(QString::fromStdString("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
     }
     if (q.isSelect())
     {
@@ -318,39 +272,7 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         if (cb_garment->currentText() != "")
         {
             //qDebug() << cb_garment->currentText();
-            switch(row)
-            {
-                case 0:
-                    textChanged_0(cb_garment->currentText());
-                    break;
-                case 1:
-                    textChanged_1(cb_garment->currentText());
-                    break;
-                case 2:
-                    textChanged_2(cb_garment->currentText());
-                    break;
-                case 3:
-                    textChanged_3(cb_garment->currentText());
-                    break;
-                case 4:
-                    textChanged_4(cb_garment->currentText());
-                    break;
-                case 5:
-                    textChanged_5(cb_garment->currentText());
-                    break;
-                case 6:
-                    textChanged_6(cb_garment->currentText());
-                    break;
-                case 7:
-                    textChanged_7(cb_garment->currentText());
-                    break;
-                case 8:
-                    textChanged_8(cb_garment->currentText());
-                    break;
-                case 9:
-                    textChanged_9(cb_garment->currentText());
-                    break;
-            }
+            cbGarmChanged(cb_garment->currentText());
         }
     }
     else if (column == TABLE_TICKET_PRIC)
@@ -373,113 +295,24 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
      */
 }
 
-void MainWindow::textChanged_0(const QString &text)
+void MainWindow::cbGarmChanged(const QString &text)
 {
-    int garment_row = 0;
+    int garment_row = ui->table_ticket->currentRow();
     QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
     // check garment is included in combobox
     if (cb_garment->findText(text, Qt::MatchExactly) != -1)
     {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
+        set_garment_price(garment_row, text, cb_service->currentText());
     }
 }
-void MainWindow::textChanged_1(const QString &text)
+
+void MainWindow::cbServChanged(const QString &text)
 {
-    int garment_row = 1;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
+    int service_row = ui->table_ticket->currentRow();
+    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(service_row, TABLE_TICKET_GARM));
+    if (cb_garment->currentText() != "")
     {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_2(const QString &text)
-{
-    int garment_row = 2;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_3(const QString &text)
-{
-    int garment_row = 3;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_4(const QString &text)
-{
-    int garment_row = 4;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_5(const QString &text)
-{
-    int garment_row = 5;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_6(const QString &text)
-{
-    int garment_row = 6;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_7(const QString &text)
-{
-    int garment_row = 7;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_8(const QString &text)
-{
-    int garment_row = 8;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
-    }
-}
-void MainWindow::textChanged_9(const QString &text)
-{
-    int garment_row = 9;
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
-        set_garment_price(garment_row, text.toStdString(), cb_service->currentText());
+        set_garment_price(service_row, cb_garment->currentText(), text);
     }
 }

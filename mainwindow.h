@@ -28,23 +28,15 @@ private slots:
     void populate_cb_client();
     void set_service_to_cb();
     void set_garment_to_cb_and_populate();
-    void set_garment_price(int garment_row, std::string garment_text, QString service_text);
+    void set_garment_price(int garment_row, QString garment_text, QString service_text);
 
     void on_pb_payment_toggled(bool checked);
     void on_bb_save_reset_clicked(QAbstractButton *button);
     void on_cb_client_editTextChanged(const QString &arg1);
     void on_table_ticket_cellChanged(int row, int column);
 
-    void textChanged_0(const QString &text);
-    void textChanged_1(const QString &text);
-    void textChanged_2(const QString &text);
-    void textChanged_3(const QString &text);
-    void textChanged_4(const QString &text);
-    void textChanged_5(const QString &text);
-    void textChanged_6(const QString &text);
-    void textChanged_7(const QString &text);
-    void textChanged_8(const QString &text);
-    void textChanged_9(const QString &text);
+    void cbGarmChanged(const QString &text);
+    void cbServChanged(const QString &text);
 
 private:
     Ui::MainWindow *ui;
