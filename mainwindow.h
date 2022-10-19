@@ -28,7 +28,7 @@ private slots:
     void populate_cb_client();
     void set_service_to_cb();
     void set_garment_to_cb_and_populate();
-    void get_garment_price();
+    void set_garment_price(int garment_row, std::string garment_text, QString service_text);
 
     void on_pb_payment_toggled(bool checked);
     void on_bb_save_reset_clicked(QAbstractButton *button);
