@@ -5,7 +5,8 @@
 #define TABLE_TICKET_GARM   1
 #define TABLE_TICKET_SIZE   2
 #define TABLE_TICKET_SERV   3
-#define TABLE_TICKET_PRIC   4
+#define TABLE_TICKET_OBSE   4
+#define TABLE_TICKET_PRIC   5
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -29,7 +30,8 @@ void MainWindow::mainwindow_initial_settings()
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_QNTY, 60);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_GARM, 400);
-    ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 110);
+    ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 70);
+    ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 150);
     // Date settings
     ui->de_date_recep->setDate(QDate::currentDate());
     // Push button settings
@@ -94,8 +96,9 @@ void MainWindow::set_service_to_cb()
     for (int row=0; row < ui->table_ticket->rowCount(); row++)
     {
         QComboBox *comBox = new QComboBox();
-        comBox->addItem("Limpieza");
-        comBox->addItem("Plancha");
+        comBox->addItem("Limp.");
+        comBox->addItem("Plan.");
+        comBox->setStyleSheet("background-color: white");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
         // connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
@@ -141,12 +144,12 @@ void MainWindow::set_garment_price(int garment_row, QString garment_text, QStrin
 {
     db.open();
     QSqlQuery q;
-    if (service_text == "Limpieza")
+    if (service_text == "Limp.")
     {
         //qDebug() << text;
         q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
     }
-    else if (service_text == "Plancha")
+    else if (service_text == "Plan.")
     {
         q.exec(QString::fromStdString("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
     }
