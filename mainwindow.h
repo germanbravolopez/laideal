@@ -27,8 +27,8 @@ private slots:
     void set_next_ticket_number();
     void populate_cb_client();
     void resize_table();
-    void set_service_to_cb();
-    void set_garment_to_cb_and_populate();
+    void set_service_to_cb(int initial_row);
+    void set_garment_to_cb_and_populate(int initial_row);
     void set_garment_price(int garment_row, QString garment_text, QString service_text);
 
     void on_pb_payment_toggled(bool checked);

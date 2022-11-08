@@ -30,6 +30,7 @@ void MainWindow::mainwindow_initial_settings()
     MainWindow::setWindowTitle("La Ideal");
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    ui->table_ticket->verticalHeader()->setVisible(false);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_QNTY, 60);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_GARM, 400);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 70);
@@ -48,8 +49,8 @@ void MainWindow::reset_all_contents()
     set_next_ticket_number();
     populate_cb_client();
     resize_table();
-    set_service_to_cb();
-    set_garment_to_cb_and_populate();
+    set_service_to_cb(0); // Set rows starting from 0
+    set_garment_to_cb_and_populate(0); // Set rows starting from 0
     ui->le_addr->clear();
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
@@ -103,25 +104,25 @@ void MainWindow::resize_table()
     pb_added_rows = 0;
 }
 
-void MainWindow::set_service_to_cb()
+void MainWindow::set_service_to_cb(int initial_row = 0)
 {
-    for (int row=0; row < ui->table_ticket->rowCount(); row++)
+    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++)
     {
         QComboBox *comBox = new QComboBox();
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
         comBox->setStyleSheet("background-color: white");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
-        // connect each ComboBox to a different function
+        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
                 SIGNAL(currentTextChanged(QString)),
                 this, SLOT(cbServChanged(QString)));
     }
 }
 
-void MainWindow::set_garment_to_cb_and_populate()
+void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
 {
-    // get garment from db to a string list
+    // Get garment from db to a string list
     db.open();
     QSqlQuery q;
     q.exec(QString::fromStdString("SELECT nombre FROM prendas"));
@@ -135,8 +136,8 @@ void MainWindow::set_garment_to_cb_and_populate()
         qDebug() << "Query is not Select!";
     q.clear();
     db.close();
-    // create cb for all garment and populate the list
-    for (int row=0; row < ui->table_ticket->rowCount(); row++)
+    // Create cb for all garment and populate the list
+    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++)
     {
         QComboBox *comBoxPrenda = new QComboBox();
         comBoxPrenda->setAutoFillBackground(true);
@@ -145,7 +146,7 @@ void MainWindow::set_garment_to_cb_and_populate()
         comBoxPrenda->setCurrentText("");
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_GARM, comBoxPrenda);
-        // connect each ComboBox to a different function
+        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM)),
                 SIGNAL(currentTextChanged(QString)),
                 this, SLOT(cbGarmChanged(QString)));
@@ -175,7 +176,7 @@ void MainWindow::set_garment_price(int garment_row, QString garment_text, QStrin
             if (qnty_item)
             {
                 double price = qnty_item->text().toFloat() * q.value(0).toString().toFloat();
-                // check if any size is filled
+                // Check if any size is filled
                 QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
                 if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0)
                 {
@@ -228,7 +229,7 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
     if (arg1 != "")
     {
         db.open();
-        // fill client phone
+        // Fill client phone
         QSqlQuery q;
         q.exec(QString::fromStdString("SELECT tel_fijo FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
         if (q.isSelect())
@@ -250,7 +251,7 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
         }
         q.clear();
         if (client_exists) {
-            // fill client mobile
+            // Fill client mobile
             q.exec(QString::fromStdString("SELECT movil FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
             if (q.isSelect())
             {
@@ -262,7 +263,7 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
             else
                 qDebug() << "Query is not Select!";
             q.clear();
-            // fill client address
+            // Fill client address
             q.exec(QString::fromStdString("SELECT direccion FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
             if (q.isSelect())
             {
@@ -314,6 +315,8 @@ void MainWindow::on_pb_add_row_clicked()
 {
     pb_added_rows++;
     ui->table_ticket->insertRow(ui->table_ticket->rowCount());
+    set_service_to_cb(ui->table_ticket->rowCount() - 1);
+    set_garment_to_cb_and_populate(ui->table_ticket->rowCount() - 1);
 }
 
 void MainWindow::cbGarmChanged(const QString &text)
@@ -321,7 +324,7 @@ void MainWindow::cbGarmChanged(const QString &text)
     int garment_row = ui->table_ticket->currentRow();
     QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
-    // check garment is included in combobox
+    // Check garment is included in combobox
     if (cb_garment->findText(text, Qt::MatchExactly) != -1)
     {
         set_garment_price(garment_row, text, cb_service->currentText());
