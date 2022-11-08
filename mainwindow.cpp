@@ -74,7 +74,7 @@ void MainWindow::set_next_ticket_number()
     q.exec("SELECT MAX(n_recibo) FROM ingresos");
     if (q.isSelect())
     {
-        if(q.first())
+        if (q.first())
             ui->le_nr_ticket->setText(QString::number(q.value(0).toInt() + 1));
         else
             qDebug() << "Query is not available!";
@@ -106,7 +106,7 @@ void MainWindow::populate_cb_client()
 
 void MainWindow::resize_table()
 {
-    for (int i=0; i < pb_added_rows; i++)
+    for (int row = 0; row < pb_added_rows; row++)
     {
         ui->table_ticket->removeRow(ui->table_ticket->rowCount() - 1);
     }
@@ -227,8 +227,11 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
         reset_all_contents();
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save))
     {
-        // save_ticket();
-        reset_all_contents();
+        if (validate_ticket())
+        {
+            save_ticket();
+            reset_all_contents();
+        }
     }
 }
 
@@ -303,7 +306,7 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
     else if (column == TABLE_TICKET_PRIC)
     {
         double total_price = 0.0;
-        for (int row_cnt=0; row_cnt < ui->table_ticket->rowCount(); row_cnt++)
+        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++)
         {
             QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
             if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
@@ -314,9 +317,7 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
     }
     /* Never accesed:
-     * else if (column == TABLE_TICKET_GARM || column == TABLE_TICKET_SERV)
-     * {
-     * }
+     * else if (column == TABLE_TICKET_GARM || column == TABLE_TICKET_SERV) {}
      */
 }
 
@@ -348,6 +349,71 @@ void MainWindow::cbServChanged(const QString &text)
     {
         set_garment_price(service_row, cb_garment->currentText(), text);
     }
+}
+
+bool MainWindow::validate_ticket()
+{
+    QMessageBox msgBox;
+    float total_cost = 0.0;
+    // Calculate the expected total cost
+    for (int row = 0; row < ui->table_ticket->rowCount(); row++)
+    {
+        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
+        {
+            if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY))
+            {
+                msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
+                msgBox.setInformativeText("La cantidad no puede estar vacía. No se va a guardar nada en la tabla de ingresos.");
+                msgBox.exec();
+                return 0;
+            }
+            else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0)
+            {
+                msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
+                msgBox.setInformativeText("La cantidad no puede ser 0. No se va a guardar nada en la tabla de ingresos.");
+                msgBox.exec();
+                return 0;
+            }
+            else
+            {
+                QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+                if (cb_garment->currentText().isEmpty())
+                {
+                    msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
+                    msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+                    msgBox.exec();
+                    return 0;
+                }
+            }
+            // If there is data in the row get the float and accumulate
+            total_cost = total_cost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
+        }
+    }
+    if (total_cost == 0.0)
+    {
+        msgBox.setText("La suma de los IMPORTES individuales es 0.");
+        msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+        msgBox.exec();
+        return 0;
+    }
+    else
+    {
+        // If there is data in lbl_cost_total it has to match with the previous calculation
+        if (ui->le_cost_total->text().toFloat() != total_cost)
+        {
+            msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
+            msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+            msgBox.exec();
+            return 0;
+        }
+        else
+            return 1;
+    }
+}
+
+void MainWindow::save_ticket()
+{
+    // Write data to db
 }
 
 /********************************************************************************************
