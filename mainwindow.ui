@@ -608,6 +608,9 @@ prenda</string>
    <property name="text">
     <string>Cerrar</string>
    </property>
+   <property name="toolTip">
+    <string>Cerrar aplicación</string>
+   </property>
   </action>
   <action name="actionRecibo">
    <property name="text">

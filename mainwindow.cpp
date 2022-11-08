@@ -28,6 +28,11 @@ MainWindow::~MainWindow()
 void MainWindow::mainwindow_initial_settings()
 {
     MainWindow::setWindowTitle("La Ideal");
+    // Taskbar
+    ui->menuArchivo->setToolTipsVisible(true);
+    ui->menuHerramientas->setToolTipsVisible(true);
+    ui->menuImprimir_ticket->setToolTipsVisible(true);
+    ui->menuVisualizar->setToolTipsVisible(true);
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     ui->table_ticket->verticalHeader()->setVisible(false);
@@ -353,4 +358,3 @@ void MainWindow::on_actionCerrar_triggered()
 {
     QCoreApplication::quit();
 }
-
