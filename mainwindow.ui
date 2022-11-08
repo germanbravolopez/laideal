@@ -569,9 +569,6 @@ prenda</string>
     <property name="title">
      <string>Archivo</string>
     </property>
-    <addaction name="actionGuardar"/>
-    <addaction name="actionGuardar_como"/>
-    <addaction name="separator"/>
     <addaction name="actionCerrar"/>
    </widget>
    <widget class="QMenu" name="menuHerramientas">
@@ -580,14 +577,15 @@ prenda</string>
     </property>
     <widget class="QMenu" name="menuImprimir_ticket">
      <property name="title">
-      <string>Imprimir...</string>
+      <string>Imprimir</string>
      </property>
-     <addaction name="actionTicket"/>
+     <addaction name="actionRecibo"/>
      <addaction name="actionFactura"/>
     </widget>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionFormulario_facturas"/>
+    <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
@@ -596,6 +594,7 @@ prenda</string>
     </property>
     <addaction name="actionIngresos"/>
     <addaction name="actionGastos"/>
+    <addaction name="separator"/>
     <addaction name="actionListado_de_prendas"/>
     <addaction name="actionListado_de_clientes"/>
     <addaction name="actionListado_de_proveedores"/>
@@ -605,40 +604,25 @@ prenda</string>
    <addaction name="menuVisualizar"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionGuardar">
-   <property name="text">
-    <string>Guardar</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+S</string>
-   </property>
-  </action>
-  <action name="actionGuardar_como">
-   <property name="text">
-    <string>Guardar como...</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+Shift+S</string>
-   </property>
-  </action>
   <action name="actionCerrar">
    <property name="text">
     <string>Cerrar</string>
    </property>
   </action>
-  <action name="actionImprimir_factura">
+  <action name="actionRecibo">
    <property name="text">
-    <string>Imprimir factura</string>
+    <string>Recibo</string>
    </property>
-  </action>
-  <action name="actionTicket">
-   <property name="text">
-    <string>Ticket</string>
+   <property name="toolTip">
+    <string>Imprimir recibo</string>
    </property>
   </action>
   <action name="actionFactura">
    <property name="text">
     <string>Factura</string>
+   </property>
+   <property name="toolTip">
+    <string>Imprimir factura</string>
    </property>
   </action>
   <action name="actionRecogida_de_prendas">
@@ -660,25 +644,40 @@ prenda</string>
    <property name="text">
     <string>Ingresos</string>
    </property>
+   <property name="toolTip">
+    <string>Visualizar tabla ingresos</string>
+   </property>
   </action>
   <action name="actionGastos">
    <property name="text">
     <string>Gastos</string>
+   </property>
+   <property name="toolTip">
+    <string>Visualizar tabla gastos</string>
    </property>
   </action>
   <action name="actionListado_de_prendas">
    <property name="text">
     <string>Listado de prendas</string>
    </property>
+   <property name="toolTip">
+    <string>Visualizar listado de prendas</string>
+   </property>
   </action>
   <action name="actionListado_de_clientes">
    <property name="text">
     <string>Listado de clientes</string>
    </property>
+   <property name="toolTip">
+    <string>Visualizar listado de clientes</string>
+   </property>
   </action>
   <action name="actionListado_de_proveedores">
    <property name="text">
     <string>Listado de proveedores</string>
+   </property>
+   <property name="toolTip">
+    <string>Visualizar listado de proveedores</string>
    </property>
   </action>
  </widget>

@@ -22,8 +22,9 @@ public:
 
 private slots:
     void mainwindow_initial_settings();
-
     void reset_all_contents();
+
+    // Mainwindow objects
     void set_next_ticket_number();
     void populate_cb_client();
     void resize_table();
@@ -39,6 +40,9 @@ private slots:
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
+
+    // Taskbar
+    void on_actionCerrar_triggered();
 
 private:
     Ui::MainWindow *ui;

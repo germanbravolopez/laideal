@@ -58,6 +58,10 @@ void MainWindow::reset_all_contents()
     ui->pb_payment->setChecked(false);
 }
 
+/********************************************************************************************
+ * FUNCTIONS FOR MAINWINDOW OBJECTS
+ *******************************************************************************************/
+
 void MainWindow::set_next_ticket_number()
 {
     db.open();
@@ -340,3 +344,13 @@ void MainWindow::cbServChanged(const QString &text)
         set_garment_price(service_row, cb_garment->currentText(), text);
     }
 }
+
+/********************************************************************************************
+ * FUNCTIONS FOR TASKBAR OBJECTS
+ *******************************************************************************************/
+
+void MainWindow::on_actionCerrar_triggered()
+{
+    QCoreApplication::quit();
+}
+
