@@ -8,6 +8,8 @@
 #define TABLE_TICKET_OBSE   4
 #define TABLE_TICKET_PRIC   5
 
+int pb_added_rows = 0;
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -45,6 +47,7 @@ void MainWindow::reset_all_contents()
     ui->table_ticket->clearContents();
     set_next_ticket_number();
     populate_cb_client();
+    resize_table();
     set_service_to_cb();
     set_garment_to_cb_and_populate();
     ui->le_addr->clear();
@@ -89,6 +92,15 @@ void MainWindow::populate_cb_client()
     q.clear();
     db.close();
     ui->cb_client->setCurrentText("");
+}
+
+void MainWindow::resize_table()
+{
+    for (int i=0; i < pb_added_rows; i++)
+    {
+        ui->table_ticket->removeRow(ui->table_ticket->rowCount() - 1);
+    }
+    pb_added_rows = 0;
 }
 
 void MainWindow::set_service_to_cb()
@@ -296,6 +308,12 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
      * {
      * }
      */
+}
+
+void MainWindow::on_pb_add_row_clicked()
+{
+    pb_added_rows++;
+    ui->table_ticket->insertRow(ui->table_ticket->rowCount());
 }
 
 void MainWindow::cbGarmChanged(const QString &text)

@@ -541,6 +541,20 @@
      <bool>true</bool>
     </property>
    </widget>
+   <widget class="QPushButton" name="pb_add_row">
+    <property name="geometry">
+     <rect>
+      <x>50</x>
+      <y>250</y>
+      <width>75</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Añadir
+prenda</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

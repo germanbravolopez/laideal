@@ -26,6 +26,7 @@ private slots:
     void reset_all_contents();
     void set_next_ticket_number();
     void populate_cb_client();
+    void resize_table();
     void set_service_to_cb();
     void set_garment_to_cb_and_populate();
     void set_garment_price(int garment_row, QString garment_text, QString service_text);
@@ -34,6 +35,7 @@ private slots:
     void on_bb_save_reset_clicked(QAbstractButton *button);
     void on_cb_client_editTextChanged(const QString &arg1);
     void on_table_ticket_cellChanged(int row, int column);
+    void on_pb_add_row_clicked();
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
