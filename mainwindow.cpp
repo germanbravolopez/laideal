@@ -16,7 +16,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/work/personal_projects/tintoreria/laideal/laideal.db");
+    db.setDatabaseName("C:/Users/Usuario/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db");
     mainwindow_initial_settings();
 }
 
@@ -355,65 +355,110 @@ bool MainWindow::validate_ticket()
 {
     QMessageBox msgBox;
     float total_cost = 0.0;
-    // Calculate the expected total cost
-    for (int row = 0; row < ui->table_ticket->rowCount(); row++)
+    if (ui->cb_client->currentText().isEmpty())
     {
-        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
-        {
-            if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY))
-            {
-                msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
-                msgBox.setInformativeText("La cantidad no puede estar vacía. No se va a guardar nada en la tabla de ingresos.");
-                msgBox.exec();
-                return 0;
-            }
-            else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0)
-            {
-                msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
-                msgBox.setInformativeText("La cantidad no puede ser 0. No se va a guardar nada en la tabla de ingresos.");
-                msgBox.exec();
-                return 0;
-            }
-            else
-            {
-                QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-                if (cb_garment->currentText().isEmpty())
-                {
-                    msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
-                    msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-                    msgBox.exec();
-                    return 0;
-                }
-            }
-            // If there is data in the row get the float and accumulate
-            total_cost = total_cost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
-        }
-    }
-    if (total_cost == 0.0)
-    {
-        msgBox.setText("La suma de los IMPORTES individuales es 0.");
+        msgBox.setText("No se ha introducido ningún cliente.");
         msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
         msgBox.exec();
         return 0;
     }
     else
     {
-        // If there is data in lbl_cost_total it has to match with the previous calculation
-        if (ui->le_cost_total->text().toFloat() != total_cost)
+        // Calculate the expected total cost
+        for (int row = 0; row < ui->table_ticket->rowCount(); row++)
         {
-            msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
+            if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
+            {
+                if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY))
+                {
+                    msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
+                    msgBox.setInformativeText("La cantidad no puede estar vacía. No se va a guardar nada en la tabla de ingresos.");
+                    msgBox.exec();
+                    return 0;
+                }
+                else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0)
+                {
+                    msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
+                    msgBox.setInformativeText("La cantidad no puede ser 0. No se va a guardar nada en la tabla de ingresos.");
+                    msgBox.exec();
+                    return 0;
+                }
+                else
+                {
+                    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+                    if (cb_garment->currentText().isEmpty())
+                    {
+                        msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
+                        msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+                        msgBox.exec();
+                        return 0;
+                    }
+                }
+                // If there is data in the row get the float and accumulate
+                total_cost = total_cost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
+            }
+        }
+        if (total_cost == 0.0)
+        {
+            msgBox.setText("La suma de los IMPORTES individuales es 0.");
             msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
             msgBox.exec();
             return 0;
         }
         else
-            return 1;
+        {
+            // If there is data in lbl_cost_total it has to match with the previous calculation
+            if (ui->le_cost_total->text().toFloat() != total_cost)
+            {
+                msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
+                msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+                msgBox.exec();
+                return 0;
+            }
+            else
+                return 1;
+        }
     }
 }
 
 void MainWindow::save_ticket()
 {
-    // Write data to db
+    for (int row = 0; row < ui->table_ticket->rowCount(); row++)
+    {
+        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
+        {
+            db.open();
+            QSqlQuery q;
+            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) \
+            VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+            q.bindValue(":n_recibo", ui->le_nr_ticket->text());
+            q.bindValue(":cliente", ui->cb_client->currentText());
+            q.bindValue(":fecha_recepcion", ui->de_date_recep->date());
+            if (ui->pb_payment->text() == "SI")
+                q.bindValue(":fecha_pago", ui->de_date_recep->date());
+            else
+                q.bindValue(":fecha_pago", NULL);
+            q.bindValue(":fecha_recogida", NULL);
+            q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
+            q.bindValue(":pagado", ui->pb_payment->text());
+            q.bindValue(":estado", "En tienda");
+            q.bindValue(":cantidad", ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text());
+            QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+            q.bindValue(":prenda", cb_garment->currentText());
+            if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
+                q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text());
+            else
+                q.bindValue(":size", NULL);
+            if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
+                q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
+            else
+                q.bindValue(":observaciones", NULL);
+            QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
+            q.bindValue(":servicio", cb_service->currentText());
+            q.bindValue(":edit_lock", "0");
+            q.exec();
+        }
+    }
 }
 
 /********************************************************************************************
