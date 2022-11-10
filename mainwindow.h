@@ -23,15 +23,20 @@ public:
 private slots:
     void mainwindow_initial_settings();
 
-    void set_next_ticket_number();
-    void set_service_to_cb();
-    void populate_cb_client();
-    void set_garment_to_cb_and_populate();
     void reset_all_contents();
+    void set_next_ticket_number();
+    void populate_cb_client();
+    void set_service_to_cb();
+    void set_garment_to_cb_and_populate();
+    void set_garment_price(int garment_row, QString garment_text, QString service_text);
 
     void on_pb_payment_toggled(bool checked);
     void on_bb_save_reset_clicked(QAbstractButton *button);
     void on_cb_client_editTextChanged(const QString &arg1);
+    void on_table_ticket_cellChanged(int row, int column);
+
+    void cbGarmChanged(const QString &text);
+    void cbServChanged(const QString &text);
 
 private:
     Ui::MainWindow *ui;
