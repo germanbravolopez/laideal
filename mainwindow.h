@@ -4,7 +4,6 @@
 #include <QMainWindow>
 #include "qabstractbutton.h"
 #include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QDebug>
 #include <QMessageBox>
 

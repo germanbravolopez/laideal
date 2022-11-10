@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "sql_lite.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -69,38 +70,12 @@ void MainWindow::reset_all_contents()
 
 void MainWindow::set_next_ticket_number()
 {
-    db.open();
-    QSqlQuery q;
-    q.exec("SELECT MAX(n_recibo) FROM ingresos");
-    if (q.isSelect())
-    {
-        if (q.first())
-            ui->le_nr_ticket->setText(QString::number(q.value(0).toInt() + 1));
-        else
-            qDebug() << "Query is not available!";
-    }
-    else
-        qDebug() << "Query is not Select!";
-    q.clear();
-    db.close();
+    ui->le_nr_ticket->setText(QString::number(read_max_value_in_column_from_table(db, "n_recibo", "ingresos") + 1));
 }
 
 void MainWindow::populate_cb_client()
 {
-    db.open();
-    QSqlQuery q;
-    q.exec(QString::fromStdString("SELECT nombre FROM clientes"));
-    if (q.isSelect())
-    {
-        QStringList client_list;
-        while(q.next())
-            client_list.append(q.value(0).toString());
-        ui->cb_client->addItems(client_list);
-    }
-    else
-        qDebug() << "Query is not Select!";
-    q.clear();
-    db.close();
+    ui->cb_client->addItems(read_column_from_table(db, "nombre", "clientes"));
     ui->cb_client->setCurrentText("");
 }
 
@@ -132,19 +107,7 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
 void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
 {
     // Get garment from db to a string list
-    db.open();
-    QSqlQuery q;
-    q.exec(QString::fromStdString("SELECT nombre FROM prendas"));
-    QStringList garment_list;
-    if (q.isSelect())
-    {
-        while(q.next())
-            garment_list.append(q.value(0).toString());
-    }
-    else
-        qDebug() << "Query is not Select!";
-    q.clear();
-    db.close();
+    QStringList garment_list = read_column_from_table(db, "nombre", "prendas");
     // Create cb for all garment and populate the list
     for (int row = initial_row; row < ui->table_ticket->rowCount(); row++)
     {
@@ -164,47 +127,25 @@ void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
 
 void MainWindow::set_garment_price(int garment_row, QString garment_text, QString service_text)
 {
-    db.open();
-    QSqlQuery q;
-    if (service_text == "Limp.")
+    QTableWidgetItem *qnty_item(ui->table_ticket->item(garment_row, TABLE_TICKET_QNTY));
+    QTableWidgetItem *item = new QTableWidgetItem;
+    item->setText("");
+    if (qnty_item)
     {
-        //qDebug() << text;
-        q.exec(QString::fromStdString("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
-    }
-    else if (service_text == "Plan.")
-    {
-        q.exec(QString::fromStdString("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment_text.toStdString() + "'"));
-    }
-    if (q.isSelect())
-    {
-        if (q.first())
+        double price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
+        // Check if any size is filled
+        QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
+        if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0)
         {
-            QTableWidgetItem *qnty_item(ui->table_ticket->item(garment_row, TABLE_TICKET_QNTY));
-            QTableWidgetItem *item = new QTableWidgetItem;
-            item->setText("");
-            if (qnty_item)
-            {
-                double price = qnty_item->text().toFloat() * q.value(0).toString().toFloat();
-                // Check if any size is filled
-                QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
-                if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0)
-                {
-                    double size = size_item->text().toFloat() * price;
-                    item->setText(QString::number(size, 'f', 2));
-                }
-                else
-                    item->setText(QString::number(price, 'f', 2));
-            }
-            else
-                qDebug() << "Cantidad is empty";
-            ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
+            double size = size_item->text().toFloat() * price;
+            item->setText(QString::number(size, 'f', 2));
         }
         else
-            qDebug() << "Query is not available.";
+            item->setText(QString::number(price, 'f', 2));
     }
     else
-        qDebug() << "Query is not Select.";
-    q.clear();
+        qDebug() << "Cantidad is empty";
+    ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
 }
 
 void MainWindow::on_pb_payment_toggled(bool checked)
@@ -237,58 +178,11 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
-    bool client_exists;
     if (arg1 != "")
     {
-        db.open();
-        // Fill client phone
-        QSqlQuery q;
-        q.exec(QString::fromStdString("SELECT tel_fijo FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
-        if (q.isSelect())
-        {
-            if (q.first()) {
-                ui->le_phone->setText(q.value(0).toString());
-                client_exists = 1;
-            }
-            else
-            {
-                qDebug() << "Client is not found in the database.";
-                client_exists = 0;
-            }
-        }
-        else
-        {
-            qDebug() << "Query is not Select!";
-            client_exists = 0;
-        }
-        q.clear();
-        if (client_exists) {
-            // Fill client mobile
-            q.exec(QString::fromStdString("SELECT movil FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
-            if (q.isSelect())
-            {
-                if (q.first())
-                    ui->le_mobile->setText(q.value(0).toString());
-                else
-                    qDebug() << "Query is not available!";
-            }
-            else
-                qDebug() << "Query is not Select!";
-            q.clear();
-            // Fill client address
-            q.exec(QString::fromStdString("SELECT direccion FROM clientes WHERE nombre LIKE '" + arg1.toStdString() + "%'"));
-            if (q.isSelect())
-            {
-                if (q.first())
-                    ui->le_addr->setText(q.value(0).toString());
-                else
-                    qDebug() << "Query is not available!";
-            }
-            else
-                qDebug() << "Query is not Select!";
-            q.clear();
-        }
-        db.close();
+        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
+        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
+        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
     }
 }
 
@@ -299,7 +193,6 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
     {
         if (cb_garment->currentText() != "")
         {
-            //qDebug() << cb_garment->currentText();
             cbGarmChanged(cb_garment->currentText());
         }
     }
@@ -316,9 +209,6 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         }
         ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
     }
-    /* Never accesed:
-     * else if (column == TABLE_TICKET_GARM || column == TABLE_TICKET_SERV) {}
-     */
 }
 
 void MainWindow::on_pb_add_row_clicked()
@@ -437,8 +327,8 @@ void MainWindow::save_ticket()
             if (ui->pb_payment->text() == "SI")
                 q.bindValue(":fecha_pago", ui->de_date_recep->date());
             else
-                q.bindValue(":fecha_pago", NULL);
-            q.bindValue(":fecha_recogida", NULL);
+                q.bindValue(":fecha_pago", "0");
+            q.bindValue(":fecha_recogida", "0");
             q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
             q.bindValue(":pagado", ui->pb_payment->text());
             q.bindValue(":estado", "En tienda");
@@ -448,11 +338,11 @@ void MainWindow::save_ticket()
             if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
                 q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text());
             else
-                q.bindValue(":size", NULL);
+                q.bindValue(":size", "0");
             if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
                 q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
             else
-                q.bindValue(":observaciones", NULL);
+                q.bindValue(":observaciones", "0");
             QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
             q.bindValue(":servicio", cb_service->currentText());
             q.bindValue(":edit_lock", "0");
