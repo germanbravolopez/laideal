@@ -4,8 +4,8 @@
 #include <QMainWindow>
 #include "qabstractbutton.h"
 #include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QDebug>
+#include <QMessageBox>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -40,6 +40,9 @@ private slots:
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
+
+    bool validate_ticket();
+    void save_ticket();
 
     // Taskbar
     void on_actionCerrar_triggered();
