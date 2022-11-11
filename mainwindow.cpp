@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
+#include "ingresos.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -28,7 +29,6 @@ MainWindow::~MainWindow()
 
 void MainWindow::mainwindow_initial_settings()
 {
-    MainWindow::setWindowTitle("La Ideal");
     // Taskbar
     ui->menuArchivo->setToolTipsVisible(true);
     ui->menuHerramientas->setToolTipsVisible(true);
@@ -347,6 +347,8 @@ void MainWindow::save_ticket()
             q.bindValue(":servicio", cb_service->currentText());
             q.bindValue(":edit_lock", "0");
             q.exec();
+            q.clear();
+            db.close();
         }
     }
 }
@@ -358,4 +360,12 @@ void MainWindow::save_ticket()
 void MainWindow::on_actionCerrar_triggered()
 {
     QCoreApplication::quit();
+}
+
+void MainWindow::on_actionIngresos_triggered()
+{
+    Ingresos *ui_ingr;
+    ui_ingr = new Ingresos(this);
+    ui_ingr->setWindowState(Qt::WindowMaximized);
+    ui_ingr->show();
 }

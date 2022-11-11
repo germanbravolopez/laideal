@@ -46,6 +46,7 @@ private slots:
 
     // Taskbar
     void on_actionCerrar_triggered();
+    void on_actionIngresos_triggered();
 
 private:
     Ui::MainWindow *ui;
