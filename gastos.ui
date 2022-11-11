@@ -18,7 +18,7 @@
   </property>
   <property name="font">
    <font>
-    <pointsize>12</pointsize>
+    <pointsize>10</pointsize>
    </font>
   </property>
   <property name="windowTitle">
@@ -98,7 +98,7 @@
      <x>0</x>
      <y>0</y>
      <width>1243</width>
-     <height>28</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuArchivo">
