@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Ingresos</class>
- <widget class="QMainWindow" name="Ingresos">
+ <class>ListaClientes</class>
+ <widget class="QMainWindow" name="ListaClientes">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -22,10 +22,10 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Ingresos</string>
+   <string>Listado de Clientes</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTableView" name="table_ingresos">
+   <widget class="QTableView" name="table_lista_clientes">
     <property name="geometry">
      <rect>
       <x>20</x>
@@ -85,7 +85,7 @@
      <locale language="Spanish" country="Spain"/>
     </property>
     <property name="text">
-     <string>Tabla de Ingresos</string>
+     <string>Listado de Clientes</string>
     </property>
     <property name="alignment">
      <set>Qt::AlignCenter</set>

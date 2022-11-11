@@ -593,7 +593,7 @@ prenda</string>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
-     <string>Visualizar</string>
+     <string>Ver</string>
     </property>
     <addaction name="actionIngresos"/>
     <addaction name="actionGastos"/>

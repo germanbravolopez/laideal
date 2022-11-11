@@ -47,6 +47,10 @@ private slots:
     // Taskbar
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
+    void on_actionGastos_triggered();
+    void on_actionListado_de_prendas_triggered();
+    void on_actionListado_de_clientes_triggered();
+    void on_actionListado_de_proveedores_triggered();
 
 private:
     Ui::MainWindow *ui;
