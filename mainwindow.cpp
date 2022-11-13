@@ -22,7 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/Users/Usuario/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db");
+    db.setDatabaseName(DB_PATH);
     mainwindow_initial_settings();
 }
 
@@ -370,7 +370,6 @@ void MainWindow::on_actionIngresos_triggered()
 {
     Ingresos *ui_ingr;
     ui_ingr = new Ingresos(this);
-    ui_ingr->setWindowState(Qt::WindowMaximized);
     ui_ingr->show();
 }
 
@@ -378,7 +377,6 @@ void MainWindow::on_actionGastos_triggered()
 {
     Gastos *ui_gast;
     ui_gast = new Gastos(this);
-    ui_gast->setWindowState(Qt::WindowMaximized);
     ui_gast->show();
 }
 
@@ -386,7 +384,7 @@ void MainWindow::on_actionListado_de_prendas_triggered()
 {
     ListaPrendas *ui_prend;
     ui_prend = new ListaPrendas(this);
-    ui_prend->setWindowState(Qt::WindowMaximized);
+    ui_prend->db = db;
     ui_prend->show();
 }
 
@@ -394,7 +392,6 @@ void MainWindow::on_actionListado_de_clientes_triggered()
 {
     ListaClientes *ui_clien;
     ui_clien = new ListaClientes(this);
-    ui_clien->setWindowState(Qt::WindowMaximized);
     ui_clien->show();
 }
 
@@ -402,6 +399,5 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
 {
     ListaProveedores *ui_prove;
     ui_prove = new ListaProveedores(this);
-    ui_prove->setWindowState(Qt::WindowMaximized);
     ui_prove->show();
 }

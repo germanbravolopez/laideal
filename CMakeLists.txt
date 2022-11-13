@@ -21,6 +21,7 @@ set(PROJECT_SOURCES
         ingresos.h              ingresos.cpp            ingresos.ui
         gastos.h                gastos.cpp              gastos.ui
         lista_prendas.h         lista_prendas.cpp       lista_prendas.ui
+        anadirprenda.h          anadirprenda.cpp        anadirprenda.ui
         lista_clientes.h        lista_clientes.cpp      lista_clientes.ui
         lista_proveedores.h     lista_proveedores.cpp   lista_proveedores.ui
 )

@@ -2,7 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "qabstractbutton.h"
+#include <QAbstractButton>
 #include <QSqlDatabase>
 #include <QDebug>
 #include <QMessageBox>
