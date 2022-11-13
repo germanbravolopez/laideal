@@ -14,12 +14,14 @@ class ListaPrendas : public QMainWindow
     Q_OBJECT
 
 public:
+    QSqlDatabase db;
     explicit ListaPrendas(QWidget *parent = nullptr);
     ~ListaPrendas();
 
 private slots:
     void populate_table();
     void on_actionActualizar_triggered();
+    void on_actionAnadir_prenda_triggered();
 
 private:
     Ui::ListaPrendas *ui;
