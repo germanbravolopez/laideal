@@ -24,6 +24,7 @@ void Gastos::populate_table()
         model->select();
         ui->table_gastos->setModel(model);
         ui->table_gastos->resizeColumnsToContents();
+        ui->table_gastos->sortByColumn(FECHA_COLUMN_IDX, Qt::AscendingOrder);
     }
 }
 

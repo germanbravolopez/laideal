@@ -24,6 +24,7 @@ void ListaClientes::populate_table()
         model->select();
         ui->table_lista_clientes->setModel(model);
         ui->table_lista_clientes->resizeColumnsToContents();
+        ui->table_lista_clientes->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
     }
 }
 

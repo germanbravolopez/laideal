@@ -5,6 +5,8 @@
 #include <QSqlDatabase>
 #include <QSqlTableModel>
 
+#define FECHA_COLUMN_IDX 4
+
 namespace Ui {
 class Gastos;
 }

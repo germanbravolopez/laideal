@@ -5,6 +5,8 @@
 #include <QSqlDatabase>
 #include <QSqlTableModel>
 
+#define NOMBRE_COLUMN_IDX 0
+
 namespace Ui {
 class ListaPrendas;
 }

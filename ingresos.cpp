@@ -24,6 +24,7 @@ void Ingresos::populate_table()
         model->select();
         ui->table_ingresos->setModel(model);
         ui->table_ingresos->resizeColumnsToContents();
+        ui->table_ingresos->sortByColumn(TICKET_COLUMN_IDX, Qt::AscendingOrder);
     }
 }
 

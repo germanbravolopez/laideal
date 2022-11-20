@@ -25,6 +25,7 @@ void ListaPrendas::populate_table()
         model->select();
         ui->table_lista_prendas->setModel(model);
         ui->table_lista_prendas->resizeColumnsToContents();
+        ui->table_lista_prendas->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
     }
 }
 

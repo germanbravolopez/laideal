@@ -24,6 +24,7 @@ void ListaProveedores::populate_table()
         model->select();
         ui->table_lista_proveedores->setModel(model);
         ui->table_lista_proveedores->resizeColumnsToContents();
+        ui->table_lista_proveedores->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
     }
 }
 
