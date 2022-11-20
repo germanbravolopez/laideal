@@ -1,5 +1,6 @@
 #include "lista_clientes.h"
 #include "ui_lista_clientes.h"
+#include "anadircliente.h"
 
 ListaClientes::ListaClientes(QWidget *parent) :
     QMainWindow(parent),
@@ -30,5 +31,22 @@ void ListaClientes::populate_table()
 
 void ListaClientes::on_actionActualizar_triggered()
 {
+    populate_table();
+}
+
+void ListaClientes::on_actionAnadir_cliente_triggered()
+{
+    AnadirCliente *ui_add_cliente;
+    ui_add_cliente = new AnadirCliente(this);
+    ui_add_cliente->db = db;
+    ui_add_cliente->setModal(true);
+    if (ui_add_cliente->exec() == QDialog::Accepted)
+    {
+        qDebug() << "Exited pressing OK";
+    }
+    else
+    {
+        qDebug() << "Exited pressing Cancel";
+    }
     populate_table();
 }

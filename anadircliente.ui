@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>AnadirPrenda</class>
- <widget class="QDialog" name="AnadirPrenda">
+ <class>AnadirCliente</class>
+ <widget class="QDialog" name="AnadirCliente">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>560</width>
-    <height>190</height>
+    <height>210</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Añadir Prenda</string>
+   <string>Añadir Cliente</string>
   </property>
-  <widget class="QWidget" name="layoutWidget">
+  <widget class="QWidget" name="">
    <property name="geometry">
     <rect>
      <x>20</x>
      <y>20</y>
      <width>521</width>
-     <height>151</height>
+     <height>171</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
@@ -36,7 +36,7 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="1" colspan="4">
+    <item row="0" column="1" colspan="3">
      <widget class="QLineEdit" name="le_nombre">
       <property name="font">
        <font>
@@ -45,7 +45,7 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="0" colspan="2">
+    <item row="1" column="0">
      <widget class="QLabel" name="label_3">
       <property name="font">
        <font>
@@ -54,12 +54,12 @@
        </font>
       </property>
       <property name="text">
-       <string>Precio limp.</string>
+       <string>Tel. fijo</string>
       </property>
      </widget>
     </item>
-    <item row="1" column="2">
-     <widget class="QLineEdit" name="le_precio_limp">
+    <item row="1" column="1">
+     <widget class="QLineEdit" name="le_tel_fijo">
       <property name="font">
        <font>
         <pointsize>12</pointsize>
@@ -67,7 +67,7 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="3">
+    <item row="1" column="2">
      <widget class="QLabel" name="label_2">
       <property name="font">
        <font>
@@ -76,12 +76,12 @@
        </font>
       </property>
       <property name="text">
-       <string>Precio plan.</string>
+       <string>Móvil</string>
       </property>
      </widget>
     </item>
-    <item row="1" column="4">
-     <widget class="QLineEdit" name="le_precio_plan">
+    <item row="1" column="3">
+     <widget class="QLineEdit" name="le_movil">
       <property name="font">
        <font>
         <pointsize>12</pointsize>
@@ -89,7 +89,29 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="3" colspan="2">
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_4">
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Dirección</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1" colspan="3">
+     <widget class="QLineEdit" name="le_direccion">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1" colspan="3">
      <widget class="QDialogButtonBox" name="bb_ok_cancel">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
