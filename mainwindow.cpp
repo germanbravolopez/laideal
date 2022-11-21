@@ -1,6 +1,11 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
+#include "ingresos.h"
+#include "gastos.h"
+#include "lista_prendas.h"
+#include "lista_clientes.h"
+#include "lista_proveedores.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -17,7 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("C:/Users/Usuario/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db");
+    db.setDatabaseName(DB_PATH);
     mainwindow_initial_settings();
 }
 
@@ -28,7 +33,6 @@ MainWindow::~MainWindow()
 
 void MainWindow::mainwindow_initial_settings()
 {
-    MainWindow::setWindowTitle("La Ideal");
     // Taskbar
     ui->menuArchivo->setToolTipsVisible(true);
     ui->menuHerramientas->setToolTipsVisible(true);
@@ -323,12 +327,12 @@ void MainWindow::save_ticket()
             VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
-            q.bindValue(":fecha_recepcion", ui->de_date_recep->date());
+            q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
             if (ui->pb_payment->text() == "SI")
-                q.bindValue(":fecha_pago", ui->de_date_recep->date());
+                q.bindValue(":fecha_pago", ui->de_date_recep->date().toString("dd-MM-yyyy"));
             else
-                q.bindValue(":fecha_pago", "0");
-            q.bindValue(":fecha_recogida", "0");
+                q.bindValue(":fecha_pago", "");
+            q.bindValue(":fecha_recogida", "");
             q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
             q.bindValue(":pagado", ui->pb_payment->text());
             q.bindValue(":estado", "En tienda");
@@ -338,15 +342,17 @@ void MainWindow::save_ticket()
             if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
                 q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text());
             else
-                q.bindValue(":size", "0");
+                q.bindValue(":size", "");
             if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
                 q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
             else
-                q.bindValue(":observaciones", "0");
+                q.bindValue(":observaciones", "");
             QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
             q.bindValue(":servicio", cb_service->currentText());
             q.bindValue(":edit_lock", "0");
             q.exec();
+            q.clear();
+            db.close();
         }
     }
 }
@@ -358,4 +364,40 @@ void MainWindow::save_ticket()
 void MainWindow::on_actionCerrar_triggered()
 {
     QCoreApplication::quit();
+}
+
+void MainWindow::on_actionIngresos_triggered()
+{
+    Ingresos *ui_ingr;
+    ui_ingr = new Ingresos(this);
+    ui_ingr->show();
+}
+
+void MainWindow::on_actionGastos_triggered()
+{
+    Gastos *ui_gast;
+    ui_gast = new Gastos(this);
+    ui_gast->show();
+}
+
+void MainWindow::on_actionListado_de_prendas_triggered()
+{
+    ListaPrendas *ui_prend;
+    ui_prend = new ListaPrendas(this);
+    ui_prend->db = db;
+    ui_prend->show();
+}
+
+void MainWindow::on_actionListado_de_clientes_triggered()
+{
+    ListaClientes *ui_clien;
+    ui_clien = new ListaClientes(this);
+    ui_clien->show();
+}
+
+void MainWindow::on_actionListado_de_proveedores_triggered()
+{
+    ListaProveedores *ui_prove;
+    ui_prove = new ListaProveedores(this);
+    ui_prove->show();
 }

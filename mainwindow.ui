@@ -25,11 +25,14 @@
   <property name="font">
    <font>
     <family>Arial</family>
-    <pointsize>12</pointsize>
+    <pointsize>10</pointsize>
    </font>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>La Ideal</string>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
   </property>
   <property name="locale">
    <locale language="Spanish" country="Spain"/>
@@ -98,6 +101,12 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce el nombre del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
     </property>
@@ -141,6 +150,12 @@
       <width>121</width>
       <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
     </property>
     <property name="locale">
      <locale language="Spanish" country="Spain"/>
@@ -202,6 +217,12 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
     </property>
@@ -243,6 +264,12 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un número fijo del teléfono del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
     </property>
@@ -283,6 +310,12 @@
       <width>181</width>
       <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
     </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce el número de móvil del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -336,6 +369,12 @@
       <width>1171</width>
       <height>371</height>
      </size>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
     </property>
     <property name="locale">
      <locale language="Spanish" country="Spain"/>
@@ -452,11 +491,20 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selecciona la fecha de recepción de la prenda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
     </property>
     <property name="locale">
      <locale language="Spanish" country="Spain"/>
+    </property>
+    <property name="displayFormat">
+     <string>dd-MMM-yyyy</string>
     </property>
    </widget>
    <widget class="QDialogButtonBox" name="bb_save_reset">
@@ -515,6 +563,12 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="toolTip">
      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce el número de móvil del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
     </property>
@@ -550,6 +604,12 @@
       <height>51</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
     <property name="text">
      <string>Añadir
 prenda</string>
@@ -562,7 +622,7 @@ prenda</string>
      <x>0</x>
      <y>0</y>
      <width>1243</width>
-     <height>24</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuArchivo">
@@ -590,7 +650,7 @@ prenda</string>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
-     <string>Visualizar</string>
+     <string>Ver</string>
     </property>
     <addaction name="actionIngresos"/>
     <addaction name="actionGastos"/>
@@ -684,6 +744,18 @@ prenda</string>
    </property>
   </action>
  </widget>
+ <tabstops>
+  <tabstop>cb_client</tabstop>
+  <tabstop>de_date_recep</tabstop>
+  <tabstop>le_addr</tabstop>
+  <tabstop>le_phone</tabstop>
+  <tabstop>le_mobile</tabstop>
+  <tabstop>pb_payment</tabstop>
+  <tabstop>table_ticket</tabstop>
+  <tabstop>pb_add_row</tabstop>
+  <tabstop>le_cost_total</tabstop>
+  <tabstop>le_nr_ticket</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

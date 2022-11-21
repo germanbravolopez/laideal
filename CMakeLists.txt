@@ -15,12 +15,17 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 
 set(PROJECT_SOURCES
-        sql_lite.cpp
-        sql_lite.h
         main.cpp
-        mainwindow.cpp
-        mainwindow.h
-        mainwindow.ui
+        sql_lite.h              sql_lite.cpp
+        mainwindow.h            mainwindow.cpp          mainwindow.ui
+        ingresos.h              ingresos.cpp            ingresos.ui
+        gastos.h                gastos.cpp              gastos.ui
+        lista_prendas.h         lista_prendas.cpp       lista_prendas.ui
+        anadirprenda.h          anadirprenda.cpp        anadirprenda.ui
+        lista_clientes.h        lista_clientes.cpp      lista_clientes.ui
+        anadircliente.h         anadircliente.cpp       anadircliente.ui
+        lista_proveedores.h     lista_proveedores.cpp   lista_proveedores.ui
+        anadirproveedor.h       anadirproveedor.cpp     anadirproveedor.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
