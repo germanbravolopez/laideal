@@ -327,12 +327,12 @@ void MainWindow::save_ticket()
             VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
-            q.bindValue(":fecha_recepcion", ui->de_date_recep->date());
+            q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
             if (ui->pb_payment->text() == "SI")
-                q.bindValue(":fecha_pago", ui->de_date_recep->date());
+                q.bindValue(":fecha_pago", ui->de_date_recep->date().toString("dd-MM-yyyy"));
             else
-                q.bindValue(":fecha_pago", "0");
-            q.bindValue(":fecha_recogida", "0");
+                q.bindValue(":fecha_pago", "");
+            q.bindValue(":fecha_recogida", "");
             q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
             q.bindValue(":pagado", ui->pb_payment->text());
             q.bindValue(":estado", "En tienda");
@@ -342,11 +342,11 @@ void MainWindow::save_ticket()
             if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
                 q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text());
             else
-                q.bindValue(":size", "0");
+                q.bindValue(":size", "");
             if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
                 q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
             else
-                q.bindValue(":observaciones", "0");
+                q.bindValue(":observaciones", "");
             QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
             q.bindValue(":servicio", cb_service->currentText());
             q.bindValue(":edit_lock", "0");

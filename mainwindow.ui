@@ -503,6 +503,9 @@
     <property name="locale">
      <locale language="Spanish" country="Spain"/>
     </property>
+    <property name="displayFormat">
+     <string>dd-MMM-yyyy</string>
+    </property>
    </widget>
    <widget class="QDialogButtonBox" name="bb_save_reset">
     <property name="geometry">
