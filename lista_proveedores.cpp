@@ -50,4 +50,3 @@ void ListaProveedores::on_actionAnadir_proveedor_triggered()
     }
     populate_table();
 }
-
