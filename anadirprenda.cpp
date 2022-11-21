@@ -7,11 +7,24 @@ AnadirPrenda::AnadirPrenda(QWidget *parent) :
     ui(new Ui::AnadirPrenda)
 {
     ui->setupUi(this);
+    anadirprenda_initial_settings();
 }
 
 AnadirPrenda::~AnadirPrenda()
 {
     delete ui;
+}
+
+void AnadirPrenda::anadirprenda_initial_settings()
+{
+    // load items in cb
+    ui->cb_nombre->addItems(read_column_from_table(db, "nombre", "prendas"));
+    ui->cb_nombre->setCurrentText("");
+    // clear all line editors
+    ui->le_precio_limp->clear();
+    ui->le_precio_plan->clear();
+    // set focus on name
+    ui->cb_nombre->setFocus();
 }
 
 void AnadirPrenda::on_bb_ok_cancel_clicked(QAbstractButton *button)
@@ -47,7 +60,7 @@ void AnadirPrenda::on_bb_ok_cancel_clicked(QAbstractButton *button)
 
 bool AnadirPrenda::check_garment_is_not_in_db()
 {
-    QString text = select_from_where_like(db, "nombre", "prendas", "nombre", ui->le_nombre->text(), true);
+    QString text = select_from_where_like(db, "nombre", "prendas", "nombre", ui->cb_nombre->currentText(), true);
     if (text.isEmpty())
         return 1;
     else
@@ -60,7 +73,7 @@ void AnadirPrenda::add_garment_to_db()
     QSqlQuery q;
     q.prepare("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) \
     VALUES (:nombre, :precio_limpieza, :precio_plancha);");
-    q.bindValue(":nombre", ui->le_nombre->text());
+    q.bindValue(":nombre", ui->cb_nombre->currentText());
     q.bindValue(":precio_limpieza", ui->le_precio_limp->text());
     q.bindValue(":precio_plancha", ui->le_precio_plan->text());
     q.exec();
@@ -71,7 +84,7 @@ void AnadirPrenda::add_garment_to_db()
 void AnadirPrenda::update_garment_to_db()
 {
     // Get exact name of the garment in database
-    QString text = select_from_where_like(db, "nombre", "prendas", "nombre", ui->le_nombre->text(), true);
+    QString text = select_from_where_like(db, "nombre", "prendas", "nombre", ui->cb_nombre->currentText(), true);
     // Update database
     db.open();
     QSqlQuery q;
@@ -82,4 +95,13 @@ void AnadirPrenda::update_garment_to_db()
     q.exec();
     q.clear();
     db.close();
+}
+
+void AnadirPrenda::on_cb_nombre_editTextChanged(const QString &arg1)
+{
+    if (arg1 != "")
+    {
+        ui->le_precio_limp->setText(select_from_where_like(db, "precio_limpieza", "prendas", "nombre", arg1, false));
+        ui->le_precio_plan->setText(select_from_where_like(db, "precio_plancha", "prendas", "nombre", arg1, false));
+    }
 }

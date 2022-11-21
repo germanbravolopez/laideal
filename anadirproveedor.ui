@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>AnadirPrenda</class>
- <widget class="QDialog" name="AnadirPrenda">
+ <class>AnadirProveedor</class>
+ <widget class="QDialog" name="AnadirProveedor">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>560</width>
-    <height>190</height>
+    <height>209</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,10 +19,34 @@
      <x>20</x>
      <y>20</y>
      <width>521</width>
-     <height>151</height>
+     <height>171</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="1" colspan="4">
+     <widget class="QComboBox" name="cb_empresa">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="editable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1" colspan="4">
+     <widget class="QLineEdit" name="le_direccion">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
     <item row="0" column="0">
      <widget class="QLabel" name="label">
       <property name="font">
@@ -32,25 +56,12 @@
        </font>
       </property>
       <property name="text">
-       <string>Nombre</string>
+       <string>Empresa</string>
       </property>
      </widget>
     </item>
-    <item row="1" column="0" colspan="2">
-     <widget class="QLabel" name="label_3">
-      <property name="font">
-       <font>
-        <pointsize>14</pointsize>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>Precio limp.</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="2">
-     <widget class="QLineEdit" name="le_precio_limp">
+    <item row="1" column="1" colspan="2">
+     <widget class="QLineEdit" name="le_cif">
       <property name="font">
        <font>
         <pointsize>12</pointsize>
@@ -67,12 +78,25 @@
        </font>
       </property>
       <property name="text">
-       <string>Precio plan.</string>
+       <string>Teléfono</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_4">
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Dirección</string>
       </property>
      </widget>
     </item>
     <item row="1" column="4">
-     <widget class="QLineEdit" name="le_precio_plan">
+     <widget class="QLineEdit" name="le_telefono">
       <property name="font">
        <font>
         <pointsize>12</pointsize>
@@ -80,7 +104,20 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="3" colspan="2">
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_3">
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>CIF</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3" colspan="2">
      <widget class="QDialogButtonBox" name="bb_ok_cancel">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
@@ -90,25 +127,14 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="1" colspan="4">
-     <widget class="QComboBox" name="cb_nombre">
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="editable">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
    </layout>
   </widget>
  </widget>
  <tabstops>
-  <tabstop>cb_nombre</tabstop>
-  <tabstop>le_precio_limp</tabstop>
-  <tabstop>le_precio_plan</tabstop>
+  <tabstop>cb_empresa</tabstop>
+  <tabstop>le_cif</tabstop>
+  <tabstop>le_telefono</tabstop>
+  <tabstop>le_direccion</tabstop>
  </tabstops>
  <resources/>
  <connections/>

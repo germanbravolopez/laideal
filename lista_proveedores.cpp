@@ -1,5 +1,6 @@
 #include "lista_proveedores.h"
 #include "ui_lista_proveedores.h"
+#include "anadirproveedor.h"
 
 ListaProveedores::ListaProveedores(QWidget *parent) :
     QMainWindow(parent),
@@ -32,3 +33,21 @@ void ListaProveedores::on_actionActualizar_triggered()
 {
     populate_table();
 }
+
+void ListaProveedores::on_actionAnadir_proveedor_triggered()
+{
+    AnadirProveedor *ui_add_prov;
+    ui_add_prov = new AnadirProveedor(this);
+    ui_add_prov->db = db;
+    ui_add_prov->setModal(true);
+    if (ui_add_prov->exec() == QDialog::Accepted)
+    {
+        qDebug() << "Exited pressing OK";
+    }
+    else
+    {
+        qDebug() << "Exited pressing Cancel";
+    }
+    populate_table();
+}
+

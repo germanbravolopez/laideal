@@ -25,6 +25,7 @@ set(PROJECT_SOURCES
         lista_clientes.h        lista_clientes.cpp      lista_clientes.ui
         anadircliente.h         anadircliente.cpp       anadircliente.ui
         lista_proveedores.h     lista_proveedores.cpp   lista_proveedores.ui
+        anadirproveedor.h       anadirproveedor.cpp     anadirproveedor.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

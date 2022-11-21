@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Añadir Cliente</string>
   </property>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>20</x>
@@ -33,15 +33,6 @@
       </property>
       <property name="text">
        <string>Nombre</string>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="1" colspan="3">
-     <widget class="QLineEdit" name="le_nombre">
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
       </property>
      </widget>
     </item>
@@ -121,9 +112,27 @@
       </property>
      </widget>
     </item>
+    <item row="0" column="1" colspan="3">
+     <widget class="QComboBox" name="cb_nombre">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="editable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>cb_nombre</tabstop>
+  <tabstop>le_tel_fijo</tabstop>
+  <tabstop>le_movil</tabstop>
+  <tabstop>le_direccion</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

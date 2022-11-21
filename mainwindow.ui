@@ -741,6 +741,18 @@ prenda</string>
    </property>
   </action>
  </widget>
+ <tabstops>
+  <tabstop>cb_client</tabstop>
+  <tabstop>de_date_recep</tabstop>
+  <tabstop>le_addr</tabstop>
+  <tabstop>le_phone</tabstop>
+  <tabstop>le_mobile</tabstop>
+  <tabstop>pb_payment</tabstop>
+  <tabstop>table_ticket</tabstop>
+  <tabstop>pb_add_row</tabstop>
+  <tabstop>le_cost_total</tabstop>
+  <tabstop>le_nr_ticket</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
