@@ -6,6 +6,7 @@
 #include "lista_prendas.h"
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
+#include "recog_prendas.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -400,4 +401,13 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     ListaProveedores *ui_prove;
     ui_prove = new ListaProveedores(this);
     ui_prove->show();
+}
+
+void MainWindow::on_actionRecogida_de_prendas_triggered()
+{
+    RecogPrendas *ui_recog;
+    ui_recog = new RecogPrendas(this);
+    ui_recog->db = db;
+    ui_recog->show();
+    ui_recog->setWindowState(Qt::WindowMaximized);
 }
