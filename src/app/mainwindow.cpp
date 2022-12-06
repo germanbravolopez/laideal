@@ -8,15 +8,6 @@
 #include "lista_proveedores.h"
 #include "recog_prendas.h"
 
-#define TABLE_TICKET_QNTY   0
-#define TABLE_TICKET_GARM   1
-#define TABLE_TICKET_SIZE   2
-#define TABLE_TICKET_SERV   3
-#define TABLE_TICKET_OBSE   4
-#define TABLE_TICKET_PRIC   5
-
-int pb_added_rows = 0;
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -46,8 +37,6 @@ void MainWindow::mainwindow_initial_settings()
     ui->table_ticket->setColumnWidth(TABLE_TICKET_GARM, 400);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 70);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 150);
-    // Date settings
-    ui->de_date_recep->setDate(QDate::currentDate());
     // Push button settings
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
     reset_all_contents();
@@ -66,6 +55,7 @@ void MainWindow::reset_all_contents()
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
     ui->le_phone->clear();
+    ui->de_date_recep->setDate(QDate::currentDate());
     ui->pb_payment->setChecked(false);
 }
 
