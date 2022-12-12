@@ -48,7 +48,7 @@ public:
 private slots:
     void initial_settings();
     void reset_all_contents();
-    void update_db();
+    void update_db(UpdateDBop op);
     void update_row_clicked_to_fields();
 
     void on_le_search_returnPressed();
