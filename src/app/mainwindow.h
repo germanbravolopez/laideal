@@ -8,6 +8,13 @@
 #include <QMessageBox>
 #include <QStyleFactory>
 
+#define TABLE_TICKET_QNTY   0
+#define TABLE_TICKET_GARM   1
+#define TABLE_TICKET_SIZE   2
+#define TABLE_TICKET_SERV   3
+#define TABLE_TICKET_OBSE   4
+#define TABLE_TICKET_PRIC   5
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -18,6 +25,7 @@ class MainWindow : public QMainWindow
 
 public:
     QSqlDatabase db;
+    int pb_added_rows = 0;
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
@@ -52,6 +60,7 @@ private slots:
     void on_actionListado_de_prendas_triggered();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
+    void on_actionRecogida_de_prendas_triggered();
 
 private:
     Ui::MainWindow *ui;

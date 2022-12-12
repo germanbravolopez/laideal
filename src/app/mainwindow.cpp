@@ -6,15 +6,7 @@
 #include "lista_prendas.h"
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
-
-#define TABLE_TICKET_QNTY   0
-#define TABLE_TICKET_GARM   1
-#define TABLE_TICKET_SIZE   2
-#define TABLE_TICKET_SERV   3
-#define TABLE_TICKET_OBSE   4
-#define TABLE_TICKET_PRIC   5
-
-int pb_added_rows = 0;
+#include "recog_prendas.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -45,8 +37,6 @@ void MainWindow::mainwindow_initial_settings()
     ui->table_ticket->setColumnWidth(TABLE_TICKET_GARM, 400);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 70);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 150);
-    // Date settings
-    ui->de_date_recep->setDate(QDate::currentDate());
     // Push button settings
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
     reset_all_contents();
@@ -65,6 +55,7 @@ void MainWindow::reset_all_contents()
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
     ui->le_phone->clear();
+    ui->de_date_recep->setDate(QDate::currentDate());
     ui->pb_payment->setChecked(false);
 }
 
@@ -294,6 +285,12 @@ bool MainWindow::validate_ticket()
         }
         if (total_cost == 0.0)
         {
+            QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
+            QString left_side = cb_garment->currentText().left(8);
+            if (left_side == "Alfombra")
+            {
+                return 1;
+            }
             msgBox.setText("La suma de los IMPORTES individuales es 0.");
             msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
             msgBox.exec();
@@ -400,4 +397,13 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     ListaProveedores *ui_prove;
     ui_prove = new ListaProveedores(this);
     ui_prove->show();
+}
+
+void MainWindow::on_actionRecogida_de_prendas_triggered()
+{
+    RecogPrendas *ui_recog;
+    ui_recog = new RecogPrendas(this);
+    ui_recog->db = db;
+    ui_recog->show();
+    ui_recog->setWindowState(Qt::WindowMaximized);
 }

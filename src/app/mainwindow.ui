@@ -506,6 +506,9 @@
     <property name="displayFormat">
      <string>dd-MMM-yyyy</string>
     </property>
+    <property name="calendarPopup">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QDialogButtonBox" name="bb_save_reset">
     <property name="geometry">
