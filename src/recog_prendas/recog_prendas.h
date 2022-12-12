@@ -4,8 +4,6 @@
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QSqlQueryModel>
-#include <QTableWidget>
-#include <QStandardItemModel>
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
@@ -33,29 +31,36 @@ class RecogPrendas : public QMainWindow
 public:
     QSqlDatabase db;
     QSqlQueryModel *sql_query_model = new QSqlQueryModel;
-    //QTableWidget table_widget_model;
-    //QModelIndex model_index_clicked;
+    bool is_cell_clicked = false;
+    int row_clicked_cell, column_clicked_cell;
+    enum UpdateDBop {
+        PAY_YES,
+        PAY_NO,
+        PKU_YES,
+        PKU_NO,
+        OBSV,
+        PAY_DE_CH,
+        PKU_DE_CH
+    };
     explicit RecogPrendas(QWidget *parent = nullptr);
     ~RecogPrendas();
 
 private slots:
     void initial_settings();
     void reset_all_contents();
+    void update_db();
+    void update_row_clicked_to_fields();
 
     void on_le_search_returnPressed();
     void on_pb_search_clicked();
     void on_pb_reset_clicked();
     void on_pb_payment_toggled(bool checked);
     void on_pb_state_toggled(bool checked);
-    void on_tableView_doubleClicked(const QModelIndex &index);
+    void on_tableView_clicked(const QModelIndex &index);
+    void on_le_obsv_returnPressed();
+    void on_de_date_paym_userDateChanged(const QDate &date);
+    void on_de_date_pickup_userDateChanged(const QDate &date);
 
-    void on_pb_save_clicked();
-/*
-    void setup_model_table(QAbstractItemModel *model);
-    void check_new_search_may_proceed();
-    bool compare_models();
-    void save_model_changes();
-*/
 private:
     Ui::RecogPrendas *ui;
 };
