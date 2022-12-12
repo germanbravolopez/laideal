@@ -222,6 +222,31 @@ void RecogPrendas::update_db(UpdateDBop op)
             db.close();
         }
         break;
+    case SIZE_AND_PRICE:
+        if (!edit_lock && ui->pb_payment->text() == "NO")
+        {
+            db.open();
+            q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE \
+                n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+            // Set new values
+            q.bindValue(":new_size", ui->le_size->text());
+            q.bindValue(":new_importe", ui->le_price->text());
+            // Set old values
+            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
+            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
+            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
+            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
+            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
+            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
+            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+            // Write to db
+            ok = q.exec();
+            q.clear();
+            db.close();
+
+        }
     default:
         break;
     }
@@ -250,6 +275,13 @@ void RecogPrendas::update_row_clicked_to_fields()
     ui->de_date_recep->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
+}
+
+void RecogPrendas::calculate_price()
+{
+    float item_price = read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+    float calculated_price = item_price * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
+    ui->le_price->setText(QString::number(calculated_price));
 }
 
 void RecogPrendas::on_le_search_returnPressed()
@@ -474,4 +506,59 @@ void RecogPrendas::on_de_date_pickup_userDateChanged(const QDate &date)
     {
         update_db(PKU_DE_CH);
     }
+}
+
+void RecogPrendas::on_le_size_editingFinished()
+{
+    QString left_side = ui->le_garm->text().left(8);
+    if (is_cell_clicked && left_side == "Alfombra")
+    {
+        calculate_price();
+        update_db(SIZE_AND_PRICE);
+    }
+}
+
+
+void RecogPrendas::on_pb_pay_all_clicked()
+{
+    int current_row = row_clicked_cell;
+    for (int row = 0; row < sql_query_model->rowCount(); row++)
+    {
+        on_tableView_clicked(sql_query_model->index(row, 0));
+        on_pb_payment_toggled(true);
+    }
+    if (current_row >= 0)
+    {
+        on_tableView_clicked(sql_query_model->index(current_row, 0));
+    }
+    else
+    {
+        reset_all_contents();
+    }
+}
+
+
+void RecogPrendas::on_pb_pku_all_clicked()
+{
+    int current_row = row_clicked_cell;
+    for (int row = 0; row < sql_query_model->rowCount(); row++)
+    {
+        on_tableView_clicked(sql_query_model->index(row, 0));
+        on_pb_state_toggled(true);
+    }
+    if (current_row >= 0)
+    {
+        on_tableView_clicked(sql_query_model->index(current_row, 0));
+    }
+    else
+    {
+        reset_all_contents();
+    }
+}
+
+
+void RecogPrendas::on_pb_pay_pku_all_clicked()
+{
+    on_pb_pay_all_clicked();
+    on_pb_pku_all_clicked();
 }
