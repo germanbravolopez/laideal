@@ -795,15 +795,14 @@ recoger </string>
      <x>0</x>
      <y>0</y>
      <width>1243</width>
-     <height>27</height>
+     <height>21</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuArchivo">
-    <property name="title">
-     <string>Archivo</string>
-    </property>
-   </widget>
-   <addaction name="menuArchivo"/>
+   <property name="font">
+    <font>
+     <pointsize>9</pointsize>
+    </font>
+   </property>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionActualizar">
