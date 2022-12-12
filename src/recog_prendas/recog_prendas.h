@@ -40,7 +40,8 @@ public:
         PKU_NO,
         OBSV,
         PAY_DE_CH,
-        PKU_DE_CH
+        PKU_DE_CH,
+        SIZE_AND_PRICE
     };
     explicit RecogPrendas(QWidget *parent = nullptr);
     ~RecogPrendas();
@@ -50,6 +51,7 @@ private slots:
     void reset_all_contents();
     void update_db(UpdateDBop op);
     void update_row_clicked_to_fields();
+    void calculate_price();
 
     void on_le_search_returnPressed();
     void on_pb_search_clicked();
@@ -60,6 +62,10 @@ private slots:
     void on_le_obsv_returnPressed();
     void on_de_date_paym_userDateChanged(const QDate &date);
     void on_de_date_pickup_userDateChanged(const QDate &date);
+    void on_le_size_editingFinished();
+    void on_pb_pay_all_clicked();
+    void on_pb_pku_all_clicked();
+    void on_pb_pay_pku_all_clicked();
 
 private:
     Ui::RecogPrendas *ui;
