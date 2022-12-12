@@ -285,6 +285,12 @@ bool MainWindow::validate_ticket()
         }
         if (total_cost == 0.0)
         {
+            QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
+            QString left_side = cb_garment->currentText().left(8);
+            if (left_side == "Alfombra")
+            {
+                return 1;
+            }
             msgBox.setText("La suma de los IMPORTES individuales es 0.");
             msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
             msgBox.exec();
