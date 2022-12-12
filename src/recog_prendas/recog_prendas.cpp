@@ -518,7 +518,6 @@ void RecogPrendas::on_le_size_editingFinished()
     }
 }
 
-
 void RecogPrendas::on_pb_pay_all_clicked()
 {
     int current_row = row_clicked_cell;
@@ -537,7 +536,6 @@ void RecogPrendas::on_pb_pay_all_clicked()
     }
 }
 
-
 void RecogPrendas::on_pb_pku_all_clicked()
 {
     int current_row = row_clicked_cell;
@@ -555,7 +553,6 @@ void RecogPrendas::on_pb_pku_all_clicked()
         reset_all_contents();
     }
 }
-
 
 void RecogPrendas::on_pb_pay_pku_all_clicked()
 {
