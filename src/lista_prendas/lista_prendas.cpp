@@ -21,7 +21,7 @@ void ListaPrendas::populate_table()
     {
         QSqlTableModel *model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("prendas");
-        model->setEditStrategy(QSqlTableModel::OnManualSubmit);
+        model->setEditStrategy(QSqlTableModel::OnFieldChange);
         model->select();
         ui->table_lista_prendas->setModel(model);
         ui->table_lista_prendas->resizeColumnsToContents();

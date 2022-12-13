@@ -405,5 +405,4 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
-    ui_recog->setWindowState(Qt::WindowMaximized);
 }
