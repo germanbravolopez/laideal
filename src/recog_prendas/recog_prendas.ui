@@ -738,16 +738,6 @@ recoger </string>
     </item>
    </layout>
   </widget>
-  <action name="actionActualizar">
-   <property name="text">
-    <string>Actualizar</string>
-   </property>
-  </action>
-  <action name="actionAnadir_cliente">
-   <property name="text">
-    <string>Añadir cliente</string>
-   </property>
-  </action>
  </widget>
  <tabstops>
   <tabstop>le_search</tabstop>

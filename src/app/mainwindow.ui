@@ -693,6 +693,9 @@ prenda</string>
    <property name="text">
     <string>Recogida de prendas</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
   </action>
   <action name="actionFormulario_facturas">
    <property name="text">

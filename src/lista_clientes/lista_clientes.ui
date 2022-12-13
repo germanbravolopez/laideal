@@ -126,10 +126,16 @@
    <property name="text">
     <string>Actualizar</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
   </action>
   <action name="actionAnadir_cliente">
    <property name="text">
     <string>Añadir cliente</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
    </property>
   </action>
  </widget>

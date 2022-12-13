@@ -111,10 +111,16 @@
    <property name="text">
     <string>Actualizar</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
   </action>
   <action name="actionAnadir_proveedor">
    <property name="text">
     <string>Añadir proveedor</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
    </property>
   </action>
  </widget>

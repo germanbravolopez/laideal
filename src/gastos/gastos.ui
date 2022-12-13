@@ -103,11 +103,33 @@
     </property>
     <addaction name="actionActualizar"/>
    </widget>
+   <widget class="QMenu" name="menuHerramientas">
+    <property name="title">
+     <string>Herramientas</string>
+    </property>
+    <addaction name="actionActivar_modo_edicion"/>
+    <addaction name="actionDesactivar_modo_edicion"/>
+   </widget>
    <addaction name="menuArchivo"/>
+   <addaction name="menuHerramientas"/>
   </widget>
+  <widget class="QStatusBar" name="statusBar"/>
   <action name="actionActualizar">
    <property name="text">
     <string>Actualizar</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
+  </action>
+  <action name="actionActivar_modo_edicion">
+   <property name="text">
+    <string>Activar modo edición</string>
+   </property>
+  </action>
+  <action name="actionDesactivar_modo_edicion">
+   <property name="text">
+    <string>Desactivar modo edición</string>
    </property>
   </action>
  </widget>
