@@ -316,6 +316,7 @@ void MainWindow::save_ticket()
 {
     for (int row = 0; row < ui->table_ticket->rowCount(); row++)
     {
+        // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
         {
             db.open();
