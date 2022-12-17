@@ -350,9 +350,6 @@
         <pointsize>12</pointsize>
        </font>
       </property>
-      <property name="toolTip">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce el número de móvil del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-      </property>
       <property name="layoutDirection">
        <enum>Qt::LeftToRight</enum>
       </property>
@@ -595,7 +592,7 @@ prenda</string>
       <property name="font">
        <font>
         <family>Arial</family>
-        <pointsize>50</pointsize>
+        <pointsize>34</pointsize>
         <bold>false</bold>
        </font>
       </property>
