@@ -91,7 +91,7 @@
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un nombre de cliente, fecha, número de teléfono o número de recibo de ticket para realizar la búsqueda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -137,9 +137,6 @@
           <pointsize>14</pointsize>
          </font>
         </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
         </property>
@@ -160,7 +157,7 @@
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Editar las observaciones de la prenda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -229,9 +226,6 @@
           <pointsize>14</pointsize>
          </font>
         </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
         </property>
@@ -298,9 +292,6 @@
           <family>Arial</family>
           <pointsize>14</pointsize>
          </font>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un número fijo del teléfono del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -398,7 +389,7 @@
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un número fijo del teléfono del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Editar el tamaño si la prenda seleccionada es una alfombra, puesto que el tamaño debe introducirse con posterioridad.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -418,9 +409,6 @@
           <family>Arial</family>
           <pointsize>14</pointsize>
          </font>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un número fijo del teléfono del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -456,9 +444,6 @@
           <family>Arial</family>
           <pointsize>14</pointsize>
          </font>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce la dirección del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -499,9 +484,6 @@
           <pointsize>14</pointsize>
          </font>
         </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selecciona la fecha de recepción de la prenda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
         </property>
@@ -541,7 +523,7 @@
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selecciona la fecha de recepción de la prenda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Modificar la fecha de pago si la prenda seleccionada está pagada, botón pagado está en &amp;quot;SI&amp;quot;, y la prenda no está bloqueada.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -579,7 +561,7 @@
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selecciona la fecha de recepción de la prenda.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Modificar la fecha de recogida si el estado de la prenda es &amp;quot;Recogido&amp;quot;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
