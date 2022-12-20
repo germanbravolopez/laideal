@@ -677,6 +677,9 @@ prenda</string>
    <property name="toolTip">
     <string>Imprimir recibo</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+R</string>
+   </property>
   </action>
   <action name="actionFactura">
    <property name="text">
@@ -685,23 +688,32 @@ prenda</string>
    <property name="toolTip">
     <string>Imprimir factura</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+F</string>
+   </property>
   </action>
   <action name="actionRecogida_de_prendas">
    <property name="text">
     <string>Recogida de prendas</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+R</string>
+    <string>Alt+R</string>
    </property>
   </action>
   <action name="actionFormulario_facturas">
    <property name="text">
     <string>Formulario facturas</string>
    </property>
+   <property name="shortcut">
+    <string>Alt+F</string>
+   </property>
   </action>
   <action name="actionGenerar_contabilidad">
    <property name="text">
     <string>Generar contabilidad</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+Shift+C</string>
    </property>
   </action>
   <action name="actionIngresos">
@@ -711,6 +723,9 @@ prenda</string>
    <property name="toolTip">
     <string>Visualizar tabla ingresos</string>
    </property>
+   <property name="shortcut">
+    <string>Alt+I</string>
+   </property>
   </action>
   <action name="actionGastos">
    <property name="text">
@@ -718,6 +733,9 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Visualizar tabla gastos</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+G</string>
    </property>
   </action>
   <action name="actionListado_de_prendas">
@@ -727,6 +745,9 @@ prenda</string>
    <property name="toolTip">
     <string>Visualizar listado de prendas</string>
    </property>
+   <property name="shortcut">
+    <string>Alt+P</string>
+   </property>
   </action>
   <action name="actionListado_de_clientes">
    <property name="text">
@@ -735,6 +756,9 @@ prenda</string>
    <property name="toolTip">
     <string>Visualizar listado de clientes</string>
    </property>
+   <property name="shortcut">
+    <string>Alt+C</string>
+   </property>
   </action>
   <action name="actionListado_de_proveedores">
    <property name="text">
@@ -742,6 +766,9 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Visualizar listado de proveedores</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+S</string>
    </property>
   </action>
  </widget>
