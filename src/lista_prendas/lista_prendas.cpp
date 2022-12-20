@@ -1,6 +1,6 @@
 #include "lista_prendas.h"
 #include "ui_lista_prendas.h"
-#include "anadirprenda.h"
+#include "tableview.h"
 
 ListaPrendas::ListaPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -8,6 +8,10 @@ ListaPrendas::ListaPrendas(QWidget *parent) :
 {
     ui->setupUi(this);
     populate_table();
+    connect(ui->table_lista_prendas->action1, SIGNAL(triggered()),
+            this, SLOT(on_actionAnadir_fila_triggered()));
+    connect(ui->table_lista_prendas->action2, SIGNAL(triggered()),
+            this, SLOT(on_actionEliminar_fila_triggered()));
 }
 
 ListaPrendas::~ListaPrendas()
@@ -19,7 +23,7 @@ void ListaPrendas::populate_table()
 {
     if (QSqlDatabase::contains("qt_sql_default_connection"))
     {
-        QSqlTableModel *model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
+        model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("prendas");
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
         model->select();
@@ -34,19 +38,21 @@ void ListaPrendas::on_actionActualizar_triggered()
     populate_table();
 }
 
-void ListaPrendas::on_actionAnadir_prenda_triggered()
+void ListaPrendas::on_actionAnadir_fila_triggered()
 {
-    AnadirPrenda *ui_add_prend;
-    ui_add_prend = new AnadirPrenda(this);
-    ui_add_prend->db = db;
-    ui_add_prend->setModal(true);
-    if (ui_add_prend->exec() == QDialog::Accepted)
+    model->insertRow(ui->table_lista_prendas->currentIndex().row() + 1);
+}
+
+void ListaPrendas::on_actionEliminar_fila_triggered()
+{
+    int ret = QMessageBox::question(this, "Eliminar fila",
+                                    "¿Está seguro que desea eliminar la fila " +
+                                    QString::number(ui->table_lista_prendas->currentIndex().row() + 1) + "?",
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::No);
+    if (ret == QMessageBox::Yes)
     {
-        qDebug() << "Exited pressing OK";
+        model->removeRow(ui->table_lista_prendas->currentIndex().row());
+        populate_table();
     }
-    else
-    {
-        qDebug() << "Exited pressing Cancel";
-    }
-    populate_table();
 }

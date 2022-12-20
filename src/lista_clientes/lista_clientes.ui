@@ -65,7 +65,7 @@
      </widget>
     </item>
     <item row="1" column="0">
-     <widget class="QTableView" name="table_lista_clientes">
+     <widget class="TableView" name="table_lista_clientes">
       <property name="minimumSize">
        <size>
         <width>500</width>
@@ -77,6 +77,9 @@
         <width>16777215</width>
         <height>16777215</height>
        </size>
+      </property>
+      <property name="mouseTracking">
+       <bool>false</bool>
       </property>
       <property name="layoutDirection">
        <enum>Qt::LeftToRight</enum>
@@ -117,10 +120,17 @@
      <string>Archivo</string>
     </property>
     <addaction name="actionActualizar"/>
+   </widget>
+   <widget class="QMenu" name="menuHerramientas">
+    <property name="title">
+     <string>Herramientas</string>
+    </property>
     <addaction name="separator"/>
-    <addaction name="actionAnadir_cliente"/>
+    <addaction name="actionAnadir_fila"/>
+    <addaction name="actionEliminar_fila"/>
    </widget>
    <addaction name="menuArchivo"/>
+   <addaction name="menuHerramientas"/>
   </widget>
   <action name="actionActualizar">
    <property name="text">
@@ -130,15 +140,30 @@
     <string>Ctrl+A</string>
    </property>
   </action>
-  <action name="actionAnadir_cliente">
+  <action name="actionAnadir_fila">
    <property name="text">
-    <string>Añadir cliente</string>
+    <string>Añadir fila</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
    </property>
   </action>
+  <action name="actionEliminar_fila">
+   <property name="text">
+    <string>Eliminar fila</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
+  </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>TableView</class>
+   <extends>QTableView</extends>
+   <header location="global">tableview.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

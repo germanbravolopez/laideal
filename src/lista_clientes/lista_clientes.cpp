@@ -1,6 +1,6 @@
 #include "lista_clientes.h"
 #include "ui_lista_clientes.h"
-#include "anadircliente.h"
+#include "tableview.h"
 
 ListaClientes::ListaClientes(QWidget *parent) :
     QMainWindow(parent),
@@ -8,6 +8,10 @@ ListaClientes::ListaClientes(QWidget *parent) :
 {
     ui->setupUi(this);
     populate_table();
+    connect(ui->table_lista_clientes->action1, SIGNAL(triggered()),
+            this, SLOT(on_actionAnadir_fila_triggered()));
+    connect(ui->table_lista_clientes->action2, SIGNAL(triggered()),
+            this, SLOT(on_actionEliminar_fila_triggered()));
 }
 
 ListaClientes::~ListaClientes()
@@ -19,7 +23,7 @@ void ListaClientes::populate_table()
 {
     if (QSqlDatabase::contains("qt_sql_default_connection"))
     {
-        QSqlTableModel *model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
+        model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("clientes");
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
         model->select();
@@ -34,19 +38,21 @@ void ListaClientes::on_actionActualizar_triggered()
     populate_table();
 }
 
-void ListaClientes::on_actionAnadir_cliente_triggered()
+void ListaClientes::on_actionAnadir_fila_triggered()
 {
-    AnadirCliente *ui_add_cliente;
-    ui_add_cliente = new AnadirCliente(this);
-    ui_add_cliente->db = db;
-    ui_add_cliente->setModal(true);
-    if (ui_add_cliente->exec() == QDialog::Accepted)
+    model->insertRow(ui->table_lista_clientes->currentIndex().row() + 1);
+}
+
+void ListaClientes::on_actionEliminar_fila_triggered()
+{
+    int ret = QMessageBox::question(this, "Eliminar fila",
+                                    "¿Está seguro que desea eliminar la fila " +
+                                    QString::number(ui->table_lista_clientes->currentIndex().row() + 1) + "?",
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::No);
+    if (ret == QMessageBox::Yes)
     {
-        qDebug() << "Exited pressing OK";
+        model->removeRow(ui->table_lista_clientes->currentIndex().row());
+        populate_table();
     }
-    else
-    {
-        qDebug() << "Exited pressing Cancel";
-    }
-    populate_table();
 }

@@ -1,6 +1,6 @@
 #include "lista_proveedores.h"
 #include "ui_lista_proveedores.h"
-#include "anadirproveedor.h"
+#include "tableview.h"
 
 ListaProveedores::ListaProveedores(QWidget *parent) :
     QMainWindow(parent),
@@ -8,6 +8,10 @@ ListaProveedores::ListaProveedores(QWidget *parent) :
 {
     ui->setupUi(this);
     populate_table();
+    connect(ui->table_lista_proveedores->action1, SIGNAL(triggered()),
+            this, SLOT(on_actionAnadir_fila_triggered()));
+    connect(ui->table_lista_proveedores->action2, SIGNAL(triggered()),
+            this, SLOT(on_actionEliminar_fila_triggered()));
 }
 
 ListaProveedores::~ListaProveedores()
@@ -19,7 +23,7 @@ void ListaProveedores::populate_table()
 {
     if (QSqlDatabase::contains("qt_sql_default_connection"))
     {
-        QSqlTableModel *model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
+        model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("proveedores");
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
         model->select();
@@ -34,19 +38,21 @@ void ListaProveedores::on_actionActualizar_triggered()
     populate_table();
 }
 
-void ListaProveedores::on_actionAnadir_proveedor_triggered()
+void ListaProveedores::on_actionAnadir_fila_triggered()
 {
-    AnadirProveedor *ui_add_prov;
-    ui_add_prov = new AnadirProveedor(this);
-    ui_add_prov->db = db;
-    ui_add_prov->setModal(true);
-    if (ui_add_prov->exec() == QDialog::Accepted)
+    model->insertRow(ui->table_lista_proveedores->currentIndex().row() + 1);
+}
+
+void ListaProveedores::on_actionEliminar_fila_triggered()
+{
+    int ret = QMessageBox::question(this, "Eliminar fila",
+                                    "¿Está seguro que desea eliminar la fila " +
+                                    QString::number(ui->table_lista_proveedores->currentIndex().row() + 1) + "?",
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::No);
+    if (ret == QMessageBox::Yes)
     {
-        qDebug() << "Exited pressing OK";
+        model->removeRow(ui->table_lista_proveedores->currentIndex().row());
+        populate_table();
     }
-    else
-    {
-        qDebug() << "Exited pressing Cancel";
-    }
-    populate_table();
 }
