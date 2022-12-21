@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1243</width>
+    <width>704</width>
     <height>698</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>1243</width>
-    <height>698</height>
+    <width>0</width>
+    <height>0</height>
    </size>
   </property>
   <property name="font">
@@ -25,80 +25,76 @@
    <string>Listado de Proveedores</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTableView" name="table_lista_proveedores">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>80</y>
-      <width>1201</width>
-      <height>531</height>
-     </rect>
-    </property>
-    <property name="maximumSize">
-     <size>
-      <width>1201</width>
-      <height>531</height>
-     </size>
-    </property>
-    <property name="locale">
-     <locale language="Spanish" country="Spain"/>
-    </property>
-    <property name="sizeAdjustPolicy">
-     <enum>QAbstractScrollArea::AdjustToContents</enum>
-    </property>
-    <property name="alternatingRowColors">
-     <bool>true</bool>
-    </property>
-    <property name="selectionMode">
-     <enum>QAbstractItemView::ContiguousSelection</enum>
-    </property>
-    <property name="sortingEnabled">
-     <bool>true</bool>
-    </property>
-    <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
-     <bool>true</bool>
-    </attribute>
-   </widget>
-   <widget class="QLabel" name="lbl_title">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>0</y>
-      <width>1221</width>
-      <height>71</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>Arial</family>
-      <pointsize>26</pointsize>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="cursor">
-     <cursorShape>ArrowCursor</cursorShape>
-    </property>
-    <property name="autoFillBackground">
-     <bool>true</bool>
-    </property>
-    <property name="locale">
-     <locale language="Spanish" country="Spain"/>
-    </property>
-    <property name="text">
-     <string>Listado de Proveedores</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignCenter</set>
-    </property>
-   </widget>
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0">
+     <widget class="QLabel" name="lbl_title">
+      <property name="font">
+       <font>
+        <family>Arial</family>
+        <pointsize>26</pointsize>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="cursor">
+       <cursorShape>ArrowCursor</cursorShape>
+      </property>
+      <property name="autoFillBackground">
+       <bool>true</bool>
+      </property>
+      <property name="locale">
+       <locale language="Spanish" country="Spain"/>
+      </property>
+      <property name="text">
+       <string>Listado de Proveedores</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="TableView" name="table_lista_proveedores">
+      <property name="minimumSize">
+       <size>
+        <width>500</width>
+        <height>300</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="locale">
+       <locale language="Spanish" country="Spain"/>
+      </property>
+      <property name="sizeAdjustPolicy">
+       <enum>QAbstractScrollArea::AdjustToContents</enum>
+      </property>
+      <property name="alternatingRowColors">
+       <bool>true</bool>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::ContiguousSelection</enum>
+      </property>
+      <property name="sortingEnabled">
+       <bool>true</bool>
+      </property>
+      <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
+       <bool>true</bool>
+      </attribute>
+     </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1243</width>
-     <height>24</height>
+     <width>704</width>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuArchivo">
@@ -106,20 +102,39 @@
      <string>Archivo</string>
     </property>
     <addaction name="actionActualizar"/>
-    <addaction name="separator"/>
-    <addaction name="actionAnadir_proveedor"/>
+   </widget>
+   <widget class="QMenu" name="menuHerramientas">
+    <property name="title">
+     <string>Herramientas</string>
+    </property>
+    <addaction name="actionAnadir_fila"/>
+    <addaction name="actionEliminar_fila"/>
    </widget>
    <addaction name="menuArchivo"/>
+   <addaction name="menuHerramientas"/>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
   <action name="actionActualizar">
    <property name="text">
     <string>Actualizar</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
   </action>
-  <action name="actionAnadir_proveedor">
+  <action name="actionAnadir_fila">
    <property name="text">
-    <string>Añadir proveedor</string>
+    <string>Añadir fila</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="actionEliminar_fila">
+   <property name="text">
+    <string>Eliminar fila</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
    </property>
   </action>
  </widget>

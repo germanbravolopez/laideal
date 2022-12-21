@@ -16,12 +16,15 @@ class Gastos : public QMainWindow
     Q_OBJECT
 
 public:
+    QSqlTableModel *model;
     explicit Gastos(QWidget *parent = nullptr);
     ~Gastos();
 
 private slots:
     void populate_table();
     void on_actionActualizar_triggered();
+    void on_actionActivar_modo_edicion_triggered();
+    void on_actionDesactivar_modo_edicion_triggered();
 
 private:
     Ui::Gastos *ui;

@@ -5,9 +5,9 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    a.setStyle(QStyleFactory::create("Windows"));
+    a.setStyle("fusion");
     MainWindow w;
-    w.setWindowState(Qt::WindowMaximized);
+    //w.setWindowState(Qt::WindowMaximized);
     w.show();
     return a.exec();
 }

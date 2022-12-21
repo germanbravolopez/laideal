@@ -160,11 +160,14 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 {
     if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
+    {
         reset_all_contents();
+    }
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save))
     {
         if (validate_ticket())
         {
+            check_client_data();
             save_ticket();
             reset_all_contents();
         }
@@ -312,10 +315,58 @@ bool MainWindow::validate_ticket()
     }
 }
 
+QString MainWindow::remove_special_char(QString str)
+{
+    str = str.normalized(QString::NormalizationForm_D).toLatin1();
+    int index = str.indexOf("?");
+    while (index != -1)
+    {
+        str = str.remove(index, 1);
+        index = str.indexOf("?");
+    }
+    return str;
+}
+
+void MainWindow::check_client_data()
+{
+    QString currentClient = ui->cb_client->currentText();
+    if (ui->cb_client->findText(currentClient) >= 0)
+    {
+        update_item_to_client(db, "tel_fijo",  ui->le_phone->text(),  currentClient);
+        update_item_to_client(db, "movil",     ui->le_mobile->text(), currentClient);
+        update_item_to_client(db, "direccion", ui->le_addr->text(),   currentClient);
+    }
+    else
+    {
+        currentClient = remove_special_char(currentClient.simplified().toLower());
+        bool client_found = false;
+        for (int idx = 0; idx < ui->cb_client->count(); idx++)
+        {
+            QString client_in_cb = remove_special_char(ui->cb_client->itemText(idx).simplified().toLower());
+            if (currentClient == client_in_cb) client_found = true;
+        }
+        if (!client_found)
+        {
+            add_new_client(db, currentClient, ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
+        }
+        else
+        {
+            QMessageBox::information(this, "Listado de clientes",
+                                  "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
+                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado. "
+                                  "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
+                                  QMessageBox::Ok,
+                                  QMessageBox::Ok);
+        }
+    }
+
+}
+
 void MainWindow::save_ticket()
 {
     for (int row = 0; row < ui->table_ticket->rowCount(); row++)
     {
+        // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
         {
             db.open();
@@ -405,5 +456,4 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
-    ui_recog->setWindowState(Qt::WindowMaximized);
 }

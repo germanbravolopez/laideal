@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QSqlTableModel>
+#include <QMessageBox>
 
 #define NOMBRE_COLUMN_IDX 0
 
@@ -17,13 +18,15 @@ class ListaPrendas : public QMainWindow
 
 public:
     QSqlDatabase db;
+    QSqlTableModel *model;
     explicit ListaPrendas(QWidget *parent = nullptr);
     ~ListaPrendas();
 
 private slots:
     void populate_table();
     void on_actionActualizar_triggered();
-    void on_actionAnadir_prenda_triggered();
+    void on_actionAnadir_fila_triggered();
+    void on_actionEliminar_fila_triggered();
 
 private:
     Ui::ListaPrendas *ui;
