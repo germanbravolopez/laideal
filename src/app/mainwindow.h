@@ -51,6 +51,8 @@ private slots:
     void cbServChanged(const QString &text);
 
     bool validate_ticket();
+    QString remove_special_char(QString str);
+    void check_client_data();
     void save_ticket();
 
     // Taskbar

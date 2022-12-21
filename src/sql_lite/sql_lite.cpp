@@ -61,11 +61,6 @@ float read_garment_price(QSqlDatabase &db, QString garment, QString service)
     return price;
 }
 
-QString search_item_from_client(QSqlDatabase &db, QString item, QString client)
-{
-    return select_from_where_like(db, item, "clientes", "nombre", client, false);
-}
-
 QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString table, QString column_to_search, QString item_to_search, bool exact_match)
 {
     QString item_to_search_text;
@@ -87,4 +82,36 @@ QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString ta
     q.clear();
     db.close();
     return item_to_search_text;
+}
+
+QString search_item_from_client(QSqlDatabase &db, QString item, QString client)
+{
+    return select_from_where_like(db, item, "clientes", "nombre", client, false);
+}
+
+bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QString client)
+{
+    QSqlQuery q;
+    db.open();
+    q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
+    q.bindValue(":item", item);
+    q.bindValue(":client", client);
+    bool ok = q.exec();
+    db.close();
+    return ok;
+}
+
+bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString direccion, QString movil)
+{
+    QSqlQuery q;
+    db.open();
+    q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) \
+    VALUES(:nombre, :tel_fijo, :direccion, :movil)");
+    q.bindValue(":nombre", client);
+    q.bindValue(":tel_fijo", tel_fijo);
+    q.bindValue(":direccion", direccion);
+    q.bindValue(":movil", movil);
+    bool ok = q.exec();
+    db.close();
+    return ok;
 }
