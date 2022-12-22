@@ -5,17 +5,17 @@ add_executable(laideal
     main.cpp
 )
 
-target_link_libraries(laideal
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+target_link_libraries(laideal PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
-    TableView
-    sql_lite
     gastos
     ingresos
-    lista_prendas
     lista_clientes
+    lista_prendas
     lista_proveedores
     recog_prendas
+    sql_lite
+    TableView
 )
 
 set_target_properties(laideal PROPERTIES

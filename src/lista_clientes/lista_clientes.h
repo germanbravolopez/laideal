@@ -17,7 +17,6 @@ class ListaClientes : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
     QSqlTableModel *model;
     explicit ListaClientes(QWidget *parent = nullptr);
     ~ListaClientes();

@@ -6,7 +6,6 @@ add_library(lista_prendas STATIC
 target_link_libraries(lista_prendas
     PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
-    sql_lite
     TableView
 )
 target_include_directories(lista_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

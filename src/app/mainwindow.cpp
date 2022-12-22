@@ -432,7 +432,6 @@ void MainWindow::on_actionListado_de_prendas_triggered()
 {
     ListaPrendas *ui_prend;
     ui_prend = new ListaPrendas(this);
-    ui_prend->db = db;
     ui_prend->show();
 }
 
