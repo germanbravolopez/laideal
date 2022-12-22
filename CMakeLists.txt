@@ -14,6 +14,7 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 
 add_subdirectory(src/app)
 add_subdirectory(src/gastos)
+add_subdirectory(src/imprimir)
 add_subdirectory(src/ingresos)
 add_subdirectory(src/lista_clientes)
 add_subdirectory(src/lista_prendas)

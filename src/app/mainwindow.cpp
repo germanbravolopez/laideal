@@ -7,6 +7,7 @@
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
 #include "recog_prendas.h"
+#include "imprimir.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -455,4 +456,20 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
+}
+
+void MainWindow::on_actionRecibo_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->show();
+}
+
+void MainWindow::on_actionFactura_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->show();
 }

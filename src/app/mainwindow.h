@@ -63,6 +63,8 @@ private slots:
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionRecogida_de_prendas_triggered();
+    void on_actionRecibo_triggered();
+    void on_actionFactura_triggered();
 
 private:
     Ui::MainWindow *ui;

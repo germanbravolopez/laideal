@@ -10,6 +10,7 @@ target_link_libraries(laideal PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql
     gastos
     ingresos
+    imprimir
     lista_clientes
     lista_prendas
     lista_proveedores
