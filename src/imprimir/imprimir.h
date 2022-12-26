@@ -4,6 +4,11 @@
 #include <QDialog>
 #include <QSqlDatabase>
 #include <QMessageBox>
+#include <QTextEdit>
+#include <QColor>
+#include <QTextDocument>
+#include <QFile>
+#include <QPainter>
 
 namespace Ui {
 class Imprimir;
@@ -25,6 +30,7 @@ private slots:
 
 private:
     Ui::Imprimir *ui;
+
 };
 
 #endif // IMPRIMIR_H
