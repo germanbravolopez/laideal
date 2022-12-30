@@ -65,6 +65,7 @@ private slots:
     void on_actionRecogida_de_prendas_triggered();
     void on_actionRecibo_triggered();
     void on_actionFactura_triggered();
+    void on_actionFactura_completa_triggered();
 
 private:
     Ui::MainWindow *ui;

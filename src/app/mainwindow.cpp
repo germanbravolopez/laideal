@@ -474,6 +474,18 @@ void MainWindow::on_actionFactura_triggered()
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->is_recibo = false;
+    ui_impr->is_complex_invoice = false;
     ui_impr->setWindowTitle("Imprimir factura");
+    ui_impr->show();
+}
+
+void MainWindow::on_actionFactura_completa_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complex_invoice = true;
+    ui_impr->setWindowTitle("Imprimir factura completa");
     ui_impr->show();
 }
