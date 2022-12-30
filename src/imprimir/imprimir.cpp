@@ -16,95 +16,161 @@ Imprimir::~Imprimir()
     delete ui;
 }
 
+void Imprimir::get_ticket_info()
+{
+    // Search ticket
+    sql_query_model = new QSqlQueryModel;
+    db.open();
+    sql_query_model->setQuery("SELECT * \
+                    FROM ingresos \
+                    WHERE n_recibo = '" + ui->le_n_ticket->text() + "'");
+    db.close();
+}
+
+bool Imprimir::check_ticket_paid()
+{
+    for (int row = 0; row < sql_query_model->rowCount(); row++)
+    {
+        if (sql_query_model->data(sql_query_model->index(row, TABLE_IS_PAYED)).toString() == "NO")
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 void Imprimir::create_ticket_and_print()
 {
+    // Create string with garments for ticket format
+    QString ticket_garments;
+    float ticket_total_f = 0.0;
+    for (int row = 0; row < sql_query_model->rowCount(); row++)
+    {
+        QString garment_name;
+        QString left_side = sql_query_model->data(sql_query_model->index(row, TABLE_GARMENT)).toString().left(8);
+        if (left_side == "Alfombra")
+        {
+            garment_name = "Alfombra - ";
+            garment_name.append(sql_query_model->data(sql_query_model->index(row, TABLE_OBSERV)).toString());
+        }
+        else
+        {
+            garment_name = sql_query_model->data(sql_query_model->index(row, TABLE_GARMENT)).toString();
+        }
+        ticket_garments.append("<tr>"
+                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; height:20px; width:33px;'>"
+                    "&nbsp;&nbsp;&nbsp;"+ sql_query_model->data(sql_query_model->index(row, TABLE_QUANTITY)).toString() + "</td>"
+                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; width:137px;'>"
+                    + garment_name + "</td>"
+                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style: normal; font-family:Calibri,sans-serif; text-align:right; border:none; width:66px;'>"
+                    + QString::number(sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat(), 'f', 2) + "&emsp;</td>"
+            "</tr>");
+        ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat();
+    }
+    // Calculate total price and IVA
+    QString ticket_total = QString::number(ticket_total_f, 'f', 2);
+    QString iva = QString::number(ticket_total_f * 0.21, 'f', 2);
+    QString base_imponible = QString::number(ticket_total_f - (ticket_total_f * 0.21), 'f', 2);
     // Create printer for tickets
     QPrinter *printer = new QPrinter(QPrinter::PrinterResolution);
     printer->setPrinterName("EPSON TM-T20III");
     printer->setColorMode(QPrinter::GrayScale);
-    // Create ticket content based on ticket information
+    // Create ticket content based on ticket information: payment date and invoice type
+    QString ticket_type, ticket_dates;
+    ticket_dates.append(
+        "<tr>"
+            "<td colspan='3'>Fecha recepci&oacute;n: "
+            + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_RCP)).toString() + "</td>"
+        "</tr>"
+    );
+    if (!is_recibo)
+    {
+        ticket_type = "<tr><td colspan='3'>FACTURA SIMPLIFICADA</td></tr>";
+        ticket_dates.append(
+            "<tr>"
+                "<td colspan='3'>Fecha pago: "
+                + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_PAY)).toString() + "</td>"
+            "</tr>"
+        );
+    }
+    // Create full HTML ticket
     QTextEdit *ticketContent = new QTextEdit();
     QString text;
-    /*QFile file("C:/work/personal_projects/tintoreria/laideal/src/imprimir/ticket.html");
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)){
-        QTextStream stream(&file);
-        while (!stream.atEnd()){
-
-            text.append(stream.readLine());
-        }
-    }
-    file.close();*/
-    text.append("<table style='border:none; border-collapse:collapse; width:177pt;'>"
-            "<tbody>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:25px; font-weight:700; font-style:normal; font-family:Calibri,sans-serif; text-align:center; border:none;'>Tintorer&iacute;a La Ideal"
-                        "<div style='font-size: 15px;'>"
-                            "<span>Roc&iacute;o L&oacute;pez Dom&iacute;nguez</span><br>"
-                            "<span>NIF: 24215141-M</span><br>"
-                            "<span>Pl. San Pantale&oacute;n 1, 18012 Granada</span><br>"
-                            "<span>Tlf: 958 27 27 83</span>"
-                        "</div>"
-                    "</td>"
-                "</tr>"
-                "<tr><td colspan='3' style='border:none'><hr></td></tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none;'>FACTURA SIMPLIFICADA</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:15px; font-weight:700; font-style:normal; font-family:Calibri,sans-serif; text-align:right;vertical-align:top; border:none; height:20pt;'>N&ordm;: 20581</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none;'>Cliente: Rafael Molina Rodela</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none;'>Recogida: 03/06/2022</td>"
-                "</tr>"
-                "<tr>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; border-top:none; border-bottom:0.5pt solid black; height:20pt; width:25pt;'>Uds.</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; border-bottom:0.5pt solid black; height:20pt; width:102pt;'>Prendas</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; border-bottom:0.5pt solid black; height:20pt; width:50pt;'>Importe</td>"
-                "</tr>"
-                "<tr>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:center; border:none; height:15pt; width:25pt;'>1</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; width:102pt;'>Traje</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style: normal; font-family:Calibri,sans-serif; text-align:center; border:none; width:50pt;'>10.50</td>"
-                "</tr>"
-                "<tr>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:center; border:none; height:15pt; width:25pt;'>1</td>"
-                    "<td style='padding:0px;color:black;font-size:15px;font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; width:102pt;'>Chaleco</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style: normal; font-family:Calibri,sans-serif; text-align:center; border:none; width:50pt;'>0.00</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='2' style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; vertical-align:bottom; border:none; border-top:0.5pt solid black; height:20pt;'>Base Imponible:</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:center; vertical-align:bottom; border:none; border-top:0.5pt solid black;'>8.68</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='2' style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; vertical-align:bottom; border:none;'>IVA (21%):</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:center; vertical-align:bottom; border:none;'>1.82</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='2' style='padding:0px; color:black; font-size:15px; font-weight:700; font-style:normal; font-family:Calibri,sans-serif; vertical-align:bottom; border:none;'>TOTAL:</td>"
-                    "<td style='padding:0px; color:black; font-size:15px; font-weight:700; font-style:normal; font-family:Calibri,sans-serif; text-align:center; vertical-align:bottom; border:none;'>10.50</td>"
-                "</tr>"
-                "<tr><td colspan='3' style='border:none'><hr></td></tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:13px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none;'>CONDICIONES GENERALES.</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:12px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; height:35pt;'>- El recibo deber&aacute; ser presentado al retirar la prenda. En caso de p&eacute;rdida, el usuario acreditar&aacute; su identidad.</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:12px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; height:35pt;'>- La obligaci&oacute;n de conservar las prendas por el establecimiento caduca una vez transcurridos SEIS MESES desde la fecha de recogida.</td>"
-                "</tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:12px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none; height:35pt;'>- No se responde de botones y otros adornos delicados de las prendas. Se recomienda que sean desmontados por el cliente.&nbsp;</td>"
-                "</tr>"
-                "<tr><td colspan='3' style='border:none'><hr></td></tr>"
-                "<tr>"
-                    "<td colspan='3' style='padding:0px; color:black; font-size:12px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; vertical-align:bottom; border:none;'>03/06/2022 - 13:55:57</td>"
-                "</tr>"
-            "</tbody>"
-        "</table>");
+    text.append(
+            "<!DOCTYPE html>"
+            "<html>"
+                "<head>"
+                    "<style>"
+                        "table, th, td { border-collapse:collapse; border:none; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; }"
+                    "</style>"
+                "</head>"
+            "<body>"
+                "<table style='width:236px;'>"
+                    "<tbody>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:25px; font-weight:700; text-align:center;'>Tintorer&iacute;a La Ideal"
+                                "<div style='text-align:center;'>"
+                                    "<span style='font-weight:700;'>Roc&iacute;o L&oacute;pez Dom&iacute;nguez</span><br>"
+                                    "<span style='font-weight:700;'>NIF: 24215141-M</span><br>"
+                                    "<span style='font-weight:700;'>Pl. San Pantale&oacute;n 1, 18012 Granada</span><br>"
+                                    "<span style='font-weight:700;'>Tlf: 958 27 27 83</span>"
+                                "</div>"
+                            "</td>"
+                        "</tr>"
+                        "<tr><td colspan='3'><hr></td></tr>"
+                        + ticket_type +
+                        "<tr>"
+                            "<td colspan='3' style='font-weight:700; text-align:right; height:26px;'>N&ordm;: "
+                            + ui->le_n_ticket->text() + "</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='3'>Cliente: "
+                            + sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString() + "</td>"
+                        "</tr>"
+                        + ticket_dates +
+                        "<tr>"
+                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:33px;'>Uds.</td>"
+                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:137px;'>Prendas</td>"
+                            "<td style='font-weight:700; text-align:right; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:66px;'>Importe</td>"
+                        "</tr>"
+                        + ticket_garments +
+                        "<tr>"
+                            "<td colspan='2' style='vertical-align:bottom; border-top:1px solid black; height:26px;'>Base Imponible:</td>"
+                            "<td style='text-align:right; vertical-align:bottom; border-top:1px solid black;'>"
+                            + base_imponible + "&emsp;</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='2' style='vertical-align:bottom;'>IVA (21%):</td>"
+                            "<td style='text-align:right; vertical-align:bottom;'>"
+                            + iva + "&emsp;</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='2' style='font-weight:700; vertical-align:bottom;'>TOTAL:</td>"
+                            "<td style='font-weight:700; text-align:right; vertical-align:bottom;'>"
+                            + ticket_total + "&emsp;</td>"
+                        "</tr>"
+                        "<tr><td colspan='3'><hr></td></tr>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:13px; vertical-align:bottom;'>CONDICIONES GENERALES.</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- El recibo deber&aacute; ser presentado al retirar la prenda. En caso de p&eacute;rdida, el usuario acreditar&aacute; su identidad.</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- La obligaci&oacute;n de conservar las prendas por el establecimiento caduca una vez transcurridos SEIS MESES desde la fecha de recogida.</td>"
+                        "</tr>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- No se responde de botones y otros adornos delicados de las prendas. Se recomienda que sean desmontados por el cliente.&nbsp;</td>"
+                        "</tr>"
+                        "<tr><td colspan='3'><hr></td></tr>"
+                        "<tr>"
+                            "<td colspan='3' style='font-size:12px; vertical-align:bottom;'>"
+                            + QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss") + "</td>"
+                        "</tr>"
+                    "</tbody>"
+                "</table>"
+            "</body>"
+            "</html>");
     ticketContent->setHtml(text);
     ticketContent->show();
     //ticketContent->print(printer);
@@ -115,7 +181,18 @@ void Imprimir::on_bb_ok_cancel_accepted()
     if (ui->le_n_ticket->text() ==
         select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true))
     {
-        create_ticket_and_print();
+        get_ticket_info();
+        if (check_ticket_paid())
+        {
+            create_ticket_and_print();
+        }
+        else
+        {
+            QMessageBox::information(this, "Imprimir",
+                                  "El número de recibo no se ha pagado por completo.",
+                                  QMessageBox::Ok,
+                                  QMessageBox::Ok);
+        }
     }
     else
     {

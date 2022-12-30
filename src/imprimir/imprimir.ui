@@ -18,6 +18,9 @@
   <property name="windowTitle">
    <string>Dialog</string>
   </property>
+  <property name="locale">
+   <locale language="Spanish" country="Spain"/>
+  </property>
   <layout class="QFormLayout" name="formLayout">
    <item row="0" column="0">
     <widget class="QLabel" name="lbl_n_ticket">
