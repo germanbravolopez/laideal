@@ -39,6 +39,18 @@ bool Imprimir::check_ticket_paid()
     return true;
 }
 
+QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
+{
+    bool ok;
+    QString text = QInputDialog::getText(this, title,
+                                         request, QLineEdit::Normal,
+                                         "", &ok);
+    if (ok)
+        return text;
+    else
+        return "";
+}
+
 void Imprimir::create_ticket_and_print()
 {
     // Create string with garments for ticket format
@@ -76,7 +88,7 @@ void Imprimir::create_ticket_and_print()
     printer->setPrinterName("EPSON TM-T20III");
     printer->setColorMode(QPrinter::GrayScale);
     // Create ticket content based on ticket information: payment date and invoice type
-    QString ticket_type, ticket_dates;
+    QString ticket_type, ticket_dates, client_address, client_id;
     ticket_dates.append(
         "<tr>"
             "<td colspan='3'>Fecha recepci&oacute;n: "
@@ -92,6 +104,31 @@ void Imprimir::create_ticket_and_print()
                 + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_PAY)).toString() + "</td>"
             "</tr>"
         );
+        // Extra data: address
+        int resp = QMessageBox::question(this, "Dirección",
+                                          "¿Añadir dirección de facturación del cliente?",
+                                          QMessageBox::Yes | QMessageBox::No,
+                                          QMessageBox::No);
+        if (resp == QMessageBox::Yes)
+        {
+            client_address = search_item_from_client(db, "direccion", sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString());
+            if (client_address == "")
+            {
+                client_address = add_extra_info_to_invoice("Añadir dirección de facturación", "Dirección:");
+            }
+            client_address = "<tr><td colspan='3'>Dirección: "
+                             + client_address + "</td></tr>";
+        }
+        // Extra data: id
+        int resp1 = QMessageBox::question(this, "DNI",
+                                          "¿Añadir DNI del cliente?",
+                                          QMessageBox::Yes | QMessageBox::No,
+                                          QMessageBox::No);
+        if (resp1 == QMessageBox::Yes)
+        {
+            client_id = "<tr><td colspan='3'>DNI: "
+                             + add_extra_info_to_invoice("Añadir DNI", "DNI:") + "</td></tr>";
+        }
     }
     // Create full HTML ticket
     QTextEdit *ticketContent = new QTextEdit();
@@ -127,7 +164,7 @@ void Imprimir::create_ticket_and_print()
                             "<td colspan='3'>Cliente: "
                             + sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString() + "</td>"
                         "</tr>"
-                        + ticket_dates +
+                        + ticket_dates + client_address + client_id +
                         "<tr>"
                             "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:33px;'>Uds.</td>"
                             "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:137px;'>Prendas</td>"
