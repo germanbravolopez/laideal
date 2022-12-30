@@ -51,7 +51,7 @@ QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
         return "";
 }
 
-void Imprimir::create_ticket_and_print()
+void Imprimir::create_ticket_and_print(bool copy_for_client)
 {
     // Create string with garments for ticket format
     QString ticket_garments;
@@ -88,28 +88,36 @@ void Imprimir::create_ticket_and_print()
     printer->setPrinterName("EPSON TM-T20III");
     printer->setColorMode(QPrinter::GrayScale);
     // Create ticket content based on ticket information: payment date and invoice type
-    QString ticket_type, ticket_dates, client_address, client_id;
+    QString ticket_type, ticket_dates, client_address, client_id, receipt_info;
     ticket_dates.append(
         "<tr>"
-            "<td colspan='3'>Fecha recepci&oacute;n: "
+            "<td colspan='3'>Recepci&oacute;n: "
             + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_RCP)).toString() + "</td>"
         "</tr>"
     );
-    if (!is_recibo)
+    if (is_recibo)
+    {
+        // Add copy for client or for store info
+        if (copy_for_client)
+        {
+            receipt_info = "<tr><td colspan='3' style='font-size:12px;'>(Copia para el cliente)</td></tr>";
+        }
+        else
+        {
+            receipt_info = "<tr><td colspan='3' style='font-size:12px;'>(Copia para el establecimiento)</td></tr>";
+        }
+    }
+    else
     {
         ticket_type = "<tr><td colspan='3'>FACTURA SIMPLIFICADA</td></tr>";
         ticket_dates.append(
             "<tr>"
-                "<td colspan='3'>Fecha pago: "
+                "<td colspan='3'>Pago: "
                 + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_PAY)).toString() + "</td>"
             "</tr>"
         );
-        // Extra data: address
-        int resp = QMessageBox::question(this, "Dirección",
-                                          "¿Añadir dirección de facturación del cliente?",
-                                          QMessageBox::Yes | QMessageBox::No,
-                                          QMessageBox::No);
-        if (resp == QMessageBox::Yes)
+        // Extra data: address and id
+        if (is_complete_invoice)
         {
             client_address = search_item_from_client(db, "direccion", sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString());
             if (client_address == "")
@@ -118,14 +126,6 @@ void Imprimir::create_ticket_and_print()
             }
             client_address = "<tr><td colspan='3'>Dirección: "
                              + client_address + "</td></tr>";
-        }
-        // Extra data: id
-        int resp1 = QMessageBox::question(this, "DNI",
-                                          "¿Añadir DNI del cliente?",
-                                          QMessageBox::Yes | QMessageBox::No,
-                                          QMessageBox::No);
-        if (resp1 == QMessageBox::Yes)
-        {
             client_id = "<tr><td colspan='3'>DNI: "
                              + add_extra_info_to_invoice("Añadir DNI", "DNI:") + "</td></tr>";
         }
@@ -157,7 +157,7 @@ void Imprimir::create_ticket_and_print()
                         "<tr><td colspan='3'><hr></td></tr>"
                         + ticket_type +
                         "<tr>"
-                            "<td colspan='3' style='font-weight:700; text-align:right; height:26px;'>N&ordm;: "
+                            "<td colspan='3' style='font-weight:700; text-align:right; height:26px;'>Recibo: "
                             + ui->le_n_ticket->text() + "</td>"
                         "</tr>"
                         "<tr>"
@@ -165,6 +165,7 @@ void Imprimir::create_ticket_and_print()
                             + sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString() + "</td>"
                         "</tr>"
                         + ticket_dates + client_address + client_id +
+                        "<tr></tr>"
                         "<tr>"
                             "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:33px;'>Uds.</td>"
                             "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:137px;'>Prendas</td>"
@@ -187,6 +188,7 @@ void Imprimir::create_ticket_and_print()
                             + ticket_total + "&emsp;</td>"
                         "</tr>"
                         "<tr><td colspan='3'><hr></td></tr>"
+                        "<tr></tr>"
                         "<tr>"
                             "<td colspan='3' style='font-size:13px; vertical-align:bottom;'>CONDICIONES GENERALES.</td>"
                         "</tr>"
@@ -204,6 +206,7 @@ void Imprimir::create_ticket_and_print()
                             "<td colspan='3' style='font-size:12px; vertical-align:bottom;'>"
                             + QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss") + "</td>"
                         "</tr>"
+                        + receipt_info +
                     "</tbody>"
                 "</table>"
             "</body>"
@@ -219,9 +222,21 @@ void Imprimir::on_bb_ok_cancel_accepted()
         select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true))
     {
         get_ticket_info();
-        if (check_ticket_paid())
+        if (is_recibo || (!is_recibo && check_ticket_paid()))
         {
-            create_ticket_and_print();
+            create_ticket_and_print(true);
+            if (is_recibo)
+            {
+                // Comment-in when no more automatic receipt are needed
+                //int resp = QMessageBox::question(this, "Copia establecimiento",
+                //                                 "¿Desea copia para el establecimiento?",
+                //                                 QMessageBox::Yes | QMessageBox::No,
+                //                                 QMessageBox::Yes);
+                //if (resp == QMessageBox::Yes)
+                //{
+                    create_ticket_and_print(false);
+                //}
+            }
         }
         else
         {
