@@ -7,6 +7,7 @@
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
 #include "recog_prendas.h"
+#include "contabilidad.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -456,4 +457,12 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
+}
+
+void MainWindow::on_actionGenerar_contabilidad_triggered()
+{
+    Contabilidad *ui_contabilidad;
+    ui_contabilidad = new Contabilidad(this);
+    ui_contabilidad->db = db;
+    ui_contabilidad->show();
 }

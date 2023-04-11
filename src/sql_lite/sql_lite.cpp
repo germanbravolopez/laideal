@@ -115,3 +115,24 @@ bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString 
     db.close();
     return ok;
 }
+
+double total_payed_income_between_dates(QSqlDatabase &db, QDate start_date, QDate end_date)
+{
+    db.open();
+    QSqlQuery q;
+    double total_price = 0.0;
+    q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+           "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) BETWEEN date('" +
+           start_date.toString("yyyy-MM-dd") + "') AND date('" +
+           end_date.toString("yyyy-MM-dd") + "'))");
+    if (q.isSelect())
+    {
+        while(q.next())
+            total_price = total_price + q.value(0).toFloat();
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    return total_price;
+}
