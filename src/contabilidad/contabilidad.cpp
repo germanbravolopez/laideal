@@ -1,6 +1,7 @@
 #include "contabilidad.h"
 #include "ui_contabilidad.h"
 #include "sql_lite.h"
+#include "qprinter.h"
 
 Contabilidad::Contabilidad(QWidget *parent) :
     QMainWindow(parent),
@@ -57,58 +58,59 @@ void Contabilidad::on_bb_ok_cancel_rejected()
 
 void Contabilidad::generate_contabilidad()
 {
-    double total_income = get_total_income("ingresos", 0);
-    double base = total_income / 1.21;
-    double iva = total_income - base;
-    qDebug().noquote() << "## AÑO "
-                + QString::number(ui->sb_year->value())
-                + ": TRIMESTRE "
-                + QString::number(ui->sb_trim->value())
-                + " ##";
-    qDebug().noquote() << "  INGRESOS TOTALES:";
-    qDebug().noquote() << "    Importe: "
-                + QString::number(total_income, 'f', 2);
-    qDebug().noquote() << "    Base:    "
-                + QString::number(base, 'f', 2);
-    qDebug().noquote() << "    IVA:     "
-                + QString::number(iva, 'f', 2);
+    double total_income_ing = get_total_income("ingresos", 0);
+    double base_ing = total_income_ing / 1.21;
+    double iva_ing = total_income_ing - base_ing;
+    double total_income_g10 = get_total_income("gastos", 10);
+    double base_g10 = total_income_g10 / 1.1;
+    double iva_g10 = total_income_g10 - base_g10;
+    double total_income_g21 = get_total_income("gastos", 21);
+    double base_g21 = total_income_g21 / 1.21;
+    double iva_g21 = total_income_g21 - base_g21;
+    double total_income_gni = get_total_income("gastos", 0);
 
-    total_income = get_total_income("gastos", 10);
-    base = total_income / 1.1;
-    iva = total_income - base;
-    qDebug().noquote() << "  GASTOS TOTALES - 10:";
-    qDebug().noquote() << "    Importe: "
-                + QString::number(total_income, 'f', 2);
-    qDebug().noquote() << "    Base:    "
-                + QString::number(base, 'f', 2);
-    qDebug().noquote() << "    IVA:     "
-                + QString::number(iva, 'f', 2);
+    QString contabilidad_html =
+    "<div align=right>"
+       "Granada, " + QDate::currentDate().toString("dd-MM-yyyy") +
+    "</div>"
+    "<div align=left>"
+       "Tintorería La Ideal<br>"
+       "Plaza San Pantaleón 1, bajo 2<br>"
+       "18012 Granada"
+    "</div>"
+    "<h1 align=center>Contabilidad</h1>"
+    "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) +
+        ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
+    "<h3>Importes totales</h3>"
+    "<p align=left>"
+        "Importe: " + QString::number(total_income_ing, 'f', 2) + "<br>"
+        "Base:    " + QString::number(base_ing, 'f', 2) + "<br>"
+        "IVA:     " + QString::number(iva_ing, 'f', 2) +
+    "</p>"
+    "<h3>Gastos totales - 10</h3>"
+    "<p align=left>"
+        "Importe: " + QString::number(total_income_g10, 'f', 2) + "<br>"
+        "Base:    " + QString::number(base_g10, 'f', 2) + "<br>"
+        "IVA:     " + QString::number(iva_g10, 'f', 2) +
+    "</p>"
+    "<h3>Gastos totales - 21</h3>"
+    "<p align=left>"
+        "Importe: " + QString::number(total_income_g21, 'f', 2) + "<br>"
+        "Base:    " + QString::number(base_g21, 'f', 2) + "<br>"
+        "IVA:     " + QString::number(iva_g21, 'f', 2) +
+    "</p>"
+    "<h3>Gastos sin IVA</h3>"
+    "<p align=left>"
+        "Importe: " + QString::number(total_income_gni, 'f', 2) +
+    "</p>"
+    "<h3>Gastos conjuntos</h3>"
+    "<p align=left>"
+        "Importe: " + QString::number(total_income_g10 + total_income_g21, 'f', 2) + "<br>"
+        "Base:    " + QString::number(base_g10 + base_g21, 'f', 2) + "<br>"
+        "IVA:     " + QString::number(iva_g10 + iva_g21, 'f', 2) +
+    "</p>";
 
-    double gastos_totales = total_income;
-    double base_total = base;
-    double iva_total = iva;
-
-    total_income = get_total_income("gastos", 21);
-    base = total_income / 1.21;
-    iva = total_income - base;
-    qDebug().noquote() << "  GASTOS TOTALES - 21:";
-    qDebug().noquote() << "    Importe: "
-                + QString::number(total_income, 'f', 2);
-    qDebug().noquote() << "    Base:    "
-                + QString::number(base, 'f', 2);
-    qDebug().noquote() << "    IVA:     "
-                + QString::number(iva, 'f', 2);
-
-    gastos_totales += total_income;
-    base_total += base;
-    iva_total += iva;
-    qDebug().noquote() << "  GASTOS CONJUNTOS:";
-    qDebug().noquote() << "    Importe: "
-                + QString::number(gastos_totales, 'f', 2);
-    qDebug().noquote() << "    Base:    "
-                + QString::number(base_total, 'f', 2);
-    qDebug().noquote() << "    IVA:     "
-                + QString::number(iva_total, 'f', 2);
+    write_to_pdf("C:/Users/gebra/Downloads/test_pdf_1.pdf", contabilidad_html);
 }
 
 double Contabilidad::get_total_income(QString table, int iva)
@@ -180,4 +182,21 @@ void Contabilidad::ask_for_repeat()
         generate_contabilidad();
         lock_data();
     }
+}
+
+void Contabilidad::write_to_pdf(QString filename, QString html)
+{
+    QTextDocument document;
+    document.setHtml(html);
+
+    QPrinter printer(QPrinter::PrinterResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setPageSize(QPageSize::A4);
+    printer.setOutputFileName(filename);
+    printer.setPageMargins(QMarginsF(15, 15, 15, 15));
+
+    document.print(&printer);
+
+    QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
+    //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
 }

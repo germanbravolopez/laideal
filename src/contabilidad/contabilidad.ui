@@ -91,6 +91,10 @@
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>sb_year</tabstop>
+  <tabstop>sb_trim</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

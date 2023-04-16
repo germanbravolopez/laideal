@@ -7,6 +7,11 @@
 #include <QDate>
 #include <QMessageBox>
 
+#include <QApplication>
+#include <QPdfWriter>
+#include <QPainter>
+#include <QDesktopServices>
+
 namespace Ui {
 class Contabilidad;
 }
@@ -32,6 +37,7 @@ private slots:
     double get_total_income(QString table, int iva);
     void lock_data();
     void ask_for_repeat();
+    void write_to_pdf(QString filename, QString html);
 
 private:
     Ui::Contabilidad *ui;
