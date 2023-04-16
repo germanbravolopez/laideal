@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QSqlTableModel>
+#include <QMessageBox>
 
 #define FECHA_COLUMN_IDX 4
 
@@ -25,6 +26,8 @@ private slots:
     void on_actionActualizar_triggered();
     void on_actionActivar_modo_edicion_triggered();
     void on_actionDesactivar_modo_edicion_triggered();
+    void on_actionA_adir_fila_triggered();
+    void on_actionEliminar_fila_triggered();
 
 private:
     Ui::Gastos *ui;

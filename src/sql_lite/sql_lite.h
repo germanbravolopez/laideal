@@ -48,10 +48,23 @@ bool add_new_client(
             QString      direccion,
             QString      movil
         );
-double total_payed_income_between_dates(
+double total_price_between_dates(
             QSqlDatabase &db,
+            QString      table,
             QDate        start_date,
-            QDate        end_date
+            QDate        end_date,
+            int          iva
+        );
+int read_lock_for_trim_and_year(
+            QSqlDatabase &db,
+            int          trim,
+            int          year
+        );
+void update_lock_in_ingresos(
+            QSqlDatabase &db,
+            int          value,
+            int          month,
+            int          year
         );
 
 #endif // SQL_LITE_H

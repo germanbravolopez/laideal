@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include <QSqlQueryModel>
 #include <QDate>
+#include <QMessageBox>
 
 namespace Ui {
 class Contabilidad;
@@ -28,8 +29,9 @@ private slots:
     void on_bb_ok_cancel_rejected();
 
     void generate_contabilidad();
-    bool check_contabilidad_not_done();
-    double get_total_income();
+    double get_total_income(QString table, int iva);
+    void lock_data();
+    void ask_for_repeat();
 
 private:
     Ui::Contabilidad *ui;

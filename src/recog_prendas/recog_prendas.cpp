@@ -47,7 +47,7 @@ void RecogPrendas::reset_all_contents()
 void RecogPrendas::update_db(UpdateDBop op)
 {
     bool edit_lock = sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_EDIT_LOCK)).toBool();
-    bool ok;
+    bool ok = false;
     QSqlQuery q;
     switch (op) {
     case PAY_YES:
@@ -371,7 +371,7 @@ void RecogPrendas::on_pb_search_clicked()
         }
         else
         {
-            QMessageBox::question(this, tr("Búsqueda incorrecta"),
+            QMessageBox::warning(this, tr("Búsqueda incorrecta"),
                                   tr("El contenido de la búsqueda no se ha identificado.\n"
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
