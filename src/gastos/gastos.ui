@@ -113,7 +113,7 @@
     <addaction name="actionActivar_modo_edicion"/>
     <addaction name="actionDesactivar_modo_edicion"/>
     <addaction name="separator"/>
-    <addaction name="actionA_adir_fila"/>
+    <addaction name="actionAnadir_fila"/>
     <addaction name="actionEliminar_fila"/>
    </widget>
    <addaction name="menuArchivo"/>
@@ -144,7 +144,7 @@
     <string>Ctrl+Shift+E</string>
    </property>
   </action>
-  <action name="actionA_adir_fila">
+  <action name="actionAnadir_fila">
    <property name="text">
     <string>Añadir fila</string>
    </property>

@@ -46,7 +46,7 @@ void Gastos::on_actionDesactivar_modo_edicion_triggered()
     ui->statusBar->showMessage("Modo edición desactivado");
 }
 
-void Gastos::on_actionA_adir_fila_triggered()
+void Gastos::on_actionAnadir_fila_triggered()
 {
     model->insertRow(ui->table_gastos->currentIndex().row() + 1);
 }
