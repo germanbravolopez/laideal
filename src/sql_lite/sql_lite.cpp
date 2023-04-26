@@ -124,8 +124,9 @@ double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_da
     if (table == "ingresos")
     {
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) BETWEEN date('"
-               + start_date.toString("yyyy-MM-dd") + "') AND date('"
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
+               + start_date.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
                + end_date.toString("yyyy-MM-dd") + "'))");
         if (q.isSelect())
         {
@@ -157,12 +158,11 @@ double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_da
     return total_price;
 }
 
-int read_lock_for_trim_and_year(QSqlDatabase &db, int trim, int year)
+int read_lock_for_trim_and_year(QSqlDatabase &db, int month, int year)
 {
     db.open();
     QSqlQuery q;
     int edit_lock = 2; // means that the search has not found any data
-    int month = trim * 3;
     q.exec("SELECT edit_lock FROM ingresos WHERE fecha_pago like '%"
            + QString::number(month) + "-"
            + QString::number(year) + "'");

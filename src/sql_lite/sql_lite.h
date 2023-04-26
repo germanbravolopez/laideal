@@ -57,7 +57,7 @@ double total_price_between_dates(
         );
 int read_lock_for_trim_and_year(
             QSqlDatabase &db,
-            int          trim,
+            int          month,
             int          year
         );
 void update_lock_in_ingresos(

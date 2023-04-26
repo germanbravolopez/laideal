@@ -25,30 +25,36 @@ void Contabilidad::initial_settings()
 
 void Contabilidad::reset_all_contents()
 {
+    ui->cb_config->setCurrentText(C_TRIMESTRAL);
     ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
 }
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
-    switch (read_lock_for_trim_and_year(db, ui->sb_trim->value(), ui->sb_year->value())) {
-    case 0:
-        // contabilidad not done
-        generate_contabilidad();
-        lock_data();
-        break;
-    case 1:
-        // contabilidad done
-        ask_for_repeat();
-        qDebug() << "contabilidad done, repeat?";
-        break;
-    default:
-        QMessageBox::warning(this, "Contabilidad",
-                              "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-        qDebug() << "no data is found in ingresos";
-        break;
+    if (ui->cb_config->currentText() == C_TRIMESTRAL)
+    {
+        switch (read_lock_for_trim_and_year(db, ui->sb_trim->value() * 3, ui->sb_year->value())) {
+        case 0:
+            // contabilidad not done
+            generate_contabilidad();
+            lock_data();
+            break;
+        case 1:
+            // contabilidad done
+            ask_for_repeat();
+            break;
+        default:
+            QMessageBox::warning(this, "Contabilidad",
+                                  "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
+            break;
+        }
     }
+    else
+        generate_contabilidad();
+
+    this->close();
 }
 
 void Contabilidad::on_bb_ok_cancel_rejected()
@@ -56,86 +62,130 @@ void Contabilidad::on_bb_ok_cancel_rejected()
     this->close();
 }
 
-void Contabilidad::generate_contabilidad()
+void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 {
-    double total_income_ing = get_total_income("ingresos", 0);
-    double base_ing = total_income_ing / 1.21;
-    double iva_ing = total_income_ing - base_ing;
-    double total_income_g10 = get_total_income("gastos", 10);
-    double base_g10 = total_income_g10 / 1.1;
-    double iva_g10 = total_income_g10 - base_g10;
-    double total_income_g21 = get_total_income("gastos", 21);
-    double base_g21 = total_income_g21 / 1.21;
-    double iva_g21 = total_income_g21 - base_g21;
-    double total_income_gni = get_total_income("gastos", 0);
-
-    QString contabilidad_html =
-    "<div align=right>"
-       "Granada, " + QDate::currentDate().toString("dd-MM-yyyy") +
-    "</div>"
-    "<div align=left>"
-       "Tintorería La Ideal<br>"
-       "Plaza San Pantaleón 1, bajo 2<br>"
-       "18012 Granada"
-    "</div>"
-    "<h1 align=center>Contabilidad</h1>"
-    "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) +
-        ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
-    "<h3>Importes totales</h3>"
-    "<p align=left>"
-        "Importe: " + QString::number(total_income_ing, 'f', 2) + "<br>"
-        "Base:    " + QString::number(base_ing, 'f', 2) + "<br>"
-        "IVA:     " + QString::number(iva_ing, 'f', 2) +
-    "</p>"
-    "<h3>Gastos totales - 10</h3>"
-    "<p align=left>"
-        "Importe: " + QString::number(total_income_g10, 'f', 2) + "<br>"
-        "Base:    " + QString::number(base_g10, 'f', 2) + "<br>"
-        "IVA:     " + QString::number(iva_g10, 'f', 2) +
-    "</p>"
-    "<h3>Gastos totales - 21</h3>"
-    "<p align=left>"
-        "Importe: " + QString::number(total_income_g21, 'f', 2) + "<br>"
-        "Base:    " + QString::number(base_g21, 'f', 2) + "<br>"
-        "IVA:     " + QString::number(iva_g21, 'f', 2) +
-    "</p>"
-    "<h3>Gastos sin IVA</h3>"
-    "<p align=left>"
-        "Importe: " + QString::number(total_income_gni, 'f', 2) +
-    "</p>"
-    "<h3>Gastos conjuntos</h3>"
-    "<p align=left>"
-        "Importe: " + QString::number(total_income_g10 + total_income_g21, 'f', 2) + "<br>"
-        "Base:    " + QString::number(base_g10 + base_g21, 'f', 2) + "<br>"
-        "IVA:     " + QString::number(iva_g10 + iva_g21, 'f', 2) +
-    "</p>";
-
-    write_to_pdf("C:/Users/gebra/Downloads/test_pdf_1.pdf", contabilidad_html);
+    if (arg1 == C_MENSUAL)
+    {
+        ui->lbl_trim->setVisible(true);
+        ui->sb_trim->setVisible(true);
+        ui->lbl_trim->setText("Mes:");
+        ui->sb_trim->setRange(1, 12);
+        ui->sb_trim->minimum();
+    }
+    else if (arg1 == C_TRIMESTRAL)
+    {
+        ui->lbl_trim->setVisible(true);
+        ui->sb_trim->setVisible(true);
+        ui->lbl_trim->setText("Trimestre:");
+        ui->sb_trim->setRange(1, 4);
+        ui->sb_trim->minimum();
+    }
+    else if (arg1 == C_ANUAL)
+    {
+        ui->lbl_trim->setVisible(false);
+        ui->sb_trim->setVisible(false);
+    }
+    else
+        QMessageBox::critical(this, "Contabilidad",
+                              "No se puede configurar de la forma indicada.",
+                              QMessageBox::Ok, QMessageBox::Ok);
 }
 
-double Contabilidad::get_total_income(QString table, int iva)
+void Contabilidad::generate_contabilidad()
+{
+    QString contabilidad_html = "<!DOCTYPE html><html>";
+    QString path, filename;
+
+    if (ui->cb_config->currentText() == C_TRIMESTRAL)
+    {
+        contabilidad_html = contabilidad_html + create_html_header()
+                + "<h1 style='text-align:center;'>Contabilidad</h1>"
+                + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
+                + create_html_tables(0) + "</body></html>";
+        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad";
+        filename = "/contabilidad_trimestral_" +
+                QString::number(ui->sb_year->value()) +
+                "_" +
+                QString::number(ui->sb_trim->value()) +
+                ".pdf";
+    }
+    else if (ui->cb_config->currentText() == C_MENSUAL)
+    {
+        contabilidad_html = contabilidad_html + create_html_header()
+                + "<h1 style='text-align:center;'>Reporte Mensual</h1>"
+                + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
+                + create_html_tables(0) + "</body></html>";
+        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
+        filename = "/reporte_mensual_" +
+                QString::number(ui->sb_year->value()) +
+                "_" +
+                QString::number(ui->sb_trim->value()) +
+                ".pdf";
+    }
+    else
+    {
+        contabilidad_html = contabilidad_html + create_html_header()
+                + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
+        for (int trim = 1; trim < 5; trim++)
+        {
+            contabilidad_html = contabilidad_html
+                + "<h2>Trimestre: " + QString::number(trim) + "</h2>"
+                + create_html_tables(trim);
+        }
+        contabilidad_html = contabilidad_html + "</body></html>";
+
+        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad/Anual";
+        filename = "/reporte_anual_" +
+                QString::number(ui->sb_year->value()) +
+                ".pdf";
+    }
+
+    if (!QFile::exists(path))
+        QDir().mkpath(path);
+    if (!QFile::exists(filename))
+        write_html(path + filename, contabilidad_html);
+    else
+        QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
+}
+
+double Contabilidad::get_total_income(QString table, int iva, int trim_for_year_config)
 {
     QDate start_date, end_date;
-    switch (ui->sb_trim->value()) {
-    case 1:
-        start_date.setDate(ui->sb_year->value(), 1, 1);
-        end_date.setDate(ui->sb_year->value(), 3, 31);
-        break;
-    case 2:
-        start_date.setDate(ui->sb_year->value(), 4, 1);
-        end_date.setDate(ui->sb_year->value(), 6, 30);
-        break;
-    case 3:
-        start_date.setDate(ui->sb_year->value(), 7, 1);
-        end_date.setDate(ui->sb_year->value(), 9, 30);
-        break;
-    case 4:
-        start_date.setDate(ui->sb_year->value(), 10, 1);
-        end_date.setDate(ui->sb_year->value(), 12, 31);
-        break;
-    default:
-        break;
+    if (ui->cb_config->currentText() == C_MENSUAL)
+    {
+        start_date.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
+        end_date.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
     }
+    else
+    {
+        int trim;
+        if (ui->cb_config->currentText() == C_TRIMESTRAL)
+            trim = ui->sb_trim->value();
+        else
+            trim = trim_for_year_config;
+
+        switch (trim) {
+        case 1:
+            start_date.setDate(ui->sb_year->value(), 1, 1);
+            end_date.setDate(ui->sb_year->value(), 4, 1);
+            break;
+        case 2:
+            start_date.setDate(ui->sb_year->value(), 4, 1);
+            end_date.setDate(ui->sb_year->value(), 7, 1);
+            break;
+        case 3:
+            start_date.setDate(ui->sb_year->value(), 7, 1);
+            end_date.setDate(ui->sb_year->value(), 10, 1);
+            break;
+        case 4:
+            start_date.setDate(ui->sb_year->value(), 10, 1);
+            end_date.setDate(ui->sb_year->value() + 1, 1, 1);
+            break;
+        default:
+            break;
+        }
+    }
+
     return total_price_between_dates(db, table, start_date, end_date, iva);
 }
 
@@ -184,7 +234,7 @@ void Contabilidad::ask_for_repeat()
     }
 }
 
-void Contabilidad::write_to_pdf(QString filename, QString html)
+void Contabilidad::write_html(QString filename, QString html)
 {
     QTextDocument document;
     document.setHtml(html);
@@ -199,4 +249,151 @@ void Contabilidad::write_to_pdf(QString filename, QString html)
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
     //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
+}
+
+QString Contabilidad::create_html_header()
+{
+    QString contabilidad_html_header =
+    "<head>"
+       "<meta charset='UTF-8'>"
+       "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
+       "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+       "<style>"
+          "table,"
+          "tr,"
+          "th,"
+          "td {"
+             "border: 1px solid black;"
+             "border-collapse: collapse;"
+          "}"
+       "</style>"
+    "</head>"
+    "<body>"
+        "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
+        "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>";
+
+    return contabilidad_html_header;
+}
+
+QString Contabilidad::create_html_tables(int trim_for_year_config)
+{
+    return create_html_table_ingresos(trim_for_year_config) + create_html_table_gastos(trim_for_year_config);
+}
+
+QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
+{
+    double total_income_ing = get_total_income("ingresos", 0, trim_for_year_config);
+    double base_ing = total_income_ing / 1.21;
+    double iva_ing = total_income_ing - base_ing;
+
+    QString contabilidad_html_table =
+    "<h3>Tabla Ingresos</h3>"
+    "<figure class='table' style='float:left;'>"
+        "<table>"
+            "<thead>"
+                "<tr>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>&nbsp;</th>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>Ingreso total </th>"
+                "</tr>"
+            "</thead>"
+            "<tbody>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>Importe </th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(total_income_ing, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>Base</th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(base_ing, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>IVA</th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(iva_ing, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+            "</tbody>"
+        "</table>"
+    "</figure>'";
+
+    return contabilidad_html_table;
+}
+
+QString Contabilidad::create_html_table_gastos(int trim_for_year_config)
+{
+    double total_income_g10 = get_total_income("gastos", 10, trim_for_year_config);
+    double base_g10 = total_income_g10 / 1.1;
+    double iva_g10 = total_income_g10 - base_g10;
+    double total_income_g21 = get_total_income("gastos", 21, trim_for_year_config);
+    double base_g21 = total_income_g21 / 1.21;
+    double iva_g21 = total_income_g21 - base_g21;
+    double total_income_gni = get_total_income("gastos", 0, trim_for_year_config);
+
+    QString contabilidad_html_table =
+    "<h3>Tabla Gastos</h3>"
+    "<figure class='table' style='float:left;'>"
+        "<table>"
+            "<thead>"
+                "<tr>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>&nbsp;</th>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>IVA = 10% </th>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>IVA = 21% </th>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>Sin IVA </th>"
+                    "<th style='border:1px solid hsl(0, 0%, 0%);'>Total </th>"
+                "</tr>"
+            "</thead>"
+            "<tbody>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>Importe </th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(total_income_g10, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(total_income_g21, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(total_income_gni, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(total_income_g10 + total_income_g21 + total_income_gni, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>Base</th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(base_g10, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(base_g21, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>- </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(base_g10 + base_g21, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+                "<tr>"
+                    "<th style='text-align:left; border:1px solid hsl(0, 0%, 0%);'>IVA</th>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(iva_g10, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(iva_g21, 'f', 2) + " € </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>- </p>"
+                    "</td>"
+                    "<td style='border:1px solid hsl(0, 0%, 0%);'>"
+                        "<p style='text-align:right;'>" + QString::number(iva_g10 + iva_g21, 'f', 2) + " € </p>"
+                    "</td>"
+                "</tr>"
+            "</tbody>"
+        "</table>"
+    "</figure>'";
+
+    return contabilidad_html_table;
 }

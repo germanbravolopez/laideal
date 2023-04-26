@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>277</width>
-    <height>122</height>
+    <width>315</width>
+    <height>169</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -32,7 +32,7 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="1" rowspan="2" colspan="2">
+    <item row="3" column="1" rowspan="2" colspan="2">
      <layout class="QGridLayout" name="gridLayout_1">
       <item row="1" column="0">
        <widget class="QSpinBox" name="sb_trim"/>
@@ -42,7 +42,62 @@
       </item>
      </layout>
     </item>
-    <item row="0" column="0" rowspan="2">
+    <item row="0" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QLabel" name="lbl_config">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>14</pointsize>
+         </font>
+        </property>
+        <property name="text">
+         <string>Configuración:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="0" column="1" colspan="2">
+     <layout class="QGridLayout" name="gridLayout_3">
+      <item row="0" column="0">
+       <widget class="QComboBox" name="cb_config">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>14</pointsize>
+         </font>
+        </property>
+        <property name="currentText">
+         <string>Mensual</string>
+        </property>
+        <property name="sizeAdjustPolicy">
+         <enum>QComboBox::AdjustToContents</enum>
+        </property>
+        <item>
+         <property name="text">
+          <string>Mensual</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Trimestral</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Anual</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="3" column="0" rowspan="2">
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
        <widget class="QLabel" name="lbl_year">
@@ -81,10 +136,17 @@
       </item>
      </layout>
     </item>
-    <item row="2" column="1" colspan="2">
+    <item row="5" column="1" colspan="2">
      <widget class="QDialogButtonBox" name="bb_ok_cancel">
       <property name="standardButtons">
        <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0" colspan="3">
+     <widget class="Line" name="line">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
      </widget>
     </item>
@@ -92,6 +154,7 @@
   </widget>
  </widget>
  <tabstops>
+  <tabstop>cb_config</tabstop>
   <tabstop>sb_year</tabstop>
   <tabstop>sb_trim</tabstop>
  </tabstops>
