@@ -158,13 +158,22 @@ double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_da
     return total_price;
 }
 
-int read_lock_for_trim_and_year(QSqlDatabase &db, int month, int year)
+int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
 {
+    // For months 1 and 2 to not mix with 11 and 12
+    QString month_fix;
+    if (month == 1)
+        month_fix = "01";
+    else if (month == 2)
+        month_fix = "02";
+    else
+        month_fix = QString::number(month);
+
     db.open();
     QSqlQuery q;
     int edit_lock = 2; // means that the search has not found any data
     q.exec("SELECT edit_lock FROM ingresos WHERE fecha_pago like '%"
-           + QString::number(month) + "-"
+           + month_fix + "-"
            + QString::number(year) + "'");
     if (q.isSelect())
     {

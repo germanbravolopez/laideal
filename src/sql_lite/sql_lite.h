@@ -55,7 +55,7 @@ double total_price_between_dates(
             QDate        end_date,
             int          iva
         );
-int read_lock_for_trim_and_year(
+int read_lock_for_month_and_year(
             QSqlDatabase &db,
             int          month,
             int          year

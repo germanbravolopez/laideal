@@ -34,7 +34,7 @@ void Contabilidad::on_bb_ok_cancel_accepted()
 {
     if (ui->cb_config->currentText() == C_TRIMESTRAL)
     {
-        switch (read_lock_for_trim_and_year(db, ui->sb_trim->value() * 3, ui->sb_year->value())) {
+        switch (read_lock_for_month_and_year(db, ui->sb_trim->value() * 3, ui->sb_year->value())) {
         case 0:
             // contabilidad not done
             generate_contabilidad();
