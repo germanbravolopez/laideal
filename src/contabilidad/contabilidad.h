@@ -42,7 +42,6 @@ private slots:
     void generate_contabilidad();
     double get_total_income(QString table, int iva, int trim_for_year_config);
     void lock_data();
-    void ask_for_repeat();
     void write_html(QString filename, QString html);
     QString create_html_header();
     QString create_html_tables(int trim_for_year_config);

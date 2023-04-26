@@ -42,7 +42,11 @@ void Contabilidad::on_bb_ok_cancel_accepted()
             break;
         case 1:
             // contabilidad done
-            ask_for_repeat();
+            qDebug() << "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                        + " para el año " + QString::number(ui->sb_year->value())
+                        + " ya se ha realizado";
+            generate_contabilidad();
+            lock_data();
             break;
         default:
             QMessageBox::warning(this, "Contabilidad",
@@ -139,9 +143,10 @@ void Contabilidad::generate_contabilidad()
                 QString::number(ui->sb_year->value()) +
                 ".pdf";
     }
-
+    // create directory in case it does not exists
     if (!QFile::exists(path))
         QDir().mkpath(path);
+    // open file in case it already exists
     if (!QFile::exists(filename))
         write_html(path + filename, contabilidad_html);
     else
@@ -214,23 +219,6 @@ void Contabilidad::lock_data()
         break;
     default:
         break;
-    }
-}
-
-void Contabilidad::ask_for_repeat()
-{
-    int ret = QMessageBox::question(this, "Contabilidad",
-                                    "La contabilidad del trimestre "
-                                    + QString::number(ui->sb_trim->value())
-                                    + " para el año "
-                                    + QString::number(ui->sb_year->value())
-                                    + " ya se ha realizado.\n¿Quieres volver a hacerla?",
-                                    QMessageBox::Yes | QMessageBox::No,
-                                    QMessageBox::No);
-    if (ret == QMessageBox::Yes)
-    {
-        generate_contabilidad();
-        lock_data();
     }
 }
 
