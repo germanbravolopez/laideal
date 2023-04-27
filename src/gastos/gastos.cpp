@@ -45,3 +45,24 @@ void Gastos::on_actionDesactivar_modo_edicion_triggered()
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     ui->statusBar->showMessage("Modo edición desactivado");
 }
+
+void Gastos::on_actionAnadir_fila_triggered()
+{
+    model->insertRow(ui->table_gastos->currentIndex().row() + 1);
+}
+
+
+void Gastos::on_actionEliminar_fila_triggered()
+{
+    int ret = QMessageBox::question(this, "Eliminar fila",
+                                        "¿Está seguro que desea eliminar la fila " +
+                                        QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
+                                        QMessageBox::Yes | QMessageBox::No,
+                                        QMessageBox::No);
+        if (ret == QMessageBox::Yes)
+        {
+            model->removeRow(ui->table_gastos->currentIndex().row());
+            populate_table();
+        }
+}
+

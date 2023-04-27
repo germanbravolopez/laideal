@@ -17,6 +17,7 @@ target_link_libraries(laideal PRIVATE
     recog_prendas
     sql_lite
     TableView
+    contabilidad
 )
 
 set_target_properties(laideal PROPERTIES

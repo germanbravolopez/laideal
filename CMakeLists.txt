@@ -9,7 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport)
 
 add_subdirectory(src/app)
@@ -22,3 +22,4 @@ add_subdirectory(src/lista_proveedores)
 add_subdirectory(src/recog_prendas)
 add_subdirectory(src/sql_lite)
 add_subdirectory(src/TableView)
+add_subdirectory(src/contabilidad)

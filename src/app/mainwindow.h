@@ -66,6 +66,7 @@ private slots:
     void on_actionRecibo_triggered();
     void on_actionFactura_triggered();
     void on_actionFactura_completa_triggered();
+    void on_actionGenerar_contabilidad_triggered();
 
 private:
     Ui::MainWindow *ui;
