@@ -16,6 +16,7 @@ target_link_libraries(laideal
     lista_clientes
     lista_proveedores
     recog_prendas
+    contabilidad
 )
 
 set_target_properties(laideal PROPERTIES

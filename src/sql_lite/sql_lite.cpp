@@ -115,3 +115,102 @@ bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString 
     db.close();
     return ok;
 }
+
+double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva)
+{
+    db.open();
+    QSqlQuery q;
+    double total_price = 0.0;
+    if (table == "ingresos")
+    {
+        q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
+               + start_date.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
+               + end_date.toString("yyyy-MM-dd") + "'))");
+        if (q.isSelect())
+        {
+            while(q.next())
+                total_price = total_price + q.value(0).toFloat();
+        }
+        else
+            qDebug() << "Query is not Select!";
+    }
+    else if (table == "gastos")
+    {
+        q.exec("SELECT importe FROM gastos WHERE (iva = "
+               + QString::number(iva)
+               + ") AND (date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) BETWEEN date('"
+               + start_date.toString("yyyy-MM-dd") + "') AND date('"
+               + end_date.toString("yyyy-MM-dd") + "'))");
+        if (q.isSelect())
+        {
+            while(q.next())
+                total_price = total_price + q.value(0).toFloat();
+        }
+        else
+            qDebug() << "Query is not Select!";
+    }
+    else
+        qDebug() << "total_price_between_dates cannot work with different table";
+    q.clear();
+    db.close();
+    return total_price;
+}
+
+int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
+{
+    // For months 1 and 2 to not mix with 11 and 12
+    QString month_fix;
+    if (month == 1)
+        month_fix = "01";
+    else if (month == 2)
+        month_fix = "02";
+    else
+        month_fix = QString::number(month);
+
+    db.open();
+    QSqlQuery q;
+    int edit_lock = 2; // means that the search has not found any data
+    q.exec("SELECT edit_lock FROM ingresos WHERE fecha_pago like '%"
+           + month_fix + "-"
+           + QString::number(year) + "'");
+    if (q.isSelect())
+    {
+        if(q.first())
+            edit_lock = q.value(0).toInt();
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    return edit_lock;
+}
+
+void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year)
+{
+    // For months 1 and 2 to not mix with 11 and 12
+    QString month_fix;
+    if (month == 1)
+        month_fix = "01";
+    else if (month == 2)
+        month_fix = "02";
+    else
+        month_fix = QString::number(month);
+
+    db.open();
+    QSqlQuery q;
+    q.exec("UPDATE ingresos SET edit_lock ="
+           + QString::number(value)
+           + " WHERE fecha_pago like '%"
+           + month_fix + "-"
+           + QString::number(year) + "'");
+    q.clear();
+    q.exec("UPDATE gastos SET edit_lock ="
+           + QString::number(value)
+           + " WHERE fecha like '%"
+           + month_fix + "-"
+           + QString::number(year) + "'");
+    q.clear();
+    db.close();
+}

@@ -7,6 +7,7 @@
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
 #include "recog_prendas.h"
+#include "contabilidad.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -310,7 +311,19 @@ bool MainWindow::validate_ticket()
                 return 0;
             }
             else
-                return 1;
+            {
+                // if the current date belongs to a locked quarter, data cannot be saved
+                if (ui->pb_payment->text() == "SI"
+                        && read_lock_for_month_and_year(db, ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1)
+                {
+                    msgBox.setText("No se puede introducir un nuevo recibo pagado en un trimestre que tiene la contabilidad cerrada.");
+                    msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
+                    msgBox.exec();
+                    return 0;
+                }
+                else
+                    return 1;
+            }
         }
     }
 }
@@ -456,4 +469,12 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
+}
+
+void MainWindow::on_actionGenerar_contabilidad_triggered()
+{
+    Contabilidad *ui_contabilidad;
+    ui_contabilidad = new Contabilidad(this);
+    ui_contabilidad->db = db;
+    ui_contabilidad->show();
 }
