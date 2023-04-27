@@ -115,9 +115,16 @@ void Contabilidad::generate_contabilidad()
     }
     else if (ui->cb_config->currentText() == C_MENSUAL)
     {
+        QString contabilidad_status;
+        if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
+            contabilidad_status = "(Contabilidad cerrada)";
+        else
+            contabilidad_status = "(Contabilidad no cerrada)";
+
         contabilidad_html = contabilidad_html + create_html_header()
                 + "<h1 style='text-align:center;'>Reporte Mensual</h1>"
-                + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
+                + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value())
+                + " " + contabilidad_status + "</h2>"
                 + create_html_tables(0) + "</body></html>";
         path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
         filename = "/reporte_mensual_" +
@@ -128,12 +135,24 @@ void Contabilidad::generate_contabilidad()
     }
     else
     {
+        QString contabilidad_status;
+        if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
+            contabilidad_status = "(Contabilidad cerrada)";
+        else
+            contabilidad_status = "(Contabilidad no cerrada)";
+
         contabilidad_html = contabilidad_html + create_html_header()
                 + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
         for (int trim = 1; trim < 5; trim++)
         {
+            QString contabilidad_status;
+            if (read_lock_for_month_and_year(db, trim * 3, ui->sb_year->value()) == 1)
+                contabilidad_status = "(Contabilidad cerrada)";
+            else
+                contabilidad_status = "(Contabilidad no cerrada)";
+
             contabilidad_html = contabilidad_html
-                + "<h2>Trimestre: " + QString::number(trim) + "</h2>"
+                + "<h2>Trimestre: " + QString::number(trim) + " " + contabilidad_status + "</h2>"
                 + create_html_tables(trim);
         }
         contabilidad_html = contabilidad_html + "</body></html>";
@@ -305,7 +324,7 @@ QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
                 "</tr>"
             "</tbody>"
         "</table>"
-    "</figure>'";
+    "</figure>";
 
     return contabilidad_html_table;
 }
@@ -381,7 +400,7 @@ QString Contabilidad::create_html_table_gastos(int trim_for_year_config)
                 "</tr>"
             "</tbody>"
         "</table>"
-    "</figure>'";
+    "</figure>";
 
     return contabilidad_html_table;
 }
