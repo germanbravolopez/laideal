@@ -85,8 +85,9 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
     QString base_imponible = QString::number(ticket_total_f - (ticket_total_f * 0.21), 'f', 2);
     /////////////////////////////
     // Create printer for tickets
-    QPrinter printer(QPrinter::PrinterResolution);
+    QPrinter printer;
     printer.setPrinterName("EPSON TM-T20III");
+    printer.setOutputFormat(QPrinter::NativeFormat);
     printer.setColorMode(QPrinter::GrayScale);
     // Create ticket content based on ticket information: payment date and invoice type
     QString ticket_type, ticket_dates, client_address, client_id, receipt_info;
@@ -213,7 +214,16 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
             "</body>"
             "</html>");
     ticketContent.setHtml(text);
+    //ticketContent.print(&printer);
+    // try this:
+    QString plainText = ticketContent.toPlainText();
+    QTextCursor cursor(&ticketContent);
+    cursor.insertText(plainText);
     ticketContent.print(&printer);
+    // else try this
+    //QWebEngineView view;
+    //view.setHtml(text);
+    //view.print(&printer);
 }
 
 void Imprimir::on_bb_ok_cancel_accepted()
