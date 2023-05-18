@@ -8,6 +8,7 @@
 #include "lista_proveedores.h"
 #include "recog_prendas.h"
 #include "contabilidad.h"
+#include "facturas.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -477,4 +478,12 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
     ui_contabilidad = new Contabilidad(this);
     ui_contabilidad->db = db;
     ui_contabilidad->show();
+}
+
+void MainWindow::on_actionFormulario_facturas_triggered()
+{
+    Facturas *ui_facturas;
+    ui_facturas = new Facturas(this);
+    ui_facturas->db = db;
+    ui_facturas->show();
 }
