@@ -27,7 +27,6 @@ public:
     const QString C_ANUAL       = "Anual";
 
     QSqlDatabase db;
-    QSqlQueryModel *sql_query_model = new QSqlQueryModel;
     explicit Contabilidad(QWidget *parent = nullptr);
     ~Contabilidad();
 

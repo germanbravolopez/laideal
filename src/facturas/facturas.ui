@@ -122,7 +122,7 @@
       <item row="5" column="0" colspan="4">
        <widget class="QDialogButtonBox" name="buttonBox">
         <property name="standardButtons">
-         <set>QDialogButtonBox::Cancel|QDialogButtonBox::Save</set>
+         <set>QDialogButtonBox::Cancel|QDialogButtonBox::Reset|QDialogButtonBox::Save</set>
         </property>
         <property name="centerButtons">
          <bool>false</bool>
@@ -133,7 +133,11 @@
        <widget class="QLineEdit" name="le_producto"/>
       </item>
       <item row="3" column="1" colspan="3">
-       <widget class="QComboBox" name="cb_empresa"/>
+       <widget class="QComboBox" name="cb_empresa">
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+       </widget>
       </item>
      </layout>
     </item>

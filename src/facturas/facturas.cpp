@@ -17,11 +17,45 @@ Facturas::~Facturas()
 
 void Facturas::initial_settings()
 {
-
+    ui->cb_empresa->addItems(read_column_from_table(db, "empresa", "proveedores"));
+    QStringList iva_list = {"", "10", "21"};
+    ui->cb_iva->addItems(iva_list);
     reset_all_contents();
 }
 
 void Facturas::reset_all_contents()
+{
+    ui->le_fra->clear();
+    ui->de_fecha->setDate(QDate::currentDate());
+    ui->le_servicio->clear();
+    ui->le_producto->clear();
+    ui->cb_empresa->setCurrentText("");
+    ui->cb_iva->setCurrentText("");
+    ui->le_importe->clear();
+}
+
+void Facturas::on_buttonBox_clicked(QAbstractButton *button)
+{
+    if (button == ui->buttonBox->button(QDialogButtonBox::Cancel))
+    {
+        this->close();
+    }
+    else if (button == ui->buttonBox->button(QDialogButtonBox::Reset))
+    {
+        reset_all_contents();
+    }
+    else if (button == ui->buttonBox->button(QDialogButtonBox::Save))
+    {
+        save_factura();
+        reset_all_contents();
+    }
+    else
+        QMessageBox::critical(this, "Formulario facturas",
+                              "Boton no definido.",
+                              QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void Facturas::save_factura()
 {
 
 }

@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include <QSqlQueryModel>
 #include <QDate>
+#include <QPushButton>
 
 namespace Ui {
 class Facturas;
@@ -16,13 +17,15 @@ class Facturas : public QMainWindow
 
 public:
     QSqlDatabase db;
-    QSqlQueryModel *sql_query_model = new QSqlQueryModel;
     explicit Facturas(QWidget *parent = nullptr);
     ~Facturas();
 
 private slots:
     void initial_settings();
     void reset_all_contents();
+    void on_buttonBox_clicked(QAbstractButton *button);
+
+    void save_factura();
 
 private:
     Ui::Facturas *ui;
