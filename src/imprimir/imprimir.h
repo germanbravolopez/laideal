@@ -5,9 +5,9 @@
 #include <QSqlDatabase>
 #include <QMessageBox>
 #include <QSqlQueryModel>
-#include <QTextEdit>
 #include <QDateTime>
 #include <QInputDialog>
+#include <QTextDocument>
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1

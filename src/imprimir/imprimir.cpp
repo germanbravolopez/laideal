@@ -132,7 +132,7 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
         }
     }
     // Create full HTML ticket
-    QTextEdit *ticketContent = new QTextEdit();
+    QTextDocument ticketContent;
     QString text;
     text.append(
             "<!DOCTYPE html>"
@@ -212,9 +212,8 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
                 "</table>"
             "</body>"
             "</html>");
-    ticketContent->setHtml(text);
-    ticketContent->show();
-    ticketContent->print(&printer);
+    ticketContent.setHtml(text);
+    ticketContent.print(&printer);
 }
 
 void Imprimir::on_bb_ok_cancel_accepted()
@@ -228,15 +227,13 @@ void Imprimir::on_bb_ok_cancel_accepted()
             create_ticket_and_print(true);
             if (is_recibo)
             {
-                // Comment-in when no more automatic receipt are needed
+                //// Comment-in when no more automatic receipt are needed
                 //int resp = QMessageBox::question(this, "Copia establecimiento",
                 //                                 "¿Desea copia para el establecimiento?",
                 //                                 QMessageBox::Yes | QMessageBox::No,
                 //                                 QMessageBox::Yes);
                 //if (resp == QMessageBox::Yes)
-                //{
-                    create_ticket_and_print(false);
-                //}
+                //    create_ticket_and_print(false);
             }
         }
         else
