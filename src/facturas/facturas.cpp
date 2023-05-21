@@ -17,7 +17,6 @@ Facturas::~Facturas()
 
 void Facturas::initial_settings()
 {
-    ui->cb_empresa->addItems(read_column_from_table(db, "empresa", "proveedores"));
     QStringList iva_list = {"", "10", "21"};
     ui->cb_iva->addItems(iva_list);
     reset_all_contents();
@@ -32,6 +31,18 @@ void Facturas::reset_all_contents()
     ui->cb_empresa->setCurrentText("");
     ui->cb_iva->setCurrentText("");
     ui->le_importe->clear();
+}
+
+void Facturas::populate_empresas()
+{
+    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores");
+    ui->cb_empresa->addItems(empresas_names);
+    ui->cb_empresa->setCurrentText("");
+}
+
+void Facturas::save_factura()
+{
+
 }
 
 void Facturas::on_buttonBox_clicked(QAbstractButton *button)
@@ -53,9 +64,4 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
         QMessageBox::critical(this, "Formulario facturas",
                               "Boton no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
-}
-
-void Facturas::save_factura()
-{
-
 }

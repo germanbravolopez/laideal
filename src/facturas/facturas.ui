@@ -144,6 +144,15 @@
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>le_fra</tabstop>
+  <tabstop>de_fecha</tabstop>
+  <tabstop>le_servicio</tabstop>
+  <tabstop>le_producto</tabstop>
+  <tabstop>cb_empresa</tabstop>
+  <tabstop>cb_iva</tabstop>
+  <tabstop>le_importe</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

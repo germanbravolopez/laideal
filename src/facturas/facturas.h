@@ -16,16 +16,17 @@ class Facturas : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
     explicit Facturas(QWidget *parent = nullptr);
     ~Facturas();
+    QSqlDatabase db;
+    void populate_empresas();
 
 private slots:
     void initial_settings();
     void reset_all_contents();
-    void on_buttonBox_clicked(QAbstractButton *button);
-
     void save_factura();
+
+    void on_buttonBox_clicked(QAbstractButton *button);
 
 private:
     Ui::Facturas *ui;

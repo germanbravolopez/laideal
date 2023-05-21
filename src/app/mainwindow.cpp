@@ -485,5 +485,6 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     Facturas *ui_facturas;
     ui_facturas = new Facturas(this);
     ui_facturas->db = db;
+    ui_facturas->populate_empresas();
     ui_facturas->show();
 }
