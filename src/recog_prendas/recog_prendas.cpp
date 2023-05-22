@@ -419,7 +419,7 @@ void RecogPrendas::on_pb_search_clicked()
         // Fill total_price if enabled
         if (total_price_active)
         {
-            double total_price = 0.0;
+            float total_price = 0.0;
             for (int row = 0; row < sql_query_model->rowCount(); row++)
             {
                 total_price = total_price + sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat();

@@ -40,9 +40,46 @@ void Facturas::populate_empresas()
     ui->cb_empresa->setCurrentText("");
 }
 
-void Facturas::save_factura()
+bool Facturas::save_factura()
 {
-
+    if (ui->le_fra->text() != "" && ui->le_servicio->text() != "" && ui->cb_empresa->currentText() != "" && ui->le_importe->text() != "")
+    {
+        if (!ui->le_importe->text().contains(","))
+        {
+            db.open();
+            QSqlQuery q;
+            q.prepare("INSERT INTO gastos (n_factura, servicio, producto, empresa, fecha, iva, importe, edit_lock) "
+                      "VALUES (:n_factura, :servicio, :producto, :empresa, :fecha, :iva, :importe, :edit_lock);");
+            q.bindValue(":n_factura", ui->le_fra->text());
+            q.bindValue(":servicio", ui->le_servicio->text());
+            q.bindValue(":producto", ui->le_producto->text());
+            q.bindValue(":empresa", ui->cb_empresa->currentText());
+            q.bindValue(":fecha", ui->de_fecha->date().toString("dd-MM-yyyy"));
+            q.bindValue(":iva", ui->cb_iva->currentText());
+            q.bindValue(":importe", ui->le_importe->text());
+            q.bindValue(":edit_lock", "0");
+            q.exec();
+            q.clear();
+            db.close();
+            return 1;
+        }
+        else
+        {
+            QMessageBox::warning(this, "Formulario factura",
+                                 "Formulario incompleto.\n"
+                                 "Para poder guardar la factura, el Importe decimal debe introducirse usando '.' como separador",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+            return 0;
+        }
+    }
+    else
+    {
+        QMessageBox::warning(this, "Formulario factura",
+                             "Formulario incompleto.\n"
+                             "Para poder guardar la factura, al menos es necesario rellenar los siguientes campos: Nº Fra., Servicio, Empresa e Importe",
+                             QMessageBox::Ok, QMessageBox::Ok);
+        return 0;
+    }
 }
 
 void Facturas::on_buttonBox_clicked(QAbstractButton *button)
@@ -57,11 +94,11 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
     }
     else if (button == ui->buttonBox->button(QDialogButtonBox::Save))
     {
-        save_factura();
-        reset_all_contents();
+        if (save_factura())
+            reset_all_contents();
     }
     else
-        QMessageBox::critical(this, "Formulario facturas",
+        QMessageBox::critical(this, "Formulario factura",
                               "Boton no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
 }

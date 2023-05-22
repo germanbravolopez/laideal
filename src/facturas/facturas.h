@@ -24,7 +24,7 @@ public:
 private slots:
     void initial_settings();
     void reset_all_contents();
-    void save_factura();
+    bool save_factura();
 
     void on_buttonBox_clicked(QAbstractButton *button);
 

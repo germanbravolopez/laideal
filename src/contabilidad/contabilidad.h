@@ -39,7 +39,7 @@ private slots:
     void on_cb_config_currentTextChanged(const QString &arg1);
 
     void generate_contabilidad();
-    double get_total_income(QString table, int iva, int trim_for_year_config);
+    float get_total_income(QString table, int iva, int trim_for_year_config);
     void lock_data();
     void write_html(QString filename, QString html);
     QString create_html_header();

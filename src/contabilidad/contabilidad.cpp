@@ -172,7 +172,7 @@ void Contabilidad::generate_contabilidad()
         QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
 }
 
-double Contabilidad::get_total_income(QString table, int iva, int trim_for_year_config)
+float Contabilidad::get_total_income(QString table, int iva, int trim_for_year_config)
 {
     QDate start_date, end_date;
     if (ui->cb_config->currentText() == C_MENSUAL)
@@ -289,9 +289,9 @@ QString Contabilidad::create_html_tables(int trim_for_year_config)
 
 QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
 {
-    double total_income_ing = get_total_income("ingresos", 0, trim_for_year_config);
-    double base_ing = total_income_ing / 1.21;
-    double iva_ing = total_income_ing - base_ing;
+    float total_income_ing = get_total_income("ingresos", 0, trim_for_year_config);
+    float base_ing = total_income_ing / 1.21;
+    float iva_ing = total_income_ing - base_ing;
 
     QString contabilidad_html_table =
     "<h3>Tabla Ingresos</h3>"
@@ -331,13 +331,13 @@ QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
 
 QString Contabilidad::create_html_table_gastos(int trim_for_year_config)
 {
-    double total_income_g10 = get_total_income("gastos", 10, trim_for_year_config);
-    double base_g10 = total_income_g10 / 1.1;
-    double iva_g10 = total_income_g10 - base_g10;
-    double total_income_g21 = get_total_income("gastos", 21, trim_for_year_config);
-    double base_g21 = total_income_g21 / 1.21;
-    double iva_g21 = total_income_g21 - base_g21;
-    double total_income_gni = get_total_income("gastos", 0, trim_for_year_config);
+    float total_income_g10 = get_total_income("gastos", 10, trim_for_year_config);
+    float base_g10 = total_income_g10 / 1.1;
+    float iva_g10 = total_income_g10 - base_g10;
+    float total_income_g21 = get_total_income("gastos", 21, trim_for_year_config);
+    float base_g21 = total_income_g21 / 1.21;
+    float iva_g21 = total_income_g21 - base_g21;
+    float total_income_gni = get_total_income("gastos", 0, trim_for_year_config);
 
     QString contabilidad_html_table =
     "<h3>Tabla Gastos</h3>"
