@@ -56,7 +56,7 @@ bool Facturas::save_factura()
             q.bindValue(":empresa", ui->cb_empresa->currentText());
             q.bindValue(":fecha", ui->de_fecha->date().toString("dd-MM-yyyy"));
             q.bindValue(":iva", ui->cb_iva->currentText());
-            q.bindValue(":importe", ui->le_importe->text());
+            q.bindValue(":importe", ui->le_importe->text().replace(",","."));
             q.bindValue(":edit_lock", "0");
             q.exec();
             q.clear();

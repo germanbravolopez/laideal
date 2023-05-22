@@ -395,14 +395,14 @@ void MainWindow::save_ticket()
             else
                 q.bindValue(":fecha_pago", "");
             q.bindValue(":fecha_recogida", "");
-            q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
+            q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(",","."));
             q.bindValue(":pagado", ui->pb_payment->text());
             q.bindValue(":estado", "En tienda");
             q.bindValue(":cantidad", ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text());
             QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
             q.bindValue(":prenda", cb_garment->currentText());
             if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
-                q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text());
+                q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().replace(",","."));
             else
                 q.bindValue(":size", "");
             if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
