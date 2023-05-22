@@ -4,6 +4,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QDate>
+#include <QMessageBox>
 
 #define DB_PATH "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db"
 
@@ -48,7 +49,7 @@ bool add_new_client(
             QString      direccion,
             QString      movil
         );
-double total_price_between_dates(
+float total_price_between_dates(
             QSqlDatabase &db,
             QString      table,
             QDate        start_date,
