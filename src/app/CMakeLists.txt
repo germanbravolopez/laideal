@@ -18,6 +18,7 @@ target_link_libraries(laideal PRIVATE
     sql_lite
     TableView
     contabilidad
+    facturas
 )
 
 set_target_properties(laideal PROPERTIES

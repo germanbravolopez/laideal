@@ -9,6 +9,7 @@
 #include "recog_prendas.h"
 #include "imprimir.h"
 #include "contabilidad.h"
+#include "facturas.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -129,12 +130,12 @@ void MainWindow::set_garment_price(int garment_row, QString garment_text, QStrin
     item->setText("");
     if (qnty_item)
     {
-        double price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
+        float price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
         // Check if any size is filled
         QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
         if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0)
         {
-            double size = size_item->text().toFloat() * price;
+            float size = size_item->text().toFloat() * price;
             item->setText(QString::number(size, 'f', 2));
         }
         else
@@ -198,7 +199,7 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
     }
     else if (column == TABLE_TICKET_PRIC)
     {
-        double total_price = 0.0;
+        float total_price = 0.0;
         for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++)
         {
             QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
@@ -509,4 +510,13 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
     ui_contabilidad = new Contabilidad(this);
     ui_contabilidad->db = db;
     ui_contabilidad->show();
+}
+
+void MainWindow::on_actionFormulario_facturas_triggered()
+{
+    Facturas *ui_facturas;
+    ui_facturas = new Facturas(this);
+    ui_facturas->db = db;
+    ui_facturas->populate_empresas();
+    ui_facturas->show();
 }

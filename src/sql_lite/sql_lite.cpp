@@ -50,7 +50,15 @@ float read_garment_price(QSqlDatabase &db, QString garment, QString service)
     if (q.isSelect())
     {
         if (q.first())
-            price = q.value(0).toString().toFloat();
+        {
+            if (!q.value(0).toString().contains(","))
+                price = q.value(0).toFloat();
+            else
+                QMessageBox::critical(nullptr, "Error en la base de datos",
+                                      "En la tabla prendas se ha detectado que hay valores decimales guardados con ','. "
+                                      "Utilizar herramienta de limpiado de importes decimales.",
+                                      QMessageBox::Ok, QMessageBox::Ok);
+        }
         else
             qDebug() << "Query is not available.";
     }
@@ -116,11 +124,11 @@ bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString 
     return ok;
 }
 
-double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva)
+float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva)
 {
     db.open();
     QSqlQuery q;
-    double total_price = 0.0;
+    float total_price = 0.0;
     if (table == "ingresos")
     {
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
@@ -131,7 +139,15 @@ double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_da
         if (q.isSelect())
         {
             while(q.next())
-                total_price = total_price + q.value(0).toFloat();
+            {
+                if (!q.value(0).toString().contains(","))
+                    total_price = total_price + q.value(0).toFloat();
+                else
+                    QMessageBox::critical(nullptr, "Error en la base de datos",
+                                          "En la tabla " + table + " "
+                                          "se ha detectado que hay valores decimales guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
+                                          QMessageBox::Ok, QMessageBox::Ok);
+            }
         }
         else
             qDebug() << "Query is not Select!";
@@ -146,7 +162,15 @@ double total_price_between_dates(QSqlDatabase &db, QString table, QDate start_da
         if (q.isSelect())
         {
             while(q.next())
-                total_price = total_price + q.value(0).toFloat();
+            {
+                if (!q.value(0).toString().contains(","))
+                    total_price = total_price + q.value(0).toFloat();
+                else
+                    QMessageBox::critical(nullptr, "Error en la base de datos",
+                                          "En la tabla " + table + " "
+                                          "se ha detectado que hay valores decimales guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
+                                          QMessageBox::Ok, QMessageBox::Ok);
+            }
         }
         else
             qDebug() << "Query is not Select!";
