@@ -1,7 +1,6 @@
 #include "imprimir.h"
 #include "ui_imprimir.h"
 #include "sql_lite.h"
-#include "qprinterinfo.h"
 #include "qprinter.h"
 
 Imprimir::Imprimir(QWidget *parent) :
@@ -51,7 +50,7 @@ QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
         return "";
 }
 
-void Imprimir::create_ticket_and_print(bool copy_for_client)
+QString Imprimir::create_html_ticket(bool copy_for_client)
 {
     // Create string with garments for ticket format
     QString ticket_garments;
@@ -70,11 +69,11 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
             garment_name = sql_query_model->data(sql_query_model->index(row, TABLE_GARMENT)).toString();
         }
         ticket_garments.append("<tr>"
-                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; height:20px; width:33px;'>"
+                "<td style='padding:0mm; color:black; font-size:3mm; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; height:4mm; width:7mm;'>"
                     "&nbsp;&nbsp;&nbsp;"+ sql_query_model->data(sql_query_model->index(row, TABLE_QUANTITY)).toString() + "</td>"
-                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; width:137px;'>"
+                "<td style='padding:0mm; color:black; font-size:3mm; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; border:none; width:27mm;'>"
                     + garment_name + "</td>"
-                "<td style='padding:0px; color:black; font-size:15px; font-weight:400; font-style: normal; font-family:Calibri,sans-serif; text-align:right; border:none; width:66px;'>"
+                "<td style='padding:0mm; color:black; font-size:3mm; font-weight:400; font-style: normal; font-family:Calibri,sans-serif; text-align:right; border:none; width:13mm;'>"
                     + QString::number(sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat(), 'f', 2) + "&emsp;</td>"
             "</tr>");
         ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat();
@@ -83,11 +82,6 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
     QString ticket_total = QString::number(ticket_total_f, 'f', 2);
     QString iva = QString::number(ticket_total_f * 0.21, 'f', 2);
     QString base_imponible = QString::number(ticket_total_f - (ticket_total_f * 0.21), 'f', 2);
-    /////////////////////////////
-    // Create printer for tickets
-    QPrinter printer(QPrinter::PrinterResolution);
-    printer.setPrinterName("EPSON TM-T20III");
-    printer.setColorMode(QPrinter::GrayScale);
     // Create ticket content based on ticket information: payment date and invoice type
     QString ticket_type, ticket_dates, client_address, client_id, receipt_info;
     ticket_dates.append(
@@ -101,11 +95,11 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
         // Add copy for client or for store info
         if (copy_for_client)
         {
-            receipt_info = "<tr><td colspan='3' style='font-size:12px;'>(Copia para el cliente)</td></tr>";
+            receipt_info = "<tr><td colspan='3' style='font-size:2mm;'>(Copia para el cliente)</td></tr>";
         }
         else
         {
-            receipt_info = "<tr><td colspan='3' style='font-size:12px;'>(Copia para el establecimiento)</td></tr>";
+            receipt_info = "<tr><td colspan='3' style='font-size:2mm;'>(Copia para el establecimiento)</td></tr>";
         }
     }
     else
@@ -132,21 +126,20 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
         }
     }
     // Create full HTML ticket
-    QTextDocument ticketContent;
     QString text;
     text.append(
             "<!DOCTYPE html>"
             "<html>"
                 "<head>"
                     "<style>"
-                        "table, th, td { border-collapse:collapse; border:none; font-size:15px; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; }"
+                        "table, th, td { border-collapse:collapse; border:none; font-size:3mm; font-weight:400; font-style:normal; font-family:Calibri,sans-serif; text-align:left; }"
                     "</style>"
                 "</head>"
             "<body>"
-                "<table style='width:236px;'>"
+                "<table style='width:72mm;'>"
                     "<tbody>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:25px; font-weight:700; text-align:center;'>Tintorer&iacute;a La Ideal"
+                            "<td colspan='3' style='font-size:6mm; font-weight:700; text-align:center;'>Tintorer&iacute;a La Ideal"
                                 "<div style='text-align:center;'>"
                                     "<span style='font-weight:700;'>Roc&iacute;o L&oacute;pez Dom&iacute;nguez</span><br>"
                                     "<span style='font-weight:700;'>NIF: 24215141-M</span><br>"
@@ -158,7 +151,7 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
                         "<tr><td colspan='3'><hr></td></tr>"
                         + ticket_type +
                         "<tr>"
-                            "<td colspan='3' style='font-weight:700; text-align:right; height:26px;'>Recibo: "
+                            "<td colspan='3' style='font-weight:700; text-align:right; height:5mm;'>Recibo: "
                             + ui->le_n_ticket->text() + "</td>"
                         "</tr>"
                         "<tr>"
@@ -168,13 +161,13 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
                         + ticket_dates + client_address + client_id +
                         "<tr></tr>"
                         "<tr>"
-                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:33px;'>Uds.</td>"
-                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:137px;'>Prendas</td>"
-                            "<td style='font-weight:700; text-align:right; vertical-align:bottom; border-bottom:1px solid black; height:26px; width:66px;'>Importe</td>"
+                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:5mm; width:7mm;'>Uds.</td>"
+                            "<td style='font-weight:700; text-align:left; vertical-align:bottom; border-bottom:1px solid black; height:5mm; width:27mm;'>Prendas</td>"
+                            "<td style='font-weight:700; text-align:right; vertical-align:bottom; border-bottom:1px solid black; height:5mm; width:13mm;'>Importe</td>"
                         "</tr>"
                         + ticket_garments +
                         "<tr>"
-                            "<td colspan='2' style='vertical-align:bottom; border-top:1px solid black; height:26px;'>Base Imponible:</td>"
+                            "<td colspan='2' style='vertical-align:bottom; border-top:1px solid black; height:5mm;'>Base Imponible:</td>"
                             "<td style='text-align:right; vertical-align:bottom; border-top:1px solid black;'>"
                             + base_imponible + "&emsp;</td>"
                         "</tr>"
@@ -191,20 +184,20 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
                         "<tr><td colspan='3'><hr></td></tr>"
                         "<tr></tr>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:13px; vertical-align:bottom;'>CONDICIONES GENERALES.</td>"
+                            "<td colspan='3' style='font-size:2.3mm; vertical-align:bottom;'>CONDICIONES GENERALES.</td>"
                         "</tr>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- El recibo deber&aacute; ser presentado al retirar la prenda. En caso de p&eacute;rdida, el usuario acreditar&aacute; su identidad.</td>"
+                            "<td colspan='3' style='font-size:2mm; vertical-align:bottom; height:10mm;'>- El recibo deber&aacute; ser presentado al retirar la prenda. En caso de p&eacute;rdida, el usuario acreditar&aacute; su identidad.</td>"
                         "</tr>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- La obligaci&oacute;n de conservar las prendas por el establecimiento caduca una vez transcurridos SEIS MESES desde la fecha de recogida.</td>"
+                            "<td colspan='3' style='font-size:2mm; vertical-align:bottom; height:10mm;'>- La obligaci&oacute;n de conservar las prendas por el establecimiento caduca una vez transcurridos SEIS MESES desde la fecha de recogida.</td>"
                         "</tr>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:12px; vertical-align:bottom; height:46px;'>- No se responde de botones y otros adornos delicados de las prendas. Se recomienda que sean desmontados por el cliente.&nbsp;</td>"
+                            "<td colspan='3' style='font-size:2mm; vertical-align:bottom; height:10mm;'>- No se responde de botones y otros adornos delicados de las prendas. Se recomienda que sean desmontados por el cliente.&nbsp;</td>"
                         "</tr>"
                         "<tr><td colspan='3'><hr></td></tr>"
                         "<tr>"
-                            "<td colspan='3' style='font-size:12px; vertical-align:bottom;'>"
+                            "<td colspan='3' style='font-size:2mm; vertical-align:bottom;'>"
                             + QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss") + "</td>"
                         "</tr>"
                         + receipt_info +
@@ -212,8 +205,18 @@ void Imprimir::create_ticket_and_print(bool copy_for_client)
                 "</table>"
             "</body>"
             "</html>");
-    ticketContent.setHtml(text);
-    ticketContent.print(&printer);
+    return text;
+}
+
+void Imprimir::print_ticket(QString html_text)
+{
+    // Create document
+    QTextDocument ticketContent;
+    ticketContent.setHtml(html_text);
+    // Create printer
+    QPrinter printer(QPrinter::PrinterResolution);
+    printer.setPrinterName("EPSON TM-T20III");
+    printer.setColorMode(QPrinter::GrayScale);
 }
 
 void Imprimir::on_bb_ok_cancel_accepted()
@@ -224,7 +227,7 @@ void Imprimir::on_bb_ok_cancel_accepted()
         get_ticket_info();
         if (is_recibo || (!is_recibo && check_ticket_paid()))
         {
-            create_ticket_and_print(true);
+            print_ticket(create_html_ticket(true));
             if (is_recibo)
             {
                 //// Comment-in when no more automatic receipt are needed
@@ -233,7 +236,7 @@ void Imprimir::on_bb_ok_cancel_accepted()
                 //                                 QMessageBox::Yes | QMessageBox::No,
                 //                                 QMessageBox::Yes);
                 //if (resp == QMessageBox::Yes)
-                //    create_ticket_and_print(false);
+                //    print_ticket(create_html_ticket(false));
             }
         }
         else
