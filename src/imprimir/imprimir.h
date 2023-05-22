@@ -8,7 +8,6 @@
 #include <QDateTime>
 #include <QInputDialog>
 #include <QTextDocument>
-#include <QTextCursor>
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
