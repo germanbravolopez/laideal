@@ -22,7 +22,9 @@ void Gastos::populate_table()
         model->setTable("gastos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
         model->select();
-        ui->table_gastos->setModel(model);
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->setSourceModel(model);
+        ui->table_gastos->setModel(proxyModel);
         ui->table_gastos->resizeColumnsToContents();
         ui->table_gastos->sortByColumn(FECHA_COLUMN_IDX, Qt::AscendingOrder);
         ui->statusBar->showMessage("Modo edición desactivado");
@@ -65,4 +67,3 @@ void Gastos::on_actionEliminar_fila_triggered()
             populate_table();
         }
 }
-

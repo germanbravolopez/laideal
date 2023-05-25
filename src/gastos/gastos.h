@@ -6,7 +6,7 @@
 #include <QSqlTableModel>
 #include <QMessageBox>
 
-#define FECHA_COLUMN_IDX 4
+#include "mysortfilterproxymodel.h"
 
 namespace Ui {
 class Gastos;
@@ -18,6 +18,7 @@ class Gastos : public QMainWindow
 
 public:
     QSqlTableModel *model;
+    MySortFilterProxyModel *proxyModel;
     explicit Gastos(QWidget *parent = nullptr);
     ~Gastos();
 

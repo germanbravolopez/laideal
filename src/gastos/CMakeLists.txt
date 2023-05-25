@@ -1,4 +1,6 @@
 add_library(gastos STATIC
+    mysortfilterproxymodel.h
+    mysortfilterproxymodel.cpp
     gastos.ui
     gastos.h
     gastos.cpp
