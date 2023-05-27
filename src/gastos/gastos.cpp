@@ -16,13 +16,14 @@ Gastos::~Gastos()
 
 void Gastos::populate_table()
 {
-    if (QSqlDatabase::contains("qt_sql_default_connection"))
-    {
+    if (QSqlDatabase::contains("qt_sql_default_connection")) {
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("gastos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
         model->select();
-        ui->table_gastos->setModel(model);
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->setSourceModel(model);
+        ui->table_gastos->setModel(proxyModel);
         ui->table_gastos->resizeColumnsToContents();
         ui->table_gastos->sortByColumn(FECHA_COLUMN_IDX, Qt::AscendingOrder);
         ui->statusBar->showMessage("Modo edición desactivado");
@@ -59,10 +60,8 @@ void Gastos::on_actionEliminar_fila_triggered()
                                         QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
                                         QMessageBox::Yes | QMessageBox::No,
                                         QMessageBox::No);
-        if (ret == QMessageBox::Yes)
-        {
-            model->removeRow(ui->table_gastos->currentIndex().row());
-            populate_table();
-        }
+    if (ret == QMessageBox::Yes) {
+        model->removeRow(ui->table_gastos->currentIndex().row());
+        populate_table();
+    }
 }
-
