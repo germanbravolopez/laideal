@@ -122,7 +122,9 @@ void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
     }
 }
 
-void MainWindow::set_garment_price(int garment_row, QString garment_text, QString service_text)
+void MainWindow::set_garment_price(int garment_row,
+                                   QString garment_text,
+                                   QString service_text)
 {
     QTableWidgetItem *qnty_item(ui->table_ticket->item(garment_row, TABLE_TICKET_QNTY));
     QTableWidgetItem *item = new QTableWidgetItem;

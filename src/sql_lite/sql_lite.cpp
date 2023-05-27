@@ -1,6 +1,8 @@
 #include "sql_lite.h"
 
-int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QString table)
+int read_max_value_in_column_from_table(QSqlDatabase &db,
+                                        QString column,
+                                        QString table)
 {
     int max_value = 0;
     db.open();
@@ -20,7 +22,9 @@ int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QStrin
     return max_value;
 }
 
-QStringList read_column_from_table(QSqlDatabase &db, QString column, QString table)
+QStringList read_column_from_table(QSqlDatabase &db,
+                                   QString column,
+                                   QString table)
 {
     db.open();
     QSqlQuery q;
@@ -38,7 +42,9 @@ QStringList read_column_from_table(QSqlDatabase &db, QString column, QString tab
     return list;
 }
 
-float read_garment_price(QSqlDatabase &db, QString garment, QString service)
+float read_garment_price(QSqlDatabase &db,
+                         QString garment,
+                         QString service)
 {
     float price = 0.0;
     db.open();
@@ -69,7 +75,12 @@ float read_garment_price(QSqlDatabase &db, QString garment, QString service)
     return price;
 }
 
-QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString table, QString column_to_search, QString item_to_search, bool exact_match)
+QString select_from_where_like(QSqlDatabase &db,
+                               QString item_to_get,
+                               QString table,
+                               QString column_to_search,
+                               QString item_to_search,
+                               bool exact_match)
 {
     QString item_to_search_text;
     db.open();
@@ -92,12 +103,17 @@ QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString ta
     return item_to_search_text;
 }
 
-QString search_item_from_client(QSqlDatabase &db, QString item, QString client)
+QString search_item_from_client(QSqlDatabase &db,
+                                QString item,
+                                QString client)
 {
     return select_from_where_like(db, item, "clientes", "nombre", client, false);
 }
 
-bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QString client)
+bool update_item_to_client(QSqlDatabase &db,
+                           QString column,
+                           QString item,
+                           QString client)
 {
     QSqlQuery q;
     db.open();
@@ -109,7 +125,11 @@ bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QStri
     return ok;
 }
 
-bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString direccion, QString movil)
+bool add_new_client(QSqlDatabase &db,
+                    QString client,
+                    QString tel_fijo,
+                    QString direccion,
+                    QString movil)
 {
     QSqlQuery q;
     db.open();
@@ -124,7 +144,11 @@ bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString 
     return ok;
 }
 
-float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva)
+float total_price_between_dates(QSqlDatabase &db,
+                                QString table,
+                                QDate start_date,
+                                QDate end_date,
+                                int iva)
 {
     db.open();
     QSqlQuery q;
@@ -182,7 +206,9 @@ float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_dat
     return total_price;
 }
 
-int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
+int read_lock_for_month_and_year(QSqlDatabase &db,
+                                 int month,
+                                 int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
     QString month_fix;
@@ -211,7 +237,10 @@ int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
     return edit_lock;
 }
 
-void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year)
+void update_lock_in_ingresos(QSqlDatabase &db,
+                             int value,
+                             int month,
+                             int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
     QString month_fix;
