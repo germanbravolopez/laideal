@@ -16,7 +16,8 @@ Gastos::~Gastos()
 
 void Gastos::populate_table()
 {
-    if (QSqlDatabase::contains("qt_sql_default_connection")) {
+    if (QSqlDatabase::contains("qt_sql_default_connection"))
+    {
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("gastos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
@@ -60,8 +61,9 @@ void Gastos::on_actionEliminar_fila_triggered()
                                         QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
                                         QMessageBox::Yes | QMessageBox::No,
                                         QMessageBox::No);
-    if (ret == QMessageBox::Yes) {
-        model->removeRow(ui->table_gastos->currentIndex().row());
-        populate_table();
-    }
+        if (ret == QMessageBox::Yes)
+        {
+            model->removeRow(ui->table_gastos->currentIndex().row());
+            populate_table();
+        }
 }
