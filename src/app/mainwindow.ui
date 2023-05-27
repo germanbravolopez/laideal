@@ -645,6 +645,7 @@ prenda</string>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="separator"/>
+    <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionGenerar_contabilidad"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
@@ -678,7 +679,7 @@ prenda</string>
     <string>Imprimir recibo</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Shift+R</string>
+    <string>Alt+P</string>
    </property>
   </action>
   <action name="actionFactura">
@@ -689,7 +690,7 @@ prenda</string>
     <string>Imprimir factura</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Shift+F</string>
+    <string>Alt+Shift+P</string>
    </property>
   </action>
   <action name="actionRecogida_de_prendas">
@@ -713,7 +714,7 @@ prenda</string>
     <string>Generar contabilidad</string>
    </property>
    <property name="shortcut">
-    <string>Alt+Shift+C</string>
+    <string>Alt+C</string>
    </property>
   </action>
   <action name="actionIngresos">
@@ -746,7 +747,7 @@ prenda</string>
     <string>Visualizar listado de prendas</string>
    </property>
    <property name="shortcut">
-    <string>Alt+P</string>
+    <string>Alt+Shift+L</string>
    </property>
   </action>
   <action name="actionListado_de_clientes">
@@ -757,7 +758,7 @@ prenda</string>
     <string>Visualizar listado de clientes</string>
    </property>
    <property name="shortcut">
-    <string>Alt+C</string>
+    <string>Alt+Shift+C</string>
    </property>
   </action>
   <action name="actionListado_de_proveedores">
@@ -768,7 +769,18 @@ prenda</string>
     <string>Visualizar listado de proveedores</string>
    </property>
    <property name="shortcut">
-    <string>Alt+S</string>
+    <string>Alt+Shift+S</string>
+   </property>
+  </action>
+  <action name="actionLimpiar_base_de_datos">
+   <property name="text">
+    <string>Limpiar base de datos</string>
+   </property>
+   <property name="toolTip">
+    <string>Limpiar comas ',' en importes guardados en la base de datos</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+L</string>
    </property>
   </action>
  </widget>

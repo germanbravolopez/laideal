@@ -72,10 +72,12 @@ bool Facturas::validate_form()
 
 void Facturas::save_factura()
 {
+    int id_max = read_max_value_in_column_from_table(db, "id", "gastos");
     db.open();
     QSqlQuery q;
-    q.prepare("INSERT INTO gastos (n_factura, servicio, producto, empresa, fecha, iva, importe, edit_lock) "
-              "VALUES (:n_factura, :servicio, :producto, :empresa, :fecha, :iva, :importe, :edit_lock);");
+    q.prepare("INSERT INTO gastos (id, n_factura, servicio, producto, empresa, fecha, iva, importe, edit_lock) "
+              "VALUES (:id, :n_factura, :servicio, :producto, :empresa, :fecha, :iva, :importe, :edit_lock);");
+    q.bindValue(":id", QString::number(id_max + 1));
     q.bindValue(":n_factura", ui->le_fra->text());
     q.bindValue(":servicio", ui->le_servicio->text());
     q.bindValue(":producto", ui->le_producto->text());
