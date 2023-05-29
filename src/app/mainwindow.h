@@ -65,6 +65,7 @@ private slots:
     void on_actionRecogida_de_prendas_triggered();
     void on_actionGenerar_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
+    void on_actionLimpiar_base_de_datos_triggered();
 
 private:
     Ui::MainWindow *ui;

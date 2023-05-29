@@ -490,3 +490,16 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     ui_facturas->populate_empresas();
     ui_facturas->show();
 }
+
+void MainWindow::on_actionLimpiar_base_de_datos_triggered()
+{
+    int gastos_cnt = update_comas_in_decimal_data(db, "gastos", "importe");
+    int ingresos_importe_cnt = update_comas_in_decimal_data(db, "ingresos", "importe");
+    int ingresos_size_cnt = update_comas_in_decimal_data(db, "ingresos", "size");
+    QMessageBox::information(this, "Limpieza de la base de datos",
+                             "Se han corregido los siguientes importes decimales que se encontraban"
+                             " en la base de datos con ',' en lugar de '.':\n"
+                             + QString::number(gastos_cnt) + " en la tabla de gastos.\n"
+                             + QString::number(ingresos_importe_cnt + ingresos_size_cnt) + " en la tabla de ingresos.",
+                             QMessageBox::Ok, QMessageBox::Ok);
+}

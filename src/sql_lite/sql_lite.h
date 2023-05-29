@@ -67,5 +67,10 @@ void update_lock_in_ingresos(
             int          month,
             int          year
         );
+int update_comas_in_decimal_data(
+            QSqlDatabase &db,
+            QString table,
+            QString item
+        );
 
 #endif // SQL_LITE_H
