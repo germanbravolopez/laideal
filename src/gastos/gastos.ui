@@ -115,6 +115,8 @@
     <addaction name="separator"/>
     <addaction name="actionAnadir_fila"/>
     <addaction name="actionEliminar_fila"/>
+    <addaction name="separator"/>
+    <addaction name="actionGenerar_pdf_con_el_listado"/>
    </widget>
    <addaction name="menuArchivo"/>
    <addaction name="menuHerramientas"/>
@@ -158,6 +160,14 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionGenerar_pdf_con_el_listado">
+   <property name="text">
+    <string>Generar pdf con el listado</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
    </property>
   </action>
  </widget>

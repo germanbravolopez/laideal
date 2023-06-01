@@ -1,5 +1,6 @@
 #include "gastos.h"
 #include "ui_gastos.h"
+#include "qprinter.h"
 
 Gastos::Gastos(QWidget *parent) :
     QMainWindow(parent),
@@ -66,4 +67,48 @@ void Gastos::on_actionEliminar_fila_triggered()
         model->removeRow(ui->table_gastos->currentIndex().row());
         populate_table();
     }
+}
+
+void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
+{
+    // prepare table
+    ui->table_gastos->hideColumn(model->columnCount() - 1);
+    ui->table_gastos->hideColumn(0);
+
+    // set path and print table
+    QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
+    QString filename = "/listado_gastos_" +
+            QDate::currentDate().toString("yyyy-MM-dd") +
+            ".pdf";
+    // create directory in case it does not exists
+    if (!QFile::exists(path))
+        QDir().mkpath(path);
+    // open file in case it already exists
+    if (!QFile::exists(path + filename))
+        write_html(path + filename);
+    else
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+
+    // reset table
+    ui->table_gastos->showColumn(model->columnCount() - 1);
+    ui->table_gastos->showColumn(0);
+}
+
+void Gastos::write_html(QString filename)
+{
+    QPrinter printer(QPrinter::PrinterResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setPageSize(QPageSize::A4);
+    printer.setOutputFileName(filename);
+
+    QPainter painter;
+    if (!painter.begin(&printer)) {
+        qWarning("No se pudo abrir el archivo de impresión");
+        return;
+    }
+
+    ui->table_gastos->render(&painter);
+    painter.end();
+
+    QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
 }

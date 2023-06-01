@@ -5,6 +5,10 @@
 #include <QSqlDatabase>
 #include <QSqlTableModel>
 #include <QMessageBox>
+#include <QFile>
+#include <QDir>
+#include <QDesktopServices>
+#include <QPainter>
 
 #include "mysortfilterproxymodel.h"
 
@@ -29,6 +33,9 @@ private slots:
     void on_actionDesactivar_modo_edicion_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
+    void on_actionGenerar_pdf_con_el_listado_triggered();
+
+    void write_html(QString filename);
 
 private:
     Ui::Gastos *ui;
