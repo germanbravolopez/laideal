@@ -2,14 +2,9 @@
 #define GASTOS_H
 
 #include <QMainWindow>
-#include <QSqlDatabase>
 #include <QSqlTableModel>
 #include <QMessageBox>
-#include <QFile>
-#include <QDir>
-#include <QDesktopServices>
-#include <QPainter>
-
+#include <QSqlDatabase>
 #include "mysortfilterproxymodel.h"
 
 namespace Ui {
@@ -21,6 +16,7 @@ class Gastos : public QMainWindow
     Q_OBJECT
 
 public:
+    QSqlDatabase db;
     QSqlTableModel *model;
     MySortFilterProxyModel *proxyModel;
     explicit Gastos(QWidget *parent = nullptr);
@@ -34,9 +30,6 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
     void on_actionGenerar_pdf_con_el_listado_triggered();
-
-    void write_html(QString filename, QString html);
-    QString generate_html_table();
 
 private:
     Ui::Gastos *ui;

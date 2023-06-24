@@ -441,6 +441,7 @@ void MainWindow::on_actionGastos_triggered()
 {
     Gastos *ui_gast;
     ui_gast = new Gastos(this);
+    ui_gast->db = db;
     ui_gast->show();
 }
 

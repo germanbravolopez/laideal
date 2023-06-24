@@ -22,6 +22,34 @@ int read_max_value_in_column_from_table(QSqlDatabase &db,
     return max_value;
 }
 
+int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
+                                             bool max_n_min,
+                                             QString column,
+                                             QString table)
+{
+    int value = 0;
+    QString query;
+    if (max_n_min)
+        query = "SELECT MAX(substr(" + column + ",7,4)) FROM " + table;
+    else
+        query = "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
+    db.open();
+    QSqlQuery q;
+    q.exec(query);
+    if (q.isSelect())
+    {
+        if (q.first())
+            value = q.value(0).toInt();
+        else
+            qDebug() << "Query is not available!";
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    return value;
+}
+
 QStringList read_column_from_table(QSqlDatabase &db,
                                    QString column,
                                    QString table)
