@@ -30,6 +30,8 @@ private slots:
     void on_buttonBox_accepted();
     void on_bb_ok_cancel_rejected();
 
+    void on_checkb_allys_clicked(bool checked);
+
 private:
     Ui::GenerarListado *ui;
 };

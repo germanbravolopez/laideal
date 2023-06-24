@@ -19,6 +19,8 @@ GenerarListado::~GenerarListado()
 void GenerarListado::initial_settings()
 {
     set_cb_fechas();
+    ui->cb_agrupar->addItems({"Fechas", "Proveedores"});
+    ui->cb_tipo_gastos->addItems({"Incluir todos", "Contabilidad cerrada"});
 }
 
 void GenerarListado::set_cb_fechas()
@@ -135,4 +137,9 @@ void GenerarListado::on_buttonBox_accepted()
 void GenerarListado::on_bb_ok_cancel_rejected()
 {
     this->close();
+}
+
+void GenerarListado::on_checkb_allys_clicked(bool checked)
+{
+    ui->cb_fechas->setDisabled(checked);
 }
