@@ -71,9 +71,8 @@ void Gastos::on_actionEliminar_fila_triggered()
 
 void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
 {
-    // prepare table
-    ui->table_gastos->hideColumn(model->columnCount() - 1);
-    ui->table_gastos->hideColumn(0);
+    // generate html table
+    QString html_table_gastos = generate_html_table();
 
     // set path and print table
     QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
@@ -85,30 +84,84 @@ void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
         QDir().mkpath(path);
     // open file in case it already exists
     if (!QFile::exists(path + filename))
-        write_html(path + filename);
+        write_html(path + filename, html_table_gastos);
     else
         QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
-
-    // reset table
-    ui->table_gastos->showColumn(model->columnCount() - 1);
-    ui->table_gastos->showColumn(0);
 }
 
-void Gastos::write_html(QString filename)
+void Gastos::write_html(QString filename,
+                        QString html)
 {
+    QTextDocument document;
+    document.setHtml(html);
+
     QPrinter printer(QPrinter::PrinterResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setPageSize(QPageSize::A4);
     printer.setOutputFileName(filename);
 
-    QPainter painter;
-    if (!painter.begin(&printer)) {
-        qWarning("No se pudo abrir el archivo de impresión");
-        return;
-    }
-
-    ui->table_gastos->render(&painter);
-    painter.end();
+    document.print(&printer);
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
+}
+
+QString Gastos::generate_html_table()
+{
+    QString html_table_gastos;
+    html_table_gastos = "<!DOCTYPE html>"
+        "<html>"
+        "<head>"
+            "<meta charset='UTF-8'>"
+            "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+            "<style>"
+                "table,tr, th, td {"
+                    "border: 1px solid black;"
+                    "border-collapse: collapse;"
+                "}"
+                "td {"
+                    "text-align: left;"
+                "}"
+            "</style>"
+        "</head>"
+        "<body>"
+            "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
+            "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>"
+            "<h1 style='text-align:center;'>Listado de Gastos</h1>"
+            "<figure class='table' style='float:left;'>"
+                "<table>"
+                    "<thead>"
+                        "<tr>"
+                            "<th>&nbsp;N. Fra&nbsp;</th>"
+                            "<th>&nbsp;Servicio&nbsp;</th>"
+                            "<th>&nbsp;Producto&nbsp;</th>"
+                            "<th>&nbsp;Empresa&nbsp;</th>"
+                            "<th>&nbsp;Fecha&nbsp;</th>"
+                            "<th>&nbsp;IVA&nbsp;</th>"
+                            "<th>&nbsp;Importe&nbsp;</th>"
+                            "<th>&nbsp;Cerrado por contabilidad&nbsp;</th>"
+                        "</tr>"
+                    "</thead>"
+                    "<tbody>";
+    // add each line of data
+    for (int row = 0; row < model->rowCount(); row++)
+    {
+        // set background color for even rows
+        if (row % 2 == 0)
+            html_table_gastos += "<tr>";
+        else
+            html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
+        // set row content
+        html_table_gastos +="<td>&nbsp;" + ui->table_gastos->model()->index(row, 1).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 2).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 3).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 4).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 5).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 6).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 7).data().toString() + "&nbsp;</td>"
+                            "<td>&nbsp;" + ui->table_gastos->model()->index(row, 8).data().toString() + "&nbsp;</td>"
+                            "</tr>";
+    }
+    html_table_gastos += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
+    return html_table_gastos;
 }

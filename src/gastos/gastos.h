@@ -35,7 +35,8 @@ private slots:
     void on_actionEliminar_fila_triggered();
     void on_actionGenerar_pdf_con_el_listado_triggered();
 
-    void write_html(QString filename);
+    void write_html(QString filename, QString html);
+    QString generate_html_table();
 
 private:
     Ui::Gastos *ui;
