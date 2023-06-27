@@ -1,9 +1,9 @@
 add_library(gastos STATIC
     mysortfilterproxymodel.h
     mysortfilterproxymodel.cpp
-    generar_listado.ui
-    generar_listado.h
-    generar_listado.cpp
+    genlistado.ui
+    genlistado.h
+    genlistado.cpp
     gastos.ui
     gastos.h
     gastos.cpp

@@ -1,29 +1,29 @@
-#include "generar_listado.h"
-#include "ui_generar_listado.h"
+#include "genlistado.h"
+#include "ui_genlistado.h"
 #include "qprinter.h"
 #include "sql_lite.h"
 
-GenerarListado::GenerarListado(QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::GenerarListado)
+GenListado::GenListado(QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::GenListado)
 {
     ui->setupUi(this);
     initial_settings();
 }
 
-GenerarListado::~GenerarListado()
+GenListado::~GenListado()
 {
     delete ui;
 }
 
-void GenerarListado::initial_settings()
+void GenListado::initial_settings()
 {
     set_cb_fechas();
     ui->cb_agrupar->addItems({"Fechas", "Proveedores"});
     ui->cb_tipo_gastos->addItems({"Incluir todos", "Contabilidad cerrada"});
 }
 
-void GenerarListado::set_cb_fechas()
+void GenListado::set_cb_fechas()
 {
     int max_year = read_max_n_min_year_in_column_from_table(db, true, "fecha", "gastos");
     int min_year = read_max_n_min_year_in_column_from_table(db, false, "fecha", "gastos");
@@ -37,8 +37,8 @@ void GenerarListado::set_cb_fechas()
     ui->cb_fechas->addItems(fechas_list);
 }
 
-void GenerarListado::write_html(QString filename,
-                                QString html)
+void GenListado::write_html(QString filename,
+                            QString html)
 {
     QTextDocument document;
     document.setHtml(html);
@@ -53,7 +53,7 @@ void GenerarListado::write_html(QString filename,
     QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
 }
 
-QString GenerarListado::generate_html_table()
+QString GenListado::generate_html_table()
 {
     QString html_table_gastos;
     html_table_gastos = "<!DOCTYPE html>"
@@ -114,9 +114,10 @@ QString GenerarListado::generate_html_table()
     return html_table_gastos;
 }
 
-void GenerarListado::on_buttonBox_accepted()
+void GenListado::on_bb_ok_cancel_accepted()
 {
     // generate html table
+    //model->sort(CLIENT_COLUMN_IDX, Qt::AscendingOrder);
     QString html_table_gastos = generate_html_table();
 
     // set path and print table
@@ -132,14 +133,16 @@ void GenerarListado::on_buttonBox_accepted()
         write_html(path + filename, html_table_gastos);
     else
         QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+    // close at openning ;)
+    this->close();
 }
 
-void GenerarListado::on_bb_ok_cancel_rejected()
+void GenListado::on_bb_ok_cancel_rejected()
 {
     this->close();
 }
 
-void GenerarListado::on_checkb_allys_clicked(bool checked)
+void GenListado::on_checkb_allys_clicked(bool checked)
 {
     ui->cb_fechas->setDisabled(checked);
 }

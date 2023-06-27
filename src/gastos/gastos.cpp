@@ -1,6 +1,6 @@
 #include "gastos.h"
 #include "ui_gastos.h"
-#include "generar_listado.h"
+#include "genlistado.h"
 
 Gastos::Gastos(QWidget *parent) :
     QMainWindow(parent),
@@ -71,9 +71,12 @@ void Gastos::on_actionEliminar_fila_triggered()
 
 void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
 {
-    GenerarListado *ui_generar_listado;
-    ui_generar_listado = new GenerarListado(this);
+    GenListado *ui_generar_listado;
+    ui_generar_listado = new GenListado(this);
     ui_generar_listado->db = db;
     ui_generar_listado->model = ui->table_gastos->model();
-    ui_generar_listado->show();
+    if(ui_generar_listado->exec() == QDialog::Accepted)
+        populate_table();
+    else
+        populate_table();
 }

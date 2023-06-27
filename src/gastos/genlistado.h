@@ -1,23 +1,24 @@
-#ifndef GENERAR_LISTADO_H
-#define GENERAR_LISTADO_H
+#ifndef GENLISTADO_H
+#define GENLISTADO_H
 
-#include <QMainWindow>
+#include <QDialog>
 #include <QDir>
 #include <QDesktopServices>
 #include <QAbstractItemModel>
 #include <QSqlDatabase>
+#include "mysortfilterproxymodel.h"
 
 namespace Ui {
-class GenerarListado;
+class GenListado;
 }
 
-class GenerarListado : public QMainWindow
+class GenListado : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit GenerarListado(QWidget *parent = nullptr);
-    ~GenerarListado();
+    explicit GenListado(QWidget *parent = nullptr);
+    ~GenListado();
     QSqlDatabase db;
     QAbstractItemModel *model;
 
@@ -27,13 +28,12 @@ private slots:
     void write_html(QString filename, QString html);
     QString generate_html_table();
 
-    void on_buttonBox_accepted();
+    void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
-
     void on_checkb_allys_clicked(bool checked);
 
 private:
-    Ui::GenerarListado *ui;
+    Ui::GenListado *ui;
 };
 
-#endif // GENERAR_LISTADO_H
+#endif // GENLISTADO_H
