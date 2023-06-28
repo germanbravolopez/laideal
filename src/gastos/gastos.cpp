@@ -27,7 +27,7 @@ void Gastos::populate_table()
         proxyModel->setSourceModel(model);
         ui->table_gastos->setModel(proxyModel);
         ui->table_gastos->resizeColumnsToContents();
-        ui->table_gastos->sortByColumn(FECHA_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_gastos->sortByColumn(C_FECHA_COLUMN_IDX, Qt::AscendingOrder);
         ui->statusBar->showMessage("Modo edición desactivado");
     }
 }

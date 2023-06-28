@@ -8,6 +8,11 @@
 #include <QSqlDatabase>
 #include "mysortfilterproxymodel.h"
 
+#define C_FECHAS      "Fechas"
+#define C_PROVEEDORES "Proveedores"
+#define C_INCL_TODOS  "Incluir todos"
+#define C_CONTAB_CERR "Contabilidad cerrada"
+
 namespace Ui {
 class GenListado;
 }
@@ -26,7 +31,9 @@ private slots:
     void initial_settings();
     void set_cb_fechas();
     void write_html(QString filename, QString html);
+    QString generate_table_with_specific_conditions();
     QString generate_html_table();
+    bool check_years_invoice_type_for_row(int row);
 
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();

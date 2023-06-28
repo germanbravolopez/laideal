@@ -19,8 +19,8 @@ GenListado::~GenListado()
 void GenListado::initial_settings()
 {
     set_cb_fechas();
-    ui->cb_agrupar->addItems({"Fechas", "Proveedores"});
-    ui->cb_tipo_gastos->addItems({"Incluir todos", "Contabilidad cerrada"});
+    ui->cb_agrupar->addItems({C_FECHAS, C_PROVEEDORES});
+    ui->cb_tipo_gastos->addItems({C_INCL_TODOS, C_CONTAB_CERR});
 }
 
 void GenListado::set_cb_fechas()
@@ -53,6 +53,14 @@ void GenListado::write_html(QString filename,
     QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
 }
 
+QString GenListado::generate_table_with_specific_conditions()
+{
+    // agrupar por proveedores if selected
+    if (ui->cb_agrupar->currentText() == C_PROVEEDORES)
+        model->sort(C_CLIENT_COLUMN_IDX, Qt::AscendingOrder);
+    return generate_html_table();
+}
+
 QString GenListado::generate_html_table()
 {
     QString html_table_gastos;
@@ -75,7 +83,7 @@ QString GenListado::generate_html_table()
         "<body>"
             "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
             "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>"
-            "<h1 style='text-align:center;'>Listado de Gastos</h1>"
+            "<h1 style='text-align:left;'>Listado de Gastos</h1>"
             "<figure class='table' style='float:left;'>"
                 "<table>"
                     "<thead>"
@@ -86,43 +94,75 @@ QString GenListado::generate_html_table()
                             "<th>&nbsp;Empresa&nbsp;</th>"
                             "<th>&nbsp;Fecha&nbsp;</th>"
                             "<th>&nbsp;IVA&nbsp;</th>"
-                            "<th>&nbsp;Importe&nbsp;</th>"
-                            "<th>&nbsp;Cerrado por contabilidad&nbsp;</th>"
-                        "</tr>"
-                    "</thead>"
-                    "<tbody>";
+                            "<th>&nbsp;Importe&nbsp;</th>";
+    if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
+        html_table_gastos += "<th>&nbsp;Cerrado por contabilidad&nbsp;</th>";
+    html_table_gastos += "</tr>" "</thead>" "<tbody>";
     // add each line of data
+    int row_printed = 0;
+
     for (int row = 0; row < model->rowCount(); row++)
     {
-        // set background color for even rows
-        if (row % 2 == 0)
-            html_table_gastos += "<tr>";
-        else
-            html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
-        // set row content
-        html_table_gastos +="<td>&nbsp;" + model->index(row, 1).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 2).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 3).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 4).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 5).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 6).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 7).data().toString() + "&nbsp;</td>"
-                            "<td>&nbsp;" + model->index(row, 8).data().toString() + "&nbsp;</td>"
-                            "</tr>";
+        // print row based on previous analysis
+        if (check_years_invoice_type_for_row(row))
+        {
+            // set background color for even rows
+            if (row_printed % 2 == 0)
+                html_table_gastos += "<tr>";
+            else
+                html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
+            // set row content
+            html_table_gastos +="<td>&nbsp;" + model->index(row, 1).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 2).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 3).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 4).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 5).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 6).data().toString() + "&nbsp;</td>"
+                                "<td>&nbsp;" + model->index(row, 7).data().toString() + "&nbsp;</td>";
+            if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
+                html_table_gastos += "<td>&nbsp;" + model->index(row, 8).data().toString() + "&nbsp;</td>";
+            html_table_gastos += "</tr>";
+            row_printed++;
+        }
     }
     html_table_gastos += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
     return html_table_gastos;
 }
 
+bool GenListado::check_years_invoice_type_for_row(int row)
+{
+    // check years
+    bool print_current_row_date = false;
+    if (!ui->checkb_allys->isChecked())
+    {
+        // print only selected years
+        if (ui->cb_fechas->currentText() == model->index(row, C_FECHA_COLUMN_IDX).data().toString().mid(6, 4))
+            print_current_row_date = true;
+    }
+    else // print all years
+        print_current_row_date = true;
+    // check type of invoice
+    bool print_current_row_cont = false;
+    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR)
+    {
+        // print only closed accountings
+        if (model->index(row, C_CONTAB_COLUMN_IDX).data().toBool())
+            print_current_row_cont = true;
+    }
+    else // print all types of invoices
+        print_current_row_cont = true;
+    // return both
+    return print_current_row_date && print_current_row_cont;
+}
+
 void GenListado::on_bb_ok_cancel_accepted()
 {
     // generate html table
-    //model->sort(CLIENT_COLUMN_IDX, Qt::AscendingOrder);
-    QString html_table_gastos = generate_html_table();
+    QString html_table_gastos = generate_table_with_specific_conditions();
 
     // set path and print table
     QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
-    QString filename = "/listado_gastos_" +
+    QString filename = "/listado_gastos_" + // anadir aqui la parte especifica del listado generado
             QDate::currentDate().toString("yyyy-MM-dd") +
             ".pdf";
     // create directory in case it does not exists

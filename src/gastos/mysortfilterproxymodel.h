@@ -4,8 +4,9 @@
 #include <QDate>
 #include <QSortFilterProxyModel>
 
-#define CLIENT_COLUMN_IDX 4
-#define FECHA_COLUMN_IDX 5
+#define C_CLIENT_COLUMN_IDX  4
+#define C_FECHA_COLUMN_IDX   5
+#define C_CONTAB_COLUMN_IDX  8
 
 class MySortFilterProxyModel : public QSortFilterProxyModel
 {

@@ -37,7 +37,7 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     QVariant leftData = sourceModel()->data(left);
     QVariant rightData = sourceModel()->data(right);
 
-    if (left.column() == FECHA_COLUMN_IDX)
+    if (left.column() == C_FECHA_COLUMN_IDX)
     {
         return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
     }
