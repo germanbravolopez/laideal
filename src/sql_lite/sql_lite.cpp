@@ -1,6 +1,8 @@
 #include "sql_lite.h"
 
-int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QString table)
+int read_max_value_in_column_from_table(QSqlDatabase &db,
+                                        QString column,
+                                        QString table)
 {
     int max_value = 0;
     db.open();
@@ -20,7 +22,37 @@ int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QStrin
     return max_value;
 }
 
-QStringList read_column_from_table(QSqlDatabase &db, QString column, QString table)
+int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
+                                             bool max_n_min,
+                                             QString column,
+                                             QString table)
+{
+    int value = 0;
+    QString query;
+    if (max_n_min)
+        query = "SELECT MAX(substr(" + column + ",7,4)) FROM " + table;
+    else
+        query = "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
+    db.open();
+    QSqlQuery q;
+    q.exec(query);
+    if (q.isSelect())
+    {
+        if (q.first())
+            value = q.value(0).toInt();
+        else
+            qDebug() << "Query is not available!";
+    }
+    else
+        qDebug() << "Query is not Select!";
+    q.clear();
+    db.close();
+    return value;
+}
+
+QStringList read_column_from_table(QSqlDatabase &db,
+                                   QString column,
+                                   QString table)
 {
     db.open();
     QSqlQuery q;
@@ -38,7 +70,9 @@ QStringList read_column_from_table(QSqlDatabase &db, QString column, QString tab
     return list;
 }
 
-float read_garment_price(QSqlDatabase &db, QString garment, QString service)
+float read_garment_price(QSqlDatabase &db,
+                         QString garment,
+                         QString service)
 {
     float price = 0.0;
     db.open();
@@ -69,7 +103,12 @@ float read_garment_price(QSqlDatabase &db, QString garment, QString service)
     return price;
 }
 
-QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString table, QString column_to_search, QString item_to_search, bool exact_match)
+QString select_from_where_like(QSqlDatabase &db,
+                               QString item_to_get,
+                               QString table,
+                               QString column_to_search,
+                               QString item_to_search,
+                               bool exact_match)
 {
     QString item_to_search_text;
     db.open();
@@ -92,12 +131,17 @@ QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString ta
     return item_to_search_text;
 }
 
-QString search_item_from_client(QSqlDatabase &db, QString item, QString client)
+QString search_item_from_client(QSqlDatabase &db,
+                                QString item,
+                                QString client)
 {
     return select_from_where_like(db, item, "clientes", "nombre", client, false);
 }
 
-bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QString client)
+bool update_item_to_client(QSqlDatabase &db,
+                           QString column,
+                           QString item,
+                           QString client)
 {
     QSqlQuery q;
     db.open();
@@ -109,7 +153,11 @@ bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QStri
     return ok;
 }
 
-bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString direccion, QString movil)
+bool add_new_client(QSqlDatabase &db,
+                    QString client,
+                    QString tel_fijo,
+                    QString direccion,
+                    QString movil)
 {
     QSqlQuery q;
     db.open();
@@ -124,7 +172,11 @@ bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString 
     return ok;
 }
 
-float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva)
+float total_price_between_dates(QSqlDatabase &db,
+                                QString table,
+                                QDate start_date,
+                                QDate end_date,
+                                int iva)
 {
     db.open();
     QSqlQuery q;
@@ -182,7 +234,9 @@ float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_dat
     return total_price;
 }
 
-int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
+int read_lock_for_month_and_year(QSqlDatabase &db,
+                                 int month,
+                                 int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
     QString month_fix;
@@ -211,7 +265,10 @@ int read_lock_for_month_and_year(QSqlDatabase &db, int month, int year)
     return edit_lock;
 }
 
-void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year)
+void update_lock_in_ingresos(QSqlDatabase &db,
+                             int value,
+                             int month,
+                             int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
     QString month_fix;
@@ -237,4 +294,72 @@ void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year)
            + QString::number(year) + "'");
     q.clear();
     db.close();
+}
+
+int update_comas_in_decimal_data(QSqlDatabase &db,
+                                 QString table,
+                                 QString item)
+{
+    int error_cnt = 0;
+    QStringList items = read_column_from_table(db, item, table);
+    if (table == "ingresos")
+    {
+        QStringList ids_1 = read_column_from_table(db, "n_recibo", table);
+        QStringList ids_2 = read_column_from_table(db, "importe", table);
+        QStringList ids_3 = read_column_from_table(db, "pagado", table);
+        QStringList ids_4 = read_column_from_table(db, "estado", table);
+        QStringList ids_5 = read_column_from_table(db, "cantidad", table);
+        QStringList ids_6 = read_column_from_table(db, "prenda", table);
+        QStringList ids_7 = read_column_from_table(db, "size", table);
+        QStringList ids_8 = read_column_from_table(db, "observaciones", table);
+
+        for (int fra = 0; fra < items.count(); fra++)
+        {
+            if (items[fra].contains(","))
+            {
+                QSqlQuery q;
+                db.open();
+                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE ("
+                          "n_recibo      = :id_1 AND "
+                          "importe       = :id_2 AND "
+                          "pagado        = :id_3 AND "
+                          "estado        = :id_4 AND "
+                          "cantidad      = :id_5 AND "
+                          "prenda        = :id_6 AND "
+                          "size          = :id_7 AND "
+                          "observaciones = :id_8)");
+                q.bindValue(":value", items[fra].replace(",","."));
+                q.bindValue(":id_1", ids_1[fra]);
+                q.bindValue(":id_2", ids_2[fra]);
+                q.bindValue(":id_3", ids_3[fra]);
+                q.bindValue(":id_4", ids_4[fra]);
+                q.bindValue(":id_5", ids_5[fra]);
+                q.bindValue(":id_6", ids_6[fra]);
+                q.bindValue(":id_7", ids_7[fra]);
+                q.bindValue(":id_8", ids_8[fra]);
+                q.exec();
+                db.close();
+                error_cnt++;
+            }
+        }
+    }
+    else if (table == "gastos")
+    {
+        QStringList ids = read_column_from_table(db, "n_factura", table);
+        for (int fra = 0; fra < items.count(); fra++)
+        {
+            if (items[fra].contains(","))
+            {
+                QSqlQuery q;
+                db.open();
+                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE n_factura = :id");
+                q.bindValue(":value", items[fra].replace(",","."));
+                q.bindValue(":id", ids[fra]);
+                q.exec();
+                db.close();
+                error_cnt++;
+            }
+        }
+    }
+    return error_cnt;
 }

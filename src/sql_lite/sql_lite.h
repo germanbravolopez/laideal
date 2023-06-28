@@ -13,6 +13,12 @@ int read_max_value_in_column_from_table(
             QString      column,
             QString      table
         );
+int read_max_n_min_year_in_column_from_table(
+            QSqlDatabase &db,
+            bool max_n_min,
+            QString column,
+            QString table
+        );
 QStringList read_column_from_table(
             QSqlDatabase &db,
             QString      column,
@@ -66,6 +72,11 @@ void update_lock_in_ingresos(
             int          value,
             int          month,
             int          year
+        );
+int update_comas_in_decimal_data(
+            QSqlDatabase &db,
+            QString table,
+            QString item
         );
 
 #endif // SQL_LITE_H

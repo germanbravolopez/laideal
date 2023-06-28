@@ -2,11 +2,10 @@
 #define GASTOS_H
 
 #include <QMainWindow>
-#include <QSqlDatabase>
 #include <QSqlTableModel>
 #include <QMessageBox>
-
-#define FECHA_COLUMN_IDX 4
+#include <QSqlDatabase>
+#include "mysortfilterproxymodel.h"
 
 namespace Ui {
 class Gastos;
@@ -17,7 +16,9 @@ class Gastos : public QMainWindow
     Q_OBJECT
 
 public:
+    QSqlDatabase db;
     QSqlTableModel *model;
+    MySortFilterProxyModel *proxyModel;
     explicit Gastos(QWidget *parent = nullptr);
     ~Gastos();
 
@@ -28,6 +29,7 @@ private slots:
     void on_actionDesactivar_modo_edicion_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
+    void on_actionGenerar_pdf_con_el_listado_triggered();
 
 private:
     Ui::Gastos *ui;

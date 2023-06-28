@@ -172,7 +172,9 @@ void Contabilidad::generate_contabilidad()
         QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
 }
 
-float Contabilidad::get_total_income(QString table, int iva, int trim_for_year_config)
+float Contabilidad::get_total_income(QString table,
+                                     int iva,
+                                     int trim_for_year_config)
 {
     QDate start_date, end_date;
     if (ui->cb_config->currentText() == C_MENSUAL)
@@ -241,7 +243,8 @@ void Contabilidad::lock_data()
     }
 }
 
-void Contabilidad::write_html(QString filename, QString html)
+void Contabilidad::write_html(QString filename,
+                              QString html)
 {
     QTextDocument document;
     document.setHtml(html);

@@ -47,7 +47,6 @@ void RecogPrendas::reset_all_contents()
 void RecogPrendas::update_db(UpdateDBop op)
 {
     bool edit_lock = sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_EDIT_LOCK)).toBool();
-    bool ok = false;
     QSqlQuery q;
     switch (op) {
     case PAY_YES:
@@ -58,8 +57,8 @@ void RecogPrendas::update_db(UpdateDBop op)
             if (read_lock_for_month_and_year(db, ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
             {
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
-                                      QMessageBox::Ok, QMessageBox::Ok);
+                                     tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
+                                     QMessageBox::Ok, QMessageBox::Ok);
             }
             else
             {
@@ -71,25 +70,24 @@ void RecogPrendas::update_db(UpdateDBop op)
                 q.bindValue(":new_pagado",     ui->pb_payment->text());
                 // Set old values
                 q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-                q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+                q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
                 q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
                 q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
                 q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
                 q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-                q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+                q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
                 q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
                 q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
                 // Write to db
-                ok = q.exec();
+                q.exec();
                 q.clear();
                 db.close();
             }
         }
         else
-        {
-            qDebug() << "DB corrupted, item with edit_lock 1 and is_payed NO";
-            qDebug() << sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString();
-        }
+            QMessageBox::warning(this, tr("Ticket bloqueado"),
+                                 tr("El ticket actual se encuentra bloqueado por la contabilidad."),
+                                 QMessageBox::Ok, QMessageBox::Ok);
         break;
     case PAY_NO:
         // If edit_lock payment info cannot be changed
@@ -104,19 +102,23 @@ void RecogPrendas::update_db(UpdateDBop op)
             q.bindValue(":new_pagado",     ui->pb_payment->text());
             // Set old values
             q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
             q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
             q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
             q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
             q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
             q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
             q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
             // Write to db
-            ok = q.exec();
+            q.exec();
             q.clear();
             db.close();
         }
+        else
+            QMessageBox::warning(this, tr("Ticket bloqueado"),
+                                 tr("El ticket actual se encuentra bloqueado por la contabilidad."),
+                                 QMessageBox::Ok, QMessageBox::Ok);
         break;
     case PKU_YES:
         db.open();
@@ -127,16 +129,16 @@ void RecogPrendas::update_db(UpdateDBop op)
         q.bindValue(":new_estado",         ui->pb_state->text());
         // Set old values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
         q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
         q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
         q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
         q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
         q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
         q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
         // Write to db
-        ok = q.exec();
+        q.exec();
         q.clear();
         db.close();
         break;
@@ -149,16 +151,16 @@ void RecogPrendas::update_db(UpdateDBop op)
         q.bindValue(":new_estado",         ui->pb_state->text());
         // Set old values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
         q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
         q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
         q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
         q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
         q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
         q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
         // Write to db
-        ok = q.exec();
+        q.exec();
         q.clear();
         db.close();
         break;
@@ -170,77 +172,18 @@ void RecogPrendas::update_db(UpdateDBop op)
         q.bindValue(":new_observaciones", ui->le_obsv->text());
         // Set old values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
         q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
         q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
         q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
         q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
         q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
         q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
         // Write to db
-        ok = q.exec();
+        q.exec();
         q.clear();
         db.close();
-        break;
-    case PAY_DE_CH:
-        // If edit_lock payment info cannot be changed
-        if (!edit_lock && ui->pb_payment->text() == "SI")
-        {
-            // dont update payment date for blocked quarters
-            if (read_lock_for_month_and_year(db, ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
-            {
-                QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
-                                      QMessageBox::Ok, QMessageBox::Ok);
-            }
-            else
-            {
-                db.open();
-                q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago WHERE \
-                    n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
-                // Set new values
-                q.bindValue(":new_fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
-                // Set old values
-                q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-                q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
-                q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-                q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-                q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-                q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-                q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
-                q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-                q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
-                // Write to db
-                ok = q.exec();
-                q.clear();
-                db.close();
-            }
-        }
-        break;
-    case PKU_DE_CH:
-        if (ui->pb_state->text() == "Recogido")
-        {
-            db.open();
-            q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida WHERE \
-                n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
-            // Set new values
-            q.bindValue(":new_fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
-            // Set old values
-            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
-            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
-            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
-            // Write to db
-            ok = q.exec();
-            q.clear();
-            db.close();
-        }
         break;
     case SIZE_AND_PRICE:
         if (!edit_lock && ui->pb_payment->text() == "NO")
@@ -253,16 +196,16 @@ void RecogPrendas::update_db(UpdateDBop op)
             q.bindValue(":new_importe", ui->le_price->text());
             // Set old values
             q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
+            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
             q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
             q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
             q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
             q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
+            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
             q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
             q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
             // Write to db
-            ok = q.exec();
+            q.exec();
             q.clear();
             db.close();
 
@@ -270,7 +213,6 @@ void RecogPrendas::update_db(UpdateDBop op)
     default:
         break;
     }
-    qDebug() << ok;
     // Search again
     on_pb_search_clicked();
     // Load again data from table
@@ -509,22 +451,6 @@ void RecogPrendas::on_le_obsv_returnPressed()
     if (is_cell_clicked)
     {
         update_db(OBSV);
-    }
-}
-
-void RecogPrendas::on_de_date_paym_userDateChanged(const QDate &date)
-{
-    if (is_cell_clicked)
-    {
-        update_db(PAY_DE_CH);
-    }
-}
-
-void RecogPrendas::on_de_date_pickup_userDateChanged(const QDate &date)
-{
-    if (is_cell_clicked)
-    {
-        update_db(PKU_DE_CH);
     }
 }
 

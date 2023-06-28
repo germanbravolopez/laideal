@@ -1,5 +1,6 @@
 #include "gastos.h"
 #include "ui_gastos.h"
+#include "genlistado.h"
 
 Gastos::Gastos(QWidget *parent) :
     QMainWindow(parent),
@@ -22,9 +23,11 @@ void Gastos::populate_table()
         model->setTable("gastos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
         model->select();
-        ui->table_gastos->setModel(model);
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->setSourceModel(model);
+        ui->table_gastos->setModel(proxyModel);
         ui->table_gastos->resizeColumnsToContents();
-        ui->table_gastos->sortByColumn(FECHA_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_gastos->sortByColumn(C_FECHA_COLUMN_IDX, Qt::AscendingOrder);
         ui->statusBar->showMessage("Modo edición desactivado");
     }
 }
@@ -55,14 +58,23 @@ void Gastos::on_actionAnadir_fila_triggered()
 void Gastos::on_actionEliminar_fila_triggered()
 {
     int ret = QMessageBox::question(this, "Eliminar fila",
-                                        "¿Está seguro que desea eliminar la fila " +
-                                        QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
-                                        QMessageBox::Yes | QMessageBox::No,
-                                        QMessageBox::No);
-        if (ret == QMessageBox::Yes)
-        {
-            model->removeRow(ui->table_gastos->currentIndex().row());
-            populate_table();
-        }
+                                    "¿Está seguro que desea eliminar la fila " +
+                                    QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::No);
+    if (ret == QMessageBox::Yes)
+    {
+        model->removeRow(ui->table_gastos->currentIndex().row());
+        populate_table();
+    }
 }
 
+void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
+{
+    GenListado *ui_generar_listado;
+    ui_generar_listado = new GenListado(this);
+    ui_generar_listado->db = db;
+    ui_generar_listado->model = ui->table_gastos->model();
+    ui_generar_listado->exec();
+    populate_table();
+}
