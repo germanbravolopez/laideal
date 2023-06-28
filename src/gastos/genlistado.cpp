@@ -155,6 +155,22 @@ bool GenListado::check_years_invoice_type_for_row(int row)
     return print_current_row_date && print_current_row_cont;
 }
 
+QString GenListado::add_sufix_to_filename()
+{
+    QString filename_sufix;
+    // add group of rows
+    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_");
+    // add accountings
+    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_");
+    // add date info
+    if (ui->checkb_allys->isChecked())
+        filename_sufix = "todos_los_años";
+    else
+        filename_sufix = ui->cb_fechas->currentText();
+
+    return filename_sufix;
+}
+
 void GenListado::on_bb_ok_cancel_accepted()
 {
     // generate html table
@@ -162,8 +178,9 @@ void GenListado::on_bb_ok_cancel_accepted()
 
     // set path and print table
     QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
-    QString filename = "/listado_gastos_" + // anadir aqui la parte especifica del listado generado
-            QDate::currentDate().toString("yyyy-MM-dd") +
+    QString filename = "/listado_gastos_" +
+            QDate::currentDate().toString("yyyy-MM-dd_") +
+            add_sufix_to_filename() +
             ".pdf";
     // create directory in case it does not exists
     if (!QFile::exists(path))

@@ -10,7 +10,7 @@
 
 #define C_FECHAS      "Fechas"
 #define C_PROVEEDORES "Proveedores"
-#define C_INCL_TODOS  "Incluir todos"
+#define C_INCL_TODOS  "Incluir todos los gastos"
 #define C_CONTAB_CERR "Contabilidad cerrada"
 
 namespace Ui {
@@ -34,6 +34,7 @@ private slots:
     QString generate_table_with_specific_conditions();
     QString generate_html_table();
     bool check_years_invoice_type_for_row(int row);
+    QString add_sufix_to_filename();
 
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
