@@ -126,7 +126,10 @@ QString GenListado::generate_html_table()
         }
     }
     html_table_gastos += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
-    return html_table_gastos;
+    if (row_printed == 0)
+        return C_NO_ROWS;
+    else
+        return html_table_gastos;
 }
 
 bool GenListado::check_years_invoice_type_for_row(int row)
@@ -157,16 +160,16 @@ bool GenListado::check_years_invoice_type_for_row(int row)
 
 QString GenListado::add_sufix_to_filename()
 {
-    QString filename_sufix;
+    QString filename_sufix = "";
     // add group of rows
-    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_");
+    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_") + "_";
     // add accountings
-    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_");
+    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_") + "_";
     // add date info
     if (ui->checkb_allys->isChecked())
-        filename_sufix = "todos_los_años";
+        filename_sufix += "todos_los_años";
     else
-        filename_sufix = ui->cb_fechas->currentText();
+        filename_sufix += ui->cb_fechas->currentText();
 
     return filename_sufix;
 }
@@ -176,20 +179,28 @@ void GenListado::on_bb_ok_cancel_accepted()
     // generate html table
     QString html_table_gastos = generate_table_with_specific_conditions();
 
-    // set path and print table
-    QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
-    QString filename = "/listado_gastos_" +
-            QDate::currentDate().toString("yyyy-MM-dd_") +
-            add_sufix_to_filename() +
-            ".pdf";
-    // create directory in case it does not exists
-    if (!QFile::exists(path))
-        QDir().mkpath(path);
-    // open file in case it already exists
-    if (!QFile::exists(path + filename))
-        write_html(path + filename, html_table_gastos);
+    if (html_table_gastos == C_NO_ROWS)
+        QMessageBox::critical(this, "Generar listado de gastos en pdf.",
+                              "No existen gastos para la configuracion seleccionada. Por favor, revise la tabla de gastos.",
+                              QMessageBox::Ok,
+                              QMessageBox::Ok);
     else
-        QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+    {
+        // set path and print table
+        QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
+        QString filename = "/listado_gastos_" +
+                QDate::currentDate().toString("yyyy-MM-dd_") +
+                add_sufix_to_filename() +
+                ".pdf";
+        // create directory in case it does not exists
+        if (!QFile::exists(path))
+            QDir().mkpath(path);
+        // open file in case it already exists
+        if (!QFile::exists(path + filename))
+            write_html(path + filename, html_table_gastos);
+        else
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+    }
     // close at openning ;)
     this->close();
 }
