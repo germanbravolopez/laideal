@@ -75,8 +75,6 @@ void Gastos::on_actionGenerar_pdf_con_el_listado_triggered()
     ui_generar_listado = new GenListado(this);
     ui_generar_listado->db = db;
     ui_generar_listado->model = ui->table_gastos->model();
-    if(ui_generar_listado->exec() == QDialog::Accepted)
-        populate_table();
-    else
-        populate_table();
+    ui_generar_listado->exec();
+    populate_table();
 }
