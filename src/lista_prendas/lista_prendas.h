@@ -17,10 +17,10 @@ class ListaPrendas : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
-    QSqlTableModel *model;
     explicit ListaPrendas(QWidget *parent = nullptr);
     ~ListaPrendas();
+    QSqlDatabase db;
+    QSqlTableModel *model;
 
 private slots:
     void populate_table();

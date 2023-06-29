@@ -4,7 +4,6 @@
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QSqlQueryModel>
-#include <QDate>
 #include <QPushButton>
 
 namespace Ui {

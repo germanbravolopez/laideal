@@ -16,9 +16,9 @@ class Ingresos : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlTableModel *model;
     explicit Ingresos(QWidget *parent = nullptr);
     ~Ingresos();
+    QSqlTableModel *model;
 
 private slots:
     void populate_table();

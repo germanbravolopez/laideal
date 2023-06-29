@@ -16,11 +16,11 @@ class Gastos : public QMainWindow
     Q_OBJECT
 
 public:
+    explicit Gastos(QWidget *parent = nullptr);
+    ~Gastos();
     QSqlDatabase db;
     QSqlTableModel *model;
     MySortFilterProxyModel *proxyModel;
-    explicit Gastos(QWidget *parent = nullptr);
-    ~Gastos();
 
 private slots:
     void populate_table();
