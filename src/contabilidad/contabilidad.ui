@@ -3,7 +3,7 @@
  <class>Contabilidad</class>
  <widget class="QMainWindow" name="Contabilidad">
   <property name="windowModality">
-   <enum>Qt::NonModal</enum>
+   <enum>Qt::WindowModal</enum>
   </property>
   <property name="geometry">
    <rect>

@@ -3,7 +3,7 @@
  <class>Facturas</class>
  <widget class="QMainWindow" name="Facturas">
   <property name="windowModality">
-   <enum>Qt::NonModal</enum>
+   <enum>Qt::WindowModal</enum>
   </property>
   <property name="geometry">
    <rect>
