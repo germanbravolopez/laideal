@@ -29,6 +29,9 @@ class RecogPrendas : public QMainWindow
     Q_OBJECT
 
 public:
+    explicit RecogPrendas(QWidget *parent = nullptr);
+    ~RecogPrendas();
+
     QSqlDatabase db;
     QSqlQueryModel *sql_query_model = new QSqlQueryModel;
     bool is_cell_clicked = false;
@@ -42,9 +45,6 @@ public:
         OBSV,
         SIZE_AND_PRICE
     };
-
-    explicit RecogPrendas(QWidget *parent = nullptr);
-    ~RecogPrendas();
 
 private slots:
     void initial_settings();

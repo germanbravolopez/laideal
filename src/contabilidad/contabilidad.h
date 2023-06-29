@@ -4,14 +4,13 @@
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QSqlQueryModel>
-#include <QDate>
 #include <QMessageBox>
-
-#include <QApplication>
-#include <QPdfWriter>
-#include <QPainter>
 #include <QDesktopServices>
 #include <QDir>
+
+#define C_MENSUAL    "Mensual"
+#define C_TRIMESTRAL "Trimestral"
+#define C_ANUAL      "Anual"
 
 namespace Ui {
 class Contabilidad;
@@ -22,13 +21,9 @@ class Contabilidad : public QMainWindow
     Q_OBJECT
 
 public:
-    const QString C_MENSUAL     = "Mensual";
-    const QString C_TRIMESTRAL  = "Trimestral";
-    const QString C_ANUAL       = "Anual";
-
-    QSqlDatabase db;
     explicit Contabilidad(QWidget *parent = nullptr);
     ~Contabilidad();
+    QSqlDatabase db;
 
 private slots:
     void initial_settings();

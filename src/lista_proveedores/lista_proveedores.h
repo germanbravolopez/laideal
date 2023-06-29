@@ -17,10 +17,10 @@ class ListaProveedores : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
-    QSqlTableModel *model;
     explicit ListaProveedores(QWidget *parent = nullptr);
     ~ListaProveedores();
+    QSqlDatabase db;
+    QSqlTableModel *model;
 
 private slots:
     void populate_table();

@@ -9,7 +9,8 @@ add_library(gastos STATIC
     gastos.cpp
 )
 target_link_libraries(gastos
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     Qt${QT_VERSION_MAJOR}::PrintSupport

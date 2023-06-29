@@ -17,10 +17,10 @@ class ListaClientes : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
-    QSqlTableModel *model;
     explicit ListaClientes(QWidget *parent = nullptr);
     ~ListaClientes();
+    QSqlDatabase db;
+    QSqlTableModel *model;
 
 private slots:
     void populate_table();

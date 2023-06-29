@@ -6,7 +6,8 @@ add_executable(laideal
 )
 
 target_link_libraries(laideal
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     TableView
     sql_lite

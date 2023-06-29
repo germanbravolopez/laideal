@@ -44,37 +44,30 @@ bool Facturas::validate_form()
 {
     bool ok = 0;
     // Avoid n_fra, service, company and cost to be empty
-    if (ui->le_fra->text() != "" && ui->le_servicio->text() != "" && ui->cb_empresa->currentText() != "" && ui->le_importe->text() != "")
-    {
+    if (ui->le_fra->text() != "" &&
+            ui->le_servicio->text() != "" &&
+            ui->cb_empresa->currentText() != "" &&
+            ui->le_importe->text() != "") {
         // Check current company as part of the company list
-        if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1)
-        {
+        if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
             if (read_lock_for_month_and_year(db, ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
-            {
                 ok = 1;
-            }
             else
-            {
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de la factura pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
-            }
         }
         else
-        {
             QMessageBox::warning(this, "Formulario factura",
                                  "El nombre de la empresa introducida no se encuentra en la lista de empresas.\n"
                                  "Añadirla en el listado de empresas antes de introducir esta factura.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-        }
     }
     else
-    {
         QMessageBox::warning(this, "Formulario factura",
                              "Formulario incompleto.\n"
                              "Para poder guardar la factura, al menos es necesario rellenar los siguientes campos: Nº Fra., Servicio, Empresa e Importe.",
                              QMessageBox::Ok, QMessageBox::Ok);
-    }
 
     return ok;
 }
@@ -103,17 +96,11 @@ void Facturas::save_factura()
 void Facturas::on_buttonBox_clicked(QAbstractButton *button)
 {
     if (button == ui->buttonBox->button(QDialogButtonBox::Cancel))
-    {
         this->close();
-    }
     else if (button == ui->buttonBox->button(QDialogButtonBox::Reset))
-    {
         reset_all_contents();
-    }
-    else if (button == ui->buttonBox->button(QDialogButtonBox::Save))
-    {
-        if (validate_form())
-        {
+    else if (button == ui->buttonBox->button(QDialogButtonBox::Save)) {
+        if (validate_form()) {
             save_factura();
             reset_all_contents();
         }

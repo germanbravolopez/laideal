@@ -32,8 +32,7 @@ void Contabilidad::reset_all_contents()
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
-    if (ui->cb_config->currentText() == C_TRIMESTRAL)
-    {
+    if (ui->cb_config->currentText() == C_TRIMESTRAL) {
         switch (read_lock_for_month_and_year(db, ui->sb_trim->value() * 3, ui->sb_year->value())) {
         case 0:
             // contabilidad not done
@@ -68,24 +67,21 @@ void Contabilidad::on_bb_ok_cancel_rejected()
 
 void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 {
-    if (arg1 == C_MENSUAL)
-    {
+    if (arg1 == C_MENSUAL) {
         ui->lbl_trim->setVisible(true);
         ui->sb_trim->setVisible(true);
         ui->lbl_trim->setText("Mes:");
         ui->sb_trim->setRange(1, 12);
         ui->sb_trim->minimum();
     }
-    else if (arg1 == C_TRIMESTRAL)
-    {
+    else if (arg1 == C_TRIMESTRAL) {
         ui->lbl_trim->setVisible(true);
         ui->sb_trim->setVisible(true);
         ui->lbl_trim->setText("Trimestre:");
         ui->sb_trim->setRange(1, 4);
         ui->sb_trim->minimum();
     }
-    else if (arg1 == C_ANUAL)
-    {
+    else if (arg1 == C_ANUAL) {
         ui->lbl_trim->setVisible(false);
         ui->sb_trim->setVisible(false);
     }
@@ -100,8 +96,7 @@ void Contabilidad::generate_contabilidad()
     QString contabilidad_html = "<!DOCTYPE html><html>";
     QString path, filename;
 
-    if (ui->cb_config->currentText() == C_TRIMESTRAL)
-    {
+    if (ui->cb_config->currentText() == C_TRIMESTRAL) {
         contabilidad_html = contabilidad_html + create_html_header()
                 + "<h1 style='text-align:center;'>Contabilidad</h1>"
                 + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
@@ -113,8 +108,7 @@ void Contabilidad::generate_contabilidad()
                 QString::number(ui->sb_trim->value()) +
                 ".pdf";
     }
-    else if (ui->cb_config->currentText() == C_MENSUAL)
-    {
+    else if (ui->cb_config->currentText() == C_MENSUAL) {
         QString contabilidad_status;
         if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
             contabilidad_status = "(Contabilidad cerrada)";
@@ -133,8 +127,7 @@ void Contabilidad::generate_contabilidad()
                 QString::number(ui->sb_trim->value()) +
                 ".pdf";
     }
-    else
-    {
+    else {
         QString contabilidad_status;
         if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
             contabilidad_status = "(Contabilidad cerrada)";
@@ -143,8 +136,7 @@ void Contabilidad::generate_contabilidad()
 
         contabilidad_html = contabilidad_html + create_html_header()
                 + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
-        for (int trim = 1; trim < 5; trim++)
-        {
+        for (int trim = 1; trim < 5; trim++) {
             QString contabilidad_status;
             if (read_lock_for_month_and_year(db, trim * 3, ui->sb_year->value()) == 1)
                 contabilidad_status = "(Contabilidad cerrada)";
@@ -177,13 +169,11 @@ float Contabilidad::get_total_income(QString table,
                                      int trim_for_year_config)
 {
     QDate start_date, end_date;
-    if (ui->cb_config->currentText() == C_MENSUAL)
-    {
+    if (ui->cb_config->currentText() == C_MENSUAL) {
         start_date.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
         end_date.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
     }
-    else
-    {
+    else {
         int trim;
         if (ui->cb_config->currentText() == C_TRIMESTRAL)
             trim = ui->sb_trim->value();

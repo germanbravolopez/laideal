@@ -24,10 +24,10 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
-    int pb_added_rows = 0;
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    QSqlDatabase db;
+    int pb_added_rows = 0;
 
 private slots:
     void mainwindow_initial_settings();

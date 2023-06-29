@@ -78,8 +78,7 @@ void MainWindow::populate_cb_client()
 
 void MainWindow::resize_table()
 {
-    for (int row = 0; row < pb_added_rows; row++)
-    {
+    for (int row = 0; row < pb_added_rows; row++) {
         ui->table_ticket->removeRow(ui->table_ticket->rowCount() - 1);
     }
     pb_added_rows = 0;
@@ -87,8 +86,7 @@ void MainWindow::resize_table()
 
 void MainWindow::set_service_to_cb(int initial_row = 0)
 {
-    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++)
-    {
+    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBox = new QComboBox();
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
@@ -97,7 +95,8 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
         // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
                 SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbServChanged(QString)));
+                this, SLOT(cbServChanged(QString))
+                );
     }
 }
 
@@ -106,8 +105,7 @@ void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
     // Get garment from db to a string list
     QStringList garment_list = read_column_from_table(db, "nombre", "prendas");
     // Create cb for all garment and populate the list
-    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++)
-    {
+    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBoxPrenda = new QComboBox();
         comBoxPrenda->setAutoFillBackground(true);
         comBoxPrenda->setEditable(true);
@@ -118,7 +116,8 @@ void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
         // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM)),
                 SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbGarmChanged(QString)));
+                this, SLOT(cbGarmChanged(QString))
+                );
     }
 }
 
@@ -129,13 +128,11 @@ void MainWindow::set_garment_price(int garment_row,
     QTableWidgetItem *qnty_item(ui->table_ticket->item(garment_row, TABLE_TICKET_QNTY));
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setText("");
-    if (qnty_item)
-    {
+    if (qnty_item) {
         float price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
         // Check if any size is filled
         QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
-        if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0)
-        {
+        if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0) {
             float size = size_item->text().toFloat() * price;
             item->setText(QString::number(size, 'f', 2));
         }
@@ -149,13 +146,11 @@ void MainWindow::set_garment_price(int garment_row,
 
 void MainWindow::on_pb_payment_toggled(bool checked)
 {
-    if (checked)
-    {
+    if (checked) {
         ui->pb_payment->setText("SI");
         ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
     }
-    else
-    {
+    else {
         ui->pb_payment->setText("NO");
         ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
     }
@@ -164,13 +159,9 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 {
     if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
-    {
         reset_all_contents();
-    }
-    else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save))
-    {
-        if (validate_ticket())
-        {
+    else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
+        if (validate_ticket()) {
             check_client_data();
             save_ticket();
             reset_all_contents();
@@ -180,8 +171,7 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
-    if (arg1 != "")
-    {
+    if (arg1 != "") {
         ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
         ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
         ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
@@ -191,23 +181,16 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 void MainWindow::on_table_ticket_cellChanged(int row, int column)
 {
     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-    if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE)
-    {
+    if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE) {
         if (cb_garment->currentText() != "")
-        {
             cbGarmChanged(cb_garment->currentText());
-        }
     }
-    else if (column == TABLE_TICKET_PRIC)
-    {
+    else if (column == TABLE_TICKET_PRIC) {
         float total_price = 0.0;
-        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++)
-        {
+        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
             QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
             if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
-            {
                 total_price = total_price + price_item->text().toFloat();
-            }
         }
         ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
     }
@@ -228,9 +211,7 @@ void MainWindow::cbGarmChanged(const QString &text)
     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
     // Check garment is included in combobox
     if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-    {
         set_garment_price(garment_row, text, cb_service->currentText());
-    }
 }
 
 void MainWindow::cbServChanged(const QString &text)
@@ -238,48 +219,38 @@ void MainWindow::cbServChanged(const QString &text)
     int service_row = ui->table_ticket->currentRow();
     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(service_row, TABLE_TICKET_GARM));
     if (cb_garment->currentText() != "")
-    {
         set_garment_price(service_row, cb_garment->currentText(), text);
-    }
 }
 
 bool MainWindow::validate_ticket()
 {
     QMessageBox msgBox;
     float total_cost = 0.0;
-    if (ui->cb_client->currentText().isEmpty())
-    {
+    if (ui->cb_client->currentText().isEmpty()) {
         msgBox.setText("No se ha introducido ningún cliente.");
         msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
         msgBox.exec();
         return 0;
     }
-    else
-    {
+    else {
         // Calculate the expected total cost
-        for (int row = 0; row < ui->table_ticket->rowCount(); row++)
-        {
-            if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
-            {
-                if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY))
-                {
+        for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
+            if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
+                if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY)) {
                     msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
                     msgBox.setInformativeText("La cantidad no puede estar vacía. No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
                     return 0;
                 }
-                else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0)
-                {
+                else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0) {
                     msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
                     msgBox.setInformativeText("La cantidad no puede ser 0. No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
                     return 0;
                 }
-                else
-                {
+                else {
                     QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-                    if (cb_garment->currentText().isEmpty())
-                    {
+                    if (cb_garment->currentText().isEmpty()) {
                         msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
                         msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                         msgBox.exec();
@@ -290,35 +261,28 @@ bool MainWindow::validate_ticket()
                 total_cost = total_cost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
             }
         }
-        if (total_cost == 0.0)
-        {
+        if (total_cost == 0.0) {
             QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
             QString left_side = cb_garment->currentText().left(8);
             if (left_side == "Alfombra")
-            {
                 return 1;
-            }
             msgBox.setText("La suma de los IMPORTES individuales es 0.");
             msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
             msgBox.exec();
             return 0;
         }
-        else
-        {
+        else {
             // If there is data in lbl_cost_total it has to match with the previous calculation
-            if (ui->le_cost_total->text().toFloat() != total_cost)
-            {
+            if (ui->le_cost_total->text().toFloat() != total_cost) {
                 msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
                 msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                 msgBox.exec();
                 return 0;
             }
-            else
-            {
+            else {
                 // if the current date belongs to a locked quarter, data cannot be saved
                 if (ui->pb_payment->text() == "SI"
-                        && read_lock_for_month_and_year(db, ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1)
-                {
+                        && read_lock_for_month_and_year(db, ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
                     msgBox.setText("No se puede introducir un nuevo recibo pagado en un trimestre que tiene la contabilidad cerrada.");
                     msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
@@ -335,8 +299,7 @@ QString MainWindow::remove_special_char(QString str)
 {
     str = str.normalized(QString::NormalizationForm_D).toLatin1();
     int index = str.indexOf("?");
-    while (index != -1)
-    {
+    while (index != -1) {
         str = str.remove(index, 1);
         index = str.indexOf("?");
     }
@@ -346,45 +309,37 @@ QString MainWindow::remove_special_char(QString str)
 void MainWindow::check_client_data()
 {
     QString currentClient = ui->cb_client->currentText();
-    if (ui->cb_client->findText(currentClient) >= 0)
-    {
+    if (ui->cb_client->findText(currentClient) >= 0) {
         update_item_to_client(db, "tel_fijo",  ui->le_phone->text(),  currentClient);
         update_item_to_client(db, "movil",     ui->le_mobile->text(), currentClient);
         update_item_to_client(db, "direccion", ui->le_addr->text(),   currentClient);
     }
-    else
-    {
+    else {
         currentClient = remove_special_char(currentClient.simplified().toLower());
         bool client_found = false;
-        for (int idx = 0; idx < ui->cb_client->count(); idx++)
-        {
+        for (int idx = 0; idx < ui->cb_client->count(); idx++) {
             QString client_in_cb = remove_special_char(ui->cb_client->itemText(idx).simplified().toLower());
             if (currentClient == client_in_cb) client_found = true;
         }
         if (!client_found)
-        {
             add_new_client(db, currentClient, ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
-        }
         else
-        {
+
             QMessageBox::information(this, "Listado de clientes",
                                   "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
                                   "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado. "
                                   "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
                                   QMessageBox::Ok,
                                   QMessageBox::Ok);
-        }
     }
 
 }
 
 void MainWindow::save_ticket()
 {
-    for (int row = 0; row < ui->table_ticket->rowCount(); row++)
-    {
+    for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
-        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC))
-        {
+        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
             db.open();
             QSqlQuery q;
             q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) \

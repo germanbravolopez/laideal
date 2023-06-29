@@ -12,6 +12,7 @@
 #define C_PROVEEDORES "Proveedores"
 #define C_INCL_TODOS  "Incluir todos los gastos"
 #define C_CONTAB_CERR "Contabilidad cerrada"
+#define C_NO_ROWS     "No rows to print"
 
 namespace Ui {
 class GenListado;

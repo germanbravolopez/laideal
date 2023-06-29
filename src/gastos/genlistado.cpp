@@ -29,8 +29,7 @@ void GenListado::set_cb_fechas()
     int min_year = read_max_n_min_year_in_column_from_table(db, false, "fecha", "gastos");
     QStringList fechas_list;
     int mid_year = max_year;
-    while (mid_year >= min_year)
-    {
+    while (mid_year >= min_year) {
         fechas_list.append(QString::number(mid_year));
         mid_year--;
     }
@@ -101,11 +100,9 @@ QString GenListado::generate_html_table()
     // add each line of data
     int row_printed = 0;
 
-    for (int row = 0; row < model->rowCount(); row++)
-    {
+    for (int row = 0; row < model->rowCount(); row++) {
         // print row based on previous analysis
-        if (check_years_invoice_type_for_row(row))
-        {
+        if (check_years_invoice_type_for_row(row)) {
             // set background color for even rows
             if (row_printed % 2 == 0)
                 html_table_gastos += "<tr>";
@@ -126,15 +123,17 @@ QString GenListado::generate_html_table()
         }
     }
     html_table_gastos += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
-    return html_table_gastos;
+    if (row_printed == 0)
+        return C_NO_ROWS;
+    else
+        return html_table_gastos;
 }
 
 bool GenListado::check_years_invoice_type_for_row(int row)
 {
     // check years
     bool print_current_row_date = false;
-    if (!ui->checkb_allys->isChecked())
-    {
+    if (!ui->checkb_allys->isChecked()) {
         // print only selected years
         if (ui->cb_fechas->currentText() == model->index(row, C_FECHA_COLUMN_IDX).data().toString().mid(6, 4))
             print_current_row_date = true;
@@ -143,8 +142,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
         print_current_row_date = true;
     // check type of invoice
     bool print_current_row_cont = false;
-    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR)
-    {
+    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR) {
         // print only closed accountings
         if (model->index(row, C_CONTAB_COLUMN_IDX).data().toBool())
             print_current_row_cont = true;
@@ -157,16 +155,16 @@ bool GenListado::check_years_invoice_type_for_row(int row)
 
 QString GenListado::add_sufix_to_filename()
 {
-    QString filename_sufix;
+    QString filename_sufix = "";
     // add group of rows
-    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_");
+    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_") + "_";
     // add accountings
-    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_");
+    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_") + "_";
     // add date info
     if (ui->checkb_allys->isChecked())
-        filename_sufix = "todos_los_años";
+        filename_sufix += "todos_los_años";
     else
-        filename_sufix = ui->cb_fechas->currentText();
+        filename_sufix += ui->cb_fechas->currentText();
 
     return filename_sufix;
 }
@@ -176,20 +174,27 @@ void GenListado::on_bb_ok_cancel_accepted()
     // generate html table
     QString html_table_gastos = generate_table_with_specific_conditions();
 
-    // set path and print table
-    QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
-    QString filename = "/listado_gastos_" +
-            QDate::currentDate().toString("yyyy-MM-dd_") +
-            add_sufix_to_filename() +
-            ".pdf";
-    // create directory in case it does not exists
-    if (!QFile::exists(path))
-        QDir().mkpath(path);
-    // open file in case it already exists
-    if (!QFile::exists(path + filename))
-        write_html(path + filename, html_table_gastos);
-    else
-        QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+    if (html_table_gastos == C_NO_ROWS)
+        QMessageBox::critical(this, "Generar listado de gastos en pdf.",
+                              "No existen gastos para la configuracion seleccionada. Por favor, revise la tabla de gastos.",
+                              QMessageBox::Ok,
+                              QMessageBox::Ok);
+    else {
+        // set path and print table
+        QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
+        QString filename = "/listado_gastos_" +
+                QDate::currentDate().toString("yyyy-MM-dd_") +
+                add_sufix_to_filename() +
+                ".pdf";
+        // create directory in case it does not exists
+        if (!QFile::exists(path))
+            QDir().mkpath(path);
+        // open file in case it already exists
+        if (!QFile::exists(path + filename))
+            write_html(path + filename, html_table_gastos);
+        else
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path + filename));
+    }
     // close at openning ;)
     this->close();
 }
