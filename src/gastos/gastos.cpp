@@ -62,8 +62,7 @@ void Gastos::on_actionEliminar_fila_triggered()
                                     QString::number(ui->table_gastos->currentIndex().row() + 1) + "?",
                                     QMessageBox::Yes | QMessageBox::No,
                                     QMessageBox::No);
-    if (ret == QMessageBox::Yes)
-    {
+    if (ret == QMessageBox::Yes) {
         model->removeRow(ui->table_gastos->currentIndex().row());
         populate_table();
     }

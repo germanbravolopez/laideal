@@ -51,17 +51,13 @@ void RecogPrendas::update_db(UpdateDBop op)
     switch (op) {
     case PAY_YES:
         // If edit_lock payment info cannot be changed
-        if (!edit_lock)
-        {
+        if (!edit_lock) {
             // dont update payment date for blocked quarters
             if (read_lock_for_month_and_year(db, ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
-            {
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
-            }
-            else
-            {
+            else {
                 db.open();
                 q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE \
                     n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
@@ -91,8 +87,7 @@ void RecogPrendas::update_db(UpdateDBop op)
         break;
     case PAY_NO:
         // If edit_lock payment info cannot be changed
-        if (!edit_lock)
-        {
+        if (!edit_lock) {
             db.open();
             QSqlQuery q;
             q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE \
@@ -186,8 +181,7 @@ void RecogPrendas::update_db(UpdateDBop op)
         db.close();
         break;
     case SIZE_AND_PRICE:
-        if (!edit_lock && ui->pb_payment->text() == "NO")
-        {
+        if (!edit_lock && ui->pb_payment->text() == "NO") {
             db.open();
             q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE \
                 n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
@@ -254,27 +248,22 @@ void RecogPrendas::on_le_search_returnPressed()
 void RecogPrendas::on_pb_search_clicked()
 {
     reset_all_contents();
-    if (ui->le_search->text() != "")
-    {
+    if (ui->le_search->text() != "") {
         bool ok = false, total_price_active = false;
         ui->le_search->text().toUInt(&ok);
-        if (ok)
-        {
-            if(ui->le_search->text().length() >= 9)
-            {
+        if (ok) {
+            if(ui->le_search->text().length() >= 9) {
                 // Phone number
                 QString client_from_tel_fijo = select_from_where_like(db, "nombre", "clientes", "tel_fijo", ui->le_search->text(), true);
                 QString client_from_movil = select_from_where_like(db, "nombre", "clientes", "movil", ui->le_search->text(), true);
-                if (!client_from_tel_fijo.isNull())
-                {
+                if (!client_from_tel_fijo.isNull()) {
                     db.open();
                     sql_query_model->setQuery("SELECT * \
                                      FROM ingresos \
                                      WHERE cliente = '" + client_from_tel_fijo + "'");
                     db.close();
                 }
-                else if (!client_from_movil.isNull())
-                {
+                else if (!client_from_movil.isNull()) {
                     db.open();
                     sql_query_model->setQuery("SELECT * \
                                     FROM ingresos \
@@ -282,8 +271,7 @@ void RecogPrendas::on_pb_search_clicked()
                     db.close();
                 }
             }
-            else
-            {
+            else {
                 // Ticket number
                 db.open();
                 sql_query_model->setQuery("SELECT * \
@@ -294,13 +282,11 @@ void RecogPrendas::on_pb_search_clicked()
             }
         }
         // Search is not a number
-        else if (ui->le_search->text().isSimpleText())
-        {
+        else if (ui->le_search->text().isSimpleText()) {
             // Text (client, address or another)
             QDate date_slash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
             QDate date_dash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
-            if (!date_slash.isNull())
-            {
+            if (!date_slash.isNull()) {
                 // Text is date
                 db.open();
                 sql_query_model->setQuery("SELECT * \
@@ -310,8 +296,7 @@ void RecogPrendas::on_pb_search_clicked()
                                     OR fecha_recogida = '" + date_slash.toString("dd-MM-yyyy") + "'");
                 db.close();
             }
-            else if (!date_dash.isNull())
-            {
+            else if (!date_dash.isNull()) {
                 // Text is date
                 db.open();
                 sql_query_model->setQuery("SELECT * \
@@ -321,8 +306,7 @@ void RecogPrendas::on_pb_search_clicked()
                                     OR fecha_recogida = '" + date_dash.toString("dd-MM-yyyy") + "'");
                 db.close();
             }
-            else
-            {
+            else {
                 // Text is not a date
                 db.open();
                 sql_query_model->setQuery("SELECT * \
@@ -332,13 +316,10 @@ void RecogPrendas::on_pb_search_clicked()
             }
         }
         else
-        {
             QMessageBox::warning(this, tr("Búsqueda incorrecta"),
                                   tr("El contenido de la búsqueda no se ha identificado.\n"
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
-            qDebug() << "Text is not identified!";
-        }
         // Complete model and set to the view
         sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("n_recibo"));
         sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("cliente"));
@@ -359,22 +340,16 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->resizeColumnsToContents();
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
         // Fill total_price if enabled
-        if (total_price_active)
-        {
+        if (total_price_active) {
             float total_price = 0.0;
             for (int row = 0; row < sql_query_model->rowCount(); row++)
-            {
                 total_price = total_price + sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat();
-            }
             ui->le_total_price->setText(QString::number(total_price, 'f', 2));
         }
         else
-        {
             ui->le_total_price->setText("");
-        }
     }
-    else
-    {
+    else {
         sql_query_model->clear();
         ui->tableView->setModel(sql_query_model);
     }
@@ -389,45 +364,33 @@ void RecogPrendas::on_pb_reset_clicked()
 
 void RecogPrendas::on_pb_payment_toggled(bool checked)
 {
-    if (checked)
-    {
+    if (checked) {
         ui->pb_payment->setText("SI");
         ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
         if (is_cell_clicked)
-        {
             update_db(PAY_YES);
-        }
     }
-    else
-    {
+    else {
         ui->pb_payment->setText("NO");
         ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
         if (is_cell_clicked)
-        {
             update_db(PAY_NO);
-        }
     }
 }
 
 void RecogPrendas::on_pb_state_toggled(bool checked)
 {
-    if (checked)
-    {
+    if (checked) {
         ui->pb_state->setText("Recogido");
         ui->pb_state->setStyleSheet("background-color: green; font-size: 20px");
         if (is_cell_clicked)
-        {
             update_db(PKU_YES);
-        }
     }
-    else
-    {
+    else {
         ui->pb_state->setText("En tienda");
         ui->pb_state->setStyleSheet("background-color: red; font-size: 20px");
         if (is_cell_clicked)
-        {
             update_db(PKU_NO);
-        }
     }
 }
 
@@ -435,9 +398,7 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
 {
     // Check if another row is clicked
     if (index.row() != row_clicked_cell)
-    {
         is_cell_clicked = false;
-    }
     // Update pointers to cell clicked
     row_clicked_cell    = index.row();
     column_clicked_cell = index.column();
@@ -449,16 +410,13 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
 void RecogPrendas::on_le_obsv_returnPressed()
 {
     if (is_cell_clicked)
-    {
         update_db(OBSV);
-    }
 }
 
 void RecogPrendas::on_le_size_editingFinished()
 {
     QString left_side = ui->le_garm->text().left(8);
-    if (is_cell_clicked && left_side == "Alfombra")
-    {
+    if (is_cell_clicked && left_side == "Alfombra") {
         calculate_price();
         update_db(SIZE_AND_PRICE);
     }
@@ -467,37 +425,27 @@ void RecogPrendas::on_le_size_editingFinished()
 void RecogPrendas::on_pb_pay_all_clicked()
 {
     int current_row = row_clicked_cell;
-    for (int row = 0; row < sql_query_model->rowCount(); row++)
-    {
+    for (int row = 0; row < sql_query_model->rowCount(); row++) {
         on_tableView_clicked(sql_query_model->index(row, 0));
         on_pb_payment_toggled(true);
     }
     if (current_row >= 0)
-    {
         on_tableView_clicked(sql_query_model->index(current_row, 0));
-    }
     else
-    {
         reset_all_contents();
-    }
 }
 
 void RecogPrendas::on_pb_pku_all_clicked()
 {
     int current_row = row_clicked_cell;
-    for (int row = 0; row < sql_query_model->rowCount(); row++)
-    {
+    for (int row = 0; row < sql_query_model->rowCount(); row++) {
         on_tableView_clicked(sql_query_model->index(row, 0));
         on_pb_state_toggled(true);
     }
     if (current_row >= 0)
-    {
         on_tableView_clicked(sql_query_model->index(current_row, 0));
-    }
     else
-    {
         reset_all_contents();
-    }
 }
 
 void RecogPrendas::on_pb_pay_pku_all_clicked()

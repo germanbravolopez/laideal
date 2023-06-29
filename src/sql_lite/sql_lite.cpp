@@ -8,8 +8,7 @@ int read_max_value_in_column_from_table(QSqlDatabase &db,
     db.open();
     QSqlQuery q;
     q.exec("SELECT MAX(" + column + ") FROM " + table);
-    if (q.isSelect())
-    {
+    if (q.isSelect()) {
         if (q.first())
             max_value = q.value(0).toInt();
         else
@@ -36,8 +35,7 @@ int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
     db.open();
     QSqlQuery q;
     q.exec(query);
-    if (q.isSelect())
-    {
+    if (q.isSelect()) {
         if (q.first())
             value = q.value(0).toInt();
         else
@@ -58,8 +56,7 @@ QStringList read_column_from_table(QSqlDatabase &db,
     QSqlQuery q;
     QStringList list;
     q.exec("SELECT " + column + " FROM " + table);
-    if (q.isSelect())
-    {
+    if (q.isSelect()) {
         while(q.next())
             list.append(q.value(0).toString());
     }
@@ -81,10 +78,8 @@ float read_garment_price(QSqlDatabase &db,
         q.exec("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment + "'");
     else if (service == "Plan.")
         q.exec("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment + "'");
-    if (q.isSelect())
-    {
-        if (q.first())
-        {
+    if (q.isSelect()) {
+        if (q.first()) {
             if (!q.value(0).toString().contains(","))
                 price = q.value(0).toFloat();
             else
@@ -117,8 +112,7 @@ QString select_from_where_like(QSqlDatabase &db,
         q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "'");
     else
         q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "%'");
-    if (q.isSelect())
-    {
+    if (q.isSelect()) {
         if (q.first())
             item_to_search_text = q.value(0).toString();
         else
@@ -181,17 +175,14 @@ float total_price_between_dates(QSqlDatabase &db,
     db.open();
     QSqlQuery q;
     float total_price = 0.0;
-    if (table == "ingresos")
-    {
+    if (table == "ingresos") {
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
                + start_date.toString("yyyy-MM-dd") + "')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
                + end_date.toString("yyyy-MM-dd") + "'))");
-        if (q.isSelect())
-        {
-            while(q.next())
-            {
+        if (q.isSelect()) {
+            while(q.next()) {
                 if (!q.value(0).toString().contains(","))
                     total_price = total_price + q.value(0).toFloat();
                 else
@@ -204,17 +195,14 @@ float total_price_between_dates(QSqlDatabase &db,
         else
             qDebug() << "Query is not Select!";
     }
-    else if (table == "gastos")
-    {
+    else if (table == "gastos") {
         q.exec("SELECT importe FROM gastos WHERE (iva = "
                + QString::number(iva)
                + ") AND (date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) BETWEEN date('"
                + start_date.toString("yyyy-MM-dd") + "') AND date('"
                + end_date.toString("yyyy-MM-dd") + "'))");
-        if (q.isSelect())
-        {
-            while(q.next())
-            {
+        if (q.isSelect()) {
+            while(q.next()) {
                 if (!q.value(0).toString().contains(","))
                     total_price = total_price + q.value(0).toFloat();
                 else
@@ -253,8 +241,7 @@ int read_lock_for_month_and_year(QSqlDatabase &db,
     q.exec("SELECT edit_lock FROM ingresos WHERE fecha_pago like '%"
            + month_fix + "-"
            + QString::number(year) + "'");
-    if (q.isSelect())
-    {
+    if (q.isSelect()) {
         if(q.first())
             edit_lock = q.value(0).toInt();
     }
@@ -302,8 +289,7 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
 {
     int error_cnt = 0;
     QStringList items = read_column_from_table(db, item, table);
-    if (table == "ingresos")
-    {
+    if (table == "ingresos") {
         QStringList ids_1 = read_column_from_table(db, "n_recibo", table);
         QStringList ids_2 = read_column_from_table(db, "importe", table);
         QStringList ids_3 = read_column_from_table(db, "pagado", table);
@@ -313,10 +299,8 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
         QStringList ids_7 = read_column_from_table(db, "size", table);
         QStringList ids_8 = read_column_from_table(db, "observaciones", table);
 
-        for (int fra = 0; fra < items.count(); fra++)
-        {
-            if (items[fra].contains(","))
-            {
+        for (int fra = 0; fra < items.count(); fra++) {
+            if (items[fra].contains(",")) {
                 QSqlQuery q;
                 db.open();
                 q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE ("
@@ -343,13 +327,10 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
             }
         }
     }
-    else if (table == "gastos")
-    {
+    else if (table == "gastos") {
         QStringList ids = read_column_from_table(db, "n_factura", table);
-        for (int fra = 0; fra < items.count(); fra++)
-        {
-            if (items[fra].contains(","))
-            {
+        for (int fra = 0; fra < items.count(); fra++) {
+            if (items[fra].contains(",")) {
                 QSqlQuery q;
                 db.open();
                 q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE n_factura = :id");

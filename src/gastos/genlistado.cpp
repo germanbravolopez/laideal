@@ -29,8 +29,7 @@ void GenListado::set_cb_fechas()
     int min_year = read_max_n_min_year_in_column_from_table(db, false, "fecha", "gastos");
     QStringList fechas_list;
     int mid_year = max_year;
-    while (mid_year >= min_year)
-    {
+    while (mid_year >= min_year) {
         fechas_list.append(QString::number(mid_year));
         mid_year--;
     }
@@ -101,11 +100,9 @@ QString GenListado::generate_html_table()
     // add each line of data
     int row_printed = 0;
 
-    for (int row = 0; row < model->rowCount(); row++)
-    {
+    for (int row = 0; row < model->rowCount(); row++) {
         // print row based on previous analysis
-        if (check_years_invoice_type_for_row(row))
-        {
+        if (check_years_invoice_type_for_row(row)) {
             // set background color for even rows
             if (row_printed % 2 == 0)
                 html_table_gastos += "<tr>";
@@ -136,8 +133,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
 {
     // check years
     bool print_current_row_date = false;
-    if (!ui->checkb_allys->isChecked())
-    {
+    if (!ui->checkb_allys->isChecked()) {
         // print only selected years
         if (ui->cb_fechas->currentText() == model->index(row, C_FECHA_COLUMN_IDX).data().toString().mid(6, 4))
             print_current_row_date = true;
@@ -146,8 +142,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
         print_current_row_date = true;
     // check type of invoice
     bool print_current_row_cont = false;
-    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR)
-    {
+    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR) {
         // print only closed accountings
         if (model->index(row, C_CONTAB_COLUMN_IDX).data().toBool())
             print_current_row_cont = true;
@@ -184,8 +179,7 @@ void GenListado::on_bb_ok_cancel_accepted()
                               "No existen gastos para la configuracion seleccionada. Por favor, revise la tabla de gastos.",
                               QMessageBox::Ok,
                               QMessageBox::Ok);
-    else
-    {
+    else {
         // set path and print table
         QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
         QString filename = "/listado_gastos_" +

@@ -38,13 +38,9 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     QVariant rightData = sourceModel()->data(right);
 
     if (left.column() == C_FECHA_COLUMN_IDX)
-    {
         return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
-    }
     else
-    {
         return QString::localeAwareCompare(leftData.toString(), rightData.toString()) < 0;
-    }
 }
 
 bool MySortFilterProxyModel::dateInRange(QDate date) const
