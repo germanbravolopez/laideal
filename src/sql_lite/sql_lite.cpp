@@ -223,6 +223,7 @@ float total_price_between_dates(QSqlDatabase &db,
 }
 
 int read_lock_for_month_and_year(QSqlDatabase &db,
+                                 QString table,
                                  int month,
                                  int year)
 {
@@ -238,15 +239,24 @@ int read_lock_for_month_and_year(QSqlDatabase &db,
     db.open();
     QSqlQuery q;
     int edit_lock = 2; // means that the search has not found any data
-    q.exec("SELECT edit_lock FROM ingresos WHERE fecha_pago like '%"
-           + month_fix + "-"
-           + QString::number(year) + "'");
+    if (table == "ingresos")
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago like '%" + month_fix + "-" + QString::number(year) + "'");
+    else if (table == "gastos")
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha like '%" + month_fix + "-" + QString::number(year) + "'");
+    else
+        QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
+                              "Tabla solicitada no está soportada por la función 'read_lock_for_month_and_year'.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     if (q.isSelect()) {
         if(q.first())
             edit_lock = q.value(0).toInt();
+        else
+            edit_lock = 0;
     }
     else
-        qDebug() << "Query is not Select!";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return edit_lock;

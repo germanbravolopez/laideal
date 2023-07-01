@@ -53,7 +53,7 @@ void RecogPrendas::update_db(UpdateDBop op)
         // If edit_lock payment info cannot be changed
         if (!edit_lock) {
             // dont update payment date for blocked quarters
-            if (read_lock_for_month_and_year(db, ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
+            if (read_lock_for_month_and_year(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);

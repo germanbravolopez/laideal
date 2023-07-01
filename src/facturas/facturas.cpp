@@ -50,7 +50,7 @@ bool Facturas::validate_form()
             ui->le_importe->text() != "") {
         // Check current company as part of the company list
         if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
-            if (read_lock_for_month_and_year(db, ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
+            if (read_lock_for_month_and_year(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
                 ok = 1;
             else
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),

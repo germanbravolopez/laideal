@@ -64,6 +64,7 @@ float total_price_between_dates(
         );
 int read_lock_for_month_and_year(
             QSqlDatabase &db,
+            QString      table,
             int          month,
             int          year
         );
