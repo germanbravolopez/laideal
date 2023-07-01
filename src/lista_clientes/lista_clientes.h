@@ -28,8 +28,13 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
 
+    void closeEvent(QCloseEvent* event);
+
 private:
     Ui::ListaClientes *ui;
+
+signals:
+    void populate_clientes();
 };
 
 #endif // LISTACLIENTES_H

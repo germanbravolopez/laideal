@@ -59,13 +59,16 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
+    void on_populate_prendas();
     void on_actionListado_de_prendas_triggered();
+    void on_populate_clientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionRecogida_de_prendas_triggered();
     void on_actionGenerar_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
+    void limpiar_base_de_datos(bool print);
 
 private:
     Ui::MainWindow *ui;

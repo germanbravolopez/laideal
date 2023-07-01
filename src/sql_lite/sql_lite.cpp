@@ -58,12 +58,16 @@ int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
 
 QStringList read_column_from_table(QSqlDatabase &db,
                                    QString column,
-                                   QString table)
+                                   QString table,
+                                   QString order_by_column)
 {
     db.open();
     QSqlQuery q;
     QStringList list;
-    q.exec("SELECT " + column + " FROM " + table);
+    if (order_by_column == "")
+        q.exec("SELECT " + column + " FROM " + table + ";");
+    else
+        q.exec("SELECT " + column + " FROM " + table + " ORDER BY " + order_by_column + " ASC;");
     if (q.isSelect()) {
         while(q.next())
             list.append(q.value(0).toString());
@@ -322,16 +326,16 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
                                  QString item)
 {
     int error_cnt = 0;
-    QStringList items = read_column_from_table(db, item, table);
     if (table == "ingresos") {
-        QStringList ids_1 = read_column_from_table(db, "n_recibo", table);
-        QStringList ids_2 = read_column_from_table(db, "importe", table);
-        QStringList ids_3 = read_column_from_table(db, "pagado", table);
-        QStringList ids_4 = read_column_from_table(db, "estado", table);
-        QStringList ids_5 = read_column_from_table(db, "cantidad", table);
-        QStringList ids_6 = read_column_from_table(db, "prenda", table);
-        QStringList ids_7 = read_column_from_table(db, "size", table);
-        QStringList ids_8 = read_column_from_table(db, "observaciones", table);
+        QStringList items = read_column_from_table(db, item, table, "");
+        QStringList ids_1 = read_column_from_table(db, "n_recibo", table, "");
+        QStringList ids_2 = read_column_from_table(db, "importe", table, "");
+        QStringList ids_3 = read_column_from_table(db, "pagado", table, "");
+        QStringList ids_4 = read_column_from_table(db, "estado", table, "");
+        QStringList ids_5 = read_column_from_table(db, "cantidad", table, "");
+        QStringList ids_6 = read_column_from_table(db, "prenda", table, "");
+        QStringList ids_7 = read_column_from_table(db, "size", table, "");
+        QStringList ids_8 = read_column_from_table(db, "observaciones", table, "");
 
         for (int fra = 0; fra < items.count(); fra++) {
             if (items[fra].contains(",")) {
@@ -362,12 +366,13 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
         }
     }
     else if (table == "gastos") {
-        QStringList ids = read_column_from_table(db, "n_factura", table);
+        QStringList items = read_column_from_table(db, item, table, "id");
+        QStringList ids = read_column_from_table(db, "id", table, "id");
         for (int fra = 0; fra < items.count(); fra++) {
             if (items[fra].contains(",")) {
                 QSqlQuery q;
                 db.open();
-                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE n_factura = :id");
+                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE id = :id");
                 q.bindValue(":value", items[fra].replace(",","."));
                 q.bindValue(":id", ids[fra]);
                 q.exec();
@@ -376,6 +381,26 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
             }
         }
     }
+    else if (table == "prendas") {
+        QStringList items = read_column_from_table(db, item, table, "nombre");
+        QStringList ids = read_column_from_table(db, "nombre", table, "nombre");
+        for (int prenda = 0; prenda < items.count(); prenda++) {
+            if (items[prenda].contains(",")) {
+                QSqlQuery q;
+                db.open();
+                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE nombre = :id");
+                q.bindValue(":value", items[prenda].replace(",","."));
+                q.bindValue(":id", ids[prenda]);
+                q.exec();
+                db.close();
+                error_cnt++;
+            }
+        }
+    }
+    else
+        QMessageBox::critical(nullptr, "Error en update_comas_in_decimal_data",
+                              "La tabla especificada en " + table + " no está soportada.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     return error_cnt;
 }
 

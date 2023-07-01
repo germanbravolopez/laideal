@@ -35,7 +35,7 @@ void Facturas::reset_all_contents()
 
 void Facturas::populate_empresas()
 {
-    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores");
+    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores", "");
     ui->cb_empresa->addItems(empresas_names);
     ui->cb_empresa->setCurrentText("");
 }

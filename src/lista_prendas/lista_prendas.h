@@ -28,8 +28,13 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
 
+    void closeEvent(QCloseEvent* event);
+
 private:
     Ui::ListaPrendas *ui;
+
+signals:
+    void populate_prendas();
 };
 
 #endif // LISTAPRENDAS_H

@@ -72,7 +72,7 @@ void MainWindow::set_next_ticket_number()
 
 void MainWindow::populate_cb_client()
 {
-    ui->cb_client->addItems(read_column_from_table(db, "nombre", "clientes"));
+    ui->cb_client->addItems(read_column_from_table(db, "nombre", "clientes", ""));
     ui->cb_client->setCurrentText("");
 }
 
@@ -103,7 +103,7 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
 void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
 {
     // Get garment from db to a string list
-    QStringList garment_list = read_column_from_table(db, "nombre", "prendas");
+    QStringList garment_list = read_column_from_table(db, "nombre", "prendas", "");
     // Create cb for all garment and populate the list
     for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBoxPrenda = new QComboBox();
@@ -402,18 +402,32 @@ void MainWindow::on_actionGastos_triggered()
     ui_gast->show();
 }
 
+void MainWindow::on_populate_prendas()
+{
+    set_garment_to_cb_and_populate(0);
+    limpiar_base_de_datos(false);
+}
+
 void MainWindow::on_actionListado_de_prendas_triggered()
 {
     ListaPrendas *ui_prend;
     ui_prend = new ListaPrendas(this);
     ui_prend->db = db;
+    connect(ui_prend, &ListaPrendas::populate_prendas, this, &MainWindow::on_populate_prendas);
     ui_prend->show();
+}
+
+void MainWindow::on_populate_clientes()
+{
+    populate_cb_client();
 }
 
 void MainWindow::on_actionListado_de_clientes_triggered()
 {
     ListaClientes *ui_clien;
     ui_clien = new ListaClientes(this);
+    connect(ui_clien, &ListaClientes::populate_clientes, this, &MainWindow::on_populate_clientes);
+    ui_clien->db = db;
     ui_clien->show();
 }
 
@@ -421,6 +435,7 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
 {
     ListaProveedores *ui_prove;
     ui_prove = new ListaProveedores(this);
+    ui_prove->db = db;
     ui_prove->show();
 }
 
@@ -451,13 +466,22 @@ void MainWindow::on_actionFormulario_facturas_triggered()
 
 void MainWindow::on_actionLimpiar_base_de_datos_triggered()
 {
+    limpiar_base_de_datos(true);
+}
+
+void MainWindow::limpiar_base_de_datos(bool print)
+{
     int gastos_cnt = update_comas_in_decimal_data(db, "gastos", "importe");
-    int ingresos_importe_cnt = update_comas_in_decimal_data(db, "ingresos", "importe");
-    int ingresos_size_cnt = update_comas_in_decimal_data(db, "ingresos", "size");
-    QMessageBox::information(this, "Limpieza de la base de datos",
-                             "Se han corregido los siguientes importes decimales que se encontraban"
-                             " en la base de datos con ',' en lugar de '.':\n"
-                             + QString::number(gastos_cnt) + " en la tabla de gastos.\n"
-                             + QString::number(ingresos_importe_cnt + ingresos_size_cnt) + " en la tabla de ingresos.",
-                             QMessageBox::Ok, QMessageBox::Ok);
+    int ingresos_cnt = update_comas_in_decimal_data(db, "ingresos", "importe");
+    ingresos_cnt += update_comas_in_decimal_data(db, "ingresos", "size");
+    int prendas_cnt = update_comas_in_decimal_data(db, "prendas", "precio_limpieza");
+    prendas_cnt += update_comas_in_decimal_data(db, "prendas", "precio_plancha");
+    if (print)
+        QMessageBox::information(this, "Limpieza de la base de datos",
+                                 "Se han corregido los siguientes importes decimales que se encontraban"
+                                 " en la base de datos con ',' en lugar de '.':\n"
+                                 + QString::number(gastos_cnt) + " en la tabla de gastos.\n"
+                                 + QString::number(ingresos_cnt) + " en la tabla de ingresos.\n"
+                                 + QString::number(prendas_cnt) + " en la tabla de lista de prendas.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
 }

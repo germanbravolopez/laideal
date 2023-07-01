@@ -58,3 +58,9 @@ void ListaPrendas::on_actionEliminar_fila_triggered()
         populate_table();
     }
 }
+
+void ListaPrendas::closeEvent(QCloseEvent* event)
+{
+    emit populate_prendas();
+    event->accept();
+}
