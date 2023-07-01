@@ -378,3 +378,23 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
     }
     return error_cnt;
 }
+
+void insert_new_item_to_table(QSqlDatabase &db,
+                              QStringList items,
+                              QString table)
+{
+    db.open();
+    QSqlQuery q;
+    QString query;
+    query = "INSERT INTO " + table + " VALUES (";
+    for (int item = 0; item < items.count(); item++) {
+        query += "'" + items.value(item) + "'";
+        if (item == items.count() - 1)
+            query += ");";
+        else
+            query += ", ";
+    }
+    q.exec(query);
+    q.clear();
+    db.close();
+}
