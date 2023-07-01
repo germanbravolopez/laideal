@@ -140,7 +140,9 @@ void MainWindow::set_garment_price(int garment_row,
             item->setText(QString::number(price, 'f', 2));
     }
     else
-        qDebug() << "Cantidad is empty";
+        QMessageBox::warning(nullptr, "Error en la casilla de cantidad",
+                              "Cantidad de prendas está vacía.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
 }
 
