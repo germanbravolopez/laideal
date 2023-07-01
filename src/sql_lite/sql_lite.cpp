@@ -12,10 +12,14 @@ int read_max_value_in_column_from_table(QSqlDatabase &db,
         if (q.first())
             max_value = q.value(0).toInt();
         else
-            qDebug() << "Query is not available!";
+            QMessageBox::warning(nullptr, "Error base de datos",
+                                  "Búsqueda vacía al usar read_max_value_in_column_from_table.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else
-        qDebug() << "Query is not Select!";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar read_max_value_in_column_from_table.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return max_value;
@@ -39,10 +43,14 @@ int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
         if (q.first())
             value = q.value(0).toInt();
         else
-            qDebug() << "Query is not available!";
+            QMessageBox::warning(nullptr, "Error base de datos",
+                                  "Búsqueda vacía al usar read_max_n_min_year_in_column_from_table.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else
-        qDebug() << "Query is not Select!";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar read_max_n_min_year_in_column_from_table.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return value;
@@ -61,7 +69,9 @@ QStringList read_column_from_table(QSqlDatabase &db,
             list.append(q.value(0).toString());
     }
     else
-        qDebug() << "Query is not Select!";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar read_column_from_table.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return list;
@@ -89,10 +99,14 @@ float read_garment_price(QSqlDatabase &db,
                                       QMessageBox::Ok, QMessageBox::Ok);
         }
         else
-            qDebug() << "Query is not available.";
+            QMessageBox::warning(nullptr, "Error base de datos",
+                                  "Búsqueda vacía al usar read_garment_price.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else
-        qDebug() << "Query is not Select.";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar read_garment_price.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return price;
@@ -116,10 +130,14 @@ QString select_from_where_like(QSqlDatabase &db,
         if (q.first())
             item_to_search_text = q.value(0).toString();
         else
-            qDebug() << "Item is not found in the database.";
+            QMessageBox::warning(nullptr, "Error base de datos",
+                                  "Búsqueda vacía al usar select_from_where_like.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else
-        qDebug() << "Query is not Select!";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar select_from_where_like.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return item_to_search_text;
@@ -193,7 +211,9 @@ float total_price_between_dates(QSqlDatabase &db,
             }
         }
         else
-            qDebug() << "Query is not Select!";
+            QMessageBox::critical(nullptr, "Error base de datos",
+                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else if (table == "gastos") {
         q.exec("SELECT importe FROM gastos WHERE (iva = "
@@ -213,10 +233,14 @@ float total_price_between_dates(QSqlDatabase &db,
             }
         }
         else
-            qDebug() << "Query is not Select!";
+            QMessageBox::critical(nullptr, "Error base de datos",
+                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
+                                  QMessageBox::Ok, QMessageBox::Ok);
     }
     else
-        qDebug() << "total_price_between_dates cannot work with different table";
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "total_price_between_dates cannot work with different table.",
+                              QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return total_price;
@@ -255,7 +279,7 @@ int read_lock_for_month_and_year(QSqlDatabase &db,
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error.",
+                              "Acceso a la tabla da un error al usar read_lock_for_month_and_year.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
