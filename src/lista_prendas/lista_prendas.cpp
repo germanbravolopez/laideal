@@ -2,6 +2,7 @@
 #include "ui_lista_prendas.h"
 #include "tableview.h"
 #include "sql_lite.h"
+#include "numberformatdelegate.h"
 
 ListaPrendas::ListaPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -31,6 +32,8 @@ void ListaPrendas::populate_table()
         ui->table_lista_prendas->setModel(model);
         ui->table_lista_prendas->resizeColumnsToContents();
         ui->table_lista_prendas->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_lista_prendas->setItemDelegateForColumn(1, new NumberFormatDelegate(this));
+        ui->table_lista_prendas->setItemDelegateForColumn(2, new NumberFormatDelegate(this));
     }
 }
 
