@@ -134,8 +134,8 @@ QString select_from_where_like(QSqlDatabase &db,
         if (q.first())
             item_to_search_text = q.value(0).toString();
         else
-            QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar select_from_where_like.",
+            QMessageBox::warning(nullptr, "Búsqueda vacía",
+                                  "El elemento '" + item_to_search + "' no se ha encontrado en la base de datos para '" + column_to_search + "'.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
     else
