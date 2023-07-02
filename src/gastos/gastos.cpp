@@ -2,6 +2,7 @@
 #include "ui_gastos.h"
 #include "genlistado.h"
 #include "sql_lite.h"
+#include "numberformatdelegate.h"
 
 Gastos::Gastos(QWidget *parent) :
     QMainWindow(parent),
@@ -29,6 +30,7 @@ void Gastos::populate_table()
         ui->table_gastos->setModel(proxyModel);
         ui->table_gastos->resizeColumnsToContents();
         ui->table_gastos->sortByColumn(C_FECHA_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_gastos->setItemDelegateForColumn(7, new NumberFormatDelegate(this));
         ui->statusBar->showMessage("Modo edición desactivado");
     }
 }

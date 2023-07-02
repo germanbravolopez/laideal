@@ -115,7 +115,7 @@ QString GenListado::generate_html_table()
                                 "<td>&nbsp;" + model->index(row, 4).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 5).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 6).data().toString() + "&nbsp;</td>"
-                                "<td>&nbsp;" + model->index(row, 7).data().toString() + "&nbsp;</td>";
+                                "<td>&nbsp;" + QString::number(model->index(row, 7).data().toFloat(), 'f', 2) + "&nbsp;</td>";
             if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
                 html_table_gastos += "<td>&nbsp;" + model->index(row, 8).data().toString() + "&nbsp;</td>";
             html_table_gastos += "</tr>";
