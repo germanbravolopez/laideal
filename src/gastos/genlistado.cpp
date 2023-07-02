@@ -92,8 +92,9 @@ QString GenListado::generate_html_table()
                             "<th>&nbsp;Producto&nbsp;</th>"
                             "<th>&nbsp;Empresa&nbsp;</th>"
                             "<th>&nbsp;Fecha&nbsp;</th>"
-                            "<th>&nbsp;IVA&nbsp;</th>"
-                            "<th>&nbsp;Importe&nbsp;</th>";
+                            "<th>&nbsp;IVA [€]&nbsp;</th>"
+                            "<th>&nbsp;Base [€]&nbsp;</th>"
+                            "<th>&nbsp;Importe [€]&nbsp;</th>";
     if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
         html_table_gastos += "<th>&nbsp;Cerrado por contabilidad&nbsp;</th>";
     html_table_gastos += "</tr>" "</thead>" "<tbody>";
@@ -108,16 +109,30 @@ QString GenListado::generate_html_table()
                 html_table_gastos += "<tr>";
             else
                 html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
+            // calculate iva and base
+            QString importe = QString::number(model->index(row, 7).data().toFloat(), 'f', 2);
+            QString iva;
+            if (model->index(row, 6).data().toString() == "21" || model->index(row, 6).data().toString() == "10")
+                iva = QString::number(model->index(row, 6).data().toFloat() * importe.toFloat() / 100, 'f', 2);
+            else
+                iva = QString::number(0.0, 'f', 2);
+            QString base = QString::number(importe.toFloat() - iva.toFloat(), 'f', 2);
+
             // set row content
             html_table_gastos +="<td>&nbsp;" + model->index(row, 1).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 2).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 3).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 4).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 5).data().toString() + "&nbsp;</td>"
-                                "<td>&nbsp;" + model->index(row, 6).data().toString() + "&nbsp;</td>"
-                                "<td>&nbsp;" + QString::number(model->index(row, 7).data().toFloat(), 'f', 2) + "&nbsp;</td>";
-            if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
-                html_table_gastos += "<td>&nbsp;" + model->index(row, 8).data().toString() + "&nbsp;</td>";
+                                "<td>&nbsp;" + iva + "&nbsp;</td>"
+                                "<td>&nbsp;" + base + "&nbsp;</td>"
+                                "<td>&nbsp;" + importe + "&nbsp;</td>";
+            if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS) {
+                if (model->index(row, 8).data().toBool())
+                    html_table_gastos += "<td>&nbsp;Si&nbsp;</td>";
+                else
+                    html_table_gastos += "<td>&nbsp;No&nbsp;</td>";
+            }
             html_table_gastos += "</tr>";
             row_printed++;
         }
