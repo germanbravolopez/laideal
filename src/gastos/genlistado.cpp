@@ -98,26 +98,44 @@ QString GenListado::generate_html_table()
     if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
         html_table_gastos += "<th>&nbsp;Cerrado por contabilidad&nbsp;</th>";
     html_table_gastos += "</tr>" "</thead>" "<tbody>";
+
     // add each line of data
     int row_printed = 0;
-
+    QString client, client_prev_row, importe, iva, base;
+    float importe_tot = 0.0;
     for (int row = 0; row < model->rowCount(); row++) {
         // print row based on previous analysis
         if (check_years_invoice_type_for_row(row)) {
+            // calculate iva and base
+            importe = QString::number(model->index(row, 7).data().toFloat(), 'f', 2);
+            if (model->index(row, 6).data().toString() == "21" || model->index(row, 6).data().toString() == "10")
+                iva = QString::number(model->index(row, 6).data().toFloat() * importe.toFloat() / 100, 'f', 2);
+            else
+                iva = QString::number(0.0, 'f', 2);
+            base = QString::number(importe.toFloat() - iva.toFloat(), 'f', 2);
+            // generate new row if group per clients
+            if (ui->cb_agrupar->currentText() == C_PROVEEDORES) {
+                client = model->index(row, 4).data().toString();
+                importe_tot += importe.toFloat();
+                if (client != client_prev_row && row_printed != 0) {
+                    // set background color for even rows
+                    if (row_printed % 2 == 0)
+                        html_table_gastos += "<tr>";
+                    else
+                        html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
+                    // set total costs row
+                    html_table_gastos +="<td colspan='7', style='text-align:right;'>&nbsp;IMPORTE TOTAL:&nbsp;</td>"
+                                        "<td colspan='2', style='text-align:left;'>&nbsp;" + QString::number(importe_tot, 'f', 2) +
+                                        "&nbsp;</td></tr>";
+                    row_printed++;
+                }
+                client_prev_row = client;
+            }
             // set background color for even rows
             if (row_printed % 2 == 0)
                 html_table_gastos += "<tr>";
             else
                 html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
-            // calculate iva and base
-            QString importe = QString::number(model->index(row, 7).data().toFloat(), 'f', 2);
-            QString iva;
-            if (model->index(row, 6).data().toString() == "21" || model->index(row, 6).data().toString() == "10")
-                iva = QString::number(model->index(row, 6).data().toFloat() * importe.toFloat() / 100, 'f', 2);
-            else
-                iva = QString::number(0.0, 'f', 2);
-            QString base = QString::number(importe.toFloat() - iva.toFloat(), 'f', 2);
-
             // set row content
             html_table_gastos +="<td>&nbsp;" + model->index(row, 1).data().toString() + "&nbsp;</td>"
                                 "<td>&nbsp;" + model->index(row, 2).data().toString() + "&nbsp;</td>"
@@ -136,6 +154,19 @@ QString GenListado::generate_html_table()
             html_table_gastos += "</tr>";
             row_printed++;
         }
+    }
+    // generate new row for last group of clients
+    if (ui->cb_agrupar->currentText() == C_PROVEEDORES) {
+        importe_tot += importe.toFloat();
+        // set background color for even rows
+        if (row_printed % 2 == 0)
+            html_table_gastos += "<tr>";
+        else
+            html_table_gastos += "<tr style='background-color: #E3E1D3;'>";
+        // set total costs row
+        html_table_gastos +="<td colspan='7', style='text-align:right;'>&nbsp;IMPORTE TOTAL:&nbsp;</td>"
+                            "<td colspan='2', style='text-align:left;'>&nbsp;" + QString::number(importe_tot, 'f', 2) +
+                            "&nbsp;</td></tr>";
     }
     html_table_gastos += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
     if (row_printed == 0)
