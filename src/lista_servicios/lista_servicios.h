@@ -1,5 +1,5 @@
-#ifndef LISTAPRENDAS_H
-#define LISTAPRENDAS_H
+#ifndef LISTASERVICIOS_H
+#define LISTASERVICIOS_H
 
 #include <QMainWindow>
 #include <QSqlDatabase>
@@ -9,16 +9,16 @@
 #define NOMBRE_COLUMN_IDX 0
 
 namespace Ui {
-class ListaPrendas;
+class ListaServicios;
 }
 
-class ListaPrendas : public QMainWindow
+class ListaServicios : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit ListaPrendas(QWidget *parent = nullptr);
-    ~ListaPrendas();
+    explicit ListaServicios(QWidget *parent = nullptr);
+    ~ListaServicios();
     QSqlDatabase db;
     QSqlTableModel *model;
 
@@ -28,13 +28,9 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
 
-    void closeEvent(QCloseEvent* event);
-
 private:
-    Ui::ListaPrendas *ui;
+    Ui::ListaServicios *ui;
 
-signals:
-    void populate_prendas();
 };
 
-#endif // LISTAPRENDAS_H
+#endif // LISTASERVICIOS_H

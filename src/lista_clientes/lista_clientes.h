@@ -17,9 +17,10 @@ class ListaClientes : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlTableModel *model;
     explicit ListaClientes(QWidget *parent = nullptr);
     ~ListaClientes();
+    QSqlDatabase db;
+    QSqlTableModel *model;
 
 private slots:
     void populate_table();
@@ -27,8 +28,13 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
 
+    void closeEvent(QCloseEvent* event);
+
 private:
     Ui::ListaClientes *ui;
+
+signals:
+    void populate_clientes();
 };
 
 #endif // LISTACLIENTES_H

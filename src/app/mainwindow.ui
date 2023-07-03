@@ -646,6 +646,7 @@ prenda</string>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="separator"/>
+    <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionGenerar_contabilidad"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
@@ -658,6 +659,7 @@ prenda</string>
     <addaction name="actionListado_de_prendas"/>
     <addaction name="actionListado_de_clientes"/>
     <addaction name="actionListado_de_proveedores"/>
+    <addaction name="actionListado_de_servicios"/>
    </widget>
    <addaction name="menuArchivo"/>
    <addaction name="menuHerramientas"/>
@@ -670,6 +672,9 @@ prenda</string>
    <property name="toolTip">
     <string>Cerrar aplicación</string>
    </property>
+   <property name="shortcut">
+    <string>Alt+C</string>
+   </property>
   </action>
   <action name="actionRecibo">
    <property name="text">
@@ -679,7 +684,7 @@ prenda</string>
     <string>Imprimir recibo</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Shift+R</string>
+    <string>Alt+P, R</string>
    </property>
   </action>
   <action name="actionFactura">
@@ -690,7 +695,7 @@ prenda</string>
     <string>Imprimir factura</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Shift+F</string>
+    <string>Alt+P, F</string>
    </property>
   </action>
   <action name="actionRecogida_de_prendas">
@@ -714,7 +719,7 @@ prenda</string>
     <string>Generar contabilidad</string>
    </property>
    <property name="shortcut">
-    <string>Alt+Shift+C</string>
+    <string>Alt+C</string>
    </property>
   </action>
   <action name="actionIngresos">
@@ -725,7 +730,7 @@ prenda</string>
     <string>Visualizar tabla ingresos</string>
    </property>
    <property name="shortcut">
-    <string>Alt+I</string>
+    <string>Alt+Shift+I</string>
    </property>
   </action>
   <action name="actionGastos">
@@ -736,7 +741,7 @@ prenda</string>
     <string>Visualizar tabla gastos</string>
    </property>
    <property name="shortcut">
-    <string>Alt+G</string>
+    <string>Alt+Shift+G</string>
    </property>
   </action>
   <action name="actionListado_de_prendas">
@@ -747,7 +752,7 @@ prenda</string>
     <string>Visualizar listado de prendas</string>
    </property>
    <property name="shortcut">
-    <string>Alt+P</string>
+    <string>Alt+Shift+P</string>
    </property>
   </action>
   <action name="actionListado_de_clientes">
@@ -758,7 +763,7 @@ prenda</string>
     <string>Visualizar listado de clientes</string>
    </property>
    <property name="shortcut">
-    <string>Alt+C</string>
+    <string>Alt+Shift+C</string>
    </property>
   </action>
   <action name="actionListado_de_proveedores">
@@ -769,7 +774,29 @@ prenda</string>
     <string>Visualizar listado de proveedores</string>
    </property>
    <property name="shortcut">
-    <string>Alt+S</string>
+    <string>Alt+Shift+O</string>
+   </property>
+  </action>
+  <action name="actionLimpiar_base_de_datos">
+   <property name="text">
+    <string>Limpiar base de datos</string>
+   </property>
+   <property name="toolTip">
+    <string>Limpiar comas ',' en importes guardados en la base de datos</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+L</string>
+   </property>
+  </action>
+  <action name="actionListado_de_servicios">
+   <property name="text">
+    <string>Listado de servicios</string>
+   </property>
+   <property name="toolTip">
+    <string>Visualizar listado de servicios</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+Shift+S</string>
    </property>
   </action>
   <action name="actionFactura_completa">

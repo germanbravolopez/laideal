@@ -4,7 +4,8 @@ add_library(lista_clientes STATIC
     lista_clientes.cpp
 )
 target_link_libraries(lista_clientes
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     TableView
 )

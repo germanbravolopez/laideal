@@ -4,8 +4,10 @@ add_library(lista_prendas STATIC
     lista_prendas.cpp
 )
 target_link_libraries(lista_prendas
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     TableView
+    NumberFormatDelegate
 )
 target_include_directories(lista_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

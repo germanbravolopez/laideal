@@ -1,5 +1,6 @@
 #include "ingresos.h"
 #include "ui_ingresos.h"
+#include "numberformatdelegate.h"
 
 Ingresos::Ingresos(QWidget *parent) :
     QMainWindow(parent),
@@ -25,6 +26,7 @@ void Ingresos::populate_table()
         ui->table_ingresos->setModel(model);
         ui->table_ingresos->resizeColumnsToContents();
         ui->table_ingresos->sortByColumn(TICKET_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_ingresos->setItemDelegateForColumn(5, new NumberFormatDelegate(this));
         ui->statusBar->showMessage("Modo edición desactivado");
     }
 }

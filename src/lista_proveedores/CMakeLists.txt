@@ -4,7 +4,8 @@ add_library(lista_proveedores STATIC
     lista_proveedores.cpp
 )
 target_link_libraries(lista_proveedores
-    PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     TableView
 )

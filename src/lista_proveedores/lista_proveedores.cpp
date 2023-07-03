@@ -1,6 +1,7 @@
 #include "lista_proveedores.h"
 #include "ui_lista_proveedores.h"
 #include "tableview.h"
+#include "sql_lite.h"
 
 ListaProveedores::ListaProveedores(QWidget *parent) :
     QMainWindow(parent),
@@ -41,6 +42,8 @@ void ListaProveedores::on_actionActualizar_triggered()
 void ListaProveedores::on_actionAnadir_fila_triggered()
 {
     model->insertRow(ui->table_lista_proveedores->currentIndex().row() + 1);
+    insert_new_item_to_table(db, {"", "", "", ""}, "proveedores");
+    populate_table();
 }
 
 void ListaProveedores::on_actionEliminar_fila_triggered()
@@ -50,8 +53,7 @@ void ListaProveedores::on_actionEliminar_fila_triggered()
                                     QString::number(ui->table_lista_proveedores->currentIndex().row() + 1) + "?",
                                     QMessageBox::Yes | QMessageBox::No,
                                     QMessageBox::No);
-    if (ret == QMessageBox::Yes)
-    {
+    if (ret == QMessageBox::Yes) {
         model->removeRow(ui->table_lista_proveedores->currentIndex().row());
         populate_table();
     }

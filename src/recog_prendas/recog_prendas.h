@@ -29,22 +29,22 @@ class RecogPrendas : public QMainWindow
     Q_OBJECT
 
 public:
+    explicit RecogPrendas(QWidget *parent = nullptr);
+    ~RecogPrendas();
+
     QSqlDatabase db;
     QSqlQueryModel *sql_query_model = new QSqlQueryModel;
     bool is_cell_clicked = false;
     int row_clicked_cell, column_clicked_cell;
+
     enum UpdateDBop {
         PAY_YES,
         PAY_NO,
         PKU_YES,
         PKU_NO,
         OBSV,
-        PAY_DE_CH,
-        PKU_DE_CH,
         SIZE_AND_PRICE
     };
-    explicit RecogPrendas(QWidget *parent = nullptr);
-    ~RecogPrendas();
 
 private slots:
     void initial_settings();
@@ -60,8 +60,6 @@ private slots:
     void on_pb_state_toggled(bool checked);
     void on_tableView_clicked(const QModelIndex &index);
     void on_le_obsv_returnPressed();
-    void on_de_date_paym_userDateChanged(const QDate &date);
-    void on_de_date_pickup_userDateChanged(const QDate &date);
     void on_le_size_editingFinished();
     void on_pb_pay_all_clicked();
     void on_pb_pku_all_clicked();

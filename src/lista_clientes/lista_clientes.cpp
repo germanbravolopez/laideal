@@ -1,6 +1,7 @@
 #include "lista_clientes.h"
 #include "ui_lista_clientes.h"
 #include "tableview.h"
+#include "sql_lite.h"
 
 ListaClientes::ListaClientes(QWidget *parent) :
     QMainWindow(parent),
@@ -41,6 +42,8 @@ void ListaClientes::on_actionActualizar_triggered()
 void ListaClientes::on_actionAnadir_fila_triggered()
 {
     model->insertRow(ui->table_lista_clientes->currentIndex().row() + 1);
+    insert_new_item_to_table(db, {"", "", "", ""}, "clientes");
+    populate_table();
 }
 
 void ListaClientes::on_actionEliminar_fila_triggered()
@@ -50,9 +53,14 @@ void ListaClientes::on_actionEliminar_fila_triggered()
                                     QString::number(ui->table_lista_clientes->currentIndex().row() + 1) + "?",
                                     QMessageBox::Yes | QMessageBox::No,
                                     QMessageBox::No);
-    if (ret == QMessageBox::Yes)
-    {
+    if (ret == QMessageBox::Yes) {
         model->removeRow(ui->table_lista_clientes->currentIndex().row());
         populate_table();
     }
+}
+
+void ListaClientes::closeEvent(QCloseEvent* event)
+{
+    emit populate_clientes();
+    event->accept();
 }

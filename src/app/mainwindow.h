@@ -24,10 +24,10 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
-    int pb_added_rows = 0;
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    QSqlDatabase db;
+    int pb_added_rows = 0;
 
 private slots:
     void mainwindow_initial_settings();
@@ -59,15 +59,20 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
+    void on_populate_prendas();
     void on_actionListado_de_prendas_triggered();
+    void on_populate_clientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
+    void on_actionListado_de_servicios_triggered();
     void on_actionRecogida_de_prendas_triggered();
     void on_actionRecibo_triggered();
     void on_actionFactura_triggered();
     void on_actionFactura_completa_triggered();
     void on_actionGenerar_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
+    void on_actionLimpiar_base_de_datos_triggered();
+    void limpiar_base_de_datos(bool print);
 
 private:
     Ui::MainWindow *ui;
