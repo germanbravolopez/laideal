@@ -6,6 +6,7 @@
 #include "lista_prendas.h"
 #include "lista_clientes.h"
 #include "lista_proveedores.h"
+#include "lista_servicios.h"
 #include "recog_prendas.h"
 #include "contabilidad.h"
 #include "facturas.h"
@@ -437,6 +438,14 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     ui_prove = new ListaProveedores(this);
     ui_prove->db = db;
     ui_prove->show();
+}
+
+void MainWindow::on_actionListado_de_servicios_triggered()
+{
+    ListaServicios *ui_servicios;
+    ui_servicios = new ListaServicios(this);
+    ui_servicios->db = db;
+    ui_servicios->show();
 }
 
 void MainWindow::on_actionRecogida_de_prendas_triggered()
