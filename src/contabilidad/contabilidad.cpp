@@ -33,7 +33,7 @@ void Contabilidad::reset_all_contents()
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
     if (ui->cb_config->currentText() == C_TRIMESTRAL) {
-        switch (read_lock_for_month_and_year(db, ui->sb_trim->value() * 3, ui->sb_year->value())) {
+        switch (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value())) {
         case 0:
             // contabilidad not done
             generate_contabilidad();
@@ -110,7 +110,7 @@ void Contabilidad::generate_contabilidad()
     }
     else if (ui->cb_config->currentText() == C_MENSUAL) {
         QString contabilidad_status;
-        if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
+        if (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
             contabilidad_status = "(Contabilidad cerrada)";
         else
             contabilidad_status = "(Contabilidad no cerrada)";
@@ -129,7 +129,7 @@ void Contabilidad::generate_contabilidad()
     }
     else {
         QString contabilidad_status;
-        if (read_lock_for_month_and_year(db, ui->sb_trim->value(), ui->sb_year->value()) == 1)
+        if (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
             contabilidad_status = "(Contabilidad cerrada)";
         else
             contabilidad_status = "(Contabilidad no cerrada)";
@@ -138,7 +138,7 @@ void Contabilidad::generate_contabilidad()
                 + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
         for (int trim = 1; trim < 5; trim++) {
             QString contabilidad_status;
-            if (read_lock_for_month_and_year(db, trim * 3, ui->sb_year->value()) == 1)
+            if (read_lock_for_month_and_year(db, "ingresos", trim * 3, ui->sb_year->value()) == 1)
                 contabilidad_status = "(Contabilidad cerrada)";
             else
                 contabilidad_status = "(Contabilidad no cerrada)";

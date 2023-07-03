@@ -19,6 +19,7 @@ public:
     ~Facturas();
     QSqlDatabase db;
     void populate_empresas();
+    void populate_servicios();
 
 private slots:
     void initial_settings();

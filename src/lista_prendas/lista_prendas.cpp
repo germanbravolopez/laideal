@@ -1,6 +1,8 @@
 #include "lista_prendas.h"
 #include "ui_lista_prendas.h"
 #include "tableview.h"
+#include "sql_lite.h"
+#include "numberformatdelegate.h"
 
 ListaPrendas::ListaPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -30,6 +32,8 @@ void ListaPrendas::populate_table()
         ui->table_lista_prendas->setModel(model);
         ui->table_lista_prendas->resizeColumnsToContents();
         ui->table_lista_prendas->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
+        ui->table_lista_prendas->setItemDelegateForColumn(1, new NumberFormatDelegate(this));
+        ui->table_lista_prendas->setItemDelegateForColumn(2, new NumberFormatDelegate(this));
     }
 }
 
@@ -41,6 +45,8 @@ void ListaPrendas::on_actionActualizar_triggered()
 void ListaPrendas::on_actionAnadir_fila_triggered()
 {
     model->insertRow(ui->table_lista_prendas->currentIndex().row() + 1);
+    insert_new_item_to_table(db, {"", "", ""}, "prendas");
+    populate_table();
 }
 
 void ListaPrendas::on_actionEliminar_fila_triggered()
@@ -54,4 +60,10 @@ void ListaPrendas::on_actionEliminar_fila_triggered()
         model->removeRow(ui->table_lista_prendas->currentIndex().row());
         populate_table();
     }
+}
+
+void ListaPrendas::closeEvent(QCloseEvent* event)
+{
+    emit populate_prendas();
+    event->accept();
 }

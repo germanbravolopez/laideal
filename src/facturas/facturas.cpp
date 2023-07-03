@@ -26,7 +26,7 @@ void Facturas::reset_all_contents()
 {
     ui->le_fra->clear();
     ui->de_fecha->setDate(QDate::currentDate());
-    ui->le_servicio->clear();
+    ui->cb_servicio->setCurrentText("");
     ui->le_producto->clear();
     ui->cb_empresa->setCurrentText("");
     ui->cb_iva->setCurrentText("");
@@ -35,9 +35,16 @@ void Facturas::reset_all_contents()
 
 void Facturas::populate_empresas()
 {
-    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores");
+    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores", "");
     ui->cb_empresa->addItems(empresas_names);
     ui->cb_empresa->setCurrentText("");
+}
+
+void Facturas::populate_servicios()
+{
+    QStringList servicios_names = read_column_from_table(db, "nombre", "servicios", "");
+    ui->cb_servicio->addItems(servicios_names);
+    ui->cb_servicio->setCurrentText("");
 }
 
 bool Facturas::validate_form()
@@ -45,12 +52,12 @@ bool Facturas::validate_form()
     bool ok = 0;
     // Avoid n_fra, service, company and cost to be empty
     if (ui->le_fra->text() != "" &&
-            ui->le_servicio->text() != "" &&
+            ui->cb_servicio->currentText() != "" &&
             ui->cb_empresa->currentText() != "" &&
             ui->le_importe->text() != "") {
         // Check current company as part of the company list
         if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
-            if (read_lock_for_month_and_year(db, ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
+            if (read_lock_for_month_and_year(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
                 ok = 1;
             else
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
@@ -81,7 +88,7 @@ void Facturas::save_factura()
               "VALUES (:id, :n_factura, :servicio, :producto, :empresa, :fecha, :iva, :importe, :edit_lock);");
     q.bindValue(":id", QString::number(id_max + 1));
     q.bindValue(":n_factura", ui->le_fra->text());
-    q.bindValue(":servicio", ui->le_servicio->text());
+    q.bindValue(":servicio", ui->cb_servicio->currentText());
     q.bindValue(":producto", ui->le_producto->text());
     q.bindValue(":empresa", ui->cb_empresa->currentText());
     q.bindValue(":fecha", ui->de_fecha->date().toString("dd-MM-yyyy"));
