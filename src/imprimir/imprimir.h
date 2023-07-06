@@ -7,7 +7,6 @@
 #include <QSqlQueryModel>
 #include <QDateTime>
 #include <QInputDialog>
-#include <QTextDocument>
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
@@ -43,8 +42,8 @@ private slots:
     void get_ticket_info();
     bool check_ticket_paid();
     QString add_extra_info_to_invoice(QString title, QString request);
-    QString create_html_ticket(bool copy_for_client);
-    void print_ticket(QString html_text);
+    void create_ticket_excel(bool copy_for_client);
+    //void print_ticket();
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
 

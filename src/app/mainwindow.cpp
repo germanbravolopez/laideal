@@ -464,6 +464,7 @@ void MainWindow::on_actionRecibo_triggered()
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->is_recibo = true;
+    ui_impr->is_complete_invoice = false;
     ui_impr->setWindowTitle("Imprimir recibo");
     ui_impr->show();
 }

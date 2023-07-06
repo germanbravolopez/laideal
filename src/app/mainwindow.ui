@@ -807,7 +807,7 @@ prenda</string>
     <string>Imprimir factura completa</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Alt+F</string>
+    <string>Alt+P, Alt+F</string>
    </property>
   </action>
  </widget>
