@@ -9,6 +9,10 @@
 #include <QInputDialog>
 #include <QFile>
 #include <QProcess>
+#include <QApplication>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLabel>
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
@@ -25,10 +29,6 @@
 #define TABLE_OBSERV    12
 #define TABLE_EDIT_LOCK 13
 
-namespace Ui {
-class Imprimir;
-}
-
 class Imprimir : public QDialog
 {
     Q_OBJECT
@@ -37,21 +37,28 @@ public:
     QSqlDatabase db;
     QSqlQueryModel *sql_query_model;
     bool is_recibo, is_complete_invoice;
-    explicit Imprimir(QWidget *parent = nullptr);
-    ~Imprimir();
+    Imprimir(QWidget *parent = nullptr);
+
+    // Public functions
+    void get_ticket_info();
+    void create_ticket_excel(bool copy_for_client, bool add_payed_info);
+    void print_ticket();
+
+    // Setup Dialog in code
+    QFormLayout *formLayout;
+    QLabel *lbl_n_ticket;
+    QLineEdit *le_n_ticket;
+    QDialogButtonBox *bb_ok_cancel;
 
 private slots:
-    void get_ticket_info();
+    void setupUi(QDialog *Imprimir);
     bool check_ticket_paid(int row);
     bool check_any_item_paid();
     QString add_extra_info_to_invoice(QString title, QString request);
-    void create_ticket_excel(bool copy_for_client);
-    void print_ticket();
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
 
 private:
-    Ui::Imprimir *ui;
 
 };
 

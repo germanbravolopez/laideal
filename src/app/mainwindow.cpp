@@ -64,7 +64,7 @@ void MainWindow::reset_all_contents()
 }
 
 /********************************************************************************************
- * FUNCTIONS FOR MAINWINDOW OBJECTS
+ * CUSTOM FUNCTIONS
  *******************************************************************************************/
 
 void MainWindow::set_next_ticket_number()
@@ -146,67 +146,6 @@ void MainWindow::set_garment_price(int garment_row,
                               "Cantidad de prendas está vacía.",
                               QMessageBox::Ok, QMessageBox::Ok);
     ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
-}
-
-void MainWindow::on_pb_payment_toggled(bool checked)
-{
-    if (checked) {
-        ui->pb_payment->setText("SI");
-        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
-    }
-    else
-    {
-        ui->pb_payment->setText("NO");
-        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
-    }
-}
-
-void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
-{
-    if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
-        reset_all_contents();
-    else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
-        if (validate_ticket()) {
-            check_client_data();
-            save_ticket();
-            reset_all_contents();
-        }
-    }
-}
-
-void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
-{
-    if (arg1 != "") {
-        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
-        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
-        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
-    }
-}
-
-void MainWindow::on_table_ticket_cellChanged(int row, int column)
-{
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-    if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE) {
-        if (cb_garment->currentText() != "")
-            cbGarmChanged(cb_garment->currentText());
-    }
-    else if (column == TABLE_TICKET_PRIC) {
-        float total_price = 0.0;
-        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
-            QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
-            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
-                total_price = total_price + price_item->text().toFloat();
-        }
-        ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
-    }
-}
-
-void MainWindow::on_pb_add_row_clicked()
-{
-    pb_added_rows++;
-    ui->table_ticket->insertRow(ui->table_ticket->rowCount());
-    set_service_to_cb(ui->table_ticket->rowCount() - 1);
-    set_garment_to_cb_and_populate(ui->table_ticket->rowCount() - 1);
 }
 
 void MainWindow::cbGarmChanged(const QString &text)
@@ -379,6 +318,87 @@ void MainWindow::save_ticket()
             db.close();
         }
     }
+}
+
+void MainWindow::print_recibo()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = true;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+    ui_impr->get_ticket_info();
+    ui_impr->create_ticket_excel(true, ui->pb_payment->isChecked());
+    ui_impr->print_ticket();
+    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
+    ui_impr->print_ticket();
+}
+
+/********************************************************************************************
+ * FUNCTIONS FOR WIDGETS
+ *******************************************************************************************/
+
+void MainWindow::on_pb_payment_toggled(bool checked)
+{
+    if (checked) {
+        ui->pb_payment->setText("SI");
+        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
+    }
+    else
+    {
+        ui->pb_payment->setText("NO");
+        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+    }
+}
+
+void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
+{
+    if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
+        reset_all_contents();
+    else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
+        if (validate_ticket()) {
+            check_client_data();
+            save_ticket();
+            print_recibo();
+            reset_all_contents();
+        }
+    }
+}
+
+void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
+{
+    if (arg1 != "") {
+        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
+        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
+        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
+    }
+}
+
+void MainWindow::on_table_ticket_cellChanged(int row, int column)
+{
+    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+    if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE) {
+        if (cb_garment->currentText() != "")
+            cbGarmChanged(cb_garment->currentText());
+    }
+    else if (column == TABLE_TICKET_PRIC) {
+        float total_price = 0.0;
+        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
+            QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
+            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
+                total_price = total_price + price_item->text().toFloat();
+        }
+        ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
+    }
+}
+
+void MainWindow::on_pb_add_row_clicked()
+{
+    pb_added_rows++;
+    ui->table_ticket->insertRow(ui->table_ticket->rowCount());
+    set_service_to_cb(ui->table_ticket->rowCount() - 1);
+    set_garment_to_cb_and_populate(ui->table_ticket->rowCount() - 1);
 }
 
 /********************************************************************************************
