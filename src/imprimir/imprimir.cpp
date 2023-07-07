@@ -36,6 +36,15 @@ bool Imprimir::check_ticket_paid(int row)
     return true;
 }
 
+bool Imprimir::check_any_item_paid()
+{
+    for (int row = 0; row < sql_query_model->rowCount(); row++) {
+        if (check_ticket_paid(row))
+            return true;
+    }
+    return false;
+}
+
 QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
 {
     bool ok;
@@ -295,8 +304,13 @@ void Imprimir::print_ticket()
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);
     } else {
+        // Change the cursor to a loading icon
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        // Start printing process
         process.start(batch_path);
         process.waitForFinished();
+        // Restore the cursor to default
+        QApplication::restoreOverrideCursor();
     }
 }
 
@@ -304,24 +318,30 @@ void Imprimir::on_bb_ok_cancel_accepted()
 {
     if (ui->le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true)) {
         get_ticket_info();
-        create_ticket_excel(true);
-        print_ticket();
-        if (is_recibo) {
-            create_ticket_excel(false);
+        if (is_recibo || !is_recibo && check_any_item_paid()) {
+            create_ticket_excel(true);
             print_ticket();
-            //// Comment-in when no more automatic receipt are needed
-            //int resp = QMessageBox::question(this, "Copia establecimiento",
-            //                                 "¿Desea copia para el establecimiento?",
-            //                                 QMessageBox::Yes | QMessageBox::No,
-            //                                 QMessageBox::Yes);
-            //if (resp == QMessageBox::Yes) {
-            //    create_ticket_excel(false);
-            //    print_ticket();
-            //}
-        }
+            if (is_recibo) {
+                create_ticket_excel(false);
+                print_ticket();
+                //// Comment-in when no more automatic receipt are needed
+                //int resp = QMessageBox::question(this, "Copia establecimiento",
+                //                                 "¿Desea copia para el establecimiento?",
+                //                                 QMessageBox::Yes | QMessageBox::No,
+                //                                 QMessageBox::Yes);
+                //if (resp == QMessageBox::Yes) {
+                //    create_ticket_excel(false);
+                //    print_ticket();
+                //}
+            }
+        } else if (!is_recibo)
+            QMessageBox::information(this, "Imprimir",
+                                     "No hay ninguna prenda pagada en el recibo " + ui->le_n_ticket->text() + ".",
+                                     QMessageBox::Ok,
+                                     QMessageBox::Ok);
     } else {
         QMessageBox::information(this, "Imprimir",
-                              "El número de recibo no se ha encontrado en la base de datos.\n"
+                              "El número de recibo " + ui->le_n_ticket->text() + " no se ha encontrado en la base de datos.\n"
                               "Utilizar otro número o buscarlo en la lista de ingresos.",
                               QMessageBox::Ok,
                               QMessageBox::Ok);
