@@ -12,11 +12,14 @@ target_link_libraries(laideal
     sql_lite
     gastos
     ingresos
+    imprimir
     lista_prendas
     lista_clientes
     lista_proveedores
     lista_servicios
     recog_prendas
+    sql_lite
+    TableView
     contabilidad
     facturas
 )

@@ -640,6 +640,7 @@ prenda</string>
      </property>
      <addaction name="actionRecibo"/>
      <addaction name="actionFactura"/>
+     <addaction name="actionFactura_completa"/>
     </widget>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
@@ -796,6 +797,17 @@ prenda</string>
    </property>
    <property name="shortcut">
     <string>Alt+Shift+S</string>
+   </property>
+  </action>
+  <action name="actionFactura_completa">
+   <property name="text">
+    <string>Factura completa</string>
+   </property>
+   <property name="toolTip">
+    <string>Imprimir factura completa</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+P, Alt+F</string>
    </property>
   </action>
  </widget>

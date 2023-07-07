@@ -66,6 +66,9 @@ private slots:
     void on_actionListado_de_proveedores_triggered();
     void on_actionListado_de_servicios_triggered();
     void on_actionRecogida_de_prendas_triggered();
+    void on_actionRecibo_triggered();
+    void on_actionFactura_triggered();
+    void on_actionFactura_completa_triggered();
     void on_actionGenerar_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();

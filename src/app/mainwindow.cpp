@@ -8,6 +8,7 @@
 #include "lista_proveedores.h"
 #include "lista_servicios.h"
 #include "recog_prendas.h"
+#include "imprimir.h"
 #include "contabilidad.h"
 #include "facturas.h"
 
@@ -153,7 +154,8 @@ void MainWindow::on_pb_payment_toggled(bool checked)
         ui->pb_payment->setText("SI");
         ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
     }
-    else {
+    else
+    {
         ui->pb_payment->setText("NO");
         ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
     }
@@ -454,6 +456,39 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
     ui_recog->show();
+}
+
+void MainWindow::on_actionRecibo_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = true;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->setWindowTitle("Imprimir recibo");
+    ui_impr->show();
+}
+
+void MainWindow::on_actionFactura_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->setWindowTitle("Imprimir factura");
+    ui_impr->show();
+}
+
+void MainWindow::on_actionFactura_completa_triggered()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complete_invoice = true;
+    ui_impr->setWindowTitle("Imprimir factura completa");
+    ui_impr->show();
 }
 
 void MainWindow::on_actionGenerar_contabilidad_triggered()
