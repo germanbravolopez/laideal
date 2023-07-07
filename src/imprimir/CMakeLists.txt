@@ -1,5 +1,4 @@
 add_library(imprimir STATIC
-    imprimir.ui
     imprimir.h
     imprimir.cpp
 )

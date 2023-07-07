@@ -1,21 +1,51 @@
 #include "imprimir.h"
-#include "ui_imprimir.h"
 #include "sql_lite.h"
 
 #include "xlsxdocument.h"
 #include "xlsxcellrange.h"
 using namespace QXlsx;
 
-Imprimir::Imprimir(QWidget *parent) :
-    QDialog(parent),
-    ui(new Ui::Imprimir)
+Imprimir::Imprimir(QWidget *parent)
+    : QDialog(parent)
 {
-    ui->setupUi(this);
+    setupUi(this);
 }
 
-Imprimir::~Imprimir()
+void Imprimir::setupUi(QDialog *Imprimir)
 {
-    delete ui;
+    if (Imprimir->objectName().isEmpty())
+        Imprimir->setObjectName("Imprimir");
+    Imprimir->setWindowModality(Qt::WindowModal);
+    Imprimir->resize(190, 90);
+    QFont font;
+    font.setPointSize(12);
+    Imprimir->setFont(font);
+    Imprimir->setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
+    formLayout = new QFormLayout(Imprimir);
+    formLayout->setObjectName("formLayout");
+    lbl_n_ticket = new QLabel(Imprimir);
+    lbl_n_ticket->setObjectName("lbl_n_ticket");
+
+    formLayout->setWidget(0, QFormLayout::LabelRole, lbl_n_ticket);
+
+    le_n_ticket = new QLineEdit(Imprimir);
+    le_n_ticket->setObjectName("le_n_ticket");
+
+    formLayout->setWidget(0, QFormLayout::FieldRole, le_n_ticket);
+
+    bb_ok_cancel = new QDialogButtonBox(Imprimir);
+    bb_ok_cancel->setObjectName("bb_ok_cancel");
+    bb_ok_cancel->setOrientation(Qt::Horizontal);
+    bb_ok_cancel->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
+
+    formLayout->setWidget(1, QFormLayout::SpanningRole, bb_ok_cancel);
+
+    Imprimir->setWindowTitle(QCoreApplication::translate("Imprimir", "Dialog", nullptr));
+    lbl_n_ticket->setText(QCoreApplication::translate("Imprimir", "N. Ticket:", nullptr));
+    QObject::connect(bb_ok_cancel, &QDialogButtonBox::accepted, Imprimir, qOverload<>(&QDialog::accept));
+    QObject::connect(bb_ok_cancel, &QDialogButtonBox::rejected, Imprimir, qOverload<>(&QDialog::reject));
+
+    QMetaObject::connectSlotsByName(Imprimir);
 }
 
 void Imprimir::get_ticket_info()
@@ -25,7 +55,7 @@ void Imprimir::get_ticket_info()
     db.open();
     sql_query_model->setQuery("SELECT * \
                     FROM ingresos \
-                    WHERE n_recibo = '" + ui->le_n_ticket->text() + "'");
+                    WHERE n_recibo = '" + le_n_ticket->text() + "'");
     db.close();
 }
 
@@ -57,7 +87,7 @@ QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
         return "";
 }
 
-void Imprimir::create_ticket_excel(bool copy_for_client)
+void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
 {
     // Check that excel is accessible
     QString excel_path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
@@ -100,7 +130,7 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         QXlsx::Format format_bold_right_align;
         format_bold_right_align.setFontBold(true);
         format_bold_right_align.setHorizontalAlignment(QXlsx::Format::AlignRight);
-        excel.write(row, 1, QString("Nº: " + ui->le_n_ticket->text()), format_bold_right_align);
+        excel.write(row, 1, QString("Nº: " + le_n_ticket->text()), format_bold_right_align);
         row++;
         // Client data
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
@@ -236,17 +266,25 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
             row++;
         }
         // Insert receipt information
-        row++; // Add empty row
+        if (add_payed_info) {
+            QXlsx::Format format_payed;
+            format_payed.setHorizontalAlignment(QXlsx::Format::AlignRight);
+            excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+            excel.write(row, 1, QString("IMPORTE PAGADO"), format_payed);
+            row++;
+        } else
+            row++; // Add empty row
         if (is_recibo && copy_for_client) {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("(Copia para el cliente)"));
             row++;
-        } else if (is_recibo && copy_for_client) {
+            row++; // Add empty row
+        } else if (is_recibo && !copy_for_client) {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("(Copia para el establecimiento)"));
             row++;
+            row++; // Add empty row
         }
-        row++; // Add empty row
         // Insert policy
         QXlsx::Format format_policy;
         format_policy.setFontSize(10);
@@ -316,32 +354,29 @@ void Imprimir::print_ticket()
 
 void Imprimir::on_bb_ok_cancel_accepted()
 {
-    if (ui->le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true)) {
+    if (le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true)) {
         get_ticket_info();
         if (is_recibo || !is_recibo && check_any_item_paid()) {
-            create_ticket_excel(true);
+            create_ticket_excel(true, false);
             print_ticket();
             if (is_recibo) {
-                create_ticket_excel(false);
-                print_ticket();
-                //// Comment-in when no more automatic receipt are needed
-                //int resp = QMessageBox::question(this, "Copia establecimiento",
-                //                                 "¿Desea copia para el establecimiento?",
-                //                                 QMessageBox::Yes | QMessageBox::No,
-                //                                 QMessageBox::Yes);
-                //if (resp == QMessageBox::Yes) {
-                //    create_ticket_excel(false);
-                //    print_ticket();
-                //}
+                int resp = QMessageBox::question(this, "Copia establecimiento",
+                                                 "¿Desea copia para el establecimiento?",
+                                                 QMessageBox::Yes | QMessageBox::No,
+                                                 QMessageBox::Yes);
+                if (resp == QMessageBox::Yes) {
+                    create_ticket_excel(false, false);
+                    print_ticket();
+                }
             }
         } else if (!is_recibo)
             QMessageBox::information(this, "Imprimir",
-                                     "No hay ninguna prenda pagada en el recibo " + ui->le_n_ticket->text() + ".",
+                                     "No hay ninguna prenda pagada en el recibo " + le_n_ticket->text() + ".",
                                      QMessageBox::Ok,
                                      QMessageBox::Ok);
     } else {
         QMessageBox::information(this, "Imprimir",
-                              "El número de recibo " + ui->le_n_ticket->text() + " no se ha encontrado en la base de datos.\n"
+                              "El número de recibo " + le_n_ticket->text() + " no se ha encontrado en la base de datos.\n"
                               "Utilizar otro número o buscarlo en la lista de ingresos.",
                               QMessageBox::Ok,
                               QMessageBox::Ok);
