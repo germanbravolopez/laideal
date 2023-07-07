@@ -69,7 +69,7 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         QXlsx::Format format_clear;
         format_clear.setBorderStyle(QXlsx::Format::BorderNone);
         format_clear.setFontSize(11);
-        format_clear.setFontBold(false);;
+        format_clear.setFontBold(false);
         format_clear.setTextWrap(false);
         format_clear.setVerticalAlignment(QXlsx::Format::AlignBottom);
         format_clear.setHorizontalAlignment(QXlsx::Format::AlignLeft);
@@ -82,7 +82,11 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         }
 
         // Start filling with current data
-        if (!is_recibo) {
+        if (is_recibo) {
+            excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+            excel.write(row, 1, QString("Recibo"));
+            row++;
+        } else {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("FACTURA SIMPLIFICADA"));
             row++;
@@ -92,7 +96,7 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         QXlsx::Format format_bold_right_align;
         format_bold_right_align.setFontBold(true);
         format_bold_right_align.setHorizontalAlignment(QXlsx::Format::AlignRight);
-        excel.write(row, 1, QString("Nº ticket: " + ui->le_n_ticket->text()), format_bold_right_align);
+        excel.write(row, 1, QString("Nº: " + ui->le_n_ticket->text()), format_bold_right_align);
         row++;
         // Client data
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
@@ -100,7 +104,7 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         row++;
         // Ticket dates
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("Recepción: " + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_RCP)).toString()));
+        excel.write(row, 1, QString("Recepción: " + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_RCP)).toString().replace("-","/")));
         row++;
         // Extra information in case of complete invoice: address and DNI
         if (is_complete_invoice) {
@@ -160,19 +164,19 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
             excel.write(row, 2, garment_name, format_garm);
             excel.write(row, 3, QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat(), 'f', 2), format_uds_cost);
             row++;
-            // Add extra information for each garment for facturas simplificadas
-            if (!is_recibo && sql_query_model->data(sql_query_model->index(row_cnt, TABLE_IS_PAYED)).toString() == "SI") {
-                format_garm.setFontSize(10);
-                excel.write(row, 2, "Pagad.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PAY)).toString(), format_garm);
-                format_garm.setFontSize(11);
-                row++;
-                if (sql_query_model->data(sql_query_model->index(row_cnt, TABLE_STATE)).toString() == "Recogido") {
-                    format_garm.setFontSize(10);
-                    excel.write(row, 2, "Recog.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PKU)).toString(), format_garm);
-                    format_garm.setFontSize(11);
-                    row++;
-                }
-            }
+            //// Add extra information for each garment for facturas simplificadas
+            //if (!is_recibo && sql_query_model->data(sql_query_model->index(row_cnt, TABLE_IS_PAYED)).toString() == "SI") {
+            //    format_garm.setFontSize(10);
+            //    excel.write(row, 2, "Pagad.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PAY)).toString().replace("-","/"), format_garm);
+            //    format_garm.setFontSize(11);
+            //    row++;
+            //    if (sql_query_model->data(sql_query_model->index(row_cnt, TABLE_STATE)).toString() == "Recogido") {
+            //        format_garm.setFontSize(10);
+            //        excel.write(row, 2, "Recog.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PKU)).toString().replace("-","/"), format_garm);
+            //        format_garm.setFontSize(11);
+            //        row++;
+            //    }
+            //}
             ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat();
         }
         // Calculate total price and IVA
