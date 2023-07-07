@@ -42,7 +42,7 @@ public:
 
 private slots:
     void get_ticket_info();
-    bool check_ticket_paid();
+    bool check_ticket_paid(int row);
     QString add_extra_info_to_invoice(QString title, QString request);
     void create_ticket_excel(bool copy_for_client);
     void print_ticket();

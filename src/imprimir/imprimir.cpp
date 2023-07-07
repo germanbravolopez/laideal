@@ -29,15 +29,10 @@ void Imprimir::get_ticket_info()
     db.close();
 }
 
-bool Imprimir::check_ticket_paid()
+bool Imprimir::check_ticket_paid(int row)
 {
-    for (int row = 0; row < sql_query_model->rowCount(); row++)
-    {
-        if (sql_query_model->data(sql_query_model->index(row, TABLE_IS_PAYED)).toString() == "NO")
-        {
-            return false;
-        }
-    }
+    if (sql_query_model->data(sql_query_model->index(row, TABLE_IS_PAYED)).toString() == "NO")
+        return false;
     return true;
 }
 
@@ -151,33 +146,35 @@ void Imprimir::create_ticket_excel(bool copy_for_client)
         // Add garments
         float ticket_total_f = 0.0;
         for (int row_cnt = 0; row_cnt < sql_query_model->rowCount(); row_cnt++) {
-            // Complete "alfombra" getting also the obsvation value (number)
-            QString garment_name;
-            QString left_side = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString().left(8);
-            if (left_side == "Alfombra") {
-                garment_name = "Alfombra - ";
-                garment_name.append(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString());
-            } else
-                garment_name = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString();
-            // Content of each garment in the ticket
-            excel.write(row, 1, sql_query_model->data(sql_query_model->index(row_cnt, TABLE_QUANTITY)).toString(), format_uds_cost);
-            excel.write(row, 2, garment_name, format_garm);
-            excel.write(row, 3, QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat(), 'f', 2), format_uds_cost);
-            row++;
-            //// Add extra information for each garment for facturas simplificadas
-            //if (!is_recibo && sql_query_model->data(sql_query_model->index(row_cnt, TABLE_IS_PAYED)).toString() == "SI") {
-            //    format_garm.setFontSize(10);
-            //    excel.write(row, 2, "Pagad.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PAY)).toString().replace("-","/"), format_garm);
-            //    format_garm.setFontSize(11);
-            //    row++;
-            //    if (sql_query_model->data(sql_query_model->index(row_cnt, TABLE_STATE)).toString() == "Recogido") {
-            //        format_garm.setFontSize(10);
-            //        excel.write(row, 2, "Recog.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PKU)).toString().replace("-","/"), format_garm);
-            //        format_garm.setFontSize(11);
-            //        row++;
-            //    }
-            //}
-            ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat();
+            if (is_recibo || !is_recibo && check_ticket_paid(row_cnt)) {
+                // Complete "alfombra" getting also the obsvation value (number)
+                QString garment_name;
+                QString left_side = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString().left(8);
+                if (left_side == "Alfombra") {
+                    garment_name = "Alfombra - ";
+                    garment_name.append(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString());
+                } else
+                    garment_name = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString();
+                // Content of each garment in the ticket
+                excel.write(row, 1, sql_query_model->data(sql_query_model->index(row_cnt, TABLE_QUANTITY)).toString(), format_uds_cost);
+                excel.write(row, 2, garment_name, format_garm);
+                excel.write(row, 3, QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat(), 'f', 2), format_uds_cost);
+                row++;
+                //// Add extra information for each garment for facturas simplificadas
+                //if (!is_recibo && sql_query_model->data(sql_query_model->index(row_cnt, TABLE_IS_PAYED)).toString() == "SI") {
+                //    format_garm.setFontSize(10);
+                //    excel.write(row, 2, "Pagad.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PAY)).toString().replace("-","/"), format_garm);
+                //    format_garm.setFontSize(11);
+                //    row++;
+                //    if (sql_query_model->data(sql_query_model->index(row_cnt, TABLE_STATE)).toString() == "Recogido") {
+                //        format_garm.setFontSize(10);
+                //        excel.write(row, 2, "Recog.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PKU)).toString().replace("-","/"), format_garm);
+                //        format_garm.setFontSize(11);
+                //        row++;
+                //    }
+                //}
+                ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat();
+            }
         }
         // Calculate total price and IVA
         QString ticket_total = QString::number(ticket_total_f, 'f', 2);
@@ -305,28 +302,22 @@ void Imprimir::print_ticket()
 
 void Imprimir::on_bb_ok_cancel_accepted()
 {
-    if (ui->le_n_ticket->text() ==
-        select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true)) {
+    if (ui->le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", ui->le_n_ticket->text(), true)) {
         get_ticket_info();
-        if (is_recibo || (!is_recibo && check_ticket_paid())) {
-            create_ticket_excel(true);
+        create_ticket_excel(true);
+        print_ticket();
+        if (is_recibo) {
+            create_ticket_excel(false);
             print_ticket();
-            if (is_recibo) {
-                //// Comment-in when no more automatic receipt are needed
-                //int resp = QMessageBox::question(this, "Copia establecimiento",
-                //                                 "¿Desea copia para el establecimiento?",
-                //                                 QMessageBox::Yes | QMessageBox::No,
-                //                                 QMessageBox::Yes);
-                //if (resp == QMessageBox::Yes) {
-                //    create_ticket_excel(false);
-                //    print_ticket();
-                //}
-            }
-        } else {
-            QMessageBox::information(this, "Imprimir",
-                                  "El número de recibo no se ha pagado por completo.",
-                                  QMessageBox::Ok,
-                                  QMessageBox::Ok);
+            //// Comment-in when no more automatic receipt are needed
+            //int resp = QMessageBox::question(this, "Copia establecimiento",
+            //                                 "¿Desea copia para el establecimiento?",
+            //                                 QMessageBox::Yes | QMessageBox::No,
+            //                                 QMessageBox::Yes);
+            //if (resp == QMessageBox::Yes) {
+            //    create_ticket_excel(false);
+            //    print_ticket();
+            //}
         }
     } else {
         QMessageBox::information(this, "Imprimir",
