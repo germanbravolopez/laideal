@@ -28,6 +28,7 @@ public:
     ~MainWindow();
     QSqlDatabase db;
     int pb_added_rows = 0;
+    bool debug = false;
 
 private slots:
     void mainwindow_initial_settings();
@@ -75,6 +76,7 @@ private slots:
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
     void limpiar_base_de_datos(bool print);
+    void on_actionModo_debug_triggered(bool checked);
 
 private:
     Ui::MainWindow *ui;

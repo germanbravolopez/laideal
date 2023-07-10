@@ -361,7 +361,8 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
         if (validate_ticket()) {
             check_client_data();
             save_ticket();
-            print_recibo();
+            if (!debug)
+                print_recibo();
             reset_all_contents();
         }
     }
@@ -550,4 +551,9 @@ void MainWindow::limpiar_base_de_datos(bool print)
                                  + QString::number(ingresos_cnt) + " en la tabla de ingresos.\n"
                                  + QString::number(prendas_cnt) + " en la tabla de lista de prendas.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void MainWindow::on_actionModo_debug_triggered(bool checked)
+{
+    debug = checked;
 }
