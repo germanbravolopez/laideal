@@ -116,7 +116,6 @@ QString GenListado::generate_html_table()
             // generate new row if group per clients
             if (ui->cb_agrupar->currentText() == C_PROVEEDORES) {
                 client = model->index(row, 4).data().toString();
-                importe_tot += importe.toFloat();
                 if (client != client_prev_row && row_printed != 0) {
                     // set background color for even rows
                     if (row_printed % 2 == 0)
@@ -127,8 +126,10 @@ QString GenListado::generate_html_table()
                     html_table_gastos +="<td colspan='7', style='text-align:right;'>&nbsp;IMPORTE TOTAL:&nbsp;</td>"
                                         "<td colspan='2', style='text-align:left;'>&nbsp;" + QString::number(importe_tot, 'f', 2) +
                                         "&nbsp;</td></tr>";
+                    importe_tot = 0.0;
                     row_printed++;
                 }
+                importe_tot += importe.toFloat();
                 client_prev_row = client;
             }
             // set background color for even rows
@@ -157,7 +158,6 @@ QString GenListado::generate_html_table()
     }
     // generate new row for last group of clients
     if (ui->cb_agrupar->currentText() == C_PROVEEDORES) {
-        importe_tot += importe.toFloat();
         // set background color for even rows
         if (row_printed % 2 == 0)
             html_table_gastos += "<tr>";
