@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>445</width>
-    <height>238</height>
+    <width>705</width>
+    <height>343</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -34,22 +34,55 @@
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
      <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="le_fra"/>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="lbl_iva">
+      <item row="0" column="4">
+       <widget class="QLabel" name="lbl_fecha">
         <property name="text">
-         <string>IVA:</string>
+         <string>Fecha:</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
         </property>
        </widget>
       </item>
-      <item row="0" column="3">
-       <widget class="QDateEdit" name="de_fecha">
-        <property name="calendarPopup">
+      <item row="3" column="1" colspan="5">
+       <widget class="QComboBox" name="cb_empresa">
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="lbl_fra">
+        <property name="text">
+         <string>Nº Fra.:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1" colspan="5">
+       <widget class="QLineEdit" name="le_producto"/>
+      </item>
+      <item row="5" column="5">
+       <widget class="QLineEdit" name="le_base">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="clearButtonEnabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="cb_iva"/>
+      </item>
+      <item row="1" column="1" colspan="5">
+       <widget class="QComboBox" name="cb_servicio">
+        <property name="editable">
          <bool>true</bool>
         </property>
        </widget>
@@ -64,39 +97,10 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="lbl_fra">
-        <property name="text">
-         <string>Nº Fra.:</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="QComboBox" name="cb_iva"/>
-      </item>
-      <item row="4" column="3">
-       <widget class="QLineEdit" name="le_importe"/>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="lbl_producto">
-        <property name="text">
-         <string>Producto:</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="lbl_fecha">
-        <property name="text">
-         <string>Fecha:</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+      <item row="0" column="5">
+       <widget class="QDateEdit" name="de_fecha">
+        <property name="calendarPopup">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -110,40 +114,92 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="2">
-       <widget class="QLabel" name="lbl_importe">
+      <item row="2" column="0">
+       <widget class="QLabel" name="lbl_producto">
         <property name="text">
-         <string>Importe:</string>
+         <string>Descripción:</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
         </property>
        </widget>
       </item>
-      <item row="5" column="0" colspan="4">
+      <item row="4" column="0">
+       <widget class="QLabel" name="lbl_tipo_iva">
+        <property name="text">
+         <string>Tipo de IVA:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1" colspan="2">
+       <widget class="QLineEdit" name="le_fra"/>
+      </item>
+      <item row="4" column="3" colspan="2">
+       <widget class="QLabel" name="lbl_importe">
+        <property name="text">
+         <string>Importe total:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="5">
+       <widget class="QLineEdit" name="le_importe"/>
+      </item>
+      <item row="5" column="3" colspan="2">
+       <widget class="QLabel" name="lbl_base">
+        <property name="text">
+         <string>Base:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="2">
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>280</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="6" column="3" colspan="2">
+       <widget class="QLabel" name="lbl_iva">
+        <property name="text">
+         <string>IVA:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="5">
+       <widget class="QLineEdit" name="le_iva">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0" colspan="6">
        <widget class="QDialogButtonBox" name="buttonBox">
         <property name="standardButtons">
          <set>QDialogButtonBox::Cancel|QDialogButtonBox::Reset|QDialogButtonBox::Save</set>
         </property>
         <property name="centerButtons">
          <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1" colspan="3">
-       <widget class="QLineEdit" name="le_producto"/>
-      </item>
-      <item row="3" column="1" colspan="3">
-       <widget class="QComboBox" name="cb_empresa">
-        <property name="editable">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1" colspan="3">
-       <widget class="QComboBox" name="cb_servicio">
-        <property name="editable">
-         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -160,6 +216,8 @@
   <tabstop>cb_empresa</tabstop>
   <tabstop>cb_iva</tabstop>
   <tabstop>le_importe</tabstop>
+  <tabstop>le_base</tabstop>
+  <tabstop>le_iva</tabstop>
  </tabstops>
  <resources/>
  <connections/>

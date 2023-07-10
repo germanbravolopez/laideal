@@ -14,6 +14,7 @@ ListaServicios::ListaServicios(QWidget *parent) :
             this, SLOT(on_actionAnadir_fila_triggered()));
     connect(ui->table_lista_servicios->action2, SIGNAL(triggered()),
             this, SLOT(on_actionEliminar_fila_triggered()));
+    resize_window_to_table();
 }
 
 ListaServicios::~ListaServicios()
@@ -34,6 +35,18 @@ void ListaServicios::populate_table()
         ui->table_lista_servicios->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
         ui->table_lista_servicios->setItemDelegateForColumn(1, new NumberFormatDelegate(this));
         ui->table_lista_servicios->setItemDelegateForColumn(2, new NumberFormatDelegate(this));
+    }
+}
+
+void ListaServicios::resize_window_to_table()
+{
+    // Set window size to minimun of size of the table
+    int size = 0;
+    for (int column = 0; column < model->columnCount(); column++) {
+        size += ui->table_lista_servicios->columnWidth(column);
+    }
+    if (this->width() < size + 40) {
+        this->resize(size + 40, this->height());
     }
 }
 

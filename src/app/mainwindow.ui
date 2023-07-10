@@ -628,6 +628,7 @@ prenda</string>
     <property name="title">
      <string>Archivo</string>
     </property>
+    <addaction name="actionModo_debug"/>
     <addaction name="actionCerrar"/>
    </widget>
    <widget class="QMenu" name="menuHerramientas">
@@ -665,15 +666,19 @@ prenda</string>
    <addaction name="menuHerramientas"/>
    <addaction name="menuVisualizar"/>
   </widget>
-  <action name="actionCerrar">
+  <action name="actionModo_debug">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="text">
-    <string>Cerrar</string>
+    <string>Modo debug</string>
    </property>
    <property name="toolTip">
-    <string>Cerrar aplicación</string>
+    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Configurar applicación en modo debug.
+Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
    </property>
    <property name="shortcut">
-    <string>Alt+C</string>
+    <string>Alt+D</string>
    </property>
   </action>
   <action name="actionRecibo">
@@ -719,7 +724,7 @@ prenda</string>
     <string>Generar contabilidad</string>
    </property>
    <property name="shortcut">
-    <string>Alt+C</string>
+    <string>Alt+G</string>
    </property>
   </action>
   <action name="actionIngresos">
@@ -808,6 +813,17 @@ prenda</string>
    </property>
    <property name="shortcut">
     <string>Alt+P, Alt+F</string>
+   </property>
+  </action>
+  <action name="actionCerrar">
+   <property name="text">
+    <string>Cerrar</string>
+   </property>
+   <property name="toolTip">
+    <string>Cerrar aplicación</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+C</string>
    </property>
   </action>
  </widget>

@@ -92,7 +92,6 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
         QComboBox *comBox = new QComboBox();
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
-        comBox->setStyleSheet("background-color: white");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
         // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
@@ -263,15 +262,16 @@ void MainWindow::check_client_data()
         bool client_found = false;
         for (int idx = 0; idx < ui->cb_client->count(); idx++) {
             QString client_in_cb = remove_special_char(ui->cb_client->itemText(idx).simplified().toLower());
-            if (currentClient == client_in_cb) client_found = true;
+            if (currentClient == client_in_cb)
+                client_found = true;
         }
         if (!client_found)
-            add_new_client(db, currentClient, ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
+            add_new_client(db, ui->cb_client->currentText(), ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
         else
 
             QMessageBox::information(this, "Listado de clientes",
                                   "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
-                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado. "
+                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado de clientes. "
                                   "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
                                   QMessageBox::Ok,
                                   QMessageBox::Ok);
@@ -360,7 +360,8 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
         if (validate_ticket()) {
             check_client_data();
             save_ticket();
-            print_recibo();
+            if (!debug)
+                print_recibo();
             reset_all_contents();
         }
     }
@@ -369,9 +370,9 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
     if (arg1 != "") {
-        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
-        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
-        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
+        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1, false));
+        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1, false));
+        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1, false));
     }
 }
 
@@ -549,4 +550,9 @@ void MainWindow::limpiar_base_de_datos(bool print)
                                  + QString::number(ingresos_cnt) + " en la tabla de ingresos.\n"
                                  + QString::number(prendas_cnt) + " en la tabla de lista de prendas.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void MainWindow::on_actionModo_debug_triggered(bool checked)
+{
+    debug = checked;
 }

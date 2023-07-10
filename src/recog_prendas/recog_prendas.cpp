@@ -219,7 +219,7 @@ void RecogPrendas::update_row_clicked_to_fields()
     // Update content from clicked row
     ui->le_nr_ticket->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
     ui->le_client->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_CLIENT)).toString());
-    ui->le_phone->setText(select_from_where_like(db, "movil", "clientes", "nombre", ui->le_client->text(), true));
+    ui->le_phone->setText(select_from_where_like(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
     ui->le_garm->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
     ui->le_qty->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
     ui->le_servic->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
@@ -254,8 +254,8 @@ void RecogPrendas::on_pb_search_clicked()
         if (ok) {
             if(ui->le_search->text().length() >= 9) {
                 // Phone number
-                QString client_from_tel_fijo = select_from_where_like(db, "nombre", "clientes", "tel_fijo", ui->le_search->text(), true);
-                QString client_from_movil = select_from_where_like(db, "nombre", "clientes", "movil", ui->le_search->text(), true);
+                QString client_from_tel_fijo = select_from_where_like(db, "nombre", "clientes", "tel_fijo", ui->le_search->text(), true, true);
+                QString client_from_movil = select_from_where_like(db, "nombre", "clientes", "movil", ui->le_search->text(), true, true);
                 if (!client_from_tel_fijo.isNull()) {
                     db.open();
                     sql_query_model->setQuery("SELECT * \

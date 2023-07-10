@@ -28,6 +28,8 @@ private slots:
     void save_factura();
 
     void on_buttonBox_clicked(QAbstractButton *button);
+    void on_le_importe_textEdited(const QString &arg1);
+    void on_cb_iva_currentTextChanged(const QString &arg1);
 
 private:
     Ui::Facturas *ui;
