@@ -31,6 +31,8 @@ void Facturas::reset_all_contents()
     ui->cb_empresa->setCurrentText("");
     ui->cb_iva->setCurrentText("");
     ui->le_importe->clear();
+    ui->le_base->clear();
+    ui->le_iva->clear();
 }
 
 void Facturas::populate_empresas()
@@ -84,12 +86,12 @@ void Facturas::save_factura()
     int id_max = read_max_value_in_column_from_table(db, "id", "gastos");
     db.open();
     QSqlQuery q;
-    q.prepare("INSERT INTO gastos (id, n_factura, servicio, producto, empresa, fecha, iva, importe, edit_lock) "
-              "VALUES (:id, :n_factura, :servicio, :producto, :empresa, :fecha, :iva, :importe, :edit_lock);");
+    q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe, edit_lock) "
+              "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe, :edit_lock);");
     q.bindValue(":id", QString::number(id_max + 1));
     q.bindValue(":n_factura", ui->le_fra->text());
     q.bindValue(":servicio", ui->cb_servicio->currentText());
-    q.bindValue(":producto", ui->le_producto->text());
+    q.bindValue(":descripcion", ui->le_producto->text());
     q.bindValue(":empresa", ui->cb_empresa->currentText());
     q.bindValue(":fecha", ui->de_fecha->date().toString("dd-MM-yyyy"));
     q.bindValue(":iva", ui->cb_iva->currentText());
@@ -116,4 +118,24 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
         QMessageBox::critical(this, "Error en formulario factura",
                               "Boton no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void Facturas::on_le_importe_textEdited(const QString &arg1)
+{
+    if (arg1.left(1) == "0"  || arg1.left(1) == "1" || arg1.left(1) == "2" || arg1.left(1) == "3"
+             || arg1.left(1) == "4" || arg1.left(1) == "5" || arg1.left(1) == "6"
+             || arg1.left(1) == "7" || arg1.left(1) == "8" || arg1.left(1) == "9") {
+        if (ui->cb_iva->currentText() != "") {
+            ui->le_base->setText(QString::number(arg1.toFloat() - (arg1.toFloat() * ui->cb_iva->currentText().toFloat() / 100), 'f', 2));
+            ui->le_iva->setText(QString::number(arg1.toFloat() * ui->cb_iva->currentText().toFloat() / 100, 'f', 2));
+        } else {
+            ui->le_base->setText(QString::number(arg1.toFloat(), 'f', 2));
+            ui->le_iva->setText(QString::number(0.0, 'f', 2));
+        }
+    }
+}
+
+void Facturas::on_cb_iva_currentTextChanged(const QString &arg1)
+{
+    on_le_importe_textEdited(ui->le_importe->text());
 }

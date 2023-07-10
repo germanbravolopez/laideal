@@ -89,7 +89,7 @@ QString GenListado::generate_html_table()
                         "<tr>"
                             "<th>&nbsp;N. Fra&nbsp;</th>"
                             "<th>&nbsp;Servicio&nbsp;</th>"
-                            "<th>&nbsp;Producto&nbsp;</th>"
+                            "<th>&nbsp;Descripción&nbsp;</th>"
                             "<th>&nbsp;Empresa&nbsp;</th>"
                             "<th>&nbsp;Fecha&nbsp;</th>"
                             "<th>&nbsp;IVA [€]&nbsp;</th>"
