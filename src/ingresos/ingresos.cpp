@@ -8,6 +8,7 @@ Ingresos::Ingresos(QWidget *parent) :
 {
     ui->setupUi(this);
     populate_table();
+    resize_window_to_table();
 }
 
 Ingresos::~Ingresos()
@@ -28,6 +29,18 @@ void Ingresos::populate_table()
         ui->table_ingresos->sortByColumn(TICKET_COLUMN_IDX, Qt::DescendingOrder);
         ui->table_ingresos->setItemDelegateForColumn(5, new NumberFormatDelegate(this));
         ui->statusBar->showMessage("Modo edición desactivado");
+    }
+}
+
+void Ingresos::resize_window_to_table()
+{
+    // Set window size to minimun of size of the table
+    int size = 0;
+    for (int column = 0; column < model->columnCount(); column++) {
+        size += ui->table_ingresos->columnWidth(column);
+    }
+    if (this->width() < size + 20) {
+        this->resize(size + 20, this->height());
     }
 }
 

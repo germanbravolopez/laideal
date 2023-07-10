@@ -24,6 +24,7 @@ public:
 
 private slots:
     void populate_table();
+    void resize_window_to_table();
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();

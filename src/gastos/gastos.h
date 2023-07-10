@@ -24,6 +24,7 @@ public:
 
 private slots:
     void populate_table();
+    void resize_window_to_table();
     void on_actionActualizar_triggered();
     void on_actionActivar_modo_edicion_triggered();
     void on_actionDesactivar_modo_edicion_triggered();

@@ -10,6 +10,7 @@ Gastos::Gastos(QWidget *parent) :
 {
     ui->setupUi(this);
     populate_table();
+    resize_window_to_table();
 }
 
 Gastos::~Gastos()
@@ -32,6 +33,18 @@ void Gastos::populate_table()
         ui->table_gastos->sortByColumn(C_FECHA_COLUMN_IDX, Qt::DescendingOrder);
         ui->table_gastos->setItemDelegateForColumn(7, new NumberFormatDelegate(this));
         ui->statusBar->showMessage("Modo edición desactivado");
+    }
+}
+
+void Gastos::resize_window_to_table()
+{
+    // Set window size to minimun of size of the table
+    int size = 0;
+    for (int column = 0; column < model->columnCount(); column++) {
+        size += ui->table_gastos->columnWidth(column);
+    }
+    if (this->width() < size + 20) {
+        this->resize(size + 20, this->height());
     }
 }
 

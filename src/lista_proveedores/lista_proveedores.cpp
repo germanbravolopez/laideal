@@ -13,6 +13,7 @@ ListaProveedores::ListaProveedores(QWidget *parent) :
             this, SLOT(on_actionAnadir_fila_triggered()));
     connect(ui->table_lista_proveedores->action2, SIGNAL(triggered()),
             this, SLOT(on_actionEliminar_fila_triggered()));
+    resize_window_to_table();
 }
 
 ListaProveedores::~ListaProveedores()
@@ -31,6 +32,18 @@ void ListaProveedores::populate_table()
         ui->table_lista_proveedores->setModel(model);
         ui->table_lista_proveedores->resizeColumnsToContents();
         ui->table_lista_proveedores->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
+    }
+}
+
+void ListaProveedores::resize_window_to_table()
+{
+    // Set window size to minimun of size of the table
+    int size = 0;
+    for (int column = 0; column < model->columnCount(); column++) {
+        size += ui->table_lista_proveedores->columnWidth(column);
+    }
+    if (this->width() < size + 20) {
+        this->resize(size + 20, this->height());
     }
 }
 
