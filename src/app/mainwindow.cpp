@@ -92,7 +92,6 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
         QComboBox *comBox = new QComboBox();
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
-        comBox->setStyleSheet("background-color: white");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
         // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
