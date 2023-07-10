@@ -143,7 +143,7 @@ void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
         // Extra information in case of complete invoice: address and DNI
         if (is_complete_invoice) {
             QString client_address;
-            client_address = search_item_from_client(db, "direccion", sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString());
+            client_address = search_item_from_client(db, "direccion", sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString(), false);
             if (client_address == "")
                 client_address = add_extra_info_to_invoice("Añadir dirección de facturación", "Dirección:");
             // Cut address string in case it is too long
@@ -354,7 +354,7 @@ void Imprimir::print_ticket()
 
 void Imprimir::on_bb_ok_cancel_accepted()
 {
-    if (le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true)) {
+    if (le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
         get_ticket_info();
         if (is_recibo || !is_recibo && check_any_item_paid()) {
             create_ticket_excel(true, false);

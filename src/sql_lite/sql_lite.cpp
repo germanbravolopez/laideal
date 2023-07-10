@@ -121,7 +121,8 @@ QString select_from_where_like(QSqlDatabase &db,
                                QString table,
                                QString column_to_search,
                                QString item_to_search,
-                               bool exact_match)
+                               bool exact_match,
+                               bool print_msg)
 {
     QString item_to_search_text;
     db.open();
@@ -133,12 +134,12 @@ QString select_from_where_like(QSqlDatabase &db,
     if (q.isSelect()) {
         if (q.first())
             item_to_search_text = q.value(0).toString();
-        else
+        else if (print_msg)
             QMessageBox::warning(nullptr, "Búsqueda vacía",
                                   "El elemento '" + item_to_search + "' no se ha encontrado en la base de datos para '" + column_to_search + "'.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
-    else
+    else if (print_msg)
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar select_from_where_like.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -149,9 +150,10 @@ QString select_from_where_like(QSqlDatabase &db,
 
 QString search_item_from_client(QSqlDatabase &db,
                                 QString item,
-                                QString client)
+                                QString client,
+                                bool print_msg)
 {
-    return select_from_where_like(db, item, "clientes", "nombre", client, false);
+    return select_from_where_like(db, item, "clientes", "nombre", client, false, print_msg);
 }
 
 bool update_item_to_client(QSqlDatabase &db,

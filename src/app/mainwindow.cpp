@@ -369,9 +369,9 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
     if (arg1 != "") {
-        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1));
-        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1));
-        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1));
+        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1, false));
+        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1, false));
+        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1, false));
     }
 }
 
