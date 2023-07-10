@@ -263,15 +263,16 @@ void MainWindow::check_client_data()
         bool client_found = false;
         for (int idx = 0; idx < ui->cb_client->count(); idx++) {
             QString client_in_cb = remove_special_char(ui->cb_client->itemText(idx).simplified().toLower());
-            if (currentClient == client_in_cb) client_found = true;
+            if (currentClient == client_in_cb)
+                client_found = true;
         }
         if (!client_found)
-            add_new_client(db, currentClient, ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
+            add_new_client(db, ui->cb_client->currentText(), ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
         else
 
             QMessageBox::information(this, "Listado de clientes",
                                   "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
-                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado. "
+                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado de clientes. "
                                   "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
                                   QMessageBox::Ok,
                                   QMessageBox::Ok);
