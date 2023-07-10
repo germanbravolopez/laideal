@@ -43,8 +43,8 @@ void Gastos::resize_window_to_table()
     for (int column = 0; column < model->columnCount(); column++) {
         size += ui->table_gastos->columnWidth(column);
     }
-    if (this->width() < size + 20) {
-        this->resize(size + 20, this->height());
+    if (this->width() < size + 40) {
+        this->resize(size + 40, this->height());
     }
 }
 
