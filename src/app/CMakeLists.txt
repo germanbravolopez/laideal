@@ -13,10 +13,7 @@ target_link_libraries(laideal
     gastos
     ingresos
     imprimir
-    lista_prendas
-    lista_clientes
-    lista_proveedores
-    lista_servicios
+    Listado
     recog_prendas
     sql_lite
     TableView

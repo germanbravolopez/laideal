@@ -3,10 +3,7 @@
 #include "sql_lite.h"
 #include "ingresos.h"
 #include "gastos.h"
-#include "lista_prendas.h"
-#include "lista_clientes.h"
-#include "lista_proveedores.h"
-#include "lista_servicios.h"
+#include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
 #include "contabilidad.h"
@@ -434,11 +431,18 @@ void MainWindow::on_populate_prendas()
 
 void MainWindow::on_actionListado_de_prendas_triggered()
 {
-    ListaPrendas *ui_prend;
-    ui_prend = new ListaPrendas(this);
-    ui_prend->db = db;
-    connect(ui_prend, &ListaPrendas::populate_prendas, this, &MainWindow::on_populate_prendas);
-    ui_prend->show();
+    QString title = "Listado de prendas";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "prendas";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_populate_clientes()
@@ -448,27 +452,50 @@ void MainWindow::on_populate_clientes()
 
 void MainWindow::on_actionListado_de_clientes_triggered()
 {
-    ListaClientes *ui_clien;
-    ui_clien = new ListaClientes(this);
-    connect(ui_clien, &ListaClientes::populate_clientes, this, &MainWindow::on_populate_clientes);
-    ui_clien->db = db;
-    ui_clien->show();
+    QString title = "Listado de clientes";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "clientes";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionListado_de_proveedores_triggered()
 {
-    ListaProveedores *ui_prove;
-    ui_prove = new ListaProveedores(this);
-    ui_prove->db = db;
-    ui_prove->show();
+    QString title = "Listado de proveedores";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "proveedores";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionListado_de_servicios_triggered()
 {
-    ListaServicios *ui_servicios;
-    ui_servicios = new ListaServicios(this);
-    ui_servicios->db = db;
-    ui_servicios->show();
+    QString title = "Listado de servicios";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "servicios";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionRecogida_de_prendas_triggered()
