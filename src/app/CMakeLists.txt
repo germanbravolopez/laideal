@@ -16,6 +16,7 @@ target_link_libraries(laideal
     Listado
     recog_prendas
     sql_lite
+    MySortFilterProxyModel
     TableView
     contabilidad
     facturas
