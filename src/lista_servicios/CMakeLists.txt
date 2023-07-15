@@ -9,6 +9,5 @@ target_link_libraries(lista_servicios
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     TableView
-    NumberFormatDelegate
 )
 target_include_directories(lista_servicios INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

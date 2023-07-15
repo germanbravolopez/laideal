@@ -2,7 +2,6 @@
 #include "ui_lista_servicios.h"
 #include "tableview.h"
 #include "sql_lite.h"
-#include "numberformatdelegate.h"
 
 ListaServicios::ListaServicios(QWidget *parent) :
     QMainWindow(parent),
@@ -33,8 +32,6 @@ void ListaServicios::populate_table()
         ui->table_lista_servicios->setModel(model);
         ui->table_lista_servicios->resizeColumnsToContents();
         ui->table_lista_servicios->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
-        ui->table_lista_servicios->setItemDelegateForColumn(1, new NumberFormatDelegate(this));
-        ui->table_lista_servicios->setItemDelegateForColumn(2, new NumberFormatDelegate(this));
     }
 }
 
