@@ -9,5 +9,7 @@ target_link_libraries(Listado
     sql_lite
     TableView
     NumberFormatDelegate
+    FilterWidget
+    MySortFilterProxyModel
 )
 target_include_directories(Listado INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

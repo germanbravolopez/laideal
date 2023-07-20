@@ -11,7 +11,11 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QHeaderView>
-#include <tableview.h>
+#include <QLineEdit>
+
+#include "tableview.h"
+#include "filterwidget.h"
+#include "mysortfilterproxymodel.h"
 
 #define NOMBRE_COLUMN_IDX 0
 
@@ -25,6 +29,9 @@ public:
     QAction *actionEliminar_fila;
     QWidget *centralwidget;
     QGridLayout *gridLayout;
+    QHBoxLayout *horizontalLayout;
+    QLabel *lbl_search;
+    FilterWidget *filter_widget;
     QLabel *lbl_title;
     TableView *table_listado;
     QMenuBar *menubar;
@@ -39,9 +46,11 @@ public:
     QSqlDatabase db;
     QString table_name;
     QSqlTableModel *model;
+    MySortFilterProxyModel *proxyModel;
 
 private slots:
     void resize_window_to_table();
+    void text_filter_changed();
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
