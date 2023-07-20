@@ -404,8 +404,11 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         float total_price = 0.0;
         for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
             QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
-            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
-                total_price = total_price + price_item->text().toFloat();
+            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0) {
+                float price_value = price_item->text().toFloat();
+                price_item->setText(QString::number(price_value, 'f', 2));
+                total_price = total_price + price_value;
+            }
         }
         ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
     }
