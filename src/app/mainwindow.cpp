@@ -276,7 +276,7 @@ void MainWindow::check_client_data()
 
 }
 
-void MainWindow::save_ticket()
+bool MainWindow::save_ticket()
 {
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
@@ -315,6 +315,11 @@ void MainWindow::save_ticket()
             db.close();
         }
     }
+    // return boolean of payed ticket
+    if (ui->pb_payment->text() == "SI")
+        return true;
+    else
+        return false;
 }
 
 void MainWindow::print_recibo()
@@ -369,12 +374,12 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validate_ticket()) {
             check_client_data();
-            save_ticket();
+            bool payed = save_ticket();
+            reset_all_contents();
             if (!debug)
                 print_recibo();
-            if (!debug && ui->pb_payment->text() == "SI")
+            if (!debug && payed)
                 print_fra();
-            reset_all_contents();
         }
     }
 }
