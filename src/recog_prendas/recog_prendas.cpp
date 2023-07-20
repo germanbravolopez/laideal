@@ -413,7 +413,7 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     is_cell_clicked     = true;
 }
 
-void RecogPrendas::on_le_obsv_returnPressed()
+void RecogPrendas::on_le_obsv_editingFinished()
 {
     if (is_cell_clicked)
         update_db(OBSV);
