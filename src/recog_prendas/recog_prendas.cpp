@@ -1,6 +1,7 @@
 #include "recog_prendas.h"
 #include "ui_recog_prendas.h"
 #include "sql_lite.h"
+#include "imprimir.h"
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -18,8 +19,8 @@ RecogPrendas::~RecogPrendas()
 void RecogPrendas::initial_settings()
 {
     reset_all_contents();
-    ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
-    ui->pb_state->setStyleSheet("background-color: red; font-size: 20px");
+    ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
+    ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
     ui->le_search->setFocus();
     ui->tableView->verticalHeader()->setVisible(false);
 }
@@ -368,13 +369,13 @@ void RecogPrendas::on_pb_payment_toggled(bool checked)
 {
     if (checked) {
         ui->pb_payment->setText("SI");
-        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
+        ui->pb_payment->setStyleSheet("background-color: green; font-size: 18px");
         if (is_cell_clicked)
             update_db(PAY_YES);
     }
     else {
         ui->pb_payment->setText("NO");
-        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+        ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
         if (is_cell_clicked)
             update_db(PAY_NO);
     }
@@ -384,13 +385,13 @@ void RecogPrendas::on_pb_state_toggled(bool checked)
 {
     if (checked) {
         ui->pb_state->setText("Recogido");
-        ui->pb_state->setStyleSheet("background-color: green; font-size: 20px");
+        ui->pb_state->setStyleSheet("background-color: green; font-size: 18px");
         if (is_cell_clicked)
             update_db(PKU_YES);
     }
     else {
         ui->pb_state->setText("En tienda");
-        ui->pb_state->setStyleSheet("background-color: red; font-size: 20px");
+        ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
         if (is_cell_clicked)
             update_db(PKU_NO);
     }
@@ -450,8 +451,15 @@ void RecogPrendas::on_pb_pku_all_clicked()
         reset_all_contents();
 }
 
-void RecogPrendas::on_pb_pay_pku_all_clicked()
+void RecogPrendas::on_pb_print_clicked()
 {
-    on_pb_pay_all_clicked();
-    on_pb_pku_all_clicked();
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+    ui_impr->get_ticket_info();
+    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
+    ui_impr->print_ticket();
 }

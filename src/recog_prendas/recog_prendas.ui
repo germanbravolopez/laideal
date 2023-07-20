@@ -30,19 +30,18 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout_4">
     <item row="2" column="5" rowspan="2">
-     <widget class="QPushButton" name="pb_pay_pku_all">
+     <widget class="QPushButton" name="pb_print">
       <property name="font">
        <font>
         <pointsize>12</pointsize>
        </font>
       </property>
       <property name="toolTip">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Marcar todas las prendas de la búsqueda como pagadas y recogidas en las fecha indicadas por &amp;quot;Fecha Pago&amp;quot; y &amp;quot;Fecha Recogida&amp;quot;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string/>
       </property>
       <property name="text">
-       <string>Pagar
-y
-recoger </string>
+       <string>Imprimir
+factura</string>
       </property>
       <property name="checkable">
        <bool>false</bool>
@@ -801,7 +800,7 @@ recoger </string>
   <tabstop>pb_state</tabstop>
   <tabstop>pb_pay_all</tabstop>
   <tabstop>pb_pku_all</tabstop>
-  <tabstop>pb_pay_pku_all</tabstop>
+  <tabstop>pb_print</tabstop>
   <tabstop>tableView</tabstop>
  </tabstops>
  <resources/>

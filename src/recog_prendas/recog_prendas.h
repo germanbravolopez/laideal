@@ -63,7 +63,7 @@ private slots:
     void on_le_size_editingFinished();
     void on_pb_pay_all_clicked();
     void on_pb_pku_all_clicked();
-    void on_pb_pay_pku_all_clicked();
+    void on_pb_print_clicked();
 
 private:
     Ui::RecogPrendas *ui;
