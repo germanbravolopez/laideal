@@ -50,6 +50,7 @@ private slots:
     void check_client_data();
     void save_ticket();
     void print_recibo();
+    void print_fra();
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
