@@ -375,11 +375,11 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
         if (validate_ticket()) {
             check_client_data();
             bool payed = save_ticket();
-            reset_all_contents();
             if (!debug)
                 print_recibo();
             if (!debug && payed)
                 print_fra();
+            reset_all_contents();
         }
     }
 }

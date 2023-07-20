@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1243</width>
-    <height>726</height>
+    <width>1027</width>
+    <height>454</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -456,7 +456,7 @@ factura</string>
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>400</height>
+        <height>100</height>
        </size>
       </property>
       <property name="font">

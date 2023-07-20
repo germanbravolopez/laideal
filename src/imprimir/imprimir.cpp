@@ -193,12 +193,12 @@ void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
                 if (size != "" && size != "0.00") {
                     garment_name.append(" - " + size);
                 }
-                // Complete "Alfombra" getting also the observation value (number)
-                QString left_side = garment_name.left(8);
-                QString obsv = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString();
-                if (left_side == "Alfombra" && obsv != "") {
-                    garment_name.append(" - " + obsv);
-                }
+                //// Complete "Alfombra" getting also the observation value (number)
+                //QString left_side = garment_name.left(8);
+                //QString obsv = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString();
+                //if (left_side == "Alfombra" && obsv != "") {
+                //    garment_name.append(" - " + obsv);
+                //}
                 // Content of each garment in the ticket
                 excel.write(row, 1, sql_query_model->data(sql_query_model->index(row_cnt, TABLE_QUANTITY)).toString(), format_uds_cost);
                 excel.write(row, 2, garment_name, format_garm);
