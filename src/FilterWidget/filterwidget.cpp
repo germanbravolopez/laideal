@@ -16,35 +16,33 @@ FilterWidget::FilterWidget(QWidget *parent)
     connect(this, &QLineEdit::textChanged, this, &FilterWidget::filterChanged);
 
     QMenu *menu = new QMenu(this);
-    m_caseSensitivityAction = menu->addAction(tr("Case Sensitive"));
+    m_caseSensitivityAction = menu->addAction(tr("Distinguir Mayúsculas y Minúsculas"));
     m_caseSensitivityAction->setCheckable(true);
     connect(m_caseSensitivityAction, &QAction::toggled, this, &FilterWidget::filterChanged);
 
     menu->addSeparator();
     m_patternGroup->setExclusive(true);
-    QAction *patternAction = menu->addAction("Regular Expression");
+    QAction *patternAction = menu->addAction("Expresión Regular");
     patternAction->setCheckable(true);
     patternAction->setChecked(true);
     patternAction->setData(QVariant(int(RegularExpression)));
     m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction("Wildcard");
+    patternAction = menu->addAction("Comodín");
     patternAction->setCheckable(true);
     patternAction->setData(QVariant(int(Wildcard)));
     m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction("Fixed String");
+    patternAction = menu->addAction("Texto Fijo");
     patternAction->setData(QVariant(int(FixedString)));
     patternAction->setCheckable(true);
     m_patternGroup->addAction(patternAction);
     connect(m_patternGroup, &QActionGroup::triggered, this, &FilterWidget::filterChanged);
 
-    const QIcon icon = QIcon(QPixmap(":/images/find.png"));
     QToolButton *optionsButton = new QToolButton;
 #ifndef QT_NO_CURSOR
     optionsButton->setCursor(Qt::ArrowCursor);
 #endif
     optionsButton->setFocusPolicy(Qt::NoFocus);
     optionsButton->setStyleSheet("* { border: none; }");
-    optionsButton->setIcon(icon);
     optionsButton->setMenu(menu);
     optionsButton->setPopupMode(QToolButton::InstantPopup);
 
