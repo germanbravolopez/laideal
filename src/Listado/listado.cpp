@@ -133,6 +133,7 @@ void Listado::populate_table()
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
         table_listado->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
         if (table_name == "prendas") {
             table_listado->setItemDelegateForColumn(1, new NumberFormatDelegate(this));

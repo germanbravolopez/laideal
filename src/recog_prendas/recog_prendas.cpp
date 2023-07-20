@@ -321,24 +321,26 @@ void RecogPrendas::on_pb_search_clicked()
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
         // Complete model and set to the view
-        sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("n_recibo"));
-        sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("cliente"));
-        sql_query_model->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("fecha_recepcion"));
-        sql_query_model->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("fecha_pago"));
-        sql_query_model->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("fecha_recogida"));
-        sql_query_model->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("importe"));
-        sql_query_model->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("pagado"));
-        sql_query_model->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("estado"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("cantidad"));
-        sql_query_model->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("prenda"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("size"));
-        sql_query_model->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("servicio"));
-        sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("observaciones"));
-        sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("edit_lock"));
+        sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("Nº"));
+        sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("Cliente"));
+        sql_query_model->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("Recepción"));
+        sql_query_model->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("Pago"));
+        sql_query_model->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("Recogida"));
+        sql_query_model->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("Importe"));
+        sql_query_model->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("Pagado"));
+        sql_query_model->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("Estado"));
+        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Cant."));
+        sql_query_model->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("Prenda"));
+        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Tam."));
+        sql_query_model->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("Serv."));
+        sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
+        sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         ui->tableView->setModel(sql_query_model);
         ui->tableView->resizeColumnsToContents();
+        ui->tableView->resizeRowsToContents();
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
+        ui->tableView->setColumnHidden(TABLE_CLIENT, true);
         // Fill total_price if enabled
         if (total_price_active) {
             float total_price = 0.0;
