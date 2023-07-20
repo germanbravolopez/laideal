@@ -59,11 +59,11 @@ private slots:
     void on_pb_payment_toggled(bool checked);
     void on_pb_state_toggled(bool checked);
     void on_tableView_clicked(const QModelIndex &index);
-    void on_le_obsv_returnPressed();
+    void on_le_obsv_editingFinished();
     void on_le_size_editingFinished();
     void on_pb_pay_all_clicked();
     void on_pb_pku_all_clicked();
-    void on_pb_pay_pku_all_clicked();
+    void on_pb_print_clicked();
 
 private:
     Ui::RecogPrendas *ui;

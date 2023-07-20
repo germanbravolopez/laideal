@@ -1,6 +1,4 @@
 add_library(gastos STATIC
-    mysortfilterproxymodel.h
-    mysortfilterproxymodel.cpp
     genlistado.ui
     genlistado.h
     genlistado.cpp
@@ -15,5 +13,6 @@ target_link_libraries(gastos
     sql_lite
     Qt${QT_VERSION_MAJOR}::PrintSupport
     NumberFormatDelegate
+    MySortFilterProxyModel
 )
 target_include_directories(gastos INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,6 +1,8 @@
 #include "recog_prendas.h"
 #include "ui_recog_prendas.h"
 #include "sql_lite.h"
+#include "imprimir.h"
+#include "backgroundbrushdelegate.h"
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -18,8 +20,8 @@ RecogPrendas::~RecogPrendas()
 void RecogPrendas::initial_settings()
 {
     reset_all_contents();
-    ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
-    ui->pb_state->setStyleSheet("background-color: red; font-size: 20px");
+    ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
+    ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
     ui->le_search->setFocus();
     ui->tableView->verticalHeader()->setVisible(false);
 }
@@ -321,24 +323,28 @@ void RecogPrendas::on_pb_search_clicked()
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
         // Complete model and set to the view
-        sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("n_recibo"));
-        sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("cliente"));
-        sql_query_model->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("fecha_recepcion"));
-        sql_query_model->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("fecha_pago"));
-        sql_query_model->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("fecha_recogida"));
-        sql_query_model->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("importe"));
-        sql_query_model->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("pagado"));
-        sql_query_model->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("estado"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("cantidad"));
-        sql_query_model->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("prenda"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("size"));
-        sql_query_model->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("servicio"));
-        sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("observaciones"));
-        sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("edit_lock"));
+        sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("Nº"));
+        sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("Cliente"));
+        sql_query_model->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("Recepción"));
+        sql_query_model->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("Pago"));
+        sql_query_model->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("Recogida"));
+        sql_query_model->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("Importe"));
+        sql_query_model->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("Pagado"));
+        sql_query_model->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("Estado"));
+        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Cant."));
+        sql_query_model->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("Prenda"));
+        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Tam."));
+        sql_query_model->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("Serv."));
+        sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
+        sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         ui->tableView->setModel(sql_query_model);
         ui->tableView->resizeColumnsToContents();
+        ui->tableView->resizeRowsToContents();
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
+        ui->tableView->setColumnHidden(TABLE_CLIENT, true);
+        ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new BackgroundBrushDelegate(TABLE_IS_PAYED, ui->tableView));
+        ui->tableView->setItemDelegateForColumn(TABLE_STATE, new BackgroundBrushDelegate(TABLE_STATE, ui->tableView));
         // Fill total_price if enabled
         if (total_price_active) {
             float total_price = 0.0;
@@ -366,13 +372,13 @@ void RecogPrendas::on_pb_payment_toggled(bool checked)
 {
     if (checked) {
         ui->pb_payment->setText("SI");
-        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
+        ui->pb_payment->setStyleSheet("background-color: green; font-size: 18px");
         if (is_cell_clicked)
             update_db(PAY_YES);
     }
     else {
         ui->pb_payment->setText("NO");
-        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+        ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
         if (is_cell_clicked)
             update_db(PAY_NO);
     }
@@ -382,13 +388,13 @@ void RecogPrendas::on_pb_state_toggled(bool checked)
 {
     if (checked) {
         ui->pb_state->setText("Recogido");
-        ui->pb_state->setStyleSheet("background-color: green; font-size: 20px");
+        ui->pb_state->setStyleSheet("background-color: green; font-size: 18px");
         if (is_cell_clicked)
             update_db(PKU_YES);
     }
     else {
         ui->pb_state->setText("En tienda");
-        ui->pb_state->setStyleSheet("background-color: red; font-size: 20px");
+        ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
         if (is_cell_clicked)
             update_db(PKU_NO);
     }
@@ -407,7 +413,7 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     is_cell_clicked     = true;
 }
 
-void RecogPrendas::on_le_obsv_returnPressed()
+void RecogPrendas::on_le_obsv_editingFinished()
 {
     if (is_cell_clicked)
         update_db(OBSV);
@@ -448,8 +454,15 @@ void RecogPrendas::on_pb_pku_all_clicked()
         reset_all_contents();
 }
 
-void RecogPrendas::on_pb_pay_pku_all_clicked()
+void RecogPrendas::on_pb_print_clicked()
 {
-    on_pb_pay_all_clicked();
-    on_pb_pku_all_clicked();
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+    ui_impr->get_ticket_info();
+    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
+    ui_impr->print_ticket();
 }

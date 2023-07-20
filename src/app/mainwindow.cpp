@@ -3,10 +3,7 @@
 #include "sql_lite.h"
 #include "ingresos.h"
 #include "gastos.h"
-#include "lista_prendas.h"
-#include "lista_clientes.h"
-#include "lista_proveedores.h"
-#include "lista_servicios.h"
+#include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
 #include "contabilidad.h"
@@ -279,7 +276,7 @@ void MainWindow::check_client_data()
 
 }
 
-void MainWindow::save_ticket()
+bool MainWindow::save_ticket()
 {
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
@@ -318,6 +315,11 @@ void MainWindow::save_ticket()
             db.close();
         }
     }
+    // return boolean of payed ticket
+    if (ui->pb_payment->text() == "SI")
+        return true;
+    else
+        return false;
 }
 
 void MainWindow::print_recibo()
@@ -331,6 +333,19 @@ void MainWindow::print_recibo()
     ui_impr->get_ticket_info();
     ui_impr->create_ticket_excel(true, ui->pb_payment->isChecked());
     ui_impr->print_ticket();
+    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
+    ui_impr->print_ticket();
+}
+
+void MainWindow::print_fra()
+{
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->is_recibo = false;
+    ui_impr->is_complete_invoice = false;
+    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+    ui_impr->get_ticket_info();
     ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
     ui_impr->print_ticket();
 }
@@ -359,9 +374,11 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validate_ticket()) {
             check_client_data();
-            save_ticket();
+            bool payed = save_ticket();
             if (!debug)
                 print_recibo();
+            if (!debug && payed)
+                print_fra();
             reset_all_contents();
         }
     }
@@ -387,8 +404,11 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         float total_price = 0.0;
         for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
             QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
-            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0)
-                total_price = total_price + price_item->text().toFloat();
+            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0) {
+                float price_value = price_item->text().toFloat();
+                price_item->setText(QString::number(price_value, 'f', 2));
+                total_price = total_price + price_value;
+            }
         }
         ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
     }
@@ -434,11 +454,18 @@ void MainWindow::on_populate_prendas()
 
 void MainWindow::on_actionListado_de_prendas_triggered()
 {
-    ListaPrendas *ui_prend;
-    ui_prend = new ListaPrendas(this);
-    ui_prend->db = db;
-    connect(ui_prend, &ListaPrendas::populate_prendas, this, &MainWindow::on_populate_prendas);
-    ui_prend->show();
+    QString title = "Listado de prendas";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "prendas";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_populate_clientes()
@@ -448,27 +475,50 @@ void MainWindow::on_populate_clientes()
 
 void MainWindow::on_actionListado_de_clientes_triggered()
 {
-    ListaClientes *ui_clien;
-    ui_clien = new ListaClientes(this);
-    connect(ui_clien, &ListaClientes::populate_clientes, this, &MainWindow::on_populate_clientes);
-    ui_clien->db = db;
-    ui_clien->show();
+    QString title = "Listado de clientes";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "clientes";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionListado_de_proveedores_triggered()
 {
-    ListaProveedores *ui_prove;
-    ui_prove = new ListaProveedores(this);
-    ui_prove->db = db;
-    ui_prove->show();
+    QString title = "Listado de proveedores";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "proveedores";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionListado_de_servicios_triggered()
 {
-    ListaServicios *ui_servicios;
-    ui_servicios = new ListaServicios(this);
-    ui_servicios->db = db;
-    ui_servicios->show();
+    QString title = "Listado de servicios";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "servicios";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionRecogida_de_prendas_triggered()
@@ -476,6 +526,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     RecogPrendas *ui_recog;
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
+    //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
 }
 

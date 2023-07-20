@@ -8,5 +8,6 @@ target_link_libraries(ingresos
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     NumberFormatDelegate
+    BackgroundBrushDelegate
 )
 target_include_directories(ingresos INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -5,7 +5,10 @@
 #include <QSqlDatabase>
 #include <QSqlTableModel>
 
-#define TICKET_COLUMN_IDX 0
+#define COLUMN_IDX_TICKET  0
+#define COLUMN_IDX_IMPORTE 5
+#define COLUMN_IDX_PAYED   6
+#define COLUMN_IDX_STATE   7
 
 namespace Ui {
 class Ingresos;

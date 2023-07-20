@@ -181,19 +181,24 @@ void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
         // Configure format for each column of garments table
         QXlsx::Format format_uds_cost, format_garm;
         format_uds_cost.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+        format_uds_cost.setVerticalAlignment(QXlsx::Format::AlignTop);
         format_garm.setTextWrap(true);
         // Add garments
         float ticket_total_f = 0.0;
         for (int row_cnt = 0; row_cnt < sql_query_model->rowCount(); row_cnt++) {
             if (is_recibo || !is_recibo && check_ticket_paid(row_cnt)) {
-                // Complete "alfombra" getting also the obsvation value (number)
-                QString garment_name;
-                QString left_side = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString().left(8);
-                if (left_side == "Alfombra") {
-                    garment_name = "Alfombra - ";
-                    garment_name.append(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString());
-                } else
-                    garment_name = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString();
+                QString garment_name = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString();
+                // Complete garment with size info
+                QString size = QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_SIZE)).toFloat(), 'f', 2);
+                if (size != "" && size != "0.00") {
+                    garment_name.append(" - " + size);
+                }
+                //// Complete "Alfombra" getting also the observation value (number)
+                //QString left_side = garment_name.left(8);
+                //QString obsv = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString();
+                //if (left_side == "Alfombra" && obsv != "") {
+                //    garment_name.append(" - " + obsv);
+                //}
                 // Content of each garment in the ticket
                 excel.write(row, 1, sql_query_model->data(sql_query_model->index(row_cnt, TABLE_QUANTITY)).toString(), format_uds_cost);
                 excel.write(row, 2, garment_name, format_garm);
