@@ -1,7 +1,7 @@
 #include "ingresos.h"
 #include "ui_ingresos.h"
 #include "numberformatdelegate.h"
-#include "backgroundbrushdelegate.h"
+#include "textcolordelegate.h"
 
 Ingresos::Ingresos(QWidget *parent) :
     QMainWindow(parent),
@@ -30,8 +30,8 @@ void Ingresos::populate_table()
         ui->table_ingresos->resizeRowsToContents();
         ui->table_ingresos->sortByColumn(COLUMN_IDX_TICKET, Qt::DescendingOrder);
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_IMPORTE, new NumberFormatDelegate(this));
-        ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_PAYED, new BackgroundBrushDelegate(COLUMN_IDX_PAYED, ui->table_ingresos));
-        ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_STATE, new BackgroundBrushDelegate(COLUMN_IDX_STATE, ui->table_ingresos));
+        ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_PAYED, new TextColorDelegate(ui->table_ingresos, this));
+        ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_STATE, new TextColorDelegate(ui->table_ingresos, this));
         ui->statusBar->showMessage("Modo edición desactivado");
     }
 }

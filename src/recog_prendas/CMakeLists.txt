@@ -9,6 +9,6 @@ target_link_libraries(recog_prendas
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     imprimir
-    BackgroundBrushDelegate
+    TextColorDelegate
 )
 target_include_directories(recog_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
