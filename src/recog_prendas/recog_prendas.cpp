@@ -2,7 +2,7 @@
 #include "ui_recog_prendas.h"
 #include "sql_lite.h"
 #include "imprimir.h"
-#include "backgroundbrushdelegate.h"
+#include "textcolordelegate.h"
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -343,8 +343,8 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->resizeRowsToContents();
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
         ui->tableView->setColumnHidden(TABLE_CLIENT, true);
-        ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new BackgroundBrushDelegate(TABLE_IS_PAYED, ui->tableView));
-        ui->tableView->setItemDelegateForColumn(TABLE_STATE, new BackgroundBrushDelegate(TABLE_STATE, ui->tableView));
+        ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
+        ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
         // Fill total_price if enabled
         if (total_price_active) {
             float total_price = 0.0;
