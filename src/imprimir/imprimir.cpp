@@ -222,8 +222,8 @@ void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
         }
         // Calculate total price and IVA
         QString ticket_total = QString::number(ticket_total_f, 'f', 2);
-        QString iva = QString::number(ticket_total_f * 0.21, 'f', 2);
-        QString base_imponible = QString::number(ticket_total_f - (ticket_total_f * 0.21), 'f', 2);
+        QString base_imponible = QString::number(ticket_total_f / 1.21, 'f', 2);
+        QString iva = QString::number(ticket_total_f - base_imponible.toFloat(), 'f', 2);
         // Add totals
         QXlsx::Format format_totals;
         format_totals.setFontBold(true);
