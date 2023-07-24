@@ -109,10 +109,11 @@ QString GenListado::generate_html_table()
             // calculate iva and base
             importe = QString::number(model->index(row, 7).data().toFloat(), 'f', 2);
             if (model->index(row, 6).data().toString() == "21" || model->index(row, 6).data().toString() == "10")
-                iva = QString::number(model->index(row, 6).data().toFloat() * importe.toFloat() / 100, 'f', 2);
+                base = QString::number(importe.toFloat() / (1 + (model->index(row, 6).data().toFloat() / 100)), 'f', 2);
             else
-                iva = QString::number(0.0, 'f', 2);
-            base = QString::number(importe.toFloat() - iva.toFloat(), 'f', 2);
+                base = QString::number(importe.toFloat(), 'f', 2);
+            iva = QString::number(importe.toFloat() - base.toFloat(), 'f', 2);
+
             // generate new row if group per clients
             if (ui->cb_agrupar->currentText() == C_PROVEEDORES) {
                 client = model->index(row, 4).data().toString();
