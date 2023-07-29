@@ -74,6 +74,7 @@ private slots:
     void on_actionFactura_triggered();
     void on_actionFactura_completa_triggered();
     void on_actionGenerar_contabilidad_triggered();
+    void on_actionRevertir_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
     void limpiar_base_de_datos(bool print);

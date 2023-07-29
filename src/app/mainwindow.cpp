@@ -571,6 +571,17 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
     ui_contabilidad->show();
 }
 
+void MainWindow::on_actionRevertir_contabilidad_triggered()
+{
+    Contabilidad *ui_rev_cont;
+    ui_rev_cont = new Contabilidad(this);
+    ui_rev_cont->db = db;
+    ui_rev_cont->setWindowTitle("Revertir Contabilidad");
+    ui_rev_cont-> revertir_on = true;
+    ui_rev_cont-> reset_all_contents();
+    ui_rev_cont->show();
+}
+
 void MainWindow::on_actionFormulario_facturas_triggered()
 {
     Facturas *ui_facturas;

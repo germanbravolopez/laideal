@@ -25,6 +25,7 @@ void Contabilidad::initial_settings()
 
 void Contabilidad::reset_all_contents()
 {
+    ui->cb_config->setEnabled(!revertir_on);
     ui->cb_config->setCurrentText(C_TRIMESTRAL);
     ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
@@ -36,7 +37,8 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         switch (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value())) {
         case 0:
             // contabilidad not done
-            generate_contabilidad();
+            if (!revertir_on)
+                generate_contabilidad();
             lock_data();
             break;
         case 1:
@@ -44,7 +46,8 @@ void Contabilidad::on_bb_ok_cancel_accepted()
             qDebug() << "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
                         + " para el año " + QString::number(ui->sb_year->value())
                         + " ya se ha realizado";
-            generate_contabilidad();
+            if (!revertir_on)
+                generate_contabilidad();
             lock_data();
             break;
         default:
@@ -209,27 +212,35 @@ void Contabilidad::lock_data()
 {
     switch (ui->sb_trim->value()) {
     case 1:
-        update_lock_in_ingresos(db, 1, 1, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 2, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 3, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 1, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 2, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 3, ui->sb_year->value());
         break;
     case 2:
-        update_lock_in_ingresos(db, 1, 4, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 5, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 6, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 4, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 5, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 6, ui->sb_year->value());
         break;
     case 3:
-        update_lock_in_ingresos(db, 1, 7, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 8, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 9, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 7, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 8, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 9, ui->sb_year->value());
         break;
     case 4:
-        update_lock_in_ingresos(db, 1, 10, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 11, ui->sb_year->value());
-        update_lock_in_ingresos(db, 1, 12, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 10, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 11, ui->sb_year->value());
+        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 12, ui->sb_year->value());
         break;
     default:
         break;
+    }
+    if (revertir_on) {
+        QMessageBox::information(this, "Revertir Contabilidad",
+                                 "Contabilidad revertida con éxito para el trimestre "
+                                 + ui->sb_trim->text() +
+                                 " del año "
+                                 + ui->sb_year->text(),
+                                 QMessageBox::Ok, QMessageBox::Ok);
     }
 }
 

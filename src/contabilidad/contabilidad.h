@@ -24,10 +24,11 @@ public:
     explicit Contabilidad(QWidget *parent = nullptr);
     ~Contabilidad();
     QSqlDatabase db;
+    bool revertir_on = false;
+    void reset_all_contents();
 
 private slots:
     void initial_settings();
-    void reset_all_contents();
 
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
