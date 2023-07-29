@@ -56,7 +56,7 @@ QString GenListado::generate_table_with_specific_conditions()
 {
     // agrupar por proveedores if selected
     if (ui->cb_agrupar->currentText() == C_PROVEEDORES)
-        model->sort(C_CLIENT_COLUMN_IDX, Qt::AscendingOrder);
+        model->sort(GASTOS_IDX_CLIENT, Qt::AscendingOrder);
     return generate_html_table();
 }
 
@@ -182,7 +182,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
     bool print_current_row_date = false;
     if (!ui->checkb_allys->isChecked()) {
         // print only selected years
-        if (ui->cb_fechas->currentText() == model->index(row, C_FECHA_COLUMN_IDX).data().toString().mid(6, 4))
+        if (ui->cb_fechas->currentText() == model->index(row, GASTOS_IDX_FECHA).data().toString().mid(6, 4))
             print_current_row_date = true;
     }
     else // print all years
@@ -191,7 +191,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
     bool print_current_row_cont = false;
     if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR) {
         // print only closed accountings
-        if (model->index(row, C_CONTAB_COLUMN_IDX).data().toBool())
+        if (model->index(row, GASTOS_IDX_CONTAB).data().toBool())
             print_current_row_cont = true;
     }
     else // print all types of invoices

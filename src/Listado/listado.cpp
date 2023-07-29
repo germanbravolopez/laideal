@@ -1,5 +1,6 @@
 #include "listado.h"
 #include "sql_lite.h"
+#include "genlistado.h"
 #include "numberformatdelegate.h"
 
 Listado::Listado(QWidget *parent) :
@@ -25,21 +26,23 @@ void Listado::setupUi(QMainWindow *Listado)
     QFont font;
     font.setPointSize(10);
     Listado->setFont(font);
-
+    // task bar
     actionActualizar = new QAction(Listado);
     actionActualizar->setObjectName("actionActualizar");
     actionAnadir_fila = new QAction(Listado);
     actionAnadir_fila->setObjectName("actionAnadir_fila");
     actionEliminar_fila = new QAction(Listado);
     actionEliminar_fila->setObjectName("actionEliminar_fila");
-
+    actionGenerar_pdf_con_el_listado = new QAction(Listado);
+    actionGenerar_pdf_con_el_listado->setObjectName("actionGenerar_pdf_con_el_listado");
+    // central widget
     centralwidget = new QWidget(Listado);
     centralwidget->setObjectName("centralwidget");
     gridLayout = new QGridLayout(centralwidget);
     gridLayout->setObjectName("gridLayout");
+    // search bar
     horizontalLayout = new QHBoxLayout();
     horizontalLayout->setObjectName("horizontalLayout");
-
     lbl_search = new QLabel(centralwidget);
     lbl_search->setObjectName("lbl_search");
     lbl_search->setMaximumSize(QSize(65, 16777215));
@@ -48,12 +51,10 @@ void Listado::setupUi(QMainWindow *Listado)
     filter_widget = new FilterWidget(centralwidget);
     filter_widget->setObjectName("filter_widget");
     horizontalLayout->addWidget(filter_widget);
-
     gridLayout->addLayout(horizontalLayout, 6, 0, 1, 1);
-
+    // main title
     lbl_title = new QLabel(centralwidget);
     lbl_title->setObjectName("lbl_title");
-
     QFont font1;
     font1.setFamilies({QString::fromUtf8("Arial")});
     font1.setPointSize(26);
@@ -63,9 +64,8 @@ void Listado::setupUi(QMainWindow *Listado)
     lbl_title->setAutoFillBackground(true);
     lbl_title->setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
     lbl_title->setAlignment(Qt::AlignCenter);
-
     gridLayout->addWidget(lbl_title, 0, 0, 1, 2);
-
+    // table widget
     table_listado = new TableView(centralwidget);
     table_listado->setObjectName("table_listado");
     table_listado->setMinimumSize(QSize(500, 300));
@@ -77,9 +77,8 @@ void Listado::setupUi(QMainWindow *Listado)
     table_listado->setSelectionMode(QAbstractItemView::ContiguousSelection);
     table_listado->setSortingEnabled(true);
     table_listado->horizontalHeader()->setProperty("showSortIndicator", QVariant(true));
-
     gridLayout->addWidget(table_listado, 8, 0, 1, 1);
-
+    // set menu bar
     Listado->setCentralWidget(centralwidget);
     menubar = new QMenuBar(Listado);
     menubar->setObjectName("menubar");
@@ -94,11 +93,13 @@ void Listado::setupUi(QMainWindow *Listado)
     menuArchivo->addAction(actionActualizar);
     menuHerramientas->addAction(actionAnadir_fila);
     menuHerramientas->addAction(actionEliminar_fila);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionGenerar_pdf_con_el_listado);
 
     retranslateUi(Listado);
 
     QMetaObject::connectSlotsByName(Listado);
-}
+} // setupUi
 
 void Listado::retranslateUi(QMainWindow *Listado)
 {
@@ -115,11 +116,15 @@ void Listado::retranslateUi(QMainWindow *Listado)
 #if QT_CONFIG(shortcut)
     actionEliminar_fila->setShortcut(QCoreApplication::translate("Listado", "Ctrl+D", nullptr));
 #endif // QT_CONFIG(shortcut)
+    actionGenerar_pdf_con_el_listado->setText(QCoreApplication::translate("Gastos", "Generar listado en pdf", nullptr));
+#if QT_CONFIG(shortcut)
+    actionGenerar_pdf_con_el_listado->setShortcut(QCoreApplication::translate("Gastos", "Ctrl+P", nullptr));
+#endif // QT_CONFIG(shortcut)
     lbl_search->setText(QCoreApplication::translate("Listado", "B\303\272squeda:", nullptr));
     lbl_title->setText(QCoreApplication::translate("Listado", "Listado", nullptr));
     menuArchivo->setTitle(QCoreApplication::translate("Listado", "Archivo", nullptr));
     menuHerramientas->setTitle(QCoreApplication::translate("Listado", "Herramientas", nullptr));
-}
+} // retranslateUi
 
 void Listado::populate_table()
 {
@@ -130,14 +135,24 @@ void Listado::populate_table()
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->table_name = table_name;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
-        table_listado->sortByColumn(NOMBRE_COLUMN_IDX, Qt::AscendingOrder);
+        // Configure sorting
+        if (table_name == "gastos") {
+            table_listado->verticalHeader()->setVisible(false);
+            table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
+        } else
+            table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+        // Configure NumberDelegate
         if (table_name == "prendas") {
-            table_listado->setItemDelegateForColumn(1, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(2, new NumberFormatDelegate(this));
+            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
+            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
+        }
+        else if (table_name == "gastos") {
+            table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
     }
     resize_window_to_table();
@@ -147,7 +162,7 @@ void Listado::resize_window_to_table()
 {
     // Set window size to minimun of size of the table
     int size = 0;
-    for (int column = 0; column < model->columnCount(); column++) {
+    for (int column = 0; column < table_listado->model()->columnCount(); column++) {
         size += table_listado->columnWidth(column);
     }
     if (this->width() < size + 40) {
@@ -184,15 +199,18 @@ void Listado::on_actionActualizar_triggered()
 
 void Listado::on_actionAnadir_fila_triggered()
 {
-    model->insertRow(table_listado->currentIndex().row() + 1);
+    table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
     if (table_name == "clientes") {
         insert_new_item_to_table(db, {"", "", "", ""}, "clientes");
     } else if (table_name == "prendas") {
         insert_new_item_to_table(db, {"", "", ""}, "prendas");
     } else if (table_name == "proveedores") {
         insert_new_item_to_table(db, {"", "", "", ""}, "proveedores");
-    }else if (table_name == "servicios") {
+    } else if (table_name == "servicios") {
         insert_new_item_to_table(db, {""}, "servicios");
+    } else if (table_name == "gastos") {
+        int id = read_max_value_in_column_from_table(db, "id", "gastos") + 1;
+        insert_new_item_to_table(db, {QString::number(id), "", "", "", "", "", "", "", "0"}, "gastos");
     }
     populate_table();
 }
@@ -205,8 +223,24 @@ void Listado::on_actionEliminar_fila_triggered()
                                     QMessageBox::Yes | QMessageBox::No,
                                     QMessageBox::No);
     if (ret == QMessageBox::Yes) {
-        model->removeRow(table_listado->currentIndex().row());
+        table_listado->model()->removeRow(table_listado->currentIndex().row());
         populate_table();
+    }
+}
+
+void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
+{
+    if (table_name == "gastos") {
+        GenListado *ui_generar_listado;
+        ui_generar_listado = new GenListado(this);
+        ui_generar_listado->db = db;
+        ui_generar_listado->model = table_listado->model();
+        ui_generar_listado->exec();
+        populate_table();
+    } else {
+        QMessageBox::information(this, "Generar listado",
+                                 "Herramienta para generar listado no está implementada para este tipo de listado.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
     }
 }
 
