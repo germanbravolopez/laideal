@@ -17,7 +17,7 @@ Facturas::~Facturas()
 
 void Facturas::initial_settings()
 {
-    QStringList iva_list = {"", "10", "21"};
+    QStringList iva_list = {"21", "10", "0"};
     ui->cb_iva->addItems(iva_list);
     reset_all_contents();
 }
@@ -29,7 +29,7 @@ void Facturas::reset_all_contents()
     ui->cb_servicio->setCurrentText("");
     ui->le_producto->clear();
     ui->cb_empresa->setCurrentText("");
-    ui->cb_iva->setCurrentText("");
+    ui->cb_iva->setCurrentText("21");
     ui->le_importe->clear();
     ui->le_base->clear();
     ui->le_iva->clear();
@@ -125,13 +125,8 @@ void Facturas::on_le_importe_textEdited(const QString &arg1)
     if (arg1.left(1) == "0"  || arg1.left(1) == "1" || arg1.left(1) == "2" || arg1.left(1) == "3"
              || arg1.left(1) == "4" || arg1.left(1) == "5" || arg1.left(1) == "6"
              || arg1.left(1) == "7" || arg1.left(1) == "8" || arg1.left(1) == "9") {
-        if (ui->cb_iva->currentText() != "") {
-            ui->le_base->setText(QString::number(arg1.toFloat() / (1 + (ui->cb_iva->currentText().toFloat() / 100)), 'f', 2));
-            ui->le_iva->setText(QString::number(arg1.toFloat() * (1 - 1 / (1 + (ui->cb_iva->currentText().toFloat() / 100))), 'f', 2));
-        } else {
-            ui->le_base->setText(QString::number(arg1.toFloat(), 'f', 2));
-            ui->le_iva->setText(QString::number(0.0, 'f', 2));
-        }
+        ui->le_base->setText(QString::number(arg1.toFloat() / (1 + (ui->cb_iva->currentText().toFloat() / 100)), 'f', 2));
+        ui->le_iva->setText(QString::number(arg1.toFloat() * (1 - 1 / (1 + (ui->cb_iva->currentText().toFloat() / 100))), 'f', 2));
     }
 }
 
