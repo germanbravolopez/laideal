@@ -37,12 +37,11 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     QVariant leftData = sourceModel()->data(left);
     QVariant rightData = sourceModel()->data(right);
 
-    if (table_name == "gastos" && left.column() == GASTOS_IDX_FECHA)
-        return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
-    else if (table_name == "ingresos" &&
-             (left.column() == INGRESOS_IDX_DATE_RCP ||
-              left.column() == INGRESOS_IDX_DATE_PAY ||
-              left.column() == INGRESOS_IDX_DATE_PKU))
+    if ((table_name == "gastos" && left.column() == GASTOS_IDX_FECHA) ||
+        (table_name == "ingresos" &&
+                     (left.column() == INGRESOS_IDX_DATE_RCP ||
+                      left.column() == INGRESOS_IDX_DATE_PAY ||
+                      left.column() == INGRESOS_IDX_DATE_PKU)))
         return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
     else if (table_name == "gastos" && (left.column() == GASTOS_IDX_IMPORTE || left.column() == GASTOS_IDX_ID) ||
              table_name == "ingresos" && left.column() == INGRESOS_IDX_IMPORTE ||
