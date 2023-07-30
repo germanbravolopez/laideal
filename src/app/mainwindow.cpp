@@ -220,9 +220,8 @@ bool MainWindow::validate_ticket()
             }
             else {
                 // if the current date belongs to a locked quarter, data cannot be saved
-                if (ui->pb_payment->text() == "SI"
-                        && read_lock_for_month_and_year(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
-                    msgBox.setText("No se puede introducir un nuevo recibo pagado en un trimestre que tiene la contabilidad cerrada.");
+                if (read_lock_for_month_and_year(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
+                    msgBox.setText("No se puede introducir un nuevo recibo en un trimestre que tiene la contabilidad cerrada.");
                     msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
                     return 0;
