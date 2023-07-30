@@ -130,11 +130,12 @@ void Listado::retranslateUi(QMainWindow *Listado)
 
 void Listado::populate_table()
 {
-    if (QSqlDatabase::contains("qt_sql_default_connection"))
-    {
+    if (QSqlDatabase::contains("qt_sql_default_connection")) {
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable(table_name);
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
+        // order model before showing data in table
+        model->setSort(0, Qt::AscendingOrder);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = table_name;
