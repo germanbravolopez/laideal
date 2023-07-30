@@ -204,8 +204,8 @@ void Listado::on_actionAnadir_fila_triggered()
     if (table_name == "clientes") {
         InsertNewItem *ui_insert_new;
         ui_insert_new = new InsertNewItem(this);
-        ui_insert_new->exec();
         ui_insert_new->db = db;
+        ui_insert_new->exec();
         populate_table();
     } else if (table_name == "prendas") {
         table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
@@ -220,11 +220,11 @@ void Listado::on_actionAnadir_fila_triggered()
         insert_new_item_to_table(db, {""}, "servicios");
         populate_table();
     } else if (table_name == "gastos") {
-        table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
-        int id = read_max_value_in_column_from_table(db, "id", "gastos") + 1;
-        insert_new_item_to_table(db, {QString::number(id), "", "", "", "", "", "", "", "0"}, "gastos");
+        QMessageBox::information(this, "Añadir fila",
+                                 "Para introducir nuevos gastos, hay que usar la herramienta de introducir "
+                                 "facturas en la ventana principal.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
         populate_table();
-        table_listado->sortByColumn(GASTOS_IDX_ID, Qt::DescendingOrder);
     } else
         QMessageBox::critical(this, "Añadir fila",
                               "Esta tabla no está soportada en listado.cpp",
