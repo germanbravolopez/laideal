@@ -25,7 +25,10 @@ void Ingresos::populate_table()
         model->setTable("ingresos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
         model->select();
-        ui->table_ingresos->setModel(model);
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->table_name = "ingresos";
+        proxyModel->setSourceModel(model);
+        ui->table_ingresos->setModel(proxyModel);
         ui->table_ingresos->resizeColumnsToContents();
         ui->table_ingresos->resizeRowsToContents();
         ui->table_ingresos->sortByColumn(COLUMN_IDX_TICKET, Qt::DescendingOrder);

@@ -4,9 +4,21 @@
 #include <QDate>
 #include <QSortFilterProxyModel>
 
-#define C_CLIENT_COLUMN_IDX  4
-#define C_FECHA_COLUMN_IDX   5
-#define C_CONTAB_COLUMN_IDX  8
+#define GASTOS_IDX_ID          0
+#define GASTOS_IDX_CLIENT      4
+#define GASTOS_IDX_FECHA       5
+#define GASTOS_IDX_IMPORTE     7
+#define GASTOS_IDX_CONTAB      8
+
+#define INGRESOS_IDX_DATE_RCP  2
+#define INGRESOS_IDX_DATE_PAY  3
+#define INGRESOS_IDX_DATE_PKU  4
+#define INGRESOS_IDX_IMPORTE   5
+#define INGRESOS_IDX_SIZE      6
+
+#define LIST_PRENDAS_IDX_NAME  0
+#define LIST_PRENDAS_IDX_LIMP  1
+#define LIST_PRENDAS_IDX_PLAN  2
 
 class MySortFilterProxyModel : public QSortFilterProxyModel
 {
@@ -20,6 +32,8 @@ public:
 
     QDate filterMaximumDate() const { return maxDate; }
     void setFilterMaximumDate(QDate date);
+
+    QString table_name;
 
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;

@@ -5,6 +5,8 @@
 #include <QSqlDatabase>
 #include <QSqlTableModel>
 
+#include "mysortfilterproxymodel.h"
+
 #define COLUMN_IDX_TICKET  0
 #define COLUMN_IDX_IMPORTE 5
 #define COLUMN_IDX_PAYED   6
@@ -22,6 +24,7 @@ public:
     explicit Ingresos(QWidget *parent = nullptr);
     ~Ingresos();
     QSqlTableModel *model;
+    MySortFilterProxyModel *proxyModel;
 
 private slots:
     void populate_table();

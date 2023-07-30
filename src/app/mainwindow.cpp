@@ -2,7 +2,6 @@
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
 #include "ingresos.h"
-#include "gastos.h"
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -221,9 +220,8 @@ bool MainWindow::validate_ticket()
             }
             else {
                 // if the current date belongs to a locked quarter, data cannot be saved
-                if (ui->pb_payment->text() == "SI"
-                        && read_lock_for_month_and_year(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
-                    msgBox.setText("No se puede introducir un nuevo recibo pagado en un trimestre que tiene la contabilidad cerrada.");
+                if (read_lock_for_month_and_year(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
+                    msgBox.setText("No se puede introducir un nuevo recibo en un trimestre que tiene la contabilidad cerrada.");
                     msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
                     return 0;
@@ -440,10 +438,18 @@ void MainWindow::on_actionIngresos_triggered()
 
 void MainWindow::on_actionGastos_triggered()
 {
-    Gastos *ui_gast;
-    ui_gast = new Gastos(this);
-    ui_gast->db = db;
-    ui_gast->show();
+    QString title = "Gastos";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "gastos";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_populate_prendas()
@@ -569,6 +575,17 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
     ui_contabilidad = new Contabilidad(this);
     ui_contabilidad->db = db;
     ui_contabilidad->show();
+}
+
+void MainWindow::on_actionRevertir_contabilidad_triggered()
+{
+    Contabilidad *ui_rev_cont;
+    ui_rev_cont = new Contabilidad(this);
+    ui_rev_cont->db = db;
+    ui_rev_cont->setWindowTitle("Revertir Contabilidad");
+    ui_rev_cont-> revertir_on = true;
+    ui_rev_cont-> reset_all_contents();
+    ui_rev_cont->show();
 }
 
 void MainWindow::on_actionFormulario_facturas_triggered()

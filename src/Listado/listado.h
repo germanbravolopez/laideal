@@ -7,17 +7,16 @@
 #include <QMessageBox>
 #include <QCoreApplication>
 #include <QGridLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
-#include <QHeaderView>
 #include <QLineEdit>
+#include <QStatusBar>
 
 #include "tableview.h"
 #include "filterwidget.h"
 #include "mysortfilterproxymodel.h"
-
-#define NOMBRE_COLUMN_IDX 0
 
 class Listado : public QMainWindow
 {
@@ -27,6 +26,7 @@ public:
     QAction *actionActualizar;
     QAction *actionAnadir_fila;
     QAction *actionEliminar_fila;
+    QAction *actionGenerar_pdf_con_el_listado;
     QWidget *centralwidget;
     QGridLayout *gridLayout;
     QHBoxLayout *horizontalLayout;
@@ -54,6 +54,7 @@ private slots:
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
+    void on_actionGenerar_pdf_con_el_listado_triggered();
 
     void closeEvent(QCloseEvent* event);
 

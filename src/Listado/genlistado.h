@@ -6,7 +6,6 @@
 #include <QDesktopServices>
 #include <QAbstractItemModel>
 #include <QSqlDatabase>
-#include "mysortfilterproxymodel.h"
 
 #define C_FECHAS      "Fechas"
 #define C_PROVEEDORES "Proveedores"

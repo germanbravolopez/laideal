@@ -649,6 +649,7 @@ prenda</string>
     <addaction name="separator"/>
     <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionGenerar_contabilidad"/>
+    <addaction name="actionRevertir_contabilidad"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -824,6 +825,14 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
    </property>
    <property name="shortcut">
     <string>Alt+C</string>
+   </property>
+  </action>
+  <action name="actionRevertir_contabilidad">
+   <property name="text">
+    <string>Revertir contabilidad</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+Shift+R</string>
    </property>
   </action>
  </widget>
