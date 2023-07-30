@@ -2,6 +2,8 @@ add_library(Listado STATIC
     genlistado.ui
     genlistado.h
     genlistado.cpp
+    insertnewitem.h
+    insertnewitem.cpp
     listado.h
     listado.cpp
 )

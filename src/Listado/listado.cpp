@@ -1,6 +1,7 @@
 #include "listado.h"
 #include "sql_lite.h"
 #include "genlistado.h"
+#include "insertnewitem.h"
 #include "numberformatdelegate.h"
 
 Listado::Listado(QWidget *parent) :
@@ -77,6 +78,7 @@ void Listado::setupUi(QMainWindow *Listado)
     table_listado->setSelectionMode(QAbstractItemView::ContiguousSelection);
     table_listado->setSortingEnabled(true);
     table_listado->horizontalHeader()->setProperty("showSortIndicator", QVariant(true));
+    table_listado->verticalHeader()->setVisible(false);
     gridLayout->addWidget(table_listado, 8, 0, 1, 1);
     // set menu bar
     Listado->setCentralWidget(centralwidget);
@@ -141,10 +143,9 @@ void Listado::populate_table()
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
         // Configure sorting
-        if (table_name == "gastos") {
-            table_listado->verticalHeader()->setVisible(false);
+        if (table_name == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-        } else
+        else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
         // Configure NumberDelegate
         if (table_name == "prendas") {
@@ -199,20 +200,34 @@ void Listado::on_actionActualizar_triggered()
 
 void Listado::on_actionAnadir_fila_triggered()
 {
-    table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
     if (table_name == "clientes") {
-        insert_new_item_to_table(db, {"", "", "", ""}, "clientes");
+        InsertNewItem *ui_insert_new;
+        ui_insert_new = new InsertNewItem(this);
+        ui_insert_new->exec();
+        ui_insert_new->db = db;
+        populate_table();
     } else if (table_name == "prendas") {
+        table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
         insert_new_item_to_table(db, {"", "", ""}, "prendas");
+        populate_table();
     } else if (table_name == "proveedores") {
+        table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
         insert_new_item_to_table(db, {"", "", "", ""}, "proveedores");
+        populate_table();
     } else if (table_name == "servicios") {
+        table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
         insert_new_item_to_table(db, {""}, "servicios");
+        populate_table();
     } else if (table_name == "gastos") {
+        table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
         int id = read_max_value_in_column_from_table(db, "id", "gastos") + 1;
         insert_new_item_to_table(db, {QString::number(id), "", "", "", "", "", "", "", "0"}, "gastos");
-    }
-    populate_table();
+        populate_table();
+        table_listado->sortByColumn(GASTOS_IDX_ID, Qt::DescendingOrder);
+    } else
+        QMessageBox::critical(this, "Añadir fila",
+                              "Esta tabla no está soportada en listado.cpp",
+                              QMessageBox::Ok, QMessageBox::Ok);
 }
 
 void Listado::on_actionEliminar_fila_triggered()

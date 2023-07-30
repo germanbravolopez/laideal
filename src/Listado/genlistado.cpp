@@ -2,6 +2,7 @@
 #include "ui_genlistado.h"
 #include "qprinter.h"
 #include "sql_lite.h"
+#include "mysortfilterproxymodel.h"
 
 GenListado::GenListado(QWidget *parent) :
     QDialog(parent),
