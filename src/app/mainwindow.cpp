@@ -1,7 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
-#include "ingresos.h"
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -435,9 +434,18 @@ void MainWindow::on_actionCerrar_triggered()
 
 void MainWindow::on_actionIngresos_triggered()
 {
-    Ingresos *ui_ingr;
-    ui_ingr = new Ingresos(this);
-    ui_ingr->show();
+    QString title = "Ingresos";
+    Listado *ui_listado;
+    ui_listado = new Listado(this);
+    ui_listado->table_name = "ingresos";
+    ui_listado->db = db;
+    ui_listado->setObjectName(title);
+    ui_listado->lbl_title->setText(title);
+    ui_listado->setWindowTitle(title);
+    ui_listado->populate_table();
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->show();
 }
 
 void MainWindow::on_actionGastos_triggered()
