@@ -257,7 +257,7 @@ void RecogPrendas::on_pb_search_clicked()
 {
     reset_all_contents();
     if (ui->le_search->text() != "") {
-        bool ok = false, total_price_active = false;
+        bool ok = false, total_price_active = true;
         ui->le_search->text().toUInt(&ok);
         if (ok) {
             if(ui->le_search->text().length() >= 9) {
