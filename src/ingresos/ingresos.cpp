@@ -24,6 +24,7 @@ void Ingresos::populate_table()
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable("ingresos");
         model->setEditStrategy(QSqlTableModel::OnManualSubmit);
+        model->setSort(COLUMN_IDX_TICKET, Qt::DescendingOrder);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = "ingresos";
@@ -31,7 +32,6 @@ void Ingresos::populate_table()
         ui->table_ingresos->setModel(proxyModel);
         ui->table_ingresos->resizeColumnsToContents();
         ui->table_ingresos->resizeRowsToContents();
-        ui->table_ingresos->sortByColumn(COLUMN_IDX_TICKET, Qt::DescendingOrder);
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_IMPORTE, new NumberFormatDelegate(this));
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_PAYED, new TextColorDelegate(ui->table_ingresos, this));
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_STATE, new TextColorDelegate(ui->table_ingresos, this));

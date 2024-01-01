@@ -137,13 +137,21 @@ void Listado::populate_table()
         // order model before showing data in table
         model->setSort(0, Qt::AscendingOrder);
         model->select();
+        // Configure sorting
+        if (table_name == "gastos") {
+            model->sort(GASTOS_IDX_FECHA, Qt::AscendingOrder);
+            model->sort(GASTOS_IDX_FECHA, Qt::DescendingOrder);
+        } else {
+            model->sort(LIST_PRENDAS_IDX_NAME, Qt::DescendingOrder);
+            model->sort(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+        }
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = table_name;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
-        // Configure sorting
+        // Perform sorting with proxy model
         if (table_name == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
         else
