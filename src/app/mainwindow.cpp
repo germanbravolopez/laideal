@@ -151,6 +151,10 @@ void MainWindow::cbGarmChanged(const QString &text)
     // Check garment is included in combobox
     if (cb_garment->findText(text, Qt::MatchExactly) != -1)
         set_garment_price(garment_row, text, cb_service->currentText());
+    else if (cb_garment->currentText() == "") {
+        QTableWidgetItem *item = new QTableWidgetItem;
+        ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
+    }
 }
 
 void MainWindow::cbServChanged(const QString &text)
