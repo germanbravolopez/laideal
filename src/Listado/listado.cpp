@@ -162,6 +162,7 @@ void Listado::populate_table()
         else if (table_name == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
+        table_listado->setFont(QFont(table_listado->font().family(), 8));
         // Resize table
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
@@ -201,6 +202,9 @@ void Listado::text_filter_changed()
         options |= QRegularExpression::CaseInsensitiveOption;
     QRegularExpression regularExpression(pattern, options);
     proxyModel->setFilterRegularExpression(regularExpression);
+    // Resize table
+    table_listado->resizeColumnsToContents();
+    table_listado->resizeRowsToContents();
 }
 
 void Listado::on_actionActualizar_triggered()

@@ -38,6 +38,7 @@ void Ingresos::populate_table()
             verticalScrollBar->setValue(verticalScrollBar->maximum());
         }
         verticalScrollBar->setValue(verticalScrollBar->minimum());
+        ui->table_ingresos->setFont(QFont(ui->table_ingresos->font().family(), 8));
         ui->table_ingresos->resizeColumnsToContents();
         ui->table_ingresos->resizeRowsToContents();
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_IMPORTE, new NumberFormatDelegate(this));
