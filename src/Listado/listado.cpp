@@ -137,20 +137,18 @@ void Listado::populate_table()
         // order model before showing data in table
         model->setSort(0, Qt::AscendingOrder);
         model->select();
-        // Configure sorting
-        if (table_name == "gastos") {
-            model->sort(GASTOS_IDX_FECHA, Qt::AscendingOrder);
-            model->sort(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-        } else {
-            model->sort(LIST_PRENDAS_IDX_NAME, Qt::DescendingOrder);
-            model->sort(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
-        }
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = table_name;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
-        table_listado->resizeColumnsToContents();
-        table_listado->resizeRowsToContents();
+        // Scroll all the way down and all the way up to get all data populated
+        int previous_length = 0;
+        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
+        while (proxyModel->rowCount() > previous_length) {
+            previous_length = proxyModel->rowCount();
+            verticalScrollBar->setValue(verticalScrollBar->maximum());
+        }
+        verticalScrollBar->setValue(verticalScrollBar->minimum());
         // Perform sorting with proxy model
         if (table_name == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
@@ -164,6 +162,9 @@ void Listado::populate_table()
         else if (table_name == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
+        // Resize table
+        table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
     }
     resize_window_to_table();
 }

@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QSqlTableModel>
+#include <QScrollBar>
 
 #include "mysortfilterproxymodel.h"
 

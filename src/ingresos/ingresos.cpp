@@ -30,6 +30,14 @@ void Ingresos::populate_table()
         proxyModel->table_name = "ingresos";
         proxyModel->setSourceModel(model);
         ui->table_ingresos->setModel(proxyModel);
+        // Scroll all the way down and all the way up to get all data populated
+        int previous_length = 0;
+        QScrollBar *verticalScrollBar = ui->table_ingresos->verticalScrollBar();
+        while (proxyModel->rowCount() > previous_length) {
+            previous_length = proxyModel->rowCount();
+            verticalScrollBar->setValue(verticalScrollBar->maximum());
+        }
+        verticalScrollBar->setValue(verticalScrollBar->minimum());
         ui->table_ingresos->resizeColumnsToContents();
         ui->table_ingresos->resizeRowsToContents();
         ui->table_ingresos->setItemDelegateForColumn(COLUMN_IDX_IMPORTE, new NumberFormatDelegate(this));
