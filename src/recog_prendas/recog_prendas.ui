@@ -449,6 +449,42 @@ factura</string>
         </item>
        </layout>
       </item>
+      <item row="0" column="5">
+       <widget class="QComboBox" name="cb_search_date">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>11</pointsize>
+         </font>
+        </property>
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Buscar por fecha de recepción, pago o entregado.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="editable">
+         <bool>false</bool>
+        </property>
+        <property name="currentText">
+         <string>Pago</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Recepción</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Pago</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Recogida</string>
+         </property>
+        </item>
+       </widget>
+      </item>
      </layout>
     </item>
     <item row="6" column="0" colspan="6">

@@ -54,6 +54,7 @@ private slots:
     void calculate_price();
 
     void on_le_search_returnPressed();
+    void on_cb_search_date_currentTextChanged(const QString &arg1);
     void on_pb_search_clicked();
     void on_pb_reset_clicked();
     void on_pb_payment_toggled(bool checked);

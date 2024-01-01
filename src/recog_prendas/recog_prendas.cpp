@@ -247,6 +247,11 @@ void RecogPrendas::on_le_search_returnPressed()
     on_pb_search_clicked();
 }
 
+void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
+{
+    on_pb_search_clicked();
+}
+
 void RecogPrendas::on_pb_search_clicked()
 {
     reset_all_contents();
@@ -288,24 +293,17 @@ void RecogPrendas::on_pb_search_clicked()
             // Text (client, address or another)
             QDate date_slash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
             QDate date_dash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
-            if (!date_slash.isNull()) {
+            QDate date = (!date_slash.isNull()) ? date_slash :
+                         (!date_dash.isNull()) ? date_dash: QDate::currentDate();
+            QString date_type = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
+                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
+                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
+            if (!date_slash.isNull() || !date_dash.isNull()) {
                 // Text is date
                 db.open();
                 sql_query_model->setQuery("SELECT * \
                                 FROM ingresos \
-                                WHERE fecha_recepcion = '" + date_slash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_pago = '" + date_slash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_recogida = '" + date_slash.toString("dd-MM-yyyy") + "'");
-                db.close();
-            }
-            else if (!date_dash.isNull()) {
-                // Text is date
-                db.open();
-                sql_query_model->setQuery("SELECT * \
-                                FROM ingresos \
-                                WHERE fecha_recepcion = '" + date_dash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_pago = '" + date_dash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_recogida = '" + date_dash.toString("dd-MM-yyyy") + "'");
+                                WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
                 db.close();
             }
             else {
