@@ -25,10 +25,30 @@ bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
     QModelIndex index0 = sourceModel()->index(sourceRow, 0, sourceParent);
     QModelIndex index1 = sourceModel()->index(sourceRow, 1, sourceParent);
     QModelIndex index2 = sourceModel()->index(sourceRow, 2, sourceParent);
+    QModelIndex index3 = sourceModel()->index(sourceRow, 3, sourceParent);
+    QModelIndex index4 = sourceModel()->index(sourceRow, 4, sourceParent);
+    QModelIndex index5 = sourceModel()->index(sourceRow, 5, sourceParent);
+    QModelIndex index6 = sourceModel()->index(sourceRow, 6, sourceParent);
+    QModelIndex index7 = sourceModel()->index(sourceRow, 7, sourceParent);
+    QModelIndex index8 = sourceModel()->index(sourceRow, 8, sourceParent);
+    QModelIndex index9 = sourceModel()->index(sourceRow, 9, sourceParent);
 
     return (sourceModel()->data(index0).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index1).toString().contains(filterRegularExpression()))
-            && dateInRange(sourceModel()->data(index2).toDate());
+            || sourceModel()->data(index1).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index2).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index3).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index4).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index5).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index6).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index7).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index8).toString().contains(filterRegularExpression())
+            || sourceModel()->data(index9).toString().contains(filterRegularExpression())
+            );
+
+    // Example with use of date ranges
+    //return (sourceModel()->data(index0).toString().contains(filterRegularExpression())
+    //        || sourceModel()->data(index1).toString().contains(filterRegularExpression()))
+    //        && dateInRange(sourceModel()->data(index2).toDate());
 }
 
 bool MySortFilterProxyModel::lessThan(const QModelIndex &left,

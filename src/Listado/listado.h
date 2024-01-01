@@ -13,6 +13,7 @@
 #include <QMenuBar>
 #include <QLineEdit>
 #include <QStatusBar>
+#include <QScrollBar>
 
 #include "tableview.h"
 #include "filterwidget.h"

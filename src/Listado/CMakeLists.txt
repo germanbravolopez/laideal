@@ -15,6 +15,7 @@ target_link_libraries(Listado
     sql_lite
     TableView
     NumberFormatDelegate
+    TextColorDelegate
     FilterWidget
     MySortFilterProxyModel
 )

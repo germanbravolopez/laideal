@@ -606,7 +606,7 @@ prenda</string>
        <locale language="Spanish" country="Spain"/>
       </property>
       <property name="text">
-       <string>Tintoreria La Ideal</string>
+       <string>Tintorería La Ideal</string>
       </property>
       <property name="alignment">
        <set>Qt::AlignCenter</set>

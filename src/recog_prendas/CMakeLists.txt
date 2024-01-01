@@ -10,5 +10,7 @@ target_link_libraries(recog_prendas
     sql_lite
     imprimir
     TextColorDelegate
+    MySortFilterProxyModel
+    NumberFormatDelegate
 )
 target_include_directories(recog_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

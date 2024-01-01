@@ -3,6 +3,7 @@
 #include "genlistado.h"
 #include "insertnewitem.h"
 #include "numberformatdelegate.h"
+#include "textcolordelegate.h"
 
 Listado::Listado(QWidget *parent) :
     QMainWindow(parent)
@@ -141,11 +142,19 @@ void Listado::populate_table()
         proxyModel->table_name = table_name;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
-        table_listado->resizeColumnsToContents();
-        table_listado->resizeRowsToContents();
-        // Configure sorting
+        // Scroll all the way down and all the way up to get all data populated
+        int previous_length = 0;
+        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
+        while (proxyModel->rowCount() > previous_length) {
+            previous_length = proxyModel->rowCount();
+            verticalScrollBar->setValue(verticalScrollBar->maximum());
+        }
+        verticalScrollBar->setValue(verticalScrollBar->minimum());
+        // Perform sorting with proxy model
         if (table_name == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
+        else if (table_name == "ingresos")
+            table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
         else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
         // Configure NumberDelegate
@@ -156,6 +165,15 @@ void Listado::populate_table()
         else if (table_name == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
+        table_listado->setFont(QFont(table_listado->font().family(), 8));
+        if (table_name == "ingresos") {
+            table_listado->setItemDelegateForColumn(INGRESOS_IDX_IMPORTE, new NumberFormatDelegate(this));
+            table_listado->setItemDelegateForColumn(INGRESOS_IDX_PAYED, new TextColorDelegate(table_listado, this));
+            table_listado->setItemDelegateForColumn(INGRESOS_IDX_STATE, new TextColorDelegate(table_listado, this));
+        }
+        // Resize table
+        table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
     }
     resize_window_to_table();
 }
@@ -192,6 +210,9 @@ void Listado::text_filter_changed()
         options |= QRegularExpression::CaseInsensitiveOption;
     QRegularExpression regularExpression(pattern, options);
     proxyModel->setFilterRegularExpression(regularExpression);
+    // Resize table
+    table_listado->resizeColumnsToContents();
+    table_listado->resizeRowsToContents();
 }
 
 void Listado::on_actionActualizar_triggered()
@@ -227,20 +248,26 @@ void Listado::on_actionAnadir_fila_triggered()
         populate_table();
     } else
         QMessageBox::critical(this, "Añadir fila",
-                              "Esta tabla no está soportada en listado.cpp",
+                              "Esta tabla no soporta añadir nuevas filas directamente.",
                               QMessageBox::Ok, QMessageBox::Ok);
 }
 
 void Listado::on_actionEliminar_fila_triggered()
 {
-    int ret = QMessageBox::question(this, "Eliminar fila",
-                                    "¿Está seguro que desea eliminar la fila " +
-                                    QString::number(table_listado->currentIndex().row() + 1) + "?",
-                                    QMessageBox::Yes | QMessageBox::No,
-                                    QMessageBox::No);
-    if (ret == QMessageBox::Yes) {
-        table_listado->model()->removeRow(table_listado->currentIndex().row());
-        populate_table();
+    if (table_name == "ingresos")
+        QMessageBox::critical(this, "Eliminar fila",
+                              "Esta tabla no soporta eliminar filas directamente.",
+                              QMessageBox::Ok, QMessageBox::Ok);
+    else {
+        int ret = QMessageBox::question(this, "Eliminar fila",
+                                        "¿Está seguro que desea eliminar la fila " +
+                                        QString::number(table_listado->currentIndex().row() + 1) + "?",
+                                        QMessageBox::Yes | QMessageBox::No,
+                                        QMessageBox::No);
+        if (ret == QMessageBox::Yes) {
+            table_listado->model()->removeRow(table_listado->currentIndex().row());
+            populate_table();
+        }
     }
 }
 

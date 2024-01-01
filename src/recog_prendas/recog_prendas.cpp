@@ -3,6 +3,7 @@
 #include "sql_lite.h"
 #include "imprimir.h"
 #include "textcolordelegate.h"
+#include "numberformatdelegate.h"
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -247,6 +248,11 @@ void RecogPrendas::on_le_search_returnPressed()
     on_pb_search_clicked();
 }
 
+void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
+{
+    on_pb_search_clicked();
+}
+
 void RecogPrendas::on_pb_search_clicked()
 {
     reset_all_contents();
@@ -288,24 +294,17 @@ void RecogPrendas::on_pb_search_clicked()
             // Text (client, address or another)
             QDate date_slash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
             QDate date_dash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
-            if (!date_slash.isNull()) {
+            QDate date = (!date_slash.isNull()) ? date_slash :
+                         (!date_dash.isNull()) ? date_dash: QDate::currentDate();
+            QString date_type = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
+                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
+                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
+            if (!date_slash.isNull() || !date_dash.isNull()) {
                 // Text is date
                 db.open();
                 sql_query_model->setQuery("SELECT * \
                                 FROM ingresos \
-                                WHERE fecha_recepcion = '" + date_slash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_pago = '" + date_slash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_recogida = '" + date_slash.toString("dd-MM-yyyy") + "'");
-                db.close();
-            }
-            else if (!date_dash.isNull()) {
-                // Text is date
-                db.open();
-                sql_query_model->setQuery("SELECT * \
-                                FROM ingresos \
-                                WHERE fecha_recepcion = '" + date_dash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_pago = '" + date_dash.toString("dd-MM-yyyy") + "' \
-                                    OR fecha_recogida = '" + date_dash.toString("dd-MM-yyyy") + "'");
+                                WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
                 db.close();
             }
             else {
@@ -338,13 +337,16 @@ void RecogPrendas::on_pb_search_clicked()
         sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
         sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
-        ui->tableView->setModel(sql_query_model);
-        ui->tableView->resizeColumnsToContents();
-        ui->tableView->resizeRowsToContents();
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->setSourceModel(sql_query_model);
+        ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
         ui->tableView->setColumnHidden(TABLE_CLIENT, true);
+        ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
+        ui->tableView->resizeColumnsToContents();
+        ui->tableView->resizeRowsToContents();
         // Fill total_price if enabled
         if (total_price_active) {
             float total_price = 0.0;

@@ -10,7 +10,6 @@ target_link_libraries(laideal
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
-    ingresos
     imprimir
     Listado
     recog_prendas

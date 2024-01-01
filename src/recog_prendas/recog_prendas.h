@@ -5,6 +5,8 @@
 #include <QMessageBox>
 #include <QSqlQueryModel>
 
+#include "mysortfilterproxymodel.h"
+
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
 #define TABLE_DATE_RCP   2
@@ -34,6 +36,7 @@ public:
 
     QSqlDatabase db;
     QSqlQueryModel *sql_query_model = new QSqlQueryModel;
+    MySortFilterProxyModel *proxyModel;
     bool is_cell_clicked = false;
     int row_clicked_cell, column_clicked_cell;
 
@@ -54,6 +57,7 @@ private slots:
     void calculate_price();
 
     void on_le_search_returnPressed();
+    void on_cb_search_date_currentTextChanged(const QString &arg1);
     void on_pb_search_clicked();
     void on_pb_reset_clicked();
     void on_pb_payment_toggled(bool checked);
