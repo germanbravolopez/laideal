@@ -3,6 +3,7 @@
 #include "sql_lite.h"
 #include "imprimir.h"
 #include "textcolordelegate.h"
+#include "numberformatdelegate.h"
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -336,13 +337,16 @@ void RecogPrendas::on_pb_search_clicked()
         sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
         sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
-        ui->tableView->setModel(sql_query_model);
-        ui->tableView->resizeColumnsToContents();
-        ui->tableView->resizeRowsToContents();
+        proxyModel = new MySortFilterProxyModel(this);
+        proxyModel->setSourceModel(sql_query_model);
+        ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
         ui->tableView->setColumnHidden(TABLE_CLIENT, true);
+        ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
+        ui->tableView->resizeColumnsToContents();
+        ui->tableView->resizeRowsToContents();
         // Fill total_price if enabled
         if (total_price_active) {
             float total_price = 0.0;
