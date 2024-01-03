@@ -239,6 +239,10 @@ void RecogPrendas::update_row_clicked_to_fields()
 void RecogPrendas::calculate_price()
 {
     float item_price = read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+    if (ui->le_size->text().contains(",")) {
+        QStringList size_splitted = ui->le_size->text().split(",");
+        ui->le_size->setText(size_splitted.first() + "." + size_splitted.last());
+    }
     float calculated_price = item_price * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
     ui->le_price->setText(QString::number(calculated_price));
 }
@@ -416,8 +420,7 @@ void RecogPrendas::on_le_obsv_editingFinished()
 
 void RecogPrendas::on_le_size_editingFinished()
 {
-    QString left_side = ui->le_garm->text().left(8);
-    if (is_cell_clicked && left_side == "Alfombra") {
+    if (is_cell_clicked && ui->le_garm->text().contains("m2")) {
         calculate_price();
         update_db(SIZE_AND_PRICE);
     }
