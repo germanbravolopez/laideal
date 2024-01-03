@@ -364,7 +364,7 @@ factura</string>
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Editar el tamaño si la prenda seleccionada es una alfombra, puesto que el tamaño debe introducirse con posterioridad.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Solo se puede editar el tamaño si la prenda seleccionada continene m2.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
