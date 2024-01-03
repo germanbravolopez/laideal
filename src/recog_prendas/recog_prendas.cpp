@@ -262,20 +262,13 @@ void RecogPrendas::on_pb_search_clicked()
         if (ok) {
             if(ui->le_search->text().length() >= 9) {
                 // Phone number
-                QString client_from_tel_fijo = select_from_where_like(db, "nombre", "clientes", "tel_fijo", ui->le_search->text(), true, true);
-                QString client_from_movil = select_from_where_like(db, "nombre", "clientes", "movil", ui->le_search->text(), true, true);
-                if (!client_from_tel_fijo.isNull()) {
+                QString client_from_phone = select_from_where_like(db, "nombre", "clientes", "tel_fijo",
+                                                                      ui->le_search->text() + "' OR movil like '" + ui->le_search->text(), true, true);
+                if (!client_from_phone.isNull()) {
                     db.open();
                     sql_query_model->setQuery("SELECT * \
                                      FROM ingresos \
-                                     WHERE cliente = '" + client_from_tel_fijo + "'");
-                    db.close();
-                }
-                else if (!client_from_movil.isNull()) {
-                    db.open();
-                    sql_query_model->setQuery("SELECT * \
-                                    FROM ingresos \
-                                    WHERE cliente = '" + client_from_movil + "'");
+                                     WHERE cliente = '" + client_from_phone + "'");
                     db.close();
                 }
             }
@@ -341,7 +334,7 @@ void RecogPrendas::on_pb_search_clicked()
         proxyModel->setSourceModel(sql_query_model);
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::AscendingOrder);
-        ui->tableView->setColumnHidden(TABLE_CLIENT, true);
+        //ui->tableView->setColumnHidden(TABLE_CLIENT, true);
         ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
