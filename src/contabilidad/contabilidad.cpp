@@ -174,7 +174,10 @@ float Contabilidad::get_total_income(QString table,
     QDate start_date, end_date;
     if (ui->cb_config->currentText() == C_MENSUAL) {
         start_date.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
-        end_date.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
+        if (ui->sb_trim->value() == 12)
+            end_date.setDate(ui->sb_year->value() + 1, 1, 1);
+        else
+            end_date.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
     }
     else {
         int trim;
