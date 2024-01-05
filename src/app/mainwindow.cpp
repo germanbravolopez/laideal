@@ -347,7 +347,7 @@ void MainWindow::print_fra()
     ui_impr->is_complete_invoice = false;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->get_ticket_info();
-    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
+    ui_impr->create_ticket_excel(false, false);
     ui_impr->print_ticket();
 }
 
