@@ -90,7 +90,7 @@ QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
 void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
 {
     // Check that excel is accessible
-    QString excel_path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
+    QString excel_path = "C:/Users/Usuario/work/tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
     if (!QFile::exists(excel_path)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo excel para generar el ticket.",
@@ -341,7 +341,7 @@ void Imprimir::print_ticket()
 {
     // Call the batch script to print the excel
     QProcess process;
-    QString batch_path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/NO_TOCAR_ticket_imprimir/print_ticket.bat";
+    QString batch_path = "C:/Users/Usuario/work/tintoreria/NO_TOCAR_ticket_imprimir/print_ticket.bat";
     if (!QFile::exists(batch_path)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
