@@ -160,11 +160,7 @@ void Contabilidad::generate_contabilidad()
     // create directory in case it does not exists
     if (!QFile::exists(path))
         QDir().mkpath(path);
-    // open file in case it already exists
-    if (!QFile::exists(filename))
-        write_html(path + filename, contabilidad_html);
-    else
-        QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
+    write_html(path + filename, contabilidad_html);
 }
 
 float Contabilidad::get_total_income(QString table,

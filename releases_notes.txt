@@ -1,0 +1,79 @@
+Releases:
+
+r5.5
+	- Avoid print message "IMPORTE PAGADO" when printing facturas
+	- Fix non-used code and let always override contabilidad reports
+
+r5.4
+	- Update project to show version details and other properties in the exe file
+	- Update hard paths to external tools (print excel and icon)
+
+r5.3
+	- Calculate contabilidad per months correctly for last month
+	- Keep name after search in recog_prendas
+	- Bugfix with phone search in recog_prendas
+	- Update size for all kinds of garments that contains m2
+
+r5.2
+	- Bugfixes let recog_prendas show the total price of the search
+
+r5.1
+	- Bugfixes when deleting garment in mainwindow
+	- Update ingresos to use Listado class and adapt search engine
+	- Populate all data to tables and present it in the correct sorting column
+	- Reduce font in tables to 8pt and keep row height constant
+	- Table in recog_prendas with proxymodel
+
+r5.0
+	- Save facturas without taxes with IVA type of 0
+	- New feature: Revert accountings
+	- Use Listados to create gastos table view
+	- Handle all sortings (date, numbers and strings) in every table
+	- New dialog (InsertNewItem) to add new clients
+	- Fix ingresos to avoid introduce any ticket in a block quarter
+
+r4.4
+	- Fix IVA maths
+
+r4.3
+	- Replace background colors by text color in payed and state columns
+
+r4.2
+	- Use common class for all lists
+	- Add search bar in lists
+	- Make smaller row heights in all tables
+	- Print invoice after payed ticket
+	- Add background colors to payed and state columns in ingresos and recog_prendas
+	- Print functionality in recog_prendas
+	- Add size infor to tickets
+	- Other little updates/fixes
+
+r4.1
+	- Setup icon for the app
+
+r4.0
+	- Revert normal combobox to services
+	- Order ingresos and gastos tables with most recent first
+	- Fix messages when new client is typed in mainwindow
+		- Do not change case or other special characters when saving new client
+	- Debug mode for avoid print of ticket in mainwindow
+	- Fix UI facturas, show iva and base calculated, replace producto with description
+	- Fix total cost calculated when ordering gastos per supplier to generate pdf
+
+r3.0
+	- Print support using excel and batch script
+	- Maximize window at startup and reorganize some code
+
+r2.0
+	- Fix facturas to add new invoices
+	- Fix saving new rows in lists
+	- Add 2 decimal digits to all currency data
+	- Update UI of search in recogida de prendas
+	- Fix generar listado de gastos
+		- actual expenses of iva, base and importe
+		- when group per supplier, add final acc
+	- Create new table in db for servicios and make them unique in facturas with cb
+
+r1.0
+	- La Ideal software full application initial release.
+
