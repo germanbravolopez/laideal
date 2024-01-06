@@ -17,6 +17,8 @@ Listado::Listado(QWidget *parent) :
             this, &Listado::text_filter_changed);
     connect(filter_widget, &QLineEdit::textChanged,
             this, &Listado::text_filter_changed);
+    connect(table_listado, &TableView::doubleClick,
+            this, &Listado::handleDoubleClick);
 }
 
 void Listado::setupUi(QMainWindow *Listado)
@@ -295,5 +297,23 @@ void Listado::closeEvent(QCloseEvent* event)
     } else if (table_name == "prendas") {
         emit populate_prendas();
         event->accept();
+    }
+}
+
+void Listado::handleDoubleClick(const QModelIndex &index)
+{
+    if (index.isValid()) {
+        int lastColumn = table_listado->model()->columnCount() - 1;
+        QString headerName = table_listado->model()->headerData(lastColumn, Qt::Horizontal, Qt::DisplayRole).toString();
+        if (headerName == "edit_lock") {
+            QVariant value = table_listado->model()->data(table_listado->model()->index(index.row(), lastColumn));
+            if (value.toInt() == 1 && index.column() != lastColumn) {
+                QMessageBox::warning(this, "Edición bloqueada",
+                                     "No es posible editar el contenido porque se encuentra cerrado por contabilidad.\n"
+                                     "Desbloquear la fila para poder editarlo.",
+                                     QMessageBox::Ok, QMessageBox::Ok);
+                populate_table();
+            }
+        }
     }
 }

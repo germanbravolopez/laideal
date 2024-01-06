@@ -56,8 +56,8 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
     void on_actionGenerar_pdf_con_el_listado_triggered();
-
     void closeEvent(QCloseEvent* event);
+    void handleDoubleClick(const QModelIndex &index);
 
 private:
 

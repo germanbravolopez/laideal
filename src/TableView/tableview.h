@@ -20,6 +20,8 @@ public:
 public slots:
     void showContextMenu(QPoint pos);
 
+signals:
+    void doubleClick(const QModelIndex &index);
 };
 
 #endif // TABLEVIEW_H
