@@ -1,5 +1,8 @@
 Releases:
 
+r5.6
+	- Prevent update of locked data in ingresos or gastos
+
 r5.5
 	- Avoid print message "IMPORTE PAGADO" when printing facturas
 	- Fix non-used code and let always override contabilidad reports
