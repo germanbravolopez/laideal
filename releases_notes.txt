@@ -1,5 +1,11 @@
 Releases:
 
+r5.7
+	- Fix deselect cell when data locked in listados
+	- Only lock data when contabilidad was not done before, avoid re-lock
+	- Add checkbox to select if data to be locked
+	- Do not close revertir window if data was not locked
+
 r5.6
 	- Prevent update of locked data in ingresos or gastos
 
