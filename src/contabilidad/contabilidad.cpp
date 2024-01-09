@@ -41,7 +41,7 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         case 0:
             // contabilidad not done
             if (revertir_on)
-                QMessageBox::information(this, "Contabilidad",
+                QMessageBox::information(this, "Revertir contabilidad",
                                          "La contabilidad del trimestre "
                                          + QString::number(ui->sb_trim->value())
                                          + " para el año " + QString::number(ui->sb_year->value())
@@ -69,8 +69,8 @@ void Contabilidad::on_bb_ok_cancel_accepted()
             break;
         default:
             QMessageBox::warning(this, "Contabilidad",
-                                  "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
+                                 "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
             break;
         }
     }
