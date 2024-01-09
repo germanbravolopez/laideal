@@ -25,10 +25,12 @@ void Contabilidad::initial_settings()
 
 void Contabilidad::reset_all_contents()
 {
-    ui->cb_config->setEnabled(!revertir_on);
     ui->cb_config->setCurrentText(C_TRIMESTRAL);
+    ui->cb_config->setDisabled(revertir_on);
     ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
+    ui->checkBox_lock->setChecked(false);
+    ui->checkBox_lock->setDisabled(revertir_on);
 }
 
 void Contabilidad::on_bb_ok_cancel_accepted()
@@ -37,22 +39,32 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         switch (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value())) {
         case 0:
             // contabilidad not done
-            if (!revertir_on)
-                generate_contabilidad();
-            update_lock();
-            break;
-        case 1:
-            // contabilidad done
-            if (!revertir_on) {
+            if (revertir_on)
                 QMessageBox::information(this, "Contabilidad",
                                          "La contabilidad del trimestre "
                                          + QString::number(ui->sb_trim->value())
                                          + " para el año " + QString::number(ui->sb_year->value())
-                                         + " ya se ha realizado",
+                                         + " no está realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
+            else
                 generate_contabilidad();
-            } else // only use update_lock when revertir
+
+            if (ui->checkBox_lock->isChecked())
                 update_lock();
+            break;
+        case 1:
+            // contabilidad done
+            if (revertir_on)
+                update_lock();
+            else {
+                generate_contabilidad();
+                QMessageBox::information(this, "Contabilidad",
+                                         "La contabilidad del trimestre "
+                                         + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value())
+                                         + " ya se ha realizado.",
+                                         QMessageBox::Ok, QMessageBox::Ok);
+            }
             break;
         default:
             QMessageBox::warning(this, "Contabilidad",
@@ -242,7 +254,14 @@ void Contabilidad::update_lock()
                                  "Contabilidad revertida con éxito para el trimestre "
                                  + ui->sb_trim->text() +
                                  " del año "
-                                 + ui->sb_year->text(),
+                                 + ui->sb_year->text() + ".",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+    } else {
+        QMessageBox::information(this, "Contabilidad",
+                                 "Contabilidad realizada con éxito para el trimestre "
+                                 + ui->sb_trim->text() +
+                                 " del año "
+                                 + ui->sb_year->text() + ".",
                                  QMessageBox::Ok, QMessageBox::Ok);
     }
 }
