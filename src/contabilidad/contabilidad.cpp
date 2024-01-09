@@ -35,8 +35,9 @@ void Contabilidad::reset_all_contents()
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
+    int edit_lock = read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value());
     if (ui->cb_config->currentText() == C_TRIMESTRAL) {
-        switch (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value())) {
+        switch (edit_lock) {
         case 0:
             // contabilidad not done
             if (revertir_on)
@@ -76,7 +77,8 @@ void Contabilidad::on_bb_ok_cancel_accepted()
     else
         generate_contabilidad();
 
-    this->close();
+    if (!(edit_lock == 0 && revertir_on))
+        this->close();
 }
 
 void Contabilidad::on_bb_ok_cancel_rejected()
