@@ -39,16 +39,20 @@ void Contabilidad::on_bb_ok_cancel_accepted()
             // contabilidad not done
             if (!revertir_on)
                 generate_contabilidad();
-            lock_data();
+            update_lock();
             break;
         case 1:
             // contabilidad done
-            qDebug() << "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
-                        + " para el año " + QString::number(ui->sb_year->value())
-                        + " ya se ha realizado";
-            if (!revertir_on)
+            if (!revertir_on) {
+                QMessageBox::information(this, "Contabilidad",
+                                         "La contabilidad del trimestre "
+                                         + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value())
+                                         + " ya se ha realizado",
+                                         QMessageBox::Ok, QMessageBox::Ok);
                 generate_contabilidad();
-            lock_data();
+            } else // only use update_lock when revertir
+                update_lock();
             break;
         default:
             QMessageBox::warning(this, "Contabilidad",
@@ -207,7 +211,7 @@ float Contabilidad::get_total_income(QString table,
     return total_price_between_dates(db, table, start_date, end_date, iva);
 }
 
-void Contabilidad::lock_data()
+void Contabilidad::update_lock()
 {
     switch (ui->sb_trim->value()) {
     case 1:
