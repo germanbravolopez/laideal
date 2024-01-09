@@ -454,13 +454,16 @@ void RecogPrendas::on_pb_pku_all_clicked()
 
 void RecogPrendas::on_pb_print_clicked()
 {
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
-    ui_impr->is_recibo = false;
-    ui_impr->is_complete_invoice = false;
-    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
-    ui_impr->get_ticket_info();
-    ui_impr->create_ticket_excel(false, false);
-    ui_impr->print_ticket();
+    if (!ui->le_nr_ticket->text().isEmpty()) {
+        Imprimir *ui_impr;
+        ui_impr = new Imprimir(this);
+        ui_impr->db = db;
+        ui_impr->is_recibo = false;
+        ui_impr->is_complete_invoice = false;
+        ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+        ui_impr->get_ticket_info();
+        ui_impr->create_ticket_excel(false, false);
+        ui_impr->print_ticket();
+        this->close();
+    }
 }
