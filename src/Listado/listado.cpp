@@ -18,7 +18,7 @@ Listado::Listado(QWidget *parent) :
     connect(filter_widget, &QLineEdit::textChanged,
             this, &Listado::text_filter_changed);
     connect(table_listado, &TableView::doubleClick,
-            this, &Listado::handleDoubleClick);
+            this, &Listado::handleDoubleClick, Qt::QueuedConnection);
 }
 
 void Listado::setupUi(QMainWindow *Listado)
@@ -312,7 +312,9 @@ void Listado::handleDoubleClick(const QModelIndex &index)
                                      "No es posible editar el contenido porque se encuentra cerrado por contabilidad.\n"
                                      "Desbloquear la fila para poder editarlo.",
                                      QMessageBox::Ok, QMessageBox::Ok);
-                populate_table();
+                // Deselect the current cell
+                QItemSelectionModel *selectionModel = table_listado->selectionModel();
+                selectionModel->clearSelection();
             }
         }
     }
