@@ -219,6 +219,14 @@ void Listado::text_filter_changed()
 
 void Listado::on_actionActualizar_triggered()
 {
+    if (table_name == "ingresos") {
+        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
+        verticalScrollBar->setValue(verticalScrollBar->minimum());
+        table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
+        table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
+        resize_window_to_table();
+    } else
     populate_table();
 }
 
