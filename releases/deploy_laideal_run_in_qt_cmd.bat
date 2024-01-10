@@ -1,7 +1,15 @@
 @echo off
 
+REM Get the full path of the current batch file
+set "full_path=%~dp0"
+
+REM Get the parent directory by changing the current directory and echoing the absolute path
+pushd "%full_path%..\.."
+set "parent_dir=%CD%"
+popd
+
 REM Set the source file and folder and check if it exists
-set "sourceFolder=C:\Users\gebra\work\tintoreria\build-laideal-Desktop_Qt_6_4_3_MinGW_64_bit-Release"
+set "sourceFolder=%parent_dir%\build-laideal-Desktop_Qt_6_4_3_MinGW_64_bit-Release"
 set "sourceSubFolder=src\app"
 set "fileName=laideal.exe"
 if not exist "%sourceFolder%\%sourceSubFolder%\%fileName%" (
