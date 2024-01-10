@@ -4,8 +4,8 @@ setlocal enabledelayedexpansion
 set "search=r1.0"
 set "replace=%~1"
 
-set "input_file=C:\Users\gebra\work\tintoreria\releases\laideal.iss"
-set "output_file=C:\Users\gebra\work\tintoreria\releases\laideal_upd.iss"
+set "input_file=laideal.iss"
+set "output_file=laideal_upd.iss"
 
 if not exist "%input_file%" (
   echo %input_file% file does not exist.
