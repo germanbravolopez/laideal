@@ -219,15 +219,17 @@ void Listado::text_filter_changed()
 
 void Listado::on_actionActualizar_triggered()
 {
-    if (table_name == "ingresos") {
-        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
-        verticalScrollBar->setValue(verticalScrollBar->minimum());
+    QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
+    verticalScrollBar->setValue(verticalScrollBar->minimum());
+    if (table_name == "gastos")
+        table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
+    else if (table_name == "ingresos")
         table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
-        table_listado->resizeColumnsToContents();
-        table_listado->resizeRowsToContents();
-        resize_window_to_table();
-    } else
-    populate_table();
+    else
+        table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+    table_listado->resizeColumnsToContents();
+    table_listado->resizeRowsToContents();
+    resize_window_to_table();
 }
 
 void Listado::on_actionAnadir_fila_triggered()

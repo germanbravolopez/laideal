@@ -5,7 +5,8 @@ r5.7
 	- Only lock data when contabilidad was not done before, avoid re-lock
 	- Add checkbox to select if data to be locked
 	- Do not close revertir window if data was not locked
-	- Close recogida prendas after print ticket
+	- Close recog_prendas after print ticket
+	- Update lists by reordering and not with populate_table()
 
 r5.6
 	- Prevent update of locked data in ingresos or gastos
