@@ -28,9 +28,9 @@ LicenseFile=C:\Users\gebra\work\tintoreria\laideal\License.txt
 InfoBeforeFile=C:\Users\gebra\work\tintoreria\laideal\releases_notes.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
-OutputDir=C:\Users\gebra\work\tintoreria\releases\setup_outputs
+OutputDir=C:\Users\gebra\work\tintoreria\laideal\releases\setup_outputs
 OutputBaseFilename=laideal_setup_r1.0
-SetupIconFile=C:\Users\gebra\work\tintoreria\icon\lavadora.ico
+SetupIconFile=C:\Users\gebra\work\tintoreria\laideal\icon\lavadora.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -43,7 +43,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Users\gebra\work\tintoreria\releases\r1.0\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\gebra\work\tintoreria\laideal\releases\r1.0\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]

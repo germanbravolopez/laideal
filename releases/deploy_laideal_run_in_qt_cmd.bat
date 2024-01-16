@@ -19,7 +19,7 @@ if not exist "%sourceFolder%\%sourceSubFolder%\%fileName%" (
 
 REM Prompt the user to enter the name of the release name, concatenate with the destination folder
 set /p "releaseName=Enter the release to do (r1.0, r2.0, ...): "
-set "destinationFolder=C:\Users\gebra\work\tintoreria\releases\%releaseName%"
+set "destinationFolder=C:\Users\gebra\work\tintoreria\laideal\releases\%releaseName%"
 REM Check if folder exists, otherwise create it
 if exist "%destinationFolder%" (
     echo Release already exists, check the folder: "%destinationFolder%".
@@ -54,12 +54,10 @@ windeployqt %fileName%
 echo Rename release folder to avoid generation of same release
 ren "%sourceFolder%" "build-laideal-Desktop_Qt_6_4_3_MinGW_64_bit-Release_%releaseName%"
 
-
-REM Call the script to zip the released folder
-call C:\Users\gebra\work\tintoreria\releases\zip_folder.bat %destinationFolder%
-
-REM Call the script to update the iss file
-call C:\Users\gebra\work\tintoreria\releases\find_replace.bat %releaseName%
-
 cd ..
 
+REM Call the script to zip the released folder
+call C:\Users\gebra\work\tintoreria\laideal\releases\zip_folder.bat %destinationFolder%
+
+REM Call the script to update the iss file
+call C:\Users\gebra\work\tintoreria\laideal\releases\find_replace.bat %releaseName%
