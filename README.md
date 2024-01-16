@@ -13,7 +13,7 @@ La Ideal laundry software app
 3. Run application in Qt with "*Release*" option
 4. Close Qt
 5. Open a Qt bash with admin rights
-6. `cd C:\Users\gebra\work\tintoreria\releases`
+6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
 7. `deploy_laideal_run_in_qt_cmd.bat`
 8. Set number of release, for example: "r4.2"
 9. Open `laideal_upd.iss` and run it
