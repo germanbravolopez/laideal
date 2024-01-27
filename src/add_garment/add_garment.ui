@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AddGarment</class>
+ <widget class="QMainWindow" name="AddGarment">
+  <property name="windowModality">
+   <enum>Qt::WindowModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>660</width>
+    <height>266</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="font">
+   <font>
+    <pointsize>12</pointsize>
+   </font>
+  </property>
+  <property name="windowTitle">
+   <string>Añadir nuevas prendas</string>
+  </property>
+  <property name="locale">
+   <locale language="Spanish" country="Spain"/>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0">
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="2" column="6">
+       <widget class="QLineEdit" name="le_cantidad"/>
+      </item>
+      <item row="6" column="0" colspan="7">
+       <widget class="QDialogButtonBox" name="buttonBox">
+        <property name="standardButtons">
+         <set>QDialogButtonBox::Cancel|QDialogButtonBox::Reset|QDialogButtonBox::Save</set>
+        </property>
+        <property name="centerButtons">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QPushButton" name="pb_search">
+        <property name="text">
+         <string>Buscar</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="2">
+       <widget class="QLabel" name="lbl_fecha_pago">
+        <property name="text">
+         <string>Fecha pago:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="lbl_servicio">
+        <property name="text">
+         <string>Servicio:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1" colspan="4">
+       <widget class="QLineEdit" name="le_cliente"/>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="lbl_estado">
+        <property name="text">
+         <string>Estado:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="lbl_pagado">
+        <property name="text">
+         <string>Pagado:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="lbl_n_recibo">
+        <property name="text">
+         <string>Nº Recibo:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3" colspan="2">
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="5" column="1">
+       <widget class="QComboBox" name="cb_servicio">
+        <property name="editable">
+         <bool>false</bool>
+        </property>
+        <item>
+         <property name="text">
+          <string>Limp.</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Plan.</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QLabel" name="lbl_fecha_rcp">
+        <property name="text">
+         <string>Fecha recepción:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QPushButton" name="pb_pagado">
+        <property name="text">
+         <string>NO</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="3">
+       <widget class="QDateEdit" name="de_fecha_pago"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="lbl_prenda">
+        <property name="text">
+         <string>Prenda:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="3">
+       <widget class="QDateEdit" name="de_fecha_recog"/>
+      </item>
+      <item row="4" column="1">
+       <widget class="QPushButton" name="pb_estado">
+        <property name="text">
+         <string>En tienda</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="2">
+       <widget class="QLabel" name="lbl_fecha_recog">
+        <property name="text">
+         <string>Fecha recogida:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="6">
+       <widget class="QDateEdit" name="de_fecha_rcp">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="5">
+       <widget class="QLabel" name="lbl_cantidad">
+        <property name="text">
+         <string>Cantidad:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="lbl_cliente">
+        <property name="text">
+         <string>Cliente:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="le_n_recibo"/>
+      </item>
+      <item row="4" column="6">
+       <widget class="QLineEdit" name="le_importe">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="clearButtonEnabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="6">
+       <widget class="QLineEdit" name="le_size"/>
+      </item>
+      <item row="3" column="5">
+       <widget class="QLabel" name="lbl_size">
+        <property name="text">
+         <string>Tamaño:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="2">
+       <widget class="QLabel" name="lbl_observaciones">
+        <property name="text">
+         <string>Observaciones:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="3" colspan="4">
+       <widget class="QLineEdit" name="le_observaciones">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="readOnly">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="5">
+       <widget class="QLabel" name="lbl_importe">
+        <property name="text">
+         <string>Importe:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1" colspan="3">
+       <widget class="QComboBox" name="cb_prenda">
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <tabstops>
+  <tabstop>le_n_recibo</tabstop>
+  <tabstop>pb_search</tabstop>
+  <tabstop>le_cliente</tabstop>
+  <tabstop>de_fecha_rcp</tabstop>
+  <tabstop>cb_prenda</tabstop>
+  <tabstop>le_cantidad</tabstop>
+  <tabstop>pb_pagado</tabstop>
+  <tabstop>de_fecha_pago</tabstop>
+  <tabstop>le_size</tabstop>
+  <tabstop>pb_estado</tabstop>
+  <tabstop>de_fecha_recog</tabstop>
+  <tabstop>le_importe</tabstop>
+  <tabstop>cb_servicio</tabstop>
+  <tabstop>le_observaciones</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

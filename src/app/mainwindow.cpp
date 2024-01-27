@@ -6,6 +6,7 @@
 #include "imprimir.h"
 #include "contabilidad.h"
 #include "facturas.h"
+#include "add_garment.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -635,4 +636,12 @@ void MainWindow::limpiar_base_de_datos(bool print)
 void MainWindow::on_actionModo_debug_triggered(bool checked)
 {
     debug = checked;
+}
+
+void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
+{
+    AddGarment *ui_add_garment;
+    ui_add_garment = new AddGarment(this);
+    ui_add_garment->db = db;
+    ui_add_garment->show();
 }

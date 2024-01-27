@@ -116,7 +116,7 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
     }
     else
         QMessageBox::critical(this, "Error en formulario factura",
-                              "Boton no definido.",
+                              "Botón no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
 }
 

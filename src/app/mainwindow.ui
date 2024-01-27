@@ -389,7 +389,7 @@
        <locale language="Spanish" country="Spain"/>
       </property>
       <property name="text">
-       <string>N. Recibo:</string>
+       <string>Nº Recibo:</string>
       </property>
      </widget>
     </item>
@@ -647,9 +647,11 @@ prenda</string>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="separator"/>
-    <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
+    <addaction name="separator"/>
+    <addaction name="actionLimpiar_base_de_datos"/>
+    <addaction name="actionAnadir_nuevas_prendas"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -833,6 +835,17 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
    </property>
    <property name="shortcut">
     <string>Alt+Shift+R</string>
+   </property>
+  </action>
+  <action name="actionAnadir_nuevas_prendas">
+   <property name="text">
+    <string>Añadir nuevas prendas</string>
+   </property>
+   <property name="toolTip">
+    <string>Añadir nuevas prendas a un ticket guardado</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+Shift+N</string>
    </property>
   </action>
  </widget>

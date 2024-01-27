@@ -9,4 +9,4 @@ target_link_libraries(facturas
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
 )
-target_include_directories(contabilidad INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(facturas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

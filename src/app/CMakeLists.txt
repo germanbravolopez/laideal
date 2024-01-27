@@ -33,6 +33,7 @@ target_link_libraries(laideal
     TableView
     contabilidad
     facturas
+    add_garment
 )
 
 set_target_properties(laideal PROPERTIES
