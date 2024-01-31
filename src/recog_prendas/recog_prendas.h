@@ -46,13 +46,14 @@ public:
         PKU_YES,
         PKU_NO,
         OBSV,
-        SIZE_AND_PRICE
+        SIZE_AND_PRICE,
+        SEPARATE_GARM
     };
 
 private slots:
     void initial_settings();
     void reset_all_contents();
-    void update_db(UpdateDBop op);
+    void update_db(UpdateDBop op, int n_garm = 0);
     void update_row_clicked_to_fields();
     void calculate_price();
 
@@ -68,6 +69,7 @@ private slots:
     void on_pb_pay_all_clicked();
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();
+    void on_pb_separ_garm_clicked();
 
 private:
     Ui::RecogPrendas *ui;

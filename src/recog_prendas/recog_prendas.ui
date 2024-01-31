@@ -466,7 +466,7 @@ factura</string>
          <bool>false</bool>
         </property>
         <property name="currentText">
-         <string>Pago</string>
+         <string>Recepción</string>
         </property>
         <item>
          <property name="text">
@@ -547,44 +547,6 @@ factura</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
-       <widget class="QDateEdit" name="de_date_recep">
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="locale">
-         <locale language="Spanish" country="Spain"/>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-        <property name="displayFormat">
-         <string>dd-MMM-yyyy</string>
-        </property>
-        <property name="calendarPopup">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="lbl_date_paym">
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="locale">
-         <locale language="Spanish" country="Spain"/>
-        </property>
-        <property name="text">
-         <string>Fecha Pago:</string>
-        </property>
-       </widget>
-      </item>
       <item row="1" column="1">
        <widget class="QDateEdit" name="de_date_paym">
         <property name="font">
@@ -623,6 +585,22 @@ factura</string>
         </property>
        </widget>
       </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="lbl_date_paym">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="text">
+         <string>Fecha Pago:</string>
+        </property>
+       </widget>
+      </item>
       <item row="2" column="1">
        <widget class="QDateEdit" name="de_date_pickup">
         <property name="font">
@@ -642,6 +620,35 @@ factura</string>
         </property>
         <property name="calendarPopup">
          <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QDateEdit" name="de_date_recep">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="displayFormat">
+         <string>dd-MMM-yyyy</string>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QPushButton" name="pb_separ_garm">
+        <property name="text">
+         <string>Separar prendas</string>
         </property>
        </widget>
       </item>

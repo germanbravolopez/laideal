@@ -47,7 +47,7 @@ void RecogPrendas::reset_all_contents()
     ui->de_date_pickup->setDate(QDate::currentDate());
 }
 
-void RecogPrendas::update_db(UpdateDBop op)
+void RecogPrendas::update_db(UpdateDBop op, int n_garm)
 {
     bool edit_lock = sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_EDIT_LOCK)).toBool();
     QSqlQuery q;
@@ -205,8 +205,69 @@ void RecogPrendas::update_db(UpdateDBop op)
             q.exec();
             q.clear();
             db.close();
-
         }
+    case SEPARATE_GARM:
+        // If edit_lock payment info cannot be changed
+        if (!edit_lock) {
+            // Update current garments
+            int new_qty_upd = ui->le_qty->text().toInt() - n_garm;
+            float new_imp_upd = QString::number(new_qty_upd).toFloat() * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+            db.open();
+            q.prepare("UPDATE ingresos SET cantidad = :new_cant, importe = :new_impor WHERE "
+                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND "
+                      "prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+            // Set new values
+            q.bindValue(":new_cant",  QString::number(new_qty_upd));
+            q.bindValue(":new_impor", QString::number(new_imp_upd, 'f', 2).replace(",","."));
+            // Set old values
+            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
+            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
+            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
+            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
+            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
+            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
+            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
+            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
+            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+            // Write to db
+            q.exec();
+            q.clear();
+            db.close();
+
+            // Insert separated garments
+            float new_imp_ins = n_garm * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+            db.open();
+            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) "
+                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+            q.bindValue(":n_recibo", ui->le_nr_ticket->text());
+            q.bindValue(":cliente", ui->le_client->text());
+            q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
+            q.bindValue(":pagado", ui->pb_payment->text());
+            if (ui->pb_payment->isChecked())
+                q.bindValue(":fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
+            else
+                q.bindValue(":fecha_pago", "");
+            q.bindValue(":estado", ui->pb_state->text());
+            if (ui->pb_state->isChecked())
+                q.bindValue(":fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
+            else
+                q.bindValue(":fecha_recogida", "");
+            q.bindValue(":importe", QString::number(new_imp_ins, 'f', 2).replace(",","."));
+            q.bindValue(":cantidad", QString::number(n_garm));
+            q.bindValue(":prenda", ui->le_garm->text());
+            q.bindValue(":size", ui->le_size->text().replace(",","."));
+            q.bindValue(":observaciones", ui->le_obsv->text());
+            q.bindValue(":servicio", ui->le_servic->text());
+            q.bindValue(":edit_lock", "0");
+            q.exec();
+            q.clear();
+            db.close();
+        }
+        else
+            QMessageBox::warning(this, tr("Ticket bloqueado"),
+                                 tr("El ticket actual se encuentra bloqueado por la contabilidad."),
+                                 QMessageBox::Ok, QMessageBox::Ok);
+        break;
     default:
         break;
     }
@@ -466,4 +527,24 @@ void RecogPrendas::on_pb_print_clicked()
         ui_impr->print_ticket();
         this->close();
     }
+}
+
+void RecogPrendas::on_pb_separ_garm_clicked()
+{
+    if (ui->le_size->text() == "") {
+        if (ui->le_qty->text().toInt() > 1) {
+            bool ok;
+            int number = QInputDialog::getInt(this, "Separar prendas",
+                                              "¿Cuántas prendas se van a pagar o entregar?", 1, 1, ui->le_qty->text().toInt() - 1, 1, &ok);
+            if (ok) {
+                update_db(SEPARATE_GARM, number);
+            }
+        } else
+            QMessageBox::warning(this, "Separar prendas",
+                                     "La cantidad de la prenda seleccionada no es mayor de 1, no se puede separar en varios recibos.",
+                                     QMessageBox::Ok, QMessageBox::Ok);
+    } else
+        QMessageBox::warning(this, "Separar prendas",
+                                 "No se pueden separar prendas que tienen un tamaño distinto de 0.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
 }
