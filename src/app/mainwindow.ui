@@ -629,6 +629,8 @@ prenda</string>
      <string>Archivo</string>
     </property>
     <addaction name="actionModo_debug"/>
+    <addaction name="actionLimpiar_base_de_datos"/>
+    <addaction name="separator"/>
     <addaction name="actionCerrar"/>
    </widget>
    <widget class="QMenu" name="menuHerramientas">
@@ -650,7 +652,6 @@ prenda</string>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
     <addaction name="separator"/>
-    <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionAnadir_nuevas_prendas"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
@@ -785,17 +786,6 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
     <string>Alt+Shift+O</string>
    </property>
   </action>
-  <action name="actionLimpiar_base_de_datos">
-   <property name="text">
-    <string>Limpiar base de datos</string>
-   </property>
-   <property name="toolTip">
-    <string>Limpiar comas ',' en importes guardados en la base de datos</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+L</string>
-   </property>
-  </action>
   <action name="actionListado_de_servicios">
    <property name="text">
     <string>Listado de servicios</string>
@@ -846,6 +836,17 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
    </property>
    <property name="shortcut">
     <string>Alt+Shift+N</string>
+   </property>
+  </action>
+  <action name="actionLimpiar_base_de_datos">
+   <property name="text">
+    <string>Limpiar base de datos</string>
+   </property>
+   <property name="toolTip">
+    <string>Limpiar comas ',' en importes guardados en la base de datos</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+L</string>
    </property>
   </action>
  </widget>
