@@ -45,9 +45,7 @@ void AddGarment::reset_all_contents()
 void AddGarment::on_pb_search_pressed()
 {
     db.open();
-    sql_query_model->setQuery("SELECT * \
-                    FROM ingresos \
-                    WHERE n_recibo = '" + ui->le_n_recibo->text() + "'");
+    sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + ui->le_n_recibo->text() + "'");
     db.close();
     // check if not empty
     if (sql_query_model->rowCount() > 0) {
@@ -196,8 +194,8 @@ void AddGarment::save_factura()
 {
     db.open();
     QSqlQuery q;
-    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) \
-    VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) "
+              "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
     q.bindValue(":n_recibo", ui->le_n_recibo->text());
     q.bindValue(":cliente", ui->le_cliente->text());
     q.bindValue(":fecha_recepcion", ui->de_fecha_rcp->date().toString("dd-MM-yyyy"));

@@ -179,8 +179,7 @@ bool add_new_client(QSqlDatabase &db,
 {
     QSqlQuery q;
     db.open();
-    q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) \
-    VALUES(:nombre, :tel_fijo, :direccion, :movil)");
+    q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) VALUES(:nombre, :tel_fijo, :direccion, :movil)");
     q.bindValue(":nombre", client);
     q.bindValue(":tel_fijo", tel_fijo);
     q.bindValue(":direccion", direccion);

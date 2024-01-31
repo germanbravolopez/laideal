@@ -53,9 +53,7 @@ void Imprimir::get_ticket_info()
     // Search ticket
     sql_query_model = new QSqlQueryModel;
     db.open();
-    sql_query_model->setQuery("SELECT * \
-                    FROM ingresos \
-                    WHERE n_recibo = '" + le_n_ticket->text() + "'");
+    sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + le_n_ticket->text() + "'");
     db.close();
 }
 

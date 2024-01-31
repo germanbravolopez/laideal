@@ -62,8 +62,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
                                      QMessageBox::Ok, QMessageBox::Ok);
             else {
                 db.open();
-                q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE \
-                    n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
+                          "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                          "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
                 // Set new values
                 q.bindValue(":new_fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
                 q.bindValue(":new_pagado",     ui->pb_payment->text());
@@ -93,8 +94,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         if (!edit_lock) {
             db.open();
             QSqlQuery q;
-            q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE \
-                n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+            q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
+                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
             // Set new values
             q.bindValue(":new_fecha_pago", "");
             q.bindValue(":new_pagado",     ui->pb_payment->text());
@@ -120,8 +122,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         break;
     case PKU_YES:
         db.open();
-        q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE \
-            n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+        q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE "
+                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
         // Set new values
         q.bindValue(":new_fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
         q.bindValue(":new_estado",         ui->pb_state->text());
@@ -142,8 +145,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         break;
     case PKU_NO:
         db.open();
-        q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE \
-            n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+        q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE "
+                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
         // Set new values
         q.bindValue(":new_fecha_recogida", "");
         q.bindValue(":new_estado",         ui->pb_state->text());
@@ -164,8 +168,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         break;
     case OBSV:
         db.open();
-        q.prepare("UPDATE ingresos SET observaciones = :new_observaciones WHERE \
-            n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+        q.prepare("UPDATE ingresos SET observaciones = :new_observaciones WHERE "
+                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
         // Set new values
         q.bindValue(":new_observaciones", ui->le_obsv->text());
         // Set old values
@@ -186,8 +191,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
     case SIZE_AND_PRICE:
         if (!edit_lock && ui->pb_payment->text() == "NO") {
             db.open();
-            q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE \
-                n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+            q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE "
+                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
             // Set new values
             q.bindValue(":new_size", ui->le_size->text());
             q.bindValue(":new_importe", ui->le_price->text());
@@ -214,8 +220,8 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             float new_imp_upd = QString::number(new_qty_upd).toFloat() * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
             db.open();
             q.prepare("UPDATE ingresos SET cantidad = :new_cant, importe = :new_impor WHERE "
-                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND cantidad = :cant AND "
-                      "prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
+                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
             // Set new values
             q.bindValue(":new_cant",  QString::number(new_qty_upd));
             q.bindValue(":new_impor", QString::number(new_imp_upd, 'f', 2).replace(",","."));
@@ -331,18 +337,14 @@ void RecogPrendas::on_pb_search_clicked()
                                                                       ui->le_search->text() + "' OR movil like '" + ui->le_search->text(), true, true);
                 if (!client_from_phone.isNull()) {
                     db.open();
-                    sql_query_model->setQuery("SELECT * \
-                                     FROM ingresos \
-                                     WHERE cliente = '" + client_from_phone + "'");
+                    sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente = '" + client_from_phone + "'");
                     db.close();
                 }
             }
             else {
                 // Ticket number
                 db.open();
-                sql_query_model->setQuery("SELECT * \
-                                FROM ingresos \
-                                WHERE n_recibo = '" + ui->le_search->text() + "'");
+                sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + ui->le_search->text() + "'");
                 db.close();
                 total_price_active = true;
             }
@@ -360,17 +362,13 @@ void RecogPrendas::on_pb_search_clicked()
             if (!date_slash.isNull() || !date_dash.isNull()) {
                 // Text is date
                 db.open();
-                sql_query_model->setQuery("SELECT * \
-                                FROM ingresos \
-                                WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
+                sql_query_model->setQuery("SELECT * FROM ingresos WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
                 db.close();
             }
             else {
                 // Text is not a date
                 db.open();
-                sql_query_model->setQuery("SELECT * \
-                                FROM ingresos \
-                                WHERE cliente like '%" + ui->le_search->text() + "%'");
+                sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente like '%" + ui->le_search->text() + "%'");
                 db.close();
             }
         }
