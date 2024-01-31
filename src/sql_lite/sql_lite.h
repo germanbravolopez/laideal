@@ -21,5 +21,6 @@ int read_lock_for_month_and_year(QSqlDatabase &db, QString table, int month, int
 void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year);
 int update_comas_in_decimal_data(QSqlDatabase &db, QString table, QString item);
 void insert_new_item_to_table(QSqlDatabase &db, QStringList items, QString table);
+QString gen_hash_16();
 
 #endif // SQL_LITE_H

@@ -630,6 +630,7 @@ prenda</string>
     </property>
     <addaction name="actionModo_debug"/>
     <addaction name="actionLimpiar_base_de_datos"/>
+    <addaction name="actionCrear_hash_en_ingresos"/>
     <addaction name="separator"/>
     <addaction name="actionCerrar"/>
    </widget>
@@ -847,6 +848,14 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
    </property>
    <property name="shortcut">
     <string>Alt+L</string>
+   </property>
+  </action>
+  <action name="actionCrear_hash_en_ingresos">
+   <property name="text">
+    <string>Crear hash en ingresos</string>
+   </property>
+   <property name="toolTip">
+    <string>Crear hashes para los recibos que no tengan ya un hash en ingresos</string>
    </property>
   </action>
  </widget>

@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QStatusBar>
 #include <QScrollBar>
+#include <QApplication>
 
 #include "tableview.h"
 #include "filterwidget.h"

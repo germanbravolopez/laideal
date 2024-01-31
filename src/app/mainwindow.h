@@ -80,6 +80,7 @@ private slots:
     void limpiar_base_de_datos(bool print);
     void on_actionModo_debug_triggered(bool checked);
     void on_actionAnadir_nuevas_prendas_triggered();
+    void on_actionCrear_hash_en_ingresos_triggered();
 
 private:
     Ui::MainWindow *ui;

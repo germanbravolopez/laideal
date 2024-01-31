@@ -8,6 +8,10 @@
 Listado::Listado(QWidget *parent) :
     QMainWindow(parent)
 {
+
+    // Change the cursor to a loading icon
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
     setupUi(this);
     connect(table_listado->action1, SIGNAL(triggered()),
             this, SLOT(on_actionAnadir_fila_triggered()));
@@ -19,6 +23,9 @@ Listado::Listado(QWidget *parent) :
             this, &Listado::text_filter_changed);
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
+
+    // Restore the cursor to default
+    QApplication::restoreOverrideCursor();
 }
 
 void Listado::setupUi(QMainWindow *Listado)

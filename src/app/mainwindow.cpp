@@ -613,7 +613,12 @@ void MainWindow::on_actionFormulario_facturas_triggered()
 
 void MainWindow::on_actionLimpiar_base_de_datos_triggered()
 {
+    // Change the cursor to a loading icon
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    // Perform time consuming task
     limpiar_base_de_datos(true);
+    // Restore the cursor to default
+    QApplication::restoreOverrideCursor();
 }
 
 void MainWindow::limpiar_base_de_datos(bool print)
@@ -645,3 +650,68 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     ui_add_garment->db = db;
     ui_add_garment->show();
 }
+
+void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
+{
+    // Change the cursor to a loading icon
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
+    // Perform time consuming process
+    int cnt = 0;
+    db.open();
+    QSqlQuery q;
+    if (q.exec("SELECT * FROM ingresos")) {
+        while (q.next()) {
+            if (q.value(14).toString() == "") {
+                QString n_recibo = q.value(0).toString();
+                QString cliente = q.value(1).toString();
+                QString fecha_recepcion = q.value(2).toString();
+                QString fecha_pago = q.value(3).toString();
+                QString fecha_recogida = q.value(4).toString();
+                QString importe = q.value(5).toString();
+                QString pagado = q.value(6).toString();
+                QString estado = q.value(7).toString();
+                QString cantidad = q.value(8).toString();
+                QString prenda = q.value(9).toString();
+                QString size = q.value(10).toString();
+                QString servicio = q.value(11).toString();
+                QString observaciones = q.value(12).toString();
+                QString edit_lock = q.value(13).toString();
+
+                QSqlQuery q1;
+                QString new_hash = gen_hash_16();
+
+                q1.prepare("UPDATE ingresos SET hash = :newHash WHERE n_recibo = :n_recibo AND "
+                          "cliente = :cliente AND fecha_recepcion = :fecha_recepcion AND fecha_pago = :fecha_pago AND "
+                          "fecha_recogida = :fecha_recogida AND importe = :importe AND pagado = :pagado AND estado = :estado AND "
+                          "cantidad = :cantidad AND prenda = :prenda AND size = :size AND servicio = :servicio AND "
+                          "observaciones = :observaciones AND edit_lock = :edit_lock");
+                q1.bindValue(":newHash", new_hash);
+                q1.bindValue(":n_recibo", n_recibo);
+                q1.bindValue(":cliente", cliente);
+                q1.bindValue(":fecha_recepcion", fecha_recepcion);
+                q1.bindValue(":fecha_pago", fecha_pago);
+                q1.bindValue(":fecha_recogida", fecha_recogida);
+                q1.bindValue(":importe", importe);
+                q1.bindValue(":pagado", pagado);
+                q1.bindValue(":estado", estado);
+                q1.bindValue(":cantidad", cantidad);
+                q1.bindValue(":prenda", prenda);
+                q1.bindValue(":size", size);
+                q1.bindValue(":servicio", servicio);
+                q1.bindValue(":observaciones", observaciones);
+                q1.bindValue(":edit_lock", edit_lock);
+                q1.exec();
+
+                cnt++;
+            }
+        }
+    }
+    // Restore the cursor to default
+    QApplication::restoreOverrideCursor();
+
+    QMessageBox::information(this, "Crear hash en ingresos",
+                             "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
+                             QMessageBox::Ok, QMessageBox::Ok);
+}
+
