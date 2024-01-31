@@ -707,11 +707,31 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
             }
         }
     }
+
+    // Check how many tickets contains duplicated hashes
+    QList<int> duplicated_tickets;
+    if (q.exec("SELECT n_recibo, COUNT(*) FROM ingresos GROUP BY hash HAVING COUNT(*) > 1")) {
+        while (q.next()) {
+            duplicated_tickets.append(q.value(0).toInt());
+        }
+    }
+    std::sort(duplicated_tickets.begin(), duplicated_tickets.end());
+    QStringList duplicated_tickets_s;
+    for (const int& num : duplicated_tickets) {
+        duplicated_tickets_s.append(QString::number(num));
+    }
+
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
 
-    QMessageBox::information(this, "Crear hash en ingresos",
-                             "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
-                             QMessageBox::Ok, QMessageBox::Ok);
+    if (duplicated_tickets.isEmpty())
+        QMessageBox::information(this, "Crear hash en ingresos",
+                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+    else
+        QMessageBox::information(this, "Crear hash en ingresos",
+                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.\n\n"
+                                 "Los siguientes recibos tienen hashes duplicados: " + duplicated_tickets_s.join(", "),
+                                 QMessageBox::Ok, QMessageBox::Ok);
 }
 
