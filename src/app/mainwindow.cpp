@@ -127,14 +127,18 @@ void MainWindow::set_garment_price(int garment_row,
     item->setText("");
     if (qnty_item) {
         float price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
-        // Check if any size is filled
-        QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
-        if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0) {
-            float size = size_item->text().toFloat() * price;
-            item->setText(QString::number(size, 'f', 2));
+        if (price < 0) {
+            price = 0.0;
+        } else {
+            // Check if any size is filled
+            QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
+            if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0) {
+                float size = size_item->text().toFloat() * price;
+                item->setText(QString::number(size, 'f', 2));
+            }
+            else
+                item->setText(QString::number(price, 'f', 2));
         }
-        else
-            item->setText(QString::number(price, 'f', 2));
     }
     else
         QMessageBox::warning(nullptr, "Error en la casilla de cantidad",

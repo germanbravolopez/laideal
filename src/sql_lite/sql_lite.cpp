@@ -96,16 +96,22 @@ float read_garment_price(QSqlDatabase &db,
         if (q.first()) {
             if (!q.value(0).toString().contains(","))
                 price = q.value(0).toFloat();
-            else
+            else {
                 QMessageBox::critical(nullptr, "Error en la base de datos",
                                       "En la tabla prendas se ha detectado que hay valores decimales guardados con ','. "
                                       "Utilizar herramienta de limpiado de importes decimales.",
                                       QMessageBox::Ok, QMessageBox::Ok);
+                price = -1;
+            }
         }
-        else
+        else {
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar read_garment_price.",
+                                  "No se ha encontrado la prenda '" + garment +
+                                  "' al usar read_garment_price para el servicio '" + service + "'.\n"
+                                  "Añadir un precio en el listado de prendas antes de continuar con esta acción.",
                                   QMessageBox::Ok, QMessageBox::Ok);
+            price = -1;
+        }
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",

@@ -218,6 +218,9 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             // Update current garments
             int new_qty_upd = ui->le_qty->text().toInt() - n_garm;
             float new_imp_upd = QString::number(new_qty_upd).toFloat() * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+            if (new_imp_upd < 0) {
+                break;
+            }
             db.open();
             q.prepare("UPDATE ingresos SET cantidad = :new_cant, importe = :new_impor WHERE "
                       "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
@@ -305,7 +308,7 @@ void RecogPrendas::update_row_clicked_to_fields()
     ui->de_date_pickup->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
 }
 
-void RecogPrendas::calculate_price()
+float RecogPrendas::calculate_price()
 {
     float item_price = read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
     if (ui->le_size->text().contains(",")) {
@@ -313,7 +316,7 @@ void RecogPrendas::calculate_price()
         ui->le_size->setText(size_splitted.first() + "." + size_splitted.last());
     }
     float calculated_price = item_price * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
-    ui->le_price->setText(QString::number(calculated_price));
+    return calculated_price;
 }
 
 void RecogPrendas::on_le_search_returnPressed()
@@ -482,8 +485,11 @@ void RecogPrendas::on_le_obsv_editingFinished()
 void RecogPrendas::on_le_size_editingFinished()
 {
     if (is_cell_clicked && ui->le_garm->text().contains("m2")) {
-        calculate_price();
-        update_db(SIZE_AND_PRICE);
+        float price = calculate_price();
+        if (price > 0) {
+            ui->le_price->setText(QString::number(price));
+            update_db(SIZE_AND_PRICE);
+        }
     }
 }
 

@@ -101,10 +101,14 @@ void AddGarment::set_garment_price()
 {
     if (ui->le_cantidad->text() != "") {
         float price = ui->le_cantidad->text().toFloat() * read_garment_price(db, ui->cb_prenda->currentText(), ui->cb_servicio->currentText());
-        if (ui->le_size->text() != "") {
-            price = ui->le_size->text().toFloat() * price;
+        if (price < 0) {
+            ui->le_importe->setText("0.00");
+        } else {
+            if (ui->le_size->text() != "") {
+                price = ui->le_size->text().toFloat() * price;
+            }
+            ui->le_importe->setText(QString::number(price, 'f', 2));
         }
-        ui->le_importe->setText(QString::number(price, 'f', 2));
     } else {
         ui->le_importe->setText("0.00");
     }
