@@ -63,21 +63,13 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             else {
                 db.open();
                 q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
-                          "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                          "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                          "n_recibo = :n_re AND hash = :hash");
                 // Set new values
                 q.bindValue(":new_fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
                 q.bindValue(":new_pagado",     ui->pb_payment->text());
-                // Set old values
+                // Set id values
                 q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-                q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-                q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-                q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-                q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-                q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-                q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-                q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-                q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+                q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
                 // Write to db
                 q.exec();
                 q.clear();
@@ -95,21 +87,13 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             db.open();
             QSqlQuery q;
             q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
-                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                      "n_recibo = :n_re AND hash = :hash");
             // Set new values
             q.bindValue(":new_fecha_pago", "");
             q.bindValue(":new_pagado",     ui->pb_payment->text());
-            // Set old values
+            // Set id values
             q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
             // Write to db
             q.exec();
             q.clear();
@@ -123,21 +107,13 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
     case PKU_YES:
         db.open();
         q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE "
-                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                  "n_recibo = :n_re AND hash = :hash");
         // Set new values
         q.bindValue(":new_fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
         q.bindValue(":new_estado",         ui->pb_state->text());
-        // Set old values
+        // Set id values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-        q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-        q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-        q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-        q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-        q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-        q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
         // Write to db
         q.exec();
         q.clear();
@@ -146,21 +122,13 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
     case PKU_NO:
         db.open();
         q.prepare("UPDATE ingresos SET fecha_recogida = :new_fecha_recogida, estado = :new_estado WHERE "
-                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                  "n_recibo = :n_re AND hash = :hash");
         // Set new values
         q.bindValue(":new_fecha_recogida", "");
         q.bindValue(":new_estado",         ui->pb_state->text());
-        // Set old values
+        // Set id values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-        q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-        q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-        q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-        q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-        q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-        q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
         // Write to db
         q.exec();
         q.clear();
@@ -169,20 +137,12 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
     case OBSV:
         db.open();
         q.prepare("UPDATE ingresos SET observaciones = :new_observaciones WHERE "
-                  "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                  "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                  "n_recibo = :n_re AND hash = :hash");
         // Set new values
         q.bindValue(":new_observaciones", ui->le_obsv->text());
-        // Set old values
+        // Set id values
         q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-        q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-        q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-        q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-        q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-        q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-        q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-        q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
         // Write to db
         q.exec();
         q.clear();
@@ -192,26 +152,19 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         if (!edit_lock && ui->pb_payment->text() == "NO") {
             db.open();
             q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE "
-                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                      "n_recibo = :n_re AND hash = :hash");
             // Set new values
             q.bindValue(":new_size", ui->le_size->text());
             q.bindValue(":new_importe", ui->le_price->text());
-            // Set old values
+            // Set id values
             q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
             // Write to db
             q.exec();
             q.clear();
             db.close();
         }
+        break;
     case SEPARATE_GARM:
         // If edit_lock payment info cannot be changed
         if (!edit_lock) {
@@ -223,21 +176,13 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             }
             db.open();
             q.prepare("UPDATE ingresos SET cantidad = :new_cant, importe = :new_impor WHERE "
-                      "n_recibo = :n_re AND importe = :impo AND pagado = :paga AND estado = :esta AND "
-                      "cantidad = :cant AND prenda = :pren AND size = :size AND servicio = :serv AND observaciones = :obsv");
+                      "n_recibo = :n_re AND hash = :hash");
             // Set new values
             q.bindValue(":new_cant",  QString::number(new_qty_upd));
             q.bindValue(":new_impor", QString::number(new_imp_upd, 'f', 2).replace(",","."));
-            // Set old values
+            // Set id values
             q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":impo", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString().replace(",","."));
-            q.bindValue(":paga", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString());
-            q.bindValue(":esta", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString());
-            q.bindValue(":cant", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-            q.bindValue(":pren", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-            q.bindValue(":size", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString().replace(",","."));
-            q.bindValue(":serv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-            q.bindValue(":obsv", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
+            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
             // Write to db
             q.exec();
             q.clear();

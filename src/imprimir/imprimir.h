@@ -28,6 +28,7 @@
 #define TABLE_SERVICE   11
 #define TABLE_OBSERV    12
 #define TABLE_EDIT_LOCK 13
+#define TABLE_HASH      14
 
 class Imprimir : public QDialog
 {

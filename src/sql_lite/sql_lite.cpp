@@ -336,36 +336,18 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
     if (table == "ingresos") {
         QStringList items = read_column_from_table(db, item, table, "");
         QStringList ids_1 = read_column_from_table(db, "n_recibo", table, "");
-        QStringList ids_2 = read_column_from_table(db, "importe", table, "");
-        QStringList ids_3 = read_column_from_table(db, "pagado", table, "");
-        QStringList ids_4 = read_column_from_table(db, "estado", table, "");
-        QStringList ids_5 = read_column_from_table(db, "cantidad", table, "");
-        QStringList ids_6 = read_column_from_table(db, "prenda", table, "");
-        QStringList ids_7 = read_column_from_table(db, "size", table, "");
-        QStringList ids_8 = read_column_from_table(db, "observaciones", table, "");
+        QStringList ids_2 = read_column_from_table(db, "hash", table, "");
 
         for (int fra = 0; fra < items.count(); fra++) {
             if (items[fra].contains(",")) {
                 QSqlQuery q;
                 db.open();
                 q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE ("
-                          "n_recibo      = :id_1 AND "
-                          "importe       = :id_2 AND "
-                          "pagado        = :id_3 AND "
-                          "estado        = :id_4 AND "
-                          "cantidad      = :id_5 AND "
-                          "prenda        = :id_6 AND "
-                          "size          = :id_7 AND "
-                          "observaciones = :id_8)");
+                          "n_recibo = :id_1 AND "
+                          "hash     = :id_2)");
                 q.bindValue(":value", items[fra].replace(",","."));
                 q.bindValue(":id_1", ids_1[fra]);
                 q.bindValue(":id_2", ids_2[fra]);
-                q.bindValue(":id_3", ids_3[fra]);
-                q.bindValue(":id_4", ids_4[fra]);
-                q.bindValue(":id_5", ids_5[fra]);
-                q.bindValue(":id_6", ids_6[fra]);
-                q.bindValue(":id_7", ids_7[fra]);
-                q.bindValue(":id_8", ids_8[fra]);
                 q.exec();
                 db.close();
                 error_cnt++;
