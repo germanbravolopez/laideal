@@ -414,11 +414,11 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     if (index.row() != row_clicked_cell)
         is_cell_clicked = false;
     // Update pointers to cell clicked
-    row_clicked_cell    = index.row();
+    row_clicked_cell = index.row();
     column_clicked_cell = index.column();
     update_row_clicked_to_fields();
     // Set clicked cell
-    is_cell_clicked     = true;
+    is_cell_clicked = true;
 }
 
 void RecogPrendas::on_le_obsv_editingFinished()
