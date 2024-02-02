@@ -192,10 +192,11 @@ bool AddGarment::validate_form()
 
 void AddGarment::save_factura()
 {
+    QString hash = gen_hash_16();
     db.open();
     QSqlQuery q;
-    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) "
-              "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
+              "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
     q.bindValue(":n_recibo", ui->le_n_recibo->text());
     q.bindValue(":cliente", ui->le_cliente->text());
     q.bindValue(":fecha_recepcion", ui->de_fecha_rcp->date().toString("dd-MM-yyyy"));
@@ -216,6 +217,7 @@ void AddGarment::save_factura()
     q.bindValue(":observaciones", ui->le_observaciones->text());
     q.bindValue(":servicio", ui->cb_servicio->currentText());
     q.bindValue(":edit_lock", "0");
+    q.bindValue(":hash", hash);
     q.exec();
     q.clear();
     db.close();

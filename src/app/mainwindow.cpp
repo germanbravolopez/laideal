@@ -283,10 +283,11 @@ bool MainWindow::save_ticket()
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
+            QString hash = gen_hash_16();
             db.open();
             QSqlQuery q;
-            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) "
-                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
+                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -312,6 +313,7 @@ bool MainWindow::save_ticket()
             QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
             q.bindValue(":servicio", cb_service->currentText());
             q.bindValue(":edit_lock", "0");
+            q.bindValue(":hash", hash);
             q.exec();
             q.clear();
             db.close();
@@ -734,4 +736,3 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
                                  "Los siguientes recibos tienen hashes duplicados: " + duplicated_tickets_s.join(", "),
                                  QMessageBox::Ok, QMessageBox::Ok);
 }
-

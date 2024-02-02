@@ -242,9 +242,10 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
 
             // Insert separated garments
             float new_imp_ins = n_garm * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+            QString hash = gen_hash_16();
             db.open();
-            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock) "
-                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock);");
+            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
+                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->le_client->text());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -265,6 +266,7 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             q.bindValue(":observaciones", ui->le_obsv->text());
             q.bindValue(":servicio", ui->le_servic->text());
             q.bindValue(":edit_lock", "0");
+            q.bindValue(":hash", hash);
             q.exec();
             q.clear();
             db.close();
