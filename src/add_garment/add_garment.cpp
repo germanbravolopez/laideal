@@ -145,6 +145,7 @@ void AddGarment::on_buttonBox_clicked(QAbstractButton *button)
         if (validate_form()) {
             save_factura();
             reset_all_contents();
+            this->close();
         }
     }
     else
