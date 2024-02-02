@@ -1,5 +1,12 @@
 Releases:
 
+r6.0
+	- New feature: add_garments for new garments to existing tickets
+	- New feature: split garments in recog_prendas
+	- Add hash to garments in ingresos to uniquely identify them in the database
+	- Update wait cursor in different places for time consuming tasks
+	- Perform recog_prendas updates to db based on recibo and hash
+
 r5.7
 	- Fix deselect cell when data locked in listados
 	- Only lock data when contabilidad was not done before, avoid re-lock

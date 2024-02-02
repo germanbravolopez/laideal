@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(laideal VERSION 5.7 LANGUAGES CXX)
+project(laideal VERSION 6.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
