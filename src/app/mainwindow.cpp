@@ -619,21 +619,20 @@ void MainWindow::on_actionFormulario_facturas_triggered()
 
 void MainWindow::on_actionLimpiar_base_de_datos_triggered()
 {
-    // Change the cursor to a loading icon
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    // Perform time consuming task
     limpiar_base_de_datos(true);
-    // Restore the cursor to default
-    QApplication::restoreOverrideCursor();
 }
 
 void MainWindow::limpiar_base_de_datos(bool print)
 {
+    // Change the cursor to a loading icon
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     int gastos_cnt = update_comas_in_decimal_data(db, "gastos", "importe");
     int ingresos_cnt = update_comas_in_decimal_data(db, "ingresos", "importe");
     ingresos_cnt += update_comas_in_decimal_data(db, "ingresos", "size");
     int prendas_cnt = update_comas_in_decimal_data(db, "prendas", "precio_limpieza");
     prendas_cnt += update_comas_in_decimal_data(db, "prendas", "precio_plancha");
+    // Restore the cursor to default
+    QApplication::restoreOverrideCursor();
     if (print)
         QMessageBox::information(this, "Limpieza de la base de datos",
                                  "Se han corregido los siguientes importes decimales que se encontraban"
