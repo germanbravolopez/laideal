@@ -8,10 +8,6 @@
 Listado::Listado(QWidget *parent) :
     QMainWindow(parent)
 {
-
-    // Change the cursor to a loading icon
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-
     setupUi(this);
     connect(table_listado->action1, SIGNAL(triggered()),
             this, SLOT(on_actionAnadir_fila_triggered()));
@@ -23,9 +19,6 @@ Listado::Listado(QWidget *parent) :
             this, &Listado::text_filter_changed);
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
-
-    // Restore the cursor to default
-    QApplication::restoreOverrideCursor();
 }
 
 void Listado::setupUi(QMainWindow *Listado)
@@ -140,6 +133,9 @@ void Listado::retranslateUi(QMainWindow *Listado)
 
 void Listado::populate_table()
 {
+    // Change the cursor to a loading icon
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
     if (QSqlDatabase::contains("qt_sql_default_connection")) {
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable(table_name);
@@ -185,6 +181,9 @@ void Listado::populate_table()
         table_listado->resizeRowsToContents();
     }
     resize_window_to_table();
+
+    // Restore the cursor to default
+    QApplication::restoreOverrideCursor();
 }
 
 void Listado::resize_window_to_table()
