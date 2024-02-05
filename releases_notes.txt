@@ -1,5 +1,8 @@
 Releases:
 
+r6.1
+	- Fix waiting cursor for listados and other tools
+
 r6.0
 	- New feature: add_garments for new garments to existing tickets
 	- New feature: split garments in recog_prendas
