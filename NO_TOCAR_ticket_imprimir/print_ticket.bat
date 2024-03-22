@@ -11,7 +11,7 @@ exit /b
    Set objExcel = CreateObject("Excel.Application")
    objExcel.Visible = False
 
-   Set objWorkbook = objExcel.Workbooks.Open("C:\Users\Usuario\OneDrive\Desktop\Tintoreria\NO_TOCAR_ticket_imprimir\ImprimirTicket.xlsx")
+   Set objWorkbook = objExcel.Workbooks.Open("C:\Users\rocio\work\tintoreria\NO_TOCAR_ticket_imprimir\ImprimirTicket.xlsx")
 
    objWorkbook.PrintOut
    objWorkbook.Close False

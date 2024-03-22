@@ -1,5 +1,8 @@
 Releases:
 
+r7.0
+	- Update hardcoded paths for new laptop
+
 r6.1
 	- Fix waiting cursor for listados and other tools
 
