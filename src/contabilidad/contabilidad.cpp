@@ -122,7 +122,7 @@ void Contabilidad::generate_contabilidad()
                 + "<h1 style='text-align:center;'>Contabilidad</h1>"
                 + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
                 + create_html_tables(0) + "</body></html>";
-        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad";
+        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad";
         filename = "/contabilidad_trimestral_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -141,7 +141,7 @@ void Contabilidad::generate_contabilidad()
                 + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value())
                 + " " + contabilidad_status + "</h2>"
                 + create_html_tables(0) + "</body></html>";
-        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
+        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
         filename = "/reporte_mensual_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -170,7 +170,7 @@ void Contabilidad::generate_contabilidad()
         }
         contabilidad_html = contabilidad_html + "</body></html>";
 
-        path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Contabilidad/Anual";
+        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Anual";
         filename = "/reporte_anual_" +
                 QString::number(ui->sb_year->value()) +
                 ".pdf";

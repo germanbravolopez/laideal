@@ -6,7 +6,7 @@
 #include <QDate>
 #include <QMessageBox>
 
-#define DB_PATH "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db"
+#define DB_PATH "C:/Users/rocio/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db"
 
 int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QString table);
 int read_max_n_min_year_in_column_from_table(QSqlDatabase &db, bool max_n_min, QString column, QString table);

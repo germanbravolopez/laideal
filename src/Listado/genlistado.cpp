@@ -229,7 +229,7 @@ void GenListado::on_bb_ok_cancel_accepted()
                               QMessageBox::Ok);
     else {
         // set path and print table
-        QString path = "C:/Users/Usuario/OneDrive/Desktop/Tintoreria/Listados_gastos";
+        QString path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Listados_gastos";
         QString filename = "/listado_gastos_" +
                 QDate::currentDate().toString("yyyy-MM-dd_") +
                 add_sufix_to_filename() +
