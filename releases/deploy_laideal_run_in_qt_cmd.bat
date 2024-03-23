@@ -9,10 +9,11 @@ set "parent_dir=%CD%"
 popd
 
 REM Set the source file and folder and check if it exists
-set "sourceFolder=%parent_dir%\build-laideal-Desktop_Qt_6_4_3_MinGW_64_bit-Release"
+for /D %%d in ("%parent_dir%\build-laideal-Desktop_Qt_*_MinGW_64_bit-Release") do set "sourceFolderFullPath=%%~d"
+
 set "sourceSubFolder=src\app"
 set "fileName=laideal.exe"
-if not exist "%sourceFolder%\%sourceSubFolder%\%fileName%" (
+if not exist "%sourceFolderFullPath%\%sourceSubFolder%\%fileName%" (
     echo Release folder or executable file does not exist.
     exit /b
 )
@@ -33,7 +34,7 @@ if errorlevel 1 (
 )
 
 REM Copy file to destination folder
-xcopy "%sourceFolder%\%sourceSubFolder%\%fileName%" "%destinationFolder%" /C /I /Y
+xcopy "%sourceFolderFullPath%\%sourceSubFolder%\%fileName%" "%destinationFolder%" /C /I /Y
 
 REM Add windeploypath to environmental variables
 set "qtPath=C:\Qt\6.4.3\mingw_64\bin"
@@ -52,7 +53,9 @@ cd %destinationFolder%
 windeployqt %fileName%
 
 echo Rename release folder to avoid generation of same release
-ren "%sourceFolder%" "build-laideal-Desktop_Qt_6_4_3_MinGW_64_bit-Release_%releaseName%"
+for %%F in ("%sourceFolderFullPath%") do set "sourceFolder=%%~nxF"
+ren "%sourceFolderFullPath%" "%sourceFolder%_%releaseName%"
+
 
 cd ..
 
