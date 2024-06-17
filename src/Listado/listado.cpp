@@ -298,6 +298,13 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
         ui_generar_listado->model = table_listado->model();
         ui_generar_listado->exec();
         populate_table();
+    } else if (table_name == "prendas") {
+            GenListado *ui_generar_listado;
+            ui_generar_listado = new GenListado(this);
+            ui_generar_listado->db = db;
+            ui_generar_listado->model = table_listado->model();
+            ui_generar_listado->table_name = table_name;
+            ui_generar_listado->print_table();
     } else {
         QMessageBox::information(this, "Generar listado",
                                  "Herramienta para generar listado no está implementada para este tipo de listado.",

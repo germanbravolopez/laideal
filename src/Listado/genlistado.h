@@ -26,13 +26,16 @@ public:
     ~GenListado();
     QSqlDatabase db;
     QAbstractItemModel *model;
+    QString table_name;
+    void print_table();
 
 private slots:
     void initial_settings();
     void set_cb_fechas();
+    QString generate_html_prendas_table();
     void write_html(QString filename, QString html);
-    QString generate_table_with_specific_conditions();
-    QString generate_html_table();
+    QString generate_html_gastos_table_with_specific_conditions();
+    QString generate_html_gastos_table();
     bool check_years_invoice_type_for_row(int row);
     QString add_sufix_to_filename();
 
