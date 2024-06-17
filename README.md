@@ -16,5 +16,4 @@ La Ideal laundry software app
 6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
 7. `deploy_laideal_run_in_qt_cmd.bat`
 8. Set number of release, for example: "r4.2"
-9. Open `laideal_upd.iss` and run it
 10. Change icon after installed

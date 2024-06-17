@@ -64,3 +64,6 @@ call C:\Users\gebra\work\tintoreria\laideal\releases\zip_folder.bat %destination
 
 REM Call the script to update the iss file
 call C:\Users\gebra\work\tintoreria\laideal\releases\find_replace.bat %releaseName%
+
+REM Run the updated iss file with Inno Setup Compiler
+call C:\Users\gebra\work\tintoreria\laideal\releases\create_installer.bat
