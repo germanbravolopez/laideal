@@ -2,6 +2,7 @@
 # ----------------------------------------------------------------------------
 releases/old_releases
 releases/setup_outputs
+releases/*.zip
 laideal_upd.iss
 
 *~
