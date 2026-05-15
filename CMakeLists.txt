@@ -13,11 +13,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport Network)
 #find_package(QXlsxQt6 REQUIRED)
 
 add_subdirectory(QXlsx)
+add_subdirectory(src/verifactu)
 add_subdirectory(src/app)
 add_subdirectory(src/sql_lite)
 add_subdirectory(src/MySortFilterProxyModel)
