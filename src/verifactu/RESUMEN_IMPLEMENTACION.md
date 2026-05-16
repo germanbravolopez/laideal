@@ -1,299 +1,245 @@
-# RESUMEN DE INTEGRACIÓN VERIFACTU
+# RESUMEN TÉCNICO Y ROADMAP DE VERIFACTU
 
-## 📦 Archivos Creados
+> **Nota**: Para implementación paso a paso, lee **GUIA_PASO_A_PASO.md**
 
-### Módulo Verifactu (`src/verifactu/`)
+## 📦 Componentes del Módulo
+
+### Arquitectura
+
+```
+VerifactuIntegration (Alto nivel)
+    ↓
+VerifactuManager (API REST)
+    ↓
+VerifactuInvoice + VerifactuTaxItem (Modelos)
+    ↓
+VerifactuConfig (Configuración)
+```
+
+### Estructura de Carpetas
 
 ```
 src/verifactu/
-├── CMakeLists.txt                    # Configuración de build
-├── README.md                         # Documentación completa
-├── GUIA_PASO_A_PASO.md              # Guía de implementación
-├── EJEMPLO_IMPLEMENTACION.cpp       # Ejemplos de uso
-│
-├── verifactuconfig.h/cpp            # Gestión de configuración
-├── verifactuinvoice.h/cpp           # Modelos de factura
-├── verifactumanager.h/cpp           # Gestor API REST
-└── verifactuintegration.h/cpp       # Integración de alto nivel
-```
-
-### Archivos Modificados
-
-- `CMakeLists.txt` (raíz)
-  - Añadido: `Network` a find_package de Qt
-  - Añadido: `add_subdirectory(src/verifactu)`
-
----
-
-## 🎯 Funcionalidades Implementadas
-
-### ✅ Completado
-
-1. **Configuración de Verifactu**
-   - Gestión de ServiceKey
-   - Datos del emisor (NIF, nombre)
-   - Cambio entre entorno TESTING y PRODUCTION
-   - Persistencia en archivo INI
-
-2. **Modelos de Factura**
-   - VerifactuInvoice: Modelo completo de factura
-   - VerifactuTaxItem: Ítems de impuesto
-   - Soporte para todos los tipos (F1, F2, F3, R1)
-   - Conversión automática a JSON
-
-3. **Gestor Principal (API REST)**
-   - Envío de facturas individuales
-   - Envío de lotes de facturas
-   - Anulación de facturas
-   - Generación de códigos QR
-   - Gestión de errores
-
-4. **Integración de Alto Nivel**
-   - Métodos simples para crear y enviar facturas
-   - Gestión automática de configuración
-   - Manejo robusto de errores
-
-5. **Documentación**
-   - README.md: Documentación completa
-   - GUIA_PASO_A_PASO.md: Pasos de implementación
-   - EJEMPLO_IMPLEMENTACION.cpp: 10 ejemplos prácticos
-
----
-
-## 🚀 Cómo Empezar
-
-### 1. Compilar el Proyecto
-
-```bash
-cd c:\Users\gebra\work\tintoreria\laideal
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
-```
-
-### 2. Integrar en tu Aplicación
-
-**En mainwindow.h**:
-```cpp
-#include "../verifactu/verifactuintegration.h"
-
-private:
-    VerifactuIntegration *m_verifactuIntegration;
-```
-
-**En mainwindow.cpp**:
-```cpp
-m_verifactuIntegration = new VerifactuIntegration(this);
-m_verifactuIntegration->initialize();
-```
-
-### 3. Usar en Facturas
-
-```cpp
-VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
-    "F001",              // Número
-    QDate::currentDate(), // Fecha
-    "B12345678",         // NIF cliente
-    "Cliente S.A.",      // Nombre cliente
-    100.0,               // Base
-    21.0                 // IVA %
-);
-
-if (result.isSuccess()) {
-    qDebug() << "CSV:" << result.csv;
-}
+├── verifactuconfig.h/cpp            # Configuración y persistencia
+├── verifactuinvoice.h/cpp           # Modelos de datos
+├── verifactumanager.h/cpp           # API REST
+└── verifactuintegration.h/cpp       # Capa de integración
 ```
 
 ---
 
-## 📝 Próximos Pasos
+## 🔧 Detalles Técnicos
 
-### Corto Plazo
+### VerifactuConfig
+- **Propósito**: Gestión centralizada de configuración
+- **Persistencia**: QSettings (archivo INI)
+- **Miembros principales**:
+  - `m_serviceKey`: Clave de API
+  - `m_emitterNIF`: NIF de la empresa
+  - `m_environment`: TESTING o PRODUCTION
 
-1. **Obtener ServiceKey**
-   - Ir a: https://facturae.irenesolutions.com/verifactu/go
-   - Registrarse
-   - Generar clave
+### VerifactuInvoice & VerifactuTaxItem
+- **Propósito**: Modelos de datos compatibles con API REST
+- **Serialización**: JSON automático
+- **Tipos soportados**: F1 (Normal), F2 (Simplificada), F3 (Sustitución), R1 (Rectificativa)
+- **Operaciones**: S1, S2, N1, N2, Exempt
 
-2. **Configurar NIF de Empresa**
-   - En `verifactuintegration.cpp`
-   - Método `loadEmitterConfiguration()`
-   - Reemplazar datos de prueba
+### VerifactuManager
+- **Propósito**: Comunicación con API REST de Verifactu
+- **Métodos principales**:
+  - `submitInvoice()`: Envío individual
+  - `submitInvoices()`: Lote de facturas
+  - `cancelInvoice()`: Anulación
+  - `generateQRCode()`: Código QR
+- **Manejo de errores**: Status enum detallado
 
-3. **Compilar y Probar**
-   - Emitir factura de prueba
-   - Verificar que aparezca CSV
-
-### Mediano Plazo
-
-1. **Integración BD**
-   - Campos adicionales en tabla `facturas`:
-     - `verifactu_csv`
-     - `verifactu_timestamp`
-     - `verifactu_estado`
-
-2. **Sistema de Reintento**
-   - Para errores de red
-   - Procesamiento de lotes pendientes
-
-3. **Generación de QR**
-   - Mostrar en recibos
-   - Imprimir en facturas
-
-### Largo Plazo
-
-1. **Pasar a Producción**
-   - Cambiar a `PRODUCTION`
-   - Datos reales
-   - Testing riguroso
-
-2. **Compliance**
-   - Auditoría de envíos
-   - Registro de CSV
-   - Validación con AEAT
-
-3. **Características Avanzadas**
-   - Rectificativas
-   - Operaciones especiales (ISP, etc.)
-   - Informes de comprobación
+### VerifactuIntegration
+- **Propósito**: Simplificar uso desde la aplicación
+- **Métodos públicos**:
+  - `createAndSubmitInvoice()`: Crear y enviar en una llamada
+  - `cancelInvoice()`: Anular factura
+  - `generateQR()`: Generar QR
+  - `initialize()`: Inicialización con validación
 
 ---
 
-## 🔐 Seguridad
+## 📊 Esquema de Base de Datos
 
-### ⚠️ Puntos Críticos
-
-1. **ServiceKey**: Almacenar de forma segura
-   - No en código fuente
-   - Usar ConfigSettings seguro
-   - Considerar encriptación
-
-2. **Datos de Empresa**: Confidencial
-   - NIF
-   - Datos bancarios (futuros)
-   - Certificado digital
-
-3. **Ambiente TESTING vs PRODUCTION**
-   - Usar TESTING para desarrollo
-   - Cambiar a PRODUCTION solo cuando esté listo
-   - No mezclar datos reales y ficticios
-
----
-
-## 📊 Estructura de Base de Datos Recomendada
+### Campos a Añadir a Tabla `facturas`
 
 ```sql
--- Tabla de facturas (existente, con nuevos campos)
 ALTER TABLE facturas ADD COLUMN (
     verifactu_csv VARCHAR(50),
     verifactu_timestamp DATETIME,
-    verifactu_estado VARCHAR(20),
+    verifactu_estado VARCHAR(20),      -- Ejemplo: ENVIADA, ERROR, ANULADA
     verifactu_error VARCHAR(255),
-    verifactu_url_validacion VARCHAR(500)
+    verifactu_url_qr VARCHAR(500)
 );
+```
 
--- Tabla de reintentos (nueva)
+### Tablas Complementarias (Recomendadas)
+
+#### Tabla de Reintentos
+```sql
 CREATE TABLE facturas_reintentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     numero_factura VARCHAR(50),
     fecha_intento DATETIME,
     numero_intentos INTEGER,
-    ultimo_error VARCHAR(255)
+    ultimo_error VARCHAR(255),
+    FOREIGN KEY (numero_factura) REFERENCES facturas(numero)
 );
+```
 
--- Tabla de auditoría (nueva)
+#### Tabla de Auditoría
+```sql
 CREATE TABLE verifactu_auditoria (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    accion VARCHAR(50),
+    accion VARCHAR(50),                -- Ejemplo: ENVIADA, ANULADA, ERROR
     numero_factura VARCHAR(50),
     fecha_accion DATETIME,
-    resultado VARCHAR(20),
-    detalles TEXT
+    resultado VARCHAR(20),             -- SUCCESS, ERROR, PENDING
+    detalles TEXT,
+    FOREIGN KEY (numero_factura) REFERENCES facturas(numero)
 );
 ```
 
 ---
 
-## 🔗 Enlaces Útiles
+## 🔐 Consideraciones de Seguridad
 
-- **Documentación oficial**: https://github.com/mdiago/VeriFactu/wiki
-- **AEAT Portal**: https://www.aeat.es/
-- **Validar QR (Testing)**: https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR
-- **Validar QR (Producción)**: https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR
-- **Clave de Servicio**: https://facturae.irenesolutions.com/verifactu/go
+### ⚠️ Puntos Críticos
+
+1. **ServiceKey**
+   - No incluir en código fuente
+   - Almacenar en archivo INI protegido
+   - Considerar encriptación QSettings
+   - Renovar periódicamente
+
+2. **Datos de Empresa**
+   - NIF confidencial
+   - Datos bancarios (futuros)
+   - Certificado digital
+
+3. **Entornos**
+   - TESTING: Datos ficticios, sin impacto real
+   - PRODUCTION: Datos reales, envío a AEAT
+   - Nunca mezclar datos reales en TESTING
+
+### Recomendaciones
+
+- Usar TESTING para desarrollo y debugging
+- Cambiar a PRODUCTION solo después de validación
+- Mantener backup de configuración
+- Auditar todos los envíos
+
+---
+
+## � Roadmap Futuro
+
+### v1.1 (Próximas semanas)
+- [ ] Panel de configuración gráfico en Qt
+- [ ] Sistema de sincronización de facturas pendientes
+- [ ] Exportación de informes Verifactu
+- [ ] Validación de respuestas AEAT mejorada
+
+### v1.2 (Próximos meses)
+- [ ] Soporte para múltiples empresas
+- [ ] Caché local de facturas
+- [ ] Notificaciones en tiempo real
+- [ ] Integración con repositorio de facturas
+
+### v2.0 (Futuro)
+- [ ] API REST propia para Verifactu
+- [ ] Dashboard de análisis
+- [ ] Integración avanzada con portales AEAT
+- [ ] Machine learning para validación de datos
+
+---
+
+## 🔗 Recursos Técnicos
+
+- **Documentación VeriFactu**: https://github.com/mdiago/VeriFactu/wiki
+- **API REST Verifactu**: https://facturae.irenesolutions.com/
+- **AEAT Documentation**: https://www.aeat.es/
+- **Qt Network Module**: https://doc.qt.io/qt-6/qtnetwork-index.html
+- **QJson Docs**: https://doc.qt.io/qt-6/qjson.html
+
+---
+
+## 💡 Patrones de Diseño Utilizados
+
+### 1. **Facade Pattern**
+VerifactuIntegration simplifica la complejidad de VerifactuManager
+
+### 2. **Configuration Pattern**
+VerifactuConfig centraliza y persiste la configuración
+
+### 3. **Model Pattern**
+VerifactuInvoice y VerifactuTaxItem representan datos de dominio
+
+### 4. **Manager Pattern**
+VerifactuManager coordina operaciones complejas
+
+---
+
+## 📝 Checklist de Implementación
+
+### Fase 1: Configuración (1-2 horas)
+- [ ] Leer GUIA_PASO_A_PASO.md completamente
+- [ ] Obtener ServiceKey en portal
+- [ ] Configurar NIF de empresa
+- [ ] Compilar el proyecto exitosamente
+
+### Fase 2: Integración (2-4 horas)
+- [ ] Añadir VerifactuIntegration a MainWindow
+- [ ] Integrar en módulo Facturas
+- [ ] Implementar métodos en UI
+- [ ] Actualizar BD con nuevos campos
+
+### Fase 3: Testing (1-2 horas)
+- [ ] Probar con datos de prueba en TESTING
+- [ ] Validar QR generados
+- [ ] Verificar almacenamiento de CSV
+
+### Fase 4: Producción (30 minutos)
+- [ ] Cambiar a PRODUCTION
+- [ ] Usar datos reales
+- [ ] Ejecutar prueba final
+- [ ] Monitorear primeras facturas
+
+---
+
+## ❓ Preguntas Frecuentes
+
+**P: ¿Qué pasa si no tengo ServiceKey?**
+A: El módulo funcionará en TESTING sin ella, pero no podrás enviar a producción.
+
+**P: ¿Puedo usar TESTING indefinidamente?**
+A: Sí, TESTING es permanente. Es ideal para desarrollo.
+
+**P: ¿Qué sucede con error de red?**
+A: El resultado incluye NETWORK_ERROR. Implementa reintentos.
+
+**P: ¿Cómo asegurar facturas no se pierdan?**
+A: Almacena localmente primero, luego sincroniza con Verifactu.
 
 ---
 
 ## 📞 Soporte
 
-### Si tienes problemas:
+### Para Problemas de Implementación
+→ Consulta **GUIA_PASO_A_PASO.md** sección "Troubleshooting"
 
-1. **Verifica la documentación**: `README.md` y `GUIA_PASO_A_PASO.md`
-2. **Consulta los ejemplos**: `EJEMPLO_IMPLEMENTACION.cpp`
-3. **Revisa los logs**: Busca mensajes de debug con `qDebug()`
+### Para Ejemplos de Código
+→ Revisa **EJEMPLO_IMPLEMENTACION.cpp**
 
-### Errores Comunes:
-
-- **"No encontrado"**: Asegúrate de que `src/verifactu/` existe
-- **Error de compilación**: Verifica que Qt Network está disponible
-- **API no responde**: Comprueba conectividad a Internet
-- **ServiceKey rechazada**: Obtén una nueva en el portal
+### Para Documentación Oficial
+→ Visita https://github.com/mdiago/VeriFactu/wiki
 
 ---
 
-## 📈 Roadmap Futuro
-
-### v1.1
-- [ ] Soporte para múltiples empresas
-- [ ] Panel de configuración gráfico
-- [ ] Exportación de informes
-
-### v1.2
-- [ ] Sistema de sincronización
-- [ ] Caché local
-- [ ] Notificaciones
-
-### v2.0
-- [ ] Integración con portales AEAT
-- [ ] Análisis de datos
-- [ ] APIs externas
-
----
-
-## ✨ Características Destacadas
-
-✅ **Arquitectura Modular**: Código separado, fácil de mantener
-✅ **API REST**: Flexible, no depende de .NET
-✅ **Manejo de Errores**: Robusto y detallado
-✅ **Documentación Completa**: Ejemplos y guías
-✅ **Integración Fácil**: Métodos de alto nivel
-✅ **Tipo de Facturas**: F1, F2, F3, R1 soportados
-✅ **Generación de QR**: Automática y validable
-✅ **Testing Ready**: Ambiente de pruebas incluido
-
----
-
-## 📄 Licencia y Atribuciones
-
-- **VeriFactu API**: [Manuel Diago Garcia](https://github.com/mdiago/VeriFactu)
-- **AEAT**: Administración Tributaria Española
-- **LAIDEAL**: Tu aplicación
-
----
-
-**Estado**: ✅ Implementado y Listo para Testing
+**Estado**: ✅ Implementación Completa
 **Versión**: 1.0
-**Última actualización**: Abril 2026
+**Última actualización**: Mayo 2026
 **Rama**: `feature/add_mdiago_verifactu`
-
----
-
-## ¿Próximos Pasos?
-
-1. Leer `GUIA_PASO_A_PASO.md`
-2. Compilar el proyecto
-3. Probar la integración
-4. Configurar datos reales
-5. ¡Pasar a producción!
-
-🎉 ¡Felicidades! Ahora tu LAIDEAL emite facturas Verifactu

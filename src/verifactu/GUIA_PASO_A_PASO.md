@@ -14,13 +14,14 @@
 ---
 
 ## Requisitos Previos
-
+```
 ✅ Qt 5.15+ o Qt 6.x instalado
 ✅ Módulo Network de Qt disponible
 ✅ CMake 3.5+
 ✅ Compilador C++17 compatible
 ✅ Acceso a Internet para API REST
 ✅ Clave de servicio Verifactu (opcional para testing)
+```
 
 ### Obtener Clave de Servicio
 
@@ -596,9 +597,3 @@ if (m_verifactuIntegration->getManager()->testConnection()) {
 4. ✅ Crea sistema de reintento automático
 5. ✅ Valida con la AEAT
 6. ✅ Pasa a producción
-
----
-
-**¿Preguntas?** Consulta el README.md o EJEMPLO_IMPLEMENTACION.cpp
-
-Versión: 1.0 | Fecha: Abril 2026
