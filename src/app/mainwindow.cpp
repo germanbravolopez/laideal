@@ -16,6 +16,20 @@ MainWindow::MainWindow(QWidget *parent)
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
     mainwindow_initial_settings();
+
+    // Verifactu
+    m_verifactuIntegration = new VerifactuIntegration(this);
+
+    if (!m_verifactuIntegration->initialize()) {
+        QMessageBox::warning(this, "Advertencia",
+            QString("No se pudo inicializar Verifactu:\n%1\n\n"
+                    "Las facturas se guardarán localmente.\n"
+                    "Configura Verifactu más tarde.")
+            .arg(m_verifactuIntegration->getLastError()));
+    } else {
+        qDebug() << "Verifactu inicializado correctamente";
+        qDebug() << m_verifactuIntegration->getConfigInfo();
+    }
 }
 
 MainWindow::~MainWindow()
@@ -282,6 +296,77 @@ void MainWindow::check_client_data()
 
 }
 
+bool MainWindow::verifactu_submit_invoice()
+{
+    if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+        VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
+            ui->le_nr_ticket->text(),                   // número de factura
+            ui->de_date_recep->date(),                  // fecha
+            "NIF N/A",                                  // NIF comprador (opcional)
+            ui->cb_client->currentText(),               // Nombre comprador
+            ui->le_cost_total->text().toFloat() / 1.21, // base imponible
+            21.0,                                       // tipo IVA
+            "Servicios de lavandería"                   // descripción del servicio
+        );
+
+        if (result.isSuccess()) {
+            qDebug() << "Factura enviada con CSV:" << result.csv;
+            show_qr_to_client(result);
+            return true;
+        } else {
+            qDebug() << "Error al enviar la factura a Verifactu:" << result.errorDescription;
+            QMessageBox::warning(this, "Error de Verifactu",
+                QString("No se pudo enviar la factura a Verifactu:\n%1\n\n"
+                        "La factura se guardará localmente sin número de factura oficial.")
+                .arg(result.errorDescription));
+            return false;
+        }
+    } else {
+        QMessageBox::warning(this, "Error de configuración de Verifactu",
+            "Ticket guardado localmente.\n"
+            "Verifactu no está disponible.");
+        return false;
+    }
+}
+
+void MainWindow::show_qr_to_client(const VerifactuResult &result)
+{
+    QDialog *qrDialog = new QDialog(this);
+    qrDialog->setWindowTitle("Código QR de Validación");
+    qrDialog->setModal(true);
+    qrDialog->setAttribute(Qt::WA_DeleteOnClose);
+
+    QVBoxLayout *layout = new QVBoxLayout();
+
+    // Mostrar QR
+    if (!result.qrCode.isNull()) {
+        QLabel *labelQR = new QLabel();
+        labelQR->setPixmap(result.qrCode.scaledToWidth(300, Qt::SmoothTransformation));
+        layout->addWidget(labelQR, 0, Qt::AlignCenter);
+    }
+
+    // Mostrar CSV
+    QLabel *labelCSV = new QLabel(
+        QString("<b>CSV Verifactu:</b> %1").arg(result.csv));
+    layout->addWidget(labelCSV, 0, Qt::AlignCenter);
+
+    // Mostrar URL de validación
+    if (!result.validationUrl.isEmpty()) {
+        QLabel *labelUrl = new QLabel(
+            QString("<a href='%1'>Validar en AEAT</a>")
+            .arg(result.validationUrl));
+        labelUrl->setOpenExternalLinks(true);
+        layout->addWidget(labelUrl, 0, Qt::AlignCenter);
+    }
+
+    QPushButton *btnCerrar = new QPushButton("Cerrar");
+    connect(btnCerrar, &QPushButton::clicked, qrDialog, &QDialog::accept);
+    layout->addWidget(btnCerrar);
+
+    qrDialog->setLayout(layout);
+    qrDialog->exec();
+}
+
 bool MainWindow::save_ticket()
 {
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
@@ -382,6 +467,7 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validate_ticket()) {
             check_client_data();
+            verifactu_submit_invoice();
             bool payed = save_ticket();
             if (!debug)
                 print_recibo();

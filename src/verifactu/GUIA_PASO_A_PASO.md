@@ -6,7 +6,7 @@
 2. [Preparación](#preparación)
 3. [Configuración Inicial](#configuración-inicial)
 4. [Integración en MainWindow](#integración-en-mainwindow)
-5. [Integración en Facturas](#integración-en-facturas)
+5. [Integración en Recibos](#integración-en-recibos-tickets-e-invoices)
 6. [Testing](#testing)
 7. [Paso a Producción](#paso-a-producción)
 8. [Troubleshooting](#troubleshooting)
@@ -138,247 +138,114 @@ MainWindow::~MainWindow()
 
 ---
 
-## Integración en Facturas
+## Integración en Recibos (Tickets e Invoices)
 
-### Paso 1: Actualizar `src/facturas/facturas.h`
+Los recibos, tickets e invoices que emites a los clientes se implementan en `mainwindow.cpp` con funciones como `validate_ticket()`, `save_ticket()`, etc. Integra Verifactu allí para emitir directamente a la AEAT.
 
-```cpp
-#include "../verifactu/verifactuintegration.h"
-#include <QMainWindow>
+### Paso 1: Integrar VerifactuIntegration en mainwindow.h
 
-class Facturas : public QMainWindow
-{
-    Q_OBJECT
+Ya lo hiciste en la sección anterior. La instancia `m_verifactuIntegration` ya existe.
 
-public:
-    explicit Facturas(QWidget *parent = nullptr);
-    ~Facturas();
+### Paso 2: Modificar el método `save_ticket()` en mainwindow.cpp
 
-    // Inyectar la instancia de VerifactuIntegration desde MainWindow
-    void setVerifactuIntegration(VerifactuIntegration *integration) {
-        m_verifactuIntegration = integration;
-    }
-
-private slots:
-    // Tus slots existentes...
-    void on_buttonGuardarFactura_clicked();  // Modificar este
-    void on_buttonAnularFactura_clicked();   // Nuevo
-    void on_buttonGenerarQR_clicked();       // Nuevo
-
-private:
-    VerifactuIntegration *m_verifactuIntegration;
-
-    // Métodos auxiliares
-    void guardarFacturaEnBD(const QString &numero, const QString &csv);
-    void mostrarQRAlCliente(const VerifactuResult &result);
-};
-```
-
-### Paso 2: Implementar en `src/facturas/facturas.cpp`
+Encuentra tu función `save_ticket()` y modifícala para enviar a Verifactu:
 
 ```cpp
-#include "facturas.h"
-#include "ui_facturas.h"
-#include <QMessageBox>
-#include <QSqlQuery>
-#include <QSqlError>
-#include <QDebug>
-
-Facturas::Facturas(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::Facturas)
-    , m_verifactuIntegration(nullptr)
+void MainWindow::save_ticket()
 {
-    ui->setupUi(this);
-}
-
-Facturas::~Facturas()
-{
-    delete ui;
-}
-
-// Modificar: Guardar factura CON Verifactu
-void Facturas::on_buttonGuardarFactura_clicked()
-{
-    // Validar datos del formulario
-    if (!validate_form()) {
+    // Validar datos del ticket
+    if (!validate_ticket()) {
         QMessageBox::warning(this, "Error de Validación",
             "Por favor completa todos los campos requeridos");
         return;
     }
 
-    // Obtener datos del formulario
-    QString numeroFactura = ui->lineEditNumeroFactura->text();
-    QDate fechaFactura = ui->dateEditFecha->date();
+    // Obtener datos del formulario del ticket
+    QString numeroTicket = ui->lineEditNumeroTicket->text();
+    QDate fechaTicket = ui->dateEditFecha->date();
     QString nifCliente = ui->lineEditNIFCliente->text();
     QString nombreCliente = ui->lineEditNombreCliente->text();
     double baseImponible = ui->spinBoxBase->value();
-    double tipoIVA = 21.0;  // Obtener de combobox si es variable
+    double tipoIVA = 21.0;  // Obtener del combobox si es variable
 
     // Si Verifactu está disponible, enviar
     if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
 
         VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
-            numeroFactura,
-            fechaFactura,
+            numeroTicket,
+            fechaTicket,
             nifCliente,
             nombreCliente,
             baseImponible,
             tipoIVA,
-            "Servicio de lavandería"
+            "Servicio de lavandería"  // Descripción del servicio
         );
 
         if (result.isSuccess()) {
-            // Guardar en BD con CSV
-            guardarFacturaEnBD(numeroFactura, result.csv);
+            // Guardar ticket en BD con CSV
+            guardarTicketEnBD(numeroTicket, result.csv);
 
             // Mostrar éxito
             QMessageBox::information(this, "Éxito",
-                QString("Factura registrada y enviada a AEAT.\n"
+                QString("Ticket emitido y enviado a AEAT.\n"
                         "CSV: %1").arg(result.csv));
 
-            // Mostrar QR
+            // Mostrar QR al cliente
             mostrarQRAlCliente(result);
 
         } else if (result.status == VerifactuResult::NETWORK_ERROR) {
-            // Si hay error de red, guardar localmente para reintento
-            guardarFacturaEnBD(numeroFactura, "");
+            // Error de red: guardar localmente para reintento posterior
+            guardarTicketEnBD(numeroTicket, "");
 
             QMessageBox::warning(this, "Advertencia de Conectividad",
-                QString("Factura guardada localmente.\n"
+                QString("Ticket guardado localmente.\n"
                         "Error Verifactu: %1\n"
                         "Se reintentará automáticamente.")
                 .arg(result.errorDescription));
+
         } else {
             // Error real en Verifactu
             int respuesta = QMessageBox::question(this, "Error en Verifactu",
                 QString("Error al enviar a AEAT: %1\n\n"
-                        "¿Deseas guardar la factura localmente?")
+                        "¿Deseas guardar el ticket localmente?")
                 .arg(result.errorDescription),
                 QMessageBox::Yes | QMessageBox::No);
 
             if (respuesta == QMessageBox::Yes) {
-                guardarFacturaEnBD(numeroFactura, "");
+                guardarTicketEnBD(numeroTicket, "");
                 QMessageBox::information(this, "Información",
-                    "Factura guardada localmente. Puedes intentar enviarla más tarde.");
+                    "Ticket guardado localmente. Puedes intentar enviarlo más tarde.");
             }
         }
     } else {
-        // Verifactu no disponible, guardar solo localmente
-        guardarFacturaEnBD(numeroFactura, "");
+        // Verifactu no disponible: guardar solo localmente
+        guardarTicketEnBD(numeroTicket, "");
 
         QMessageBox::information(this, "Información",
-            "Factura guardada localmente.\n"
+            "Ticket guardado localmente.\n"
             "Verifactu no está disponible.");
     }
 
     // Limpiar formulario
-    reset_all_contents();
+    clear_ticket_form();
 }
+```
 
-// Nuevo: Anular factura
-void Facturas::on_buttonAnularFactura_clicked()
-{
-    QString numeroFactura = ui->lineEditNumeroFactura->text();
+### Paso 3: Añadir método auxiliar para guardar ticket
 
-    if (numeroFactura.isEmpty()) {
-        QMessageBox::warning(this, "Error", "Selecciona una factura a anular");
-        return;
-    }
+Añade estos métodos a `mainwindow.cpp`:
 
-    if (QMessageBox::question(this, "Confirmar Anulación",
-        QString("¿Anular la factura %1?\n"
-                "Esta operación es irreversible.")
-        .arg(numeroFactura)) != QMessageBox::Yes) {
-        return;
-    }
-
-    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
-        QMessageBox::warning(this, "Error",
-            "Verifactu no está configurado");
-        return;
-    }
-
-    QSqlQuery query;
-    query.prepare("SELECT fecha FROM facturas WHERE numero = :numero");
-    query.addBindValue(numeroFactura);
-
-    if (!query.exec() || !query.next()) {
-        QMessageBox::warning(this, "Error", "Factura no encontrada");
-        return;
-    }
-
-    QDate fechaFactura = query.value(0).toDate();
-
-    // Anular en Verifactu
-    VerifactuResult result = m_verifactuIntegration->cancelInvoice(
-        numeroFactura,
-        fechaFactura
-    );
-
-    if (result.isSuccess()) {
-        // Actualizar BD
-        QSqlQuery updateQuery;
-        updateQuery.prepare("UPDATE facturas SET estado = 'ANULADA', csv_anulacion = :csv "
-                           "WHERE numero = :numero");
-        updateQuery.addBindValue(result.csv);
-        updateQuery.addBindValue(numeroFactura);
-
-        if (updateQuery.exec()) {
-            QMessageBox::information(this, "Éxito",
-                QString("Factura anulada.\nCSV de anulación: %1")
-                .arg(result.csv));
-        }
-    } else {
-        QMessageBox::critical(this, "Error",
-            QString("No se pudo anular la factura:\n%1")
-            .arg(result.errorDescription));
-    }
-}
-
-// Nuevo: Generar QR
-void Facturas::on_buttonGenerarQR_clicked()
-{
-    QString numeroFactura = ui->lineEditNumeroFactura->text();
-    double importe = ui->spinBoxBase->value() * 1.21;  // Incluir IVA
-    QDate fecha = ui->dateEditFecha->date();
-
-    if (numeroFactura.isEmpty()) {
-        QMessageBox::warning(this, "Error", "Selecciona una factura");
-        return;
-    }
-
-    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
-        QMessageBox::warning(this, "Error",
-            "Verifactu no está configurado");
-        return;
-    }
-
-    VerifactuResult result = m_verifactuIntegration->generateQR(
-        numeroFactura,
-        fecha,
-        importe
-    );
-
-    if (!result.qrCode.isNull()) {
-        mostrarQRAlCliente(result);
-    } else {
-        QMessageBox::warning(this, "Error",
-            "No se pudo generar el QR");
-    }
-}
-
-// Métodos auxiliares
-void Facturas::guardarFacturaEnBD(const QString &numero, const QString &csv)
+```cpp
+void MainWindow::guardarTicketEnBD(const QString &numero, const QString &csv)
 {
     QSqlQuery query;
-    query.prepare("INSERT INTO facturas "
+    query.prepare("INSERT INTO tickets "
                  "(numero, fecha, cliente_nif, cliente_nombre, "
                  "importe_base, csv, estado) "
                  "VALUES (:numero, :fecha, :nif, :nombre, :base, :csv, :estado)");
 
     query.addBindValue(numero);
-    query.addBindValue(ui->dateEditFecha->date());
+    query.addBindValue(QDate::currentDate());
     query.addBindValue(ui->lineEditNIFCliente->text());
     query.addBindValue(ui->lineEditNombreCliente->text());
     query.addBindValue(ui->spinBoxBase->value());
@@ -386,15 +253,16 @@ void Facturas::guardarFacturaEnBD(const QString &numero, const QString &csv)
     query.addBindValue(csv.isEmpty() ? "NO_ENVIADA" : "ENVIADA");
 
     if (!query.exec()) {
-        qWarning() << "Error guardando factura:" << query.lastError().text();
+        qWarning() << "Error guardando ticket:" << query.lastError().text();
     }
 }
 
-void Facturas::mostrarQRAlCliente(const VerifactuResult &result)
+void MainWindow::mostrarQRAlCliente(const VerifactuResult &result)
 {
     QDialog *qrDialog = new QDialog(this);
     qrDialog->setWindowTitle("Código QR de Validación");
     qrDialog->setModal(true);
+    qrDialog->setAttribute(Qt::WA_DeleteOnClose);
 
     QVBoxLayout *layout = new QVBoxLayout();
 
@@ -402,16 +270,21 @@ void Facturas::mostrarQRAlCliente(const VerifactuResult &result)
     if (!result.qrCode.isNull()) {
         QLabel *labelQR = new QLabel();
         labelQR->setPixmap(result.qrCode.scaledToWidth(300, Qt::SmoothTransformation));
-        layout->addWidget(labelQR);
+        layout->addWidget(labelQR, 0, Qt::AlignCenter);
     }
 
-    // Mostrar URL
+    // Mostrar CSV
+    QLabel *labelCSV = new QLabel(
+        QString("<b>CSV Verifactu:</b> %1").arg(result.csv));
+    layout->addWidget(labelCSV, 0, Qt::AlignCenter);
+
+    // Mostrar URL de validación
     if (!result.validationUrl.isEmpty()) {
         QLabel *labelUrl = new QLabel(
             QString("<a href='%1'>Validar en AEAT</a>")
             .arg(result.validationUrl));
         labelUrl->setOpenExternalLinks(true);
-        layout->addWidget(labelUrl);
+        layout->addWidget(labelUrl, 0, Qt::AlignCenter);
     }
 
     QPushButton *btnCerrar = new QPushButton("Cerrar");
@@ -420,24 +293,84 @@ void Facturas::mostrarQRAlCliente(const VerifactuResult &result)
 
     qrDialog->setLayout(layout);
     qrDialog->exec();
-    qrDialog->deleteLater();
 }
 ```
 
-### Paso 3: Pasar VerifactuIntegration a Facturas
-
-En `src/app/mainwindow.cpp`, cuando abras Facturas:
+### Paso 4: Método para anular ticket si es necesario
 
 ```cpp
-void MainWindow::abrirFacturas()
+void MainWindow::cancelTicket(const QString &numeroTicket)
 {
-    Facturas *ventanaFacturas = new Facturas(this);
+    if (numeroTicket.isEmpty()) {
+        QMessageBox::warning(this, "Error", "Selecciona un ticket a anular");
+        return;
+    }
 
-    // ✓ IMPORTANTE: Pasar la instancia de Verifactu
-    ventanaFacturas->setVerifactuIntegration(m_verifactuIntegration);
+    if (QMessageBox::question(this, "Confirmar Anulación",
+        QString("¿Anular el ticket %1?\n"
+                "Esta operación es irreversible.")
+        .arg(numeroTicket)) != QMessageBox::Yes) {
+        return;
+    }
 
-    ventanaFacturas->show();
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        QMessageBox::warning(this, "Error",
+            "Verifactu no está configurado");
+        return;
+    }
+
+    // Obtener fecha del ticket de BD
+    QSqlQuery query;
+    query.prepare("SELECT fecha FROM tickets WHERE numero = :numero");
+    query.addBindValue(numeroTicket);
+
+    if (!query.exec() || !query.next()) {
+        QMessageBox::warning(this, "Error", "Ticket no encontrado");
+        return;
+    }
+
+    QDate fechaTicket = query.value(0).toDate();
+
+    // Anular en Verifactu
+    VerifactuResult result = m_verifactuIntegration->cancelInvoice(
+        numeroTicket,
+        fechaTicket
+    );
+
+    if (result.isSuccess()) {
+        // Actualizar BD
+        QSqlQuery updateQuery;
+        updateQuery.prepare("UPDATE tickets SET estado = 'ANULADO', csv_anulacion = :csv "
+                           "WHERE numero = :numero");
+        updateQuery.addBindValue(result.csv);
+        updateQuery.addBindValue(numeroTicket);
+
+        if (updateQuery.exec()) {
+            QMessageBox::information(this, "Éxito",
+                QString("Ticket anulado.\nCSV de anulación: %1")
+                .arg(result.csv));
+        }
+    } else {
+        QMessageBox::critical(this, "Error",
+            QString("No se pudo anular el ticket:\n%1")
+            .arg(result.errorDescription));
+    }
 }
+```
+
+### Paso 5: Actualizar mainwindow.h
+
+Añade las declaraciones de los métodos en `mainwindow.h`:
+
+```cpp
+private slots:
+    // ... tus slots existentes ...
+    void cancelTicket(const QString &numeroTicket);
+
+private:
+    // ... tus miembros existentes ...
+    void guardarTicketEnBD(const QString &numero, const QString &csv);
+    void mostrarQRAlCliente(const VerifactuResult &result);
 ```
 
 ---

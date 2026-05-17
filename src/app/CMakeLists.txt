@@ -34,6 +34,7 @@ target_link_libraries(laideal
     contabilidad
     facturas
     add_garment
+    verifactu
 )
 
 set_target_properties(laideal PROPERTIES

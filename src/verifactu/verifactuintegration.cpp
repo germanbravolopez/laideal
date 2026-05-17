@@ -1,5 +1,9 @@
 #include "verifactuintegration.h"
 #include <QDebug>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
+#include <cstdlib>
 
 VerifactuIntegration::VerifactuIntegration(QObject *parent)
     : QObject(parent), m_manager(nullptr)
@@ -177,22 +181,34 @@ bool VerifactuIntegration::loadEmitterConfiguration()
     // QString name = Database::getInstance()->getCompanyName();
     // QString serviceKey = Settings::getInstance()->getVerifactuServiceKey();
     //
-    // Pero como no tenemos acceso a eso aquí, usamos valores de ejemplo.
-    //
-    // TODO: Implementar carga real de configuración desde tu BD
 
     if (!m_manager) return false;
 
-    // Valores de ejemplo - DEBES REEMPLAZAR ESTOS CON DATOS REALES
+    // ========================================
+    // 1. CARGAR DATOS DEL EMISOR
+    // ========================================
     // Estos datos se pueden obtener de:
     // 1. Tu base de datos SQLite
-    // 2. Un archivo de configuración
+    // 2. Un archivo de configuración INI/JSON
     // 3. Las preferencias de la aplicación
+    // 4. Variables de entorno
+    //
+
+    QString emitterNIF = "B12345678";           // TODO: NIF real de la empresa
+    QString emitterName = "Mi Empresa SL";      // TODO: Nombre real de la empresa
+    QString emitterCommercialName = "Mi Empresa";
+
+    // Intentar cargar desde variable de entorno (mejor práctica para desarrollo)
+    const char* envNIF = std::getenv("VERIFACTU_NIF");
+    if (envNIF) {
+        emitterNIF = QString::fromUtf8(envNIF);
+        qDebug() << "NIF cargado desde variable de entorno: " << emitterNIF;
+    }
 
     m_manager->getConfig()->setEmitterData(
-        "B12345678",        // TODO: NIF real de la empresa
-        "Mi Empresa SL",    // TODO: Nombre real de la empresa
-        "Mi Empresa"        // Nombre comercial
+        emitterNIF,
+        emitterName,
+        emitterCommercialName
     );
 
     m_manager->getConfig()->setSystemData(
@@ -201,14 +217,72 @@ bool VerifactuIntegration::loadEmitterConfiguration()
         "LAIDEAL"
     );
 
-    // CRÍTICO: Establecer la clave de servicio obtenida en https://facturae.irenesolutions.com/verifactu/go
-    m_manager->getConfig()->setServiceKey("");  // TODO: Obtener de configuración
+    // ========================================
+    // 2. CARGAR LA CLAVE DE SERVICIO
+    // ========================================
+    // CRÍTICO: La clave debe obtenerse de https://facturae.irenesolutions.com/verifactu/go
+    //
+    // Opciones de carga (en orden de preferencia):
+    // 1. Variable de entorno VERIFACTU_SERVICEKEY (RECOMENDADO)
+    // 2. Base de datos (tabla de configuración)
+    // 3. Archivo de configuración seguro
+    // 4. Archivo .env en el directorio home del usuario
+    //
 
-    // Establecer entorno (TESTING para pruebas, PRODUCTION para producción)
+    QString serviceKey;
+
+    // Opción 1: Variable de entorno (MEJOR OPCIÓN para desarrollo y producción)
+    const char* envServiceKey = std::getenv("VERIFACTU_SERVICEKEY");
+    if (envServiceKey) {
+        serviceKey = QString::fromUtf8(envServiceKey);
+        qDebug() << "ServiceKey cargada desde variable de entorno";
+    }
+    // Opción 2: Archivo en el directorio home del usuario (más seguro)
+    else {
+        QString homeDir = QDir::homePath();
+        QString keyFilePath = homeDir + "/.verifactu_key";
+        QFile keyFile(keyFilePath);
+
+        if (keyFile.exists()) {
+            if (keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream stream(&keyFile);
+                serviceKey = stream.readLine().trimmed();
+                keyFile.close();
+                qDebug() << "ServiceKey cargada desde archivo:" << keyFilePath;
+            } else {
+                qWarning() << "No se pudo abrir el archivo de clave:" << keyFilePath;
+            }
+        } else {
+            qWarning() << "Archivo de clave no encontrado en:" << keyFilePath;
+            qWarning() << "Instrucciones:";
+            qWarning() << "  1. Obtén tu clave en: https://facturae.irenesolutions.com/verifactu/go";
+            qWarning() << "  2. Crea un archivo en:" << keyFilePath;
+            qWarning() << "  3. Pega tu clave en el archivo (solo la clave, sin espacios)";
+            qWarning() << "  O establece la variable de entorno:";
+            qWarning() << "  SET VERIFACTU_SERVICEKEY=tu_clave_aqui";
+        }
+    }
+
+    m_manager->getConfig()->setServiceKey(serviceKey);
+
+    // ========================================
+    // 3. ESTABLECER ENTORNO
+    // ========================================
+    // TESTING para pruebas (sin validación real)
+    // PRODUCTION para producción (validación real con AEAT)
     m_manager->getConfig()->setEnvironment(VerifactuConfig::TESTING);
 
     // Guardar configuración
     m_manager->getConfig()->save();
 
-    return m_manager->getConfig()->isValid();
+    // ========================================
+    // 4. VALIDAR CONFIGURACIÓN
+    // ========================================
+    if (!m_manager->getConfig()->isValid()) {
+        qCritical() << "Error: Configuración de Verifactu inválida";
+        qCritical() << m_manager->getConfig()->getValidationError();
+        return false;
+    }
+
+    return true;
 }

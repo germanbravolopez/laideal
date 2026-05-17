@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QStyleFactory>
+#include "verifactuintegration.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -48,6 +49,8 @@ private slots:
     bool validate_ticket();
     QString remove_special_char(QString str);
     void check_client_data();
+    bool verifactu_submit_invoice();
+    void show_qr_to_client(const VerifactuResult &result);
     bool save_ticket();
     void print_recibo();
     void print_fra();
@@ -84,6 +87,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    VerifactuIntegration *m_verifactuIntegration;
 };
 
 #endif // MAINWINDOW_H
