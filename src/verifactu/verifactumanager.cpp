@@ -9,6 +9,7 @@
 #include <QUrlQuery>
 #include <QByteArray>
 #include <QBuffer>
+#include <QEventLoop>
 
 VerifactuManager::VerifactuManager(const QString &configPath, QObject *parent)
     : QObject(parent), m_config(nullptr), m_networkManager(nullptr)
@@ -49,13 +50,32 @@ VerifactuResult VerifactuManager::submitInvoice(const VerifactuInvoice &invoice)
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Create");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
+    qDebug() << "Enviando factura" << invoice.getInvoiceNumber() << "a Verifactu";
+    qDebug() << "JSON enviado:" << doc.toJson();
+    qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
+
     QNetworkReply *reply = m_networkManager->post(request, payload);
 
-    // Procesar la respuesta de forma síncrona (simplificado)
-    // En una aplicación real, esto debería ser asíncrono
-    qDebug() << "Enviando factura" << invoice.getInvoiceNumber() << "a Verifactu";
+    // Esperar la respuesta de forma síncrona usando un event loop
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
 
-    result = processResponse(payload, false);
+    loop.exec();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Error de conexión: " + reply->errorString();
+        m_lastError = result.errorDescription;
+        qWarning() << m_lastError;
+        reply->deleteLater();
+        return result;
+    }
+
+    QByteArray responseData = reply->readAll();
+    reply->deleteLater();
+
+    qDebug() << "Respuesta del servidor:" << QString::fromUtf8(responseData);
+    result = processResponse(responseData, false);
     return result;
 }
 
@@ -101,11 +121,28 @@ VerifactuResult VerifactuManager::submitInvoices(const QList<VerifactuInvoice> &
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/CreateBatch");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    QNetworkReply *reply = m_networkManager->post(request, payload);
-
     qDebug() << "Enviando lote de" << invoices.count() << "facturas a Verifactu";
 
-    result = processResponse(payload, false);
+    QNetworkReply *reply = m_networkManager->post(request, payload);
+
+    // Esperar la respuesta
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    loop.exec();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Error de conexión: " + reply->errorString();
+        qWarning() << result.errorDescription;
+        reply->deleteLater();
+        return result;
+    }
+
+    QByteArray responseData = reply->readAll();
+    reply->deleteLater();
+
+    result = processResponse(responseData, false);
     return result;
 }
 
@@ -142,7 +179,24 @@ VerifactuResult VerifactuManager::cancelInvoice(const QString &invoiceNumber, co
 
     qDebug() << "Anulando factura" << invoiceNumber;
 
-    result = processResponse(payload, false);
+    // Esperar la respuesta
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    loop.exec();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Error de conexión: " + reply->errorString();
+        qWarning() << result.errorDescription;
+        reply->deleteLater();
+        return result;
+    }
+
+    QByteArray responseData = reply->readAll();
+    reply->deleteLater();
+
+    result = processResponse(responseData, false);
     return result;
 }
 
@@ -176,7 +230,24 @@ VerifactuResult VerifactuManager::generateQRCode(const VerifactuInvoice &invoice
 
     qDebug() << "Generando QR para factura" << invoice.getInvoiceNumber();
 
-    result = processResponse(payload, true);
+    // Esperar la respuesta
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    loop.exec();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Error de conexión: " + reply->errorString();
+        qWarning() << result.errorDescription;
+        reply->deleteLater();
+        return result;
+    }
+
+    QByteArray responseData = reply->readAll();
+    reply->deleteLater();
+
+    result = processResponse(responseData, true);
     result.validationUrl = getValidationUrl(invoice);
     return result;
 }

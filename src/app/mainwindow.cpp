@@ -19,6 +19,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Verifactu
     initialize_verifactu();
+
+    // TODO: delete this quick test
+    ui->cb_client->setEditText("Elia Lopez Bailon");
+    ui->le_cost_total->setText("4.50");
+    verifactu_submit_invoice();
+    std::exit(0);
 }
 
 MainWindow::~MainWindow()
@@ -311,7 +317,7 @@ bool MainWindow::verifactu_submit_invoice()
             ui->cb_client->currentText(),               // Nombre comprador
             ui->le_cost_total->text().toFloat() / 1.21, // base imponible
             21.0,                                       // tipo IVA
-            "Servicios de lavandería"                   // descripción del servicio
+            "Servicios de lavanderia"                   // descripción del servicio
         );
 
         if (result.isSuccess()) {
@@ -320,16 +326,10 @@ bool MainWindow::verifactu_submit_invoice()
             return true;
         } else {
             qDebug() << "Error al enviar la factura a Verifactu:" << result.errorDescription;
-            QMessageBox::warning(this, "Error de Verifactu",
-                QString("No se pudo enviar la factura a Verifactu:\n%1\n\n"
-                        "La factura se guardará localmente sin número de factura oficial.")
-                .arg(result.errorDescription));
             return false;
         }
     } else {
-        QMessageBox::warning(this, "Error de configuración de Verifactu",
-            "Ticket guardado localmente.\n"
-            "Verifactu no está disponible.");
+        qDebug() << "Error de configuración de Verifactu";
         return false;
     }
 }
