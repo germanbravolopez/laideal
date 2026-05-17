@@ -33,6 +33,7 @@ public:
 
 private slots:
     void mainwindow_initial_settings();
+    void initialize_verifactu();
     void reset_all_contents();
 
     // Custom functions

@@ -18,18 +18,7 @@ MainWindow::MainWindow(QWidget *parent)
     mainwindow_initial_settings();
 
     // Verifactu
-    m_verifactuIntegration = new VerifactuIntegration(this);
-
-    if (!m_verifactuIntegration->initialize()) {
-        QMessageBox::warning(this, "Advertencia",
-            QString("No se pudo inicializar Verifactu:\n%1\n\n"
-                    "Las facturas se guardarán localmente.\n"
-                    "Configura Verifactu más tarde.")
-            .arg(m_verifactuIntegration->getLastError()));
-    } else {
-        qDebug() << "Verifactu inicializado correctamente";
-        qDebug() << m_verifactuIntegration->getConfigInfo();
-    }
+    initialize_verifactu();
 }
 
 MainWindow::~MainWindow()
@@ -54,6 +43,22 @@ void MainWindow::mainwindow_initial_settings()
     // Push button settings
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
     reset_all_contents();
+}
+
+void MainWindow::initialize_verifactu()
+{
+    m_verifactuIntegration = new VerifactuIntegration(this);
+
+    if (!m_verifactuIntegration->initialize()) {
+        QMessageBox::warning(this, "Advertencia",
+            QString("No se pudo inicializar Verifactu:\n%1\n\n"
+                    "Las facturas se guardarán localmente.\n"
+                    "Configura Verifactu más tarde.")
+            .arg(m_verifactuIntegration->getLastError()));
+    } else {
+        qDebug() << "Verifactu inicializado correctamente";
+        qDebug() << m_verifactuIntegration->getConfigInfo();
+    }
 }
 
 void MainWindow::reset_all_contents()
