@@ -5,8 +5,6 @@ releases/setup_outputs
 releases/*.zip
 laideal_upd.iss
 
-.irenesolutions_servicekey
-
 *~
 *.autosave
 *.a
@@ -40,6 +38,7 @@ Thumbs.db
 *.rc
 /.qmake.cache
 /.qmake.stash
+*.bak
 
 # qtcreator generated files
 *.pro.user*
@@ -77,4 +76,3 @@ Thumbs.db
 # --------
 *.dll
 *.exe
-
