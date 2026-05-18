@@ -1,7 +1,19 @@
 Releases:
 
-r8.0
-	- New feature: add Verifactu support
+8.0
+	- New feature: Verifactu integration — AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
+		- Submits invoices to AEAT automatically when a ticket is saved
+		- Shows a QR dialog to the client after successful submission (QR image + security code + AEAT validation link)
+		- Graceful degradation: if Verifactu is not configured, ticket saving continues normally with a warning
+		- ServiceKey loaded from an external .ini file (not stored in source code)
+		- TESTING and PRODUCTION environments supported; switch in configuration
+		- Classes: VerifactuIntegration, VerifactuManager, VerifactuConfig, VerifactuInvoice
+	- Code quality: applied coding guidelines to all source modules
+		- Renamed all identifiers from snake_case to camelCase (methods, members, local variables)
+		- Translated all developer comments and debug messages to English
+		- Converted SIGNAL/SLOT macro syntax to new-style pointer syntax throughout
+		- Fixed SQL injection vulnerability in add_garment search (parameterised query)
+	- Build: version number now managed from root CMakeLists.txt and propagated automatically
 
 r7.1
 	- New feature: print listado de prendas to pdf
