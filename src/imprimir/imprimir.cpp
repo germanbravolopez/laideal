@@ -47,35 +47,35 @@ void Imprimir::setupUi(QDialog *Imprimir)
     QMetaObject::connectSlotsByName(Imprimir);
 }
 
-void Imprimir::get_ticket_info()
+void Imprimir::getTicketInfo()
 {
-    sql_query_model = new QSqlQueryModel;
+    sqlQueryModel = new QSqlQueryModel;
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
     q.bindValue(":n_recibo", le_n_ticket->text());
     q.exec();
-    sql_query_model->setQuery(std::move(q));
+    sqlQueryModel->setQuery(std::move(q));
     db.close();
 }
 
-bool Imprimir::check_ticket_paid(int row)
+bool Imprimir::checkTicketPaid(int row)
 {
-    if (sql_query_model->data(sql_query_model->index(row, TABLE_IS_PAYED)).toString() == "NO")
+    if (sqlQueryModel->data(sqlQueryModel->index(row, TABLE_IS_PAYED)).toString() == "NO")
         return false;
     return true;
 }
 
-bool Imprimir::check_any_item_paid()
+bool Imprimir::checkAnyItemPaid()
 {
-    for (int row = 0; row < sql_query_model->rowCount(); row++) {
-        if (check_ticket_paid(row))
+    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
+        if (checkTicketPaid(row))
             return true;
     }
     return false;
 }
 
-QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
+QString Imprimir::addExtraInfoToInvoice(QString title, QString request)
 {
     bool ok;
     QString text = QInputDialog::getText(this, title,
@@ -87,36 +87,36 @@ QString Imprimir::add_extra_info_to_invoice(QString title, QString request)
         return "";
 }
 
-void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
+void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
 {
     // Check that excel is accessible
-    QString excel_path = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
-    if (!QFile::exists(excel_path)) {
+    QString excelPath = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
+    if (!QFile::exists(excelPath)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo excel para generar el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);
     } else {
         int row = 6;
-        QXlsx::Document excel(excel_path);
+        QXlsx::Document excel(excelPath);
 
         // First clear current content
-        QXlsx::Format format_clear;
-        format_clear.setBorderStyle(QXlsx::Format::BorderNone);
-        format_clear.setFontSize(11);
-        format_clear.setFontBold(false);
-        format_clear.setTextWrap(false);
-        format_clear.setVerticalAlignment(QXlsx::Format::AlignBottom);
-        format_clear.setHorizontalAlignment(QXlsx::Format::AlignLeft);
-        for (int row_cnt = row; row_cnt < 100; row_cnt++) {
-            for (int col_cnt = 1; col_cnt < 4; col_cnt++) {
-                excel.write(row_cnt, col_cnt, "", format_clear);
+        QXlsx::Format formatClear;
+        formatClear.setBorderStyle(QXlsx::Format::BorderNone);
+        formatClear.setFontSize(11);
+        formatClear.setFontBold(false);
+        formatClear.setTextWrap(false);
+        formatClear.setVerticalAlignment(QXlsx::Format::AlignBottom);
+        formatClear.setHorizontalAlignment(QXlsx::Format::AlignLeft);
+        for (int rowCnt = row; rowCnt < 100; rowCnt++) {
+            for (int colCnt = 1; colCnt < 4; colCnt++) {
+                excel.write(rowCnt, colCnt, "", formatClear);
             }
-            excel.unmergeCells("A" + QString::number(row_cnt) + ":B" + QString::number(row_cnt));
-            excel.unmergeCells("A" + QString::number(row_cnt) + ":C" + QString::number(row_cnt));
+            excel.unmergeCells("A" + QString::number(rowCnt) + ":B" + QString::number(rowCnt));
+            excel.unmergeCells("A" + QString::number(rowCnt) + ":C" + QString::number(rowCnt));
         }
 
         // Start filling with current data
-        if (is_recibo) {
+        if (isRecibo) {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("Recibo"));
             row++;
@@ -127,222 +127,222 @@ void Imprimir::create_ticket_excel(bool copy_for_client, bool add_payed_info)
         }
         // N_recibo
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        QXlsx::Format format_bold_right_align;
-        format_bold_right_align.setFontBold(true);
-        format_bold_right_align.setHorizontalAlignment(QXlsx::Format::AlignRight);
-        excel.write(row, 1, QString("Nº: " + le_n_ticket->text()), format_bold_right_align);
+        QXlsx::Format formatBoldRightAlign;
+        formatBoldRightAlign.setFontBold(true);
+        formatBoldRightAlign.setHorizontalAlignment(QXlsx::Format::AlignRight);
+        excel.write(row, 1, QString("Nº: " + le_n_ticket->text()), formatBoldRightAlign);
         row++;
         // Client data
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("Cliente: " + sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString()));
+        excel.write(row, 1, QString("Cliente: " + sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_CLIENT)).toString()));
         row++;
         // Ticket dates
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("Recepción: " + sql_query_model->data(sql_query_model->index(0 , TABLE_DATE_RCP)).toString().replace("-","/")));
+        excel.write(row, 1, QString("Recepción: " + sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_DATE_RCP)).toString().replace("-","/")));
         row++;
         // Extra information in case of complete invoice: address and DNI
-        if (is_complete_invoice) {
-            QString client_address;
-            client_address = search_item_from_client(db, "direccion", sql_query_model->data(sql_query_model->index(0 , TABLE_CLIENT)).toString(), false);
-            if (client_address == "")
-                client_address = add_extra_info_to_invoice("Añadir dirección de facturación", "Dirección:");
+        if (isCompleteInvoice) {
+            QString clientAddress;
+            clientAddress = searchItemFromClient(db, "direccion", sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_CLIENT)).toString(), false);
+            if (clientAddress == "")
+                clientAddress = addExtraInfoToInvoice("Añadir dirección de facturación", "Dirección:");
             // Cut address string in case it is too long
-            if (client_address.size() >= 42) {
+            if (clientAddress.size() >= 42) {
                 excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-                excel.write(row, 1, QString("Dirección: " + client_address.left(41)));
+                excel.write(row, 1, QString("Dirección: " + clientAddress.left(41)));
                 row++;
                 excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-                excel.write(row, 1, QString("Dirección: " + client_address.mid(41)));
+                excel.write(row, 1, QString("Dirección: " + clientAddress.mid(41)));
                 row++;
             } else {
                 excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-                excel.write(row, 1, QString("Dirección: " + client_address));
+                excel.write(row, 1, QString("Dirección: " + clientAddress));
                 row++;
             }
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-            excel.write(row, 1, QString("DNI: " + add_extra_info_to_invoice("Añadir DNI", "DNI:")));
+            excel.write(row, 1, QString("DNI: " + addExtraInfoToInvoice("Añadir DNI", "DNI:")));
             row++;
         }
         // Add double line empty row
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        QXlsx::Format format_double_line;
-        format_double_line.setBottomBorderStyle(QXlsx::Format::BorderDouble);
-        excel.write(row, 1, "", format_double_line);
-        excel.write(row, 2, "", format_double_line);
-        excel.write(row, 3, "", format_double_line);
+        QXlsx::Format formatDoubleLine;
+        formatDoubleLine.setBottomBorderStyle(QXlsx::Format::BorderDouble);
+        excel.write(row, 1, "", formatDoubleLine);
+        excel.write(row, 2, "", formatDoubleLine);
+        excel.write(row, 3, "", formatDoubleLine);
         row++;
         // Add header for garments table
-        QXlsx::Format format_single_line;
-        format_single_line.setBottomBorderStyle(QXlsx::Format::BorderThin);
-        excel.write(row, 1, "Uds.", format_single_line);
-        excel.write(row, 2, "Prendas", format_single_line);
-        excel.write(row, 3, "Importe", format_single_line);
+        QXlsx::Format formatSingleLine;
+        formatSingleLine.setBottomBorderStyle(QXlsx::Format::BorderThin);
+        excel.write(row, 1, "Uds.", formatSingleLine);
+        excel.write(row, 2, "Prendas", formatSingleLine);
+        excel.write(row, 3, "Importe", formatSingleLine);
         row++;
         // Configure format for each column of garments table
-        QXlsx::Format format_uds_cost, format_garm;
-        format_uds_cost.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
-        format_uds_cost.setVerticalAlignment(QXlsx::Format::AlignTop);
-        format_garm.setTextWrap(true);
+        QXlsx::Format formatUdsCost, formatGarm;
+        formatUdsCost.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+        formatUdsCost.setVerticalAlignment(QXlsx::Format::AlignTop);
+        formatGarm.setTextWrap(true);
         // Add garments
-        float ticket_total_f = 0.0;
-        for (int row_cnt = 0; row_cnt < sql_query_model->rowCount(); row_cnt++) {
-            if (is_recibo || !is_recibo && check_ticket_paid(row_cnt)) {
-                QString garment_name = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_GARMENT)).toString();
+        float ticketTotalF = 0.0;
+        for (int rowCnt = 0; rowCnt < sqlQueryModel->rowCount(); rowCnt++) {
+            if (isRecibo || !isRecibo && checkTicketPaid(rowCnt)) {
+                QString garmentName = sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_GARMENT)).toString();
                 // Complete garment with size info
-                QString size = QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_SIZE)).toFloat(), 'f', 2);
+                QString size = QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_SIZE)).toFloat(), 'f', 2);
                 if (size != "" && size != "0.00") {
-                    garment_name.append(" - " + size);
+                    garmentName.append(" - " + size);
                 }
                 //// Complete "Alfombra" getting also the observation value (number)
-                //QString left_side = garment_name.left(8);
-                //QString obsv = sql_query_model->data(sql_query_model->index(row_cnt, TABLE_OBSERV)).toString();
-                //if (left_side == "Alfombra" && obsv != "") {
-                //    garment_name.append(" - " + obsv);
+                //QString leftSide = garmentName.left(8);
+                //QString obsv = sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_OBSERV)).toString();
+                //if (leftSide == "Alfombra" && obsv != "") {
+                //    garmentName.append(" - " + obsv);
                 //}
                 // Content of each garment in the ticket
-                excel.write(row, 1, sql_query_model->data(sql_query_model->index(row_cnt, TABLE_QUANTITY)).toString(), format_uds_cost);
-                excel.write(row, 2, garment_name, format_garm);
-                excel.write(row, 3, QString::number(sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat(), 'f', 2), format_uds_cost);
+                excel.write(row, 1, sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_QUANTITY)).toString(), formatUdsCost);
+                excel.write(row, 2, garmentName, formatGarm);
+                excel.write(row, 3, QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_PRICE)).toFloat(), 'f', 2), formatUdsCost);
                 row++;
                 //// Add extra information for each garment for facturas simplificadas
-                //if (!is_recibo && sql_query_model->data(sql_query_model->index(row_cnt, TABLE_IS_PAYED)).toString() == "SI") {
-                //    format_garm.setFontSize(10);
-                //    excel.write(row, 2, "Pagad.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PAY)).toString().replace("-","/"), format_garm);
-                //    format_garm.setFontSize(11);
+                //if (!isRecibo && sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_IS_PAYED)).toString() == "SI") {
+                //    formatGarm.setFontSize(10);
+                //    excel.write(row, 2, "Pagad.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_DATE_PAY)).toString().replace("-","/"), formatGarm);
+                //    formatGarm.setFontSize(11);
                 //    row++;
-                //    if (sql_query_model->data(sql_query_model->index(row_cnt, TABLE_STATE)).toString() == "Recogido") {
-                //        format_garm.setFontSize(10);
-                //        excel.write(row, 2, "Recog.: " + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_DATE_PKU)).toString().replace("-","/"), format_garm);
-                //        format_garm.setFontSize(11);
+                //    if (sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_STATE)).toString() == "Recogido") {
+                //        formatGarm.setFontSize(10);
+                //        excel.write(row, 2, "Recog.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_DATE_PKU)).toString().replace("-","/"), formatGarm);
+                //        formatGarm.setFontSize(11);
                 //        row++;
                 //    }
                 //}
-                ticket_total_f = ticket_total_f + sql_query_model->data(sql_query_model->index(row_cnt, TABLE_PRICE)).toFloat();
+                ticketTotalF = ticketTotalF + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_PRICE)).toFloat();
             }
         }
         // Calculate total price and IVA
-        QString ticket_total = QString::number(ticket_total_f, 'f', 2);
-        QString base_imponible = QString::number(ticket_total_f / 1.21, 'f', 2);
-        QString iva = QString::number(ticket_total_f - base_imponible.toFloat(), 'f', 2);
+        QString ticketTotal = QString::number(ticketTotalF, 'f', 2);
+        QString baseImponible = QString::number(ticketTotalF / 1.21, 'f', 2);
+        QString iva = QString::number(ticketTotalF - baseImponible.toFloat(), 'f', 2);
         // Add totals
-        QXlsx::Format format_totals;
-        format_totals.setFontBold(true);
-        format_totals.setTopBorderStyle(QXlsx::Format::BorderThin);
-        format_totals.setBottomBorderStyle(QXlsx::Format::BorderDouble);
-        format_totals.setHorizontalAlignment(QXlsx::Format::AlignRight);
-        if (is_recibo) {
+        QXlsx::Format formatTotals;
+        formatTotals.setFontBold(true);
+        formatTotals.setTopBorderStyle(QXlsx::Format::BorderThin);
+        formatTotals.setBottomBorderStyle(QXlsx::Format::BorderDouble);
+        formatTotals.setHorizontalAlignment(QXlsx::Format::AlignRight);
+        if (isRecibo) {
             // Write total text
             excel.mergeCells("A" + QString::number(row) + ":B" + QString::number(row));
-            excel.write(row, 1, QString("TOTAL (IVA incl.):"), format_totals);
-            excel.write(row, 2, "", format_totals);
+            excel.write(row, 1, QString("TOTAL (IVA incl.):"), formatTotals);
+            excel.write(row, 2, "", formatTotals);
             // Write total cost
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
-            excel.write(row, 3, ticket_total, format_totals);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+            excel.write(row, 3, ticketTotal, formatTotals);
             row++;
         } else {
             // Write base text
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignRight);
-            format_totals.setBottomBorderStyle(QXlsx::Format::BorderNone);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignRight);
+            formatTotals.setBottomBorderStyle(QXlsx::Format::BorderNone);
             excel.mergeCells("A" + QString::number(row) + ":B" + QString::number(row));
-            excel.write(row, 1, QString("Base Imponible:"), format_totals);
-            excel.write(row, 2, "", format_totals);
+            excel.write(row, 1, QString("Base Imponible:"), formatTotals);
+            excel.write(row, 2, "", formatTotals);
             // Write base cost
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
-            excel.write(row, 3, base_imponible, format_totals);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+            excel.write(row, 3, baseImponible, formatTotals);
             row++;
             // Write iva text
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignRight);
-            format_totals.setTopBorderStyle(QXlsx::Format::BorderNone);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignRight);
+            formatTotals.setTopBorderStyle(QXlsx::Format::BorderNone);
             excel.mergeCells("A" + QString::number(row) + ":B" + QString::number(row));
-            excel.write(row, 1, QString("IVA (21%):"), format_totals);
+            excel.write(row, 1, QString("IVA (21%):"), formatTotals);
             // Write iva cost
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
-            excel.write(row, 3, iva, format_totals);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+            excel.write(row, 3, iva, formatTotals);
             row++;
             // Write total text
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignRight);
-            format_totals.setBottomBorderStyle(QXlsx::Format::BorderDouble);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignRight);
+            formatTotals.setBottomBorderStyle(QXlsx::Format::BorderDouble);
             excel.mergeCells("A" + QString::number(row) + ":B" + QString::number(row));
-            excel.write(row, 1, QString("TOTAL:"), format_totals);
-            excel.write(row, 2, "", format_totals);
+            excel.write(row, 1, QString("TOTAL:"), formatTotals);
+            excel.write(row, 2, "", formatTotals);
             // Write total cost
-            format_totals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
-            excel.write(row, 3, ticket_total, format_totals);
+            formatTotals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+            excel.write(row, 3, ticketTotal, formatTotals);
             row++;
         }
         // Insert receipt information
-        if (add_payed_info) {
-            QXlsx::Format format_payed;
-            format_payed.setHorizontalAlignment(QXlsx::Format::AlignRight);
+        if (addPayedInfo) {
+            QXlsx::Format formatPayed;
+            formatPayed.setHorizontalAlignment(QXlsx::Format::AlignRight);
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-            excel.write(row, 1, QString("IMPORTE PAGADO"), format_payed);
+            excel.write(row, 1, QString("IMPORTE PAGADO"), formatPayed);
             row++;
         } else
             row++; // Add empty row
-        if (is_recibo && copy_for_client) {
+        if (isRecibo && copyForClient) {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("(Copia para el cliente)"));
             row++;
             row++; // Add empty row
-        } else if (is_recibo && !copy_for_client) {
+        } else if (isRecibo && !copyForClient) {
             excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
             excel.write(row, 1, QString("(Copia para el establecimiento)"));
             row++;
             row++; // Add empty row
         }
         // Insert policy
-        QXlsx::Format format_policy;
-        format_policy.setFontSize(10);
+        QXlsx::Format formatPolicy;
+        formatPolicy.setFontSize(10);
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("CONDICIONES GENERALES."), format_policy);
+        excel.write(row, 1, QString("CONDICIONES GENERALES."), formatPolicy);
         row++;
-        format_policy.setFontSize(9);
+        formatPolicy.setFontSize(9);
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("- El recibo deberá ser presentado al retirar la"), format_policy);
-        row++;
-        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("prenda. En caso de pérdida, el usuario acreditará"), format_policy);
+        excel.write(row, 1, QString("- El recibo deberá ser presentado al retirar la"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("su identidad."), format_policy);
+        excel.write(row, 1, QString("prenda. En caso de pérdida, el usuario acreditará"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("- La obligación de conservar las prendas por el"), format_policy);
+        excel.write(row, 1, QString("su identidad."), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("establecimiento caduca una vez transcurridos"), format_policy);
+        excel.write(row, 1, QString("- La obligación de conservar las prendas por el"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("SEIS MESES desde la fecha de recepción."), format_policy);
+        excel.write(row, 1, QString("establecimiento caduca una vez transcurridos"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("- No se responde de botones y otros adornos "), format_policy);
+        excel.write(row, 1, QString("SEIS MESES desde la fecha de recepción."), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("delicados de las prendas. Se recomienda que"), format_policy);
+        excel.write(row, 1, QString("- No se responde de botones y otros adornos "), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("que sean desmontados por el cliente."), format_policy);
+        excel.write(row, 1, QString("delicados de las prendas. Se recomienda que"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("que sean desmontados por el cliente."), formatPolicy);
         row++;
         // Insert timestamp
-        QXlsx::Format format_stamp;
-        format_stamp.setFontSize(9);
-        format_stamp.setTopBorderStyle(QXlsx::Format::BorderThin);
+        QXlsx::Format formatStamp;
+        formatStamp.setFontSize(9);
+        formatStamp.setTopBorderStyle(QXlsx::Format::BorderThin);
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss"), format_stamp);
-        excel.write(row, 2, "", format_stamp);
-        excel.write(row, 3, "", format_stamp);
+        excel.write(row, 1, QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss"), formatStamp);
+        excel.write(row, 2, "", formatStamp);
+        excel.write(row, 3, "", formatStamp);
         // Save file
         excel.save();
     }
 }
 
-void Imprimir::print_ticket()
+void Imprimir::printTicket()
 {
     // Call the batch script to print the excel
     QProcess process;
-    QString batch_path = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/print_ticket.bat";
-    if (!QFile::exists(batch_path)) {
+    QString batchPath = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/print_ticket.bat";
+    if (!QFile::exists(batchPath)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -350,7 +350,7 @@ void Imprimir::print_ticket()
         // Change the cursor to a loading icon
         QApplication::setOverrideCursor(Qt::WaitCursor);
         // Start printing process
-        process.start(batch_path);
+        process.start(batchPath);
         process.waitForFinished();
         // Restore the cursor to default
         QApplication::restoreOverrideCursor();
@@ -359,22 +359,22 @@ void Imprimir::print_ticket()
 
 void Imprimir::on_bb_ok_cancel_accepted()
 {
-    if (le_n_ticket->text() == select_from_where_like(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
-        get_ticket_info();
-        if (is_recibo || !is_recibo && check_any_item_paid()) {
-            create_ticket_excel(true, false);
-            print_ticket();
-            if (is_recibo) {
+    if (le_n_ticket->text() == selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
+        getTicketInfo();
+        if (isRecibo || !isRecibo && checkAnyItemPaid()) {
+            createTicketExcel(true, false);
+            printTicket();
+            if (isRecibo) {
                 int resp = QMessageBox::question(this, "Copia establecimiento",
                                                  "¿Desea copia para el establecimiento?",
                                                  QMessageBox::Yes | QMessageBox::No,
                                                  QMessageBox::Yes);
                 if (resp == QMessageBox::Yes) {
-                    create_ticket_excel(false, false);
-                    print_ticket();
+                    createTicketExcel(false, false);
+                    printTicket();
                 }
             }
-        } else if (!is_recibo)
+        } else if (!isRecibo)
             QMessageBox::information(this, "Imprimir",
                                      "No hay ninguna prenda pagada en el recibo " + le_n_ticket->text() + ".",
                                      QMessageBox::Ok,

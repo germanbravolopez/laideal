@@ -14,9 +14,9 @@ Listado::Listado(QWidget *parent) :
     connect(table_listado->action2, &QAction::triggered,
             this, &Listado::on_actionEliminar_fila_triggered);
     connect(filter_widget, &FilterWidget::filterChanged,
-            this, &Listado::text_filter_changed);
+            this, &Listado::textFilterChanged);
     connect(filter_widget, &QLineEdit::textChanged,
-            this, &Listado::text_filter_changed);
+            this, &Listado::textFilterChanged);
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
 }
@@ -131,47 +131,47 @@ void Listado::retranslateUi(QMainWindow *Listado)
     menuHerramientas->setTitle(QCoreApplication::translate("Listado", "Herramientas", nullptr));
 } // retranslateUi
 
-void Listado::populate_table()
+void Listado::populateTable()
 {
     // Change the cursor to a loading icon
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
     if (QSqlDatabase::contains("qt_sql_default_connection")) {
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
-        model->setTable(table_name);
+        model->setTable(tableName);
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
         // order model before showing data in table
         model->setSort(0, Qt::AscendingOrder);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
-        proxyModel->table_name = table_name;
+        proxyModel->table_name = tableName;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         // Scroll all the way down and all the way up to get all data populated
-        int previous_length = 0;
+        int previousLength = 0;
         QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
-        while (proxyModel->rowCount() > previous_length) {
-            previous_length = proxyModel->rowCount();
+        while (proxyModel->rowCount() > previousLength) {
+            previousLength = proxyModel->rowCount();
             verticalScrollBar->setValue(verticalScrollBar->maximum());
         }
         verticalScrollBar->setValue(verticalScrollBar->minimum());
         // Perform sorting with proxy model
-        if (table_name == "gastos")
+        if (tableName == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-        else if (table_name == "ingresos")
+        else if (tableName == "ingresos")
             table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
         else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
         // Configure NumberDelegate
-        if (table_name == "prendas") {
+        if (tableName == "prendas") {
             table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
             table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
         }
-        else if (table_name == "gastos") {
+        else if (tableName == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
         table_listado->setFont(QFont(table_listado->font().family(), 8));
-        if (table_name == "ingresos") {
+        if (tableName == "ingresos") {
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_IMPORTE, new NumberFormatDelegate(this));
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_PAYED, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_STATE, new TextColorDelegate(table_listado, this));
@@ -180,13 +180,13 @@ void Listado::populate_table()
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
     }
-    resize_window_to_table();
+    resizeWindowToTable();
 
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
 }
 
-void Listado::resize_window_to_table()
+void Listado::resizeWindowToTable()
 {
     // Set window size to minimun of size of the table
     int size = 0;
@@ -198,7 +198,7 @@ void Listado::resize_window_to_table()
     }
 }
 
-void Listado::text_filter_changed()
+void Listado::textFilterChanged()
 {
     FilterWidget::PatternSyntax s = filter_widget->patternSyntax();
     QString pattern = filter_widget->text();
@@ -227,43 +227,43 @@ void Listado::on_actionActualizar_triggered()
 {
     QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
     verticalScrollBar->setValue(verticalScrollBar->minimum());
-    if (table_name == "gastos")
+    if (tableName == "gastos")
         table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-    else if (table_name == "ingresos")
+    else if (tableName == "ingresos")
         table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
     else
         table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
     table_listado->resizeColumnsToContents();
     table_listado->resizeRowsToContents();
-    resize_window_to_table();
+    resizeWindowToTable();
 }
 
 void Listado::on_actionAnadir_fila_triggered()
 {
-    if (table_name == "clientes") {
+    if (tableName == "clientes") {
         InsertNewItem *ui_insert_new;
         ui_insert_new = new InsertNewItem(this);
         ui_insert_new->db = db;
         ui_insert_new->exec();
-        populate_table();
-    } else if (table_name == "prendas") {
+        populateTable();
+    } else if (tableName == "prendas") {
         table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
-        insert_new_item_to_table(db, {"", "", ""}, "prendas");
-        populate_table();
-    } else if (table_name == "proveedores") {
+        insertNewItemToTable(db, {"", "", ""}, "prendas");
+        populateTable();
+    } else if (tableName == "proveedores") {
         table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
-        insert_new_item_to_table(db, {"", "", "", ""}, "proveedores");
-        populate_table();
-    } else if (table_name == "servicios") {
+        insertNewItemToTable(db, {"", "", "", ""}, "proveedores");
+        populateTable();
+    } else if (tableName == "servicios") {
         table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
-        insert_new_item_to_table(db, {""}, "servicios");
-        populate_table();
-    } else if (table_name == "gastos") {
+        insertNewItemToTable(db, {""}, "servicios");
+        populateTable();
+    } else if (tableName == "gastos") {
         QMessageBox::information(this, "Añadir fila",
                                  "Para introducir nuevos gastos, hay que usar la herramienta de introducir "
                                  "facturas en la ventana principal.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-        populate_table();
+        populateTable();
     } else
         QMessageBox::critical(this, "Añadir fila",
                               "Esta tabla no soporta añadir nuevas filas directamente.",
@@ -272,7 +272,7 @@ void Listado::on_actionAnadir_fila_triggered()
 
 void Listado::on_actionEliminar_fila_triggered()
 {
-    if (table_name == "ingresos")
+    if (tableName == "ingresos")
         QMessageBox::critical(this, "Eliminar fila",
                               "Esta tabla no soporta eliminar filas directamente.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -284,26 +284,26 @@ void Listado::on_actionEliminar_fila_triggered()
                                         QMessageBox::No);
         if (ret == QMessageBox::Yes) {
             table_listado->model()->removeRow(table_listado->currentIndex().row());
-            populate_table();
+            populateTable();
         }
     }
 }
 
 void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
 {
-    if (table_name == "gastos") {
+    if (tableName == "gastos") {
         GenListado *ui_generar_listado;
         ui_generar_listado = new GenListado(this);
         ui_generar_listado->db = db;
         ui_generar_listado->model = table_listado->model();
         ui_generar_listado->exec();
-        populate_table();
-    } else if (table_name == "prendas") {
+        populateTable();
+    } else if (tableName == "prendas") {
             GenListado *ui_generar_listado;
             ui_generar_listado = new GenListado(this);
             ui_generar_listado->db = db;
             ui_generar_listado->model = table_listado->model();
-            ui_generar_listado->table_name = table_name;
+            ui_generar_listado->table_name = tableName;
             ui_generar_listado->print_table();
     } else {
         QMessageBox::information(this, "Generar listado",
@@ -314,11 +314,11 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
 
 void Listado::closeEvent(QCloseEvent* event)
 {
-    if (table_name == "clientes") {
-        emit populate_clientes();
+    if (tableName == "clientes") {
+        emit populateClientes();
         event->accept();
-    } else if (table_name == "prendas") {
-        emit populate_prendas();
+    } else if (tableName == "prendas") {
+        emit populatePrendas();
         event->accept();
     }
 }

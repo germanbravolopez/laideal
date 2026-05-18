@@ -7,7 +7,7 @@ Facturas::Facturas(QWidget *parent) :
     ui(new Ui::Facturas)
 {
     ui->setupUi(this);
-    initial_settings();
+    initialSettings();
 }
 
 Facturas::~Facturas()
@@ -15,14 +15,14 @@ Facturas::~Facturas()
     delete ui;
 }
 
-void Facturas::initial_settings()
+void Facturas::initialSettings()
 {
-    QStringList iva_list = {"21", "10", "0"};
-    ui->cb_iva->addItems(iva_list);
-    reset_all_contents();
+    QStringList ivaList = {"21", "10", "0"};
+    ui->cb_iva->addItems(ivaList);
+    resetAllContents();
 }
 
-void Facturas::reset_all_contents()
+void Facturas::resetAllContents()
 {
     ui->le_fra->clear();
     ui->de_fecha->setDate(QDate::currentDate());
@@ -35,21 +35,21 @@ void Facturas::reset_all_contents()
     ui->le_iva->clear();
 }
 
-void Facturas::populate_empresas()
+void Facturas::populateEmpresas()
 {
-    QStringList empresas_names = read_column_from_table(db, "nombre", "proveedores", "");
-    ui->cb_empresa->addItems(empresas_names);
+    QStringList empresasNames = readColumnFromTable(db, "nombre", "proveedores", "");
+    ui->cb_empresa->addItems(empresasNames);
     ui->cb_empresa->setCurrentText("");
 }
 
-void Facturas::populate_servicios()
+void Facturas::populateServicios()
 {
-    QStringList servicios_names = read_column_from_table(db, "nombre", "servicios", "");
-    ui->cb_servicio->addItems(servicios_names);
+    QStringList serviciosNames = readColumnFromTable(db, "nombre", "servicios", "");
+    ui->cb_servicio->addItems(serviciosNames);
     ui->cb_servicio->setCurrentText("");
 }
 
-bool Facturas::validate_form()
+bool Facturas::validateForm()
 {
     bool ok = 0;
     // Avoid n_fra, service, company and cost to be empty
@@ -59,7 +59,7 @@ bool Facturas::validate_form()
             ui->le_importe->text() != "") {
         // Check current company as part of the company list
         if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
-            if (read_lock_for_month_and_year(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
+            if (readLockForMonthAndYear(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
                 ok = 1;
             else
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
@@ -81,14 +81,14 @@ bool Facturas::validate_form()
     return ok;
 }
 
-void Facturas::save_factura()
+void Facturas::saveFactura()
 {
-    int id_max = read_max_value_in_column_from_table(db, "id", "gastos");
+    int idMax = readMaxValueInColumnFromTable(db, "id", "gastos");
     db.open();
     QSqlQuery q;
     q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe, edit_lock) "
               "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe, :edit_lock);");
-    q.bindValue(":id", QString::number(id_max + 1));
+    q.bindValue(":id", QString::number(idMax + 1));
     q.bindValue(":n_factura", ui->le_fra->text());
     q.bindValue(":servicio", ui->cb_servicio->currentText());
     q.bindValue(":descripcion", ui->le_producto->text());
@@ -107,11 +107,11 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
     if (button == ui->buttonBox->button(QDialogButtonBox::Cancel))
         this->close();
     else if (button == ui->buttonBox->button(QDialogButtonBox::Reset))
-        reset_all_contents();
+        resetAllContents();
     else if (button == ui->buttonBox->button(QDialogButtonBox::Save)) {
-        if (validate_form()) {
-            save_factura();
-            reset_all_contents();
+        if (validateForm()) {
+            saveFactura();
+            resetAllContents();
         }
     }
     else

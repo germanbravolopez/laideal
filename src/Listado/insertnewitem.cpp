@@ -80,7 +80,7 @@ void InsertNewItem::retranslateUi(QDialog *InsertNewItem)
 
 void InsertNewItem::on_bb_ok_cancel_accepted()
 {
-    insert_new_item_to_table(db, {le_1->text(), le_2->text(), le_3->text(), le_4->text()}, "clientes");
+    insertNewItemToTable(db, {le_1->text(), le_2->text(), le_3->text(), le_4->text()}, "clientes");
 } // on_bb_ok_cancel_accepted
 
 void InsertNewItem::on_bb_ok_cancel_rejected()

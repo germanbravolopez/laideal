@@ -42,17 +42,17 @@ public:
 
     void setupUi(QMainWindow *Listado);
     void retranslateUi(QMainWindow *Listado);
-    void populate_table();
+    void populateTable();
 
     explicit Listado(QWidget *parent = nullptr);
     QSqlDatabase db;
-    QString table_name;
+    QString tableName;
     QSqlTableModel *model;
     MySortFilterProxyModel *proxyModel;
 
 private slots:
-    void resize_window_to_table();
-    void text_filter_changed();
+    void resizeWindowToTable();
+    void textFilterChanged();
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
@@ -63,8 +63,8 @@ private slots:
 private:
 
 signals:
-    void populate_clientes();
-    void populate_prendas();
+    void populateClientes();
+    void populatePrendas();
 };
 
 #endif // LISTADO_H

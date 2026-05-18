@@ -35,10 +35,10 @@ public:
     ~RecogPrendas();
 
     QSqlDatabase db;
-    QSqlQueryModel *sql_query_model = new QSqlQueryModel;
+    QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel;
-    bool is_cell_clicked = false;
-    int row_clicked_cell, column_clicked_cell;
+    bool isCellClicked = false;
+    int rowClickedCell, columnClickedCell;
 
     enum UpdateDBop {
         PAY_YES,
@@ -51,11 +51,11 @@ public:
     };
 
 private slots:
-    void initial_settings();
-    void reset_all_contents();
-    void update_db(UpdateDBop op, int n_garm = 0);
-    void update_row_clicked_to_fields();
-    float calculate_price();
+    void initialSettings();
+    void resetAllContents();
+    void updateDb(UpdateDBop op, int nGarm = 0);
+    void updateRowClickedToFields();
+    float calculatePrice();
 
     void on_le_search_returnPressed();
     void on_cb_search_date_currentTextChanged(const QString &arg1);

@@ -26,8 +26,8 @@ void GenListado::initial_settings()
 
 void GenListado::set_cb_fechas()
 {
-    int max_year = read_max_n_min_year_in_column_from_table(db, true, "fecha", "gastos");
-    int min_year = read_max_n_min_year_in_column_from_table(db, false, "fecha", "gastos");
+    int max_year = readMaxNMinYearInColumnFromTable(db, true, "fecha", "gastos");
+    int min_year = readMaxNMinYearInColumnFromTable(db, false, "fecha", "gastos");
     QStringList fechas_list;
     int mid_year = max_year;
     while (mid_year >= min_year) {

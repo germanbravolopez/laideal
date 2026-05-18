@@ -36,14 +36,14 @@ class Imprimir : public QDialog
 
 public:
     QSqlDatabase db;
-    QSqlQueryModel *sql_query_model;
-    bool is_recibo, is_complete_invoice;
+    QSqlQueryModel *sqlQueryModel;
+    bool isRecibo, isCompleteInvoice;
     Imprimir(QWidget *parent = nullptr);
 
     // Public functions
-    void get_ticket_info();
-    void create_ticket_excel(bool copy_for_client, bool add_payed_info);
-    void print_ticket();
+    void getTicketInfo();
+    void createTicketExcel(bool copyForClient, bool addPayedInfo);
+    void printTicket();
 
     // Setup Dialog in code
     QFormLayout *formLayout;
@@ -53,9 +53,9 @@ public:
 
 private slots:
     void setupUi(QDialog *Imprimir);
-    bool check_ticket_paid(int row);
-    bool check_any_item_paid();
-    QString add_extra_info_to_invoice(QString title, QString request);
+    bool checkTicketPaid(int row);
+    bool checkAnyItemPaid();
+    QString addExtraInfoToInvoice(QString title, QString request);
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
 

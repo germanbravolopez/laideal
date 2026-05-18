@@ -1,38 +1,38 @@
 #include "sql_lite.h"
 
-int read_max_value_in_column_from_table(QSqlDatabase &db,
-                                        QString column,
-                                        QString table)
+int readMaxValueInColumnFromTable(QSqlDatabase &db,
+                                  QString column,
+                                  QString table)
 {
-    int max_value = 0;
+    int maxValue = 0;
     db.open();
     QSqlQuery q;
     q.exec("SELECT MAX(" + column + ") FROM " + table);
     if (q.isSelect()) {
         if (q.first())
-            max_value = q.value(0).toInt();
+            maxValue = q.value(0).toInt();
         else
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar read_max_value_in_column_from_table.",
+                                  "Búsqueda vacía al usar readMaxValueInColumnFromTable.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_max_value_in_column_from_table.",
+                              "Acceso a la tabla da un error al usar readMaxValueInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
-    return max_value;
+    return maxValue;
 }
 
-int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
-                                             bool max_n_min,
-                                             QString column,
-                                             QString table)
+int readMaxNMinYearInColumnFromTable(QSqlDatabase &db,
+                                     bool maxNMin,
+                                     QString column,
+                                     QString table)
 {
     int value = 0;
     QString query;
-    if (max_n_min)
+    if (maxNMin)
         query = "SELECT MAX(substr(" + column + ",7,4)) FROM " + table;
     else
         query = "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
@@ -44,46 +44,46 @@ int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
             value = q.value(0).toInt();
         else
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar read_max_n_min_year_in_column_from_table.",
+                                  "Búsqueda vacía al usar readMaxNMinYearInColumnFromTable.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_max_n_min_year_in_column_from_table.",
+                              "Acceso a la tabla da un error al usar readMaxNMinYearInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return value;
 }
 
-QStringList read_column_from_table(QSqlDatabase &db,
-                                   QString column,
-                                   QString table,
-                                   QString order_by_column)
+QStringList readColumnFromTable(QSqlDatabase &db,
+                                QString column,
+                                QString table,
+                                QString orderByColumn)
 {
     db.open();
     QSqlQuery q;
     QStringList list;
-    if (order_by_column == "")
+    if (orderByColumn == "")
         q.exec("SELECT " + column + " FROM " + table + ";");
     else
-        q.exec("SELECT " + column + " FROM " + table + " ORDER BY " + order_by_column + " ASC;");
+        q.exec("SELECT " + column + " FROM " + table + " ORDER BY " + orderByColumn + " ASC;");
     if (q.isSelect()) {
         while(q.next())
             list.append(q.value(0).toString());
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_column_from_table.",
+                              "Acceso a la tabla da un error al usar readColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return list;
 }
 
-float read_garment_price(QSqlDatabase &db,
-                         QString garment,
-                         QString service)
+float readGarmentPrice(QSqlDatabase &db,
+                       QString garment,
+                       QString service)
 {
     float price = 0.0;
     db.open();
@@ -112,7 +112,7 @@ float read_garment_price(QSqlDatabase &db,
         else {
             QMessageBox::warning(nullptr, "Error base de datos",
                                   "No se ha encontrado la prenda '" + garment +
-                                  "' al usar read_garment_price para el servicio '" + service + "'.\n"
+                                  "' al usar readGarmentPrice para el servicio '" + service + "'.\n"
                                   "Añadir un precio en el listado de prendas antes de continuar con esta acción.",
                                   QMessageBox::Ok, QMessageBox::Ok);
             price = -1;
@@ -120,56 +120,56 @@ float read_garment_price(QSqlDatabase &db,
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_garment_price.",
+                              "Acceso a la tabla da un error al usar readGarmentPrice.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
     return price;
 }
 
-QString select_from_where_like(QSqlDatabase &db,
-                               QString item_to_get,
-                               QString table,
-                               QString column_to_search,
-                               QString item_to_search,
-                               bool exact_match,
-                               bool print_msg)
+QString selectFromWhereLike(QSqlDatabase &db,
+                            QString itemToGet,
+                            QString table,
+                            QString columnToSearch,
+                            QString itemToSearch,
+                            bool exactMatch,
+                            bool printMsg)
 {
-    QString item_to_search_text;
+    QString itemToSearchText;
     db.open();
     QSqlQuery q;
-    q.prepare("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " LIKE :item");
-    q.bindValue(":item", exact_match ? item_to_search : item_to_search + "%");
+    q.prepare("SELECT " + itemToGet + " FROM " + table + " WHERE " + columnToSearch + " LIKE :item");
+    q.bindValue(":item", exactMatch ? itemToSearch : itemToSearch + "%");
     q.exec();
     if (q.isSelect()) {
         if (q.first())
-            item_to_search_text = q.value(0).toString();
-        else if (print_msg)
+            itemToSearchText = q.value(0).toString();
+        else if (printMsg)
             QMessageBox::warning(nullptr, "Búsqueda vacía",
-                                  "El elemento '" + item_to_search + "' no se ha encontrado en la base de datos para '" + column_to_search + "'.",
+                                  "El elemento '" + itemToSearch + "' no se ha encontrado en la base de datos para '" + columnToSearch + "'.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
-    else if (print_msg)
+    else if (printMsg)
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar select_from_where_like.",
+                              "Acceso a la tabla da un error al usar selectFromWhereLike.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
-    return item_to_search_text;
+    return itemToSearchText;
 }
 
-QString search_item_from_client(QSqlDatabase &db,
-                                QString item,
-                                QString client,
-                                bool print_msg)
+QString searchItemFromClient(QSqlDatabase &db,
+                             QString item,
+                             QString client,
+                             bool printMsg)
 {
-    return select_from_where_like(db, item, "clientes", "nombre", client, false, print_msg);
+    return selectFromWhereLike(db, item, "clientes", "nombre", client, false, printMsg);
 }
 
-bool update_item_to_client(QSqlDatabase &db,
-                           QString column,
-                           QString item,
-                           QString client)
+bool updateItemToClient(QSqlDatabase &db,
+                        QString column,
+                        QString item,
+                        QString client)
 {
     QSqlQuery q;
     db.open();
@@ -181,17 +181,17 @@ bool update_item_to_client(QSqlDatabase &db,
     return ok;
 }
 
-bool add_new_client(QSqlDatabase &db,
-                    QString client,
-                    QString tel_fijo,
-                    QString direccion,
-                    QString movil)
+bool addNewClient(QSqlDatabase &db,
+                  QString client,
+                  QString telFijo,
+                  QString direccion,
+                  QString movil)
 {
     QSqlQuery q;
     db.open();
     q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) VALUES(:nombre, :tel_fijo, :direccion, :movil)");
     q.bindValue(":nombre", client);
-    q.bindValue(":tel_fijo", tel_fijo);
+    q.bindValue(":tel_fijo", telFijo);
     q.bindValue(":direccion", direccion);
     q.bindValue(":movil", movil);
     bool ok = q.exec();
@@ -199,25 +199,25 @@ bool add_new_client(QSqlDatabase &db,
     return ok;
 }
 
-float total_price_between_dates(QSqlDatabase &db,
-                                QString table,
-                                QDate start_date,
-                                QDate end_date,
-                                int iva)
+float totalPriceBetweenDates(QSqlDatabase &db,
+                             QString table,
+                             QDate startDate,
+                             QDate endDate,
+                             int iva)
 {
     db.open();
     QSqlQuery q;
-    float total_price = 0.0;
+    float totalPrice = 0.0;
     if (table == "ingresos") {
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
-               + start_date.toString("yyyy-MM-dd") + "')) AND "
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
-               + end_date.toString("yyyy-MM-dd") + "'))");
+               + endDate.toString("yyyy-MM-dd") + "'))");
         if (q.isSelect()) {
             while(q.next()) {
                 if (!q.value(0).toString().contains(","))
-                    total_price = total_price + q.value(0).toFloat();
+                    totalPrice = totalPrice + q.value(0).toFloat();
                 else
                     QMessageBox::critical(nullptr, "Error en la base de datos",
                                           "En la tabla " + table + " "
@@ -227,19 +227,19 @@ float total_price_between_dates(QSqlDatabase &db,
         }
         else
             QMessageBox::critical(nullptr, "Error base de datos",
-                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
+                                  "Acceso a la tabla da un error al usar totalPriceBetweenDates.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
     else if (table == "gastos") {
         q.exec("SELECT importe FROM gastos WHERE (iva = "
                + QString::number(iva)
                + ") AND (date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) BETWEEN date('"
-               + start_date.toString("yyyy-MM-dd") + "') AND date('"
-               + end_date.toString("yyyy-MM-dd") + "'))");
+               + startDate.toString("yyyy-MM-dd") + "') AND date('"
+               + endDate.toString("yyyy-MM-dd") + "'))");
         if (q.isSelect()) {
             while(q.next()) {
                 if (!q.value(0).toString().contains(","))
-                    total_price = total_price + q.value(0).toFloat();
+                    totalPrice = totalPrice + q.value(0).toFloat();
                 else
                     QMessageBox::critical(nullptr, "Error en la base de datos",
                                           "En la tabla " + table + " "
@@ -249,98 +249,98 @@ float total_price_between_dates(QSqlDatabase &db,
         }
         else
             QMessageBox::critical(nullptr, "Error base de datos",
-                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
+                                  "Acceso a la tabla da un error al usar totalPriceBetweenDates.",
                                   QMessageBox::Ok, QMessageBox::Ok);
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "total_price_between_dates cannot work with different table.",
+                              "totalPriceBetweenDates cannot work with different table.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
-    return total_price;
+    return totalPrice;
 }
 
-int read_lock_for_month_and_year(QSqlDatabase &db,
-                                 QString table,
-                                 int month,
-                                 int year)
+int readLockForMonthAndYear(QSqlDatabase &db,
+                            QString table,
+                            int month,
+                            int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
-    QString month_fix;
+    QString monthFix;
     if (month == 1)
-        month_fix = "01";
+        monthFix = "01";
     else if (month == 2)
-        month_fix = "02";
+        monthFix = "02";
     else
-        month_fix = QString::number(month);
+        monthFix = QString::number(month);
 
     db.open();
     QSqlQuery q;
-    int edit_lock = 2; // means that the search has not found any data
+    int editLock = 2; // means that the search has not found any data
     if (table == "ingresos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago like '%" + month_fix + "-" + QString::number(year) + "'");
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago like '%" + monthFix + "-" + QString::number(year) + "'");
     else if (table == "gastos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha like '%" + month_fix + "-" + QString::number(year) + "'");
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha like '%" + monthFix + "-" + QString::number(year) + "'");
     else
         QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
-                              "Tabla solicitada no está soportada por la función 'read_lock_for_month_and_year'.",
+                              "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
                               QMessageBox::Ok, QMessageBox::Ok);
     if (q.isSelect()) {
         if(q.first())
-            edit_lock = q.value(0).toInt();
+            editLock = q.value(0).toInt();
         else
-            edit_lock = 0;
+            editLock = 0;
     }
     else
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_lock_for_month_and_year.",
+                              "Acceso a la tabla da un error al usar readLockForMonthAndYear.",
                               QMessageBox::Ok, QMessageBox::Ok);
     q.clear();
     db.close();
-    return edit_lock;
+    return editLock;
 }
 
-void update_lock_in_ingresos(QSqlDatabase &db,
-                             int value,
-                             int month,
-                             int year)
+void updateLockInIngresos(QSqlDatabase &db,
+                          int value,
+                          int month,
+                          int year)
 {
     // For months 1 and 2 to not mix with 11 and 12
-    QString month_fix;
+    QString monthFix;
     if (month == 1)
-        month_fix = "01";
+        monthFix = "01";
     else if (month == 2)
-        month_fix = "02";
+        monthFix = "02";
     else
-        month_fix = QString::number(month);
+        monthFix = QString::number(month);
 
     db.open();
     QSqlQuery q;
     q.exec("UPDATE ingresos SET edit_lock ="
            + QString::number(value)
            + " WHERE fecha_pago like '%"
-           + month_fix + "-"
+           + monthFix + "-"
            + QString::number(year) + "'");
     q.clear();
     q.exec("UPDATE gastos SET edit_lock ="
            + QString::number(value)
            + " WHERE fecha like '%"
-           + month_fix + "-"
+           + monthFix + "-"
            + QString::number(year) + "'");
     q.clear();
     db.close();
 }
 
-int update_comas_in_decimal_data(QSqlDatabase &db,
-                                 QString table,
-                                 QString item)
+int updateComasInDecimalData(QSqlDatabase &db,
+                             QString table,
+                             QString item)
 {
-    int error_cnt = 0;
+    int errorCnt = 0;
     if (table == "ingresos") {
-        QStringList items = read_column_from_table(db, item, table, "");
-        QStringList ids_1 = read_column_from_table(db, "n_recibo", table, "");
-        QStringList ids_2 = read_column_from_table(db, "hash", table, "");
+        QStringList items = readColumnFromTable(db, item, table, "");
+        QStringList ids_1 = readColumnFromTable(db, "n_recibo", table, "");
+        QStringList ids_2 = readColumnFromTable(db, "hash", table, "");
 
         for (int fra = 0; fra < items.count(); fra++) {
             if (items[fra].contains(",")) {
@@ -354,13 +354,13 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
                 q.bindValue(":id_2", ids_2[fra]);
                 q.exec();
                 db.close();
-                error_cnt++;
+                errorCnt++;
             }
         }
     }
     else if (table == "gastos") {
-        QStringList items = read_column_from_table(db, item, table, "id");
-        QStringList ids = read_column_from_table(db, "id", table, "id");
+        QStringList items = readColumnFromTable(db, item, table, "id");
+        QStringList ids = readColumnFromTable(db, "id", table, "id");
         for (int fra = 0; fra < items.count(); fra++) {
             if (items[fra].contains(",")) {
                 QSqlQuery q;
@@ -370,13 +370,13 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
                 q.bindValue(":id", ids[fra]);
                 q.exec();
                 db.close();
-                error_cnt++;
+                errorCnt++;
             }
         }
     }
     else if (table == "prendas") {
-        QStringList items = read_column_from_table(db, item, table, "nombre");
-        QStringList ids = read_column_from_table(db, "nombre", table, "nombre");
+        QStringList items = readColumnFromTable(db, item, table, "nombre");
+        QStringList ids = readColumnFromTable(db, "nombre", table, "nombre");
         for (int prenda = 0; prenda < items.count(); prenda++) {
             if (items[prenda].contains(",")) {
                 QSqlQuery q;
@@ -386,20 +386,20 @@ int update_comas_in_decimal_data(QSqlDatabase &db,
                 q.bindValue(":id", ids[prenda]);
                 q.exec();
                 db.close();
-                error_cnt++;
+                errorCnt++;
             }
         }
     }
     else
-        QMessageBox::critical(nullptr, "Error en update_comas_in_decimal_data",
+        QMessageBox::critical(nullptr, "Error en updateComasInDecimalData",
                               "La tabla especificada en " + table + " no está soportada.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    return error_cnt;
+    return errorCnt;
 }
 
-void insert_new_item_to_table(QSqlDatabase &db,
-                              QStringList items,
-                              QString table)
+void insertNewItemToTable(QSqlDatabase &db,
+                          QStringList items,
+                          QString table)
 {
     db.open();
     QSqlQuery q;
@@ -417,7 +417,7 @@ void insert_new_item_to_table(QSqlDatabase &db,
     db.close();
 }
 
-QString gen_hash_16()
+QString genHash16()
 {
     static const char alphanum[] =
         "0123456789"

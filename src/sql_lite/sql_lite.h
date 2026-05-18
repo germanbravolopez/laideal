@@ -8,19 +8,19 @@
 
 #define DB_PATH "C:/Users/rocio/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db"
 
-int read_max_value_in_column_from_table(QSqlDatabase &db, QString column, QString table);
-int read_max_n_min_year_in_column_from_table(QSqlDatabase &db, bool max_n_min, QString column, QString table);
-QStringList read_column_from_table(QSqlDatabase &db, QString column, QString table, QString order_by_column);
-float read_garment_price(QSqlDatabase &db, QString garment, QString service);
-QString select_from_where_like(QSqlDatabase &db, QString item_to_get, QString table, QString column_to_search, QString item_to_search, bool exact_match, bool print_msg);
-QString search_item_from_client(QSqlDatabase &db, QString item, QString client, bool print_msg);
-bool update_item_to_client(QSqlDatabase &db, QString column, QString item, QString client);
-bool add_new_client(QSqlDatabase &db, QString client, QString tel_fijo, QString direccion, QString movil);
-float total_price_between_dates(QSqlDatabase &db, QString table, QDate start_date, QDate end_date, int iva);
-int read_lock_for_month_and_year(QSqlDatabase &db, QString table, int month, int year);
-void update_lock_in_ingresos(QSqlDatabase &db, int value, int month, int year);
-int update_comas_in_decimal_data(QSqlDatabase &db, QString table, QString item);
-void insert_new_item_to_table(QSqlDatabase &db, QStringList items, QString table);
-QString gen_hash_16();
+int readMaxValueInColumnFromTable(QSqlDatabase &db, QString column, QString table);
+int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, QString column, QString table);
+QStringList readColumnFromTable(QSqlDatabase &db, QString column, QString table, QString orderByColumn);
+float readGarmentPrice(QSqlDatabase &db, QString garment, QString service);
+QString selectFromWhereLike(QSqlDatabase &db, QString itemToGet, QString table, QString columnToSearch, QString itemToSearch, bool exactMatch, bool printMsg);
+QString searchItemFromClient(QSqlDatabase &db, QString item, QString client, bool printMsg);
+bool updateItemToClient(QSqlDatabase &db, QString column, QString item, QString client);
+bool addNewClient(QSqlDatabase &db, QString client, QString telFijo, QString direccion, QString movil);
+float totalPriceBetweenDates(QSqlDatabase &db, QString table, QDate startDate, QDate endDate, int iva);
+int readLockForMonthAndYear(QSqlDatabase &db, QString table, int month, int year);
+void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year);
+int updateComasInDecimalData(QSqlDatabase &db, QString table, QString item);
+void insertNewItemToTable(QSqlDatabase &db, QStringList items, QString table);
+QString genHash16();
 
 #endif // SQL_LITE_H

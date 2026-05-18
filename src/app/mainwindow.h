@@ -28,33 +28,33 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     QSqlDatabase db;
-    int pb_added_rows = 0;
+    int pbAddedRows = 0;
     bool debug = false;
 
 private slots:
-    void mainwindow_initial_settings();
-    void initialize_verifactu();
-    void reset_all_contents();
+    void mainwindowInitialSettings();
+    void initializeVerifactu();
+    void resetAllContents();
 
     // Custom functions
-    void set_next_ticket_number();
-    void populate_cb_client();
-    void resize_table();
-    void set_service_to_cb(int initial_row);
-    void set_garment_to_cb_and_populate(int initial_row);
-    void set_garment_price(int garment_row, QString garment_text, QString service_text);
+    void setNextTicketNumber();
+    void populateCbClient();
+    void resizeTable();
+    void setServiceToCb(int initialRow);
+    void setGarmentToCbAndPopulate(int initialRow);
+    void setGarmentPrice(int garmentRow, QString garmentText, QString serviceText);
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
 
-    bool validate_ticket();
-    QString remove_special_char(QString str);
-    void check_client_data();
-    bool verifactu_submit_invoice();
-    void show_qr_to_client(const VerifactuResult &result);
-    bool save_ticket();
-    void print_recibo();
-    void print_fra();
+    bool validateTicket();
+    QString removeSpecialChar(QString str);
+    void checkClientData();
+    bool verifactuSubmitInvoice();
+    void showQrToClient(const VerifactuResult &result);
+    bool saveTicket();
+    void printRecibo();
+    void printFra();
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
@@ -67,9 +67,9 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
-    void repopulate_prendas();
+    void repopulatePrendas();
     void on_actionListado_de_prendas_triggered();
-    void repopulate_clientes();
+    void repopulateClientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionListado_de_servicios_triggered();
@@ -81,7 +81,7 @@ private slots:
     void on_actionRevertir_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
-    void limpiar_base_de_datos(bool print);
+    void cleanDatabase(bool print);
     void on_actionModo_debug_triggered(bool checked);
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
