@@ -25,7 +25,7 @@ bool VerifactuIntegration::initialize()
         return false;
     }
 
-    qDebug() << m_manager->getConfigurationInfo();
+    qDebug().noquote() << m_manager->getConfigurationInfo();
     return true;
 }
 
@@ -213,7 +213,7 @@ bool VerifactuIntegration::loadEmitterConfiguration()
 
     m_manager->getConfig()->setSystemData(
         "LAIDEAL",
-        "7.1",
+         QString(PROJECT_VERSION),
         "LAIDEAL"
     );
 

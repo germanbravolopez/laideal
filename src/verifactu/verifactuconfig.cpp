@@ -4,7 +4,7 @@
 #include <QDebug>
 
 VerifactuConfig::VerifactuConfig(const QString &configPath)
-    : m_environment(TESTING), m_systemName("LAIDEAL"), m_systemVersion("7.1"), m_systemDeveloper("LAIDEAL")
+    : m_environment(TESTING), m_systemName("LAIDEAL"), m_systemVersion(QString(PROJECT_VERSION)), m_systemDeveloper("LAIDEAL")
 {
     QString path = configPath.isEmpty()
         ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/verifactu_config.ini"
@@ -135,7 +135,7 @@ void VerifactuConfig::load()
 
     m_settings->beginGroup("System");
     m_systemName = m_settings->value("Name", "LAIDEAL").toString();
-    m_systemVersion = m_settings->value("Version", "7.1").toString();
+    m_systemVersion = m_settings->value("Version", PROJECT_VERSION).toString();
     m_systemDeveloper = m_settings->value("Developer", "LAIDEAL").toString();
     m_settings->endGroup();
 

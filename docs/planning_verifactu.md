@@ -129,7 +129,7 @@ Perfect! I've successfully updated the root README.md to include a comprehensive
 
 ✅ **Added Main Features Section** - Lists all key capabilities including the new Verifactu integration
 
-✅ **Added Verifactu Section (v7.1)** - Explains:
+✅ **Added Verifactu Section** - Explains:
 - What Verifactu is and its purpose
 - Obligatory dates (January 2026 for companies, July 2026 for self-employed)
 - Implemented features (invoice submission, QR generation, multiple invoice types, error handling)

@@ -51,7 +51,7 @@ VerifactuResult VerifactuManager::submitInvoice(const VerifactuInvoice &invoice)
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     qDebug() << "Enviando factura" << invoice.getInvoiceNumber() << "a Verifactu";
-    qDebug() << "JSON enviado:" << doc.toJson();
+    qDebug().noquote() << "JSON enviado:" << QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
     qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
@@ -74,7 +74,7 @@ VerifactuResult VerifactuManager::submitInvoice(const VerifactuInvoice &invoice)
     QByteArray responseData = reply->readAll();
     reply->deleteLater();
 
-    qDebug() << "Respuesta del servidor:" << QString::fromUtf8(responseData);
+    qDebug().noquote() << "Respuesta del servidor:" << QString::fromUtf8(responseData);
     result = processResponse(responseData, false);
     return result;
 }
@@ -290,7 +290,7 @@ QString VerifactuManager::getConfigurationInfo() const
     info += "Emisor Nombre: " + m_config->getEmitterName() + "\n";
     info += "Sistema: " + m_config->getSystemName() + " v" + m_config->getSystemVersion() + "\n";
     info += "Endpoint: " + m_config->getEndpointUrl() + "\n";
-    info += "Configurado: " + QString(m_config->isValid() ? "SÍ" : "NO") + "\n";
+    info += "Configurado: " + QString(m_config->isValid() ? "Si" : "No") + "\n";
 
     if (!m_config->isValid()) {
         info += "Error: " + m_config->getValidationError() + "\n";

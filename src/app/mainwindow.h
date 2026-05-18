@@ -67,9 +67,9 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
-    void on_populate_prendas();
+    void repopulate_prendas();
     void on_actionListado_de_prendas_triggered();
-    void on_populate_clientes();
+    void repopulate_clientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionListado_de_servicios_triggered();

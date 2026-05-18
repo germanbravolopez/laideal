@@ -1,5 +1,8 @@
 Releases:
 
+r8.0
+	- New feature: add Verifactu support
+
 r7.1
 	- New feature: print listado de prendas to pdf
 

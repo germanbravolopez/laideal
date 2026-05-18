@@ -61,9 +61,6 @@ void MainWindow::initialize_verifactu()
                     "Las facturas se guardarán localmente.\n"
                     "Configura Verifactu más tarde.")
             .arg(m_verifactuIntegration->getLastError()));
-    } else {
-        qDebug() << "Verifactu inicializado correctamente";
-        qDebug() << m_verifactuIntegration->getConfigInfo();
     }
 }
 
@@ -541,8 +538,8 @@ void MainWindow::on_actionIngresos_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 
@@ -557,12 +554,12 @@ void MainWindow::on_actionGastos_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 
-void MainWindow::on_populate_prendas()
+void MainWindow::repopulate_prendas()
 {
     set_garment_to_cb_and_populate(0);
     limpiar_base_de_datos(false);
@@ -579,12 +576,12 @@ void MainWindow::on_actionListado_de_prendas_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 
-void MainWindow::on_populate_clientes()
+void MainWindow::repopulate_clientes()
 {
     populate_cb_client();
 }
@@ -600,8 +597,8 @@ void MainWindow::on_actionListado_de_clientes_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 
@@ -616,8 +613,8 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 
@@ -632,8 +629,8 @@ void MainWindow::on_actionListado_de_servicios_triggered()
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::repopulate_clientes);
+    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::repopulate_prendas);
     ui_listado->show();
 }
 

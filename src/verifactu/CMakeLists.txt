@@ -1,15 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
-
-project(verifactu LANGUAGES CXX)
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS
     Core
@@ -34,15 +23,19 @@ set(PROJECT_SOURCES
     verifactuintegration.cpp
 )
 
-add_library(${PROJECT_NAME} ${PROJECT_SOURCES})
+add_library(verifactu ${PROJECT_SOURCES})
 
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Network
 )
 
-target_include_directories(${PROJECT_NAME}
+target_compile_definitions(verifactu PRIVATE
+    PROJECT_VERSION="${PROJECT_VERSION}"
+)
+
+target_include_directories(verifactu
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )

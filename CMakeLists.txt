@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-
-project(laideal VERSION 7.1 LANGUAGES CXX)
+project(laideal VERSION 8.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -18,7 +17,6 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport 
 #find_package(QXlsxQt6 REQUIRED)
 
 add_subdirectory(QXlsx)
-add_subdirectory(src/verifactu)
 add_subdirectory(src/app)
 add_subdirectory(src/sql_lite)
 add_subdirectory(src/MySortFilterProxyModel)
@@ -32,3 +30,4 @@ add_subdirectory(src/recog_prendas)
 add_subdirectory(src/contabilidad)
 add_subdirectory(src/facturas)
 add_subdirectory(src/add_garment)
+add_subdirectory(src/verifactu)
