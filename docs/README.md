@@ -1,56 +1,65 @@
-# Documentación - La Ideal
+# Documentation — La Ideal
 
-Índice central de toda la documentación del proyecto.
+Navigation index for the `docs/` folder. For the project-wide quick-find reference see `docs/INDEX.md`.
 
 ---
 
-## Estructura
+## Structure
 
 ```
 docs/
-├── README.md                      (este archivo — índice general)
+├── README.md                          (this file — docs folder navigation)
+├── INDEX.md                           (project-wide quick-find: files, concepts, topics)
+├── AI_agent_instructions.md           (agent onboarding — start here)
+├── architecture.md                    (modules, DB schema, data flow, known issues)
+├── progress_tracker.md                (what's done, blocking issues, roadmap)
 ├── modules/
-│   └── verifactu/                 (módulo de facturación electrónica AEAT)
+│   └── verifactu/                     (AEAT digital invoicing module)
 │       ├── README.md
 │       ├── INDEX.md
 │       ├── GUIA_PASO_A_PASO.md
 │       ├── RESUMEN_IMPLEMENTACION.md
 │       └── VERIFACTU_REST_API.md
 ├── development/
-│   └── planning_verifactu.md      (notas de planificación interna)
+│   └── planning_verifactu.md          (historical planning notes)
 └── todo/
-    └── hardcoded_paths.png        (captura de incidencia conocida)
+    └── hardcoded_paths.png            (screenshot of known hardcoded-paths issue)
 ```
 
 ---
 
-## Módulos
+## Core Documentation
 
-### Verifactu — Facturación electrónica AEAT
+| Document | Purpose | Read time |
+|----------|---------|-----------|
+| [AI_agent_instructions.md](./AI_agent_instructions.md) | Agent onboarding, critical issues, file map, rules | 5 min |
+| [architecture.md](./architecture.md) | Full module reference, DB schema, data flow | 15 min |
+| [progress_tracker.md](./progress_tracker.md) | Blocking issues, in-progress work, history | 5 min |
+| [INDEX.md](./INDEX.md) | Quick-find: every file, concept, topic | As needed |
 
-Integración con el sistema Verifactu de la AEAT para la emisión de facturas digitales en tiempo real.
+## Module Documentation
 
-| Documento | Descripción | Tiempo estimado |
-|-----------|-------------|-----------------|
-| [README.md](./modules/verifactu/README.md) | Vista general, quick start, estado | 3 min |
-| [INDEX.md](./modules/verifactu/INDEX.md) | Mapa de documentación y rutas de aprendizaje | 3 min |
-| [GUIA_PASO_A_PASO.md](./modules/verifactu/GUIA_PASO_A_PASO.md) | Guía completa de implementación | 45 min |
-| [RESUMEN_IMPLEMENTACION.md](./modules/verifactu/RESUMEN_IMPLEMENTACION.md) | Arquitectura, DB schema, roadmap | 20 min |
-| [VERIFACTU_REST_API.md](./modules/verifactu/VERIFACTU_REST_API.md) | Referencia completa de la API REST | 15 min |
-| [EJEMPLO_IMPLEMENTACION.cpp](../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) | 10+ ejemplos de código práctico | 5-10 min |
+### Verifactu — AEAT digital invoicing
+
+| Document | Description | Read time |
+|----------|-------------|-----------|
+| [README.md](./modules/verifactu/README.md) | Overview, quick start, status | 3 min |
+| [INDEX.md](./modules/verifactu/INDEX.md) | Navigation map and reading paths | 3 min |
+| [GUIA_PASO_A_PASO.md](./modules/verifactu/GUIA_PASO_A_PASO.md) | Complete implementation guide | 45 min |
+| [RESUMEN_IMPLEMENTACION.md](./modules/verifactu/RESUMEN_IMPLEMENTACION.md) | Architecture, DB schema SQL, roadmap | 20 min |
+| [VERIFACTU_REST_API.md](./modules/verifactu/VERIFACTU_REST_API.md) | REST API complete field reference | 15 min |
+| [EJEMPLO_IMPLEMENTACION.cpp](../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) | 10+ practical code examples | 5–10 min |
+
+## Development Notes
+
+| Document | Description |
+|----------|-------------|
+| [planning_verifactu.md](./development/planning_verifactu.md) | Historical Verifactu planning notes (raw) |
 
 ---
 
-## Desarrollo
+## Adding documentation for a new module
 
-| Documento | Descripción |
-|-----------|-------------|
-| [planning_verifactu.md](./development/planning_verifactu.md) | Notas de planificación del módulo Verifactu |
-
----
-
-## Para añadir documentación de un nuevo módulo
-
-1. Crear carpeta `docs/modules/<nombre-modulo>/`
-2. Añadir al menos un `README.md` con descripción, archivos y quick start
-3. Registrar el módulo en la tabla de "Módulos" de este archivo
+1. Create `docs/modules/<module-name>/` folder
+2. Add at minimum a `README.md` with: description, source file list, quick start
+3. Register the new doc in the tables above and in `docs/INDEX.md`
