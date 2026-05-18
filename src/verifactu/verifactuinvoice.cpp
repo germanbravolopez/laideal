@@ -41,10 +41,8 @@ bool VerifactuTaxItem::isValid() const
         return false;
     }
 
-    // Validar que el importe coincida con base * tipo
-    if (m_operationType != EXEMPT && std::abs((m_taxBase * m_taxRate / 100.0) - m_taxAmount) > 0.01) {
-        qWarning() << "Advertencia: El importe de impuesto no coincide con base * tipo";
-    }
+    if (m_operationType != EXEMPT && std::abs((m_taxBase * m_taxRate / 100.0) - m_taxAmount) > 0.01)
+        qWarning() << "Tax amount does not match base * rate";
 
     return true;
 }
@@ -57,11 +55,11 @@ QString VerifactuTaxItem::getValidationError() const
 QString VerifactuTaxItem::operationTypeToString(OperationType type)
 {
     switch (type) {
-        case S1: return "S1";  // Operación sujeta
-        case S2: return "S2";  // Inversión del sujeto pasivo
-        case N1: return "N1";  // No sujeta art. 7, 14
-        case N2: return "N2";  // No sujeta reglas de localización
-        case EXEMPT: return "E1";  // Exenta
+        case S1: return "S1";  // subject to tax (standard)
+        case S2: return "S2";  // reverse charge
+        case N1: return "N1";  // not subject (art. 7, 14)
+        case N2: return "N2";  // not subject (location rules)
+        case EXEMPT: return "E1";  // exempt
         default: return "S1";
     }
 }
@@ -96,34 +94,25 @@ QJsonObject VerifactuInvoice::toJson() const
 {
     QJsonObject json;
 
-    // Datos básicos de la factura
     json["InvoiceID"] = m_invoiceNumber;
     json["InvoiceDate"] = m_invoiceDate.toString(Qt::ISODate);
     json["InvoiceType"] = invoiceTypeToString(m_invoiceType);
-
-    // Emisor (vendedor)
     json["SellerID"] = m_sellerNIF;
     json["SellerName"] = m_sellerName;
 
-    // Comprador (no obligatorio para F2)
     if (!m_buyerNIF.isEmpty()) {
         json["BuyerID"] = m_buyerNIF;
         json["BuyerName"] = m_buyerName;
     }
 
-    // Descripción
-    if (!m_description.isEmpty()) {
+    if (!m_description.isEmpty())
         json["Text"] = m_description;
-    }
 
-    // Items de impuesto
     QJsonArray taxItems;
-    for (const auto &item : m_taxItems) {
+    for (const auto &item : m_taxItems)
         taxItems.append(item.toJson());
-    }
     json["TaxItems"] = taxItems;
 
-    // Totales
     json["TotalAmount"] = m_totalAmount;
     json["TotalTaxAmount"] = m_totalTaxAmount;
 
@@ -152,7 +141,7 @@ bool VerifactuInvoice::isValid() const
         return false;
     }
 
-    // Comprador es obligatorio excepto para facturas simplificadas (F2)
+    // buyer required except for simplified invoices (F2)
     if (m_invoiceType != SIMPLIFIED) {
         if (m_buyerNIF.isEmpty()) {
             m_validationError = "NIF del comprador no configurado";
@@ -169,7 +158,6 @@ bool VerifactuInvoice::isValid() const
         return false;
     }
 
-    // Validar cada item
     for (const auto &item : m_taxItems) {
         if (!item.isValid()) {
             m_validationError = "Item de impuesto inválido: " + item.getValidationError();
@@ -188,11 +176,11 @@ QString VerifactuInvoice::getValidationError() const
 QString VerifactuInvoice::invoiceTypeToString(InvoiceType type) const
 {
     switch (type) {
-        case NORMAL: return "F1";
-        case SIMPLIFIED: return "F2";
-        case SUBSTITUTE: return "F3";
-        case RECTIFICATION: return "R1";
-        default: return "F1";
+        case NORMAL:        return "F1";  // standard invoice
+        case SIMPLIFIED:    return "F2";  // simplified invoice
+        case SUBSTITUTE:    return "F3";  // substitute for simplified
+        case RECTIFICATION: return "R1";  // corrective invoice
+        default:            return "F1";
     }
 }
 

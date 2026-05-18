@@ -13,7 +13,6 @@ VerifactuConfig::VerifactuConfig(const QString &configPath)
     QDir().mkpath(QFileInfo(path).dir().absolutePath());
     m_settings = new QSettings(path, QSettings::IniFormat);
 
-    // Cargar configuración guardada
     load();
 }
 
@@ -117,7 +116,7 @@ void VerifactuConfig::save()
     m_settings->endGroup();
     m_settings->sync();
 
-    qDebug() << "Configuración de Verifactu guardada correctamente";
+    qDebug() << "Verifactu configuration saved";
 }
 
 void VerifactuConfig::load()

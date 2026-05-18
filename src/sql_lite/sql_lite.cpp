@@ -88,10 +88,15 @@ float read_garment_price(QSqlDatabase &db,
     float price = 0.0;
     db.open();
     QSqlQuery q;
-    if (service == "Limp.")
-        q.exec("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment + "'");
-    else if (service == "Plan.")
-        q.exec("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment + "'");
+    if (service == "Limp.") {
+        q.prepare("SELECT precio_limpieza FROM prendas WHERE nombre LIKE :garment");
+        q.bindValue(":garment", garment);
+        q.exec();
+    } else if (service == "Plan.") {
+        q.prepare("SELECT precio_plancha FROM prendas WHERE nombre LIKE :garment");
+        q.bindValue(":garment", garment);
+        q.exec();
+    }
     if (q.isSelect()) {
         if (q.first()) {
             if (!q.value(0).toString().contains(","))
@@ -133,10 +138,9 @@ QString select_from_where_like(QSqlDatabase &db,
     QString item_to_search_text;
     db.open();
     QSqlQuery q;
-    if (exact_match)
-        q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "'");
-    else
-        q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "%'");
+    q.prepare("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " LIKE :item");
+    q.bindValue(":item", exact_match ? item_to_search : item_to_search + "%");
+    q.exec();
     if (q.isSelect()) {
         if (q.first())
             item_to_search_text = q.value(0).toString();

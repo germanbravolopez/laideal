@@ -3,7 +3,6 @@
 
 #include "xlsxdocument.h"
 #include "xlsxcellrange.h"
-using namespace QXlsx;
 
 Imprimir::Imprimir(QWidget *parent)
     : QDialog(parent)
@@ -50,10 +49,13 @@ void Imprimir::setupUi(QDialog *Imprimir)
 
 void Imprimir::get_ticket_info()
 {
-    // Search ticket
     sql_query_model = new QSqlQueryModel;
     db.open();
-    sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + le_n_ticket->text() + "'");
+    QSqlQuery q(db);
+    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+    q.bindValue(":n_recibo", le_n_ticket->text());
+    q.exec();
+    sql_query_model->setQuery(std::move(q));
     db.close();
 }
 

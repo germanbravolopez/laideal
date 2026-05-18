@@ -11,7 +11,7 @@ La Ideal laundry software app
 
 ## 🆕 Verifactu - Nuevo Sistema de Facturas Digitales
 
-A partir de la versión 7.1, LAIDEAL incluye integración completa con **Verifactu**, el sistema de la AEAT para emitir facturas digitales.
+A partir de la versión 8.0, LAIDEAL incluye integración completa con **Verifactu**, el sistema de la AEAT para emitir facturas digitales.
 
 ### ¿Qué es Verifactu?
 
@@ -22,13 +22,14 @@ Verifactu es el nuevo sistema de la AEAT obligatorio para empresas que no utiliz
 - 🔹 Autónomos: 1 de julio de 2026
 
 ### Características Implementadas
-
+```
 ✅ Envío de facturas a la AEAT
 ✅ Generación automática de códigos QR
 ✅ Soporte para todos los tipos de factura (F1, F2, F3, R1)
 ✅ Entorno de pruebas y producción
 ✅ Gestión de anulaciones y rectificativas
 ✅ Manejo robusto de errores
+```
 
 ### Cómo Usar Verifactu en LAIDEAL
 

@@ -281,44 +281,70 @@ void RecogPrendas::on_pb_search_clicked()
         bool ok = false, total_price_active = true;
         ui->le_search->text().toUInt(&ok);
         if (ok) {
-            if(ui->le_search->text().length() >= 9) {
-                // Phone number
-                QString client_from_phone = select_from_where_like(db, "nombre", "clientes", "tel_fijo",
-                                                                      ui->le_search->text() + "' OR movil like '" + ui->le_search->text(), true, true);
+            if (ui->le_search->text().length() >= 9) {
+                // Phone number — search tel_fijo OR movil
+                db.open();
+                QSqlQuery phoneQ(db);
+                phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
+                phoneQ.bindValue(":phone", ui->le_search->text());
+                phoneQ.bindValue(":movil", ui->le_search->text());
+                phoneQ.exec();
+                QString client_from_phone;
+                if (phoneQ.first())
+                    client_from_phone = phoneQ.value(0).toString();
+                else
+                    QMessageBox::warning(this, tr("Búsqueda vacía"),
+                                          tr("No se ha encontrado ningún cliente con el teléfono indicado."),
+                                          QMessageBox::Ok, QMessageBox::Ok);
+                db.close();
+
                 if (!client_from_phone.isNull()) {
                     db.open();
-                    sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente = '" + client_from_phone + "'");
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
+                    q.bindValue(":cliente", client_from_phone);
+                    q.exec();
+                    sql_query_model->setQuery(std::move(q));
                     db.close();
                 }
             }
             else {
                 // Ticket number
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + ui->le_search->text() + "'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+                q.bindValue(":n_recibo", ui->le_search->text());
+                q.exec();
+                sql_query_model->setQuery(std::move(q));
                 db.close();
                 total_price_active = true;
             }
         }
-        // Search is not a number
         else if (ui->le_search->text().isSimpleText()) {
-            // Text (client, address or another)
             QDate date_slash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
             QDate date_dash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
             QDate date = (!date_slash.isNull()) ? date_slash :
                          (!date_dash.isNull()) ? date_dash: QDate::currentDate();
+            // date_type values come from a hard-coded ComboBox — not user input
             QString date_type = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
                                 (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
                                 (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
             if (!date_slash.isNull() || !date_dash.isNull()) {
-                // Text is date
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos WHERE " + date_type + " = :date");
+                q.bindValue(":date", date.toString("dd-MM-yyyy"));
+                q.exec();
+                sql_query_model->setQuery(std::move(q));
                 db.close();
             }
             else {
-                // Text is not a date
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente like '%" + ui->le_search->text() + "%'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos WHERE cliente LIKE :search");
+                q.bindValue(":search", "%" + ui->le_search->text() + "%");
+                q.exec();
+                sql_query_model->setQuery(std::move(q));
                 db.close();
             }
         }

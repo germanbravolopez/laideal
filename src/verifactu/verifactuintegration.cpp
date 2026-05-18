@@ -18,10 +18,9 @@ bool VerifactuIntegration::initialize()
 {
     m_manager = new VerifactuManager(QString(), this);
 
-    // Cargar configuración del emisor
     if (!loadEmitterConfiguration()) {
         m_lastError = "No se pudo cargar la configuración del emisor";
-        qWarning() << m_lastError;
+        qWarning() << "Verifactu emitter configuration failed to load";
         return false;
     }
 
@@ -47,7 +46,6 @@ VerifactuResult VerifactuIntegration::createAndSubmitInvoice(
         return result;
     }
 
-    // Crear la factura
     VerifactuInvoice invoice;
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
@@ -57,13 +55,8 @@ VerifactuResult VerifactuIntegration::createAndSubmitInvoice(
     invoice.setBuyerNIF(buyerNIF);
     invoice.setBuyerName(buyerName);
 
-    if (!description.isEmpty()) {
-        invoice.setDescription(description);
-    } else {
-        invoice.setDescription("Operación de venta");
-    }
+    invoice.setDescription(description.isEmpty() ? "Operación de venta" : description);
 
-    // Añadir item de impuesto
     VerifactuTaxItem taxItem;
     taxItem.setTaxBase(taxBase);
     taxItem.setTaxRate(taxRate);
@@ -74,14 +67,13 @@ VerifactuResult VerifactuIntegration::createAndSubmitInvoice(
     invoice.addTaxItem(taxItem);
     invoice.calculateTotals();
 
-    // Enviar la factura
     result = m_manager->submitInvoice(invoice);
 
     if (result.isSuccess()) {
-        qDebug() << "Factura enviada exitosamente. CSV:" << result.csv;
+        qDebug() << "Invoice submitted successfully. CSV:" << result.csv;
     } else {
         m_lastError = result.errorDescription;
-        qWarning() << "Error al enviar factura:" << m_lastError;
+        qWarning() << "Invoice submission failed:" << m_lastError;
     }
 
     return result;
@@ -106,10 +98,10 @@ VerifactuResult VerifactuIntegration::cancelInvoice(
     );
 
     if (result.isSuccess()) {
-        qDebug() << "Factura anulada exitosamente. CSV:" << result.csv;
+        qDebug() << "Invoice cancelled successfully. CSV:" << result.csv;
     } else {
         m_lastError = result.errorDescription;
-        qWarning() << "Error al anular factura:" << m_lastError;
+        qWarning() << "Invoice cancellation failed:" << m_lastError;
     }
 
     return result;
@@ -128,7 +120,6 @@ VerifactuResult VerifactuIntegration::generateQR(
         return result;
     }
 
-    // Crear la factura (mínima información para generar QR)
     VerifactuInvoice invoice;
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
@@ -139,11 +130,10 @@ VerifactuResult VerifactuIntegration::generateQR(
     result = m_manager->generateQRCode(invoice);
 
     if (!result.qrCode.isNull()) {
-        qDebug() << "QR generado exitosamente";
-        qDebug() << "URL de validación:" << result.validationUrl;
+        qDebug() << "QR code generated. Validation URL:" << result.validationUrl;
     } else {
         m_lastError = result.errorDescription;
-        qWarning() << "Error al generar QR:" << m_lastError;
+        qWarning() << "QR generation failed:" << m_lastError;
     }
 
     return result;
@@ -151,9 +141,8 @@ VerifactuResult VerifactuIntegration::generateQR(
 
 QString VerifactuIntegration::getConfigInfo() const
 {
-    if (!m_manager) {
-        return "Gestor de Verifactu no inicializado";
-    }
+    if (!m_manager)
+        return "Verifactu manager not initialized";
     return m_manager->getConfigurationInfo();
 }
 
@@ -166,81 +155,38 @@ bool VerifactuIntegration::isConfigured() const
 bool VerifactuIntegration::validateEmitterConfiguration()
 {
     if (!m_manager) return false;
-
-    return m_manager->getConfig()->getEmitterNIF().isEmpty() ? false : true;
+    return !m_manager->getConfig()->getEmitterNIF().isEmpty();
 }
 
 bool VerifactuIntegration::loadEmitterConfiguration()
 {
-    // IMPORTANTE: Este método debe cargar la configuración del emisor desde tu base de datos
-    // o desde los datos de configuración de la empresa.
-    //
-    // Ejemplo si tienes acceso a una clase Database o Settings:
-    //
-    // QString nif = Database::getInstance()->getCompanyNIF();
-    // QString name = Database::getInstance()->getCompanyName();
-    // QString serviceKey = Settings::getInstance()->getVerifactuServiceKey();
-    //
-
+    // TODO: load emitter data from the app's SQLite config table or QSettings
     if (!m_manager) return false;
 
-    // ========================================
-    // 1. CARGAR DATOS DEL EMISOR
-    // ========================================
-    // Estos datos se pueden obtener de:
-    // 1. Tu base de datos SQLite
-    // 2. Un archivo de configuración INI/JSON
-    // 3. Las preferencias de la aplicación
-    // 4. Variables de entorno
-    //
-
-    QString emitterNIF = "B12345678";           // TODO: NIF real de la empresa
-    QString emitterName = "Mi Empresa SL";      // TODO: Nombre real de la empresa
+    QString emitterNIF = "B12345678";           // TODO: real company NIF
+    QString emitterName = "Mi Empresa SL";      // TODO: real company name
     QString emitterCommercialName = "Mi Empresa";
 
-    // Intentar cargar desde variable de entorno (mejor práctica para desarrollo)
+    // Prefer environment variable so secrets stay out of source
     const char* envNIF = std::getenv("VERIFACTU_NIF");
     if (envNIF) {
         emitterNIF = QString::fromUtf8(envNIF);
-        qDebug() << "NIF cargado desde variable de entorno: " << emitterNIF;
+        qDebug() << "NIF loaded from environment variable:" << emitterNIF;
     }
 
-    m_manager->getConfig()->setEmitterData(
-        emitterNIF,
-        emitterName,
-        emitterCommercialName
-    );
+    m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterCommercialName);
+    m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION), "LAIDEAL");
 
-    m_manager->getConfig()->setSystemData(
-        "LAIDEAL",
-         QString(PROJECT_VERSION),
-        "LAIDEAL"
-    );
-
-    // ========================================
-    // 2. CARGAR LA CLAVE DE SERVICIO
-    // ========================================
-    // CRÍTICO: La clave debe obtenerse de https://facturae.irenesolutions.com/verifactu/go
-    //
-    // Opciones de carga (en orden de preferencia):
-    // 1. Variable de entorno VERIFACTU_SERVICEKEY (RECOMENDADO)
-    // 2. Base de datos (tabla de configuración)
-    // 3. Archivo de configuración seguro
-    // 4. Archivo .env en el directorio home del usuario
-    //
-
+    // Load service key — prefer env var, fall back to ~/.verifactu_key
+    // Get key from https://facturae.irenesolutions.com/verifactu/go
     QString serviceKey;
 
-    // Opción 1: Variable de entorno (MEJOR OPCIÓN para desarrollo y producción)
     const char* envServiceKey = std::getenv("VERIFACTU_SERVICEKEY");
     if (envServiceKey) {
         serviceKey = QString::fromUtf8(envServiceKey);
-        qDebug() << "ServiceKey cargada desde variable de entorno";
-    }
-    // Opción 2: Archivo en el directorio home del usuario (más seguro)
-    else {
-        QString homeDir = QDir::homePath();
-        QString keyFilePath = homeDir + "/.verifactu_key";
+        qDebug() << "ServiceKey loaded from environment variable";
+    } else {
+        QString keyFilePath = QDir::homePath() + "/.verifactu_key";
         QFile keyFile(keyFilePath);
 
         if (keyFile.exists()) {
@@ -248,39 +194,29 @@ bool VerifactuIntegration::loadEmitterConfiguration()
                 QTextStream stream(&keyFile);
                 serviceKey = stream.readLine().trimmed();
                 keyFile.close();
-                qDebug() << "ServiceKey cargada desde archivo:" << keyFilePath;
+                qDebug() << "ServiceKey loaded from file:" << keyFilePath;
             } else {
-                qWarning() << "No se pudo abrir el archivo de clave:" << keyFilePath;
+                qWarning() << "Could not open key file:" << keyFilePath;
             }
         } else {
-            qWarning() << "Archivo de clave no encontrado en:" << keyFilePath;
-            qWarning() << "Instrucciones:";
-            qWarning() << "  1. Obtén tu clave en: https://facturae.irenesolutions.com/verifactu/go";
-            qWarning() << "  2. Crea un archivo en:" << keyFilePath;
-            qWarning() << "  3. Pega tu clave en el archivo (solo la clave, sin espacios)";
-            qWarning() << "  O establece la variable de entorno:";
-            qWarning() << "  SET VERIFACTU_SERVICEKEY=tu_clave_aqui";
+            qWarning() << "Key file not found:" << keyFilePath;
+            qWarning() << "Instructions:";
+            qWarning() << "  1. Get your key at: https://facturae.irenesolutions.com/verifactu/go";
+            qWarning() << "  2. Create a file at:" << keyFilePath;
+            qWarning() << "  3. Paste your key (key only, no spaces)";
+            qWarning() << "  Or set the environment variable: SET VERIFACTU_SERVICEKEY=your_key_here";
         }
     }
 
     m_manager->getConfig()->setServiceKey(serviceKey);
 
-    // ========================================
-    // 3. ESTABLECER ENTORNO
-    // ========================================
-    // TESTING para pruebas (sin validación real)
-    // PRODUCTION para producción (validación real con AEAT)
+    // TESTING = no real AEAT validation; PRODUCTION = live validation
     m_manager->getConfig()->setEnvironment(VerifactuConfig::TESTING);
 
-    // Guardar configuración
     m_manager->getConfig()->save();
 
-    // ========================================
-    // 4. VALIDAR CONFIGURACIÓN
-    // ========================================
     if (!m_manager->getConfig()->isValid()) {
-        qCritical() << "Error: Configuración de Verifactu inválida";
-        qCritical() << m_manager->getConfig()->getValidationError();
+        qCritical() << "Verifactu configuration is invalid:" << m_manager->getConfig()->getValidationError();
         return false;
     }
 

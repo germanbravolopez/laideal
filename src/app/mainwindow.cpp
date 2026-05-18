@@ -21,10 +21,10 @@ MainWindow::MainWindow(QWidget *parent)
     initialize_verifactu();
 
     // TODO: delete this quick test
-    ui->cb_client->setEditText("Elia Lopez Bailon");
-    ui->le_cost_total->setText("4.50");
-    verifactu_submit_invoice();
-    std::exit(0);
+    //ui->cb_client->setEditText("Elia Lopez Bailon");
+    //ui->le_cost_total->setText("4.50");
+    //verifactu_submit_invoice();
+    //std::exit(0);
 }
 
 MainWindow::~MainWindow()
@@ -111,19 +111,15 @@ void MainWindow::set_service_to_cb(int initial_row = 0)
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
-        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
-                SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbServChanged(QString))
-                );
+                &QComboBox::currentTextChanged,
+                this, &MainWindow::cbServChanged);
     }
 }
 
 void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
 {
-    // Get garment from db to a string list
     QStringList garment_list = read_column_from_table(db, "nombre", "prendas", "");
-    // Create cb for all garment and populate the list
     for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBoxPrenda = new QComboBox();
         comBoxPrenda->setAutoFillBackground(true);
@@ -132,11 +128,9 @@ void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
         comBoxPrenda->setCurrentText("");
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_GARM, comBoxPrenda);
-        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM)),
-                SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbGarmChanged(QString))
-                );
+                &QComboBox::currentTextChanged,
+                this, &MainWindow::cbGarmChanged);
     }
 }
 
@@ -318,15 +312,15 @@ bool MainWindow::verifactu_submit_invoice()
         );
 
         if (result.isSuccess()) {
-            qDebug() << "Factura enviada con CSV:" << result.csv;
+            qDebug() << "Invoice submitted with CSV:" << result.csv;
             show_qr_to_client(result);
             return true;
         } else {
-            qDebug() << "Error al enviar la factura a Verifactu:" << result.errorDescription;
+            qDebug() << "Invoice submission failed:" << result.errorDescription;
             return false;
         }
     } else {
-        qDebug() << "Error de configuración de Verifactu";
+        qDebug() << "Verifactu not configured — skipping invoice submission";
         return false;
     }
 }
@@ -340,19 +334,16 @@ void MainWindow::show_qr_to_client(const VerifactuResult &result)
 
     QVBoxLayout *layout = new QVBoxLayout();
 
-    // Mostrar QR
     if (!result.qrCode.isNull()) {
         QLabel *labelQR = new QLabel();
         labelQR->setPixmap(result.qrCode.scaledToWidth(300, Qt::SmoothTransformation));
         layout->addWidget(labelQR, 0, Qt::AlignCenter);
     }
 
-    // Mostrar CSV
     QLabel *labelCSV = new QLabel(
         QString("<b>CSV Verifactu:</b> %1").arg(result.csv));
     layout->addWidget(labelCSV, 0, Qt::AlignCenter);
 
-    // Mostrar URL de validación
     if (!result.validationUrl.isEmpty()) {
         QLabel *labelUrl = new QLabel(
             QString("<a href='%1'>Validar en AEAT</a>")

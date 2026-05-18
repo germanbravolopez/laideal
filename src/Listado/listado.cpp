@@ -9,10 +9,10 @@ Listado::Listado(QWidget *parent) :
     QMainWindow(parent)
 {
     setupUi(this);
-    connect(table_listado->action1, SIGNAL(triggered()),
-            this, SLOT(on_actionAnadir_fila_triggered()));
-    connect(table_listado->action2, SIGNAL(triggered()),
-            this, SLOT(on_actionEliminar_fila_triggered()));
+    connect(table_listado->action1, &QAction::triggered,
+            this, &Listado::on_actionAnadir_fila_triggered);
+    connect(table_listado->action2, &QAction::triggered,
+            this, &Listado::on_actionEliminar_fila_triggered);
     connect(filter_widget, &FilterWidget::filterChanged,
             this, &Listado::text_filter_changed);
     connect(filter_widget, &QLineEdit::textChanged,
