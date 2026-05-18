@@ -29,6 +29,7 @@
   - Classes: `VerifactuIntegration`, `VerifactuManager`, `VerifactuConfig`, `VerifactuInvoice`
   - TESTING environment works; production requires real `ServiceKey` and company NIF
   - QR dialog shown to user after successful submission
+- [x] Created `.claude/commands/coding-guidelines.md` skill (`/coding-guidelines`) — May 2026
 - [ ] Documentation migration and expansion (this session, May 2026)
   - Moved verifactu docs from `src/verifactu/` to `docs/modules/verifactu/`
   - Created `docs/AI_agent_instructions.md`, `docs/architecture.md`, `docs/progress_tracker.md`, `docs/INDEX.md`

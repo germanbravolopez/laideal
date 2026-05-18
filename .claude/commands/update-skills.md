@@ -56,6 +56,7 @@ Anything non-obvious, common failure modes, or follow-up actions.
 |-------|------|---------|
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | This file |
+| `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
 
 ## Rules
 

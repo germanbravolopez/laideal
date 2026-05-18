@@ -62,6 +62,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 |-------|--------|-------------|
 | Update documentation | `/update-docs` | After any feature, fix, or new insight |
 | Create/update skills | `/update-skills` | When a new repeatable workflow is found |
+| Coding guidelines | `/coding-guidelines` | Before writing any new code — language, naming, Qt, DB rules |
 | Security review | `/security-review` | Before release or when touching auth/data |
 | Code review | `/review` | Before merging significant changes |
 | Simplify code | `/simplify` | After implementation, to improve quality |
