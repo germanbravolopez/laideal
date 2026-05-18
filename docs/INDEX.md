@@ -70,7 +70,7 @@ Read the full skill file when the skill is relevant to your task.
 
 | File | Purpose |
 |------|---------|
-| `CMakeLists.txt` | Root CMake — project v8.0, adds all subdirectories |
+| `CMakeLists.txt` | Root CMake — project 8.0, adds all subdirectories |
 | `src/app/CMakeLists.txt` | Main executable target |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |

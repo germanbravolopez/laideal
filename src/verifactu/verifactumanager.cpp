@@ -288,7 +288,7 @@ QNetworkRequest VerifactuManager::createNetworkRequest(const QString &endpoint) 
 {
     QNetworkRequest request{QUrl(endpoint)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL-Verifactu/7.1");
+    request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL/" + QString(PROJECT_VERSION));
     return request;
 }
 

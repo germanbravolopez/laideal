@@ -6,7 +6,7 @@
 
 ## Project in One Paragraph
 
-La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ or 6.x), SQLite database, CMake build system. It manages garments, clients, receipts, accounting, invoices, and printing. From v8.0 it integrates **Verifactu** — mandatory AEAT digital invoicing for Spanish businesses. The DB lives at a hardcoded path on a specific machine.
+La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ or 6.x), SQLite database, CMake build system. It manages garments, clients, receipts, accounting, invoices, and printing. From 8.0 it integrates **Verifactu** — mandatory AEAT digital invoicing for Spanish businesses. The DB lives at a hardcoded path on a specific machine.
 
 ## Critical Issues — Check Before Touching Anything
 

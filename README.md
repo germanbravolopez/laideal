@@ -13,7 +13,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Supplier invoices** — invoice entry form with automatic IVA/base calculation
 - **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
-- **Verifactu** — AEAT mandatory digital invoicing integration (v8.0+, required for Spanish businesses from 2026)
+- **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
 
 ---
 
@@ -92,7 +92,7 @@ Package the application for distribution using **windeployqt** and **Inno Setup*
 5. Open a Qt command prompt with administrator rights
 6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
 7. Run `deploy_laideal_run_in_qt_cmd.bat`
-8. Enter the release tag when prompted (e.g. `r8.0`)
+8. Enter the release tag when prompted (e.g. `8.0`)
 9. Update the application icon after installation if needed
 
 ---

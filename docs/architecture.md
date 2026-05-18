@@ -195,7 +195,7 @@ AEAT QR validation:
 | Hardcoded DB path | `src/sql_lite/sql_lite.h:9` | Medium | Requires manual edit for each new machine |
 | Hardcoded icon path | `src/app/main.cpp:12–13` | Medium | Same issue |
 | ServiceKey stored plaintext | `src/verifactu/verifactuconfig.h` | Medium | Consider QSettings encryption |
-| No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap v1.1 |
+| No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap |
 
 ---
 

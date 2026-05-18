@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set "search=r1.0"
+set "search=1.0"
 set "replace=%~1"
 
 set "input_file=laideal.iss"

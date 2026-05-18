@@ -83,7 +83,7 @@
 - [x] Created `.claude/commands/coding-guidelines.md` skill (`/coding-guidelines`)
 - [x] All documentation translated to English
 
-### v8.0 — Verifactu Support — May 2026 (`feature/add_mdiago_verifactu`)
+### 8.0 — Verifactu Support — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Created `src/verifactu/` module: `VerifactuConfig`, `VerifactuInvoice`, `VerifactuManager`, `VerifactuIntegration`
 - [x] Added `VerifactuIntegration` instance to `MainWindow` (`m_verifactuIntegration`)
 - [x] `verifactuSubmitInvoice()` called in ticket save flow
@@ -93,16 +93,16 @@
 - [x] CMake integration (`src/verifactu/CMakeLists.txt` + root `CMakeLists.txt`)
 - [x] `initializeVerifactu()` in `MainWindow` constructor
 
-### v7.1 — PDF export for listados
+### r7.1 — PDF export for listados
 - [x] Print listado de prendas to PDF via `actionGenerar_pdf_con_el_listado`
 
-### v7.0 — Hardcoded path update
+### r7.0 — Hardcoded path update
 - [x] Updated hardcoded paths for new laptop (still hardcoded, different machine address)
 
-### v6.1 — Fix waiting cursor
+### r6.1 — Fix waiting cursor
 - [x] Fixed waiting cursor in listados and other time-consuming operations
 
-### v6.0 — Garment management upgrades
+### r6.0 — Garment management upgrades
 - [x] `AddGarment` module: add garments to existing tickets
 - [x] Split garments in `RecogPrendas`
 - [x] `hash` column added to `ingresos` for unique row identification
@@ -112,22 +112,22 @@
 
 ## Archive (Entries older than 6 months / no longer actionable)
 
-### v5.x — Listado & accounting improvements
-- [x] Revert accountings feature (v5.0)
-- [x] Data lock on closed quarters (v5.6)
-- [x] Generic `Listado` class replacing per-table views (v5.1+)
+### r5.x — Listado & accounting improvements
+- [x] Revert accountings feature (r5.0)
+- [x] Data lock on closed quarters (r5.6)
+- [x] Generic `Listado` class replacing per-table views (r5.1+)
 - [x] Sort/filter for all table columns
 - [x] New `InsertNewItem` dialog for adding clients
-- [x] Quarter lock prevents out-of-period data entry (v5.0)
+- [x] Quarter lock prevents out-of-period data entry (r5.0)
 
-### v4.x — Print, UI, and invoice improvements
-- [x] Print support via Excel + batch script (v3.0/v4.x)
-- [x] Debug mode toggle (v4.0)
-- [x] Invoice form: show IVA and base, replace "producto" with description (v4.0)
-- [x] App icon (v4.1)
-- [x] Version metadata in `.exe` (v5.4)
+### r4.x — Print, UI, and invoice improvements
+- [x] Print support via Excel + batch script (r3.0/r4.x)
+- [x] Debug mode toggle (r4.0)
+- [x] Invoice form: show IVA and base, replace "producto" with description (r4.0)
+- [x] App icon (r4.1)
+- [x] Version metadata in `.exe` (r5.4)
 
-### v1.0–v2.0 — Foundation
+### r1.0–r2.0 — Foundation
 - [x] Initial release with garment/client/receipt/accounting/invoice features
 - [x] SQLite database
 - [x] `servicios` table for unique services in invoices

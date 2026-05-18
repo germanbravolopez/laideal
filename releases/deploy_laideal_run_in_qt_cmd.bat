@@ -19,7 +19,7 @@ if not exist "%sourceFolderFullPath%\%sourceSubFolder%\%fileName%" (
 )
 
 REM Prompt the user to enter the name of the release name, concatenate with the destination folder
-set /p "releaseName=Enter the release to do (r1.0, r2.0, ...): "
+set /p "releaseName=Enter the release to do (8.0, 8.1, ...): "
 set "destinationFolder=C:\Users\gebra\work\tintoreria\laideal\releases\%releaseName%"
 REM Check if folder exists, otherwise create it
 if exist "%destinationFolder%" (

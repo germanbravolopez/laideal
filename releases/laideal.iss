@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "La Ideal"
-#define MyAppVersion "r1.0"
+#define MyAppVersion "1.0"
 #define MyAppPublisher "German Bravo Lopez"
 #define MyAppURL "https://github.com/germanbravolopez/laideal"
 #define MyAppExeName "laideal.exe"
@@ -29,7 +29,7 @@ InfoBeforeFile=C:\Users\gebra\work\tintoreria\laideal\releases_notes.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\gebra\work\tintoreria\laideal\releases\setup_outputs
-OutputBaseFilename=laideal_setup_r1.0
+OutputBaseFilename=laideal_setup_1.0
 SetupIconFile=C:\Users\gebra\work\tintoreria\laideal\icon\lavadora.ico
 Compression=lzma
 SolidCompression=yes
@@ -43,7 +43,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Users\gebra\work\tintoreria\laideal\releases\r1.0\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\gebra\work\tintoreria\laideal\releases\1.0\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
