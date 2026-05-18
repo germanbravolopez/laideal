@@ -13,12 +13,12 @@
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-- [ ] **Remove temp debug code** in `src/app/mainwindow.cpp:23–27`
-  - Constructor calls `verifactu_submit_invoice()` then `std::exit(0)`
+- [ ] **Remove temp debug code** in `src/app/mainwindow.cpp` (near top of constructor)
+  - Constructor calls `verifactuSubmitInvoice()` then `std::exit(0)`
   - App exits immediately on launch — cannot be used in this state
 - [ ] **Persist Verifactu CSV to database** — the CSV received from AEAT after successful submission is logged via `qDebug()` but not saved anywhere
   - Needs `ALTER TABLE` to add columns (SQL in `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md`)
-  - Then update `save_ticket()` or `verifactu_submit_invoice()` to write the CSV
+  - Then update `saveTicket()` or `verifactuSubmitInvoice()` to write the CSV
 - [ ] **Add Verifactu columns to DB schema** — `ingresos` (or `facturas`) needs `verifactu_csv`, `verifactu_timestamp`, `verifactu_estado`, `verifactu_error`, `verifactu_url_qr`
 
 ---
@@ -29,11 +29,6 @@
   - Classes: `VerifactuIntegration`, `VerifactuManager`, `VerifactuConfig`, `VerifactuInvoice`
   - TESTING environment works; production requires real `ServiceKey` and company NIF
   - QR dialog shown to user after successful submission
-- [x] Created `.claude/commands/coding-guidelines.md` skill (`/coding-guidelines`) — May 2026
-- [ ] Documentation migration and expansion (this session, May 2026)
-  - Moved verifactu docs from `src/verifactu/` to `docs/modules/verifactu/`
-  - Created `docs/AI_agent_instructions.md`, `docs/architecture.md`, `docs/progress_tracker.md`, `docs/INDEX.md`
-  - Created `.claude/commands/update-docs.md`, `.claude/commands/update-skills.md`
 
 ---
 
@@ -41,38 +36,56 @@
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Hardcoded DB path | `src/sql_lite/sql_lite.h:9` | Must be changed for each new machine |
-| Hardcoded icon path | `src/app/main.cpp:12–13` | Same — points to specific user's OneDrive |
+| Hardcoded DB path | `src/sql_lite/sql_lite.h` (`DB_PATH`) | Must be changed for each new machine |
+| Hardcoded icon path | `src/app/main.cpp` | Same — points to specific user's OneDrive |
+| Hardcoded report output path | `src/contabilidad/`, `src/Listado/genlistado.cpp` | Same issue |
 | ServiceKey in plaintext INI | `src/verifactu/verifactuconfig.h` | Consider QSettings encryption |
-| No retry for failed Verifactu calls | `src/verifactu/` | Planned for v1.1 |
-| No Verifactu configuration UI | `src/verifactu/` | Planned for v1.1 |
+| No retry for failed Verifactu calls | `src/verifactu/` | Planned |
+| No Verifactu configuration UI | `src/verifactu/` | Planned |
 
 ---
 
 ## Completed Milestones
 
+### Documentation expansion — May 2026
+- [x] Created per-module reference docs for all non-Verifactu modules (`docs/modules/*.md`)
+  - `mainwindow.md`, `sql_lite.md`, `listado.md`, `recog_prendas.md`, `facturas.md`, `contabilidad.md`, `imprimir.md`, `add_garment.md`
+- [x] Condensed Verifactu docs: `README.md` (Spanish→English, shorter), `RESUMEN_IMPLEMENTACION.md` (246→85 lines), removed redundant `INDEX.md`
+- [x] Updated `architecture.md` and `AI_agent_instructions.md` — method names reflect current camelCase identifiers
+- [x] Removed `docs/todo/` and `docs/development/` references from all docs; deleted `hardcoded_paths.png`
+- [x] Updated `docs/INDEX.md` and `docs/README.md` to register all new module docs
+
+### Code quality improvements — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] Applied coding guidelines to all `src/` modules (commit `157c354`)
+  - Translated Spanish dev comments and debug strings to English
+  - Converted `SIGNAL`/`SLOT` macro syntax to new-style pointer syntax
+  - Fixed SQL injection in `add_garment.cpp` `on_pb_search_pressed` (parameterised query)
+- [x] Renamed all user-defined snake_case identifiers to camelCase across all `src/` modules (commit `551b920`)
+  - Methods, members, parameters, local variables, free functions, signals
+  - Qt auto-connect slots (`on_*`) and Qt virtual overrides preserved unchanged
+  - Updated call sites in `insertnewitem.cpp` and `genlistado.cpp`
+
 ### Documentation reorganisation — May 2026
 - [x] Moved all `.md` docs from `src/verifactu/` to `docs/modules/verifactu/`
 - [x] Created `docs/README.md` (docs folder index)
-- [x] Created `docs/modules/verifactu/` with full Verifactu docs (5 files)
-- [x] Moved `docs/planning_verifactu.md` to `docs/development/planning_verifactu.md`
+- [x] Created `docs/modules/verifactu/` with full Verifactu docs
 - [x] Created `docs/AI_agent_instructions.md` — agent onboarding guide
 - [x] Created `docs/architecture.md` — full module/DB/flow documentation
 - [x] Created `docs/progress_tracker.md` — this file
 - [x] Created `docs/INDEX.md` — project-wide quick-find index
-- [x] Created `.claude/commands/update-docs.md` skill
-- [x] Created `.claude/commands/update-skills.md` skill
+- [x] Created `.claude/commands/update-docs.md` and `.claude/commands/update-skills.md` skills
+- [x] Created `.claude/commands/coding-guidelines.md` skill (`/coding-guidelines`)
 - [x] All documentation translated to English
 
 ### v8.0 — Verifactu Support — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Created `src/verifactu/` module: `VerifactuConfig`, `VerifactuInvoice`, `VerifactuManager`, `VerifactuIntegration`
-- [x] Added `VerifactuIntegration` instance to `MainWindow`
-- [x] `verifactu_submit_invoice()` called in ticket save flow
-- [x] `show_qr_to_client()` — QR + CSV + validation URL dialog
+- [x] Added `VerifactuIntegration` instance to `MainWindow` (`m_verifactuIntegration`)
+- [x] `verifactuSubmitInvoice()` called in ticket save flow
+- [x] `showQrToClient()` — QR + CSV + validation URL dialog
 - [x] Graceful degradation: shows warning if Verifactu not configured, does not block ticket saving
 - [x] TESTING environment available; production environment ready
 - [x] CMake integration (`src/verifactu/CMakeLists.txt` + root `CMakeLists.txt`)
-- [x] `initialize_verifactu()` in `MainWindow` constructor
+- [x] `initializeVerifactu()` in `MainWindow` constructor
 
 ### v7.1 — PDF export for listados
 - [x] Print listado de prendas to PDF via `actionGenerar_pdf_con_el_listado`

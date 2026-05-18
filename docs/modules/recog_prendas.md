@@ -1,0 +1,41 @@
+# RecogPrendas (`src/recog_prendas/`)
+
+"Garment pickup" panel. Loads all `ingresos` rows into a filterable table. Handles payment marking, pickup marking, observation editing, size/price editing, and garment row splitting.
+
+## Source files
+
+- `src/recog_prendas/recog_prendas.h/cpp`
+
+## Key interface
+
+```cpp
+RecogPrendas *ui = new RecogPrendas(this);
+ui->db = db;
+ui->show();
+```
+
+## Operations
+
+| Operation | `UpdateDBop` value | What it writes |
+|-----------|-------------------|----------------|
+| Mark paid | `PAY_YES` / `PAY_NO` | `pagado`, `fecha_pago` |
+| Mark picked up | `PKU_YES` / `PKU_NO` | `estado`, `fecha_recogida` |
+| Edit observation | `OBSV` | `observaciones` |
+| Edit size + price | `SIZE_AND_PRICE` | `size`, `importe` |
+| Split garment row | `SEPARATE_GARM` | Inserts a new row with `genHash16()`; decrements quantity on original |
+
+## Search
+
+- **By client name**: `le_search` — triggered on Enter or the search button
+- **By date**: `cb_search_date` combobox — available date values
+
+## Table column indices (recog_prendas.h)
+
+`TABLE_TICKET=0`, `TABLE_CLIENT=1`, `TABLE_DATE_RCP=2`, `TABLE_DATE_PAY=3`, `TABLE_DATE_PKU=4`, `TABLE_PRICE=5`, `TABLE_IS_PAYED=6`, `TABLE_STATE=7`, `TABLE_QUANTITY=8`, `TABLE_GARMENT=9`, `TABLE_SIZE=10`, `TABLE_SERVICE=11`, `TABLE_OBSERV=12`, `TABLE_EDIT_LOCK=13`
+
+## Notes
+
+- All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
+- Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
+- The print button opens an `Imprimir` dialog with `isRecibo=true`.
+- `PAY_ALL` and `PKU_ALL` buttons mark all visible rows paid or picked up in one operation.

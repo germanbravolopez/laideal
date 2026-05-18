@@ -12,8 +12,8 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 
 | Issue | File:Line | Priority |
 |-------|-----------|----------|
-| **Temp debug code: calls `verifactu_submit_invoice()` + `std::exit(0)` in constructor** | `src/app/mainwindow.cpp:23–27` | **HIGH — remove before any release** |
-| **Verifactu CSV not saved to database** | `src/app/mainwindow.cpp:320` | High |
+| **Temp debug code: calls `verifactuSubmitInvoice()` + `std::exit(0)` in constructor** | `src/app/mainwindow.cpp` | **HIGH — remove before any release** |
+| **Verifactu CSV not saved to database** | `src/app/mainwindow.cpp` | High |
 | **DB schema missing Verifactu columns** | See `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md` | High |
 | Hardcoded DB path `C:/Users/rocio/...` | `src/sql_lite/sql_lite.h:9` | Medium |
 | Hardcoded icon path `C:/Users/rocio/...` | `src/app/main.cpp:12–13` | Medium |
@@ -31,7 +31,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 |---------------|-------|
 | Entry point | `src/app/main.cpp` |
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |
-| Ticket save flow | `src/app/mainwindow.cpp:372` (`save_ticket`) |
+| Ticket save flow | `src/app/mainwindow.cpp` (`saveTicket`) |
 | All DB free functions | `src/sql_lite/sql_lite.h` / `.cpp` |
 | Generic list viewer | `src/Listado/listado.h` / `.cpp` |
 | Garment pickup panel | `src/recog_prendas/recog_prendas.h` / `.cpp` |
@@ -54,7 +54,8 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
 | `docs/progress_tracker.md` | What's done, in progress, open issues |
 | `docs/AI_agent_instructions.md` | This file |
-| `docs/modules/verifactu/` | Full Verifactu implementation docs (5 files) |
+| `docs/modules/verifactu/` | Full Verifactu implementation docs (4 files) |
+| `docs/modules/*.md` | Per-module reference docs (MainWindow, sql_lite, Listado, etc.) |
 
 ## Skills — Read Fully When Relevant
 
@@ -84,6 +85,6 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 - **Services**: "Limp." (limpieza/cleaning) and "Plan." (plancha/ironing) — each garment has a price per service.
 - **Size**: `size` column multiplies unit price (e.g., rugs measured in m²).
 - **Accounting lock**: once a quarter is locked, `ingresos` rows for that quarter cannot be added/modified.
-- **Verifactu call** happens during ticket save in `on_bb_save_reset_clicked()` → `verifactu_submit_invoice()`.
-- **Hash**: each `ingresos` row has a 16-char hash (`gen_hash_16()`) for deduplication.
+- **Verifactu call** happens during ticket save in `on_bb_save_reset_clicked()` → `verifactuSubmitInvoice()`.
+- **Hash**: each `ingresos` row has a 16-char hash (`genHash16()`) for deduplication.
 - **Formal invoice (factura)**: separate from receipt. Entered via the Facturas form, stored in `facturas` table.

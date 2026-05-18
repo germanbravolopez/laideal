@@ -1,105 +1,69 @@
-# Integración Verifactu en LAIDEAL
+# Verifactu Module (`src/verifactu/`)
 
-## 📋 ¿Qué es este módulo?
+AEAT mandatory digital invoicing integration (required for Spanish businesses from 2026). Submits invoices to AEAT in real time, receives a CSV security code, and generates a client QR code.
 
-Este módulo integra **Verifactu**, el nuevo sistema de la AEAT para emitir facturas digitales en tiempo real. A partir de 2026, es obligatorio para todas las empresas españolas.
+**Status**: Code complete. Pending: DB schema update and production testing.
 
-**Está completamente implementado y listo para usar.**
+## Source files
 
----
+| File | Purpose |
+|------|---------|
+| `verifactuintegration.h/cpp` | Facade — the only class `MainWindow` interacts with |
+| `verifactumanager.h/cpp` | HTTP REST via `QNetworkAccessManager` |
+| `verifactuconfig.h/cpp` | `QSettings` INI config: serviceKey, NIF, environment |
+| `verifactuinvoice.h/cpp` | JSON-serialisable invoice and tax-line models |
 
-## 🚀 Quick Start
-
-1. **Compilar**: El módulo ya está integrado en CMakeLists.txt
-2. **Leer**: [GUIA_PASO_A_PASO.md](./GUIA_PASO_A_PASO.md) para implementación completa
-3. **Consultar**: [EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) para código de ejemplo
-
----
-
-## 📦 Archivos del Módulo
+## Architecture
 
 ```
-src/verifactu/                         (código fuente)
-├── verifactuconfig.h/cpp         ✓ Configuración
-├── verifactuinvoice.h/cpp        ✓ Modelos de factura
-├── verifactumanager.h/cpp        ✓ Gestor API REST
-├── verifactuintegration.h/cpp    ✓ Integración simplificada
-├── CMakeLists.txt                ✓ Configuración de build
-└── EJEMPLO_IMPLEMENTACION.cpp    ✓ Ejemplos de código
-
-docs/modules/verifactu/               (documentación)
-├── README.md                     ✓ Este archivo (overview)
-├── INDEX.md                      ✓ Mapa de documentación
-├── GUIA_PASO_A_PASO.md           ✓ Guía completa de implementación
-├── RESUMEN_IMPLEMENTACION.md     ✓ Detalles técnicos y roadmap
-└── VERIFACTU_REST_API.md         ✓ Referencia completa de la API REST
+MainWindow → VerifactuIntegration (facade)
+               └── VerifactuManager (HTTP)
+                     ├── VerifactuConfig (QSettings)
+                     └── VerifactuInvoice + VerifactuTaxItem
 ```
 
----
+## Key interface
 
-## 🎯 Funcionalidades
+```cpp
+// Initialise in MainWindow constructor
+m_verifactuIntegration = new VerifactuIntegration(this);
+m_verifactuIntegration->initialize();  // warns if not configured — non-fatal
+
+// Submit an invoice
+VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(...);
+// result.status: SUCCESS | PENDING | ERROR | NETWORK_ERROR | INVALID_CONFIG
 ```
-✅ Envío de facturas a la AEAT
-✅ Generación de códigos QR
-✅ Anulación de facturas
-✅ Todos los tipos de factura (F1, F2, F3, R1)
-✅ Ambientes TESTING y PRODUCTION
-✅ Manejo robusto de errores
-✅ Persistencia de configuración
-```
----
 
-## 👉 ¿Por dónde empiezo?
+## Configuration
 
-### **Start Here**: [INDEX.md](./INDEX.md) - Mapa de documentación
+Loaded from an external `.ini` file via `QSettings`. Not in source control.
 
-Abre **INDEX.md** para:
-- Elegir tu ruta de aprendizaje
-- Ver matriz de consulta rápida
-- Encontrar respuestas rápidamente
+| Key | Description |
+|-----|-------------|
+| `serviceKey` | API key — obtain at https://facturae.irenesolutions.com/verifactu/go |
+| `emitterNIF` | Company NIF (confidential) |
+| `environment` | `TESTING` or `PRODUCTION` |
 
----
+## Environments
 
-## 📚 Documentación
+| Environment | Description | QR validation URL |
+|-------------|-------------|-------------------|
+| TESTING | Safe for dev — no real AEAT submission | `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR` |
+| PRODUCTION | Live — submits to AEAT | `https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR` |
 
-| Documento | Propósito | Tiempo |
-|-----------|-----------|--------|
-| **[INDEX.md](./INDEX.md)** ⭐ | Guía de navegación (LEE ESTO PRIMERO) | 3 min |
-| **[GUIA_PASO_A_PASO.md](./GUIA_PASO_A_PASO.md)** | Implementación completa paso a paso | 45 min |
-| **[RESUMEN_IMPLEMENTACION.md](./RESUMEN_IMPLEMENTACION.md)** | Detalles técnicos, DB schema, roadmap | 20 min |
-| **[VERIFACTU_REST_API.md](./VERIFACTU_REST_API.md)** | Referencia completa de campos de la API | 15 min |
-| **[EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp)** | 10+ ejemplos de código práctico | 5-10 min |
+REST API endpoint (both environments): `https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices`
 
----
+## Open issues
 
-## 🔗 Enlaces Útiles
+- CSV code received from AEAT is not persisted to DB — only printed via `qDebug()`
+- DB schema missing Verifactu columns — see `RESUMEN_IMPLEMENTACION.md` for `ALTER TABLE` SQL
+- No retry on network failure (planned)
+- No configuration UI (planned)
 
-- **Obtener ServiceKey**: https://facturae.irenesolutions.com/verifactu/go
-- **Documentación oficial**: https://github.com/mdiago/VeriFactu/wiki
-- **Portal AEAT**: https://www.aeat.es/
-- **Validar QR (Testing)**: https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR
-- **Validar QR (Producción)**: https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR
+## Documentation
 
----
-
-## ✨ Estado
-
-- **Compilación**: ✅ Lista
-- **Documentación**: ✅ Completa y sin duplicaciones
-- **Testing**: ✅ Ambiente TESTING disponible
-- **Producción**: ⏳ Requiere datos reales y ServiceKey
-
----
-
-## 📖 Estructura de Documentación
-
-Hemos organizado la documentación en 4 documentos complementarios **sin duplicaciones**:
-
-1. **INDEX.md** - Brújula para navegar todos los documentos
-2. **GUIA_PASO_A_PASO.md** - Todo lo necesario para implementar (DOCUMENTO PRINCIPAL)
-3. **RESUMEN_IMPLEMENTACION.md** - Arquitectura, diseño y roadmap (NO repite GUIA)
-4. **EJEMPLO_IMPLEMENTACION.cpp** - Código funcional (NO documentación textual)
-
----
-
-**¿Listo?** → [Abre INDEX.md](./INDEX.md) 🚀
+| Document | Purpose |
+|----------|---------|
+| `step_by_step_guide.md` | Complete step-by-step implementation guide |
+| `implementation_summary.md` | DB schema SQL, security notes, class reference, roadmap |
+| `rest_api.md` | Full REST API field reference |

@@ -13,12 +13,18 @@
 | `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
-| `docs/modules/verifactu/README.md` | Verifactu overview and quick start |
-| `docs/modules/verifactu/INDEX.md` | Verifactu docs navigation and reading paths |
-| `docs/modules/verifactu/GUIA_PASO_A_PASO.md` | Step-by-step Verifactu implementation guide (45 min) |
-| `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md` | Verifactu architecture, DB schema SQL, roadmap |
-| `docs/modules/verifactu/VERIFACTU_REST_API.md` | Verifactu REST API complete field reference |
-| `docs/development/planning_verifactu.md` | Historical planning notes (raw Copilot conversation) |
+| `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
+| `docs/modules/sql_lite.md` | DB free-function reference, usage patterns, accounting lock |
+| `docs/modules/listado.md` | Generic list viewer, InsertNewItem dialog, GenListado PDF |
+| `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search |
+| `docs/modules/facturas.md` | Supplier invoice form, validation, auto-calculation |
+| `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
+| `docs/modules/imprimir.md` | Excel/print flow, layout modes, QXlsx dependency |
+| `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
+| `docs/modules/verifactu/README.md` | Verifactu overview, architecture, key interface, status |
+| `docs/modules/verifactu/step_by_step_guide.md` | Step-by-step Verifactu implementation guide |
+| `docs/modules/verifactu/implementation_summary.md` | Class reference, DB schema SQL, security, roadmap |
+| `docs/modules/verifactu/rest_api.md` | Verifactu REST API complete field reference |
 
 ## Skills (Custom Slash Commands)
 
@@ -53,7 +59,6 @@ Read the full skill file when the skill is relevant to your task.
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
-| Code examples (Verifactu) | `src/verifactu/EJEMPLO_IMPLEMENTACION.cpp` | — |
 | Sort/filter proxy | `src/MySortFilterProxyModel/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/FilterWidget/filterwidget.h` | `.cpp` |
 | Custom table view | `src/TableView/tableview.h` | `.cpp` |
@@ -75,7 +80,7 @@ Read the full skill file when the skill is relevant to your task.
 | Term | Definition |
 |------|-----------|
 | Recibo / Ticket | Customer visit receipt. One ticket = N rows in `ingresos` sharing the same `n_recibo` |
-| Factura | Formal invoice (different from receipt). Stored in `facturas` table |
+| Factura | Formal invoice (different from receipt). Stored in `gastos` table via Facturas form |
 | Prenda | Garment item (clothing, rug, curtain, etc.) |
 | Limp. | "Limpieza" — cleaning service |
 | Plan. | "Plancha" — ironing service |
@@ -91,18 +96,18 @@ Read the full skill file when the skill is relevant to your task.
 
 | Topic | Where to look |
 |-------|--------------|
-| Ticket save flow (complete) | `src/app/mainwindow.cpp:372` + `docs/architecture.md` (Data Flow) |
-| DB path (and hardcoding issue) | `src/sql_lite/sql_lite.h:9` |
-| Verifactu call during save | `src/app/mainwindow.cpp:307` |
-| QR dialog implementation | `src/app/mainwindow.cpp:334` |
-| Accounting lock check | `src/sql_lite/sql_lite.h` (`read_lock_for_month_and_year`) |
-| Hash generation | `src/sql_lite/sql_lite.h` (`gen_hash_16`) |
-| Print / Excel flow | `src/imprimir/imprimir.h` + `.cpp` |
+| Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
+| DB path (and hardcoding issue) | `src/sql_lite/sql_lite.h` (`DB_PATH`) |
+| Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
+| QR dialog implementation | `src/app/mainwindow.cpp` (`showQrToClient`) |
+| Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
+| Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
+| Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Release procedure | Root `README.md` |
-| Verifactu REST API fields | `docs/modules/verifactu/VERIFACTU_REST_API.md` |
-| Verifactu DB schema changes (SQL) | `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md` |
-| Verifactu step-by-step implementation | `docs/modules/verifactu/GUIA_PASO_A_PASO.md` |
+| Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
+| Verifactu DB schema changes (SQL) | `docs/modules/verifactu/implementation_summary.md` |
+| Verifactu step-by-step implementation | `docs/modules/verifactu/step_by_step_guide.md` |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |

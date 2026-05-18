@@ -1,78 +1,71 @@
 # La Ideal
-La Ideal laundry software app
+La Ideal laundry management software
 
-## 📋 Características Principales
+## Main Features
 
-- ✅ Gestión de prendas y clientes
-- ✅ Sistema de contabilidad
-- ✅ **NUEVO: Integración Verifactu para emisión de facturas a la AEAT**
-- ✅ Generación de reportes
-- ✅ Base de datos SQLite local
+- Garment and client management
+- Accounting system
+- **Verifactu integration for AEAT digital invoicing** (v8.0+)
+- Report generation
+- Local SQLite database
 
-## 🆕 Verifactu - Nuevo Sistema de Facturas Digitales
+## Verifactu — Digital Invoice System (v8.0+)
 
-A partir de la versión 8.0, LAIDEAL incluye integración completa con **Verifactu**, el sistema de la AEAT para emitir facturas digitales.
+From version 8.0, LAIDEAL includes full integration with **Verifactu**, the mandatory AEAT system for real-time digital invoice submission.
 
-### ¿Qué es Verifactu?
+### What is Verifactu?
 
-Verifactu es el nuevo sistema de la AEAT obligatorio para empresas que no utilizan el SII. Permite emitir facturas digitales en tiempo real directamente a la administración tributaria.
+Verifactu is the AEAT system for businesses not using SII. It allows submitting digital invoices in real time to the tax authority.
 
-**Fechas de obligatoriedad**:
-- 🔹 Empresas: 1 de enero de 2026
-- 🔹 Autónomos: 1 de julio de 2026
+**Mandatory from:**
+- Businesses: 1 January 2026
+- Self-employed: 1 July 2026
 
-### Características Implementadas
-```
-✅ Envío de facturas a la AEAT
-✅ Generación automática de códigos QR
-✅ Soporte para todos los tipos de factura (F1, F2, F3, R1)
-✅ Entorno de pruebas y producción
-✅ Gestión de anulaciones y rectificativas
-✅ Manejo robusto de errores
-```
+### Implemented features
 
-### Cómo Usar Verifactu en LAIDEAL
+- Submit invoices to AEAT in real time
+- Automatic QR code generation
+- All invoice types (F1, F2, F3, R1)
+- TESTING and PRODUCTION environments
+- Invoice cancellation and correction
+- Robust error handling
+
+### Using Verifactu in LAIDEAL
 
 ```cpp
-// Enviar factura a la AEAT
-VerifactuResult result = verifactuManager->createAndSubmitInvoice(
-    "F001",                  // Número de factura
-    QDate::currentDate(),    // Fecha
-    "B12345678",             // NIF cliente
-    "Cliente S.A.",          // Nombre cliente
-    100.0,                   // Base imponible
-    21.0                     // Tipo IVA
+// Submit an invoice to AEAT
+VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
+    "F001",                 // invoice number
+    QDate::currentDate(),   // date
+    "B12345678",            // buyer NIF
+    "Cliente SA",           // buyer name
+    100.0,                  // tax base
+    21.0                    // VAT rate
 );
 
 if (result.isSuccess()) {
-    qDebug() << "CSV:" << result.csv;  // Código de Seguridad
-    qDebug() << "QR generado";
+    qDebug() << "CSV:" << result.csv;  // security code
+    // QR shown to client via showQrToClient(result)
 }
 ```
 
-### Documentación Verifactu
+### Verifactu documentation
 
-- 📖 [README de Verifactu](./docs/modules/verifactu/README.md)
-- 🗺️ [Índice de Documentación](./docs/modules/verifactu/INDEX.md)
-- 📚 [Guía Paso a Paso](./docs/modules/verifactu/GUIA_PASO_A_PASO.md)
-- 🔌 [Referencia API REST](./docs/modules/verifactu/VERIFACTU_REST_API.md)
-- 📋 [Resumen de Integración](./docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md)
-- 💡 [Ejemplos de Implementación](./src/verifactu/EJEMPLO_IMPLEMENTACION.cpp)
+- [Verifactu module README](./docs/modules/verifactu/README.md)
+- [Step-by-step guide](./docs/modules/verifactu/step_by_step_guide.md)
+- [REST API reference](./docs/modules/verifactu/rest_api.md)
+- [Implementation summary](./docs/modules/verifactu/implementation_summary.md)
+- [Code examples](./src/verifactu/implementation_example.cpp)
 
-### Requisitos para Verifactu
+### Requirements for Verifactu
 
-1. Obtener **ServiceKey** en: https://facturae.irenesolutions.com/verifactu/go
-2. Conexión a Internet
-3. Datos correctos de tu empresa (NIF, nombre)
+1. Obtain a **ServiceKey** at: https://facturae.irenesolutions.com/verifactu/go
+2. Internet connection
+3. Correct company data (NIF, name)
 
-## Documentación
+## Documentation
 
-Toda la documentación técnica está en la carpeta [`docs/`](./docs/README.md).
-
-| Sección | Descripción |
-|---------|-------------|
-| [docs/modules/verifactu/](./docs/modules/verifactu/README.md) | Módulo de facturación electrónica AEAT |
-| [docs/development/](./docs/development/planning_verifactu.md) | Notas de planificación interna |
+All technical documentation is in the [`docs/`](./docs/README.md) folder.
 
 ---
 
@@ -81,14 +74,14 @@ Toda la documentación técnica está en la carpeta [`docs/`](./docs/README.md).
 - [Tutorial to create installer](https://www.youtube.com/watch?v=Y9Ovo2XJHDs)
 - Application to create installer: [Inno Setup](https://jrsoftware.org/isinfo.php)
 
-## Release procedure:
+## Release procedure
 
 1. Update release number in `laideal/CMakeLists.txt`
 2. Update release notes
-3. Run application in Qt with "*Release*" option
+3. Run application in Qt with "Release" option
 4. Close Qt
 5. Open a Qt bash with admin rights
 6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
 7. `deploy_laideal_run_in_qt_cmd.bat`
 8. Set number of release, for example: "r4.2"
-10. Change icon after installed
+9. Change icon after installed

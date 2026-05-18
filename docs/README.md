@@ -13,17 +13,20 @@ docs/
 ├── AI_agent_instructions.md           (agent onboarding — start here)
 ├── architecture.md                    (modules, DB schema, data flow, known issues)
 ├── progress_tracker.md                (what's done, blocking issues, roadmap)
-├── modules/
-│   └── verifactu/                     (AEAT digital invoicing module)
-│       ├── README.md
-│       ├── INDEX.md
-│       ├── GUIA_PASO_A_PASO.md
-│       ├── RESUMEN_IMPLEMENTACION.md
-│       └── VERIFACTU_REST_API.md
-├── development/
-│   └── planning_verifactu.md          (historical planning notes)
-└── todo/
-    └── hardcoded_paths.png            (screenshot of known hardcoded-paths issue)
+└── modules/
+    ├── mainwindow.md                  (MainWindow — central controller)
+    ├── sql_lite.md                    (database free-function API)
+    ├── listado.md                     (generic list viewer + PDF export)
+    ├── recog_prendas.md               (garment pickup panel)
+    ├── facturas.md                    (formal supplier invoice form)
+    ├── contabilidad.md                (accounting reports and period locking)
+    ├── imprimir.md                    (Excel + print generation)
+    ├── add_garment.md                 (add garments to existing ticket)
+    └── verifactu/                     (AEAT digital invoicing module)
+        ├── README.md
+        ├── step_by_step_guide.md
+        ├── implementation_summary.md
+        └── rest_api.md
 ```
 
 ---
@@ -39,27 +42,30 @@ docs/
 
 ## Module Documentation
 
+| Document | Description |
+|----------|-------------|
+| [modules/mainwindow.md](./modules/mainwindow.md) | MainWindow methods, save flow, column indices |
+| [modules/sql_lite.md](./modules/sql_lite.md) | DB API function reference and usage patterns |
+| [modules/listado.md](./modules/listado.md) | List viewer, InsertNewItem, GenListado |
+| [modules/recog_prendas.md](./modules/recog_prendas.md) | Garment pickup operations and table indices |
+| [modules/facturas.md](./modules/facturas.md) | Supplier invoice form fields and validation |
+| [modules/contabilidad.md](./modules/contabilidad.md) | Accounting report modes and period locking |
+| [modules/imprimir.md](./modules/imprimir.md) | Excel/print flow and layout modes |
+| [modules/add_garment.md](./modules/add_garment.md) | Add-garment workflow and validation |
+
 ### Verifactu — AEAT digital invoicing
 
 | Document | Description | Read time |
 |----------|-------------|-----------|
-| [README.md](./modules/verifactu/README.md) | Overview, quick start, status | 3 min |
-| [INDEX.md](./modules/verifactu/INDEX.md) | Navigation map and reading paths | 3 min |
-| [GUIA_PASO_A_PASO.md](./modules/verifactu/GUIA_PASO_A_PASO.md) | Complete implementation guide | 45 min |
-| [RESUMEN_IMPLEMENTACION.md](./modules/verifactu/RESUMEN_IMPLEMENTACION.md) | Architecture, DB schema SQL, roadmap | 20 min |
-| [VERIFACTU_REST_API.md](./modules/verifactu/VERIFACTU_REST_API.md) | REST API complete field reference | 15 min |
-| [EJEMPLO_IMPLEMENTACION.cpp](../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) | 10+ practical code examples | 5–10 min |
-
-## Development Notes
-
-| Document | Description |
-|----------|-------------|
-| [planning_verifactu.md](./development/planning_verifactu.md) | Historical Verifactu planning notes (raw) |
+| [README.md](./modules/verifactu/README.md) | Overview, architecture, key interface, status | 5 min |
+| [step_by_step_guide.md](./modules/verifactu/step_by_step_guide.md) | Complete implementation guide | 45 min |
+| [implementation_summary.md](./modules/verifactu/implementation_summary.md) | Class reference, DB schema SQL, security, roadmap | 10 min |
+| [rest_api.md](./modules/verifactu/rest_api.md) | REST API complete field reference | 15 min |
 
 ---
 
 ## Adding documentation for a new module
 
-1. Create `docs/modules/<module-name>/` folder
-2. Add at minimum a `README.md` with: description, source file list, quick start
+1. Create `docs/modules/<module-name>.md` (or a subfolder for complex modules)
+2. Add at minimum: description, source file list, key interface, integration notes
 3. Register the new doc in the tables above and in `docs/INDEX.md`
