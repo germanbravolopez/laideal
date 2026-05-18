@@ -42,6 +42,12 @@
 | ServiceKey in plaintext INI | `src/verifactu/verifactuconfig.h` | Consider QSettings encryption |
 | No retry for failed Verifactu calls | `src/verifactu/` | Planned |
 | No Verifactu configuration UI | `src/verifactu/` | Planned |
+| Search fails for names with Spanish accents (tildes) | `src/sql_lite/sql_lite.cpp`, `src/recog_prendas/` | `selectFromWhereLike` and related search functions may not match names containing á, é, í, ó, ú, ñ stored in the DB. Audit all search paths and fix collation or normalization. Likely related to the issue below. |
+| Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/Listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. Also: `RecogPrendas` search by name does not find them, but search by ticket number does. Investigate query differences — likely a collation or encoding mismatch, possibly the same root cause as the tilde issue. |
+| Price calculation for size-dependent garments (cortinas) may be incorrect | `src/app/mainwindow.cpp` (`setGarmentPrice`), `src/add_garment/add_garment.cpp` | When the size is not an exact value, verify that the price rounds or truncates correctly and matches what is shown on the receipt. |
+| `RecogPrendas`: landline phone (`tel_fijo`) not shown | `src/recog_prendas/recog_prendas.h/cpp` | Add `tel_fijo` from `clientes` table alongside client name, so staff can call the client directly from the pickup panel. |
+| Establishment receipt copy: remove general conditions at the end | `src/imprimir/imprimir.cpp` | The copy printed for the shop should not include the general conditions block. Only the client copy needs it. |
+| Client receipt: replace general conditions with data-protection notice | `src/imprimir/imprimir.cpp` | Reduce the general conditions text and add a GDPR/data-protection legend required by Spanish law. |
 
 ---
 

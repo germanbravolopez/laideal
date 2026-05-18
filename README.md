@@ -1,87 +1,102 @@
 # La Ideal
-La Ideal laundry management software
 
-## Main Features
-
-- Garment and client management
-- Accounting system
-- **Verifactu integration for AEAT digital invoicing** (v8.0+)
-- Report generation
-- Local SQLite database
-
-## Verifactu — Digital Invoice System (v8.0+)
-
-From version 8.0, LAIDEAL includes full integration with **Verifactu**, the mandatory AEAT system for real-time digital invoice submission.
-
-### What is Verifactu?
-
-Verifactu is the AEAT system for businesses not using SII. It allows submitting digital invoices in real time to the tax authority.
-
-**Mandatory from:**
-- Businesses: 1 January 2026
-- Self-employed: 1 July 2026
-
-### Implemented features
-
-- Submit invoices to AEAT in real time
-- Automatic QR code generation
-- All invoice types (F1, F2, F3, R1)
-- TESTING and PRODUCTION environments
-- Invoice cancellation and correction
-- Robust error handling
-
-### Using Verifactu in LAIDEAL
-
-```cpp
-// Submit an invoice to AEAT
-VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
-    "F001",                 // invoice number
-    QDate::currentDate(),   // date
-    "B12345678",            // buyer NIF
-    "Cliente SA",           // buyer name
-    100.0,                  // tax base
-    21.0                    // VAT rate
-);
-
-if (result.isSuccess()) {
-    qDebug() << "CSV:" << result.csv;  // security code
-    // QR shown to client via showQrToClient(result)
-}
-```
-
-### Verifactu documentation
-
-- [Verifactu module README](./docs/modules/verifactu/README.md)
-- [Step-by-step guide](./docs/modules/verifactu/step_by_step_guide.md)
-- [REST API reference](./docs/modules/verifactu/rest_api.md)
-- [Implementation summary](./docs/modules/verifactu/implementation_summary.md)
-- [Code examples](./src/verifactu/implementation_example.cpp)
-
-### Requirements for Verifactu
-
-1. Obtain a **ServiceKey** at: https://facturae.irenesolutions.com/verifactu/go
-2. Internet connection
-3. Correct company data (NIF, name)
-
-## Documentation
-
-All technical documentation is in the [`docs/`](./docs/README.md) folder.
+Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt** (5.15+/6.x) on Windows, using a local SQLite database.
 
 ---
 
-## Deploy application
-- [windeployqt](https://medium.com/swlh/how-to-deploy-your-qt-cross-platform-applications-to-windows-operating-system-by-using-windeployqt-a7cd5663d46e)
-- [Tutorial to create installer](https://www.youtube.com/watch?v=Y9Ovo2XJHDs)
-- Application to create installer: [Inno Setup](https://jrsoftware.org/isinfo.php)
+## Features
+
+- **Client management** — directory with name, phone, and address
+- **Garment receipts** — multi-garment tickets per client visit; quantity, size, service, and price per line
+- **Garment pickup** — mark items as paid and collected; edit sizes, prices, and observations; split garment rows
+- **Printing** — receipt and full invoice layouts built as Excel files and printed via an external script
+- **Supplier invoices** — invoice entry form with automatic IVA/base calculation
+- **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
+- **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
+- **Verifactu** — AEAT mandatory digital invoicing integration (v8.0+, required for Spanish businesses from 2026)
+
+---
+
+## Requirements
+
+| Dependency | Version |
+|------------|---------|
+| Qt | 5.15+ or 6.x |
+| Qt modules | Widgets, Sql, PrintSupport, Network |
+| CMake | 3.5+ |
+| Compiler | C++17-compatible (MSVC or MinGW) |
+| OS | Windows 10 / 11 |
+
+---
+
+## Build
+
+```bash
+git clone <repo-url>
+cd laideal
+cmake -B build
+cmake --build build --config Release
+```
+
+Or open `CMakeLists.txt` directly in Qt Creator and build with the *Release* configuration.
+
+---
+
+## Configuration
+
+The following items require manual setup on each machine:
+
+| Item | Where | Notes |
+|------|-------|-------|
+| Database path | `src/sql_lite/sql_lite.h` (`DB_PATH`) | Hardcoded — update to local path |
+| App icon path | `src/app/main.cpp` | Hardcoded — update to local path |
+| Verifactu ServiceKey | External `.ini` file | Obtain at https://facturae.irenesolutions.com/verifactu/go |
+| Verifactu company NIF | `src/verifactu/verifactuintegration.cpp` | Set real NIF for production use |
+
+---
+
+## Documentation
+
+Full technical documentation lives in [`docs/`](./docs/README.md).
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](./docs/architecture.md) | Module overview, DB schema, data flow, known issues |
+| [Module docs](./docs/README.md) | One reference page per module |
+| [Verifactu](./docs/modules/verifactu/README.md) | AEAT digital invoicing — setup, API, DB schema |
+| [Progress tracker](./docs/progress_tracker.md) | Open issues, blocking items, roadmap |
+| [Quick-find index](./docs/INDEX.md) | Every file, function, concept — Ctrl+F entry point |
+
+---
+
+## Known issues
+
+See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Blocking issues for the current release are at the top.
+
+---
+
+## Deploy
+
+Package the application for distribution using **windeployqt** and **Inno Setup**:
+
+- [windeployqt guide](https://medium.com/swlh/how-to-deploy-your-qt-cross-platform-applications-to-windows-operating-system-by-using-windeployqt-a7cd5663d46e)
+- [Inno Setup installer tutorial](https://www.youtube.com/watch?v=Y9Ovo2XJHDs)
+- Installer tool: [Inno Setup](https://jrsoftware.org/isinfo.php)
 
 ## Release procedure
 
-1. Update release number in `laideal/CMakeLists.txt`
-2. Update release notes
-3. Run application in Qt with "Release" option
-4. Close Qt
-5. Open a Qt bash with admin rights
+1. Update the version number in `CMakeLists.txt`
+2. Update `releases_notes.txt`
+3. Build with the *Release* configuration in Qt Creator
+4. Close Qt Creator
+5. Open a Qt command prompt with administrator rights
 6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
-7. `deploy_laideal_run_in_qt_cmd.bat`
-8. Set number of release, for example: "r4.2"
-9. Change icon after installed
+7. Run `deploy_laideal_run_in_qt_cmd.bat`
+8. Enter the release tag when prompted (e.g. `r8.0`)
+9. Update the application icon after installation if needed
+
+---
+
+## Version history
+
+See [`releases_notes.txt`](./releases_notes.txt).
