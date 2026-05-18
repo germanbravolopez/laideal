@@ -65,7 +65,7 @@
 
 ---
 
-### 4. **[EJEMPLO_IMPLEMENTACION.cpp](EJEMPLO_IMPLEMENTACION.cpp)** - Código Práctico
+### 4. **[EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp)** - Código Práctico
 **Contenido**: 10+ ejemplos funcionales
 **Objetivo**: Ver código real de cada caso de uso
 **Tiempo**: 5-10 minutos por ejemplo
@@ -181,7 +181,7 @@ Si aún no: Revisar logs qDebug()
 | [README.md](README.md) | Todos | Todos | 2 min | Overview |
 | [GUIA_PASO_A_PASO.md](GUIA_PASO_A_PASO.md) | **Implementadores** | Cualquiera | 45 min | ⭐ Implementación completa |
 | [RESUMEN_IMPLEMENTACION.md](RESUMEN_IMPLEMENTACION.md) | **Arquitectos** | Avanzado | 20 min | Diseño técnico |
-| [EJEMPLO_IMPLEMENTACION.cpp](EJEMPLO_IMPLEMENTACION.cpp) | **Programadores** | Intermedio+ | 10 min/caso | Código funcional |
+| [EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) | **Programadores** | Intermedio+ | 10 min/caso | Código funcional |
 
 ---
 

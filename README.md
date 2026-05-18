@@ -51,16 +51,29 @@ if (result.isSuccess()) {
 
 ### Documentación Verifactu
 
-- 📖 [README de Verifactu](./src/verifactu/README.md)
-- 📚 [Guía Paso a Paso](./src/verifactu/GUIA_PASO_A_PASO.md)
+- 📖 [README de Verifactu](./docs/modules/verifactu/README.md)
+- 🗺️ [Índice de Documentación](./docs/modules/verifactu/INDEX.md)
+- 📚 [Guía Paso a Paso](./docs/modules/verifactu/GUIA_PASO_A_PASO.md)
+- 🔌 [Referencia API REST](./docs/modules/verifactu/VERIFACTU_REST_API.md)
+- 📋 [Resumen de Integración](./docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md)
 - 💡 [Ejemplos de Implementación](./src/verifactu/EJEMPLO_IMPLEMENTACION.cpp)
-- 📋 [Resumen de Integración](./src/verifactu/RESUMEN_IMPLEMENTACION.md)
 
 ### Requisitos para Verifactu
 
 1. Obtener **ServiceKey** en: https://facturae.irenesolutions.com/verifactu/go
 2. Conexión a Internet
 3. Datos correctos de tu empresa (NIF, nombre)
+
+## Documentación
+
+Toda la documentación técnica está en la carpeta [`docs/`](./docs/README.md).
+
+| Sección | Descripción |
+|---------|-------------|
+| [docs/modules/verifactu/](./docs/modules/verifactu/README.md) | Módulo de facturación electrónica AEAT |
+| [docs/development/](./docs/development/planning_verifactu.md) | Notas de planificación interna |
+
+---
 
 ## Deploy application
 - [windeployqt](https://medium.com/swlh/how-to-deploy-your-qt-cross-platform-applications-to-windows-operating-system-by-using-windeployqt-a7cd5663d46e)

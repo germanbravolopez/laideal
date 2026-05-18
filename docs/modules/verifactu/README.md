@@ -12,24 +12,27 @@ Este módulo integra **Verifactu**, el nuevo sistema de la AEAT para emitir fact
 
 1. **Compilar**: El módulo ya está integrado en CMakeLists.txt
 2. **Leer**: [GUIA_PASO_A_PASO.md](./GUIA_PASO_A_PASO.md) para implementación completa
-3. **Consultar**: [EJEMPLO_IMPLEMENTACION.cpp](./EJEMPLO_IMPLEMENTACION.cpp) para código de ejemplo
+3. **Consultar**: [EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp) para código de ejemplo
 
 ---
 
 ## 📦 Archivos del Módulo
 
 ```
-src/verifactu/
+src/verifactu/                         (código fuente)
 ├── verifactuconfig.h/cpp         ✓ Configuración
 ├── verifactuinvoice.h/cpp        ✓ Modelos de factura
 ├── verifactumanager.h/cpp        ✓ Gestor API REST
 ├── verifactuintegration.h/cpp    ✓ Integración simplificada
 ├── CMakeLists.txt                ✓ Configuración de build
-├── INDEX.md                      ✓ Mapa de documentación
+└── EJEMPLO_IMPLEMENTACION.cpp    ✓ Ejemplos de código
+
+docs/modules/verifactu/               (documentación)
 ├── README.md                     ✓ Este archivo (overview)
+├── INDEX.md                      ✓ Mapa de documentación
 ├── GUIA_PASO_A_PASO.md           ✓ Guía completa de implementación
 ├── RESUMEN_IMPLEMENTACION.md     ✓ Detalles técnicos y roadmap
-└── EJEMPLO_IMPLEMENTACION.cpp    ✓ Ejemplos de código
+└── VERIFACTU_REST_API.md         ✓ Referencia completa de la API REST
 ```
 
 ---
@@ -61,10 +64,11 @@ Abre **INDEX.md** para:
 
 | Documento | Propósito | Tiempo |
 |-----------|-----------|--------|
-| **INDEX.md** ⭐ | Guía de navegación (LEE ESTO PRIMERO) | 3 min |
-| **GUIA_PASO_A_PASO.md** | Implementación completa paso a paso | 45 min |
-| **RESUMEN_IMPLEMENTACION.md** | Detalles técnicos, DB schema, roadmap | 20 min |
-| **EJEMPLO_IMPLEMENTACION.cpp** | 10+ ejemplos de código práctico | 5-10 min |
+| **[INDEX.md](./INDEX.md)** ⭐ | Guía de navegación (LEE ESTO PRIMERO) | 3 min |
+| **[GUIA_PASO_A_PASO.md](./GUIA_PASO_A_PASO.md)** | Implementación completa paso a paso | 45 min |
+| **[RESUMEN_IMPLEMENTACION.md](./RESUMEN_IMPLEMENTACION.md)** | Detalles técnicos, DB schema, roadmap | 20 min |
+| **[VERIFACTU_REST_API.md](./VERIFACTU_REST_API.md)** | Referencia completa de campos de la API | 15 min |
+| **[EJEMPLO_IMPLEMENTACION.cpp](../../../src/verifactu/EJEMPLO_IMPLEMENTACION.cpp)** | 10+ ejemplos de código práctico | 5-10 min |
 
 ---
 
