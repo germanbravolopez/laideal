@@ -818,3 +818,18 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
                                  "Los siguientes recibos tienen hashes duplicados: " + duplicatedTicketsS.join(", "),
                                  QMessageBox::Ok, QMessageBox::Ok);
 }
+
+void MainWindow::on_actionAnular_factura_verifactu_triggered()
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        QMessageBox::warning(this, "Verifactu no configurado",
+                             "Verifactu no está configurado correctamente.\n"
+                             "Configura las credenciales en Archivo → Configuración.",
+                             QMessageBox::Ok);
+        return;
+    }
+    CancelInvoiceDialog dlg(this);
+    dlg.db = db;
+    dlg.m_verifactu = m_verifactuIntegration;
+    dlg.exec();
+}

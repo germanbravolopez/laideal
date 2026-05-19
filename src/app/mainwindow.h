@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QStyleFactory>
 #include "verifactuintegration.h"
+#include "cancelinvoicedialog.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -82,6 +83,7 @@ private slots:
     void cleanDatabase(bool print);
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
+    void on_actionAnular_factura_verifactu_triggered();
 
 private:
     Ui::MainWindow *ui;

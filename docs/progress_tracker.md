@@ -29,8 +29,9 @@ No open blocking issues. All three previous blockers resolved:
   - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_settings.json`
 - [ ] QR on printed receipt — add Verifactu QR image to the Excel receipt layout (`src/imprimir/imprimir.cpp`)
 - [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
-- [ ] Invoice cancellation — test cancellation flow via `cancelInvoice()` / `VerifactuManager::cancelInvoice()`; verify the rectified invoice CSV is returned and stored
+- [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
 - [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
+- [ ] Logging mechanism — implement a persistent logging system for Verifactu submissions to help debug customer issues (`src/verifactu/` or a new `src/logging/` module)
 
 ---
 
@@ -38,7 +39,6 @@ No open blocking issues. All three previous blockers resolved:
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Logging mechanism | ? | Implement a logging system for the verifactu logs, to be able to debug laideal's cutomers problems |
 | Streamline build and deploy from CLI | `CMakeLists.txt`, root scripts | Add a single command (script or CMake target) to configure, build, and deploy the release `.exe` with all Qt dependencies — replacing the current manual Qt Creator / cmake-gui workflow. |
 | GitHub Actions CI/CD pipeline | `.github/workflows/` | Set up a Windows runner that builds on every push/PR (CMake + MinGW), runs tests, and optionally produces a release artifact. Requires a self-hosted runner or a cross-compile setup since the app targets Windows. |
 | Unit and integration tests | `tests/` | Add a test suite (Qt Test or Catch2) covering at minimum: `sql_lite` free functions, `VerifactuManager::processResponse()` response parsing, `MySortFilterProxyModel` diacritic filtering, and price calculation logic in `setGarmentPrice`. |
@@ -54,6 +54,13 @@ No open blocking issues. All three previous blockers resolved:
 ---
 
 ## Completed Milestones
+
+### Invoice cancellation — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `CancelInvoiceDialog` added to `src/app/` — search ticket by number, show cliente/fecha/importe/CSV/estado, enable cancel only when `estado == "ENVIADA"`
+- [x] `Herramientas → Anular factura Verifactu…` menu action opens the dialog; disabled with warning if Verifactu not configured
+- [x] On AEAT confirmation: updates `ingresos` rows (`verifactu_estado = 'ANULADA'`, `verifactu_timestamp = now`, clears `verifactu_error`)
+- [x] `VerifactuManager::cancelInvoice()` fixed to include `CompanyName` in cancel JSON — required by AEAT API
+- [x] AEAT error 3002 "No existe el registro de facturación" diagnosed: TESTING environment purges old records; must cancel a freshly-submitted invoice in the same session
 
 ### RecogPrendas UX + Listado fixes — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `showQrToClient()` removed from `MainWindow` — QR dialog after invoice submit was disruptive; Verifactu info is now accessible in `RecogPrendas` instead

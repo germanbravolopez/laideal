@@ -13,6 +13,8 @@ add_executable(laideal
     mainwindow.ui
     mainwindow.h
     mainwindow.cpp
+    cancelinvoicedialog.h
+    cancelinvoicedialog.cpp
     main.cpp
     ${EXE_SOURCES}
 )

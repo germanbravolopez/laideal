@@ -2,7 +2,7 @@
 
 AEAT mandatory digital invoicing integration (required for Spanish businesses from 2026). Submits invoices to AEAT in real time, receives a CSV security code, and generates a client QR code.
 
-**Status**: TESTING confirmed (CSV received from AEAT). Pending: DB persistence, QR on receipt, production credentials.
+**Status**: TESTING confirmed — submit and cancel both working. DB persistence done. Pending: QR on printed receipt, production credentials.
 
 ## Source files
 
@@ -40,16 +40,25 @@ VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
 // Submit a full (F1) invoice — requires buyer NIF
 VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
     invoiceNumber, date, buyerNIF, buyerName, taxBase, 21.0, description);
+
+// Cancel a previously submitted invoice
+VerifactuResult result = m_verifactuIntegration->cancelInvoice(invoiceNumber, invoiceDate);
+// On success: update ingresos verifactu_estado = 'ANULADA'
+// Note: cancel JSON must include CompanyName (emitter name) — required by AEAT API
 ```
 
-## Configuration files (not in source control)
+## Configuration (not in source control)
 
-| File | Content | Example |
-|------|---------|---------|
-| `~/.laideal_cfg` | Emitter NIF and name | `nif=12345678A` / `name=La Ideal SL` |
-| `~/.verifactu_key` | API service key (one line) | `abc123...` |
+All Verifactu credentials are stored in `~/.laideal_settings.json` (managed by `AppSettings`):
 
-`initialize()` returns `false` and shows a warning if either file is missing or incomplete.
+| Key | Content |
+|-----|---------|
+| `verifactu.nif` | Emitter NIF |
+| `verifactu.name` | Emitter name (`CompanyName` sent to AEAT) |
+| `verifactu.serviceKey` | API service key |
+| `verifactu.production` | `true` = PRODUCTION, `false` = TESTING |
+
+Editable from Archivo → Configuración… → Verifactu tab. `initialize()` returns `false` and shows a non-fatal warning if NIF or name is empty.
 
 ## Environments
 
@@ -75,12 +84,9 @@ The `submitInvoice` response includes all of these in `Return`:
 
 ## Open issues
 
-- CSV and QR not persisted to DB — `ingresos` needs 5 new columns (see progress tracker)
-- `processResponse()` does not yet capture `QrCode` from `submitInvoice` response — currently only captured in `generateQRCode()`; merge the logic
-- QR not added to printed receipt
-- QR view and validation link not shown in RecogPrendas
-- No retry on network failure (planned)
-- No configuration UI (planned)
+- QR not added to printed receipt (`src/imprimir/imprimir.cpp`)
+- No retry on network failure
+- No handling for failed submissions at save time (retry strategy, user notification)
 
 ## Documentation
 

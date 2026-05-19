@@ -22,6 +22,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 | `saveTicket(verifactuResult)` | Inserts N garment rows into `ingresos` including all 5 `verifactu_*` columns |
 | `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir` dialog |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
+| `on_actionAnular_factura_verifactu_triggered()` | Opens `CancelInvoiceDialog`; shows warning if Verifactu not configured |
 
 ## Table column indices (mainwindow.h)
 
@@ -40,7 +41,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 on_bb_save_reset_clicked(Save)   — Qt auto-connect slot
   ├── validateTicket()
   ├── checkClientData()
-  ├── verifactuSubmitInvoice() → showQrToClient() on success
+  ├── verifactuSubmitInvoice()
   │     returns VerifactuResult (SUCCESS / ERROR / INVALID_CONFIG)
   ├── saveTicket(verifactuResult)  — persists all 5 verifactu_* columns
   ├── [if AppSettings::enablePrinting()] printRecibo()
@@ -51,7 +52,9 @@ on_bb_save_reset_clicked(Save)   — Qt auto-connect slot
 ## Child windows
 
 Opened via menu actions. Each child holds its own `db` reference set by `MainWindow` at open time:
-`Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`
+`Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`, `CancelInvoiceDialog`
+
+`CancelInvoiceDialog` (`src/app/cancelinvoicedialog.h/cpp`) is a modal dialog (no `.ui` file) opened from Herramientas → Anular factura Verifactu. It searches `ingresos` by ticket number, shows Verifactu details, calls `VerifactuIntegration::cancelInvoice()`, and on success updates `verifactu_estado`, `verifactu_timestamp`, and `verifactu_error` for all rows of that ticket.
 
 ## Known issues
 

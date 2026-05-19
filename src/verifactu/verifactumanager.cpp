@@ -159,6 +159,7 @@ VerifactuResult VerifactuManager::cancelInvoice(const QString &invoiceNumber, co
     cancelJson["InvoiceID"] = invoiceNumber;
     cancelJson["InvoiceDate"] = invoiceDate.toString(Qt::ISODate);
     cancelJson["SellerID"] = sellerNIF;
+    cancelJson["CompanyName"] = m_config->getEmitterName();
     cancelJson["ServiceKey"] = m_config->getServiceKey();
 
     QJsonDocument doc(cancelJson);

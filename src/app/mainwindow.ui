@@ -653,6 +653,8 @@ prenda</string>
     <addaction name="actionRevertir_contabilidad"/>
     <addaction name="separator"/>
     <addaction name="actionAnadir_nuevas_prendas"/>
+    <addaction name="separator"/>
+    <addaction name="actionAnular_factura_verifactu"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -840,6 +842,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Crear hashes para los recibos que no tengan ya un hash en ingresos</string>
+   </property>
+  </action>
+  <action name="actionAnular_factura_verifactu">
+   <property name="text">
+    <string>Anular factura Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
    </property>
   </action>
  </widget>
