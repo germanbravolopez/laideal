@@ -334,17 +334,27 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
     int resultCode = obj.value("ResultCode").toInt(-1);
 
     if (resultCode == 0) {
-        result.status = VerifactuResult::SUCCESS;
-
         if (isQrRequest && obj.contains("Return")) {
+            result.status = VerifactuResult::SUCCESS;
             result.qrCode = decodeImageFromBase64(obj.value("Return").toString());
         } else if (obj.contains("Return")) {
             QJsonObject ret = obj.value("Return").toObject();
-            result.csv           = ret.value("CSV").toString();
-            result.validationUrl = ret.value("ValidationUrl").toString();
-            QString qrBase64     = ret.value("QrCode").toString();
-            if (!qrBase64.isEmpty())
-                result.qrCode = decodeImageFromBase64(qrBase64);
+            // ResultCode 0 can still carry an invoice-level error in Return.ErrorCode
+            QString invoiceError = ret.value("ErrorCode").toString();
+            if (!invoiceError.isEmpty()) {
+                result.status = VerifactuResult::ERROR;
+                result.errorCode = invoiceError;
+                result.errorDescription = ret.value("ErrorDescription").toString("Error desconocido");
+            } else {
+                result.status = VerifactuResult::SUCCESS;
+                result.csv           = ret.value("CSV").toString();
+                result.validationUrl = ret.value("ValidationUrl").toString();
+                QString qrBase64     = ret.value("QrCode").toString();
+                if (!qrBase64.isEmpty())
+                    result.qrCode = decodeImageFromBase64(qrBase64);
+            }
+        } else {
+            result.status = VerifactuResult::SUCCESS;
         }
     } else {
         result.status = VerifactuResult::ERROR;
