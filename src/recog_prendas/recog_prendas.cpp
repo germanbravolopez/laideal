@@ -45,6 +45,12 @@ void RecogPrendas::resetAllContents()
     ui->le_total_price->clear();
     ui->pb_payment->setChecked(false);
     ui->pb_state->setChecked(false);
+    ui->pb_payment->setEnabled(false);
+    ui->pb_state->setEnabled(false);
+    ui->pb_pay_all->setEnabled(false);
+    ui->pb_pku_all->setEnabled(false);
+    ui->pb_separ_garm->setEnabled(false);
+    ui->pb_print->setEnabled(false);
     ui->pb_verifactu->setEnabled(false);
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
@@ -463,6 +469,13 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     rowClickedCell = index.row();
     columnClickedCell = index.column();
     updateRowClickedToFields();
+    // Enable action buttons now that a row is selected
+    ui->pb_payment->setEnabled(true);
+    ui->pb_state->setEnabled(true);
+    ui->pb_pay_all->setEnabled(true);
+    ui->pb_pku_all->setEnabled(true);
+    ui->pb_separ_garm->setEnabled(true);
+    ui->pb_print->setEnabled(true);
     // Set clicked cell
     isCellClicked = true;
 }
