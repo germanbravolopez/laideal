@@ -26,11 +26,9 @@ target_link_libraries(laideal
     appsettings
     sql_lite
     imprimir
-    Listado
+    listado
     recog_prendas
-    MySortFilterProxyModel
-    FilterWidget
-    TableView
+    tableview
     contabilidad
     facturas
     add_garment

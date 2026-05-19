@@ -7,6 +7,27 @@ MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
 {
 }
 
+QString MySortFilterProxyModel::removeDiacritics(const QString &text)
+{
+    // Decompose to NFD so accented chars split into base + combining mark,
+    // then strip all combining (non-spacing) marks — handles á,é,í,ó,ú,ñ,ü, etc.
+    QString nfd = text.normalized(QString::NormalizationForm_D);
+    QString result;
+    result.reserve(nfd.size());
+    for (const QChar &c : nfd) {
+        if (c.category() != QChar::Mark_NonSpacing)
+            result += c;
+    }
+    return result;
+}
+
+void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, int column)
+{
+    m_normalizedFilterText = normalizedText;
+    m_filterColumn = column;
+    invalidateFilter();
+}
+
 void MySortFilterProxyModel::setFilterMinimumDate(QDate date)
 {
     minDate = date;
@@ -22,33 +43,27 @@ void MySortFilterProxyModel::setFilterMaximumDate(QDate date)
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
                                               const QModelIndex &sourceParent) const
 {
-    QModelIndex index0 = sourceModel()->index(sourceRow, 0, sourceParent);
-    QModelIndex index1 = sourceModel()->index(sourceRow, 1, sourceParent);
-    QModelIndex index2 = sourceModel()->index(sourceRow, 2, sourceParent);
-    QModelIndex index3 = sourceModel()->index(sourceRow, 3, sourceParent);
-    QModelIndex index4 = sourceModel()->index(sourceRow, 4, sourceParent);
-    QModelIndex index5 = sourceModel()->index(sourceRow, 5, sourceParent);
-    QModelIndex index6 = sourceModel()->index(sourceRow, 6, sourceParent);
-    QModelIndex index7 = sourceModel()->index(sourceRow, 7, sourceParent);
-    QModelIndex index8 = sourceModel()->index(sourceRow, 8, sourceParent);
-    QModelIndex index9 = sourceModel()->index(sourceRow, 9, sourceParent);
+    const QRegularExpression re = filterRegularExpression();
+    const bool hasRegex = !re.pattern().isEmpty();
+    const bool hasNormalized = !m_normalizedFilterText.isEmpty();
 
-    return (sourceModel()->data(index0).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index1).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index2).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index3).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index4).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index5).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index6).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index7).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index8).toString().contains(filterRegularExpression())
-            || sourceModel()->data(index9).toString().contains(filterRegularExpression())
-            );
+    if (!hasRegex && !hasNormalized)
+        return true;
 
-    // Example with use of date ranges
-    //return (sourceModel()->data(index0).toString().contains(filterRegularExpression())
-    //        || sourceModel()->data(index1).toString().contains(filterRegularExpression()))
-    //        && dateInRange(sourceModel()->data(index2).toDate());
+    int colCount = qMin(sourceModel()->columnCount(), 10);
+    for (int c = 0; c < colCount; ++c) {
+        QModelIndex idx = sourceModel()->index(sourceRow, c, sourceParent);
+        QString cellText = sourceModel()->data(idx).toString();
+
+        if (hasRegex && cellText.contains(re))
+            return true;
+
+        if (hasNormalized && (m_filterColumn == -1 || c == m_filterColumn)) {
+            if (removeDiacritics(cellText).toLower().contains(m_normalizedFilterText))
+                return true;
+        }
+    }
+    return false;
 }
 
 bool MySortFilterProxyModel::lessThan(const QModelIndex &left,

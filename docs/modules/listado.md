@@ -1,4 +1,4 @@
-# Listado (`src/Listado/`)
+# Listado (`src/listado/`)
 
 Generic list-view window. Set `tableName` at runtime to display any DB table. Used by `MainWindow` for `ingresos`, `gastos`, `prendas`, `clientes`, `proveedores`, and `servicios`.
 
@@ -6,9 +6,9 @@ Generic list-view window. Set `tableName` at runtime to display any DB table. Us
 
 | File | Purpose |
 |------|---------|
-| `src/Listado/listado.h/cpp` | Main list viewer |
-| `src/Listado/insertnewitem.h/cpp` | Dialog for inserting a new row into `clientes` |
-| `src/Listado/genlistado.h/cpp` | Dialog for generating garment/expense PDF reports |
+| `src/listado/listado.h/cpp` | Main list viewer |
+| `src/listado/insertnewitem.h/cpp` | Dialog for inserting a new row into `clientes` |
+| `src/listado/genlistado.h/cpp` | Dialog for generating garment/expense PDF reports |
 
 ## Key interface
 
@@ -34,9 +34,14 @@ signals:
 
 - Add / delete rows via menu actions
 - Text filter via `FilterWidget` (backed by `MySortFilterProxyModel`)
+- **Diacritic-insensitive search**: typing "garcia" matches "García". Implemented via `MySortFilterProxyModel::setNormalizedFilter` called from `textFilterChanged()`.
 - PDF export via `GenListado` dialog (`actionGenerar_pdf_con_el_listado`)
-- Inline cell editing via double-click
+- Inline cell editing via double-click; locked rows (`edit_lock=1`) show a warning
 - Auto-resize window to table content
+
+## Dependencies (CMake)
+
+`listado` links against the `tableview` library as PUBLIC, which exposes `FilterWidget`, `MySortFilterProxyModel`, `TableView`, `NumberFormatDelegate`, and `TextColorDelegate` to consumers of `listado`.
 
 ## Sub-classes
 
@@ -44,6 +49,4 @@ signals:
 `QDialog` for adding a new client row. Fields: name, landline, mobile, address. Calls `insertNewItemToTable(db, ..., "clientes")` on accept.
 
 ### GenListado
-`QDialog` for generating garment or expense PDF reports. Configurable by year and grouping mode (by date or by supplier). Generates HTML and renders to PDF via `QTextDocument` + `QPrinter`.
-
-Output path is hardcoded to `C:/Users/rocio/OneDrive/Desktop/Tintoreria/...` (known issue — same as DB path).
+`QDialog` for generating garment or expense PDF reports. Configurable by year and grouping mode (by date or by supplier). Generates HTML and renders to PDF via `QTextDocument` + `QPrinter`. Output paths are read from `AppSettings` (`listadosPrendasPath`, `listadosGastosPath`).

@@ -33,8 +33,9 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |
 | Ticket save flow | `src/app/mainwindow.cpp` (`saveTicket`) |
 | All DB free functions | `src/sql_lite/sql_lite.h` / `.cpp` |
-| Generic list viewer | `src/Listado/listado.h` / `.cpp` |
+| Generic list viewer | `src/listado/listado.h` / `.cpp` |
 | Garment pickup panel | `src/recog_prendas/recog_prendas.h` / `.cpp` |
+| Table view utilities (TableView, FilterWidget, MySortFilterProxyModel, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Formal invoices form | `src/facturas/facturas.h` / `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` / `.cpp` |
 | Print + Excel generation | `src/imprimir/imprimir.h` / `.cpp` |
@@ -55,7 +56,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 | `docs/progress_tracker.md` | What's done, in progress, open issues |
 | `docs/AI_agent_instructions.md` | This file |
 | `docs/modules/verifactu/` | Full Verifactu implementation docs (4 files) |
-| `docs/modules/*.md` | Per-module reference docs (MainWindow, sql_lite, Listado, etc.) |
+| `docs/modules/*.md` | Per-module reference docs (MainWindow, sql_lite, listado, recog_prendas, etc.) |
 
 ## Skills — Read Fully When Relevant
 

@@ -49,9 +49,9 @@ Read the full skill file when the skill is relevant to your task.
 | Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
-| Generic list viewer | `src/Listado/listado.h` | `src/Listado/listado.cpp` |
-| List row insert dialog | `src/Listado/insertnewitem.h` | `.cpp` |
-| List data generator | `src/Listado/genlistado.h` | `.cpp` |
+| Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
+| List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |
+| List data generator | `src/listado/genlistado.h` | `.cpp` |
 | Garment pickup panel | `src/recog_prendas/recog_prendas.h` | `.cpp` |
 | Formal invoice form | `src/facturas/facturas.h` | `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` | `.cpp` |
@@ -61,11 +61,11 @@ Read the full skill file when the skill is relevant to your task.
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
-| Sort/filter proxy | `src/MySortFilterProxyModel/mysortfilterproxymodel.h` | `.cpp` |
-| Filter widget | `src/FilterWidget/filterwidget.h` | `.cpp` |
-| Custom table view | `src/TableView/tableview.h` | `.cpp` |
-| Number format delegate | `src/NumberFormatDelegate/numberformatdelegate.h` | `.cpp` |
-| Text colour delegate | `src/TextColorDelegate/textcolordelegate.h` | `.cpp` |
+| Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
+| Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
+| Custom table view | `src/tableview/tableview.h` | `.cpp` |
+| Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
+| Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
 | Excel library | `QXlsx/` (entire directory) | third-party — do not modify |
 
 ## Build Files
@@ -73,7 +73,9 @@ Read the full skill file when the skill is relevant to your task.
 | File | Purpose |
 |------|---------|
 | `CMakeLists.txt` | Root CMake — project 8.0, adds all subdirectories |
-| `src/app/CMakeLists.txt` | Main executable target |
+| `src/app/CMakeLists.txt` | Main executable target (`laideal`) |
+| `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate) |
+| `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |
 
@@ -107,6 +109,8 @@ Read the full skill file when the skill is relevant to your task.
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
+| Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
+| Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Release procedure | Root `README.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema changes (SQL) | `docs/modules/verifactu/implementation_summary.md` |

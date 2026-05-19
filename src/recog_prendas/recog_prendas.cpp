@@ -279,6 +279,7 @@ void RecogPrendas::on_pb_search_clicked()
     resetAllContents();
     if (ui->le_search->text() != "") {
         bool ok = false, totalPriceActive = true;
+        QString nameSearchFilter;
         ui->le_search->text().toUInt(&ok);
         if (ok) {
             if (ui->le_search->text().length() >= 9) {
@@ -339,13 +340,15 @@ void RecogPrendas::on_pb_search_clicked()
                 db.close();
             }
             else {
+                // SQLite LIKE is ASCII-only and won't match García when searching "garcia".
+                // Load all rows and filter client-side so normalization handles diacritics.
                 db.open();
                 QSqlQuery q(db);
-                q.prepare("SELECT * FROM ingresos WHERE cliente LIKE :search");
-                q.bindValue(":search", "%" + ui->le_search->text() + "%");
+                q.prepare("SELECT * FROM ingresos");
                 q.exec();
                 sqlQueryModel->setQuery(std::move(q));
                 db.close();
+                nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
             }
         }
         else
@@ -370,19 +373,24 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         proxyModel = new MySortFilterProxyModel(this);
+        if (!nameSearchFilter.isEmpty())
+            proxyModel->setNormalizedFilter(nameSearchFilter, TABLE_CLIENT);
+        // Fetch all source rows before handing to proxy (needed for name search with full SELECT)
+        while (sqlQueryModel->canFetchMore())
+            sqlQueryModel->fetchMore();
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
-        ui->tableView->sortByColumn(0, Qt::AscendingOrder);
+        ui->tableView->sortByColumn(0, Qt::DescendingOrder);
         ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
         ui->tableView->resizeColumnsToContents();
         ui->tableView->resizeRowsToContents();
-        // Fill total_price if enabled
+        // Fill total_price from proxy rows (reflects the filtered set in all search modes)
         if (totalPriceActive) {
             float totalPrice = 0.0;
-            for (int row = 0; row < sqlQueryModel->rowCount(); row++)
-                totalPrice = totalPrice + sqlQueryModel->data(sqlQueryModel->index(row, TABLE_PRICE)).toFloat();
+            for (int row = 0; row < proxyModel->rowCount(); row++)
+                totalPrice += proxyModel->data(proxyModel->index(row, TABLE_PRICE)).toFloat();
             ui->le_total_price->setText(QString::number(totalPrice, 'f', 2));
         }
         else

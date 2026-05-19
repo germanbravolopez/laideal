@@ -35,6 +35,13 @@ public:
     QDate filterMaximumDate() const { return maxDate; }
     void setFilterMaximumDate(QDate date);
 
+    // Sets a plain-text filter that matches diacritic-insensitively.
+    // column: column index to check, or -1 to check all columns (default).
+    void setNormalizedFilter(const QString &normalizedText, int column = -1);
+
+    // Strips Spanish/common diacritics from a string for locale-insensitive comparison.
+    static QString removeDiacritics(const QString &text);
+
     QString table_name;
 
 protected:
@@ -46,6 +53,8 @@ private:
 
     QDate minDate;
     QDate maxDate;
+    QString m_normalizedFilterText;
+    int m_filterColumn = -1;
 };
 
 #endif // MYSORTFILTERPROXYMODEL_H

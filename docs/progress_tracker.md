@@ -46,8 +46,7 @@
 |-------|------|-------|
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Previously in INI, now in JSON — still plaintext; consider encryption |
 | No retry for failed Verifactu calls | `src/verifactu/` | Planned |
-| Search fails for names with Spanish accents (tildes) | `src/sql_lite/sql_lite.cpp`, `src/recog_prendas/` | `selectFromWhereLike` and related search functions may not match names containing á, é, í, ó, ú, ñ stored in the DB. Audit all search paths and fix collation or normalization. Likely related to the issue below. |
-| Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/Listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. Also: `RecogPrendas` search by name does not find them, but search by ticket number does. Investigate query differences — likely a collation or encoding mismatch, possibly the same root cause as the tilde issue. |
+| Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. `RecogPrendas` search by name now uses diacritic-insensitive proxy filtering; investigate whether missing clients have encoding differences in the DB. |
 | Price calculation for size-dependent garments (cortinas) may be incorrect | `src/app/mainwindow.cpp` (`setGarmentPrice`), `src/add_garment/add_garment.cpp` | When the size is not an exact value, verify that the price rounds or truncates correctly and matches what is shown on the receipt. |
 | `RecogPrendas`: landline phone (`tel_fijo`) not shown | `src/recog_prendas/recog_prendas.h/cpp` | Add `tel_fijo` from `clientes` table alongside client name, so staff can call the client directly from the pickup panel. |
 | Establishment receipt copy: remove general conditions at the end | `src/imprimir/imprimir.cpp` | The copy printed for the shop should not include the general conditions block. Only the client copy needs it. |
@@ -56,6 +55,17 @@
 ---
 
 ## Completed Milestones
+
+### Module consolidation + tilde search fix — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] All src subdirectory names lowercased; root `CMakeLists.txt` updated to match
+- [x] Five separate CMake libraries (`FilterWidget`, `MySortFilterProxyModel`, `NumberFormatDelegate`, `TextColorDelegate`, `TableView`) merged into a single `tableview` library — source files stay in their own dirs, all exposed via the `tableview` INTERFACE include path
+- [x] `listado` library renamed to lowercase, now links `tableview` as PUBLIC (propagates headers to consumers)
+- [x] `recog_prendas` and `app` `target_link_libraries` updated — no more references to old individual targets
+- [x] `MySortFilterProxyModel::removeDiacritics()` added — strips Unicode combining marks via NFD decomposition; covers all Spanish accented characters and ñ
+- [x] `MySortFilterProxyModel::setNormalizedFilter(text, column)` added — OR-combined with existing regex filter inside `filterAcceptsRow`; `column = -1` searches all columns
+- [x] `Listado::textFilterChanged` now calls `setNormalizedFilter` so searches without tildes (e.g., "garcia") match names with tildes (e.g., "García")
+- [x] `RecogPrendas` name search changed from SQL `WHERE cliente LIKE` (ASCII-only) to full `SELECT * FROM ingresos` + proxy-model normalized filter on `TABLE_CLIENT` column
+- [x] `RecogPrendas` total-price calculation now sums from the proxy model rows (correct for name search filtered set)
 
 ### Centralised AppSettings + sql_lite refactor — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] New `src/appsettings/` module: `AppSettings` singleton + `SettingsDialog`

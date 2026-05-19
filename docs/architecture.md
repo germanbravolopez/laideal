@@ -6,7 +6,7 @@
 
 ```
 MainWindow (src/app/)
-  ├── Listado           (src/Listado/)          — generic list viewer (all tables)
+  ├── Listado           (src/listado/)           — generic list viewer (all tables)
   ├── RecogPrendas      (src/recog_prendas/)     — garment pickup panel
   ├── Facturas          (src/facturas/)          — formal supplier invoice form
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
@@ -20,11 +20,9 @@ MainWindow (src/app/)
 Shared infrastructure:
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
-  src/MySortFilterProxyModel/     — sort+filter proxy used by all list views
-  src/FilterWidget/               — reusable text filter widget
-  src/TableView/                  — custom QTableView subclass
-  src/NumberFormatDelegate/       — table cell number formatting
-  src/TextColorDelegate/          — table cell text coloring
+  src/tableview/                  — all table-view utility classes (single CMake target):
+                                      TableView, MySortFilterProxyModel, FilterWidget,
+                                      NumberFormatDelegate, TextColorDelegate
   QXlsx/                          — third-party Excel r/w library (do not modify)
 ```
 
@@ -53,16 +51,18 @@ Key methods:
 
 Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OBSE=4`, `PRIC=5`
 
-### Listado (`src/Listado/`)
+### Listado (`src/listado/`)
 Generic list-view window. Set `tableName` property at runtime to display any table.
 Used for: `ingresos`, `gastos`, `prendas`, `clientes`, `proveedores`, `servicios`.
 Features: add row, delete row, text filter (`FilterWidget`), PDF export.
+Search is diacritic-insensitive: typing "garcia" matches "García" via `MySortFilterProxyModel::setNormalizedFilter`.
 Signals `populateClientes()` / `populatePrendas()` back to `MainWindow` after edits.
 
 ### RecogPrendas (`src/recog_prendas/`)
-"Garment pickup" window. Loads all `ingresos` rows into a filterable table view.
+"Garment pickup" window. Loads `ingresos` rows into a filterable table view.
 Operations: mark paid, mark picked up, edit observations, edit size+price, split garment rows.
-Search: by client name and by date range.
+Search modes: by ticket number, by phone, by date, or by client name.
+Name search loads all `ingresos` and filters client-side via `MySortFilterProxyModel::setNormalizedFilter` (diacritic-insensitive — handles García, Jiménez, etc.).
 
 ### Facturas (`src/facturas/`)
 Formal supplier invoice entry form. Distinct from receipts.
@@ -80,6 +80,17 @@ Dialog accepts ticket number, fetches data from `ingresos` via `getTicketInfo()`
 
 ### AddGarment (`src/add_garment/`)
 Adds new garment rows to an existing ticket number already in the database.
+
+### tableview (`src/tableview/`)
+Single CMake library (`tableview`) containing all table-view utility classes. All headers live in the same directory and are exposed via one INTERFACE include path.
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `TableView` | `tableview.h/.cpp` | `QTableView` subclass with context menu (add/delete row) and `doubleClick` signal |
+| `MySortFilterProxyModel` | `mysortfilterproxymodel.h/.cpp` | `QSortFilterProxyModel` subclass; checks all columns against filter regex; also supports diacritic-insensitive plain-text filter via `setNormalizedFilter(text, column)` and `removeDiacritics(text)` static helper |
+| `FilterWidget` | `filterwidget.h/.cpp` | `QLineEdit` with case-sensitivity toggle and pattern-syntax menu (Regex / Wildcard / Fixed) |
+| `NumberFormatDelegate` | `numberformatdelegate.h/.cpp` | `QStyledItemDelegate` that formats numeric cells to 2 decimal places |
+| `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red |
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.
@@ -203,6 +214,7 @@ AEAT QR validation:
 | **DB schema missing Verifactu columns** | `ingresos`/`facturas` tables | High | `ALTER TABLE` SQL in verifactu docs |
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
 | No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap |
+| Clients missing from Listado but present in MainWindow combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Low | Investigate encoding/collation differences between `readColumnFromTable` and `QSqlTableModel`; tilde issue in name search is now fixed separately |
 
 ---
 
