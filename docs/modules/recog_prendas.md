@@ -37,14 +37,61 @@ Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Inp
 
 Name search loads all rows because SQLite LIKE is ASCII-only and cannot match accented characters. The proxy model's `removeDiacritics()` + `toLower()` normalization handles the matching client-side.
 
-## Table column indices (`recog_prendas.h`)
+## Table column indices
 
-`TABLE_TICKET=0`, `TABLE_CLIENT=1`, `TABLE_DATE_RCP=2`, `TABLE_DATE_PAY=3`, `TABLE_DATE_PKU=4`, `TABLE_PRICE=5`, `TABLE_IS_PAYED=6`, `TABLE_STATE=7`, `TABLE_QUANTITY=8`, `TABLE_GARMENT=9`, `TABLE_SIZE=10`, `TABLE_SERVICE=11`, `TABLE_OBSERV=12`, `TABLE_EDIT_LOCK=13`
+Defined in `recog_prendas.h`. `TABLE_HASH` (14) is defined in `imprimir.h` which is included transitively.
+
+| Constant | Index | Column |
+|----------|-------|--------|
+| `TABLE_TICKET` | 0 | n_recibo |
+| `TABLE_CLIENT` | 1 | cliente |
+| `TABLE_DATE_RCP` | 2 | fecha_recepcion |
+| `TABLE_DATE_PAY` | 3 | fecha_pago |
+| `TABLE_DATE_PKU` | 4 | fecha_recogida |
+| `TABLE_PRICE` | 5 | importe |
+| `TABLE_IS_PAYED` | 6 | pagado |
+| `TABLE_STATE` | 7 | estado |
+| `TABLE_QUANTITY` | 8 | cantidad |
+| `TABLE_GARMENT` | 9 | prenda |
+| `TABLE_SIZE` | 10 | size |
+| `TABLE_SERVICE` | 11 | servicio |
+| `TABLE_OBSERV` | 12 | observaciones |
+| `TABLE_EDIT_LOCK` | 13 | edit_lock |
+| `TABLE_HASH` *(imprimir.h)* | 14 | hash |
+| `TABLE_VERIFACTU_CSV` | 15 | verifactu_csv |
+| `TABLE_VERIFACTU_TIMESTAMP` | 16 | verifactu_timestamp |
+| `TABLE_VERIFACTU_ESTADO` | 17 | verifactu_estado |
+| `TABLE_VERIFACTU_ERROR` | 18 | verifactu_error |
+| `TABLE_VERIFACTU_URL_QR` | 19 | verifactu_url_qr |
+
+Columns 14–19 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash) and `on_pb_verifactu_clicked()` (verifactu_*).
+
+## Verifactu info button (`pb_verifactu`)
+
+A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket was submitted to AEAT). Clicking it opens a `QDialog` showing:
+
+- Estado (ENVIADA / ERROR)
+- CSV security code
+- Submission timestamp
+- Error description (if any)
+- Clickable "Abrir en AEAT" link to the `verifactu_url_qr` validation URL
+
+Note: the QR image is not stored in the DB; staff can access it via the AEAT validation link.
+
+## Button enable/disable behaviour
+
+All action buttons start **disabled**. They are enabled when a row is clicked in the table:
+
+| Button | Enabled when |
+|--------|-------------|
+| `pb_payment`, `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print` | Any row is selected |
+| `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
+
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` re-enables the first group; `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
 
 ## Notes
 
 - All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
 - Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
-- The print button opens an `Imprimir` dialog with `isRecibo=true`.
 - `PAY_ALL` and `PKU_ALL` buttons mark all visible rows paid or picked up in one operation.
 - Total price display (`le_total_price`) sums from the proxy model rows, not the raw SQL result, so it always reflects the filtered set.

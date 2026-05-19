@@ -37,7 +37,18 @@ signals:
 - **Diacritic-insensitive search**: typing "garcia" matches "García". Implemented via `MySortFilterProxyModel::setNormalizedFilter` called from `textFilterChanged()`.
 - PDF export via `GenListado` dialog (`actionGenerar_pdf_con_el_listado`)
 - Inline cell editing via double-click; locked rows (`edit_lock=1`) show a warning
-- Auto-resize window to table content
+- Auto-resize window to table content, capped at the current screen's available width (`screen()->availableGeometry().width()`) so the window never extends off-screen
+
+## Data loading strategy (`populateTable`)
+
+`QSqlTableModel` fetches rows lazily in batches of 256. Two strategies are used:
+
+| Table | Strategy | Reason |
+|-------|----------|--------|
+| `ingresos` | SQL-level `ORDER BY n_recibo DESC` — first batch is the most recent 256 rows; older rows load lazily as the user scrolls | `ingresos` can have thousands of rows; loading all upfront is slow |
+| All others | `model->fetchMore()` loop until `canFetchMore()` is false — all rows loaded immediately | Smaller tables where full load is fast and filters need all data |
+
+After the initial load `verticalHeader()->setDefaultSectionSize(rowHeight(0))` locks the compact row height so lazily-fetched rows match the initially-sized rows and don't expand unexpectedly on scroll.
 
 ## Dependencies (CMake)
 

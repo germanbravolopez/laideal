@@ -28,7 +28,7 @@ No open blocking issues. All three previous blockers resolved:
   - DB persistence complete: `verifactu_*` columns added to `ingresos` via `migrateDatabase()`
   - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_settings.json`
 - [ ] QR on printed receipt — add Verifactu QR image to the Excel receipt layout (`src/imprimir/imprimir.cpp`)
-- [ ] QR view in RecogPrendas — show stored CSV, QR image, and AEAT validation link per ticket in `src/recog_prendas/recog_prendas.h/cpp`
+- [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
 - [ ] Invoice cancellation — test cancellation flow via `cancelInvoice()` / `VerifactuManager::cancelInvoice()`; verify the rectified invoice CSV is returned and stored
 - [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
 
@@ -54,6 +54,16 @@ No open blocking issues. All three previous blockers resolved:
 ---
 
 ## Completed Milestones
+
+### RecogPrendas UX + Listado fixes — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `showQrToClient()` removed from `MainWindow` — QR dialog after invoice submit was disruptive; Verifactu info is now accessible in `RecogPrendas` instead
+- [x] `pb_verifactu` button added to `RecogPrendas` — enabled only when selected row has `verifactu_estado` non-empty; opens dialog showing estado, CSV, timestamp, error, and clickable AEAT validation link
+- [x] All action buttons in `RecogPrendas` (`pb_payment`, `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print`, `pb_verifactu`) start disabled; enabled on row selection
+- [x] `ingresos` Listado view now loads most-recent rows first (`ORDER BY n_recibo DESC`) so latest tickets are visible without loading the full table
+- [x] Other tables in Listado use `model->fetchMore()` loop replacing the unreliable scrollbar hack
+- [x] Row height no longer expands on lazy-load: `setDefaultSectionSize(rowHeight(0))` locks compact height after initial `resizeRowsToContents()`
+- [x] Listado window width capped at `screen()->availableGeometry().width()` — prevents window from expanding off-screen when `ingresos` has many columns
+- [x] `TABLE_VERIFACTU_CSV/TIMESTAMP/ESTADO/ERROR/URL_QR` (15–19) added to `recog_prendas.h`; hash + verifactu columns hidden from table view via `setColumnHidden()`
 
 ### Debug mode replaced by AppSettings::enablePrinting() — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `bool debug` member and `on_actionModo_debug_triggered` slot removed from `MainWindow`
