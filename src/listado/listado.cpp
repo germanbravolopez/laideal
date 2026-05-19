@@ -140,20 +140,23 @@ void Listado::populateTable()
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable(tableName);
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
-        // order model before showing data in table
-        model->setSort(0, Qt::AscendingOrder);
+        // For ingresos, fetch most-recent rows first so the first batch is already the latest.
+        // For other tables, ascending order + force-fetch all rows.
+        if (tableName == "ingresos")
+            model->setSort(0, Qt::DescendingOrder);
+        else
+            model->setSort(0, Qt::AscendingOrder);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = tableName;
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
-        // Scroll all the way down and all the way up to get all data populated
-        int previousLength = 0;
-        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
-        while (proxyModel->rowCount() > previousLength) {
-            previousLength = proxyModel->rowCount();
-            verticalScrollBar->setValue(verticalScrollBar->maximum());
+        if (tableName != "ingresos") {
+            // Force-load all rows for smaller tables via fetchMore.
+            while (model->canFetchMore(QModelIndex()))
+                model->fetchMore(QModelIndex());
         }
+        QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
         verticalScrollBar->setValue(verticalScrollBar->minimum());
         // Perform sorting with proxy model
         if (tableName == "gastos")
@@ -179,6 +182,9 @@ void Listado::populateTable()
         // Resize table
         table_listado->resizeColumnsToContents();
         table_listado->resizeRowsToContents();
+        // Lock row height so lazily-loaded rows use the same compact height.
+        if (model->rowCount() > 0)
+            table_listado->verticalHeader()->setDefaultSectionSize(table_listado->rowHeight(0));
     }
     resizeWindowToTable();
 
@@ -188,14 +194,14 @@ void Listado::populateTable()
 
 void Listado::resizeWindowToTable()
 {
-    // Set window size to minimun of size of the table
     int size = 0;
     for (int column = 0; column < table_listado->model()->columnCount(); column++) {
         size += table_listado->columnWidth(column);
     }
-    if (this->width() < size + 40) {
-        this->resize(size + 40, this->height());
-    }
+    int desired = size + 40;
+    int maxWidth = screen()->availableGeometry().width();
+    if (this->width() < desired)
+        this->resize(qMin(desired, maxWidth), this->height());
 }
 
 void Listado::textFilterChanged()
