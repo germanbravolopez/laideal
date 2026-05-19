@@ -218,6 +218,8 @@ void Listado::textFilterChanged()
         options |= QRegularExpression::CaseInsensitiveOption;
     QRegularExpression regularExpression(pattern, options);
     proxyModel->setFilterRegularExpression(regularExpression);
+    // Also set normalized filter so searches without tildes match names that have them
+    proxyModel->setNormalizedFilter(MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
     // Resize table
     table_listado->resizeColumnsToContents();
     table_listado->resizeRowsToContents();

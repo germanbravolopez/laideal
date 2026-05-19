@@ -1,4 +1,4 @@
-add_library(Listado STATIC
+add_library(listado STATIC
     genlistado.ui
     genlistado.h
     genlistado.cpp
@@ -7,17 +7,14 @@ add_library(Listado STATIC
     listado.h
     listado.cpp
 )
-target_link_libraries(Listado
+target_link_libraries(listado
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     Qt${QT_VERSION_MAJOR}::PrintSupport
     sql_lite
     appsettings
-    TableView
-    NumberFormatDelegate
-    TextColorDelegate
-    FilterWidget
-    MySortFilterProxyModel
+    PUBLIC
+    tableview
 )
-target_include_directories(Listado INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(listado INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
