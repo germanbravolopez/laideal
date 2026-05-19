@@ -18,6 +18,14 @@ public:
 
     VerifactuManager *getManager() const { return m_manager; }
 
+    VerifactuResult submitSimplifiedInvoice(
+        const QString &invoiceNumber,
+        const QDate &invoiceDate,
+        double taxBase,
+        double taxRate,
+        const QString &description = QString()
+    );
+
     VerifactuResult createAndSubmitInvoice(
         const QString &invoiceNumber,
         const QDate &invoiceDate,

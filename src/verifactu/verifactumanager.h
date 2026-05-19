@@ -64,6 +64,7 @@ private:
     VerifactuResult m_lastResult;
 
     QNetworkRequest createNetworkRequest(const QString &endpoint) const;
+    void logResponse(const QByteArray &response) const;
     VerifactuResult processResponse(const QByteArray &response, bool isQrRequest = false);
     bool validateConfiguration();
     QString encodeImageToBase64(const QPixmap &pixmap) const;

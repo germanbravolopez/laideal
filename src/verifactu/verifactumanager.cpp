@@ -70,7 +70,7 @@ VerifactuResult VerifactuManager::submitInvoice(const VerifactuInvoice &invoice)
     QByteArray responseData = reply->readAll();
     reply->deleteLater();
 
-    qDebug().noquote() << "Server response:" << QString::fromUtf8(responseData);
+    logResponse(responseData);
     result = processResponse(responseData, false);
     return result;
 }
@@ -290,6 +290,29 @@ QNetworkRequest VerifactuManager::createNetworkRequest(const QString &endpoint) 
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL/" + QString(PROJECT_VERSION));
     return request;
+}
+
+void VerifactuManager::logResponse(const QByteArray &response) const
+{
+    QJsonDocument doc = QJsonDocument::fromJson(response);
+    if (!doc.isObject()) {
+        qDebug().noquote() << "Server response:" << QString::fromUtf8(response);
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+
+    // Truncate QrCode — it's a large base64 BMP that floods the log
+    if (obj.contains("Return") && obj["Return"].isObject()) {
+        QJsonObject ret = obj["Return"].toObject();
+        if (ret.contains("QrCode") && !ret["QrCode"].isNull()) {
+            int len = ret["QrCode"].toString().length();
+            ret["QrCode"] = QString("[base64 BMP, %1 chars]").arg(len);
+            obj["Return"] = ret;
+        }
+    }
+
+    qDebug().noquote() << "Server response:\n" << QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
 }
 
 VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bool isQrRequest)

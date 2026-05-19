@@ -61,3 +61,4 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 - **Preserve insights** — if you discovered something non-obvious about the codebase, document it
 - When adding a new doc file, register it in `docs/INDEX.md` and `docs/README.md`
 - Skills live in `.claude/commands/` — register new skills in `docs/INDEX.md`
+- **Avoid emojis** — do not use emojis in titles or other places

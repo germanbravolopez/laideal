@@ -2,7 +2,7 @@
 
 AEAT mandatory digital invoicing integration (required for Spanish businesses from 2026). Submits invoices to AEAT in real time, receives a CSV security code, and generates a client QR code.
 
-**Status**: Code complete. Pending: DB schema update and production testing.
+**Status**: TESTING confirmed (CSV received from AEAT). Pending: DB persistence, QR on receipt, production credentials.
 
 ## Source files
 
@@ -29,20 +29,27 @@ MainWindow → VerifactuIntegration (facade)
 m_verifactuIntegration = new VerifactuIntegration(this);
 m_verifactuIntegration->initialize();  // warns if not configured — non-fatal
 
-// Submit an invoice
-VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(...);
-// result.status: SUCCESS | PENDING | ERROR | NETWORK_ERROR | INVALID_CONFIG
+// Submit a simplified (F2) invoice — used for laundry retail tickets
+VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
+    ticketNumber, date, taxBase, 21.0, "Servicios de lavanderia");
+// result.status: SUCCESS | ERROR | NETWORK_ERROR | INVALID_CONFIG
+// result.csv:    "A-9VARYQTZTARVU2"  (AEAT security code — persist to DB)
+// result.qrCode: QPixmap             (BMP QR image — add to receipt)
+// result.validationUrl               (AEAT portal link — show in RecogPrendas)
+
+// Submit a full (F1) invoice — requires buyer NIF
+VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
+    invoiceNumber, date, buyerNIF, buyerName, taxBase, 21.0, description);
 ```
 
-## Configuration
+## Configuration files (not in source control)
 
-Loaded from an external `.ini` file via `QSettings`. Not in source control.
+| File | Content | Example |
+|------|---------|---------|
+| `~/.laideal_cfg` | Emitter NIF and name | `nif=12345678A` / `name=La Ideal SL` |
+| `~/.verifactu_key` | API service key (one line) | `abc123...` |
 
-| Key | Description |
-|-----|-------------|
-| `serviceKey` | API key — obtain at https://facturae.irenesolutions.com/verifactu/go |
-| `emitterNIF` | Company NIF (confidential) |
-| `environment` | `TESTING` or `PRODUCTION` |
+`initialize()` returns `false` and shows a warning if either file is missing or incomplete.
 
 ## Environments
 
@@ -53,10 +60,25 @@ Loaded from an external `.ini` file via `QSettings`. Not in source control.
 
 REST API endpoint (both environments): `https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices`
 
+## What the API returns on success
+
+The `submitInvoice` response includes all of these in `Return`:
+
+| Field | Description | Captured |
+|-------|-------------|---------|
+| `CSV` | AEAT security code — must be shown to client and stored | Yes (`result.csv`) |
+| `QrCode` | Base64 BMP image — print on receipt and show in RecogPrendas | Yes (`result.qrCode`) |
+| `ValidationUrl` | AEAT portal URL with all invoice params pre-filled | Yes (`result.validationUrl`) |
+| `QrCodeUrl` | Direct URL to QR image on Irene Solutions server | Not captured |
+| `ExternKey` | Blockchain identifier | Not captured |
+| `StatusResponse` | `"Correcto"` on success | Not captured (ResultCode used instead) |
+
 ## Open issues
 
-- CSV code received from AEAT is not persisted to DB — only printed via `qDebug()`
-- DB schema missing Verifactu columns — see `RESUMEN_IMPLEMENTACION.md` for `ALTER TABLE` SQL
+- CSV and QR not persisted to DB — `ingresos` needs 5 new columns (see progress tracker)
+- `processResponse()` does not yet capture `QrCode` from `submitInvoice` response — currently only captured in `generateQRCode()`; merge the logic
+- QR not added to printed receipt
+- QR view and validation link not shown in RecogPrendas
 - No retry on network failure (planned)
 - No configuration UI (planned)
 

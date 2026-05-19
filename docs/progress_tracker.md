@@ -16,19 +16,27 @@
 - [ ] **Remove temp debug code** in `src/app/mainwindow.cpp` (near top of constructor)
   - Constructor calls `verifactuSubmitInvoice()` then `std::exit(0)`
   - App exits immediately on launch — cannot be used in this state
-- [ ] **Persist Verifactu CSV to database** — the CSV received from AEAT after successful submission is logged via `qDebug()` but not saved anywhere
-  - Needs `ALTER TABLE` to add columns (SQL in `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md`)
-  - Then update `saveTicket()` or `verifactuSubmitInvoice()` to write the CSV
-- [ ] **Add Verifactu columns to DB schema** — `ingresos` (or `facturas`) needs `verifactu_csv`, `verifactu_timestamp`, `verifactu_estado`, `verifactu_error`, `verifactu_url_qr`
+- [ ] **Persist Verifactu response to database** — CSV, timestamp, estado, error, validation URL received from AEAT but not saved anywhere
+  - `ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT`
+  - `ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT`
+  - `ALTER TABLE ingresos ADD COLUMN verifactu_estado TEXT`
+  - `ALTER TABLE ingresos ADD COLUMN verifactu_error TEXT`
+  - `ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT`
+  - Then update `saveTicket()` to write the result after `verifactuSubmitInvoice()`
+- [ ] **Capture `ValidationUrl` and `QrCode` from `submitInvoice()` response** — the API already returns both in the `Return` object but `processResponse()` only extracts `CSV`; update it to also capture `ValidationUrl` and `QrCode` so the QR dialog works without a separate QR generation call
 
 ---
 
 ## In Progress
 
-- [ ] Verifactu integration — code complete, pending production testing
-  - Classes: `VerifactuIntegration`, `VerifactuManager`, `VerifactuConfig`, `VerifactuInvoice`
-  - TESTING environment works; production requires real `ServiceKey` and company NIF
-  - QR dialog shown to user after successful submission
+- [ ] Verifactu integration — TESTING confirmed, pending DB persistence and production testing
+  - `submitSimplifiedInvoice()` confirmed working: F2 invoice, CSV received from AEAT
+  - API also returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response
+  - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_cfg`
+- [ ] QR on printed receipt — add Verifactu QR image to the Excel receipt layout (`src/imprimir/imprimir.cpp`)
+- [ ] QR view in RecogPrendas — show stored CSV, QR image, and AEAT validation link per ticket in `src/recog_prendas/recog_prendas.h/cpp`
+- [ ] Invoice cancellation — test cancellation flow via `cancelInvoice()` / `VerifactuManager::cancelInvoice()`; verify the rectified invoice CSV is returned and stored
+- [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
 
 ---
 
@@ -52,6 +60,14 @@
 ---
 
 ## Completed Milestones
+
+### First successful Verifactu submission — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `submitSimplifiedInvoice()` added to `VerifactuIntegration` for F2 (simplified) invoices — no buyer NIF required, correct for laundry retail
+- [x] Fixed `CompanyName` field name — API requires `CompanyName`, was incorrectly sent as `SellerName`
+- [x] Emitter NIF and name moved out of source code to `~/.laideal_cfg` (key=value, same location as `~/.verifactu_key`)
+- [x] `logResponse()` added to `VerifactuManager` — pretty-prints server JSON with QR blob truncated
+- [x] First confirmed AEAT TESTING submission: invoice `24417`, CSV `A-9VARYQTZTARVU2`, `StatusResponse: Correcto`
+- [x] Confirmed API returns `QrCode`, `ValidationUrl`, and `QrCodeUrl` directly in the `submitInvoice` response
 
 ### Documentation expansion — May 2026
 - [x] Created per-module reference docs for all non-Verifactu modules (`docs/modules/*.md`)

@@ -28,6 +28,51 @@ bool VerifactuIntegration::initialize()
     return true;
 }
 
+VerifactuResult VerifactuIntegration::submitSimplifiedInvoice(
+    const QString &invoiceNumber,
+    const QDate &invoiceDate,
+    double taxBase,
+    double taxRate,
+    const QString &description)
+{
+    VerifactuResult result;
+
+    if (!isConfigured()) {
+        result.status = VerifactuResult::INVALID_CONFIG;
+        result.errorDescription = "Verifactu no está configurado correctamente";
+        m_lastError = result.errorDescription;
+        return result;
+    }
+
+    VerifactuInvoice invoice;
+    invoice.setInvoiceNumber(invoiceNumber);
+    invoice.setInvoiceDate(invoiceDate);
+    invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
+    invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
+    invoice.setSellerName(m_manager->getConfig()->getEmitterName());
+
+    invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
+
+    VerifactuTaxItem taxItem;
+    taxItem.setTaxBase(taxBase);
+    taxItem.setTaxRate(taxRate);
+    taxItem.setTaxAmount(taxBase * taxRate / 100.0);
+
+    invoice.addTaxItem(taxItem);
+    invoice.calculateTotals();
+
+    result = m_manager->submitInvoice(invoice);
+
+    if (result.isSuccess()) {
+        qDebug() << "Invoice submitted successfully. CSV:" << result.csv;
+    } else {
+        m_lastError = result.errorDescription;
+        qWarning() << "Invoice submission failed:" << m_lastError;
+    }
+
+    return result;
+}
+
 VerifactuResult VerifactuIntegration::createAndSubmitInvoice(
     const QString &invoiceNumber,
     const QDate &invoiceDate,
@@ -55,7 +100,7 @@ VerifactuResult VerifactuIntegration::createAndSubmitInvoice(
     invoice.setBuyerNIF(buyerNIF);
     invoice.setBuyerName(buyerName);
 
-    invoice.setDescription(description.isEmpty() ? "Operación de venta" : description);
+    invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
 
     VerifactuTaxItem taxItem;
     taxItem.setTaxBase(taxBase);
@@ -160,21 +205,48 @@ bool VerifactuIntegration::validateEmitterConfiguration()
 
 bool VerifactuIntegration::loadEmitterConfiguration()
 {
-    // TODO: load emitter data from the app's SQLite config table or QSettings
     if (!m_manager) return false;
 
-    QString emitterNIF = "B12345678";           // TODO: real company NIF
-    QString emitterName = "Mi Empresa SL";      // TODO: real company name
-    QString emitterCommercialName = "Mi Empresa";
+    // Load emitter NIF and name from ~/.laideal_cfg
+    // File format — one key=value pair per line:
+    //   nif=B12345678
+    //   name=La Ideal SL
+    QString emitterNIF;
+    QString emitterName;
 
-    // Prefer environment variable so secrets stay out of source
-    const char* envNIF = std::getenv("VERIFACTU_NIF");
-    if (envNIF) {
-        emitterNIF = QString::fromUtf8(envNIF);
-        qDebug() << "NIF loaded from environment variable:" << emitterNIF;
+    QString cfgFilePath = QDir::homePath() + "/.laideal_cfg";
+    QFile cfgFile(cfgFilePath);
+
+    if (cfgFile.exists()) {
+        if (cfgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream stream(&cfgFile);
+            while (!stream.atEnd()) {
+                QString line = stream.readLine().trimmed();
+                if (line.startsWith("nif="))
+                    emitterNIF = line.mid(4).trimmed();
+                else if (line.startsWith("name="))
+                    emitterName = line.mid(5).trimmed();
+            }
+            cfgFile.close();
+            qDebug() << "Emitter config loaded from file:" << cfgFilePath;
+        } else {
+            qWarning() << "Could not open config file:" << cfgFilePath;
+        }
+    } else {
+        qWarning() << "Config file not found:" << cfgFilePath;
+        qWarning() << "Instructions:";
+        qWarning() << "  Create a file at:" << cfgFilePath;
+        qWarning() << "  with two lines:";
+        qWarning() << "    nif=B12345678";
+        qWarning() << "    name=La Ideal SL";
     }
 
-    m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterCommercialName);
+    if (emitterNIF.isEmpty() || emitterName.isEmpty()) {
+        qCritical() << "Emitter NIF or name missing in" << cfgFilePath;
+        return false;
+    }
+
+    m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterName);
     m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION), "LAIDEAL");
 
     // Load service key — prefer env var, fall back to ~/.verifactu_key

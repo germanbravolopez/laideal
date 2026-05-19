@@ -98,7 +98,7 @@ QJsonObject VerifactuInvoice::toJson() const
     json["InvoiceDate"] = m_invoiceDate.toString(Qt::ISODate);
     json["InvoiceType"] = invoiceTypeToString(m_invoiceType);
     json["SellerID"] = m_sellerNIF;
-    json["SellerName"] = m_sellerName;
+    json["CompanyName"] = m_sellerName; // SellerName is not used
 
     if (!m_buyerNIF.isEmpty()) {
         json["BuyerID"] = m_buyerNIF;

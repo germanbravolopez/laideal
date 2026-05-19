@@ -78,6 +78,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 4. **Document size limits**: see `/update-docs` skill for thresholds and split rules.
 5. **English only** in all documentation.
 6. **Preserve history** — never delete progress tracker entries; move old ones to Archive.
+7. **Avoid emojis** — do not use emojis in titles or other places
 
 ## Key Business Logic
 

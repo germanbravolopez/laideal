@@ -21,10 +21,10 @@ MainWindow::MainWindow(QWidget *parent)
     initializeVerifactu();
 
     // TODO: delete this quick test
-    //ui->cb_client->setEditText("Elia Lopez Bailon");
-    //ui->le_cost_total->setText("4.50");
-    //verifactuSubmitInvoice();
-    //std::exit(0);
+    ui->cb_client->setEditText("Elia Lopez Bailon");
+    ui->le_cost_total->setText("4.50");
+    verifactuSubmitInvoice();
+    std::exit(0);
 }
 
 MainWindow::~MainWindow()
@@ -301,11 +301,9 @@ void MainWindow::checkClientData()
 bool MainWindow::verifactuSubmitInvoice()
 {
     if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
-        VerifactuResult result = m_verifactuIntegration->createAndSubmitInvoice(
+        VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
             ui->le_nr_ticket->text(),                   // número de factura
             ui->de_date_recep->date(),                  // fecha
-            "NIF N/A",                                  // NIF comprador (opcional)
-            ui->cb_client->currentText(),               // Nombre comprador
             ui->le_cost_total->text().toFloat() / 1.21, // base imponible
             21.0,                                       // tipo IVA
             "Servicios de lavanderia"                   // descripción del servicio
