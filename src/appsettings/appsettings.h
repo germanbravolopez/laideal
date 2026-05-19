@@ -39,6 +39,8 @@ public:
     void setListadosGastosPath(const QString &v);
 
     // --- Print resources ---
+    bool enablePrinting() const;
+    void setEnablePrinting(bool v);
     QString printTemplatePath() const;
     void setPrintTemplatePath(const QString &v);
     QString printScriptPath() const;

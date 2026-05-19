@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
+#include <QDateTime>
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -18,15 +19,7 @@ MainWindow::MainWindow(QWidget *parent)
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
     mainwindowInitialSettings();
-
-    // Verifactu
     initializeVerifactu();
-
-    // TODO: delete this quick test
-    //ui->cb_client->setEditText("Elia Lopez Bailon");
-    //ui->le_cost_total->setText("4.50");
-    //verifactuSubmitInvoice();
-    //std::exit(0);
 }
 
 MainWindow::~MainWindow()
@@ -36,6 +29,8 @@ MainWindow::~MainWindow()
 
 void MainWindow::mainwindowInitialSettings()
 {
+    migrateDatabase(db);
+
     // Settings action — prepended to Archivo menu
     QAction *actionConfig = new QAction(tr("Configuración..."), this);
     connect(actionConfig, &QAction::triggered, this, [this]() {
@@ -319,7 +314,7 @@ void MainWindow::checkClientData()
 
 }
 
-bool MainWindow::verifactuSubmitInvoice()
+VerifactuResult MainWindow::verifactuSubmitInvoice()
 {
     if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
         double ivaRate = AppSettings::instance()->ivaRate();
@@ -334,14 +329,13 @@ bool MainWindow::verifactuSubmitInvoice()
         if (result.isSuccess()) {
             qDebug() << "Invoice submitted with CSV:" << result.csv;
             showQrToClient(result);
-            return true;
         } else {
             qDebug() << "Invoice submission failed:" << result.errorDescription;
-            return false;
         }
+        return result;
     } else {
         qDebug() << "Verifactu not configured — skipping invoice submission";
-        return false;
+        return VerifactuResult{};
     }
 }
 
@@ -380,16 +374,25 @@ void MainWindow::showQrToClient(const VerifactuResult &result)
     qrDialog->exec();
 }
 
-bool MainWindow::saveTicket()
+bool MainWindow::saveTicket(const VerifactuResult &verifactuResult)
 {
+    const QString timestamp = verifactuResult.isSuccess()
+        ? QDateTime::currentDateTime().toString(Qt::ISODate) : "";
+
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
             QString hash = genHash16();
             db.open();
             QSqlQuery q;
-            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
-                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
+            q.prepare("INSERT INTO ingresos "
+                      "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
+                      "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                      "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr) "
+                      "VALUES "
+                      "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
+                      ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
+                      ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -416,6 +419,26 @@ bool MainWindow::saveTicket()
             q.bindValue(":servicio", cbService->currentText());
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
+            if (verifactuResult.isSuccess()) {
+                q.bindValue(":verifactu_csv",       verifactuResult.csv);
+                q.bindValue(":verifactu_timestamp", timestamp);
+                q.bindValue(":verifactu_estado",    "ENVIADA");
+                q.bindValue(":verifactu_error",     "");
+                q.bindValue(":verifactu_url_qr",    verifactuResult.validationUrl);
+            } else if (verifactuResult.status == VerifactuResult::ERROR
+                       || verifactuResult.status == VerifactuResult::NETWORK_ERROR) {
+                q.bindValue(":verifactu_csv",       "");
+                q.bindValue(":verifactu_timestamp", QDateTime::currentDateTime().toString(Qt::ISODate));
+                q.bindValue(":verifactu_estado",    "ERROR");
+                q.bindValue(":verifactu_error",     verifactuResult.errorDescription);
+                q.bindValue(":verifactu_url_qr",    "");
+            } else {
+                q.bindValue(":verifactu_csv",       "");
+                q.bindValue(":verifactu_timestamp", "");
+                q.bindValue(":verifactu_estado",    "");
+                q.bindValue(":verifactu_error",     "");
+                q.bindValue(":verifactu_url_qr",    "");
+            }
             q.exec();
             q.clear();
             db.close();
@@ -480,12 +503,14 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validateTicket()) {
             checkClientData();
-            verifactuSubmitInvoice();
-            bool payed = saveTicket();
-            if (!debug)
+            VerifactuResult verifactuResult = verifactuSubmitInvoice();
+            bool payed = saveTicket(verifactuResult);
+            if (AppSettings::instance()->enablePrinting()) {
                 printRecibo();
-            if (!debug && payed)
-                printFra();
+                if (payed) {
+                    printFra();
+                }
+            }
             resetAllContents();
         }
     }
@@ -740,11 +765,6 @@ void MainWindow::cleanDatabase(bool print)
                                  + QString::number(ingresosCnt) + " en la tabla de ingresos.\n"
                                  + QString::number(prendasCnt) + " en la tabla de lista de prendas.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-}
-
-void MainWindow::on_actionModo_debug_triggered(bool checked)
-{
-    debug = checked;
 }
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()

@@ -628,7 +628,6 @@ prenda</string>
     <property name="title">
      <string>Archivo</string>
     </property>
-    <addaction name="actionModo_debug"/>
     <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionCrear_hash_en_ingresos"/>
     <addaction name="separator"/>
@@ -671,21 +670,6 @@ prenda</string>
    <addaction name="menuHerramientas"/>
    <addaction name="menuVisualizar"/>
   </widget>
-  <action name="actionModo_debug">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Modo debug</string>
-   </property>
-   <property name="toolTip">
-    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Configurar applicación en modo debug.
-Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+D</string>
-   </property>
-  </action>
   <action name="actionRecibo">
    <property name="text">
     <string>Recibo</string>

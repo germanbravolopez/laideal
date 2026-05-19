@@ -37,14 +37,14 @@ Key methods:
 
 | Method | Purpose |
 |--------|---------|
-| `mainwindowInitialSettings()` | UI setup at startup (table columns, buttons) |
+| `mainwindowInitialSettings()` | Runs `migrateDatabase()`, then UI setup (table columns, buttons) |
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows warning if not configured |
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
-| `saveTicket()` | Writes rows to `ingresos`; returns `true` if paid |
-| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration` with ticket data |
+| `saveTicket(verifactuResult)` | Writes rows to `ingresos` including 5 `verifactu_*` columns; returns `true` if paid |
+| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` |
 | `showQrToClient()` | Modal showing QR image + CSV + AEAT validation URL |
-| `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` |
+| `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` — guarded by `AppSettings::enablePrinting()` |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 | `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
 | `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |
@@ -97,13 +97,14 @@ Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on s
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, report output paths, business name/address/city, Verifactu NIF/name/serviceKey/production.
+Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, `print.enable` (bool — replaces the removed debug flag), report output paths, business name/address/city, Verifactu NIF/name/serviceKey/production.
 
 ### sql_lite (`src/sql_lite/`)
 Stateless free functions; all modules include this header.
 
 Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
+- `migrateDatabase(db)` — adds the 5 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
@@ -133,6 +134,11 @@ Notable items:
 | observaciones | TEXT | Free-text notes |
 | edit_lock | INTEGER | `0` = editable, `1` = locked by accounting close |
 | hash | TEXT | 16-char deduplication hash |
+| verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
+| verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
+| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, empty if not submitted |
+| verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
+| verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 
 ### `prendas` (garment catalogue)
 
@@ -157,9 +163,6 @@ Columns include `importe` (REAL) and supplier/date/description fields. Managed v
 ### Other tables
 `proveedores`, `servicios`, `facturas`, `empresas` — managed via Listado or Facturas windows.
 
-### Pending schema changes (Verifactu)
-See `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md` for the `ALTER TABLE` SQL to add Verifactu tracking columns to `ingresos`/`facturas`.
-
 ---
 
 ## Data Flow: Ticket Save
@@ -170,11 +173,11 @@ User fills form in MainWindow
 on_bb_save_reset_clicked(Save)
   ├── validateTicket()          — checks client, amounts, quarter lock
   ├── checkClientData()         — adds/updates client in `clientes`
-  ├── verifactuSubmitInvoice()  — REST POST to AEAT (fails gracefully)
-  │     └── showQrToClient()   — shows QR dialog on success
-  ├── saveTicket()              — writes N rows to `ingresos`
-  ├── printRecibo()             — Excel + print receipt
-  ├── [if paid] printFra()      — Excel + print invoice
+  ├── verifactuSubmitInvoice()  — REST POST to AEAT; returns VerifactuResult
+  │     └── showQrToClient()    — shows QR dialog on SUCCESS
+  ├── saveTicket(result)        — writes N rows to `ingresos` + all verifactu_* columns
+  ├── [if AppSettings::enablePrinting()] printRecibo()  — Excel + print receipt
+  ├── [if printing enabled && paid] printFra()          — Excel + print invoice
   └── resetAllContents()        — clears form for next ticket
 ```
 
@@ -209,9 +212,6 @@ AEAT QR validation:
 
 | Issue | File | Priority | Notes |
 |-------|------|----------|-------|
-| **Temp debug code in constructor** | `src/app/mainwindow.cpp` | **Critical** | Remove `verifactuSubmitInvoice()` + `std::exit(0)` before any release |
-| **Verifactu CSV not persisted** | `src/app/mainwindow.cpp` | High | CSV received but not written to DB |
-| **DB schema missing Verifactu columns** | `ingresos`/`facturas` tables | High | `ALTER TABLE` SQL in verifactu docs |
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
 | No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap |
 | Clients missing from Listado but present in MainWindow combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Low | Investigate encoding/collation differences between `readColumnFromTable` and `QSqlTableModel`; tilde issue in name search is now fixed separately |

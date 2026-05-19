@@ -10,11 +10,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 
 ## Critical Issues — Check Before Touching Anything
 
-| Issue | File:Line | Priority |
-|-------|-----------|----------|
-| **Temp debug code: calls `verifactuSubmitInvoice()` + `std::exit(0)` in constructor** | `src/app/mainwindow.cpp` | **HIGH — remove before any release** |
-| **Verifactu CSV not saved to database** | `src/app/mainwindow.cpp` | High |
-| **DB schema missing Verifactu columns** | See `docs/modules/verifactu/implementation_summary.md` | High |
+No blocking critical issues. See `docs/progress_tracker.md` for the full issue list.
 
 ## Build & Run
 
@@ -51,6 +47,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 
 | Document | Purpose |
 |----------|---------|
+| `README.md` | Repository root readme files with the project description and initial overview |
 | `docs/INDEX.md` | **Quick-find**: every doc, source file, concept |
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
 | `docs/progress_tracker.md` | What's done, in progress, open issues |

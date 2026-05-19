@@ -101,7 +101,7 @@ Read the full skill file when the skill is relevant to your task.
 | Topic | Where to look |
 |-------|--------------|
 | Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
-| All configurable settings (paths, IVA, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
+| All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
 | QR dialog implementation | `src/app/mainwindow.cpp` (`showQrToClient`) |
@@ -113,7 +113,7 @@ Read the full skill file when the skill is relevant to your task.
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Release procedure | Root `README.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
-| Verifactu DB schema changes (SQL) | `docs/modules/verifactu/implementation_summary.md` |
+| Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/implementation_summary.md` |
 | Verifactu step-by-step implementation | `docs/modules/verifactu/step_by_step_guide.md` |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |

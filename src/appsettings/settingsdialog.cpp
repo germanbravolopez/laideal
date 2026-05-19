@@ -76,6 +76,10 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_ivaRate->setFixedWidth(80);
     fl->addRow(tr("Tipo de IVA (%):"), m_ivaRate);
 
+    m_enablePrinting = new QCheckBox(tr("Habilitar impresión de tickets y facturas"));
+    m_enablePrinting->setChecked(s->enablePrinting());
+    fl->addRow(m_enablePrinting);
+
     auto *settingsPathLabel = new QLabel(
         tr("Archivo de configuración: <b>%1</b>").arg(s->filePath()));
     settingsPathLabel->setWordWrap(true);
@@ -164,6 +168,7 @@ void SettingsDialog::accept()
     s->setDbPath(m_dbPath->text().trimmed());
     s->setIconPath(m_iconPath->text().trimmed());
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
+    s->setEnablePrinting(m_enablePrinting->isChecked());
 
     s->setContabilidadPath(m_contabilidadPath->text().trimmed());
     s->setListadosPrendasPath(m_listadosPrendasPath->text().trimmed());

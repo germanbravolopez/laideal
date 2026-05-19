@@ -29,7 +29,6 @@ public:
     ~MainWindow();
     QSqlDatabase db;
     int pbAddedRows = 0;
-    bool debug = false;
 
 private slots:
     void mainwindowInitialSettings();
@@ -50,9 +49,9 @@ private slots:
     bool validateTicket();
     QString removeSpecialChar(QString str);
     void checkClientData();
-    bool verifactuSubmitInvoice();
+    VerifactuResult verifactuSubmitInvoice();
     void showQrToClient(const VerifactuResult &result);
-    bool saveTicket();
+    bool saveTicket(const VerifactuResult &verifactuResult);
     void printRecibo();
     void printFra();
 

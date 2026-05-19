@@ -31,6 +31,7 @@ private:
     QLineEdit *m_dbPath;
     QLineEdit *m_iconPath;
     QLineEdit *m_ivaRate;
+    QCheckBox *m_enablePrinting;
 
     QLineEdit *m_contabilidadPath;
     QLineEdit *m_listadosPrendasPath;

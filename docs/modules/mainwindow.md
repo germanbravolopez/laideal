@@ -11,16 +11,16 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 
 | Method | Purpose |
 |--------|---------|
-| `mainwindowInitialSettings()` | UI setup at startup: table columns, buttons, comboboxes |
+| `mainwindowInitialSettings()` | UI setup at startup: runs `migrateDatabase()`, configures table columns, buttons, comboboxes |
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows non-fatal warning if not configured |
 | `resetAllContents()` | Clears form after a ticket save |
 | `setNextTicketNumber()` | Auto-increments `n_recibo` from the max in `ingresos` |
 | `populateCbClient()` | Fills the client combobox from `clientes` table |
 | `validateTicket()` | Pre-save checks: client present, garments valid, quarter not locked |
 | `checkClientData()` | Adds or updates the client row in `clientes` |
-| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; gracefully skips if not configured |
+| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` (INVALID_CONFIG if not configured) |
 | `showQrToClient(result)` | Modal dialog showing QR image + CSV + AEAT validation URL |
-| `saveTicket()` | Inserts N garment rows into `ingresos`; returns `true` if paid |
+| `saveTicket(verifactuResult)` | Inserts N garment rows into `ingresos` including all 5 `verifactu_*` columns; returns `true` if paid |
 | `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir` dialog |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 
@@ -42,9 +42,10 @@ on_bb_save_reset_clicked(Save)   — Qt auto-connect slot
   ├── validateTicket()
   ├── checkClientData()
   ├── verifactuSubmitInvoice() → showQrToClient() on success
-  ├── saveTicket()
-  ├── printRecibo()
-  ├── [if paid] printFra()
+  │     returns VerifactuResult (SUCCESS / ERROR / INVALID_CONFIG)
+  ├── saveTicket(verifactuResult)  — persists all 5 verifactu_* columns
+  ├── [if AppSettings::enablePrinting()] printRecibo()
+  ├── [if printing enabled && paid] printFra()
   └── resetAllContents()
 ```
 
@@ -55,6 +56,4 @@ Opened via menu actions. Each child holds its own `db` reference set by `MainWin
 
 ## Known issues
 
-- **Temp debug code** (`mainwindow.cpp` near top of constructor): calls `verifactuSubmitInvoice()` then `std::exit(0)` — remove before release.
-- `main.cpp`: hardcoded app icon path pointing to a specific user's machine.
 - Verifactu `m_verifactuIntegration` member is heap-allocated with `this` as Qt parent (no manual delete needed).

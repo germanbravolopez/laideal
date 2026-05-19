@@ -26,27 +26,17 @@ Public facade (only class `MainWindow` calls directly):
 
 ## Database schema changes
 
-These columns must be added to `ingresos` (or `facturas`) before persisting Verifactu results:
+Five `verifactu_*` columns are added to `ingresos` automatically at startup via `migrateDatabase()` in `sql_lite.cpp`:
 
-```sql
-ALTER TABLE facturas ADD COLUMN verifactu_csv VARCHAR(50);
-ALTER TABLE facturas ADD COLUMN verifactu_timestamp DATETIME;
-ALTER TABLE facturas ADD COLUMN verifactu_estado VARCHAR(20);   -- ENVIADA, ERROR, ANULADA
-ALTER TABLE facturas ADD COLUMN verifactu_error VARCHAR(255);
-ALTER TABLE facturas ADD COLUMN verifactu_url_qr VARCHAR(500);
-```
+| Column | Values |
+|--------|--------|
+| `verifactu_csv` | AEAT security code (e.g. `A-9VARYQTZTARVU2`), empty if not submitted |
+| `verifactu_timestamp` | ISO-8601 timestamp of submission, empty if not submitted |
+| `verifactu_estado` | `ENVIADA` / `ERROR` / empty |
+| `verifactu_error` | Error description when `estado = ERROR`, empty otherwise |
+| `verifactu_url_qr` | AEAT `ValidationUrl`, empty if not submitted |
 
-Optional retry-tracking table:
-
-```sql
-CREATE TABLE facturas_reintentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero_factura VARCHAR(50),
-    fecha_intento DATETIME,
-    numero_intentos INTEGER,
-    ultimo_error VARCHAR(255)
-);
-```
+The `ALTER TABLE ADD COLUMN` calls are idempotent — SQLite silently ignores them on subsequent runs.
 
 ---
 
@@ -61,7 +51,8 @@ CREATE TABLE facturas_reintentos (
 
 ## Roadmap
 
-- [ ] Persist CSV and QR URL to DB after successful submission (blocking — see progress tracker)
+- [x] Persist CSV, ValidationUrl, estado and error to DB after submission — done via `migrateDatabase()` + `saveTicket(VerifactuResult)`
+- [x] `processResponse()` captures `ValidationUrl` and `QrCode` from the `/Create` response
 - [ ] Configuration UI panel in Qt
 - [ ] Retry queue for failed submissions
 - [ ] Local invoice cache for offline scenarios

@@ -135,6 +135,9 @@ void    AppSettings::setListadosGastosPath(const QString &v) { setStr({"reports"
 // ---------------------------------------------------------------------------
 // Print
 // ---------------------------------------------------------------------------
+bool AppSettings::enablePrinting() const { return str({"print", "enable"}) == "Yes"; }
+void AppSettings::setEnablePrinting(bool v) { setStr({"print", "enable"}, v ? "Yes" : "No"); }
+
 QString AppSettings::printTemplatePath() const { return str({"print", "template_path"}); }
 void    AppSettings::setPrintTemplatePath(const QString &v) { setStr({"print", "template_path"}, v); }
 

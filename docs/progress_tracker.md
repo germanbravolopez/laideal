@@ -7,32 +7,26 @@
 ## Current Status — May 2026
 
 **Active branch**: `feature/add_mdiago_verifactu`
-**Version**: 8.0 (unreleased — blocked by items below)
+**Version**: 8.0 (unreleased — pending production Verifactu testing)
 
 ---
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-- [ ] **Remove temp debug code** in `src/app/mainwindow.cpp` (near top of constructor)
-  - Constructor calls `verifactuSubmitInvoice()` then `std::exit(0)`
-  - App exits immediately on launch — cannot be used in this state
-- [ ] **Persist Verifactu response to database** — CSV, timestamp, estado, error, validation URL received from AEAT but not saved anywhere
-  - `ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT`
-  - `ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT`
-  - `ALTER TABLE ingresos ADD COLUMN verifactu_estado TEXT`
-  - `ALTER TABLE ingresos ADD COLUMN verifactu_error TEXT`
-  - `ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT`
-  - Then update `saveTicket()` to write the result after `verifactuSubmitInvoice()`
-- [ ] **Capture `ValidationUrl` and `QrCode` from `submitInvoice()` response** — the API already returns both in the `Return` object but `processResponse()` only extracts `CSV`; update it to also capture `ValidationUrl` and `QrCode` so the QR dialog works without a separate QR generation call
+No open blocking issues. All three previous blockers resolved:
+- [x] Temp debug code removed from `MainWindow` constructor
+- [x] Verifactu response persisted to DB (`verifactu_*` columns, `migrateDatabase()`, `saveTicket(VerifactuResult)`)
+- [x] `ValidationUrl` and `QrCode` captured from `/Create` response in `processResponse()`
 
 ---
 
 ## In Progress
 
-- [ ] Verifactu integration — TESTING confirmed, pending DB persistence and production testing
+- [ ] Verifactu integration — TESTING confirmed, DB persistence done, pending production testing
   - `submitSimplifiedInvoice()` confirmed working: F2 invoice, CSV received from AEAT
-  - API also returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response
-  - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_cfg`
+  - API returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response — all now captured
+  - DB persistence complete: `verifactu_*` columns added to `ingresos` via `migrateDatabase()`
+  - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_settings.json`
 - [ ] QR on printed receipt — add Verifactu QR image to the Excel receipt layout (`src/imprimir/imprimir.cpp`)
 - [ ] QR view in RecogPrendas — show stored CSV, QR image, and AEAT validation link per ticket in `src/recog_prendas/recog_prendas.h/cpp`
 - [ ] Invoice cancellation — test cancellation flow via `cancelInvoice()` / `VerifactuManager::cancelInvoice()`; verify the rectified invoice CSV is returned and stored
@@ -55,6 +49,20 @@
 ---
 
 ## Completed Milestones
+
+### Debug mode replaced by AppSettings::enablePrinting() — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `bool debug` member and `on_actionModo_debug_triggered` slot removed from `MainWindow`
+- [x] `actionModo_debug` UI action removed from `mainwindow.ui` (Archivo menu)
+- [x] `AppSettings::enablePrinting()` / `setEnablePrinting()` added — persisted under `print.enable` in `~/.laideal_settings.json`
+- [x] `SettingsDialog` General tab gains checkbox "Habilitar impresión de tickets y facturas"
+- [x] `on_bb_save_reset_clicked()` now guards printing with `AppSettings::instance()->enablePrinting()` instead of `!debug`
+
+### Verifactu DB persistence + response capture — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `migrateDatabase()` added to `sql_lite` — adds 5 `verifactu_*` columns to `ingresos` on startup (idempotent)
+- [x] `processResponse()` in `VerifactuManager` now extracts `ValidationUrl` and `QrCode` from the `/Create` response alongside `CSV`
+- [x] `saveTicket()` extended to persist `verifactu_csv`, `verifactu_timestamp`, `verifactu_estado`, `verifactu_error`, `verifactu_url_qr` for every garment row in the ticket
+- [x] `verifactuSubmitInvoice()` now returns `VerifactuResult`; caller in `on_bb_save_reset_clicked()` passes it to `saveTicket()`
+- [x] Error and unconfigured states also written to DB (empty estado = not submitted; estado=ERROR stores error description)
 
 ### Module consolidation + tilde search fix — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] All src subdirectory names lowercased; root `CMakeLists.txt` updated to match

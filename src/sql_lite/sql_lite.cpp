@@ -37,6 +37,20 @@ static QString monthStr(int month)
 // Public functions
 // ---------------------------------------------------------------------------
 
+void migrateDatabase(QSqlDatabase &db)
+{
+    if (dbNotConfigured(db, __func__)) return;
+    db.open();
+    QSqlQuery q(db);
+    // Each exec() silently fails if the column already exists — safe to call repeatedly.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_estado TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_error TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT");
+    db.close();
+}
+
 int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table)
 {
     if (dbNotConfigured(db, __func__)) return 0;

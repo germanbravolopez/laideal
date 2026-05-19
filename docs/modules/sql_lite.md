@@ -26,6 +26,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 
 | Function | Returns | Purpose |
 |----------|---------|---------|
+| `migrateDatabase(db)` | `void` | Adds 5 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent — silently skips if columns exist |
 | `readMaxValueInColumnFromTable(db, column, table)` | `int` | Max integer value in a column |
 | `readMaxNMinYearInColumnFromTable(db, maxNMin, column, table)` | `int` | Max (`true`) or min (`false`) year from a date-string column |
 | `readColumnFromTable(db, column, table, orderByColumn)` | `QStringList` | All values in a column |

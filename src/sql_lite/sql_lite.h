@@ -13,6 +13,8 @@ void    setDbPath(const QString &path);
 QString dbPath();
 #define DB_PATH dbPath()
 
+void migrateDatabase(QSqlDatabase &db);
+
 int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table);
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);
 QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, const QString &orderByColumn);

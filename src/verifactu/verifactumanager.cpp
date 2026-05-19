@@ -339,7 +339,12 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
         if (isQrRequest && obj.contains("Return")) {
             result.qrCode = decodeImageFromBase64(obj.value("Return").toString());
         } else if (obj.contains("Return")) {
-            result.csv = obj.value("Return").toObject().value("CSV").toString();
+            QJsonObject ret = obj.value("Return").toObject();
+            result.csv           = ret.value("CSV").toString();
+            result.validationUrl = ret.value("ValidationUrl").toString();
+            QString qrBase64     = ret.value("QrCode").toString();
+            if (!qrBase64.isEmpty())
+                result.qrCode = decodeImageFromBase64(qrBase64);
         }
     } else {
         result.status = VerifactuResult::ERROR;
