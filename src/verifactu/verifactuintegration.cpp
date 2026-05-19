@@ -1,9 +1,6 @@
 #include "verifactuintegration.h"
+#include "appsettings.h"
 #include <QDebug>
-#include <QFile>
-#include <QTextStream>
-#include <QDir>
-#include <cstdlib>
 
 VerifactuIntegration::VerifactuIntegration(QObject *parent)
     : QObject(parent), m_manager(nullptr)
@@ -207,83 +204,24 @@ bool VerifactuIntegration::loadEmitterConfiguration()
 {
     if (!m_manager) return false;
 
-    // Load emitter NIF and name from ~/.laideal_cfg
-    // File format — one key=value pair per line:
-    //   nif=B12345678
-    //   name=La Ideal SL
-    QString emitterNIF;
-    QString emitterName;
-
-    QString cfgFilePath = QDir::homePath() + "/.laideal_cfg";
-    QFile cfgFile(cfgFilePath);
-
-    if (cfgFile.exists()) {
-        if (cfgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QTextStream stream(&cfgFile);
-            while (!stream.atEnd()) {
-                QString line = stream.readLine().trimmed();
-                if (line.startsWith("nif="))
-                    emitterNIF = line.mid(4).trimmed();
-                else if (line.startsWith("name="))
-                    emitterName = line.mid(5).trimmed();
-            }
-            cfgFile.close();
-            qDebug() << "Emitter config loaded from file:" << cfgFilePath;
-        } else {
-            qWarning() << "Could not open config file:" << cfgFilePath;
-        }
-    } else {
-        qWarning() << "Config file not found:" << cfgFilePath;
-        qWarning() << "Instructions:";
-        qWarning() << "  Create a file at:" << cfgFilePath;
-        qWarning() << "  with two lines:";
-        qWarning() << "    nif=B12345678";
-        qWarning() << "    name=La Ideal SL";
-    }
+    AppSettings *settings = AppSettings::instance();
+    QString emitterNIF  = settings->verifactuNif();
+    QString emitterName = settings->verifactuName();
+    QString serviceKey  = settings->verifactuServiceKey();
 
     if (emitterNIF.isEmpty() || emitterName.isEmpty()) {
-        qCritical() << "Emitter NIF or name missing in" << cfgFilePath;
+        qCritical() << "Emitter NIF or name not configured in AppSettings";
         return false;
     }
 
     m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterName);
     m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION), "LAIDEAL");
-
-    // Load service key — prefer env var, fall back to ~/.verifactu_key
-    // Get key from https://facturae.irenesolutions.com/verifactu/go
-    QString serviceKey;
-
-    const char* envServiceKey = std::getenv("VERIFACTU_SERVICEKEY");
-    if (envServiceKey) {
-        serviceKey = QString::fromUtf8(envServiceKey);
-        qDebug() << "ServiceKey loaded from environment variable";
-    } else {
-        QString keyFilePath = QDir::homePath() + "/.verifactu_key";
-        QFile keyFile(keyFilePath);
-
-        if (keyFile.exists()) {
-            if (keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                QTextStream stream(&keyFile);
-                serviceKey = stream.readLine().trimmed();
-                keyFile.close();
-                qDebug() << "ServiceKey loaded from file:" << keyFilePath;
-            } else {
-                qWarning() << "Could not open key file:" << keyFilePath;
-            }
-        } else {
-            qWarning() << "Key file not found:" << keyFilePath;
-            qWarning() << "Instructions:";
-            qWarning() << "  1. Get your key at: https://facturae.irenesolutions.com/verifactu/go";
-            qWarning() << "  2. Create a file at:" << keyFilePath;
-            qWarning() << "  3. Paste your key (key only, no spaces)";
-            qWarning() << "  Or set the environment variable: SET VERIFACTU_SERVICEKEY=your_key_here";
-        }
-    }
-
     m_manager->getConfig()->setServiceKey(serviceKey);
 
-    // TESTING = no real AEAT validation; PRODUCTION = live validation
-    m_manager->getConfig()->setEnvironment(VerifactuConfig::TESTING);
+    VerifactuConfig::Environment env = settings->verifactuProduction()
+        ? VerifactuConfig::PRODUCTION
+        : VerifactuConfig::TESTING;
+    m_manager->getConfig()->setEnvironment(env);
 
     m_manager->getConfig()->save();
 

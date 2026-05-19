@@ -10,10 +10,17 @@ Stateless free-function database API. Every module includes `sql_lite.h`. Functi
 ## DB path
 
 ```cpp
-#define DB_PATH "C:/Users/rocio/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db"
+#define DB_PATH dbPath()   // expands to the runtime-configured path
 ```
 
-Known issue: hardcoded. Requires manual edit for each machine.
+Set once at startup by `main()`:
+```cpp
+AppSettings *settings = AppSettings::instance();
+settings->load();
+setDbPath(settings->dbPath());
+```
+
+The actual path is stored in `~/.laideal_settings.json` under the `db.path` key and is configured via Archivo → Configuración. If the path is empty or the file does not exist, `main()` opens `SettingsDialog` before constructing `MainWindow`.
 
 ## Function reference
 

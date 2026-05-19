@@ -44,12 +44,8 @@
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Hardcoded DB path | `src/sql_lite/sql_lite.h` (`DB_PATH`) | Must be changed for each new machine |
-| Hardcoded icon path | `src/app/main.cpp` | Same — points to specific user's OneDrive |
-| Hardcoded report output path | `src/contabilidad/`, `src/Listado/genlistado.cpp` | Same issue |
-| ServiceKey in plaintext INI | `src/verifactu/verifactuconfig.h` | Consider QSettings encryption |
+| ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Previously in INI, now in JSON — still plaintext; consider encryption |
 | No retry for failed Verifactu calls | `src/verifactu/` | Planned |
-| No Verifactu configuration UI | `src/verifactu/` | Planned |
 | Search fails for names with Spanish accents (tildes) | `src/sql_lite/sql_lite.cpp`, `src/recog_prendas/` | `selectFromWhereLike` and related search functions may not match names containing á, é, í, ó, ú, ñ stored in the DB. Audit all search paths and fix collation or normalization. Likely related to the issue below. |
 | Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/Listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. Also: `RecogPrendas` search by name does not find them, but search by ticket number does. Investigate query differences — likely a collation or encoding mismatch, possibly the same root cause as the tilde issue. |
 | Price calculation for size-dependent garments (cortinas) may be incorrect | `src/app/mainwindow.cpp` (`setGarmentPrice`), `src/add_garment/add_garment.cpp` | When the size is not an exact value, verify that the price rounds or truncates correctly and matches what is shown on the receipt. |
@@ -60,6 +56,15 @@
 ---
 
 ## Completed Milestones
+
+### Centralised AppSettings + sql_lite refactor — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] New `src/appsettings/` module: `AppSettings` singleton + `SettingsDialog`
+  - All previously hardcoded paths and values (DB path, icon, report dirs, Excel template, batch script, business identity, IVA rate, Verifactu NIF/name/key/environment) now live in `~/.laideal_settings.json`
+  - Legacy `~/.laideal_cfg` and `~/.verifactu_key` files migrated automatically on first run
+  - Settings dialog accessible from Archivo → Configuración...; changes applied at runtime (icon, Verifactu) or require restart (DB path)
+- [x] `main.cpp` — validates DB path before constructing `MainWindow`; opens `SettingsDialog` on first run or misconfiguration
+- [x] `sql_lite` refactored — `const QString &` params, `dbNotConfigured()` guard prevents error dialogs when DB path not set, `monthStr()` helper deduplicates month-padding logic, `QRandomGenerator` replaces `rand()` in `genHash16()`
+- [x] All module CMakeLists.txt updated to link `appsettings`
 
 ### First successful Verifactu submission — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `submitSimplifiedInvoice()` added to `VerifactuIntegration` for F2 (simplified) invoices — no buyer NIF required, correct for laundry retail

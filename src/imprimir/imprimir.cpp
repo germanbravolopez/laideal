@@ -1,5 +1,6 @@
 #include "imprimir.h"
 #include "sql_lite.h"
+#include "appsettings.h"
 
 #include "xlsxdocument.h"
 #include "xlsxcellrange.h"
@@ -90,7 +91,7 @@ QString Imprimir::addExtraInfoToInvoice(QString title, QString request)
 void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
 {
     // Check that excel is accessible
-    QString excelPath = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/ImprimirTicket.xlsx";
+    QString excelPath = AppSettings::instance()->printTemplatePath();
     if (!QFile::exists(excelPath)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo excel para generar el ticket.",
@@ -221,8 +222,9 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
             }
         }
         // Calculate total price and IVA
+        float ivaRate = static_cast<float>(AppSettings::instance()->ivaRate());
         QString ticketTotal = QString::number(ticketTotalF, 'f', 2);
-        QString baseImponible = QString::number(ticketTotalF / 1.21, 'f', 2);
+        QString baseImponible = QString::number(ticketTotalF / (1.0f + ivaRate / 100.0f), 'f', 2);
         QString iva = QString::number(ticketTotalF - baseImponible.toFloat(), 'f', 2);
         // Add totals
         QXlsx::Format formatTotals;
@@ -254,7 +256,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
             formatTotals.setHorizontalAlignment(QXlsx::Format::AlignRight);
             formatTotals.setTopBorderStyle(QXlsx::Format::BorderNone);
             excel.mergeCells("A" + QString::number(row) + ":B" + QString::number(row));
-            excel.write(row, 1, QString("IVA (21%):"), formatTotals);
+            excel.write(row, 1, QString("IVA (%1%):").arg(ivaRate, 0, 'f', 0), formatTotals);
             // Write iva cost
             formatTotals.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
             excel.write(row, 3, iva, formatTotals);
@@ -341,7 +343,7 @@ void Imprimir::printTicket()
 {
     // Call the batch script to print the excel
     QProcess process;
-    QString batchPath = "C:/Users/rocio/work/tintoreria/NO_TOCAR_ticket_imprimir/print_ticket.bat";
+    QString batchPath = AppSettings::instance()->printScriptPath();
     if (!QFile::exists(batchPath)) {
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo batch para imprimir el ticket.",

@@ -23,11 +23,11 @@ target_link_libraries(laideal
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
+    appsettings
     sql_lite
     imprimir
     Listado
     recog_prendas
-    sql_lite
     MySortFilterProxyModel
     FilterWidget
     TableView

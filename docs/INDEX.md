@@ -45,6 +45,8 @@ Read the full skill file when the skill is relevant to your task.
 | Module | Header | Implementation |
 |--------|--------|---------------|
 | Entry point | `src/app/main.cpp` | — |
+| App settings singleton | `src/appsettings/appsettings.h` | `src/appsettings/appsettings.cpp` |
+| Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/Listado/listado.h` | `src/Listado/listado.cpp` |
@@ -97,7 +99,8 @@ Read the full skill file when the skill is relevant to your task.
 | Topic | Where to look |
 |-------|--------------|
 | Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
-| DB path (and hardcoding issue) | `src/sql_lite/sql_lite.h` (`DB_PATH`) |
+| All configurable settings (paths, IVA, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
+| DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
 | QR dialog implementation | `src/app/mainwindow.cpp` (`showQrToClient`) |
 | Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |

@@ -14,9 +14,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 |-------|-----------|----------|
 | **Temp debug code: calls `verifactuSubmitInvoice()` + `std::exit(0)` in constructor** | `src/app/mainwindow.cpp` | **HIGH — remove before any release** |
 | **Verifactu CSV not saved to database** | `src/app/mainwindow.cpp` | High |
-| **DB schema missing Verifactu columns** | See `docs/modules/verifactu/RESUMEN_IMPLEMENTACION.md` | High |
-| Hardcoded DB path `C:/Users/rocio/...` | `src/sql_lite/sql_lite.h:9` | Medium |
-| Hardcoded icon path `C:/Users/rocio/...` | `src/app/main.cpp:12–13` | Medium |
+| **DB schema missing Verifactu columns** | See `docs/modules/verifactu/implementation_summary.md` | High |
 
 ## Build & Run
 
@@ -30,6 +28,8 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt (5.15+ o
 | What you need | Where |
 |---------------|-------|
 | Entry point | `src/app/main.cpp` |
+| App settings (all configurable values) | `src/appsettings/appsettings.h` / `.cpp` |
+| Settings dialog (UI to edit settings) | `src/appsettings/settingsdialog.h` / `.cpp` |
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |
 | Ticket save flow | `src/app/mainwindow.cpp` (`saveTicket`) |
 | All DB free functions | `src/sql_lite/sql_lite.h` / `.cpp` |

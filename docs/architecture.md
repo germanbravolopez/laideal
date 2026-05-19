@@ -18,6 +18,7 @@ MainWindow (src/app/)
                 └── VerifactuInvoice + VerifactuTaxItem
 
 Shared infrastructure:
+  src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
   src/MySortFilterProxyModel/     — sort+filter proxy used by all list views
   src/FilterWidget/               — reusable text filter widget
@@ -80,12 +81,20 @@ Dialog accepts ticket number, fetches data from `ingresos` via `getTicketInfo()`
 ### AddGarment (`src/add_garment/`)
 Adds new garment rows to an existing ticket number already in the database.
 
+### AppSettings (`src/appsettings/`)
+Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.
+
+`SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
+
+Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, report output paths, business name/address/city, Verifactu NIF/name/serviceKey/production.
+
 ### sql_lite (`src/sql_lite/`)
 Stateless free functions; all modules include this header.
 
 Notable items:
-- `DB_PATH` macro → hardcoded to `C:/Users/rocio/OneDrive/Desktop/Tintoreria/BaseDatos/laideal.db`
-- `genHash16()` → 16-char alphanumeric hash for row deduplication
+- `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
+- `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
+- `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
 - `updateLockInIngresos()` → locks/unlocks a month+year in `ingresos`
 - `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
@@ -189,12 +198,10 @@ AEAT QR validation:
 
 | Issue | File | Priority | Notes |
 |-------|------|----------|-------|
-| **Temp debug exit in constructor** | `src/app/mainwindow.cpp` | **Critical** | Remove `verifactuSubmitInvoice()` + `std::exit(0)` before release |
+| **Temp debug code in constructor** | `src/app/mainwindow.cpp` | **Critical** | Remove `verifactuSubmitInvoice()` + `std::exit(0)` before any release |
 | **Verifactu CSV not persisted** | `src/app/mainwindow.cpp` | High | CSV received but not written to DB |
-| **DB missing Verifactu columns** | `ingresos`/`facturas` tables | High | `ALTER TABLE` SQL in verifactu docs |
-| Hardcoded DB path | `src/sql_lite/sql_lite.h:9` | Medium | Requires manual edit for each new machine |
-| Hardcoded icon path | `src/app/main.cpp:12–13` | Medium | Same issue |
-| ServiceKey stored plaintext | `src/verifactu/verifactuconfig.h` | Medium | Consider QSettings encryption |
+| **DB schema missing Verifactu columns** | `ingresos`/`facturas` tables | High | `ALTER TABLE` SQL in verifactu docs |
+| ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
 | No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap |
 
 ---

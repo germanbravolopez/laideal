@@ -13,6 +13,7 @@ target_link_libraries(Listado
     Qt${QT_VERSION_MAJOR}::Sql
     Qt${QT_VERSION_MAJOR}::PrintSupport
     sql_lite
+    appsettings
     TableView
     NumberFormatDelegate
     TextColorDelegate

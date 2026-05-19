@@ -3,6 +3,9 @@
 #include "qprinter.h"
 #include "sql_lite.h"
 #include "mysortfilterproxymodel.h"
+#include "appsettings.h"
+
+#include <QMessageBox>
 
 GenListado::GenListado(QWidget *parent) :
     QDialog(parent),
@@ -42,7 +45,7 @@ void GenListado::print_table()
     model->sort(0, Qt::AscendingOrder);
     QString html_table_prendas = generate_html_prendas_table();
     // set path and print table
-    QString path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Listados_prendas";
+    QString path = AppSettings::instance()->listadosPrendasPath();
     QString filename = "/listado_prendas_" +
             QDate::currentDate().toString("yyyy-MM-dd") +
             ".pdf";
@@ -82,7 +85,9 @@ QString GenListado::generate_html_prendas_table()
         "</head>"
         "<body>"
             "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-            "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>"
+            "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
+            "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
+            "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>"
             "<h1 style='text-align:left;'>Listado de Prendas</h1>"
             "<figure class='table' style='float:left;'>"
                 "<table>"
@@ -172,7 +177,9 @@ QString GenListado::generate_html_gastos_table()
         "</head>"
         "<body>"
             "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-            "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>"
+            "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
+            "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
+            "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>"
             "<h1 style='text-align:left;'>Listado de Gastos</h1>"
             "<figure class='table' style='float:left;'>"
                 "<table>"
@@ -317,7 +324,7 @@ void GenListado::on_bb_ok_cancel_accepted()
                               QMessageBox::Ok);
     else {
         // set path and print table
-        QString path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Listados_gastos";
+        QString path = AppSettings::instance()->listadosGastosPath();
         QString filename = "/listado_gastos_" +
                 QDate::currentDate().toString("yyyy-MM-dd_") +
                 add_sufix_to_filename() +

@@ -2,6 +2,7 @@
 #include "ui_contabilidad.h"
 #include "sql_lite.h"
 #include "qprinter.h"
+#include "appsettings.h"
 
 Contabilidad::Contabilidad(QWidget *parent) :
     QMainWindow(parent),
@@ -122,7 +123,7 @@ void Contabilidad::generateContabilidad()
                 + "<h1 style='text-align:center;'>Contabilidad</h1>"
                 + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
                 + createHtmlTables(0) + "</body></html>";
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad";
+        path = AppSettings::instance()->contabilidadPath();
         filename = "/contabilidad_trimestral_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -141,7 +142,7 @@ void Contabilidad::generateContabilidad()
                 + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value())
                 + " " + contabilidadStatus + "</h2>"
                 + createHtmlTables(0) + "</body></html>";
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
+        path = AppSettings::instance()->contabilidadPath() + "/Mensual";
         filename = "/reporte_mensual_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -170,7 +171,7 @@ void Contabilidad::generateContabilidad()
         }
         contabilidadHtml = contabilidadHtml + "</body></html>";
 
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Anual";
+        path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" +
                 QString::number(ui->sb_year->value()) +
                 ".pdf";
@@ -304,7 +305,9 @@ QString Contabilidad::createHtmlHeader()
     "</head>"
     "<body>"
         "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-        "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>";
+        "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
+        "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
+        "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>";
 
     return contabilidadHtmlHeader;
 }
@@ -317,7 +320,8 @@ QString Contabilidad::createHtmlTables(int trimForYearConfig)
 QString Contabilidad::createHtmlTableIngresos(int trimForYearConfig)
 {
     float totalIncomeIng = getTotalIncome("ingresos", 0, trimForYearConfig);
-    float baseIng = totalIncomeIng / 1.21;
+    float ivaRate = static_cast<float>(AppSettings::instance()->ivaRate());
+    float baseIng = totalIncomeIng / (1.0f + ivaRate / 100.0f);
     float ivaIng = totalIncomeIng - baseIng;
 
     QString contabilidadHtmlTable =

@@ -115,8 +115,6 @@ void VerifactuConfig::save()
 
     m_settings->endGroup();
     m_settings->sync();
-
-    qDebug() << "Verifactu configuration saved";
 }
 
 void VerifactuConfig::load()

@@ -7,6 +7,8 @@
 #include "contabilidad.h"
 #include "facturas.h"
 #include "add_garment.h"
+#include "appsettings.h"
+#include "settingsdialog.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,10 +23,10 @@ MainWindow::MainWindow(QWidget *parent)
     initializeVerifactu();
 
     // TODO: delete this quick test
-    ui->cb_client->setEditText("Elia Lopez Bailon");
-    ui->le_cost_total->setText("4.50");
-    verifactuSubmitInvoice();
-    std::exit(0);
+    //ui->cb_client->setEditText("Elia Lopez Bailon");
+    //ui->le_cost_total->setText("4.50");
+    //verifactuSubmitInvoice();
+    //std::exit(0);
 }
 
 MainWindow::~MainWindow()
@@ -34,6 +36,25 @@ MainWindow::~MainWindow()
 
 void MainWindow::mainwindowInitialSettings()
 {
+    // Settings action — prepended to Archivo menu
+    QAction *actionConfig = new QAction(tr("Configuración..."), this);
+    connect(actionConfig, &QAction::triggered, this, [this]() {
+        SettingsDialog dlg(this);
+        if (dlg.exec() == QDialog::Accepted) {
+            // Apply icon change immediately (no restart needed)
+            QString iconPath = AppSettings::instance()->iconPath();
+            if (!iconPath.isEmpty()) {
+                QIcon icon(iconPath);
+                QApplication::setWindowIcon(icon);
+                setWindowIcon(icon);
+            }
+            // Reload Verifactu with potentially new credentials
+            initializeVerifactu();
+        }
+    });
+    ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);
+    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(1));
+
     // Taskbar
     ui->menuArchivo->setToolTipsVisible(true);
     ui->menuHerramientas->setToolTipsVisible(true);
@@ -301,12 +322,13 @@ void MainWindow::checkClientData()
 bool MainWindow::verifactuSubmitInvoice()
 {
     if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+        double ivaRate = AppSettings::instance()->ivaRate();
         VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
-            ui->le_nr_ticket->text(),                   // número de factura
-            ui->de_date_recep->date(),                  // fecha
-            ui->le_cost_total->text().toFloat() / 1.21, // base imponible
-            21.0,                                       // tipo IVA
-            "Servicios de lavanderia"                   // descripción del servicio
+            ui->le_nr_ticket->text(),
+            ui->de_date_recep->date(),
+            ui->le_cost_total->text().toDouble() / (1.0 + ivaRate / 100.0),
+            ivaRate,
+            "Servicios de lavanderia"
         );
 
         if (result.isSuccess()) {

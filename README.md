@@ -44,14 +44,23 @@ Or open `CMakeLists.txt` directly in Qt Creator and build with the *Release* con
 
 ## Configuration
 
-The following items require manual setup on each machine:
+All configuration is managed through a single JSON file at `~/.laideal_settings.json` (home directory). No source-code edits are required.
 
-| Item | Where | Notes |
-|------|-------|-------|
-| Database path | `src/sql_lite/sql_lite.h` (`DB_PATH`) | Hardcoded — update to local path |
-| App icon path | `src/app/main.cpp` | Hardcoded — update to local path |
-| Verifactu ServiceKey | External `.ini` file | Obtain at https://facturae.irenesolutions.com/verifactu/go |
-| Verifactu company NIF | `src/verifactu/verifactuintegration.cpp` | Set real NIF for production use |
+**First run**: if the database path is not set, the app opens the Settings dialog automatically before showing the main window.
+
+**Ongoing**: open Archivo → Configuración... to change any setting at runtime.
+
+| Setting | Key in JSON | Notes |
+|---------|-------------|-------|
+| Database path | `db.path` | Full path to the SQLite `.db` file |
+| App icon path | `app.iconPath` | Path to `.ico` or `.png` |
+| IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
+| Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |
+| Business name / address / city | `business.*` | Printed on receipts and invoices |
+| Verifactu NIF | `verifactu.nif` | Issuer tax ID (NIF) |
+| Verifactu company name | `verifactu.name` | Issuer name as registered with AEAT |
+| Verifactu ServiceKey | `verifactu.serviceKey` | Obtain at https://facturae.irenesolutions.com/verifactu/go |
+| Verifactu environment | `verifactu.production` | `false` = TESTING, `true` = production |
 
 ---
 

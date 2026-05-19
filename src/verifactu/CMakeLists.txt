@@ -29,6 +29,7 @@ target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Network
+    appsettings
 )
 
 target_compile_definitions(verifactu PRIVATE
