@@ -374,7 +374,7 @@ void MainWindow::showQrToClient(const VerifactuResult &result)
     qrDialog->exec();
 }
 
-bool MainWindow::saveTicket(const VerifactuResult &verifactuResult)
+void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
 {
     const QString timestamp = verifactuResult.isSuccess()
         ? QDateTime::currentDateTime().toString(Qt::ISODate) : "";
@@ -444,11 +444,6 @@ bool MainWindow::saveTicket(const VerifactuResult &verifactuResult)
             db.close();
         }
     }
-    // return boolean of payed ticket
-    if (ui->pb_payment->text() == "SI")
-        return true;
-    else
-        return false;
 }
 
 void MainWindow::printRecibo()
@@ -504,10 +499,10 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
         if (validateTicket()) {
             checkClientData();
             VerifactuResult verifactuResult = verifactuSubmitInvoice();
-            bool payed = saveTicket(verifactuResult);
+            saveTicket(verifactuResult);
             if (AppSettings::instance()->enablePrinting()) {
                 printRecibo();
-                if (payed) {
+                if (ui->pb_payment->text() == "SI") {
                     printFra();
                 }
             }

@@ -20,7 +20,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 | `checkClientData()` | Adds or updates the client row in `clientes` |
 | `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` (INVALID_CONFIG if not configured) |
 | `showQrToClient(result)` | Modal dialog showing QR image + CSV + AEAT validation URL |
-| `saveTicket(verifactuResult)` | Inserts N garment rows into `ingresos` including all 5 `verifactu_*` columns; returns `true` if paid |
+| `saveTicket(verifactuResult)` | Inserts N garment rows into `ingresos` including all 5 `verifactu_*` columns |
 | `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir` dialog |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 

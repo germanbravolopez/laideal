@@ -51,7 +51,7 @@ private slots:
     void checkClientData();
     VerifactuResult verifactuSubmitInvoice();
     void showQrToClient(const VerifactuResult &result);
-    bool saveTicket(const VerifactuResult &verifactuResult);
+    void saveTicket(const VerifactuResult &verifactuResult);
     void printRecibo();
     void printFra();
 
@@ -81,7 +81,6 @@ private slots:
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
     void cleanDatabase(bool print);
-    void on_actionModo_debug_triggered(bool checked);
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
 

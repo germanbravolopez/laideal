@@ -41,7 +41,7 @@ Key methods:
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows warning if not configured |
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
-| `saveTicket(verifactuResult)` | Writes rows to `ingresos` including 5 `verifactu_*` columns; returns `true` if paid |
+| `saveTicket(verifactuResult)` | Writes rows to `ingresos` including 5 `verifactu_*` columns |
 | `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` |
 | `showQrToClient()` | Modal showing QR image + CSV + AEAT validation URL |
 | `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` — guarded by `AppSettings::enablePrinting()` |
