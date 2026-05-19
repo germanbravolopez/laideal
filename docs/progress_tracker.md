@@ -38,6 +38,7 @@ No open blocking issues. All three previous blockers resolved:
 
 | Issue | File | Notes |
 |-------|------|-------|
+| Logging mechanism | ? | Implement a logging system for the verifactu logs, to be able to debug laideal's cutomers problems |
 | Streamline build and deploy from CLI | `CMakeLists.txt`, root scripts | Add a single command (script or CMake target) to configure, build, and deploy the release `.exe` with all Qt dependencies — replacing the current manual Qt Creator / cmake-gui workflow. |
 | GitHub Actions CI/CD pipeline | `.github/workflows/` | Set up a Windows runner that builds on every push/PR (CMake + MinGW), runs tests, and optionally produces a release artifact. Requires a self-hosted runner or a cross-compile setup since the app targets Windows. |
 | Unit and integration tests | `tests/` | Add a test suite (Qt Test or Catch2) covering at minimum: `sql_lite` free functions, `VerifactuManager::processResponse()` response parsing, `MySortFilterProxyModel` diacritic filtering, and price calculation logic in `setGarmentPrice`. |

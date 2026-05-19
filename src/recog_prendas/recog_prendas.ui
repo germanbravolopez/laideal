@@ -29,7 +29,7 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout_4">
-    <item row="2" column="5" rowspan="2">
+    <item row="2" column="5">
      <widget class="QPushButton" name="pb_print">
       <property name="font">
        <font>
@@ -44,6 +44,24 @@
 factura</string>
       </property>
       <property name="checkable">
+       <bool>false</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="5">
+     <widget class="QPushButton" name="pb_verifactu">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="toolTip">
+       <string>Ver información de Verifactu para el ticket seleccionado</string>
+      </property>
+      <property name="text">
+       <string>Verifactu</string>
+      </property>
+      <property name="enabled">
        <bool>false</bool>
       </property>
      </widget>

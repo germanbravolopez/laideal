@@ -4,6 +4,9 @@
 #include "imprimir.h"
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QLabel>
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -42,6 +45,7 @@ void RecogPrendas::resetAllContents()
     ui->le_total_price->clear();
     ui->pb_payment->setChecked(false);
     ui->pb_state->setChecked(false);
+    ui->pb_verifactu->setEnabled(false);
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
@@ -251,6 +255,8 @@ void RecogPrendas::updateRowClickedToFields()
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
+    QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
 
 float RecogPrendas::calculatePrice()
@@ -381,6 +387,13 @@ void RecogPrendas::on_pb_search_clicked()
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::DescendingOrder);
+        // Hide internal columns not meant for display
+        ui->tableView->setColumnHidden(TABLE_HASH,                true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_CSV,       true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_TIMESTAMP, true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_ESTADO,    true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_ERROR,     true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_URL_QR,    true);
         ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
@@ -511,6 +524,50 @@ void RecogPrendas::on_pb_print_clicked()
         ui_impr->printTicket();
         this->close();
     }
+}
+
+void RecogPrendas::on_pb_verifactu_clicked()
+{
+    if (!isCellClicked) return;
+
+    QString ticketNum  = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
+    QString estado     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    QString csv        = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_CSV)).toString();
+    QString timestamp  = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_TIMESTAMP)).toString();
+    QString error      = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ERROR)).toString();
+    QString url        = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_URL_QR)).toString();
+
+    QDialog *dlg = new QDialog(this);
+    dlg->setWindowTitle("Verifactu — Ticket " + ticketNum);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+
+    QVBoxLayout *layout = new QVBoxLayout(dlg);
+
+    auto addRow = [&](const QString &label, const QString &value) {
+        QLabel *lbl = new QLabel(QString("<b>%1</b> %2").arg(label, value.isEmpty() ? "—" : value));
+        lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->addWidget(lbl);
+    };
+
+    addRow("Estado:", estado);
+    addRow("CSV:", csv);
+    addRow("Fecha envío:", timestamp);
+    if (!error.isEmpty())
+        addRow("Error:", error);
+    if (!url.isEmpty()) {
+        QLabel *urlLabel = new QLabel(
+            QString("<b>Validación AEAT:</b> <a href='%1'>Abrir en AEAT</a>").arg(url));
+        urlLabel->setOpenExternalLinks(true);
+        urlLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        layout->addWidget(urlLabel);
+    }
+
+    QPushButton *btnClose = new QPushButton("Cerrar");
+    connect(btnClose, &QPushButton::clicked, dlg, &QDialog::accept);
+    layout->addWidget(btnClose);
+
+    dlg->setMinimumWidth(420);
+    dlg->exec();
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()

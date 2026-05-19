@@ -50,7 +50,6 @@ private slots:
     QString removeSpecialChar(QString str);
     void checkClientData();
     VerifactuResult verifactuSubmitInvoice();
-    void showQrToClient(const VerifactuResult &result);
     void saveTicket(const VerifactuResult &verifactuResult);
     void printRecibo();
     void printFra();

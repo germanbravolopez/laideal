@@ -20,7 +20,13 @@
 #define TABLE_SIZE      10
 #define TABLE_SERVICE   11
 #define TABLE_OBSERV    12
-#define TABLE_EDIT_LOCK 13
+#define TABLE_EDIT_LOCK          13
+// TABLE_HASH = 14 is defined in imprimir.h
+#define TABLE_VERIFACTU_CSV       15
+#define TABLE_VERIFACTU_TIMESTAMP 16
+#define TABLE_VERIFACTU_ESTADO    17
+#define TABLE_VERIFACTU_ERROR     18
+#define TABLE_VERIFACTU_URL_QR    19
 
 namespace Ui {
 class RecogPrendas;
@@ -70,6 +76,7 @@ private slots:
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
+    void on_pb_verifactu_clicked();
 
 private:
     Ui::RecogPrendas *ui;

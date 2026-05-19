@@ -328,7 +328,6 @@ VerifactuResult MainWindow::verifactuSubmitInvoice()
 
         if (result.isSuccess()) {
             qDebug() << "Invoice submitted with CSV:" << result.csv;
-            showQrToClient(result);
         } else {
             qDebug() << "Invoice submission failed:" << result.errorDescription;
         }
@@ -339,40 +338,6 @@ VerifactuResult MainWindow::verifactuSubmitInvoice()
     }
 }
 
-void MainWindow::showQrToClient(const VerifactuResult &result)
-{
-    QDialog *qrDialog = new QDialog(this);
-    qrDialog->setWindowTitle("Código QR de Validación");
-    qrDialog->setModal(true);
-    qrDialog->setAttribute(Qt::WA_DeleteOnClose);
-
-    QVBoxLayout *layout = new QVBoxLayout();
-
-    if (!result.qrCode.isNull()) {
-        QLabel *labelQR = new QLabel();
-        labelQR->setPixmap(result.qrCode.scaledToWidth(300, Qt::SmoothTransformation));
-        layout->addWidget(labelQR, 0, Qt::AlignCenter);
-    }
-
-    QLabel *labelCSV = new QLabel(
-        QString("<b>CSV Verifactu:</b> %1").arg(result.csv));
-    layout->addWidget(labelCSV, 0, Qt::AlignCenter);
-
-    if (!result.validationUrl.isEmpty()) {
-        QLabel *labelUrl = new QLabel(
-            QString("<a href='%1'>Validar en AEAT</a>")
-            .arg(result.validationUrl));
-        labelUrl->setOpenExternalLinks(true);
-        layout->addWidget(labelUrl, 0, Qt::AlignCenter);
-    }
-
-    QPushButton *btnCerrar = new QPushButton("Cerrar");
-    connect(btnCerrar, &QPushButton::clicked, qrDialog, &QDialog::accept);
-    layout->addWidget(btnCerrar);
-
-    qrDialog->setLayout(layout);
-    qrDialog->exec();
-}
 
 void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
 {
