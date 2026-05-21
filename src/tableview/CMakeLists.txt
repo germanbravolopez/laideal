@@ -9,6 +9,8 @@ add_library(tableview STATIC
     numberformatdelegate.cpp
     textcolordelegate.h
     textcolordelegate.cpp
+    linkdelegate.h
+    linkdelegate.cpp
 )
 target_link_libraries(tableview
     PRIVATE

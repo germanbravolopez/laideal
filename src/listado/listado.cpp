@@ -19,6 +19,13 @@ Listado::Listado(QWidget *parent) :
             this, &Listado::textFilterChanged);
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
+    connect(table_listado, &QTableView::clicked, this, [this](const QModelIndex &index) {
+        if (tableName == "ingresos" && index.column() == INGRESOS_IDX_VERIFACTU_URL_QR) {
+            QString url = index.data().toString();
+            if (!url.isEmpty())
+                QDesktopServices::openUrl(QUrl(url));
+        }
+    });
 }
 
 void Listado::setupUi(QMainWindow *Listado)
@@ -178,6 +185,8 @@ void Listado::populateTable()
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_IMPORTE, new NumberFormatDelegate(this));
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_PAYED, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_STATE, new TextColorDelegate(table_listado, this));
+            table_listado->setItemDelegateForColumn(INGRESOS_IDX_VERIFACTU_URL_QR, new LinkDelegate(this));
+            table_listado->horizontalHeader()->moveSection(INGRESOS_IDX_VERIFACTU_URL_QR, INGRESOS_IDX_VERIFACTU_ERROR);
         }
         // Resize table
         table_listado->resizeColumnsToContents();

@@ -16,10 +16,13 @@
 #include <QScrollBar>
 #include <QApplication>
 #include <QScreen>
+#include <QDesktopServices>
+#include <QUrl>
 
 #include "tableview.h"
 #include "filterwidget.h"
 #include "mysortfilterproxymodel.h"
+#include "linkdelegate.h"
 
 class Listado : public QMainWindow
 {

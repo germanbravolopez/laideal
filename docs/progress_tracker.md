@@ -13,7 +13,9 @@
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-No open blocking issues. All three previous blockers resolved:
+- [ ] **Verify contabilidad correctness with Verifactu** — confirm that the accounting reports (`src/contabilidad/`) still produce correct figures after the v8.0 Verifactu changes; specifically, determine whether tickets with `verifactu_estado = 'ANULADA'` are included or excluded from the quarterly totals, and whether the current behaviour is the legally correct one for AEAT.
+
+Previously resolved blockers:
 - [x] Temp debug code removed from `MainWindow` constructor
 - [x] Verifactu response persisted to DB (`verifactu_*` columns, `migrateDatabase()`, `saveTicket(VerifactuResult)`)
 - [x] `ValidationUrl` and `QrCode` captured from `/Create` response in `processResponse()`
@@ -54,6 +56,12 @@ No open blocking issues. All three previous blockers resolved:
 ---
 
 ## Completed Milestones
+
+### Ingresos Listado: clickable Verifactu URL column — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] New `LinkDelegate` added to `src/tableview/` — renders non-empty cells as blue underlined text; follows the same `initStyleOption` pattern as `TextColorDelegate`
+- [x] `INGRESOS_IDX_VERIFACTU_ERROR` (18) and `INGRESOS_IDX_VERIFACTU_URL_QR` (19) constants added to `mysortfilterproxymodel.h`
+- [x] `Listado::populateTable()` applies `LinkDelegate` to the URL QR column and moves it visually before `verifactu_error` via `QHeaderView::moveSection()`
+- [x] `Listado` constructor connects `table_listado->clicked` to open the URL in the system browser via `QDesktopServices::openUrl()`
 
 ### RecogPrendas bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Buttons (payment, state, pay-all, pku-all, separ-garm, print) no longer grey out after an action — moved `setEnabled(true)` calls into `updateRowClickedToFields()` so they fire after every `updateDb()` cycle, not only on direct row click
