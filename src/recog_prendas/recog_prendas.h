@@ -2,6 +2,7 @@
 #define RECOGPRENDAS_H
 
 #include <QMainWindow>
+#include <QDate>
 #include <QMessageBox>
 #include <QSqlQueryModel>
 
@@ -80,6 +81,7 @@ private slots:
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
     void on_pb_verifactu_clicked();
+    void retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate);
 
 private:
     Ui::RecogPrendas *ui;

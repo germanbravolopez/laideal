@@ -32,7 +32,7 @@ Previously resolved blockers:
 - [x] QR on printed receipt — Verifactu QR embedded at the bottom of the Excel ticket via `QXlsx::insertImage`. Image not persisted in DB: save-flow path reuses the pixmap from the `/Create` response; reprint path calls `/GetQrCode` through `VerifactuIntegration::generateQR()` using ticket data from `ingresos`
 - [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
 - [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
-- [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
+- [x] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
 - [x] Logging mechanism — `src/logging/AppLogger` installed in `main.cpp`; all `qDebug`/`qWarning`/`qCritical` output written to `~/.laideal.log` with timestamps; rotates to `.laideal.log.old` at 5 MB; Herramientas → Log de depuración… shows path and opens folder in Explorer
 
 ---
@@ -46,7 +46,7 @@ Previously resolved blockers:
 | Unit and integration tests | `tests/` | Add a test suite (Qt Test or Catch2) covering at minimum: `sql_lite` free functions, `VerifactuManager::processResponse()` response parsing, `MySortFilterProxyModel` diacritic filtering, and price calculation logic in `setGarmentPrice`. |
 | Replace Excel-based printing with EPSON ticket printer API | `src/imprimir/imprimir.cpp` | Current receipt/invoice printing generates an Excel file and launches an external batch script. Should be replaced with direct EPSON ESC/POS (or equivalent) API calls to the ticket printer, removing the Excel template dependency entirely. |
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Previously in INI, now in JSON — still plaintext; consider encryption |
-| No retry for failed Verifactu calls | `src/verifactu/` | Planned |
+| ~~No retry for failed Verifactu calls~~ | ~~`src/verifactu/`~~ | Done — see "Unsuccessful invoice handling" in In Progress |
 | Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. `RecogPrendas` search by name now uses diacritic-insensitive proxy filtering; investigate whether missing clients have encoding differences in the DB. |
 | Price calculation for size-dependent garments (cortinas) may be incorrect | `src/app/mainwindow.cpp` (`setGarmentPrice`), `src/add_garment/add_garment.cpp` | When the size is not an exact value, verify that the price rounds or truncates correctly and matches what is shown on the receipt. |
 | `RecogPrendas`: landline phone (`tel_fijo`) not shown | `src/recog_prendas/recog_prendas.h/cpp` | Add `tel_fijo` from `clientes` table alongside client name, so staff can call the client directly from the pickup panel. |
@@ -56,6 +56,11 @@ Previously resolved blockers:
 ---
 
 ## Completed Milestones
+
+### Unsuccessful invoice handling — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `verifactuSubmitInvoice()` in `MainWindow` now shows `QMessageBox::warning` (Spanish) when submission fails with `ERROR` or `NETWORK_ERROR`; `INVALID_CONFIG` (not configured) remains silent
+- [x] `retryVerifactuSubmit(ticketNum, invoiceDate)` added to `RecogPrendas`: sums ticket total from DB, resubmits via `submitSimplifiedInvoice`, updates all `n_recibo` rows in `ingresos`, refreshes table
+- [x] `on_pb_verifactu_clicked()` extended: shows "Reintentar envío a AEAT" button in the info dialog when `estado == "ERROR"` and Verifactu is configured
 
 ### Persistent debug logging — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] New `src/logging/` module: `AppLogger` static class with `install()` and `logFilePath()`

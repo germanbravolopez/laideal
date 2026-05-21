@@ -2,11 +2,15 @@
 #include "ui_recog_prendas.h"
 #include "sql_lite.h"
 #include "imprimir.h"
+#include "appsettings.h"
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
+#include <QDateTime>
 #include <QDialog>
+#include <QPushButton>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QSqlQuery>
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -550,12 +554,14 @@ void RecogPrendas::on_pb_verifactu_clicked()
 {
     if (!isCellClicked) return;
 
-    QString ticketNum  = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
-    QString estado     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
-    QString csv        = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_CSV)).toString();
-    QString timestamp  = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_TIMESTAMP)).toString();
-    QString error      = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ERROR)).toString();
-    QString url        = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_URL_QR)).toString();
+    QString ticketNum   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
+    QString estado      = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    QString csv         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_CSV)).toString();
+    QString timestamp   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_TIMESTAMP)).toString();
+    QString error       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ERROR)).toString();
+    QString url         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_URL_QR)).toString();
+    QString dateStr     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString();
+    QDate invoiceDate   = QDate::fromString(dateStr, "dd-MM-yyyy");
 
     QDialog *dlg = new QDialog(this);
     dlg->setWindowTitle("Verifactu — Ticket " + ticketNum);
@@ -582,12 +588,90 @@ void RecogPrendas::on_pb_verifactu_clicked()
         layout->addWidget(urlLabel);
     }
 
-    QPushButton *btnClose = new QPushButton("Cerrar");
+    if (estado == "ERROR" && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+        QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
+        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
+            dlg->accept();
+            retryVerifactuSubmit(ticketNum, invoiceDate);
+        });
+        layout->addWidget(btnRetry);
+    }
+
+    QPushButton *btnClose = new QPushButton("Cerrar", dlg);
     connect(btnClose, &QPushButton::clicked, dlg, &QDialog::accept);
     layout->addWidget(btnClose);
 
     dlg->setMinimumWidth(420);
     dlg->exec();
+}
+
+void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate)
+{
+    double total = 0.0;
+    db.open();
+    {
+        QSqlQuery q;
+        q.prepare("SELECT SUM(CAST(importe AS REAL)) FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", ticketNum);
+        q.exec();
+        if (q.next())
+            total = q.value(0).toDouble();
+    }
+    db.close();
+
+    double ivaRate = AppSettings::instance()->ivaRate();
+    VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
+        ticketNum,
+        invoiceDate,
+        total / (1.0 + ivaRate / 100.0),
+        ivaRate,
+        "Servicios de lavanderia"
+    );
+
+    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    db.open();
+    {
+        QSqlQuery upd;
+        if (result.isSuccess()) {
+            upd.prepare("UPDATE ingresos SET "
+                        "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+                        "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+                        "WHERE n_recibo = :n_recibo");
+            upd.bindValue(":csv",    result.csv);
+            upd.bindValue(":ts",     timestamp);
+            upd.bindValue(":estado", "ENVIADA");
+            upd.bindValue(":error",  "");
+            upd.bindValue(":url",    result.validationUrl);
+        } else {
+            upd.prepare("UPDATE ingresos SET "
+                        "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+                        "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+                        "WHERE n_recibo = :n_recibo");
+            upd.bindValue(":csv",    "");
+            upd.bindValue(":ts",     timestamp);
+            upd.bindValue(":estado", "ERROR");
+            upd.bindValue(":error",  result.errorDescription);
+            upd.bindValue(":url",    "");
+        }
+        upd.bindValue(":n_recibo", ticketNum);
+        upd.exec();
+    }
+    db.close();
+
+    on_pb_search_clicked();
+    updateRowClickedToFields();
+    isCellClicked = true;
+
+    if (result.isSuccess()) {
+        QMessageBox::information(this, "Verifactu enviado",
+                                 "Factura enviada correctamente a la AEAT.\n\nCSV: " + result.csv,
+                                 QMessageBox::Ok);
+    } else {
+        qWarning() << "Verifactu retry failed for ticket" << ticketNum << "—" << result.errorDescription;
+        QMessageBox::warning(this, "Error al enviar a Verifactu",
+                             "No se ha podido enviar la factura a la AEAT.\n\nError: " + result.errorDescription,
+                             QMessageBox::Ok);
+    }
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()

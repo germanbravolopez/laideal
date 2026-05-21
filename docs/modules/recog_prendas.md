@@ -68,13 +68,23 @@ Columns 14–19 are loaded by the `SELECT *` query but hidden from the `QTableVi
 
 ## Verifactu info button (`pb_verifactu`)
 
-A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket was submitted to AEAT). Clicking it opens a `QDialog` showing:
+A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket was submitted to AEAT or attempted). Clicking it opens a `QDialog` showing:
 
-- Estado (ENVIADA / ERROR)
+- Estado (`ENVIADA` / `ERROR`)
 - CSV security code
 - Submission timestamp
 - Error description (if any)
 - Clickable "Abrir en AEAT" link to the `verifactu_url_qr` validation URL
+
+When `estado == "ERROR"` and Verifactu is configured, the dialog also shows a **"Reintentar envío a AEAT"** button. Clicking it:
+
+1. Closes the dialog.
+2. Queries `SUM(importe)` for the ticket from `ingresos` to recompute the total.
+3. Calls `VerifactuIntegration::submitSimplifiedInvoice()` with the original `n_recibo`, `fecha_recepcion`, and the recomputed tax base.
+4. Updates **all rows** for that `n_recibo` with the new `verifactu_*` values (`ENVIADA` or `ERROR`).
+5. Refreshes the table view and shows a success/failure message.
+
+Implemented in `retryVerifactuSubmit(ticketNum, invoiceDate)` — a private method called from a lambda in `on_pb_verifactu_clicked()`.
 
 Note: the QR image is not stored in the DB; staff can access it via the AEAT validation link.
 

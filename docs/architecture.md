@@ -185,7 +185,7 @@ on_bb_save_reset_clicked(Save)
   ├── validateTicket()          — checks client, amounts, quarter lock
   ├── checkClientData()         — adds/updates client in `clientes`
   ├── verifactuSubmitInvoice()  — REST POST to AEAT; returns VerifactuResult
-  │     └── showQrToClient()    — shows QR dialog on SUCCESS
+  │     └── on ERROR/NETWORK_ERROR: QMessageBox::warning shown in Spanish
   ├── saveTicket(result)        — writes N rows to `ingresos` + all verifactu_* columns
   ├── [if AppSettings::enablePrinting()] printRecibo()  — Excel + print receipt
   ├── [if printing enabled && paid] printFra()          — Excel + print invoice
@@ -224,7 +224,7 @@ AEAT QR validation:
 | Issue | File | Priority | Notes |
 |-------|------|----------|-------|
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
-| No retry for failed Verifactu submissions | `src/verifactu/` | Low | Roadmap |
+| ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; save-time failure shows warning dialog |
 | Clients missing from Listado but present in MainWindow combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Low | Investigate encoding/collation differences between `readColumnFromTable` and `QSqlTableModel`; tilde issue in name search is now fixed separately |
 
 ---

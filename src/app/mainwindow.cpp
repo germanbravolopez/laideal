@@ -334,6 +334,15 @@ VerifactuResult MainWindow::verifactuSubmitInvoice()
             qDebug() << "Invoice submitted with CSV:" << result.csv;
         } else {
             qDebug() << "Invoice submission failed:" << result.errorDescription;
+            if (result.status == VerifactuResult::ERROR || result.status == VerifactuResult::NETWORK_ERROR) {
+                qWarning() << "Verifactu submission failed for ticket"
+                           << ui->le_nr_ticket->text() << "—" << result.errorDescription;
+                QMessageBox::warning(this, "Error al enviar a Verifactu",
+                    "El ticket se ha guardado pero no ha podido enviarse a la AEAT (Verifactu).\n\n"
+                    "Error: " + result.errorDescription + "\n\n"
+                    "Puede reintentar el envío desde Recogida de prendas → botón Verifactu.",
+                    QMessageBox::Ok);
+            }
         }
         return result;
     } else {
