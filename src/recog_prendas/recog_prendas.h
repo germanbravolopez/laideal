@@ -7,6 +7,8 @@
 
 #include "mysortfilterproxymodel.h"
 
+class VerifactuIntegration;
+
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
 #define TABLE_DATE_RCP   2
@@ -41,6 +43,7 @@ public:
     ~RecogPrendas();
 
     QSqlDatabase db;
+    VerifactuIntegration *m_verifactuIntegration = nullptr;
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel;
     bool isCellClicked = false;

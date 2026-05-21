@@ -55,6 +55,10 @@ No open blocking issues. All three previous blockers resolved:
 
 ## Completed Milestones
 
+### RecogPrendas bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] Buttons (payment, state, pay-all, pku-all, separ-garm, print) no longer grey out after an action — moved `setEnabled(true)` calls into `updateRowClickedToFields()` so they fire after every `updateDb()` cycle, not only on direct row click
+- [x] Print button in RecogPrendas now generates QR code — `m_verifactuIntegration` added as public member to `RecogPrendas`; `MainWindow` passes it at creation; `on_pb_print_clicked()` forwards it to `Imprimir`
+
 ### Ticket header + business phone setting — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `createTicketExcel()` header rewritten: 6-row block (business name at font 22, then company name / NIF / address / city / phone at font 11 bold) sourced entirely from `AppSettings` — removed dead `formatCenterAlign` and broken `verifactuIntegration` call
 - [x] `AppSettings::businessPhone()` / `setBusinessPhone()` added — persisted under `business.phone` in `~/.laideal_settings.json`

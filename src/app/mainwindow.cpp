@@ -641,6 +641,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     RecogPrendas *ui_recog;
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
+    ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
 }

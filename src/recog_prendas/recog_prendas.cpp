@@ -261,6 +261,12 @@ void RecogPrendas::updateRowClickedToFields()
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
+    ui->pb_payment->setEnabled(true);
+    ui->pb_state->setEnabled(true);
+    ui->pb_pay_all->setEnabled(true);
+    ui->pb_pku_all->setEnabled(true);
+    ui->pb_separ_garm->setEnabled(true);
+    ui->pb_print->setEnabled(true);
     QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
@@ -531,6 +537,7 @@ void RecogPrendas::on_pb_print_clicked()
         ui_impr->db = db;
         ui_impr->isRecibo = false;
         ui_impr->isCompleteInvoice = false;
+        ui_impr->verifactuIntegration = m_verifactuIntegration;
         ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
         ui_impr->getTicketInfo();
         ui_impr->createTicketExcel(false, false);
