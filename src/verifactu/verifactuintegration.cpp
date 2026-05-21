@@ -152,7 +152,9 @@ VerifactuResult VerifactuIntegration::cancelInvoice(
 VerifactuResult VerifactuIntegration::generateQR(
     const QString &invoiceNumber,
     const QDate &invoiceDate,
-    double totalAmount)
+    double taxBase,
+    double taxRate,
+    const QString &description)
 {
     VerifactuResult result;
 
@@ -165,9 +167,18 @@ VerifactuResult VerifactuIntegration::generateQR(
     VerifactuInvoice invoice;
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
+    invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
     invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
     invoice.setSellerName(m_manager->getConfig()->getEmitterName());
-    invoice.setTotalAmount(totalAmount);
+    invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
+
+    VerifactuTaxItem taxItem;
+    taxItem.setTaxBase(taxBase);
+    taxItem.setTaxRate(taxRate);
+    taxItem.setTaxAmount(taxBase * taxRate / 100.0);
+
+    invoice.addTaxItem(taxItem);
+    invoice.calculateTotals();
 
     result = m_manager->generateQRCode(invoice);
 

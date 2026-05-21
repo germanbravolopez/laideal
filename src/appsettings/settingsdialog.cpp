@@ -122,10 +122,12 @@ void SettingsDialog::buildBusinessTab(QTabWidget *tabs)
     m_businessName    = new QLineEdit(s->businessName());
     m_businessAddress = new QLineEdit(s->businessAddress());
     m_businessCity    = new QLineEdit(s->businessCity());
+    m_businessPhone   = new QLineEdit(s->businessPhone());
 
     fl->addRow(tr("Nombre:"),    m_businessName);
     fl->addRow(tr("Dirección:"), m_businessAddress);
     fl->addRow(tr("Ciudad:"),    m_businessCity);
+    fl->addRow(tr("Teléfono:"),  m_businessPhone);
 
     tabs->addTab(w, tr("Empresa"));
 }
@@ -179,6 +181,7 @@ void SettingsDialog::accept()
     s->setBusinessName(m_businessName->text().trimmed());
     s->setBusinessAddress(m_businessAddress->text().trimmed());
     s->setBusinessCity(m_businessCity->text().trimmed());
+    s->setBusinessPhone(m_businessPhone->text().trimmed());
 
     s->setVerifactuNif(m_vNif->text().trimmed());
     s->setVerifactuName(m_vName->text().trimmed());

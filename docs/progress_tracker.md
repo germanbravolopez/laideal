@@ -27,7 +27,7 @@ No open blocking issues. All three previous blockers resolved:
   - API returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response — all now captured
   - DB persistence complete: `verifactu_*` columns added to `ingresos` via `migrateDatabase()`
   - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_settings.json`
-- [ ] QR on printed receipt — add Verifactu QR image to the Excel receipt layout (`src/imprimir/imprimir.cpp`)
+- [x] QR on printed receipt — Verifactu QR embedded at the bottom of the Excel ticket via `QXlsx::insertImage`. Image not persisted in DB: save-flow path reuses the pixmap from the `/Create` response; reprint path calls `/GetQrCode` through `VerifactuIntegration::generateQR()` using ticket data from `ingresos`
 - [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
 - [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
 - [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
@@ -54,6 +54,20 @@ No open blocking issues. All three previous blockers resolved:
 ---
 
 ## Completed Milestones
+
+### Ticket header + business phone setting — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `createTicketExcel()` header rewritten: 6-row block (business name at font 22, then company name / NIF / address / city / phone at font 11 bold) sourced entirely from `AppSettings` — removed dead `formatCenterAlign` and broken `verifactuIntegration` call
+- [x] `AppSettings::businessPhone()` / `setBusinessPhone()` added — persisted under `business.phone` in `~/.laideal_settings.json`
+- [x] `SettingsDialog` Business tab gains "Teléfono:" field wired to `businessPhone`
+
+### Verifactu QR on printed ticket — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `Imprimir` gains `qrCode` (QPixmap) and `verifactuIntegration` members; `resolveQrCode()` returns the pre-supplied pixmap if any, otherwise calls `/GetQrCode` via `VerifactuIntegration::generateQR()` using ticket number/date/taxBase/taxRate from `ingresos`
+- [x] `Imprimir::createTicketExcel()` embeds the QR (scaled 140×140) at the bottom of the receipt using `QXlsx::Document::insertImage()`
+- [x] `Imprimir` column constants extended (`TABLE_VERIFACTU_CSV` … `TABLE_VERIFACTU_URL_QR`) for the new `ingresos` columns
+- [x] `MainWindow::printRecibo()` / `printFra()` now take `const VerifactuResult &` and pass `result.qrCode` to `Imprimir` (no extra REST call when QR is already in hand)
+- [x] `Imprimir → Recibo / Factura / Factura completa` reprint actions inject `m_verifactuIntegration` so the dialog can hit `/GetQrCode` for tickets without an in-memory pixmap
+- [x] `VerifactuIntegration::generateQR()` signature fixed: now builds a valid F2 simplified invoice (with tax item) so the `/GetQrCode` endpoint accepts the request (previous version failed `isValid()` due to missing TaxItems)
+- [x] `imprimir` CMake target now links the `verifactu` library
 
 ### Invoice cancellation — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `CancelInvoiceDialog` added to `src/app/` — search ticket by number, show cliente/fecha/importe/CSV/estado, enable cancel only when `estado == "ENVIADA"`

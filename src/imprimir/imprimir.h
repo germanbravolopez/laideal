@@ -13,22 +13,30 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPixmap>
 
-#define TABLE_TICKET     0
-#define TABLE_CLIENT     1
-#define TABLE_DATE_RCP   2
-#define TABLE_DATE_PAY   3
-#define TABLE_DATE_PKU   4
-#define TABLE_PRICE      5
-#define TABLE_IS_PAYED   6
-#define TABLE_STATE      7
-#define TABLE_QUANTITY   8
-#define TABLE_GARMENT    9
-#define TABLE_SIZE      10
-#define TABLE_SERVICE   11
-#define TABLE_OBSERV    12
-#define TABLE_EDIT_LOCK 13
-#define TABLE_HASH      14
+#include "verifactuintegration.h"
+
+#define TABLE_TICKET             0
+#define TABLE_CLIENT             1
+#define TABLE_DATE_RCP           2
+#define TABLE_DATE_PAY           3
+#define TABLE_DATE_PKU           4
+#define TABLE_PRICE              5
+#define TABLE_IS_PAYED           6
+#define TABLE_STATE              7
+#define TABLE_QUANTITY           8
+#define TABLE_GARMENT            9
+#define TABLE_SIZE              10
+#define TABLE_SERVICE           11
+#define TABLE_OBSERV            12
+#define TABLE_EDIT_LOCK         13
+#define TABLE_HASH              14
+#define TABLE_VERIFACTU_CSV     15
+#define TABLE_VERIFACTU_TS      16
+#define TABLE_VERIFACTU_ESTADO  17
+#define TABLE_VERIFACTU_ERROR   18
+#define TABLE_VERIFACTU_URL_QR  19
 
 class Imprimir : public QDialog
 {
@@ -38,12 +46,15 @@ public:
     QSqlDatabase db;
     QSqlQueryModel *sqlQueryModel;
     bool isRecibo, isCompleteInvoice;
+    VerifactuIntegration *verifactuIntegration = nullptr;
+    QPixmap qrCode;
     Imprimir(QWidget *parent = nullptr);
 
     // Public functions
     void getTicketInfo();
     void createTicketExcel(bool copyForClient, bool addPayedInfo);
     void printTicket();
+    QPixmap resolveQrCode();
 
     // Setup Dialog in code
     QFormLayout *formLayout;

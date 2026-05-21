@@ -44,7 +44,9 @@ public:
     VerifactuResult generateQR(
         const QString &invoiceNumber,
         const QDate &invoiceDate,
-        double totalAmount
+        double taxBase,
+        double taxRate,
+        const QString &description = QString()
     );
 
     QString getConfigInfo() const;

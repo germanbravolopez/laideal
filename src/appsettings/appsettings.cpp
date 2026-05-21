@@ -156,6 +156,9 @@ void    AppSettings::setBusinessAddress(const QString &v) { setStr({"business", 
 QString AppSettings::businessCity() const    { return str({"business", "city"}); }
 void    AppSettings::setBusinessCity(const QString &v) { setStr({"business", "city"}, v); }
 
+QString AppSettings::businessPhone() const   { return str({"business", "phone"}); }
+void    AppSettings::setBusinessPhone(const QString &v) { setStr({"business", "phone"}, v); }
+
 // ---------------------------------------------------------------------------
 // Taxes
 // ---------------------------------------------------------------------------

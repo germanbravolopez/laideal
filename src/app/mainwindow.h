@@ -52,8 +52,8 @@ private slots:
     void checkClientData();
     VerifactuResult verifactuSubmitInvoice();
     void saveTicket(const VerifactuResult &verifactuResult);
-    void printRecibo();
-    void printFra();
+    void printRecibo(const VerifactuResult &verifactuResult);
+    void printFra(const VerifactuResult &verifactuResult);
 
     // Widgets
     void on_pb_payment_toggled(bool checked);

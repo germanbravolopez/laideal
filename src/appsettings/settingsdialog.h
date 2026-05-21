@@ -42,6 +42,7 @@ private:
     QLineEdit *m_businessName;
     QLineEdit *m_businessAddress;
     QLineEdit *m_businessCity;
+    QLineEdit *m_businessPhone;
 
     QLineEdit *m_vNif;
     QLineEdit *m_vName;

@@ -411,13 +411,16 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
     }
 }
 
-void MainWindow::printRecibo()
+void MainWindow::printRecibo(const VerifactuResult &verifactuResult)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
+    if (verifactuResult.isSuccess() && !verifactuResult.qrCode.isNull())
+        ui_impr->qrCode = verifactuResult.qrCode;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(true, ui->pb_payment->isChecked());
@@ -426,13 +429,16 @@ void MainWindow::printRecibo()
     ui_impr->printTicket();
 }
 
-void MainWindow::printFra()
+void MainWindow::printFra(const VerifactuResult &verifactuResult)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
+    if (verifactuResult.isSuccess() && !verifactuResult.qrCode.isNull())
+        ui_impr->qrCode = verifactuResult.qrCode;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(false, false);
@@ -466,9 +472,9 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
             VerifactuResult verifactuResult = verifactuSubmitInvoice();
             saveTicket(verifactuResult);
             if (AppSettings::instance()->enablePrinting()) {
-                printRecibo();
+                printRecibo(verifactuResult);
                 if (ui->pb_payment->text() == "SI") {
-                    printFra();
+                    printFra(verifactuResult);
                 }
             }
             resetAllContents();
@@ -646,6 +652,7 @@ void MainWindow::on_actionRecibo_triggered()
     ui_impr->db = db;
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir recibo");
     ui_impr->show();
 }
@@ -657,6 +664,7 @@ void MainWindow::on_actionFactura_triggered()
     ui_impr->db = db;
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir factura");
     ui_impr->show();
 }
@@ -668,6 +676,7 @@ void MainWindow::on_actionFactura_completa_triggered()
     ui_impr->db = db;
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = true;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir factura completa");
     ui_impr->show();
 }

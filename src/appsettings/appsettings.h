@@ -53,6 +53,8 @@ public:
     void setBusinessAddress(const QString &v);
     QString businessCity() const;
     void setBusinessCity(const QString &v);
+    QString businessPhone() const;
+    void setBusinessPhone(const QString &v);
 
     // --- Taxes ---
     double ivaRate() const;      // percentage, e.g. 21.0

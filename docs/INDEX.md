@@ -104,7 +104,7 @@ Read the full skill file when the skill is relevant to your task.
 | All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
-| QR dialog implementation | `src/app/mainwindow.cpp` (`showQrToClient`) |
+| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `createTicketExcel`) — pixmap from save flow or REST `/GetQrCode` |
 | Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
