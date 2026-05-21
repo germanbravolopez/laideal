@@ -1,6 +1,7 @@
 configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h @ONLY)
 
 if (WIN32)
+    string(TIMESTAMP CURRENT_YEAR "%Y")
     configure_file(
         ${CMAKE_SOURCE_DIR}/resources/laideal.rc.in
         ${CMAKE_CURRENT_BINARY_DIR}/laideal.rc @ONLY

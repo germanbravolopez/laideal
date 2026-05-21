@@ -24,7 +24,7 @@ BEGIN
             VALUE "OriginalFilename", "laideal.exe\0"
             VALUE "ProductName",      "laideal\0"
             VALUE "ProductVersion",   "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@\0"
-            VALUE "LegalCopyright",   "German Bravo Lopez (C), 2024\0"
+            VALUE "LegalCopyright",   "German Bravo Lopez (C), @CURRENT_YEAR@\0"
         END
     END
     BLOCK "VarFileInfo"
