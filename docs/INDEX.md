@@ -48,6 +48,7 @@ Read the full skill file when the skill is relevant to your task.
 | App settings singleton | `src/appsettings/appsettings.h` | `src/appsettings/appsettings.cpp` |
 | Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
+| Invoice cancellation dialog | `src/app/cancelinvoicedialog.h` | `.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |
@@ -66,6 +67,7 @@ Read the full skill file when the skill is relevant to your task.
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
 | Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
 | Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
+| Link (URL) delegate | `src/tableview/linkdelegate.h` | `.cpp` |
 | Excel library | `QXlsx/` (entire directory) | third-party — do not modify |
 
 ## Build Files
@@ -74,7 +76,7 @@ Read the full skill file when the skill is relevant to your task.
 |------|---------|
 | `CMakeLists.txt` | Root CMake — project 8.0, adds all subdirectories |
 | `src/app/CMakeLists.txt` | Main executable target (`laideal`) |
-| `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate) |
+| `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate, LinkDelegate) |
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |
@@ -108,6 +110,7 @@ Read the full skill file when the skill is relevant to your task.
 | Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
+| Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/imprimir/imprimir.cpp` (`createTicketExcel` — `copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |

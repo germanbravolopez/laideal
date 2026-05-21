@@ -77,6 +77,7 @@ Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 Creates Excel via `QXlsx`, then launches an external process to print.
 `isRecibo = true` → receipt layout; `false` → invoice layout; `isCompleteInvoice` flag adds extra fields.
 Dialog accepts ticket number, fetches data from `ingresos` via `getTicketInfo()`.
+General conditions block (4 clauses + RGPD notice) is printed only when `copyForClient == true`; the establishment copy omits it. Clauses are grounded in RD 1453/1987. See `docs/modules/imprimir.md` for the full layout table.
 
 ### AddGarment (`src/add_garment/`)
 Adds new garment rows to an existing ticket number already in the database.
@@ -91,13 +92,14 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | `FilterWidget` | `filterwidget.h/.cpp` | `QLineEdit` with case-sensitivity toggle and pattern-syntax menu (Regex / Wildcard / Fixed) |
 | `NumberFormatDelegate` | `numberformatdelegate.h/.cpp` | `QStyledItemDelegate` that formats numeric cells to 2 decimal places |
 | `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red |
+| `LinkDelegate` | `linkdelegate.h/.cpp` | `QStyledItemDelegate` that renders non-empty cells as blue underlined text; used for the `verifactu_url_qr` column in the Ingresos Listado |
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, `print.enable` (bool — replaces the removed debug flag), report output paths, business name/address/city, Verifactu NIF/name/serviceKey/production.
+Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, `print.enable` (bool — replaces the removed debug flag), report output paths, business name/address/city/phone (`business.phone` — used in ticket header and RGPD clause), Verifactu NIF/name/serviceKey/production.
 
 ### sql_lite (`src/sql_lite/`)
 Stateless free functions; all modules include this header.

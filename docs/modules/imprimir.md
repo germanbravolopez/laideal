@@ -53,10 +53,24 @@ Rows are written sequentially using the local `row` counter:
 | … | totals block (receipt: TOTAL only; invoice: base + IVA + TOTAL) | bold |
 | … | Verifactu QR image (140×140, if available) | — |
 | … | payment info / copy label | — |
-| … | general conditions | font 9–10 |
+| … | general conditions (client copy only — see below) | font 9–10 |
 | last | timestamp | font 9, top border |
 
 All header fields are read from `AppSettings::instance()` at render time.
+
+## General conditions block
+
+The conditions block is rendered only when `copyForClient == true` (establishment copy omits it entirely).
+
+All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against Consumo Responde (Junta de Andalucía):
+
+| # | Topic | Key text | Legal basis |
+|---|-------|----------|-------------|
+| 1 | Receipt / identity | Receipt required to collect; loss does not prevent it — client identifies themselves | Custom clause, industry standard |
+| 2 | Storage obligation | Storage fees may accrue after 3 months from delivery; custody obligation ends at 6 months | Art. 6 RD 1453/1987 (custody, not documentation) |
+| 3 | Accessories | No liability for buttons/ornaments/accessories unless noted on *this receipt*; removal recommended | Art. 3 RD 1453/1987; disclaimer must be per-garment |
+| 4 | Pre-cleaning advisory | If garment state implies risk of damage or uncertain outcome, client will be informed before treatment | Art. 6 RD 1453/1987 (information obligation) |
+| 5 | RGPD notice | Data processed by `businessName()` to manage the service; rights under Arts.15-22 RGPD via `businessPhone()` (falls back to "ver cartel en tienda") | LOPDGDD Art. 11 / RGPD Art. 13 layered-notice |
 
 ## Table column indices (imprimir.h)
 

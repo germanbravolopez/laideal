@@ -27,6 +27,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | App settings (all configurable values) | `src/appsettings/appsettings.h` / `.cpp` |
 | Settings dialog (UI to edit settings) | `src/appsettings/settingsdialog.h` / `.cpp` |
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |
+| Invoice cancellation dialog | `src/app/cancelinvoicedialog.h` / `.cpp` |
 | Ticket save flow | `src/app/mainwindow.cpp` (`saveTicket`) |
 | All DB free functions | `src/sql_lite/sql_lite.h` / `.cpp` |
 | Generic list viewer | `src/listado/listado.h` / `.cpp` |

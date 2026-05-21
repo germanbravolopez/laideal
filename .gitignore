@@ -22,3 +22,6 @@ build
 # binaries
 *.dll
 *.exe
+
+# local settings
+.claude/settings.local.json

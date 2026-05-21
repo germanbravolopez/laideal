@@ -50,12 +50,25 @@ Previously resolved blockers:
 | Clients missing from `Listado` table view but present in `MainWindow` combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Some clients appear in the combobox (populated via `readColumnFromTable`) but not in the list view. `RecogPrendas` search by name now uses diacritic-insensitive proxy filtering; investigate whether missing clients have encoding differences in the DB. |
 | Price calculation for size-dependent garments (cortinas) may be incorrect | `src/app/mainwindow.cpp` (`setGarmentPrice`), `src/add_garment/add_garment.cpp` | When the size is not an exact value, verify that the price rounds or truncates correctly and matches what is shown on the receipt. |
 | `RecogPrendas`: landline phone (`tel_fijo`) not shown | `src/recog_prendas/recog_prendas.h/cpp` | Add `tel_fijo` from `clientes` table alongside client name, so staff can call the client directly from the pickup panel. |
-| Establishment receipt copy: remove general conditions at the end | `src/imprimir/imprimir.cpp` | The copy printed for the shop should not include the general conditions block. Only the client copy needs it. |
-| Client receipt: replace general conditions with data-protection notice | `src/imprimir/imprimir.cpp` | Reduce the general conditions text and add a GDPR/data-protection legend required by Spanish law. |
+| ~~Establishment receipt copy: remove general conditions at the end~~ | ~~`src/imprimir/imprimir.cpp`~~ | Fixed — wrapped conditions block in `if (!isRecibo \|\| copyForClient)`. |
+| ~~Client receipt: add RGPD data-protection clause~~ | ~~`src/imprimir/imprimir.cpp`~~ | **Done.** 4th bullet added to conditions block: controller = `businessName()`, purpose = gestión del servicio, rights = arts.15-22 RGPD, contact = `businessPhone()` (falls back to "ver cartel en tienda" if empty). Based on LOPDGDD Art. 11 (BOE-A-2018-16673), verified live against aepd.es. If a dedicated email is preferred over phone as the rights-contact, add `businessEmail()` to AppSettings and update the clause. |
 
 ---
 
 ## Completed Milestones
+
+### General conditions rewritten for legal correctness — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] Conditions block (client copy only) rewritten against RD 1453/1987 (BOE-A-1987-26716) and Consumo Responde (Junta de Andalucía)
+- [x] Clause 1 (receipt/identity): receipt required to collect garment; loss does not prevent collection — client identifies themselves
+- [x] Clause 2 (storage — legal fix): storage fees may accrue after 3 months from delivery; custody obligation ends at 6 months (Art. 6 RD 1453/1987 correctly applied to custody, not documentation)
+- [x] Clause 3 (accessories — per-receipt): disclaimer for buttons/ornaments applies only when noted on *this specific receipt*; removal recommended before delivery
+- [x] Clause 4 (NEW — pre-cleaning advisory, Art. 6 RD 1453/1987): if garment condition implies risk of damage or uncertain outcome, client will be informed before treatment proceeds
+
+### RGPD first-layer notice added to client receipt — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] 4th bullet added to `createTicketExcel()` conditions block (client copy only): "Sus datos son tratados por [businessName] para gestionar el servicio (RGPD). Derechos arts.15-22: [businessPhone or 'ver cartel en tienda']." Complies with LOPDGDD Art. 11 layered-notice requirement verified live against aepd.es
+
+### General conditions omitted from establishment receipt copy — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `createTicketExcel()` conditions block wrapped in `if (!isRecibo || copyForClient)` — establishment copy now ends at the timestamp; invoice copies (no `isRecibo`) always show conditions as before
 
 ### Ingresos Listado: clickable Verifactu URL column — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] New `LinkDelegate` added to `src/tableview/` — renders non-empty cells as blue underlined text; follows the same `initStyleOption` pattern as `TextColorDelegate`

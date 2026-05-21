@@ -363,40 +363,76 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.write(row, 1, QString("(Copia para el establecimiento)"));
         row += 2;
     }
-    // Insert policy
-    QXlsx::Format formatPolicy;
-    formatPolicy.setFontSize(10);
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("CONDICIONES GENERALES."), formatPolicy);
-    row++;
-    formatPolicy.setFontSize(9);
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("- El recibo deberá ser presentado al retirar la"), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("prenda. En caso de pérdida, el usuario"), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("acreditará su identidad."), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("- La obligación de conservar las prendas por el"), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("establecimiento caduca una vez transcurridos"), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("SEIS MESES desde la fecha de recepción."), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("- No se responde de botones y otros adornos "), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("delicados de las prendas. Se recomienda que"), formatPolicy);
-    row++;
-    excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("que sean desmontados por el cliente."), formatPolicy);
-    row++;
+    // Insert policy — only on the client copy; the establishment copy omits it
+    if (copyForClient) {
+        QXlsx::Format formatPolicy;
+        formatPolicy.setFontSize(10);
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("CONDICIONES GENERALES."), formatPolicy);
+        row++;
+        formatPolicy.setFontSize(9);
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("(RD 1453/1987)"), formatPolicy);
+        row++;
+        // Clause 1: receipt presentation / identity verification
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("- El recibo deberá presentarse al retirar la"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("prenda. Su pérdida no impide la recogida;"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("el cliente acreditará su identidad."), formatPolicy);
+        row++;
+        // Clause 2: storage obligation (3 months free, 6 months limit — Art. 6 RD 1453/1987)
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("- Las prendas no recogidas en 3 MESES desde"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("la entrega podrán devengar gastos de custodia."), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("Transcurridos 6 MESES el establecimiento"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("queda liberado de la obligación de custodia."), formatPolicy);
+        row++;
+        // Clause 3: accessories — disclaimer applies when noted on this receipt
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("- No se responde de botones, adornos ni"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("accesorios salvo anotación en este recibo."), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("Se recomienda retirarlos antes de entregar."), formatPolicy);
+        row++;
+        // Clause 4: pre-cleaning advisory obligation (Art. 6 RD 1453/1987)
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("- Si el estado de la prenda implica riesgo de"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("daño o resultado incierto, se informará al"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("cliente antes de proceder al tratamiento."), formatPolicy);
+        row++;
+        // RGPD first-layer notice (LOPDGDD Art. 11 / RGPD Art. 13)
+        QString rgpdContact = settings->businessPhone().isEmpty()
+                              ? QString("ver cartel en tienda")
+                              : settings->businessPhone();
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("- Sus datos son tratados por "), formatPolicy);
+        row++;
+        excel.write(row, 1, settings->businessName(), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("para gestionar el servicio (RGPD)."), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("Derechos arts.15-22: ") + rgpdContact + ".", formatPolicy);
+        row++;
+    }
     // Insert timestamp
     QXlsx::Format formatStamp;
     formatStamp.setFontSize(9);
