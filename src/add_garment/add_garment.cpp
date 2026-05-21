@@ -227,7 +227,8 @@ void AddGarment::saveFactura()
     q.bindValue(":servicio", ui->cb_servicio->currentText());
     q.bindValue(":edit_lock", "0");
     q.bindValue(":hash", hash);
-    q.exec();
+    if (!q.exec())
+        qWarning() << "AddGarment INSERT failed for ticket" << ui->le_n_recibo->text() << "—" << q.lastError().text();
     q.clear();
     db.close();
 }

@@ -360,6 +360,9 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
     const QString timestamp = verifactuResult.isSuccess()
         ? QDateTime::currentDateTime().toString(Qt::ISODate) : "";
 
+    qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
+             << "rows:" << ui->table_ticket->rowCount();
+
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
@@ -420,7 +423,9 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
                 q.bindValue(":verifactu_error",     "");
                 q.bindValue(":verifactu_url_qr",    "");
             }
-            q.exec();
+            if (!q.exec())
+                qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
+                           << "row" << row << "—" << q.lastError().text();
             q.clear();
             db.close();
         }

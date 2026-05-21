@@ -85,7 +85,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
                 q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
                 // Write to db
-                q.exec();
+                if (!q.exec())
+                    qWarning() << "updateDb PAY_YES UPDATE failed —" << q.lastError().text();
                 q.clear();
                 db.close();
             }
@@ -110,7 +111,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb PAY_NO UPDATE failed —" << q.lastError().text();
             q.clear();
             db.close();
         }
@@ -131,7 +133,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb PKU_YES UPDATE failed —" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -146,7 +149,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb PKU_NO UPDATE failed —" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -160,7 +164,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb OBSV UPDATE failed —" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -176,7 +181,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SIZE_AND_PRICE UPDATE failed —" << q.lastError().text();
             q.clear();
             db.close();
         }
@@ -200,7 +206,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SEPARATE_GARM UPDATE failed —" << q.lastError().text();
             q.clear();
             db.close();
 
@@ -231,7 +238,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":servicio", ui->le_servic->text());
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SEPARATE_GARM INSERT failed —" << q.lastError().text();
             q.clear();
             db.close();
         }
