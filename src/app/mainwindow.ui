@@ -655,6 +655,7 @@ prenda</string>
     <addaction name="actionAnadir_nuevas_prendas"/>
     <addaction name="separator"/>
     <addaction name="actionAnular_factura_verifactu"/>
+    <addaction name="actionMostrar_log"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -850,6 +851,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
+   </property>
+  </action>
+  <action name="actionMostrar_log">
+   <property name="text">
+    <string>Log de depuración...</string>
+   </property>
+   <property name="toolTip">
+    <string>Muestra la ubicación del archivo de log para enviar al soporte técnico</string>
    </property>
   </action>
  </widget>

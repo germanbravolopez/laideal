@@ -17,6 +17,7 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport 
 #find_package(QXlsxQt6 REQUIRED)
 
 add_subdirectory(QXlsx)
+add_subdirectory(src/logging)
 add_subdirectory(src/appsettings)
 add_subdirectory(src/app)
 add_subdirectory(src/sql_lite)

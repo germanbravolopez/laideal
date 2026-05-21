@@ -1,7 +1,11 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
+#include "applogger.h"
 #include <QDateTime>
+#include <QDesktopServices>
+#include <QFileInfo>
+#include <QUrl>
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -842,4 +846,18 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     dlg.db = db;
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
+}
+
+void MainWindow::on_actionMostrar_log_triggered()
+{
+    const QString path = AppLogger::logFilePath();
+    QMessageBox msg(this);
+    msg.setWindowTitle("Log de depuración");
+    msg.setText(QString("El archivo de log se encuentra en:\n%1\n\n"
+                        "Envíe este archivo al soporte técnico cuando tenga un problema.").arg(path));
+    msg.setStandardButtons(QMessageBox::Ok);
+    QPushButton *openBtn = msg.addButton("Abrir carpeta", QMessageBox::ActionRole);
+    msg.exec();
+    if (msg.clickedButton() == openBtn)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
 }

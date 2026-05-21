@@ -25,6 +25,7 @@ target_link_libraries(laideal
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
+    logging
     appsettings
     sql_lite
     imprimir

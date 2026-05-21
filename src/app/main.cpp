@@ -3,6 +3,7 @@
 #include "appsettings.h"
 #include "settingsdialog.h"
 #include "sql_lite.h"
+#include "applogger.h"
 
 #include <QApplication>
 #include <QFile>
@@ -13,6 +14,8 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     a.setStyle("fusion");
+
+    AppLogger::install();
 
     AppSettings *settings = AppSettings::instance();
     settings->load();

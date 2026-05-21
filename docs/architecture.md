@@ -18,6 +18,7 @@ MainWindow (src/app/)
                 └── VerifactuInvoice + VerifactuTaxItem
 
 Shared infrastructure:
+  src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
   src/tableview/                  — all table-view utility classes (single CMake target):
@@ -93,6 +94,14 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | `NumberFormatDelegate` | `numberformatdelegate.h/.cpp` | `QStyledItemDelegate` that formats numeric cells to 2 decimal places |
 | `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red |
 | `LinkDelegate` | `linkdelegate.h/.cpp` | `QStyledItemDelegate` that renders non-empty cells as blue underlined text; used for the `verifactu_url_qr` column in the Ingresos Listado |
+
+### AppLogger (`src/logging/`)
+Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `qWarning`, `qCritical`, and `qFatal` output to `~/.laideal.log` using `qInstallMessageHandler`. No changes required at any call site.
+
+- Log format: `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] <message>`
+- Session separator written on each launch
+- Rotates to `.laideal.log.old` when the file exceeds 5 MB; thread-safe via `QMutex`
+- `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Herramientas → Log de depuración…) to show the customer where to find the file
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.

@@ -24,6 +24,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | What you need | Where |
 |---------------|-------|
 | Entry point | `src/app/main.cpp` |
+| Debug log file | `src/logging/applogger.h` / `.cpp` |
 | App settings (all configurable values) | `src/appsettings/appsettings.h` / `.cpp` |
 | Settings dialog (UI to edit settings) | `src/appsettings/settingsdialog.h` / `.cpp` |
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |

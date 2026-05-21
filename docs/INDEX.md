@@ -45,6 +45,7 @@ Read the full skill file when the skill is relevant to your task.
 | Module | Header | Implementation |
 |--------|--------|---------------|
 | Entry point | `src/app/main.cpp` | — |
+| Debug logger | `src/logging/applogger.h` | `src/logging/applogger.cpp` |
 | App settings singleton | `src/appsettings/appsettings.h` | `src/appsettings/appsettings.cpp` |
 | Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
@@ -112,6 +113,8 @@ Read the full skill file when the skill is relevant to your task.
 | Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
 | Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/imprimir/imprimir.cpp` (`createTicketExcel` — `copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
+| Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
+| How to read customer bug logs | `~/.laideal.log` on customer machine; Herramientas → Log de depuración… opens the folder |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Release procedure | Root `README.md` |

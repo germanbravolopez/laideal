@@ -84,6 +84,7 @@ private slots:
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
     void on_actionAnular_factura_verifactu_triggered();
+    void on_actionMostrar_log_triggered();
 
 private:
     Ui::MainWindow *ui;

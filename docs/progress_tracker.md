@@ -33,7 +33,7 @@ Previously resolved blockers:
 - [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
 - [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
 - [ ] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
-- [ ] Logging mechanism — implement a persistent logging system for Verifactu submissions to help debug customer issues (`src/verifactu/` or a new `src/logging/` module)
+- [x] Logging mechanism — `src/logging/AppLogger` installed in `main.cpp`; all `qDebug`/`qWarning`/`qCritical` output written to `~/.laideal.log` with timestamps; rotates to `.laideal.log.old` at 5 MB; Herramientas → Log de depuración… shows path and opens folder in Explorer
 
 ---
 
@@ -56,6 +56,14 @@ Previously resolved blockers:
 ---
 
 ## Completed Milestones
+
+### Persistent debug logging — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] New `src/logging/` module: `AppLogger` static class with `install()` and `logFilePath()`
+- [x] `qInstallMessageHandler` captures all `qDebug` / `qWarning` / `qCritical` output — no changes needed to any existing call site
+- [x] Log format: `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] message`; session separator written on each app start
+- [x] Rotation: file renamed to `.laideal.log.old` when it exceeds 5 MB; thread-safe via `QMutex`
+- [x] Log file location: `~/.laideal.log` (consistent with `~/.laideal_settings.json`)
+- [x] Herramientas → Log de depuración… dialog shows full path + "Abrir carpeta" button (opens Explorer)
 
 ### General conditions rewritten for legal correctness — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Conditions block (client copy only) rewritten against RD 1453/1987 (BOE-A-1987-26716) and Consumo Responde (Junta de Andalucía)
