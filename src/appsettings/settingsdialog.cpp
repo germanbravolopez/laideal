@@ -188,9 +188,11 @@ void SettingsDialog::accept()
     s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
 
-    if (!s->save())
+    if (!s->save()) {
+        qWarning() << "SettingsDialog: failed to save settings to" << s->filePath();
         QMessageBox::warning(this, tr("Error"),
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
+    }
 
     QDialog::accept();
 }

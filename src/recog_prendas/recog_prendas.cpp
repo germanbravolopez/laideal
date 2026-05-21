@@ -70,11 +70,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         // If editLock payment info cannot be changed
         if (!editLock) {
             // dont update payment date for blocked quarters
-            if (readLockForMonthAndYear(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
+            if (readLockForMonthAndYear(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1) {
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
-            else {
+            } else {
                 db.open();
                 q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
                           "n_recibo = :n_re AND hash = :hash");
@@ -90,10 +90,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 db.close();
             }
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     case PAY_NO:
         // If editLock payment info cannot be changed
@@ -113,10 +114,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.clear();
             db.close();
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     case PKU_YES:
         db.open();
@@ -233,10 +235,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.clear();
             db.close();
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     default:
         break;
@@ -315,10 +318,11 @@ void RecogPrendas::on_pb_search_clicked()
                 QString clientFromPhone;
                 if (phoneQ.first())
                     clientFromPhone = phoneQ.value(0).toString();
-                else
+                else {
                     QMessageBox::warning(this, tr("Búsqueda vacía"),
                                           tr("No se ha encontrado ningún cliente con el teléfono indicado."),
                                           QMessageBox::Ok, QMessageBox::Ok);
+                }
                 db.close();
 
                 if (!clientFromPhone.isNull()) {
@@ -373,11 +377,13 @@ void RecogPrendas::on_pb_search_clicked()
                 nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
             }
         }
-        else
+        else {
+            qWarning() << "Search: unrecognized input:" << ui->le_search->text();
             QMessageBox::warning(this, tr("Búsqueda incorrecta"),
                                   tr("El contenido de la búsqueda no se ha identificado.\n"
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
+        }
         // Complete model and set to the view
         sqlQueryModel->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("Nº"));
         sqlQueryModel->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("Cliente"));
@@ -684,12 +690,16 @@ void RecogPrendas::on_pb_separ_garm_clicked()
             if (ok) {
                 updateDb(SEPARATE_GARM, number);
             }
-        } else
+        } else {
+            qWarning() << "Garment split blocked: quantity is not greater than 1";
             QMessageBox::warning(this, "Separar prendas",
                                      "La cantidad de la prenda seleccionada no es mayor de 1, no se puede separar en varios recibos.",
                                      QMessageBox::Ok, QMessageBox::Ok);
-    } else
+        }
+    } else {
+        qWarning() << "Garment split blocked: garment has a non-zero size";
         QMessageBox::warning(this, "Separar prendas",
                                  "No se pueden separar prendas que tienen un tamaño distinto de 0.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+    }
 }

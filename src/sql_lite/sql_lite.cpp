@@ -1,5 +1,6 @@
 #include "sql_lite.h"
 
+#include <QDebug>
 #include <QMessageBox>
 #include <QRandomGenerator>
 #include <QSqlQuery>
@@ -62,10 +63,12 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
     if (q.isSelect()) {
         if (q.first())
             maxValue = q.value(0).toInt();
-        else
+        else {
+            qWarning() << "readMaxValueInColumnFromTable: empty result for column" << column << "in" << table;
             QMessageBox::warning(nullptr, "Error base de datos",
                                  "Búsqueda vacía al usar readMaxValueInColumnFromTable.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
     } else {
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readMaxValueInColumnFromTable.",
@@ -90,10 +93,12 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
     if (q.isSelect()) {
         if (q.first())
             value = q.value(0).toInt();
-        else
+        else {
+            qWarning() << "readMaxNMinYearInColumnFromTable: empty result for column" << column << "in" << table;
             QMessageBox::warning(nullptr, "Error base de datos",
                                  "Búsqueda vacía al usar readMaxNMinYearInColumnFromTable.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
     } else {
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readMaxNMinYearInColumnFromTable.",
@@ -155,6 +160,7 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
                 price = -1.0f;
             }
         } else {
+            qWarning() << "readGarmentPrice: garment not found:" << garment << "service:" << service;
             QMessageBox::warning(nullptr, "Error base de datos",
                                  "No se ha encontrado la prenda '" + garment +
                                  "' al usar readGarmentPrice para el servicio '" + service + "'.\n"
@@ -187,6 +193,7 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
         if (q.first()) {
             result = q.value(0).toString();
         } else if (printMsg) {
+            qWarning() << "selectFromWhereLike: item not found:" << itemToSearch << "in column" << columnToSearch;
             QMessageBox::warning(nullptr, "Búsqueda vacía",
                                  "El elemento '" + itemToSearch + "' no se ha encontrado en la base de datos para '"
                                  + columnToSearch + "'.",

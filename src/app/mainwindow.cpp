@@ -76,6 +76,7 @@ void MainWindow::initializeVerifactu()
     m_verifactuIntegration = new VerifactuIntegration(this);
 
     if (!m_verifactuIntegration->initialize()) {
+        qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
         QMessageBox::warning(this, "Advertencia",
             QString("No se pudo inicializar Verifactu:\n%1\n\n"
                     "Las facturas se guardarán localmente.\n"
@@ -176,10 +177,12 @@ void MainWindow::setGarmentPrice(int garmentRow,
                 item->setText(QString::number(price, 'f', 2));
         }
     }
-    else
+    else {
+        qWarning() << "setGarmentPrice: quantity field is empty for row" << garmentRow;
         QMessageBox::warning(nullptr, "Error en la casilla de cantidad",
                               "Cantidad de prendas está vacía.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
     ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, item);
 }
 
@@ -845,6 +848,7 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
 void MainWindow::on_actionAnular_factura_verifactu_triggered()
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "Cancel invoice action: Verifactu not configured";
         QMessageBox::warning(this, "Verifactu no configurado",
                              "Verifactu no está configurado correctamente.\n"
                              "Configura las credenciales en Archivo → Configuración.",

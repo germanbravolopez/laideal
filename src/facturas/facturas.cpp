@@ -61,22 +61,25 @@ bool Facturas::validateForm()
         if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
             if (readLockForMonthAndYear(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
                 ok = 1;
-            else
+            else {
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de la factura pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
+            }
         }
-        else
+        else {
             QMessageBox::warning(this, "Formulario factura",
                                  "El nombre de la empresa introducida no se encuentra en la lista de empresas.\n"
                                  "Añadirla en el listado de empresas antes de introducir esta factura.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
     }
-    else
+    else {
         QMessageBox::warning(this, "Formulario factura",
                              "Formulario incompleto.\n"
                              "Para poder guardar la factura, al menos es necesario rellenar los siguientes campos: Nº Fra., Servicio, Empresa e Importe.",
                              QMessageBox::Ok, QMessageBox::Ok);
+    }
 
     return ok;
 }
