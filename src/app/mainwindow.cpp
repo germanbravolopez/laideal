@@ -782,22 +782,21 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     QSqlQuery q;
     if (q.exec("SELECT * FROM ingresos")) {
         while (q.next()) {
-            // TODO: fix hardcoded indexes
-            if (q.value(14).toString() == "") {
-                QString nRecibo = q.value(0).toString();
-                QString cliente = q.value(1).toString();
-                QString fechaRecepcion = q.value(2).toString();
-                QString fechaPago = q.value(3).toString();
-                QString fechaRecogida = q.value(4).toString();
-                QString importe = q.value(5).toString();
-                QString pagado = q.value(6).toString();
-                QString estado = q.value(7).toString();
-                QString cantidad = q.value(8).toString();
-                QString prenda = q.value(9).toString();
-                QString size = q.value(10).toString();
-                QString servicio = q.value(11).toString();
-                QString observaciones = q.value(12).toString();
-                QString editLock = q.value(13).toString();
+            if (q.value(INGRESOS_IDX_HASH).toString() == "") {
+                QString nRecibo = q.value(INGRESOS_IDX_ID).toString();
+                QString cliente = q.value(INGRESOS_IDX_CLIENT).toString();
+                QString fechaRecepcion = q.value(INGRESOS_IDX_DATE_RCP).toString();
+                QString fechaPago = q.value(INGRESOS_IDX_DATE_PAY).toString();
+                QString fechaRecogida = q.value(INGRESOS_IDX_DATE_PKU).toString();
+                QString importe = q.value(INGRESOS_IDX_IMPORTE).toString();
+                QString pagado = q.value(INGRESOS_IDX_PAYED).toString();
+                QString estado = q.value(INGRESOS_IDX_STATE).toString();
+                QString cantidad = q.value(INGRESOS_IDX_CANTIDAD).toString();
+                QString prenda = q.value(INGRESOS_IDX_PRENDA).toString();
+                QString size = q.value(INGRESOS_IDX_SIZE).toString();
+                QString servicio = q.value(INGRESOS_IDX_SERVICIO).toString();
+                QString observaciones = q.value(INGRESOS_IDX_OBSV).toString();
+                QString editLock = q.value(INGRESOS_IDX_EDIT_LOCK).toString();
 
                 QSqlQuery q1;
                 QString newHash = genHash16();
