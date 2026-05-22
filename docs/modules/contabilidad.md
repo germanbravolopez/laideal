@@ -34,10 +34,16 @@ ui->show();
 
 ## Output
 
-The HTML report is written to a hardcoded path (`C:/Users/rocio/OneDrive/Desktop/Tintoreria/...`) and opened automatically via `QDesktopServices::openUrl()`.
-
-Known issue: output path is hardcoded (same issue as DB path).
+The HTML report is written to `AppSettings::instance()->contabilidadPath()` (configurable via Settings) and opened automatically via `QDesktopServices::openUrl()`.
 
 ## IVA breakdown
 
 `getTotalIncome(table, iva, trimForYearConfig)` sums `importe` for a specific IVA rate and period. Called separately for 21%, 10%, and 0% rates when generating the report.
+
+## Verifactu interaction
+
+`totalPriceBetweenDates` (in `sql_lite.cpp`) excludes `ingresos` rows where `verifactu_estado = 'ANULADA'` from the quarterly sum. A Verifactu-cancelled invoice must not appear in taxable income. Rows with NULL or empty `verifactu_estado` (tickets predating v8.0 or when Verifactu is not configured) are included normally.
+
+## Date range
+
+Both `ingresos` and `gastos` queries use a half-open interval `[startDate, endDate)` — `>= startDate AND < endDate`. `endDate` is always the first day of the next quarter, so this correctly excludes that boundary day from the current quarter.

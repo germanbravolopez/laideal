@@ -3,6 +3,7 @@
 #include "sql_lite.h"
 #include "applogger.h"
 #include <QDateTime>
+#include <QSqlError>
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QUrl>
@@ -409,20 +410,20 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
             if (verifactuResult.isSuccess()) {
                 q.bindValue(":verifactu_csv",       verifactuResult.csv);
                 q.bindValue(":verifactu_timestamp", timestamp);
-                q.bindValue(":verifactu_estado",    "ENVIADA");
+                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::Enviada));
                 q.bindValue(":verifactu_error",     "");
                 q.bindValue(":verifactu_url_qr",    verifactuResult.validationUrl);
             } else if (verifactuResult.status == VerifactuResult::ERROR
                        || verifactuResult.status == VerifactuResult::NETWORK_ERROR) {
                 q.bindValue(":verifactu_csv",       "");
                 q.bindValue(":verifactu_timestamp", QDateTime::currentDateTime().toString(Qt::ISODate));
-                q.bindValue(":verifactu_estado",    "ERROR");
+                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::Error));
                 q.bindValue(":verifactu_error",     verifactuResult.errorDescription);
                 q.bindValue(":verifactu_url_qr",    "");
             } else {
                 q.bindValue(":verifactu_csv",       "");
                 q.bindValue(":verifactu_timestamp", "");
-                q.bindValue(":verifactu_estado",    "");
+                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
                 q.bindValue(":verifactu_error",     "");
                 q.bindValue(":verifactu_url_qr",    "");
             }

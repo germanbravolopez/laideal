@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QSqlError>
 #include <QSqlQuery>
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
@@ -603,7 +604,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
         layout->addWidget(urlLabel);
     }
 
-    if (estado == "ERROR" && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+    if (verifactuEstadoFromString(estado) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
         connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
             dlg->accept();
@@ -647,24 +648,20 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &i
     db.open();
     {
         QSqlQuery upd;
+        upd.prepare("UPDATE ingresos SET "
+                    "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+                    "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+                    "WHERE n_recibo = :n_recibo");
         if (result.isSuccess()) {
-            upd.prepare("UPDATE ingresos SET "
-                        "verifactu_csv = :csv, verifactu_timestamp = :ts, "
-                        "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
-                        "WHERE n_recibo = :n_recibo");
             upd.bindValue(":csv",    result.csv);
             upd.bindValue(":ts",     timestamp);
-            upd.bindValue(":estado", "ENVIADA");
+            upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
             upd.bindValue(":error",  "");
             upd.bindValue(":url",    result.validationUrl);
         } else {
-            upd.prepare("UPDATE ingresos SET "
-                        "verifactu_csv = :csv, verifactu_timestamp = :ts, "
-                        "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
-                        "WHERE n_recibo = :n_recibo");
             upd.bindValue(":csv",    "");
             upd.bindValue(":ts",     timestamp);
-            upd.bindValue(":estado", "ERROR");
+            upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
             upd.bindValue(":error",  result.errorDescription);
             upd.bindValue(":url",    "");
         }

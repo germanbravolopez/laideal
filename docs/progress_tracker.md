@@ -13,7 +13,10 @@
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-- [ ] **Verify contabilidad correctness with Verifactu** — confirm that the accounting reports (`src/contabilidad/`) still produce correct figures after the v8.0 Verifactu changes; specifically, determine whether tickets with `verifactu_estado = 'ANULADA'` are included or excluded from the quarterly totals, and whether the current behaviour is the legally correct one for AEAT.
+- [x] **Contabilidad correctness with Verifactu** — fixed three bugs in accounting reports (`src/contabilidad/`, `src/sql_lite/`):
+  1. **Syntax error**: `on_cb_config_currentTextChanged` in `contabilidad.cpp` was missing a closing `}` for the `else` block — prevented compilation.
+  2. **ANULADA in quarterly totals**: `totalPriceBetweenDates` now excludes rows where `verifactu_estado = 'ANULADA'`; pre-v8.0 rows (NULL/empty estado) are still included. Correct per AEAT: a cancelled Verifactu invoice must not contribute to taxable income.
+  3. **`gastos` double-count on quarter boundary**: `BETWEEN startDate AND endDate` was endpoint-inclusive, so an expense on the first day of the next quarter was counted in both quarters. Replaced with `>= startDate AND < endDate` — same half-open interval as `ingresos`.
 
 Previously resolved blockers:
 - [x] Temp debug code removed from `MainWindow` constructor
@@ -56,6 +59,17 @@ Previously resolved blockers:
 ---
 
 ## Completed Milestones
+
+### VerifactuEstado enum — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `VerifactuEstado` enum class added to `verifactumanager.h` (NotSubmitted, Enviada, Anulada, Error)
+- [x] `verifactuEstadoToString()` and `verifactuEstadoFromString()` inline helpers in the same header
+- [x] All hardcoded `"ENVIADA"` / `"ANULADA"` / `"ERROR"` literals replaced in `mainwindow.cpp`, `cancelinvoicedialog.cpp`, `recog_prendas.cpp`
+- [x] SQL literal `'ANULADA'` in `cancelinvoicedialog.cpp` replaced with parameterized bind
+
+### Contabilidad bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] Missing `}` in `contabilidad.cpp::on_cb_config_currentTextChanged` fixed (syntax error, prevented compilation)
+- [x] `totalPriceBetweenDates` now excludes `verifactu_estado = 'ANULADA'` rows from ingresos — cancelled invoices no longer counted as taxable income
+- [x] `gastos` query changed from `BETWEEN` (endpoint-inclusive) to `>= AND <` — eliminates double-counting on quarter boundary dates
 
 ### Unsuccessful invoice handling — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `verifactuSubmitInvoice()` in `MainWindow` now shows `QMessageBox::warning` (Spanish) when submission fails with `ERROR` or `NETWORK_ERROR`; `INVALID_CONFIG` (not configured) remains silent

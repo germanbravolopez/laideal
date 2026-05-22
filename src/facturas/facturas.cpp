@@ -1,6 +1,7 @@
 #include "facturas.h"
 #include "ui_facturas.h"
 #include "sql_lite.h"
+#include <QSqlError>
 
 Facturas::Facturas(QWidget *parent) :
     QMainWindow(parent),

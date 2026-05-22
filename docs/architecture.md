@@ -73,6 +73,7 @@ Writes to the `facturas` table. Populated from `empresas` and `servicios` tables
 Generates HTML accounting reports. Three modes: `Mensual`, `Trimestral`, `Anual`.
 Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 `revertirOn = true` unlocks a previously locked quarter.
+Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado = 'ANULADA'` rows (cancelled invoices must not appear in taxable income). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
 
 ### Imprimir (`src/imprimir/`)
 Creates Excel via `QXlsx`, then launches an external process to print.
@@ -147,7 +148,7 @@ Notable items:
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
-| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, empty if not submitted |
+| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, empty if not submitted. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
 | verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
 | verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 
@@ -215,7 +216,9 @@ AEAT QR validation:
 
 `VerifactuConfig` loads from an external `.ini` file via `QSettings`. The `ServiceKey` must be obtained from https://facturae.irenesolutions.com/verifactu/go and is not in source control.
 
-`VerifactuResult` status values: `SUCCESS`, `PENDING`, `ERROR`, `NETWORK_ERROR`, `INVALID_CONFIG`
+`VerifactuResult::Status` values (API call result): `SUCCESS`, `PENDING`, `ERROR`, `NETWORK_ERROR`, `INVALID_CONFIG`
+
+`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted`, `Enviada`, `Anulada`, `Error`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`).
 
 ---
 

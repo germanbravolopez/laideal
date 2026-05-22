@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QRandomGenerator>
+#include <QSqlError>
 #include <QSqlQuery>
 
 // ---------------------------------------------------------------------------
@@ -265,15 +266,21 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
     QSqlQuery q(db);
 
     if (table == "ingresos") {
+        // Exclude ANULADA rows: a Verifactu-cancelled invoice must not contribute to taxable income.
+        // Rows without verifactu_estado (NULL or empty, pre-v8.0) are included as normal.
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+               "(verifactu_estado IS NULL OR verifactu_estado = '' OR verifactu_estado != 'ANULADA') AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
                + startDate.toString("yyyy-MM-dd") + "')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
                + endDate.toString("yyyy-MM-dd") + "'))");
     } else if (table == "gastos") {
+        // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
+        // first day of the next quarter are not double-counted in the current quarter.
         q.exec("SELECT importe FROM gastos WHERE (iva = " + QString::number(iva) + ") AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) BETWEEN date('"
-               + startDate.toString("yyyy-MM-dd") + "') AND date('"
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
                + endDate.toString("yyyy-MM-dd") + "'))");
     } else {
         qCritical() << "totalPriceBetweenDates: unsupported table:" << table;

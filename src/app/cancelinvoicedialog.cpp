@@ -94,15 +94,16 @@ void CancelInvoiceDialog::onSearchClicked()
              csv.isEmpty() ? "—" : csv,
              estado.isEmpty() ? "No enviado" : estado));
 
-    if (estado == "ENVIADA") {
+    const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
+    if (estadoEnum == VerifactuEstado::Enviada) {
         m_loadedTicket = ticketNum;
         m_loadedDate   = QDate::fromString(fecha, "dd-MM-yyyy");
         m_loadedCSV    = csv;
         m_btnCancel->setEnabled(true);
     } else {
-        QString reason = (estado == "ANULADA")  ? "Este ticket ya está anulado en AEAT." :
-                         (estado == "ERROR")     ? "Este ticket tuvo un error al enviarse — no hay nada que anular." :
-                                                   "Este ticket no fue enviado a AEAT — no hay nada que anular.";
+        QString reason = (estadoEnum == VerifactuEstado::Anulada) ? "Este ticket ya está anulado en AEAT." :
+                         (estadoEnum == VerifactuEstado::Error)    ? "Este ticket tuvo un error al enviarse — no hay nada que anular." :
+                                                                     "Este ticket no fue enviado a AEAT — no hay nada que anular.";
         m_lblResult->setText(reason);
     }
 }
@@ -119,7 +120,8 @@ void CancelInvoiceDialog::onCancelClicked()
     if (result.isSuccess()) {
         db.open();
         QSqlQuery q(db);
-        q.prepare("UPDATE ingresos SET verifactu_estado = 'ANULADA' WHERE n_recibo = :num");
+        q.prepare("UPDATE ingresos SET verifactu_estado = :estado WHERE n_recibo = :num");
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
         q.bindValue(":num", m_loadedTicket);
         q.exec();
         db.close();

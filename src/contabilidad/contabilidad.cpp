@@ -122,6 +122,7 @@ void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
         QMessageBox::critical(this, "Contabilidad",
                               "No se puede configurar de la forma indicada.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
 }
 
 void Contabilidad::generateContabilidad()

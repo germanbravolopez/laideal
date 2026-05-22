@@ -98,6 +98,7 @@ Read the full skill file when the skill is relevant to your task.
 | Trimestre | Quarter (Q1–Q4) — the unit for accounting lock and report generation |
 | QR (Verifactu) | QR image generated per invoice, shown to client for AEAT validation |
 | TESTING / PRODUCTION | Verifactu environments. TESTING uses fictitious data. PRODUCTION submits to AEAT |
+| VerifactuEstado | `enum class` in `verifactumanager.h` representing the DB-persisted `verifactu_estado` value: `NotSubmitted`, `Enviada`, `Anulada`, `Error`. Use `verifactuEstadoToString()` / `verifactuEstadoFromString()` to convert |
 
 ## Topics → File Map
 
@@ -120,6 +121,8 @@ Read the full skill file when the skill is relevant to your task.
 | Release procedure | Root `README.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/implementation_summary.md` |
+| verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
+| Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`totalPriceBetweenDates`) + `docs/modules/contabilidad.md` |
 | Verifactu step-by-step implementation | `docs/modules/verifactu/step_by_step_guide.md` |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |

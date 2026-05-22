@@ -1,6 +1,7 @@
 #include "add_garment.h"
 #include "ui_add_garment.h"
 #include "sql_lite.h"
+#include <QSqlError>
 #include "imprimir.h"
 
 AddGarment::AddGarment(QWidget *parent) :

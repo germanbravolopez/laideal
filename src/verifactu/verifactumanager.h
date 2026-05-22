@@ -9,6 +9,33 @@
 #include "verifactuconfig.h"
 #include "verifactuinvoice.h"
 
+// Persisted value of the verifactu_estado column in the ingresos table.
+enum class VerifactuEstado {
+    NotSubmitted,  // empty string — Verifactu not configured or not yet submitted
+    Enviada,       // "ENVIADA" — successfully submitted to AEAT
+    Anulada,       // "ANULADA" — cancelled via AEAT
+    Error          // "ERROR"   — submission or cancellation failed
+};
+
+inline QString verifactuEstadoToString(VerifactuEstado e)
+{
+    switch (e) {
+    case VerifactuEstado::Enviada:      return QStringLiteral("ENVIADA");
+    case VerifactuEstado::Anulada:      return QStringLiteral("ANULADA");
+    case VerifactuEstado::Error:        return QStringLiteral("ERROR");
+    case VerifactuEstado::NotSubmitted: return QString();
+    }
+    return QString();
+}
+
+inline VerifactuEstado verifactuEstadoFromString(const QString &s)
+{
+    if (s == QLatin1String("ENVIADA")) return VerifactuEstado::Enviada;
+    if (s == QLatin1String("ANULADA")) return VerifactuEstado::Anulada;
+    if (s == QLatin1String("ERROR"))   return VerifactuEstado::Error;
+    return VerifactuEstado::NotSubmitted;
+}
+
 struct VerifactuResult
 {
     enum Status {
