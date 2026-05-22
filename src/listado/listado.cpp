@@ -281,19 +281,22 @@ void Listado::on_actionAnadir_fila_triggered()
                                  "facturas en la ventana principal.",
                                  QMessageBox::Ok, QMessageBox::Ok);
         populateTable();
-    } else
+    } else {
+        qCritical() << "Listado::on_actionAnadir_fila_triggered: '" << tableName << "' table does not support adding new rows directly and is not handled in the code";
         QMessageBox::critical(this, "Añadir fila",
                               "Esta tabla no soporta añadir nuevas filas directamente.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
 }
 
 void Listado::on_actionEliminar_fila_triggered()
 {
-    if (tableName == "ingresos")
+    if (tableName == "ingresos") {
+        qCritical() << "Listado::on_actionEliminar_fila_triggered: '" << tableName << "' table does not support deleting rows directly and is not handled in the code";
         QMessageBox::critical(this, "Eliminar fila",
                               "Esta tabla no soporta eliminar filas directamente.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    else {
+    } else {
         int ret = QMessageBox::question(this, "Eliminar fila",
                                         "¿Está seguro que desea eliminar la fila " +
                                         QString::number(table_listado->currentIndex().row() + 1) + "?",
@@ -323,6 +326,8 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
             ui_generar_listado->table_name = tableName;
             ui_generar_listado->print_table();
     } else {
+        qDebug() << "Listado::on_actionGenerar_pdf_con_el_listado_triggered: '" << tableName
+                 << "' table does not support generating pdf list directly and is not handled in the code";
         QMessageBox::information(this, "Generar listado",
                                  "Herramienta para generar listado no está implementada para este tipo de listado.",
                                  QMessageBox::Ok, QMessageBox::Ok);

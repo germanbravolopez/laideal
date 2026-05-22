@@ -41,25 +41,32 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         switch (editLock) {
         case 0:
             // contabilidad not done
-            if (revertirOn)
+            if (revertirOn) {
+                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad not done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << "but lock is checked, so just showing information message without generating the report or updating the lock.";
                 QMessageBox::information(this, "Revertir contabilidad",
                                          "La contabilidad del trimestre "
                                          + QString::number(ui->sb_trim->value())
                                          + " para el año " + QString::number(ui->sb_year->value())
                                          + " no está realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
-            else
+            }
+            else {
                 generateContabilidad();
-
-            if (ui->checkBox_lock->isChecked())
+            }
+            if (ui->checkBox_lock->isChecked()) {
                 updateLock();
+            }
             break;
         case 1:
             // contabilidad done
-            if (revertirOn)
+            if (revertirOn) {
                 updateLock();
+            }
             else {
                 generateContabilidad();
+                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad already done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << "and lock is not checked, so just generating the report without updating the lock.";
                 QMessageBox::information(this, "Contabilidad",
                                          "La contabilidad del trimestre "
                                          + QString::number(ui->sb_trim->value())
@@ -69,17 +76,20 @@ void Contabilidad::on_bb_ok_cancel_accepted()
             }
             break;
         default:
+            qWarning() << "Contabilidad::on_bb_ok_cancel_accepted: invalid lock value read from database:" << editLock;
             QMessageBox::warning(this, "Contabilidad",
                                  "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
                                  QMessageBox::Ok, QMessageBox::Ok);
             break;
         }
     }
-    else
+    else {
         generateContabilidad();
+    }
 
-    if (!(editLock == 0 && revertirOn))
+    if (!(editLock == 0 && revertirOn)) {
         this->close();
+    }
 }
 
 void Contabilidad::on_bb_ok_cancel_rejected()
@@ -107,7 +117,8 @@ void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
         ui->lbl_trim->setVisible(false);
         ui->sb_trim->setVisible(false);
     }
-    else
+    else {
+        qCritical() << "Contabilidad::on_cb_config_currentTextChanged: unsupported configuration option" << arg1;
         QMessageBox::critical(this, "Contabilidad",
                               "No se puede configurar de la forma indicada.",
                               QMessageBox::Ok, QMessageBox::Ok);

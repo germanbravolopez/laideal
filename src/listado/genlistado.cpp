@@ -317,11 +317,13 @@ void GenListado::on_bb_ok_cancel_accepted()
     // generate html table
     QString html_table_gastos = generate_html_gastos_table_with_specific_conditions();
 
-    if (html_table_gastos == C_NO_ROWS)
+    if (html_table_gastos == C_NO_ROWS) {
+        qCritical() << "GenListado::on_bb_ok_cancel_accepted: no rows to print in 'gastos' table for selected configuration";
         QMessageBox::critical(this, "Generar listado de gastos en pdf.",
                               "No existen gastos para la configuracion seleccionada. Por favor, revise la tabla de gastos.",
                               QMessageBox::Ok,
                               QMessageBox::Ok);
+    }
     else {
         // set path and print table
         QString path = AppSettings::instance()->listadosGastosPath();

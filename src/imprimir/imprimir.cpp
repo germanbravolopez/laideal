@@ -452,6 +452,7 @@ void Imprimir::printTicket()
     QProcess process;
     QString batchPath = AppSettings::instance()->printScriptPath();
     if (!QFile::exists(batchPath)) {
+        qCritical() << "Imprimir::printTicket: print script not found at path" << batchPath;
         QMessageBox::critical(this, "Imprimir",
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);

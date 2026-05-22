@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
         if (dlg.exec() != QDialog::Accepted
                 || settings->dbPath().isEmpty()
                 || !QFile::exists(settings->dbPath())) {
+            qCritical() << "main: database path is not set or file does not exist after settings dialog";
             QMessageBox::critical(nullptr, QObject::tr("Error de configuración"),
                 QObject::tr("La base de datos no está configurada o no existe.\n"
                             "La aplicación no puede continuar."));

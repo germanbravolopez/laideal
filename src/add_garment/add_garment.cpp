@@ -152,10 +152,12 @@ void AddGarment::on_buttonBox_clicked(QAbstractButton *button)
             this->close();
         }
     }
-    else
+    else {
+        qCritical() << "AddGarment::on_buttonBox_clicked: button not defined";
         QMessageBox::critical(this, "Añadir prenda",
                               "Botón no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
+        }
 }
 
 bool AddGarment::validateForm()
@@ -192,7 +194,8 @@ bool AddGarment::validateForm()
         }
     } else {
         ok = 0;
-        QMessageBox::critical(nullptr, "Añadir prenda",
+        qWarning() << "AddGarment::validateForm: no ticket found for receipt number" << ui->le_n_recibo->text();
+        QMessageBox::warning(nullptr, "Añadir prenda",
                               "No se ha buscado ningún Nº recibo previo a guardar los datos actuales.",
                               QMessageBox::Ok, QMessageBox::Ok);
     }

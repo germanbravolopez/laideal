@@ -309,14 +309,17 @@ void MainWindow::checkClientData()
         }
         if (!clientFound)
             addNewClient(db, ui->cb_client->currentText(), ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
-        else
-
+        else {
+            qDebug() << "checkClientData: client found in database after removing special characters like accents or 'ñ'. "
+                     << "The data entered for the client in this receipt has not been added to the client in the client list. "
+                     << "If you want to update the data, add manually in the client list.";
             QMessageBox::information(this, "Listado de clientes",
                                   "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
                                   "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado de clientes. "
                                   "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
                                   QMessageBox::Ok,
                                   QMessageBox::Ok);
+        }
     }
 
 }
@@ -777,6 +780,7 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     QSqlQuery q;
     if (q.exec("SELECT * FROM ingresos")) {
         while (q.next()) {
+            // TODO: fix hardcoded indexes
             if (q.value(14).toString() == "") {
                 QString nRecibo = q.value(0).toString();
                 QString cliente = q.value(1).toString();
@@ -839,15 +843,18 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
 
-    if (duplicatedTickets.isEmpty())
+    if (duplicatedTickets.isEmpty()) {
+        qDebug() << "No duplicated hashes found in ingresos after update.";
         QMessageBox::information(this, "Crear hash en ingresos",
                                  "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-    else
-        QMessageBox::information(this, "Crear hash en ingresos",
+    } else {
+        qWarning() << "Duplicated hashes found in ingresos after update for tickets:" << duplicatedTicketsS;
+        QMessageBox::warning(this, "Crear hash en ingresos",
                                  "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.\n\n"
                                  "Los siguientes recibos tienen hashes duplicados: " + duplicatedTicketsS.join(", "),
                                  QMessageBox::Ok, QMessageBox::Ok);
+    }
 }
 
 void MainWindow::on_actionAnular_factura_verifactu_triggered()

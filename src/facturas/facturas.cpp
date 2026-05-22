@@ -118,10 +118,12 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
             resetAllContents();
         }
     }
-    else
+    else {
+        qCritical() << "Facturas::on_buttonBox_clicked: button not defined";
         QMessageBox::critical(this, "Error en formulario factura",
                               "Botón no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
 }
 
 void Facturas::on_le_importe_textEdited(const QString &arg1)

@@ -70,6 +70,7 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
                                  QMessageBox::Ok, QMessageBox::Ok);
         }
     } else {
+        qCritical() << "readMaxValueInColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readMaxValueInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -100,6 +101,7 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
                                  QMessageBox::Ok, QMessageBox::Ok);
         }
     } else {
+        qCritical() << "readMaxNMinYearInColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readMaxNMinYearInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -124,6 +126,7 @@ QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const Q
         while (q.next())
             list.append(q.value(0).toString());
     } else {
+        qCritical() << "readColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -153,6 +156,7 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
             if (!q.value(0).toString().contains(',')) {
                 price = q.value(0).toFloat();
             } else {
+                qCritical() << "readGarmentPrice: comma decimal found in prendas for garment" << garment;
                 QMessageBox::critical(nullptr, "Error en la base de datos",
                                       "En la tabla prendas se ha detectado que hay valores decimales guardados con ','. "
                                       "Utilizar herramienta de limpiado de importes decimales.",
@@ -169,6 +173,7 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
             price = -1.0f;
         }
     } else {
+        qCritical() << "readGarmentPrice: query error for garment" << garment << "service" << service;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readGarmentPrice.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -200,6 +205,7 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
                                  QMessageBox::Ok, QMessageBox::Ok);
         }
     } else if (printMsg) {
+        qCritical() << "selectFromWhereLike: query error for" << itemToSearch << "in column" << columnToSearch;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar selectFromWhereLike.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -223,6 +229,8 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
     q.bindValue(":item", item);
     q.bindValue(":client", client);
     bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateItemToClient: failed to update column" << column << "for client" << client << "—" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -241,6 +249,8 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     q.bindValue(":direccion", direccion);
     q.bindValue(":movil",     movil);
     bool ok = q.exec();
+    if (!ok)
+        qWarning() << "addNewClient: failed to insert client" << client << "—" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -266,6 +276,7 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
                + startDate.toString("yyyy-MM-dd") + "') AND date('"
                + endDate.toString("yyyy-MM-dd") + "'))");
     } else {
+        qCritical() << "totalPriceBetweenDates: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "totalPriceBetweenDates: tabla no soportada: " + table,
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -278,6 +289,7 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
             if (!q.value(0).toString().contains(',')) {
                 totalPrice += q.value(0).toFloat();
             } else {
+                qCritical() << "totalPriceBetweenDates: comma decimal found in" << table;
                 QMessageBox::critical(nullptr, "Error en la base de datos",
                                       "En la tabla " + table + " se ha detectado que hay valores decimales "
                                       "guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
@@ -285,6 +297,7 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
             }
         }
     } else {
+        qCritical() << "totalPriceBetweenDates: query error for table" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar totalPriceBetweenDates.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -307,17 +320,21 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
         q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'");
     else if (table == "gastos")
         q.exec("SELECT edit_lock FROM " + table + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'");
-    else
+    else {
+        qCritical() << "readLockForMonthAndYear: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
                               "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
 
     if (q.isSelect())
         editLock = q.first() ? q.value(0).toInt() : 0;
-    else
+    else {
+        qCritical() << "readLockForMonthAndYear: query error for table" << table << "month" << mStr << "year" << yStr;
         QMessageBox::critical(nullptr, "Error base de datos",
                               "Acceso a la tabla da un error al usar readLockForMonthAndYear.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
     db.close();
     return editLock;
 }
@@ -332,8 +349,10 @@ void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
 
     db.open();
     QSqlQuery q(db);
-    q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'");
-    q.exec("UPDATE gastos   SET edit_lock = " + val + " WHERE fecha      LIKE '%-" + mStr + "-" + yStr + "'");
+    if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
+        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "—" << q.lastError().text();
+    if (!q.exec("UPDATE gastos SET edit_lock = " + val + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'"))
+        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "—" << q.lastError().text();
     db.close();
 }
 
@@ -357,7 +376,8 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.bindValue(":value", QString(items[i]).replace(',', '.'));
             q.bindValue(":id1",   ids1[i]);
             q.bindValue(":id2",   ids2[i]);
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "hash" << ids2[i] << "—" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
@@ -372,7 +392,8 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE id = :id");
             q.bindValue(":value", QString(items[i]).replace(',', '.'));
             q.bindValue(":id",   ids[i]);
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "id" << ids[i] << "—" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
@@ -387,11 +408,13 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE nombre = :id");
             q.bindValue(":value", QString(items[i]).replace(',', '.'));
             q.bindValue(":id",   ids[i]);
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "nombre" << ids[i] << "—" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
     } else {
+        qCritical() << "updateComasInDecimalData: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error en updateComasInDecimalData",
                               "La tabla especificada '" + table + "' no está soportada.",
                               QMessageBox::Ok, QMessageBox::Ok);
@@ -410,7 +433,8 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     }
     db.open();
     QSqlQuery q(db);
-    q.exec(query);
+    if (!q.exec(query))
+        qWarning() << "insertNewItemToTable: insert into" << table << "failed —" << q.lastError().text();
     db.close();
 }
 

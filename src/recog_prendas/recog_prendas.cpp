@@ -71,6 +71,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         if (!editLock) {
             // dont update payment date for blocked quarters
             if (readLockForMonthAndYear(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1) {
+                qWarning() << "updateDb PAY_YES: attempt to update payment date for a blocked quarter:" << ui->de_date_paym->date().toString("dd-MM-yyyy");
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
@@ -677,6 +678,7 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &i
     isCellClicked = true;
 
     if (result.isSuccess()) {
+        qDebug() << "Verifactu retry successful for ticket" << ticketNum << "— CSV:" << result.csv;
         QMessageBox::information(this, "Verifactu enviado",
                                  "Factura enviada correctamente a la AEAT.\n\nCSV: " + result.csv,
                                  QMessageBox::Ok);
