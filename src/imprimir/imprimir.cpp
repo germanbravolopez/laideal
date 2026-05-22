@@ -458,12 +458,12 @@ void Imprimir::printTicket()
                               QMessageBox::Ok, QMessageBox::Ok);
     } else {
         // Change the cursor to a loading icon
-        //QApplication::setOverrideCursor(Qt::WaitCursor);
+        QApplication::setOverrideCursor(Qt::WaitCursor);
         // Start printing process
-        //process.start(batchPath);
-        //process.waitForFinished();
+        process.start(batchPath);
+        process.waitForFinished();
         // Restore the cursor to default
-        //QApplication::restoreOverrideCursor();
+        QApplication::restoreOverrideCursor();
     }
 }
 
