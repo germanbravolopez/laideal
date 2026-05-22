@@ -49,13 +49,12 @@ if %errorlevel% equ 0 (
 )
 
 echo Run windeployqt.
-cd %destinationFolder%
+cd "%destinationFolder%"
 windeployqt %fileName%
 
 echo Rename release folder to avoid generation of same release
 for %%F in ("%sourceFolderFullPath%") do set "sourceFolder=%%~nxF"
 ren "%sourceFolderFullPath%" "%sourceFolder%_%releaseName%"
-
 
 cd ..
 
@@ -67,3 +66,10 @@ call C:\Users\gebra\work\tintoreria\laideal\releases\find_replace.bat %releaseNa
 
 REM Run the updated iss file with Inno Setup Compiler
 call C:\Users\gebra\work\tintoreria\laideal\releases\create_installer.bat
+
+REM Remove staging folder and temporary iss file
+rmdir /s /q "%destinationFolder%"
+del laideal_upd.iss
+
+REM Move the zip to old_releases
+move "%destinationFolder%.zip" "old_releases\%releaseName%.zip"

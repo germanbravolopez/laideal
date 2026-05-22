@@ -1,19 +1,38 @@
 Releases:
 
 8.0
-	- New feature: Verifactu integration — AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
-		- Submits invoices to AEAT automatically when a ticket is saved
-		- Shows a QR dialog to the client after successful submission (QR image + security code + AEAT validation link)
-		- Graceful degradation: if Verifactu is not configured, ticket saving continues normally with a warning
-		- ServiceKey loaded from an external .ini file (not stored in source code)
-		- TESTING and PRODUCTION environments supported; switch in configuration
-		- Classes: VerifactuIntegration, VerifactuManager, VerifactuConfig, VerifactuInvoice
+	- New feature: Verifactu integration - AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
+		- Submits simplified (F2) invoices to AEAT automatically when a ticket is saved
+		- QR code embedded at the bottom of the printed receipt
+		- Verifactu status, CSV, and AEAT validation link accessible per ticket in RecogPrendas
+		- Invoice cancellation: Herramientas -> Anular factura Verifactu
+		- Retry failed submissions from RecogPrendas
+		- Graceful degradation: unconfigured Verifactu does not block ticket saving
+		- TESTING and PRODUCTION environments supported; v8.0 ships with TESTING
+	- New feature: centralised settings - all hardcoded paths and values moved to ~/.laideal_settings.json
+		- Covers DB path, business identity, IVA rate, report paths, Verifactu credentials, print toggle
+		- Settings dialog accessible via Archivo -> Configuracion
+		- First run or missing DB path opens the settings dialog automatically
+	- New feature: persistent debug log - all output written to ~/.laideal.log (5 MB rotation)
+		- Accessible via Archivo -> Log de depuracion
+	- Accounting fixes
+		- Cancelled Verifactu invoices excluded from quarterly income totals
+		- Fixed gastos quarter-boundary double-count
+		- Contextual confirmation dialogs in contabilidad (lock/revert)
+	- Receipt improvements
+		- Ticket header sourced from AppSettings (business name, NIF, address, phone)
+		- General conditions rewritten for legal correctness (RD 1453/1987)
+		- RGPD first-layer notice added to client receipt copy
+		- Conditions omitted from establishment copy
+	- Search: diacritic-insensitive filtering in RecogPrendas and Listado (e.g. "garcia" matches "Garcia")
+	- Ingresos Listado loads most-recent rows first; clickable Verifactu URL column
+	- Herramientas menu reorganised; debug mode replaced by print toggle in settings
 	- Code quality: applied coding guidelines to all source modules
-		- Renamed all identifiers from snake_case to camelCase (methods, members, local variables)
+		- Renamed all identifiers from snake_case to camelCase
 		- Translated all developer comments and debug messages to English
 		- Converted SIGNAL/SLOT macro syntax to new-style pointer syntax throughout
 		- Fixed SQL injection vulnerability in add_garment search (parameterised query)
-	- Build: version number now managed from root CMakeLists.txt and propagated automatically
+	- Build: version number managed from root CMakeLists.txt and propagated automatically
 
 r7.1
 	- New feature: print listado de prendas to pdf
