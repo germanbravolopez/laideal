@@ -7,7 +7,7 @@
 ## Current Status — May 2026
 
 **Active branch**: `feature/add_mdiago_verifactu`
-**Version**: 8.0 (unreleased — pending production Verifactu testing)
+**Version**: 8.0 (ready to release — ships with TESTING environment; switch to PRODUCTION after meeting with IreneSolutions)
 
 ---
 
@@ -27,11 +27,11 @@ Previously resolved blockers:
 
 ## In Progress
 
-- [ ] Verifactu integration — TESTING confirmed, DB persistence done, pending production testing
-  - `submitSimplifiedInvoice()` confirmed working: F2 invoice, CSV received from AEAT
-  - API returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response — all now captured
+- [x] Verifactu integration — fully validated end-to-end with real company credentials
+  - `submitSimplifiedInvoice()` confirmed working: F2 invoice, CSV received from AEAT, QR resolves correctly on AEAT portal
+  - API returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response — all captured and persisted
   - DB persistence complete: `verifactu_*` columns added to `ingresos` via `migrateDatabase()`
-  - TESTING environment confirmed; production requires real `ServiceKey` and company NIF from `~/.laideal_settings.json`
+  - v8.0 ships with TESTING environment; switch to PRODUCTION requires meeting with IreneSolutions for production ServiceKey
 - [x] QR on printed receipt — Verifactu QR embedded at the bottom of the Excel ticket via `QXlsx::insertImage`. Image not persisted in DB: save-flow path reuses the pixmap from the `/Create` response; reprint path calls `/GetQrCode` through `VerifactuIntegration::generateQR()` using ticket data from `ingresos`
 - [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
 - [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
@@ -44,6 +44,9 @@ Previously resolved blockers:
 
 | Issue | File | Notes |
 |-------|------|-------|
+| Improve report visualisation | `src/contabilidad/`, `src/listado/`, `src/imprimir/` | Improve the presentation of generated reports (contabilidad summaries, listados, printed receipts/invoices) — better formatting, layout, and readability. |
+| Add sorting to table views | `src/listado/listado.cpp`, `src/recog_prendas/recog_prendas.cpp` | Allow users to sort table columns by clicking headers. `MySortFilterProxyModel` already supports `lessThan()`; wire up `QHeaderView::sectionClicked` and set `sortingEnabled` on each `QTableView`. |
+| Switch Verifactu to PRODUCTION environment | `~/.laideal_settings.json`, `SettingsDialog` | v8.0 ships with TESTING environment. After meeting with IreneSolutions and obtaining production ServiceKey: update `verifactu.environment` and credentials in settings. No code change required — all handled via `SettingsDialog`. |
 | Streamline build and deploy from CLI | `CMakeLists.txt`, root scripts | Add a single command (script or CMake target) to configure, build, and deploy the release `.exe` with all Qt dependencies — replacing the current manual Qt Creator / cmake-gui workflow. |
 | GitHub Actions CI/CD pipeline | `.github/workflows/` | Set up a Windows runner that builds on every push/PR (CMake + MinGW), runs tests, and optionally produces a release artifact. Requires a self-hosted runner or a cross-compile setup since the app targets Windows. |
 | Unit and integration tests | `tests/` | Add a test suite (Qt Test or Catch2) covering at minimum: `sql_lite` free functions, `VerifactuManager::processResponse()` response parsing, `MySortFilterProxyModel` diacritic filtering, and price calculation logic in `setGarmentPrice`. |
