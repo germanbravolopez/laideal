@@ -53,7 +53,8 @@ void MainWindow::mainwindowInitialSettings()
         }
     });
     ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);
-    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(1));
+    ui->menuArchivo->insertAction(ui->menuArchivo->actions().at(1), ui->actionMostrar_log);
+    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(2));
 
     // Taskbar
     ui->menuArchivo->setToolTipsVisible(true);

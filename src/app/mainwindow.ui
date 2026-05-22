@@ -647,15 +647,13 @@ prenda</string>
     </widget>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
+    <addaction name="actionAnadir_nuevas_prendas"/>
+    <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
+    <addaction name="actionAnular_factura_verifactu"/>
     <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
-    <addaction name="separator"/>
-    <addaction name="actionAnadir_nuevas_prendas"/>
-    <addaction name="separator"/>
-    <addaction name="actionAnular_factura_verifactu"/>
-    <addaction name="actionMostrar_log"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -705,7 +703,7 @@ prenda</string>
   </action>
   <action name="actionFormulario_facturas">
    <property name="text">
-    <string>Formulario facturas</string>
+    <string>Añadir factura de gastos</string>
    </property>
    <property name="shortcut">
     <string>Alt+F</string>

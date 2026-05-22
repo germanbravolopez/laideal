@@ -60,6 +60,11 @@ Previously resolved blockers:
 
 ## Completed Milestones
 
+### Herramientas menu reorganisation — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] `menuHerramientas` reordered: Imprimir, Recogida de prendas, Añadir nuevas prendas, ─, Añadir factura de gastos, Anular factura Verifactu, ─, Generar contabilidad, Revertir contabilidad
+- [x] `actionFormulario_facturas` renamed to "Añadir factura de gastos"
+- [x] Log de depuración moved from Herramientas to Archivo, below Configuración (before the separator)
+
 ### VerifactuEstado enum — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `VerifactuEstado` enum class added to `verifactumanager.h` (NotSubmitted, Enviada, Anulada, Error)
 - [x] `verifactuEstadoToString()` and `verifactuEstadoFromString()` inline helpers in the same header
