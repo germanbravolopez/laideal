@@ -161,7 +161,6 @@ void MainWindow::saveTicket()
         );
 
         if (result.isSuccess()) {
-            // TODO: persist result.csv to DB (blocking issue)
             showQrToClient(result);
         } else if (result.status == VerifactuResult::NETWORK_ERROR) {
             qWarning() << "Verifactu network error:" << result.errorDescription;
@@ -202,7 +201,6 @@ void MainWindow::cancelInvoice(const QString &invoiceNumber, QDate invoiceDate)
 
     if (result.isSuccess()) {
         qDebug() << "Invoice cancelled, CSV:" << result.csv;
-        // TODO: update DB row with cancellation CSV
     } else {
         QMessageBox::critical(this, tr("Error"),
             QString(tr("No se pudo anular la factura:\n%1"))
