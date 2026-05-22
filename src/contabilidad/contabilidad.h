@@ -24,7 +24,7 @@ public:
     explicit Contabilidad(QWidget *parent = nullptr);
     ~Contabilidad();
     QSqlDatabase db;
-    bool revertirOn = false;
+    bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
     void resetAllContents();
 
 private slots:

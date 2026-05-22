@@ -60,6 +60,12 @@ Previously resolved blockers:
 
 ## Completed Milestones
 
+### Contabilidad dialog improvements — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] Contextual confirmation dialogs added to `on_bb_ok_cancel_accepted` (4 cases: lock/revert × already-done/not-done)
+- [x] Fixed syntax bug: `QMessageBox::information` call had `, + "..."` as a separate argument instead of string concatenation
+- [x] Fixed double-dialog: removed redundant `QMessageBox` calls from `updateLock()` (replaced with `qDebug`) since `on_bb_ok_cancel_accepted` now owns those dialogs
+- [x] Fixed wrong comment: `checkBox_lock->setDisabled(revertirOn)` line had copy-paste "configuration combobox" comment — corrected to "lock checkbox when reverting"
+
 ### Herramientas menu reorganisation — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] `menuHerramientas` reordered: Imprimir, Recogida de prendas, Añadir nuevas prendas, ─, Añadir factura de gastos, Anular factura Verifactu, ─, Generar contabilidad, Revertir contabilidad
 - [x] `actionFormulario_facturas` renamed to "Añadir factura de gastos"

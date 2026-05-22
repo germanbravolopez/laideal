@@ -27,11 +27,11 @@ void Contabilidad::initialSettings()
 void Contabilidad::resetAllContents()
 {
     ui->cb_config->setCurrentText(C_TRIMESTRAL);
-    ui->cb_config->setDisabled(revertirOn);
+    ui->cb_config->setDisabled(revertirOn); // disable configuration combobox when reverting contabilidad mode
     ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
     ui->checkBox_lock->setChecked(false);
-    ui->checkBox_lock->setDisabled(revertirOn);
+    ui->checkBox_lock->setDisabled(revertirOn); // disable lock checkbox when reverting
 }
 
 void Contabilidad::on_bb_ok_cancel_accepted()
@@ -42,17 +42,23 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         case 0:
             // contabilidad not done
             if (revertirOn) {
-                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad not done for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << "but lock is checked, so just showing information message without generating the report or updating the lock.";
-                QMessageBox::information(this, "Revertir contabilidad",
-                                         "La contabilidad del trimestre "
-                                         + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value())
-                                         + " no está realizada.",
+                // revert contabilidad mode
+                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad was not done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << " (editLock = 0). Just showing information message without generating the report or updating the lock.";
+                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " no estaba aun realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
             }
             else {
                 generateContabilidad();
+                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad is done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << ". Proceeding with report generation + editLock = " << ui->checkBox_lock->isChecked() << ".";
+                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha realizado."
+                                         + (ui->checkBox_lock->isChecked() ?
+                                                " El trimestre se ha bloqueado para evitar modificaciones posteriores." :
+                                                " El trimestre no se ha bloqueado, por lo que se pueden realizar modificaciones posteriores."),
+                                         QMessageBox::Ok, QMessageBox::Ok);
             }
             if (ui->checkBox_lock->isChecked()) {
                 updateLock();
@@ -61,17 +67,21 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         case 1:
             // contabilidad done
             if (revertirOn) {
+                // revert contabilidad mode
                 updateLock();
+                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad reverted for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << " (editLock = 0).";
+                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha revertido.",
+                                         QMessageBox::Ok, QMessageBox::Ok);
             }
             else {
                 generateContabilidad();
                 qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad already done for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << "and lock is not checked, so just generating the report without updating the lock.";
-                QMessageBox::information(this, "Contabilidad",
-                                         "La contabilidad del trimestre "
-                                         + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value())
-                                         + " ya se ha realizado.",
+                         << "year" << ui->sb_year->value() << "and editLock was already set, so just generating the report.";
+                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " ya estaba realizada."
+                                         + " Documentacion generada de nuevo.",
                                          QMessageBox::Ok, QMessageBox::Ok);
             }
             break;
@@ -264,21 +274,8 @@ void Contabilidad::updateLock()
     default:
         break;
     }
-    if (revertirOn) {
-        QMessageBox::information(this, "Revertir Contabilidad",
-                                 "Contabilidad revertida con éxito para el trimestre "
-                                 + ui->sb_trim->text() +
-                                 " del año "
-                                 + ui->sb_year->text() + ".",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-    } else {
-        QMessageBox::information(this, "Contabilidad",
-                                 "Contabilidad realizada con éxito para el trimestre "
-                                 + ui->sb_trim->text() +
-                                 " del año "
-                                 + ui->sb_year->text() + ".",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-    }
+    qDebug() << "Contabilidad::updateLock: edit_lock set to" << static_cast<int>(!revertirOn)
+             << "for trim" << ui->sb_trim->value() << "year" << ui->sb_year->value();
 }
 
 void Contabilidad::writeHtml(QString filename,
