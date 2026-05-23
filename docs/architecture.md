@@ -43,9 +43,8 @@ Key methods:
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
 | `saveTicket(verifactuResult)` | Writes rows to `ingresos` including 5 `verifactu_*` columns |
-| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` |
-| `showQrToClient()` | Modal showing QR image + CSV + AEAT validation URL |
-| `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` — guarded by `AppSettings::enablePrinting()` |
+| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration::submitSimplifiedInvoice()`; returns `VerifactuResult` (warning dialog on ERROR / NETWORK_ERROR) |
+| `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` (QR pixmap from `VerifactuResult` passed through) — guarded by `AppSettings::enablePrinting()` |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 | `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
 | `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |

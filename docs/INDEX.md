@@ -21,10 +21,8 @@
 | `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
 | `docs/modules/imprimir.md` | Excel/print flow, layout modes, QXlsx dependency |
 | `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
-| `docs/modules/verifactu/README.md` | Verifactu overview, architecture, key interface, status |
-| `docs/modules/verifactu/step_by_step_guide.md` | Step-by-step Verifactu implementation guide |
-| `docs/modules/verifactu/implementation_summary.md` | Class reference, DB schema SQL, security, roadmap |
-| `docs/modules/verifactu/rest_api.md` | Verifactu REST API complete field reference |
+| `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
+| `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
 
 ## Skills (Custom Slash Commands)
 
@@ -120,10 +118,10 @@ Read the full skill file when the skill is relevant to your task.
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Release procedure | Root `README.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
-| Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/implementation_summary.md` |
+| Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |
 | verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
 | Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`totalPriceBetweenDates`) + `docs/modules/contabilidad.md` |
-| Verifactu step-by-step implementation | `docs/modules/verifactu/step_by_step_guide.md` |
+| Verifactu integration points (save, retry, cancel, print) | `docs/modules/verifactu/README.md` (Integration points section) |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |

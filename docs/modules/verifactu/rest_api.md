@@ -295,8 +295,7 @@ Contains the same Invoice properties plus processing results.
 - **Importance**: MUST be captured and shown to the client
 - **Type**: Alphanumeric (100)
 - **Example**: `"ABCD1234EF"`
-- **In LAIDEAL**: `result.csv` of `VerifactuResult`
-- **Where to save**: DB column on the ticket/invoice row (pending — see progress tracker)
+- **In LAIDEAL**: `result.csv` of `VerifactuResult` — persisted to `ingresos.verifactu_csv`
 
 ### QrCode
 - **Description**: QR image in BMP format encoded as base64
@@ -491,30 +490,24 @@ invoiceJson["ServiceKey"] = m_config->getServiceKey();
 ## Data Flow
 
 ```
-User creates ticket in MainWindow
+User saves a paid ticket in MainWindow
     ↓
-Extract data (number, date, client, amount, tax)
+verifactuSubmitInvoice() → VerifactuIntegration::submitSimplifiedInvoice()  (F2)
     ↓
-verifactuSubmitInvoice() → VerifactuIntegration::createAndSubmitInvoice()
+Builds VerifactuInvoice with seller data from AppSettings + single VerifactuTaxItem
     ↓
-Creates VerifactuInvoice and sets all fields
+calculateTotals() + isValid()
     ↓
-Adds VerifactuTaxItem (base, rate, amount)
+VerifactuManager::submitInvoice() — adds ServiceKey, POSTs JSON to /Create
     ↓
-Calculates totals (calculateTotals())
+processResponse() — captures CSV, QrCode, ValidationUrl from Return
     ↓
-Validates invoice (isValid())
+saveTicket(VerifactuResult) — writes verifactu_* columns to ingresos
     ↓
-Serialises to JSON (toJson())
-    ↓
-VerifactuManager adds ServiceKey
-    ↓
-HTTP POST to Verifactu endpoint
-    ↓
-API responds with ResultCode (0 = success)
-    ↓
-showQrToClient() displays QR dialog
+Imprimir::createTicketExcel() — embeds QR pixmap at the bottom of the receipt
 ```
+
+For the F1 (full invoice with buyer NIF) flow substitute `createAndSubmitInvoice()`. For the reprint path the QR is fetched via `generateQR()` → `/GetQrCode` because the pixmap is not persisted.
 
 ---
 

@@ -23,10 +23,8 @@ docs/
     ├── imprimir.md                    (Excel + print generation)
     ├── add_garment.md                 (add garments to existing ticket)
     └── verifactu/                     (AEAT digital invoicing module)
-        ├── README.md
-        ├── step_by_step_guide.md
-        ├── implementation_summary.md
-        └── rest_api.md
+        ├── README.md                  (module reference — start here)
+        └── rest_api.md                (AEAT REST API field reference)
 ```
 
 ---
@@ -57,10 +55,8 @@ docs/
 
 | Document | Description | Read time |
 |----------|-------------|-----------|
-| [README.md](./modules/verifactu/README.md) | Overview, architecture, key interface, status | 5 min |
-| [step_by_step_guide.md](./modules/verifactu/step_by_step_guide.md) | Complete implementation guide | 45 min |
-| [implementation_summary.md](./modules/verifactu/implementation_summary.md) | Class reference, DB schema SQL, security, roadmap | 10 min |
-| [rest_api.md](./modules/verifactu/rest_api.md) | REST API complete field reference | 15 min |
+| [README.md](./modules/verifactu/README.md) | Module reference: architecture, public API, configuration, DB schema, integration points, environments, errors | 10 min |
+| [rest_api.md](./modules/verifactu/rest_api.md) | AEAT REST API complete field reference | 15 min |
 
 ---
 
