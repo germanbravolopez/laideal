@@ -42,7 +42,7 @@ The HTML report is written to `AppSettings::instance()->contabilidadPath()` (con
 
 ## Verifactu interaction
 
-`totalPriceBetweenDates` (in `sql_lite.cpp`) excludes `ingresos` rows where `verifactu_estado = 'ANULADA'` from the quarterly sum. A Verifactu-cancelled invoice must not appear in taxable income. Rows with NULL or empty `verifactu_estado` (tickets predating v8.0 or when Verifactu is not configured) are included normally.
+`totalPriceBetweenDates` (in `sql_lite.cpp`) excludes `ingresos` rows where `verifactu_estado = 'ANULADA'` from the quarterly sum. A Verifactu-cancelled invoice must not appear in taxable income. All other estados (`ENVIADA`, `ERROR`, `PENDIENTE`, and legacy NULL/empty rows from before Verifactu) are included normally.
 
 ## Date range
 

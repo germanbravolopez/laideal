@@ -148,7 +148,7 @@ Notable items:
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
-| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, empty if not submitted. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
+| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, `PENDIENTE` if not yet submitted (Verifactu not configured, or unpaid ticket awaiting submission at pickup). Legacy rows from before Verifactu may have NULL/empty. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
 | verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
 | verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 
@@ -218,7 +218,7 @@ AEAT QR validation:
 
 `VerifactuResult::Status` values (API call result): `SUCCESS`, `PENDING`, `ERROR`, `NETWORK_ERROR`, `INVALID_CONFIG`
 
-`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted`, `Enviada`, `Anulada`, `Error`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`).
+`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted` ↔ `"PENDIENTE"`, `Enviada` ↔ `"ENVIADA"`, `Anulada` ↔ `"ANULADA"`, `Error` ↔ `"ERROR"`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) to `NotSubmitted`.
 
 ---
 

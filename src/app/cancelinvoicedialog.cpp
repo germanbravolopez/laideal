@@ -92,7 +92,7 @@ void CancelInvoiceDialog::onSearchClicked()
         .arg(cliente, fecha,
              QString::number(importe, 'f', 2),
              csv.isEmpty() ? "—" : csv,
-             estado.isEmpty() ? "No enviado" : estado));
+             verifactuEstadoToString(verifactuEstadoFromString(estado))));
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
     if (estadoEnum == VerifactuEstado::Enviada) {

@@ -98,7 +98,7 @@ Read the full skill file when the skill is relevant to your task.
 | Trimestre | Quarter (Q1–Q4) — the unit for accounting lock and report generation |
 | QR (Verifactu) | QR image generated per invoice, shown to client for AEAT validation |
 | TESTING / PRODUCTION | Verifactu environments. TESTING uses fictitious data. PRODUCTION submits to AEAT |
-| VerifactuEstado | `enum class` in `verifactumanager.h` representing the DB-persisted `verifactu_estado` value: `NotSubmitted`, `Enviada`, `Anulada`, `Error`. Use `verifactuEstadoToString()` / `verifactuEstadoFromString()` to convert |
+| VerifactuEstado | `enum class` in `verifactumanager.h` representing the DB-persisted `verifactu_estado` value: `NotSubmitted`↔`"PENDIENTE"`, `Enviada`↔`"ENVIADA"`, `Anulada`↔`"ANULADA"`, `Error`↔`"ERROR"`. Use `verifactuEstadoToString()` / `verifactuEstadoFromString()` to convert |
 
 ## Topics → File Map
 

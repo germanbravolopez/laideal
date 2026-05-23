@@ -68,9 +68,9 @@ Columns 14–19 are loaded by the `SELECT *` query but hidden from the `QTableVi
 
 ## Verifactu info button (`pb_verifactu`)
 
-A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket was submitted to AEAT or attempted). Clicking it opens a `QDialog` showing:
+A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket has a Verifactu state — `PENDIENTE`, `ENVIADA`, `ERROR`, or `ANULADA`). Legacy rows from before Verifactu (NULL/empty) keep the button disabled. Clicking it opens a `QDialog` showing:
 
-- Estado (`ENVIADA` / `ERROR`)
+- Estado (`PENDIENTE` / `ENVIADA` / `ERROR` / `ANULADA`)
 - CSV security code
 - Submission timestamp
 - Error description (if any)

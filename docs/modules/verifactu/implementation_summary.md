@@ -32,7 +32,7 @@ Five `verifactu_*` columns are added to `ingresos` automatically at startup via 
 |--------|--------|
 | `verifactu_csv` | AEAT security code (e.g. `A-9VARYQTZTARVU2`), empty if not submitted |
 | `verifactu_timestamp` | ISO-8601 timestamp of submission, empty if not submitted |
-| `verifactu_estado` | `ENVIADA` / `ERROR` / empty |
+| `verifactu_estado` | `ENVIADA` / `ERROR` / `ANULADA` / `PENDIENTE` (legacy rows may be NULL/empty) |
 | `verifactu_error` | Error description when `estado = ERROR`, empty otherwise |
 | `verifactu_url_qr` | AEAT `ValidationUrl`, empty if not submitted |
 

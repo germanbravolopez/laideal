@@ -88,6 +88,7 @@ Previously resolved blockers:
 - [x] `verifactuEstadoToString()` and `verifactuEstadoFromString()` inline helpers in the same header
 - [x] All hardcoded `"ENVIADA"` / `"ANULADA"` / `"ERROR"` literals replaced in `mainwindow.cpp`, `cancelinvoicedialog.cpp`, `recog_prendas.cpp`
 - [x] SQL literal `'ANULADA'` in `cancelinvoicedialog.cpp` replaced with parameterized bind
+- [x] `NotSubmitted` now serializes as `"PENDIENTE"` instead of empty string — user-visible status in the Verifactu info dialog and Anular factura search. `verifactuEstadoFromString()` still maps NULL/empty to `NotSubmitted` for legacy pre-Verifactu rows
 
 ### Contabilidad bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Missing `}` in `contabilidad.cpp::on_cb_config_currentTextChanged` fixed (syntax error, prevented compilation)
