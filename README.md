@@ -103,6 +103,10 @@ Package the application for distribution using **windeployqt** and **Inno Setup*
 7. Run `deploy_laideal_run_in_qt_cmd.bat`
 8. Enter the release tag when prompted (e.g. `8.0`)
 9. Update the application icon after installation if needed
+10. Commit the version bump and release notes (`git add CMakeLists.txt releases_notes.txt && git commit -m "release X.Y"`)
+11. Tag the release commit (`git tag -a X.Y -m "Release X.Y"`)
+12. Push commits and the tag (`git push && git push origin X.Y`)
+13. Create the GitHub release: `gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt` (or use the GitHub web UI: Releases → Draft a new release → select the tag → attach the installer from `releases/setup_outputs/` and the zip from `releases/old_releases/`)
 
 ---
 

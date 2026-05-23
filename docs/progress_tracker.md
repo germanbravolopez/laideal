@@ -1,6 +1,12 @@
 # Progress Tracker — La Ideal
 
-**Rule**: Add new entries at the **top** of the relevant section. When entries exceed ~6 months old and are no longer actionable, move them to the Archive at the bottom. Keep the most important and recent information near the top.
+**Rule**: Track only what is actionable now. The active sections are:
+- **Blocking Issues** — must-fix items before merging the current branch and cutting a release. Items move out of here once resolved (into Completed Milestones below).
+- **Open Non-Blocking Issues** — known backlog that does not gate the release.
+- **Completed Milestones** — finished work, newest at the top. Provides history for the changelog.
+- **Archive** — entries older than ~6 months and no longer actionable.
+
+Add new entries at the **top** of the relevant section. Do not keep an "In Progress" list — work in progress lives in the branch and in Blocking Issues if it gates the release.
 
 ---
 
@@ -28,21 +34,6 @@ Previously resolved blockers:
 - [x] Temp debug code removed from `MainWindow` constructor
 - [x] Verifactu response persisted to DB (`verifactu_*` columns, `migrateDatabase()`, `saveTicket(VerifactuResult)`)
 - [x] `ValidationUrl` and `QrCode` captured from `/Create` response in `processResponse()`
-
----
-
-## In Progress
-
-- [x] Verifactu integration — fully validated end-to-end with real company credentials
-  - `submitSimplifiedInvoice()` confirmed working: F2 invoice, CSV received from AEAT, QR resolves correctly on AEAT portal
-  - API returns `QrCode` (base64 BMP), `ValidationUrl`, and `QrCodeUrl` in the submit response — all captured and persisted
-  - DB persistence complete: `verifactu_*` columns added to `ingresos` via `migrateDatabase()`
-  - v8.0 ships with TESTING environment; switch to PRODUCTION requires meeting with IreneSolutions for production ServiceKey
-- [x] QR on printed receipt — Verifactu QR embedded at the bottom of the Excel ticket via `QXlsx::insertImage`. Image not persisted in DB: save-flow path reuses the pixmap from the `/Create` response; reprint path calls `/GetQrCode` through `VerifactuIntegration::generateQR()` using ticket data from `ingresos`
-- [x] Verifactu info in RecogPrendas — "Verifactu" button shows estado/CSV/timestamp/error/AEAT link per ticket (QR image not stored; accessible via AEAT link)
-- [x] Invoice cancellation — `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…): search by ticket number, confirm details, call `VerifactuIntegration::cancelInvoice()`, update DB (`verifactu_estado = 'ANULADA'`); confirmed working in TESTING environment
-- [x] Unsuccessful invoice handling — define behaviour when Verifactu fails at save time: retry strategy, user notification, fallback storage
-- [x] Logging mechanism — `src/logging/AppLogger` installed in `main.cpp`; all `qDebug`/`qWarning`/`qCritical` output written to `~/.laideal.log` with timestamps; rotates to `.laideal.log.old` at 5 MB; Herramientas → Log de depuración… shows path and opens folder in Explorer
 
 ---
 
