@@ -13,6 +13,12 @@
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
+- [x] **Verifactu submitted unconditionally at ticket save** — `verifactuSubmitInvoice()` was called in `on_bb_save_reset_clicked()` regardless of payment status; a factura simplificada must only be sent to AEAT when the customer pays.
+  - Fix 1: `mainwindow.cpp::on_bb_save_reset_clicked()` now guards `verifactuSubmitInvoice()` with `ui->pb_payment->text() == "SI"` — unpaid saves produce a NotSubmitted ticket only.
+  - Fix 2: `recog_prendas.cpp::updateDb(PAY_YES)` now queries `verifactu_estado` directly from DB after the UPDATE; if `NotSubmitted` and Verifactu is configured, calls `retryVerifactuSubmit(ticketNum, paymentDate)` — covers the case where the customer pays later at pickup. DB query (not proxy model) prevents double-submit during the "pay all" loop.
+
+- [ ] **Printed ticket columns too wide for printer** — explicit `setColumnWidth` calls (5+21+8=34 units total, added in `d9627d2`) exceed the thermal printer's page width, splitting the Excel across multiple horizontal print areas. Changed to (4, 20, 7) = 31 units — needs testing on the physical printer before committing.
+
 - [x] **Contabilidad correctness with Verifactu** — fixed three bugs in accounting reports (`src/contabilidad/`, `src/sql_lite/`):
   1. **Syntax error**: `on_cb_config_currentTextChanged` in `contabilidad.cpp` was missing a closing `}` for the `else` block — prevented compilation.
   2. **ANULADA in quarterly totals**: `totalPriceBetweenDates` now excludes rows where `verifactu_estado = 'ANULADA'`; pre-v8.0 rows (NULL/empty estado) are still included. Correct per AEAT: a cancelled Verifactu invoice must not contribute to taxable income.
@@ -62,6 +68,9 @@ Previously resolved blockers:
 ---
 
 ## Completed Milestones
+
+### Pre-release bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] **Verifactu conditional on payment**: `on_bb_save_reset_clicked()` now only calls `verifactuSubmitInvoice()` when `pagado == "SI"`; unpaid saves produce NotSubmitted state. `updateDb(PAY_YES)` in `recog_prendas.cpp` auto-submits if the ticket is still NotSubmitted, using the payment date as invoice date; DB is queried directly so the pay-all loop never double-submits.
 
 ### Contabilidad dialog improvements — May 2026 (`feature/add_mdiago_verifactu`)
 - [x] Contextual confirmation dialogs added to `on_bb_ok_cancel_accepted` (4 cases: lock/revert × already-done/not-done)

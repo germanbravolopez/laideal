@@ -495,7 +495,9 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validateTicket()) {
             checkClientData();
-            VerifactuResult verifactuResult = verifactuSubmitInvoice();
+            VerifactuResult verifactuResult;
+            if (ui->pb_payment->text() == "SI")
+                verifactuResult = verifactuSubmitInvoice();
             saveTicket(verifactuResult);
             if (AppSettings::instance()->enablePrinting()) {
                 printRecibo(verifactuResult);

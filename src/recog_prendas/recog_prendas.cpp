@@ -77,6 +77,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
             } else {
+                QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
                 db.open();
                 q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
                           "n_recibo = :n_re AND hash = :hash");
@@ -84,13 +85,23 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 q.bindValue(":new_fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
                 q.bindValue(":new_pagado",     ui->pb_payment->text());
                 // Set id values
-                q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+                q.bindValue(":n_re", ticketNum);
                 q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
                 // Write to db
                 if (!q.exec())
                     qWarning() << "updateDb PAY_YES UPDATE failed —" << q.lastError().text();
                 q.clear();
+                // Check verifactu_estado from DB (not model) so pay-all loop does not double-submit
+                QSqlQuery chk;
+                chk.prepare("SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n LIMIT 1");
+                chk.bindValue(":n", ticketNum);
+                chk.exec();
+                QString estadoDb = chk.next() ? chk.value(0).toString() : "";
                 db.close();
+                if (verifactuEstadoFromString(estadoDb) == VerifactuEstado::NotSubmitted
+                        && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+                    retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());
+                }
             }
         }
         else {
