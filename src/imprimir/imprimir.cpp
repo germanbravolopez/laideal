@@ -144,10 +144,9 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     }
     int row = 1;
     QXlsx::Document excel(excelPath);
-    // Setup column widths
-    excel.setColumnWidth(1, 5);
-    excel.setColumnWidth(2, 21);
-    excel.setColumnWidth(3, 8);
+    excel.setColumnWidth(1, 4);
+    excel.setColumnWidth(2, 20);
+    excel.setColumnWidth(3, 7);
 
     // Header of the ticket
     AppSettings *settings = AppSettings::instance();
