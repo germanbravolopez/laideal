@@ -25,6 +25,22 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 - [ ] **Printed ticket columns too wide for printer** — explicit `setColumnWidth` calls (5+21+8=34 units total, added in `d9627d2`) exceed the thermal printer's page width, splitting the Excel across multiple horizontal print areas. Changed to (4, 20, 7) = 31 units — needs testing on the physical printer before committing.
 
+- [ ] **Em-dash (`—`) in source code** — 47 occurrences across 13 `.cpp/.h` files (mostly comments and log strings). Replace with `-` for portability (some Windows code pages mangle U+2014). Mechanical find-and-replace; verify no string literal depends on the character.
+
+- [ ] **UI tool to test Verifactu server connection** — `VerifactuManager::testConnection()` exists but is never called from the UI. Add a "Probar conexión" button in Archivo → Configuración → Verifactu tab that calls it and shows the result in a `QMessageBox` (success / NIF / environment / endpoint, or error description). Useful for diagnosing config issues without going through a save flow.
+
+- [ ] **Partial-payment Verifactu duplicate-InvoiceID problem** — `ingresos` stores one row per garment; `RecogPrendas` allows paying one garment at a time but `retryVerifactuSubmit()` sums `SUM(importe)` for the full ticket and submits one F2 with `InvoiceID = n_recibo`. When the user pays a second garment later, AEAT rejects the resubmission as a duplicate `InvoiceID`. Architectural fix (recommended): treat each payment event as a separate factura simplificada.
+  - Add `verifactu_invoice_seq INTEGER` to `ingresos` (default `0`) and submit with `InvoiceID = "<n_recibo>-<seq>"` where `seq` increments per payment event for the same `n_recibo`.
+  - Each submission carries only the amount paid in that event (sum of the rows being paid right now), not the full ticket total.
+  - `verifactu_csv`, `verifactu_url_qr`, `verifactu_estado` stay per-row — natural because each row already corresponds to a garment paid in a specific event.
+  - `Contabilidad::totalPriceBetweenDates()` already sums per-row `importe`, so the multi-invoice case is transparent for accounting.
+  - Cancellation path: `CancelInvoiceDialog` would need to cancel each `(n_recibo, seq)` pair separately — likely fine since cancellations are rare.
+  - Alternative (simpler but UX-changing): block per-garment payment when Verifactu is configured, requiring full-ticket payment. Rejected because it constrains the existing UX.
+
+- [ ] **Verifactu submission blocks the UI** — `VerifactuManager::submitInvoice()` / `cancelInvoice()` / `generateQRCode()` all use `QEventLoop` to await the `QNetworkReply`. If AEAT is slow or unreachable, the save flow in `MainWindow` and the pay flow in `RecogPrendas` hang until the request finishes or QNetworkAccessManager's default timeout fires. The app must not depend on AEAT availability. Two viable fixes:
+  - **Short option**: enforce a 5-second timeout at the network layer (`QTimer::singleShot` + `reply->abort()`); on timeout return `NETWORK_ERROR` so the row is persisted with `estado = "PENDIENTE"` and the existing retry path in `RecogPrendas` picks it up. Keeps the synchronous API but bounds the wait.
+  - **Architectural option**: make `VerifactuIntegration` truly async (signals on completion). The save flow writes the row with `estado = "PENDIENTE"` immediately and returns; a slot updates the row when the AEAT response arrives. Removes any UI dependency on AEAT latency. Requires reworking every call site that currently consumes `VerifactuResult` synchronously.
+
 - [x] **Contabilidad correctness with Verifactu** — fixed three bugs in accounting reports (`src/contabilidad/`, `src/sql_lite/`):
   1. **Syntax error**: `on_cb_config_currentTextChanged` in `contabilidad.cpp` was missing a closing `}` for the `else` block — prevented compilation.
   2. **ANULADA in quarterly totals**: `totalPriceBetweenDates` now excludes rows where `verifactu_estado = 'ANULADA'`; pre-v8.0 rows (NULL/empty estado) are still included. Correct per AEAT: a cancelled Verifactu invoice must not contribute to taxable income.
