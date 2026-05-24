@@ -884,8 +884,8 @@ void MainWindow::on_actionMostrar_log_triggered()
     msg.setText(QString("El archivo de log se encuentra en:\n%1\n\n"
                         "Envíe este archivo al soporte técnico cuando tenga un problema.").arg(path));
     msg.setStandardButtons(QMessageBox::Ok);
-    QPushButton *openBtn = msg.addButton("Abrir carpeta", QMessageBox::ActionRole);
+    QPushButton *openBtn = msg.addButton("Abrir archivo", QMessageBox::ActionRole);
     msg.exec();
     if (msg.clickedButton() == openBtn)
-        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
