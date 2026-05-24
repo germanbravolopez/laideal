@@ -10,7 +10,7 @@ MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
 QString MySortFilterProxyModel::removeDiacritics(const QString &text)
 {
     // Decompose to NFD so accented chars split into base + combining mark,
-    // then strip all combining (non-spacing) marks — handles á,é,í,ó,ú,ñ,ü, etc.
+    // then strip all combining (non-spacing) marks - handles á,é,í,ó,ú,ñ,ü, etc.
     QString nfd = text.normalized(QString::NormalizationForm_D);
     QString result;
     result.reserve(nfd.size());

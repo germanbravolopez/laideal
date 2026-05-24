@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     bool dbValid = !settings->dbPath().isEmpty() && QFile::exists(settings->dbPath());
     if (!dbValid) {
         SettingsDialog dlg;
-        dlg.setWindowTitle(QObject::tr("Configuración inicial — se requiere la base de datos"));
+        dlg.setWindowTitle(QObject::tr("Configuración inicial - se requiere la base de datos"));
         if (dlg.exec() != QDialog::Accepted
                 || settings->dbPath().isEmpty()
                 || !QFile::exists(settings->dbPath())) {

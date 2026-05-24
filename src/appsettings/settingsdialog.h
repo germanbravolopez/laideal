@@ -5,7 +5,7 @@
 #include <QLineEdit>
 #include <QCheckBox>
 
-// Settings dialog — all user-configurable options across the application.
+// Settings dialog - all user-configurable options across the application.
 // Reads from and writes to AppSettings. Call exec(); on Accepted the caller
 // should re-apply settings that take effect at runtime (icon, Verifactu).
 // DB path changes require an application restart.

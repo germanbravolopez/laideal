@@ -36,7 +36,7 @@ void MainWindow::mainwindowInitialSettings()
 {
     migrateDatabase(db);
 
-    // Settings action — prepended to Archivo menu
+    // Settings action - prepended to Archivo menu
     QAction *actionConfig = new QAction(tr("Configuración..."), this);
     connect(actionConfig, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
@@ -344,7 +344,7 @@ VerifactuResult MainWindow::verifactuSubmitInvoice()
             qDebug() << "Invoice submission failed:" << result.errorDescription;
             if (result.status == VerifactuResult::ERROR || result.status == VerifactuResult::NETWORK_ERROR) {
                 qWarning() << "Verifactu submission failed for ticket"
-                           << ui->le_nr_ticket->text() << "—" << result.errorDescription;
+                           << ui->le_nr_ticket->text() << "-" << result.errorDescription;
                 QMessageBox::warning(this, "Error al enviar a Verifactu",
                     "El ticket se ha guardado pero no ha podido enviarse a la AEAT (Verifactu).\n\n"
                     "Error: " + result.errorDescription + "\n\n"
@@ -354,7 +354,7 @@ VerifactuResult MainWindow::verifactuSubmitInvoice()
         }
         return result;
     } else {
-        qDebug() << "Verifactu not configured — skipping invoice submission";
+        qDebug() << "Verifactu not configured - skipping invoice submission";
         return VerifactuResult{};
     }
 }
@@ -430,7 +430,7 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
             }
             if (!q.exec())
                 qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
-                           << "row" << row << "—" << q.lastError().text();
+                           << "row" << row << "-" << q.lastError().text();
             q.clear();
             db.close();
         }

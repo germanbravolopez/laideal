@@ -7,7 +7,7 @@
 #include <QSqlQuery>
 
 // ---------------------------------------------------------------------------
-// DB path — set once in main() before MainWindow is constructed
+// DB path - set once in main() before MainWindow is constructed
 // ---------------------------------------------------------------------------
 
 static QString s_dbPath;
@@ -25,7 +25,7 @@ static bool dbNotConfigured(const QSqlDatabase &db, const char *caller)
 {
     if (!db.databaseName().isEmpty())
         return false;
-    qWarning() << caller << "— database path not configured, skipping query";
+    qWarning() << caller << "- database path not configured, skipping query";
     return true;
 }
 
@@ -44,7 +44,7 @@ void migrateDatabase(QSqlDatabase &db)
     if (dbNotConfigured(db, __func__)) return;
     db.open();
     QSqlQuery q(db);
-    // Each exec() silently fails if the column already exists — safe to call repeatedly.
+    // Each exec() silently fails if the column already exists - safe to call repeatedly.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_estado TEXT");
@@ -231,7 +231,7 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
     q.bindValue(":client", client);
     bool ok = q.exec();
     if (!ok)
-        qWarning() << "updateItemToClient: failed to update column" << column << "for client" << client << "—" << q.lastError().text();
+        qWarning() << "updateItemToClient: failed to update column" << column << "for client" << client << "-" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -251,7 +251,7 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     q.bindValue(":movil",     movil);
     bool ok = q.exec();
     if (!ok)
-        qWarning() << "addNewClient: failed to insert client" << client << "—" << q.lastError().text();
+        qWarning() << "addNewClient: failed to insert client" << client << "-" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -357,9 +357,9 @@ void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
     db.open();
     QSqlQuery q(db);
     if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "—" << q.lastError().text();
+        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
     if (!q.exec("UPDATE gastos SET edit_lock = " + val + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "—" << q.lastError().text();
+        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
     db.close();
 }
 
@@ -384,7 +384,7 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.bindValue(":id1",   ids1[i]);
             q.bindValue(":id2",   ids2[i]);
             if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "hash" << ids2[i] << "—" << q.lastError().text();
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "hash" << ids2[i] << "-" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
@@ -400,7 +400,7 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.bindValue(":value", QString(items[i]).replace(',', '.'));
             q.bindValue(":id",   ids[i]);
             if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "id" << ids[i] << "—" << q.lastError().text();
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "id" << ids[i] << "-" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
@@ -416,7 +416,7 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
             q.bindValue(":value", QString(items[i]).replace(',', '.'));
             q.bindValue(":id",   ids[i]);
             if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "nombre" << ids[i] << "—" << q.lastError().text();
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "nombre" << ids[i] << "-" << q.lastError().text();
             db.close();
             ++errorCnt;
         }
@@ -441,7 +441,7 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     db.open();
     QSqlQuery q(db);
     if (!q.exec(query))
-        qWarning() << "insertNewItemToTable: insert into" << table << "failed —" << q.lastError().text();
+        qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     db.close();
 }
 

@@ -89,7 +89,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
                 // Write to db
                 if (!q.exec())
-                    qWarning() << "updateDb PAY_YES UPDATE failed —" << q.lastError().text();
+                    qWarning() << "updateDb PAY_YES UPDATE failed -" << q.lastError().text();
                 q.clear();
                 // Check verifactu_estado from DB (not model) so pay-all loop does not double-submit
                 QSqlQuery chk;
@@ -125,7 +125,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
             if (!q.exec())
-                qWarning() << "updateDb PAY_NO UPDATE failed —" << q.lastError().text();
+                qWarning() << "updateDb PAY_NO UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
@@ -147,7 +147,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
         if (!q.exec())
-            qWarning() << "updateDb PKU_YES UPDATE failed —" << q.lastError().text();
+            qWarning() << "updateDb PKU_YES UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -163,7 +163,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
         if (!q.exec())
-            qWarning() << "updateDb PKU_NO UPDATE failed —" << q.lastError().text();
+            qWarning() << "updateDb PKU_NO UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -178,7 +178,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
         if (!q.exec())
-            qWarning() << "updateDb OBSV UPDATE failed —" << q.lastError().text();
+            qWarning() << "updateDb OBSV UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -195,7 +195,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
             if (!q.exec())
-                qWarning() << "updateDb SIZE_AND_PRICE UPDATE failed —" << q.lastError().text();
+                qWarning() << "updateDb SIZE_AND_PRICE UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
@@ -220,7 +220,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
             if (!q.exec())
-                qWarning() << "updateDb SEPARATE_GARM UPDATE failed —" << q.lastError().text();
+                qWarning() << "updateDb SEPARATE_GARM UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
 
@@ -252,7 +252,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
             if (!q.exec())
-                qWarning() << "updateDb SEPARATE_GARM INSERT failed —" << q.lastError().text();
+                qWarning() << "updateDb SEPARATE_GARM INSERT failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
@@ -289,7 +289,7 @@ void RecogPrendas::updateRowClickedToFields()
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
-    // pb_payment kept disabled — per-garment payment would submit a Verifactu invoice
+    // pb_payment kept disabled - per-garment payment would submit a Verifactu invoice
     // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
     ui->pb_state->setEnabled(true);
     ui->pb_pay_all->setEnabled(true);
@@ -330,7 +330,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->le_search->text().toUInt(&ok);
         if (ok) {
             if (ui->le_search->text().length() >= 9) {
-                // Phone number — search tel_fijo OR movil
+                // Phone number - search tel_fijo OR movil
                 db.open();
                 QSqlQuery phoneQ(db);
                 phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
@@ -374,7 +374,7 @@ void RecogPrendas::on_pb_search_clicked()
             QDate dateDash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
             QDate date = (!dateSlash.isNull()) ? dateSlash :
                          (!dateDash.isNull()) ? dateDash: QDate::currentDate();
-            // date_type values come from a hard-coded ComboBox — not user input
+            // date_type values come from a hard-coded ComboBox - not user input
             QString dateType = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
@@ -507,7 +507,7 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     rowClickedCell = index.row();
     columnClickedCell = index.column();
     updateRowClickedToFields();
-    // Enable action buttons now that a row is selected (pb_payment stays disabled — see updateRowClickedToFields)
+    // Enable action buttons now that a row is selected (pb_payment stays disabled - see updateRowClickedToFields)
     ui->pb_state->setEnabled(true);
     ui->pb_pay_all->setEnabled(true);
     ui->pb_pku_all->setEnabled(true);
@@ -591,13 +591,13 @@ void RecogPrendas::on_pb_verifactu_clicked()
     QDate invoiceDate   = QDate::fromString(dateStr, "dd-MM-yyyy");
 
     QDialog *dlg = new QDialog(this);
-    dlg->setWindowTitle("Verifactu — Ticket " + ticketNum);
+    dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
 
     QVBoxLayout *layout = new QVBoxLayout(dlg);
 
     auto addRow = [&](const QString &label, const QString &value) {
-        QLabel *lbl = new QLabel(QString("<b>%1</b> %2").arg(label, value.isEmpty() ? "—" : value));
+        QLabel *lbl = new QLabel(QString("<b>%1</b> %2").arg(label, value.isEmpty() ? "-" : value));
         lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
         layout->addWidget(lbl);
     };
@@ -686,12 +686,12 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &i
     isCellClicked = true;
 
     if (result.isSuccess()) {
-        qDebug() << "Verifactu retry successful for ticket" << ticketNum << "— CSV:" << result.csv;
+        qDebug() << "Verifactu retry successful for ticket" << ticketNum << "- CSV:" << result.csv;
         QMessageBox::information(this, "Verifactu enviado",
                                  "Factura enviada correctamente a la AEAT.\n\nCSV: " + result.csv,
                                  QMessageBox::Ok);
     } else {
-        qWarning() << "Verifactu retry failed for ticket" << ticketNum << "—" << result.errorDescription;
+        qWarning() << "Verifactu retry failed for ticket" << ticketNum << "-" << result.errorDescription;
         QMessageBox::warning(this, "Error al enviar a Verifactu",
                              "No se ha podido enviar la factura a la AEAT.\n\nError: " + result.errorDescription,
                              QMessageBox::Ok);

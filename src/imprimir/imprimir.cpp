@@ -362,7 +362,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.write(row, 1, QString("(Copia para el establecimiento)"));
         row += 2;
     }
-    // Insert policy — only on the client copy; the establishment copy omits it
+    // Insert policy - only on the client copy; the establishment copy omits it
     if (copyForClient) {
         QXlsx::Format formatPolicy;
         formatPolicy.setFontSize(10);
@@ -383,7 +383,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
         excel.write(row, 1, QString("el cliente acreditará su identidad."), formatPolicy);
         row++;
-        // Clause 2: storage obligation (3 months free, 6 months limit — Art. 6 RD 1453/1987)
+        // Clause 2: storage obligation (3 months free, 6 months limit - Art. 6 RD 1453/1987)
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
         excel.write(row, 1, QString("- Las prendas no recogidas en 3 MESES desde"), formatPolicy);
         row++;
@@ -396,7 +396,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
         excel.write(row, 1, QString("queda liberado de la obligación de custodia."), formatPolicy);
         row++;
-        // Clause 3: accessories — disclaimer applies when noted on this receipt
+        // Clause 3: accessories - disclaimer applies when noted on this receipt
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
         excel.write(row, 1, QString("- No se responde de botones, adornos ni"), formatPolicy);
         row++;

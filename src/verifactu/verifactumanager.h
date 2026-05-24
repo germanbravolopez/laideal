@@ -11,10 +11,10 @@
 
 // Persisted value of the verifactu_estado column in the ingresos table.
 enum class VerifactuEstado {
-    NotSubmitted,  // "PENDIENTE" — Verifactu not configured or not yet submitted
-    Enviada,       // "ENVIADA"   — successfully submitted to AEAT
-    Anulada,       // "ANULADA"   — cancelled via AEAT
-    Error          // "ERROR"     — submission or cancellation failed
+    NotSubmitted,  // "PENDIENTE" - Verifactu not configured or not yet submitted
+    Enviada,       // "ENVIADA"   - successfully submitted to AEAT
+    Anulada,       // "ANULADA"   - cancelled via AEAT
+    Error          // "ERROR"     - submission or cancellation failed
 };
 
 inline QString verifactuEstadoToString(VerifactuEstado e)

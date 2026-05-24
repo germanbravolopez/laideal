@@ -117,3 +117,4 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 | Raw `new` without Qt parent or paired `delete` | Memory leak |
 | Committed debug-only code or `qDebug()` prints left in production paths | Use the `debug` flag in `MainWindow` or remove before merging |
 | Comma as decimal separator in numeric strings | DB stores data with `.`; commas cause silent data corruption |
+| Non-ASCII punctuation in `.cpp` / `.h` files: em-dash (`—` U+2014), en-dash (`–` U+2013), curly quotes (`“ ” ‘ ’`), ellipsis (`…` U+2026) | Some Windows code pages mangle these characters in source files; use plain ASCII (`-`, `"`, `'`, `...`) in comments, log strings, and string literals. Exception: Spanish characters (`á`, `é`, `í`, `ó`, `ú`, `ñ`, `¿`, `¡`, `°`) are required in user-facing UI strings and are allowed everywhere. |

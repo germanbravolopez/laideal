@@ -232,7 +232,7 @@ void AddGarment::saveFactura()
     q.bindValue(":edit_lock", "0");
     q.bindValue(":hash", hash);
     if (!q.exec())
-        qWarning() << "AddGarment INSERT failed for ticket" << ui->le_n_recibo->text() << "—" << q.lastError().text();
+        qWarning() << "AddGarment INSERT failed for ticket" << ui->le_n_recibo->text() << "-" << q.lastError().text();
     q.clear();
     db.close();
 }

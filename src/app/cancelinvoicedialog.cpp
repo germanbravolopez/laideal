@@ -26,7 +26,7 @@ CancelInvoiceDialog::CancelInvoiceDialog(QWidget *parent)
     layout->addLayout(searchRow);
 
     // Ticket info panel
-    m_lblInfo = new QLabel("—");
+    m_lblInfo = new QLabel("-");
     m_lblInfo->setWordWrap(true);
     m_lblInfo->setFrameShape(QFrame::StyledPanel);
     m_lblInfo->setContentsMargins(8, 8, 8, 8);
@@ -91,7 +91,7 @@ void CancelInvoiceDialog::onSearchClicked()
                 "<b>Estado:</b> %5")
         .arg(cliente, fecha,
              QString::number(importe, 'f', 2),
-             csv.isEmpty() ? "—" : csv,
+             csv.isEmpty() ? "-" : csv,
              verifactuEstadoToString(verifactuEstadoFromString(estado))));
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
@@ -102,8 +102,8 @@ void CancelInvoiceDialog::onSearchClicked()
         m_btnCancel->setEnabled(true);
     } else {
         QString reason = (estadoEnum == VerifactuEstado::Anulada) ? "Este ticket ya está anulado en AEAT." :
-                         (estadoEnum == VerifactuEstado::Error)    ? "Este ticket tuvo un error al enviarse — no hay nada que anular." :
-                                                                     "Este ticket no fue enviado a AEAT — no hay nada que anular.";
+                         (estadoEnum == VerifactuEstado::Error)    ? "Este ticket tuvo un error al enviarse - no hay nada que anular." :
+                                                                     "Este ticket no fue enviado a AEAT - no hay nada que anular.";
         m_lblResult->setText(reason);
     }
 }

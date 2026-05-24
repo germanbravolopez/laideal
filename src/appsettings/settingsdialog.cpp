@@ -11,7 +11,7 @@
 #include <QMessageBox>
 #include <QDoubleValidator>
 
-// Helpers — create a row: line edit + Browse button
+// Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
 {
     auto *w   = new QWidget;

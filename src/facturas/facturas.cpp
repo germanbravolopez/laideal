@@ -102,7 +102,7 @@ void Facturas::saveFactura()
     q.bindValue(":importe", ui->le_importe->text().replace(",","."));
     q.bindValue(":edit_lock", "0");
     if (!q.exec())
-        qWarning() << "saveFactura INSERT failed for" << ui->le_fra->text() << "—" << q.lastError().text();
+        qWarning() << "saveFactura INSERT failed for" << ui->le_fra->text() << "-" << q.lastError().text();
     q.clear();
     db.close();
 }
