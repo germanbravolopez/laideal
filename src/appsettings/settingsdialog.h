@@ -19,6 +19,15 @@ public:
 public:
     void browsePath(QLineEdit *target, bool directory);
 
+signals:
+    // Emitted when the user clicks "Probar conexión" in the Verifactu tab.
+    // The connection test is performed by MainWindow (which owns the VerifactuIntegration)
+    // so this module does not depend on verifactu.
+    void testConnectionRequested(const QString &nif,
+                                 const QString &name,
+                                 const QString &serviceKey,
+                                 bool production);
+
 private slots:
     void accept() override;
 

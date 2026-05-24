@@ -160,6 +160,16 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     note->setWordWrap(true);
     fl->addRow(note);
 
+    auto *btnTest = new QPushButton(tr("Probar conexión"));
+    btnTest->setToolTip(tr("Comprueba que el servidor Verifactu es accesible con los valores actuales del formulario"));
+    connect(btnTest, &QPushButton::clicked, this, [this]() {
+        emit testConnectionRequested(m_vNif->text().trimmed(),
+                                     m_vName->text().trimmed(),
+                                     m_vKey->text().trimmed(),
+                                     m_vProduction->isChecked());
+    });
+    fl->addRow(btnTest);
+
     tabs->addTab(w, tr("Verifactu"));
 }
 

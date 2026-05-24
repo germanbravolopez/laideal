@@ -78,7 +78,11 @@ public:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;
 
     QString getLastError() const { return m_lastError; }
-    bool testConnection();
+    // GETs the endpoint URL with a 5s timeout. SUCCESS = server reachable (any HTTP status
+    // counts, including 4xx/5xx, since the endpoint only accepts POST and a GET typically
+    // returns 405). NETWORK_ERROR = no HTTP response (DNS failure, connection refused,
+    // timeout). INVALID_CONFIG = local validation failed. Does not authenticate.
+    VerifactuResult testConnection();
     QString getConfigurationInfo() const;
 
 private slots:

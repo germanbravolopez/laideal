@@ -256,17 +256,51 @@ QString VerifactuManager::getValidationUrl(const VerifactuInvoice &invoice) cons
     return url;
 }
 
-bool VerifactuManager::testConnection()
+VerifactuResult VerifactuManager::testConnection()
 {
+    VerifactuResult result;
+
     if (!validateConfiguration()) {
-        return false;
+        result.status = VerifactuResult::INVALID_CONFIG;
+        result.errorDescription = getLastError();
+        return result;
     }
 
-    QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl());
-    QNetworkReply *reply = m_networkManager->get(request);
+    // POST a stub payload to /Create. The server rejects it (missing fields), but ANY
+    // HTTP response proves connectivity + auth. GET on the base URL hangs without ever
+    // responding, so POST to /Create is the only reliable probe.
+    QJsonObject probe;
+    probe["ServiceKey"] = m_config->getServiceKey();
+    QByteArray payload = QJsonDocument(probe).toJson(QJsonDocument::Compact);
 
-    qDebug() << "Testing Verifactu connection...";
-    return true;
+    QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Create");
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setTransferTimeout(10000);
+    QNetworkReply *reply = m_networkManager->post(request, payload);
+
+    qDebug() << "Testing Verifactu connection to" << (m_config->getEndpointUrl() + "/Create");
+
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    QString errStr = reply->errorString();
+    reply->deleteLater();
+
+    if (!httpStatus.isValid()) {
+        // No HTTP response - DNS failure, connection refused, or timeout
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Error de red: " + errStr;
+        m_lastError = result.errorDescription;
+        qWarning() << "testConnection: network error" << errStr;
+        return result;
+    }
+
+    result.status = VerifactuResult::SUCCESS;
+    result.errorDescription = QString("HTTP %1").arg(httpStatus.toInt());
+    qDebug() << "testConnection: reachable, HTTP" << httpStatus.toInt();
+    return result;
 }
 
 QString VerifactuManager::getConfigurationInfo() const

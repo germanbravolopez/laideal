@@ -15,6 +15,8 @@
 #include "add_garment.h"
 #include "appsettings.h"
 #include "settingsdialog.h"
+#include "verifactumanager.h"
+#include "verifactuconfig.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -40,6 +42,34 @@ void MainWindow::mainwindowInitialSettings()
     QAction *actionConfig = new QAction(tr("Configuración..."), this);
     connect(actionConfig, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
+        connect(&dlg, &SettingsDialog::testConnectionRequested,
+                &dlg, [&dlg](const QString &nif, const QString &name,
+                             const QString &serviceKey, bool production) {
+            if (nif.isEmpty() || name.isEmpty() || serviceKey.isEmpty()) {
+                QMessageBox::warning(&dlg, tr("Datos incompletos"),
+                    tr("Introduce NIF, nombre y clave de servicio antes de probar la conexión."));
+                return;
+            }
+            VerifactuManager mgr;
+            mgr.getConfig()->setEmitterData(nif, name, name);
+            mgr.getConfig()->setServiceKey(serviceKey);
+            mgr.getConfig()->setEnvironment(production
+                ? VerifactuConfig::PRODUCTION
+                : VerifactuConfig::TESTING);
+
+            VerifactuResult result = mgr.testConnection();
+            const QString env = production ? "PRODUCCIÓN" : "TESTING";
+            const QString endpoint = mgr.getConfig()->getEndpointUrl();
+            if (result.isSuccess()) {
+                QMessageBox::information(&dlg, tr("Conexión correcta"),
+                    tr("Servidor accesible (%1).\n\nEntorno: %2\nNIF: %3\nEndpoint: %4")
+                        .arg(result.errorDescription, env, nif, endpoint));
+            } else {
+                QMessageBox::warning(&dlg, tr("Conexión fallida"),
+                    tr("No se pudo conectar al servidor.\n\nDetalle: %1\nEntorno: %2\nEndpoint: %3")
+                        .arg(result.errorDescription, env, endpoint));
+            }
+        });
         if (dlg.exec() == QDialog::Accepted) {
             // Apply icon change immediately (no restart needed)
             QString iconPath = AppSettings::instance()->iconPath();
