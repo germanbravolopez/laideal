@@ -101,7 +101,7 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 - Log format: `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] <message>`
 - Session separator written on each launch
 - Rotates to `.laideal.log.old` when the file exceeds 5 MB; thread-safe via `QMutex`
-- `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Herramientas → Log de depuración…) to show the customer where to find the file
+- `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Archivo → Log de depuración…) to show the customer the path with an "Abrir archivo" button that opens the log directly
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.

@@ -113,7 +113,7 @@ Read the full skill file when the skill is relevant to your task.
 | Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/imprimir/imprimir.cpp` (`createTicketExcel` — `copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
-| How to read customer bug logs | `~/.laideal.log` on customer machine; Herramientas → Log de depuración… opens the folder |
+| How to read customer bug logs | `~/.laideal.log` on customer machine; Archivo → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Release procedure | Root `README.md` |

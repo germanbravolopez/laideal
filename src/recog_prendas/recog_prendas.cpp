@@ -289,7 +289,8 @@ void RecogPrendas::updateRowClickedToFields()
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
-    ui->pb_payment->setEnabled(true);
+    // pb_payment kept disabled — per-garment payment would submit a Verifactu invoice
+    // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
     ui->pb_state->setEnabled(true);
     ui->pb_pay_all->setEnabled(true);
     ui->pb_pku_all->setEnabled(true);
@@ -506,8 +507,7 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
     rowClickedCell = index.row();
     columnClickedCell = index.column();
     updateRowClickedToFields();
-    // Enable action buttons now that a row is selected
-    ui->pb_payment->setEnabled(true);
+    // Enable action buttons now that a row is selected (pb_payment stays disabled — see updateRowClickedToFields)
     ui->pb_state->setEnabled(true);
     ui->pb_pay_all->setEnabled(true);
     ui->pb_pku_all->setEnabled(true);

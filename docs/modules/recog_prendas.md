@@ -94,10 +94,11 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 | Button | Enabled when |
 |--------|-------------|
-| `pb_payment`, `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print` | Any row is selected |
+| `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print` | Any row is selected |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
+| `pb_payment` | **Never** — kept disabled to prevent per-garment payment from triggering a Verifactu submission per garment (would cause duplicate-InvoiceID rejection at AEAT). Pay via `pb_pay_all` instead. The pay-all loop calls `on_pb_payment_toggled(true)` programmatically and Qt still fires `toggled` on a disabled button, so the full-ticket pay flow is intact. See "Per-payment Verifactu InvoiceID seq" in `docs/progress_tracker.md` for the future fix that would restore per-garment payment. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` re-enables the first group; `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
 
 ## Notes
 
