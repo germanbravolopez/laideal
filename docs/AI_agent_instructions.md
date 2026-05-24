@@ -70,6 +70,12 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 
 **Rule**: When a skill is relevant to your current task, **read the full skill file before starting work**.
 
+## Subagents
+
+| Agent | File | When to use |
+|-------|------|-------------|
+| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). Output goes into `docs/dead_code_report.md`. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
+
 ## Agent Obligations
 
 1. **Run `/update-docs`** (or follow its steps manually) after every meaningful change.

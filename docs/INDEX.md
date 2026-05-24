@@ -11,6 +11,7 @@
 | `docs/AI_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
+| `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](.claude/agents/dead-code-finder.md) agent) |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
@@ -37,6 +38,14 @@ Read the full skill file when the skill is relevant to your task.
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
 | `/init` | Built-in | Initialise a CLAUDE.md file |
+
+## Subagents
+
+Project-specific agents callable via the `Agent` tool with `subagent_type: "<name>"`.
+
+| Agent | File | Purpose |
+|-------|------|---------|
+| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Scan `src/` for methods declared in headers but never called. Knows about Qt auto-connect / virtual overrides / signals so it doesn't false-flag them. Output goes into `docs/dead_code_report.md`. |
 
 ## Source Files
 
