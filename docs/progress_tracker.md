@@ -19,21 +19,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-- [x] **Verifactu submitted unconditionally at ticket save** — `verifactuSubmitInvoice()` was called in `on_bb_save_reset_clicked()` regardless of payment status; a factura simplificada must only be sent to AEAT when the customer pays.
-  - Fix 1: `mainwindow.cpp::on_bb_save_reset_clicked()` now guards `verifactuSubmitInvoice()` with `ui->pb_payment->text() == "SI"` — unpaid saves produce a NotSubmitted ticket only.
-  - Fix 2: `recog_prendas.cpp::updateDb(PAY_YES)` now queries `verifactu_estado` directly from DB after the UPDATE; if `NotSubmitted` and Verifactu is configured, calls `retryVerifactuSubmit(ticketNum, paymentDate)` — covers the case where the customer pays later at pickup. DB query (not proxy model) prevents double-submit during the "pay all" loop.
-
 - [ ] **Printed ticket columns too wide for printer** — explicit `setColumnWidth` calls (5+21+8=34 units total, added in `d9627d2`) exceed the thermal printer's page width, splitting the Excel across multiple horizontal print areas. Changed to (4, 20, 7) = 31 units — needs testing on the physical printer before committing.
-
-- [x] **Contabilidad correctness with Verifactu** — fixed three bugs in accounting reports (`src/contabilidad/`, `src/sql_lite/`):
-  1. **Syntax error**: `on_cb_config_currentTextChanged` in `contabilidad.cpp` was missing a closing `}` for the `else` block — prevented compilation.
-  2. **ANULADA in quarterly totals**: `totalPriceBetweenDates` now excludes rows where `verifactu_estado = 'ANULADA'`; pre-v8.0 rows (NULL/empty estado) are still included. Correct per AEAT: a cancelled Verifactu invoice must not contribute to taxable income.
-  3. **`gastos` double-count on quarter boundary**: `BETWEEN startDate AND endDate` was endpoint-inclusive, so an expense on the first day of the next quarter was counted in both quarters. Replaced with `>= startDate AND < endDate` — same half-open interval as `ingresos`.
-
-Previously resolved blockers:
-- [x] Temp debug code removed from `MainWindow` constructor
-- [x] Verifactu response persisted to DB (`verifactu_*` columns, `migrateDatabase()`, `saveTicket(VerifactuResult)`)
-- [x] `ValidationUrl` and `QrCode` captured from `/Create` response in `processResponse()`
 
 ---
 
@@ -67,6 +53,7 @@ Previously resolved blockers:
 ## Completed Milestones
 
 ### Pre-release bug fixes — May 2026 (`feature/add_mdiago_verifactu`)
+- [x] **Temp debug code removed from `MainWindow` constructor** — early development debug code that printed module state at startup; cleaned up before the v8.0 cut.
 - [x] **Verifactu fully async — UI no longer blocks on AEAT**: `VerifactuManager` and `VerifactuIntegration` rewritten — `submitInvoice` / `cancelInvoice` / `generateQRCode` (sync, `QEventLoop`-blocking) replaced with `submitInvoiceAsync` / `cancelInvoiceAsync` / `generateQRAsync` that return a `QString requestId` immediately. Results arrive via a new `requestFinished(reqId, VerifactuResult)` signal. Each consumer holds a small `QHash<reqId, ticketNum>` map to correlate.
   - **MainWindow save flow**: `saveTicket()` writes rows with `verifactu_estado = PENDIENTE` immediately. Print branching now diverges by payment state — **paid → `printFra()` only** (factura simplificada), **unpaid → `printRecibo()` only** (claim ticket, two copies). In both cases `verifactuIntegration = nullptr`, so save-time prints never carry CSV/QR (AEAT response is still in flight). The async submit is fired for paid tickets, status bar shows "Enviando ticket NNNN a AEAT..." and the form resets. When AEAT replies, `onVerifactuRequestFinished()` UPDATEs the row(s) and shows "Ticket NNNN enviado (CSV: ...)" or "Error..." in the status bar (no popups). Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir`. `AppSettings::enablePrinting()` is checked inside `printRecibo()` / `printFra()` and only guards the actual `printTicket()` calls — the Excel file is generated even in testing mode for inspection.
   - **RecogPrendas pay-all + retry**: same async pattern. `updateDb(PAY_YES)` now consults an in-memory `hasPendingSubmit(ticketNum)` map in addition to the DB-state check (pay-all iterates per row, async submits don't update DB synchronously, so the old DB-only dedup would double-fire). `retryVerifactuSubmit` is now fire-and-forget; status bar shows progress.
