@@ -18,9 +18,10 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 | `populateCbClient()` | Fills the client combobox from `clientes` table |
 | `validateTicket()` | Pre-save checks: client present, garments valid, quarter not locked |
 | `checkClientData()` | Adds or updates the client row in `clientes` |
-| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration`; returns `VerifactuResult` (INVALID_CONFIG if not configured) |
-| `saveTicket(verifactuResult)` | Inserts N garment rows into `ingresos` including all 5 `verifactu_*` columns |
-| `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir` dialog |
+| `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status-bar progress |
+| `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar |
+| `saveTicket()` | Inserts N garment rows into `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
+| `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir`. `verifactuIntegration = nullptr` so no QR fetch at save time. Excel is generated unconditionally; `printTicket()` runs only when `AppSettings::enablePrinting()` is true. |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 | `on_actionAnular_factura_verifactu_triggered()` | Opens `CancelInvoiceDialog`; shows warning if Verifactu not configured |
 
@@ -41,13 +42,16 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 on_bb_save_reset_clicked(Save)   — Qt auto-connect slot
   ├── validateTicket()
   ├── checkClientData()
-  ├── verifactuSubmitInvoice()
-  │     returns VerifactuResult (SUCCESS / ERROR / INVALID_CONFIG)
-  ├── saveTicket(verifactuResult)  — persists all 5 verifactu_* columns
-  ├── [if AppSettings::enablePrinting()] printRecibo()
-  ├── [if printing enabled && paid] printFra()
+  ├── saveTicket()                  — N rows with verifactu_estado = PENDIENTE
+  ├── if (isPaid):
+  │     ├── verifactuSubmitInvoice  — fires async; status bar "Enviando..."
+  │     └── printFra()              — factura simplificada (no CSV/QR yet)
+  ├── else:
+  │     └── printRecibo()           — claim receipt, two copies
   └── resetAllContents()
 ```
+
+When the AEAT reply arrives, `onVerifactuRequestFinished()` UPDATEs `verifactu_csv` / `verifactu_timestamp` / `verifactu_estado` for the ticket and posts the result to the status bar. The save-time print never has the CSV/QR; the customer can reprint a Verifactu-complete copy via `RecogPrendas → Imprimir` once status arrives.
 
 ## Child windows
 

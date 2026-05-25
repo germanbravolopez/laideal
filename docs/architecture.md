@@ -45,7 +45,7 @@ Key methods:
 | `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
-| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty). Customer reprint with QR is available via `RecogPrendas → Imprimir`. Guarded by `AppSettings::enablePrinting()`. |
+| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `createTicketExcel()` always runs (Excel file is generated even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 | `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
 | `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |
@@ -183,14 +183,21 @@ Columns include `importe` (REAL) and supplier/date/description fields. Managed v
 User fills form in MainWindow
   ↓
 on_bb_save_reset_clicked(Save)
-  ├── validateTicket()          — checks client, amounts, quarter lock
-  ├── checkClientData()         — adds/updates client in `clientes`
-  ├── verifactuSubmitInvoice()  — REST POST to AEAT; returns VerifactuResult
-  │     └── on ERROR/NETWORK_ERROR: QMessageBox::warning shown in Spanish
-  ├── saveTicket(result)        — writes N rows to `ingresos` + all verifactu_* columns
-  ├── [if AppSettings::enablePrinting()] printRecibo()  — Excel + print receipt
-  ├── [if printing enabled && paid] printFra()          — Excel + print invoice
-  └── resetAllContents()        — clears form for next ticket
+  ├── validateTicket()                       — checks client, amounts, quarter lock
+  ├── checkClientData()                      — adds/updates client in `clientes`
+  ├── saveTicket()                           — writes N rows to `ingresos` with verifactu_estado = PENDIENTE
+  ├── if (isPaid):
+  │     ├── verifactuSubmitInvoice(...)      — fires async submit; status bar "Enviando..."
+  │     └── printFra()                       — Excel + printTicket (factura simplificada, no CSV/QR yet)
+  ├── else (not paid):
+  │     └── printRecibo()                    — Excel + printTicket (claim receipt, two copies)
+  └── resetAllContents()                     — clears form for next ticket
+
+Async tail (when AEAT replies):
+  VerifactuIntegration::requestFinished(reqId, result)
+  └── MainWindow::onVerifactuRequestFinished
+        ├── updateTicketVerifactuFields(...) — UPDATE ingresos with CSV/timestamp/estado
+        └── statusBar message                — "Ticket NNNN enviado (CSV: ...)" or "Error: ..."
 ```
 
 ---

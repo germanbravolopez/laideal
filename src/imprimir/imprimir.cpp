@@ -406,16 +406,19 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         row++;
         // Clause 2: storage obligation (3 months free, 6 months limit - Art. 6 RD 1453/1987)
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("- Las prendas no recogidas en 3 MESES desde"), formatPolicy);
+        excel.write(row, 1, QString("- Las prendas no recogidas en 3 MESES"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("la entrega podrán devengar gastos de custodia."), formatPolicy);
+        excel.write(row, 1, QString("desde la entrega podrán devengar gastos"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("Transcurridos 6 MESES el establecimiento"), formatPolicy);
+        excel.write(row, 1, QString("de custodia. Transcurridos 6 MESES el"), formatPolicy);
         row++;
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-        excel.write(row, 1, QString("queda liberado de la obligación de custodia."), formatPolicy);
+        excel.write(row, 1, QString("establecimiento queda liberado de la"), formatPolicy);
+        row++;
+        excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+        excel.write(row, 1, QString("obligación de custodia."), formatPolicy);
         row++;
         // Clause 3: accessories - disclaimer applies when noted on this receipt
         excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
@@ -477,14 +480,13 @@ void Imprimir::printTicket()
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);
     } else {
-        // TODO: do not commit the following changes since it is only for testing purposes
-        // // Change the cursor to a loading icon
-        // QApplication::setOverrideCursor(Qt::WaitCursor);
-        // // Start printing process
-        // process.start(batchPath);
-        // process.waitForFinished();
-        // // Restore the cursor to default
-        // QApplication::restoreOverrideCursor();
+        // Change the cursor to a loading icon
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        // Start printing process
+        process.start(batchPath);
+        process.waitForFinished();
+        // Restore the cursor to default
+        QApplication::restoreOverrideCursor();
     }
 }
 
