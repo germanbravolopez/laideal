@@ -17,6 +17,7 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include <QStatusBar>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -115,6 +116,9 @@ void MainWindow::initializeVerifactu()
                     "Configura Verifactu más tarde.")
             .arg(m_verifactuIntegration->getLastError()));
     }
+
+    connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
+            this, &MainWindow::onVerifactuRequestFinished);
 }
 
 void MainWindow::resetAllContents()
@@ -356,45 +360,80 @@ void MainWindow::checkClientData()
 
 }
 
-VerifactuResult MainWindow::verifactuSubmitInvoice()
+void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
 {
-    if (m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
-        double ivaRate = AppSettings::instance()->ivaRate();
-        VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
-            ui->le_nr_ticket->text(),
-            ui->de_date_recep->date(),
-            ui->le_cost_total->text().toDouble() / (1.0 + ivaRate / 100.0),
-            ivaRate,
-            "Servicios de lavanderia"
-        );
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qDebug() << "Verifactu not configured - skipping invoice submission for ticket" << ticketNum;
+        return;
+    }
+    double ivaRate = AppSettings::instance()->ivaRate();
+    const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
+        ticketNum,
+        invoiceDate,
+        totalAmount / (1.0 + ivaRate / 100.0),
+        ivaRate,
+        "Servicios de lavanderia"
+    );
+    if (reqId.isEmpty()) {
+        qWarning() << "Verifactu submit rejected for ticket" << ticketNum;
+        return;
+    }
+    m_pendingSubmits.insert(reqId, ticketNum);
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+}
 
-        if (result.isSuccess()) {
-            qDebug() << "Invoice submitted with CSV:" << result.csv;
-        } else {
-            qDebug() << "Invoice submission failed:" << result.errorDescription;
-            if (result.status == VerifactuResult::ERROR || result.status == VerifactuResult::NETWORK_ERROR) {
-                qWarning() << "Verifactu submission failed for ticket"
-                           << ui->le_nr_ticket->text() << "-" << result.errorDescription;
-                QMessageBox::warning(this, "Error al enviar a Verifactu",
-                    "El ticket se ha guardado pero no ha podido enviarse a la AEAT (Verifactu).\n\n"
-                    "Error: " + result.errorDescription + "\n\n"
-                    "Puede reintentar el envío desde Recogida de prendas → botón Verifactu.",
-                    QMessageBox::Ok);
-            }
-        }
-        return result;
+void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
+{
+    auto it = m_pendingSubmits.find(requestId);
+    if (it == m_pendingSubmits.end()) return; // not one of ours (cancel/QR/etc. or other consumer)
+    const QString ticketNum = it.value();
+    m_pendingSubmits.erase(it);
+
+    updateTicketVerifactuFields(ticketNum, result);
+
+    if (result.isSuccess()) {
+        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
     } else {
-        qDebug() << "Verifactu not configured - skipping invoice submission";
-        return VerifactuResult{};
+        statusBar()->showMessage(
+            tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
     }
 }
 
-
-void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
+void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
 {
-    const QString timestamp = verifactuResult.isSuccess()
-        ? QDateTime::currentDateTime().toString(Qt::ISODate) : "";
+    db.open();
+    QSqlQuery q;
+    q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+              "WHERE n_recibo = :n_recibo");
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    if (result.isSuccess()) {
+        q.bindValue(":csv",    result.csv);
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+        q.bindValue(":error",  "");
+        q.bindValue(":url",    result.validationUrl);
+    } else {
+        q.bindValue(":csv",    "");
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
+        q.bindValue(":error",  result.errorDescription);
+        q.bindValue(":url",    "");
+    }
+    q.bindValue(":n_recibo", ticketNum);
+    if (!q.exec())
+        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
+                   << "-" << q.lastError().text();
+    db.close();
+}
 
+
+void MainWindow::saveTicket()
+{
+    // Rows are always written with verifactu_estado = PENDIENTE (or empty if Verifactu is
+    // not configured for this ticket). The async submit handler patches the rows with
+    // CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
     qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
              << "rows:" << ui->table_ticket->rowCount();
 
@@ -438,26 +477,11 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
             q.bindValue(":servicio", cbService->currentText());
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
-            if (verifactuResult.isSuccess()) {
-                q.bindValue(":verifactu_csv",       verifactuResult.csv);
-                q.bindValue(":verifactu_timestamp", timestamp);
-                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::Enviada));
-                q.bindValue(":verifactu_error",     "");
-                q.bindValue(":verifactu_url_qr",    verifactuResult.validationUrl);
-            } else if (verifactuResult.status == VerifactuResult::ERROR
-                       || verifactuResult.status == VerifactuResult::NETWORK_ERROR) {
-                q.bindValue(":verifactu_csv",       "");
-                q.bindValue(":verifactu_timestamp", QDateTime::currentDateTime().toString(Qt::ISODate));
-                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::Error));
-                q.bindValue(":verifactu_error",     verifactuResult.errorDescription);
-                q.bindValue(":verifactu_url_qr",    "");
-            } else {
-                q.bindValue(":verifactu_csv",       "");
-                q.bindValue(":verifactu_timestamp", "");
-                q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
-                q.bindValue(":verifactu_error",     "");
-                q.bindValue(":verifactu_url_qr",    "");
-            }
+            q.bindValue(":verifactu_csv",       "");
+            q.bindValue(":verifactu_timestamp", "");
+            q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+            q.bindValue(":verifactu_error",     "");
+            q.bindValue(":verifactu_url_qr",    "");
             if (!q.exec())
                 qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
                            << "row" << row << "-" << q.lastError().text();
@@ -467,16 +491,17 @@ void MainWindow::saveTicket(const VerifactuResult &verifactuResult)
     }
 }
 
-void MainWindow::printRecibo(const VerifactuResult &verifactuResult)
+void MainWindow::printRecibo()
 {
+    // Save-time print: AEAT submission is in flight (async). DB still has empty CSV,
+    // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
+    // given a reprint via RecogPrendas after AEAT replies.
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
-    ui_impr->verifactuIntegration = m_verifactuIntegration;
-    if (verifactuResult.isSuccess() && !verifactuResult.qrCode.isNull())
-        ui_impr->qrCode = verifactuResult.qrCode;
+    ui_impr->verifactuIntegration = nullptr;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(true, ui->pb_payment->isChecked());
@@ -485,16 +510,14 @@ void MainWindow::printRecibo(const VerifactuResult &verifactuResult)
     ui_impr->printTicket();
 }
 
-void MainWindow::printFra(const VerifactuResult &verifactuResult)
+void MainWindow::printFra()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
-    ui_impr->verifactuIntegration = m_verifactuIntegration;
-    if (verifactuResult.isSuccess() && !verifactuResult.qrCode.isNull())
-        ui_impr->qrCode = verifactuResult.qrCode;
+    ui_impr->verifactuIntegration = nullptr;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(false, false);
@@ -525,16 +548,19 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
         if (validateTicket()) {
             checkClientData();
-            VerifactuResult verifactuResult;
-            if (ui->pb_payment->text() == "SI")
-                verifactuResult = verifactuSubmitInvoice();
-            saveTicket(verifactuResult);
+            const QString ticketNum   = ui->le_nr_ticket->text();
+            const QDate   invoiceDate = ui->de_date_recep->date();
+            const bool    isPaid      = ui->pb_payment->text() == "SI";
+            const double  totalAmount = ui->le_cost_total->text().toDouble();
+
+            saveTicket();
             if (AppSettings::instance()->enablePrinting()) {
-                printRecibo(verifactuResult);
-                if (ui->pb_payment->text() == "SI") {
-                    printFra(verifactuResult);
-                }
+                printRecibo();
+                if (isPaid)
+                    printFra();
             }
+            if (isPaid)
+                verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
             resetAllContents();
         }
     }

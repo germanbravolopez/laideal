@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QStyleFactory>
+#include <QHash>
 #include "verifactuintegration.h"
 #include "cancelinvoicedialog.h"
 
@@ -50,10 +51,12 @@ private slots:
     bool validateTicket();
     QString removeSpecialChar(QString str);
     void checkClientData();
-    VerifactuResult verifactuSubmitInvoice();
-    void saveTicket(const VerifactuResult &verifactuResult);
-    void printRecibo(const VerifactuResult &verifactuResult);
-    void printFra(const VerifactuResult &verifactuResult);
+    void verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount);
+    void saveTicket();
+    void printRecibo();
+    void printFra();
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
+    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
@@ -89,6 +92,9 @@ private slots:
 private:
     Ui::MainWindow *ui;
     VerifactuIntegration *m_verifactuIntegration;
+    // Async submit tracking: reqId -> ticket number, so the requestFinished handler
+    // can look up which DB rows to update for each Verifactu response.
+    QHash<QString, QString> m_pendingSubmits;
 };
 
 #endif // MAINWINDOW_H

@@ -42,9 +42,10 @@ Key methods:
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows warning if not configured |
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
-| `saveTicket(verifactuResult)` | Writes rows to `ingresos` including 5 `verifactu_*` columns |
-| `verifactuSubmitInvoice()` | Calls `VerifactuIntegration::submitSimplifiedInvoice()`; returns `VerifactuResult` (warning dialog on ERROR / NETWORK_ERROR) |
-| `printRecibo()` / `printFra()` | Create Excel and trigger `Imprimir` (QR pixmap from `VerifactuResult` passed through) — guarded by `AppSettings::enablePrinting()` |
+| `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
+| `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
+| `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
+| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty). Customer reprint with QR is available via `RecogPrendas → Imprimir`. Guarded by `AppSettings::enablePrinting()`. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 | `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
 | `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |

@@ -33,7 +33,7 @@ VerifactuManager (HTTP via QNetworkAccessManager)
             └─────────────────────────┘
 ```
 
-The only consumer of `VerifactuManager` directly is `Imprimir` (to call `generateQR()` on the reprint path). Everything else goes through `VerifactuIntegration`.
+All consumers go through `VerifactuIntegration` (or in the case of `SettingsDialog::testConnection`, a transient `VerifactuManager` with dialog-only values). The API is fully async — calls return a request ID immediately and the result arrives via `requestFinished`.
 
 ---
 
@@ -41,24 +41,31 @@ The only consumer of `VerifactuManager` directly is `Imprimir` (to call `generat
 
 ```cpp
 m_verifactuIntegration = new VerifactuIntegration(this);
-m_verifactuIntegration->initialize();    // non-fatal — only warns if not configured
+m_verifactuIntegration->initialize();    // non-fatal - only warns if not configured
 m_verifactuIntegration->isConfigured();  // true once NIF + name + ServiceKey are set
 
-// F2 simplified invoice — laundry tickets (no buyer NIF)
-VerifactuResult r = m_verifactuIntegration->submitSimplifiedInvoice(
+connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
+        this, &MyClass::onVerifactuRequestFinished);
+
+// F2 simplified invoice - laundry tickets (no buyer NIF). Returns a request ID.
+QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
     ticketNumber, ticketDate, taxBase, ivaRate, "Servicios de lavanderia");
 
-// F1 standard invoice — supplier-style invoices (requires buyer NIF + name)
-VerifactuResult r = m_verifactuIntegration->createAndSubmitInvoice(
-    invoiceNumber, date, buyerNIF, buyerName, taxBase, ivaRate, description);
-
 // Cancel a previously submitted invoice
-VerifactuResult r = m_verifactuIntegration->cancelInvoice(invoiceNumber, invoiceDate);
+QString reqId = m_verifactuIntegration->cancelInvoiceAsync(invoiceNumber, invoiceDate);
 
-// Re-fetch QR for an already-submitted invoice (used by the reprint path in Imprimir)
-VerifactuResult r = m_verifactuIntegration->generateQR(
+// Re-fetch QR for an already-submitted invoice (used by Imprimir reprint path)
+QString reqId = m_verifactuIntegration->generateQRAsync(
     invoiceNumber, invoiceDate, taxBase, ivaRate, description);
+
+// Result arrives later via the signal:
+void MyClass::onVerifactuRequestFinished(const QString &reqId, const VerifactuResult &result) {
+    if (reqId != m_pendingId) return;   // not ours
+    // ... handle result ...
+}
 ```
+
+An empty returned `QString` means the call was rejected synchronously (Verifactu not configured) - no signal fires for it. Otherwise the signal is guaranteed to fire exactly once, even for validation errors and invalid-config cases (delivered via `Qt::QueuedConnection`).
 
 ### `VerifactuResult`
 
@@ -126,11 +133,11 @@ Five columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 
 | Location | Behaviour |
 |----------|-----------|
-| `MainWindow::on_bb_save_reset_clicked()` | At ticket save with `pagado == "SI"`: calls `verifactuSubmitInvoice()` → `submitSimplifiedInvoice()`. On `ERROR` / `NETWORK_ERROR` shows a Spanish warning pointing the user to the retry path. Unpaid tickets save with `estado = "PENDIENTE"` |
-| `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB (not the proxy model, to avoid pay-all double-submit); if `NotSubmitted`, calls `retryVerifactuSubmit(ticketNum, paymentDate)` |
-| `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` |
-| `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…) | Search by ticket number, confirm details, call `cancelInvoice()`, update all `ingresos` rows for that `n_recibo` to `estado = "ANULADA"` |
-| `Imprimir::createTicketExcel()` | Embeds the QR pixmap at the bottom of the receipt (140×140). `resolveQrCode()` returns the in-memory pixmap from the save-flow `VerifactuResult` if available, otherwise calls `generateQR()` against `/GetQrCode` for the reprint path |
+| `MainWindow::on_bb_save_reset_clicked()` | Saves rows with `estado = PENDIENTE`, prints receipts (without QR — AEAT is in flight), fires `verifactuSubmitInvoice()` (paid only), resets form. Status bar shows progress. Async handler `onVerifactuRequestFinished()` UPDATEs the row(s) with CSV when AEAT replies. |
+| `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB AND checks `hasPendingSubmit(ticketNum)` (in-memory dedup — async submit hasn't updated DB yet, so DB-only check would double-fire from the pay-all loop). If both clear, calls `retryVerifactuSubmit()`. |
+| `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` (async, status bar). |
+| `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…) | Async cancel — dialog stays open with "Enviando anulación..." label until AEAT replies. `m_pendingCancelId` guards re-entry. |
+| `Imprimir::createTicketExcel()` | Embeds the QR pixmap at the bottom of the receipt (140×140). `resolveQrCode()` returns the in-memory pixmap if present, otherwise fires `generateQRAsync()` and waits up to 5s in a local `QEventLoop`. Times out gracefully — prints without QR + log warning. Save-time prints never hit this path because the DB CSV is empty. |
 
 ---
 

@@ -11,7 +11,7 @@
 
 // Persisted value of the verifactu_estado column in the ingresos table.
 enum class VerifactuEstado {
-    NotSubmitted,  // "PENDIENTE" - Verifactu not configured or not yet submitted
+    NotSubmitted,  // "PENDIENTE" - Verifactu not configured, not yet submitted, or AEAT reply pending
     Enviada,       // "ENVIADA"   - successfully submitted to AEAT
     Anulada,       // "ANULADA"   - cancelled via AEAT
     Error          // "ERROR"     - submission or cancellation failed
@@ -60,7 +60,9 @@ struct VerifactuResult
     bool isError() const { return status == ERROR || status == NETWORK_ERROR || status == INVALID_CONFIG; }
 };
 
-// Handles REST communication with the Verifactu AEAT API.
+// Async REST client for the Verifactu AEAT API. All invoice operations return
+// immediately with a request ID; the result arrives via the requestFinished signal
+// so the UI never blocks on AEAT latency.
 class VerifactuManager : public QObject
 {
     Q_OBJECT
@@ -71,35 +73,42 @@ public:
 
     VerifactuConfig *getConfig() const { return m_config; }
 
-    VerifactuResult submitInvoice(const VerifactuInvoice &invoice);
-    VerifactuResult submitInvoices(const QList<VerifactuInvoice> &invoices);
-    VerifactuResult cancelInvoice(const QString &invoiceNumber, const QDate &invoiceDate, const QString &sellerNIF);
-    VerifactuResult generateQRCode(const VerifactuInvoice &invoice);
-    QString getValidationUrl(const VerifactuInvoice &invoice) const;
+    // Async API. Each call returns a unique request ID; the caller correlates it with
+    // the requestFinished signal to pick up its own result. Validation errors and
+    // invalid-config cases also arrive via the signal (queued) so callers have a
+    // uniform handling path.
+    QString submitInvoiceAsync(const VerifactuInvoice &invoice);
+    QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate);
+    QString generateQRAsync(const VerifactuInvoice &invoice);
 
+    QString getValidationUrl(const VerifactuInvoice &invoice) const;
     QString getLastError() const { return m_lastError; }
-    // GETs the endpoint URL with a 5s timeout. SUCCESS = server reachable (any HTTP status
-    // counts, including 4xx/5xx, since the endpoint only accepts POST and a GET typically
-    // returns 405). NETWORK_ERROR = no HTTP response (DNS failure, connection refused,
-    // timeout). INVALID_CONFIG = local validation failed. Does not authenticate.
-    VerifactuResult testConnection();
     QString getConfigurationInfo() const;
 
-private slots:
-    void onNetworkReply(QNetworkReply *reply);
+    // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
+    // /Create with a 10s setTransferTimeout - bounded wait, never blocks indefinitely.
+    VerifactuResult testConnection();
+
+signals:
+    void requestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     VerifactuConfig *m_config;
     QNetworkAccessManager *m_networkManager;
     QString m_lastError;
-    VerifactuResult m_lastResult;
+    int m_requestCounter;
 
+    QString nextRequestId();
     QNetworkRequest createNetworkRequest(const QString &endpoint) const;
     void logResponse(const QByteArray &response) const;
     VerifactuResult processResponse(const QByteArray &response, bool isQrRequest = false);
     bool validateConfiguration();
-    QString encodeImageToBase64(const QPixmap &pixmap) const;
     QPixmap decodeImageFromBase64(const QString &data) const;
+
+    // Queues an error so callers see it via requestFinished, same as a real reply.
+    void emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description);
+    // Connects reply finished to a lambda that processes the response and emits requestFinished.
+    void wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest);
 };
 
 #endif // VERIFACTUMANAGER_H

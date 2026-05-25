@@ -23,6 +23,7 @@ public:
 private slots:
     void onSearchClicked();
     void onCancelClicked();
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     QLineEdit   *m_leTicketNum;
@@ -33,6 +34,7 @@ private:
     QString m_loadedTicket;
     QDate   m_loadedDate;
     QString m_loadedCSV;
+    QString m_pendingCancelId; // empty when no AEAT cancel in flight
 };
 
 #endif // CANCELINVOICEDIALOG_H

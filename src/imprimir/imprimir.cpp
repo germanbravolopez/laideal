@@ -9,6 +9,8 @@
 #include <QImage>
 #include <QDebug>
 #include <QFile>
+#include <QEventLoop>
+#include <QTimer>
 
 Imprimir::Imprimir(QWidget *parent)
     : QDialog(parent)
@@ -110,12 +112,31 @@ QPixmap Imprimir::resolveQrCode()
     double ivaRate = AppSettings::instance()->ivaRate();
     double taxBase = total / (1.0 + ivaRate / 100.0);
 
-    VerifactuResult result = verifactuIntegration->generateQR(
+    // Reprint path: fire async QR fetch and wait up to 5s in a local event loop.
+    // If AEAT does not reply in time, print without QR (logged warning).
+    const QString reqId = verifactuIntegration->generateQRAsync(
         invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
+    if (reqId.isEmpty()) {
+        qWarning() << "GetQrCode rejected for ticket" << invoiceNumber
+                   << ":" << verifactuIntegration->getLastError();
+        return QPixmap();
+    }
+
+    VerifactuResult result;
+    QEventLoop loop;
+    auto conn = connect(verifactuIntegration, &VerifactuIntegration::requestFinished, this,
+            [&loop, &result, reqId](const QString &id, const VerifactuResult &r) {
+        if (id != reqId) return;
+        result = r;
+        loop.quit();
+    });
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+    loop.exec();
+    disconnect(conn);
 
     if (result.qrCode.isNull()) {
-        qWarning() << "GetQrCode failed for ticket" << invoiceNumber
-                   << ":" << result.errorDescription;
+        qWarning() << "GetQrCode failed or timed out for ticket" << invoiceNumber
+                   << ":" << (result.errorDescription.isEmpty() ? "timeout (5s)" : result.errorDescription);
         return QPixmap();
     }
 
@@ -456,13 +477,14 @@ void Imprimir::printTicket()
                               "No se puede encontrar el archivo batch para imprimir el ticket.",
                               QMessageBox::Ok, QMessageBox::Ok);
     } else {
-        // Change the cursor to a loading icon
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        // Start printing process
-        process.start(batchPath);
-        process.waitForFinished();
-        // Restore the cursor to default
-        QApplication::restoreOverrideCursor();
+        // TODO: do not commit the following changes since it is only for testing purposes
+        // // Change the cursor to a loading icon
+        // QApplication::setOverrideCursor(Qt::WaitCursor);
+        // // Start printing process
+        // process.start(batchPath);
+        // process.waitForFinished();
+        // // Restore the cursor to default
+        // QApplication::restoreOverrideCursor();
     }
 }
 

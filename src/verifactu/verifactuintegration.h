@@ -5,7 +5,8 @@
 #include <QDate>
 #include "verifactumanager.h"
 
-// High-level facade over VerifactuManager: create/submit/cancel invoices and generate QR codes.
+// High-level async facade over VerifactuManager: submit/cancel/QR operations return
+// a request ID immediately; results arrive via the requestFinished signal.
 class VerifactuIntegration : public QObject
 {
     Q_OBJECT
@@ -16,9 +17,10 @@ public:
 
     bool initialize();
 
-    VerifactuManager *getManager() const { return m_manager; }
-
-    VerifactuResult submitSimplifiedInvoice(
+    // Async API. Returns a unique request ID; the caller correlates it with the
+    // requestFinished signal to pick up its own result. Empty string means the
+    // call was rejected synchronously (Verifactu not configured) - no signal will fire.
+    QString submitSimplifiedInvoiceAsync(
         const QString &invoiceNumber,
         const QDate &invoiceDate,
         double taxBase,
@@ -26,22 +28,12 @@ public:
         const QString &description = QString()
     );
 
-    VerifactuResult createAndSubmitInvoice(
-        const QString &invoiceNumber,
-        const QDate &invoiceDate,
-        const QString &buyerNIF,
-        const QString &buyerName,
-        double taxBase,
-        double taxRate,
-        const QString &description = QString()
-    );
-
-    VerifactuResult cancelInvoice(
+    QString cancelInvoiceAsync(
         const QString &invoiceNumber,
         const QDate &invoiceDate
     );
 
-    VerifactuResult generateQR(
+    QString generateQRAsync(
         const QString &invoiceNumber,
         const QDate &invoiceDate,
         double taxBase,
@@ -49,15 +41,16 @@ public:
         const QString &description = QString()
     );
 
-    QString getConfigInfo() const;
     bool isConfigured() const;
     QString getLastError() const { return m_lastError; }
+
+signals:
+    void requestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     VerifactuManager *m_manager;
     QString m_lastError;
 
-    bool validateEmitterConfiguration();
     bool loadEmitterConfiguration();
 };
 

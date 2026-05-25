@@ -8,11 +8,10 @@
 #include <QDebug>
 #include <QUrlQuery>
 #include <QByteArray>
-#include <QBuffer>
 #include <QEventLoop>
 
 VerifactuManager::VerifactuManager(const QString &configPath, QObject *parent)
-    : QObject(parent), m_config(nullptr), m_networkManager(nullptr)
+    : QObject(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
 {
     m_config = new VerifactuConfig(configPath);
     m_networkManager = new QNetworkAccessManager(this);
@@ -22,145 +21,90 @@ VerifactuManager::~VerifactuManager()
 {
 }
 
-VerifactuResult VerifactuManager::submitInvoice(const VerifactuInvoice &invoice)
+QString VerifactuManager::nextRequestId()
 {
-    VerifactuResult result;
+    return QStringLiteral("req-%1").arg(++m_requestCounter);
+}
+
+void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description)
+{
+    VerifactuResult r;
+    r.status = status;
+    r.errorDescription = description;
+    m_lastError = description;
+    QMetaObject::invokeMethod(this, [this, reqId, r]() {
+        emit requestFinished(reqId, r);
+    }, Qt::QueuedConnection);
+}
+
+void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest)
+{
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, isQrRequest]() {
+        VerifactuResult result;
+        if (reply->error() != QNetworkReply::NoError) {
+            result.status = VerifactuResult::NETWORK_ERROR;
+            result.errorDescription = "Error de conexión: " + reply->errorString();
+            m_lastError = result.errorDescription;
+            qWarning() << "Verifactu network error (" << reqId << "):" << m_lastError;
+        } else {
+            QByteArray responseData = reply->readAll();
+            logResponse(responseData);
+            result = processResponse(responseData, isQrRequest);
+        }
+        reply->deleteLater();
+        emit requestFinished(reqId, result);
+    });
+}
+
+QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
+{
+    const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
-        return result;
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        return reqId;
     }
-
     if (!invoice.isValid()) {
-        result.status = VerifactuResult::ERROR;
-        result.errorDescription = invoice.getValidationError();
-        return result;
+        emitErrorAsync(reqId, VerifactuResult::ERROR, invoice.getValidationError());
+        return reqId;
     }
 
     QJsonObject invoiceJson = invoice.toJson();
     invoiceJson["ServiceKey"] = m_config->getServiceKey();
-
     QJsonDocument doc(invoiceJson);
     QByteArray payload = doc.toJson(QJsonDocument::Compact);
 
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Create");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    qDebug() << "Submitting invoice" << invoice.getInvoiceNumber() << "to Verifactu";
+    qDebug() << "Submitting invoice" << invoice.getInvoiceNumber() << "(" << reqId << ")";
     qDebug().noquote() << "Payload:" << QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
     qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        result.status = VerifactuResult::NETWORK_ERROR;
-        result.errorDescription = "Error de conexión: " + reply->errorString();
-        m_lastError = result.errorDescription;
-        qWarning() << "Network error:" << m_lastError;
-        reply->deleteLater();
-        return result;
-    }
-
-    QByteArray responseData = reply->readAll();
-    reply->deleteLater();
-
-    logResponse(responseData);
-    result = processResponse(responseData, false);
-    return result;
+    wireReply(reqId, reply, false);
+    return reqId;
 }
 
-VerifactuResult VerifactuManager::submitInvoices(const QList<VerifactuInvoice> &invoices)
+QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
-    VerifactuResult result;
+    const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
-        return result;
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        return reqId;
     }
-
-    if (invoices.isEmpty()) {
-        result.status = VerifactuResult::ERROR;
-        result.errorDescription = "La lista de facturas no puede estar vacía";
-        return result;
-    }
-
-    for (const auto &invoice : invoices) {
-        if (!invoice.isValid()) {
-            result.status = VerifactuResult::ERROR;
-            result.errorDescription = "Factura inválida: " + invoice.getValidationError();
-            return result;
-        }
-    }
-
-    QJsonObject batchJson;
-    QJsonArray invoicesArray;
-
-    for (const auto &invoice : invoices) {
-        invoicesArray.append(invoice.toJson());
-    }
-
-    batchJson["Invoices"] = invoicesArray;
-    batchJson["ServiceKey"] = m_config->getServiceKey();
-
-    QJsonDocument doc(batchJson);
-    QByteArray payload = doc.toJson(QJsonDocument::Compact);
-
-    QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/CreateBatch");
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    qDebug() << "Submitting batch of" << invoices.count() << "invoices to Verifactu";
-
-    QNetworkReply *reply = m_networkManager->post(request, payload);
-
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        result.status = VerifactuResult::NETWORK_ERROR;
-        result.errorDescription = "Error de conexión: " + reply->errorString();
-        qWarning() << "Batch network error:" << result.errorDescription;
-        reply->deleteLater();
-        return result;
-    }
-
-    QByteArray responseData = reply->readAll();
-    reply->deleteLater();
-
-    result = processResponse(responseData, false);
-    return result;
-}
-
-VerifactuResult VerifactuManager::cancelInvoice(const QString &invoiceNumber, const QDate &invoiceDate, const QString &sellerNIF)
-{
-    VerifactuResult result;
-
-    if (!validateConfiguration()) {
-        result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
-        return result;
-    }
-
-    if (invoiceNumber.isEmpty() || invoiceDate.isNull() || sellerNIF.isEmpty()) {
-        result.status = VerifactuResult::ERROR;
-        result.errorDescription = "Datos de anulación incompletos";
-        return result;
+    if (invoiceNumber.isEmpty() || invoiceDate.isNull()) {
+        emitErrorAsync(reqId, VerifactuResult::ERROR, "Datos de anulación incompletos");
+        return reqId;
     }
 
     QJsonObject cancelJson;
-    cancelJson["InvoiceID"] = invoiceNumber;
+    cancelJson["InvoiceID"]   = invoiceNumber;
     cancelJson["InvoiceDate"] = invoiceDate.toString(Qt::ISODate);
-    cancelJson["SellerID"] = sellerNIF;
+    cancelJson["SellerID"]    = m_config->getEmitterNIF();
     cancelJson["CompanyName"] = m_config->getEmitterName();
-    cancelJson["ServiceKey"] = m_config->getServiceKey();
+    cancelJson["ServiceKey"]  = m_config->getServiceKey();
 
     QJsonDocument doc(cancelJson);
     QByteArray payload = doc.toJson(QJsonDocument::Compact);
@@ -168,78 +112,58 @@ VerifactuResult VerifactuManager::cancelInvoice(const QString &invoiceNumber, co
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Cancel");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
+    qDebug() << "Cancelling invoice" << invoiceNumber << "(" << reqId << ")";
+
     QNetworkReply *reply = m_networkManager->post(request, payload);
-
-    qDebug() << "Cancelling invoice" << invoiceNumber;
-
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        result.status = VerifactuResult::NETWORK_ERROR;
-        result.errorDescription = "Error de conexión: " + reply->errorString();
-        qWarning() << "Cancel network error:" << result.errorDescription;
-        reply->deleteLater();
-        return result;
-    }
-
-    QByteArray responseData = reply->readAll();
-    reply->deleteLater();
-
-    result = processResponse(responseData, false);
-    return result;
+    wireReply(reqId, reply, false);
+    return reqId;
 }
 
-VerifactuResult VerifactuManager::generateQRCode(const VerifactuInvoice &invoice)
+QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
 {
-    VerifactuResult result;
+    const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
-        return result;
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        return reqId;
     }
-
     if (!invoice.isValid()) {
-        result.status = VerifactuResult::ERROR;
-        result.errorDescription = invoice.getValidationError();
-        return result;
+        emitErrorAsync(reqId, VerifactuResult::ERROR, invoice.getValidationError());
+        return reqId;
     }
 
     QJsonObject qrJson = invoice.toJson();
     qrJson["ServiceKey"] = m_config->getServiceKey();
-
     QJsonDocument doc(qrJson);
     QByteArray payload = doc.toJson(QJsonDocument::Compact);
 
     QNetworkRequest request = createNetworkRequest(m_config->getQrUrl());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
+    qDebug() << "Generating QR for invoice" << invoice.getInvoiceNumber() << "(" << reqId << ")";
+
     QNetworkReply *reply = m_networkManager->post(request, payload);
 
-    qDebug() << "Generating QR for invoice" << invoice.getInvoiceNumber();
-
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        result.status = VerifactuResult::NETWORK_ERROR;
-        result.errorDescription = "Error de conexión: " + reply->errorString();
-        qWarning() << "QR network error:" << result.errorDescription;
+    // QR path also needs validationUrl assembled locally - use a dedicated lambda
+    // instead of wireReply so we can stamp it before emitting.
+    const QString validationUrl = getValidationUrl(invoice);
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, validationUrl]() {
+        VerifactuResult result;
+        if (reply->error() != QNetworkReply::NoError) {
+            result.status = VerifactuResult::NETWORK_ERROR;
+            result.errorDescription = "Error de conexión: " + reply->errorString();
+            m_lastError = result.errorDescription;
+            qWarning() << "Verifactu QR network error (" << reqId << "):" << m_lastError;
+        } else {
+            QByteArray responseData = reply->readAll();
+            logResponse(responseData);
+            result = processResponse(responseData, true);
+            result.validationUrl = validationUrl;
+        }
         reply->deleteLater();
-        return result;
-    }
-
-    QByteArray responseData = reply->readAll();
-    reply->deleteLater();
-
-    result = processResponse(responseData, true);
-    result.validationUrl = getValidationUrl(invoice);
-    return result;
+        emit requestFinished(reqId, result);
+    });
+    return reqId;
 }
 
 QString VerifactuManager::getValidationUrl(const VerifactuInvoice &invoice) const
@@ -359,7 +283,6 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
     if (!doc.isObject()) {
         result.status = VerifactuResult::ERROR;
         result.errorDescription = "Respuesta inválida del servidor";
-        m_lastResult = result;
         return result;
     }
 
@@ -402,7 +325,6 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
         }
     }
 
-    m_lastResult = result;
     return result;
 }
 
@@ -415,34 +337,10 @@ bool VerifactuManager::validateConfiguration()
     return true;
 }
 
-QString VerifactuManager::encodeImageToBase64(const QPixmap &pixmap) const
-{
-    QByteArray byteArray;
-    QBuffer buffer(&byteArray);
-    buffer.open(QIODevice::WriteOnly);
-    pixmap.save(&buffer, "PNG");
-    return QString::fromLatin1(byteArray.toBase64());
-}
-
 QPixmap VerifactuManager::decodeImageFromBase64(const QString &data) const
 {
     QByteArray byteArray = QByteArray::fromBase64(data.toLatin1());
     QPixmap pixmap;
     pixmap.loadFromData(byteArray);
     return pixmap;
-}
-
-void VerifactuManager::onNetworkReply(QNetworkReply *reply)
-{
-    if (!reply) return;
-
-    if (reply->error() != QNetworkReply::NoError) {
-        m_lastError = reply->errorString();
-        qCritical() << "Network error:" << m_lastError;
-    } else {
-        QByteArray responseData = reply->readAll();
-        m_lastResult = processResponse(responseData);
-    }
-
-    reply->deleteLater();
 }

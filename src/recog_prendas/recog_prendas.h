@@ -5,10 +5,12 @@
 #include <QDate>
 #include <QMessageBox>
 #include <QSqlQueryModel>
+#include <QHash>
 
 #include "mysortfilterproxymodel.h"
 
 class VerifactuIntegration;
+struct VerifactuResult;
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
@@ -82,9 +84,17 @@ private slots:
     void on_pb_separ_garm_clicked();
     void on_pb_verifactu_clicked();
     void retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate);
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     Ui::RecogPrendas *ui;
+    // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
+    // loop so multiple garments of the same ticket only fire one AEAT submission.
+    QHash<QString, QString> m_pendingSubmits;
+
+    void ensureVerifactuConnected();
+    bool hasPendingSubmit(const QString &ticketNum) const;
+    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 };
 
 #endif // RECOGPRENDAS_H

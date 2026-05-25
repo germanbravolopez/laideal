@@ -5,6 +5,7 @@
 #include "appsettings.h"
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
+#include "verifactuintegration.h"
 #include <QDateTime>
 #include <QDialog>
 #include <QPushButton>
@@ -12,6 +13,7 @@
 #include <QLabel>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStatusBar>
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
@@ -98,8 +100,12 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 chk.exec();
                 QString estadoDb = chk.next() ? chk.value(0).toString() : "";
                 db.close();
+                // Dedup pay-all loop: if a submit is already in flight for this ticket,
+                // a per-row check of estadoDb is not enough because the async DB write
+                // hasn't happened yet. hasPendingSubmit() consults the in-memory map.
                 if (verifactuEstadoFromString(estadoDb) == VerifactuEstado::NotSubmitted
-                        && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+                        && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
+                        && !hasPendingSubmit(ticketNum)) {
                     retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());
                 }
             }
@@ -634,6 +640,11 @@ void RecogPrendas::on_pb_verifactu_clicked()
 
 void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate)
 {
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "retryVerifactuSubmit: Verifactu not configured for ticket" << ticketNum;
+        return;
+    }
+
     double total = 0.0;
     db.open();
     {
@@ -647,55 +658,90 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &i
     db.close();
 
     double ivaRate = AppSettings::instance()->ivaRate();
-    VerifactuResult result = m_verifactuIntegration->submitSimplifiedInvoice(
+    ensureVerifactuConnected();
+    const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
         ticketNum,
         invoiceDate,
         total / (1.0 + ivaRate / 100.0),
         ivaRate,
         "Servicios de lavanderia"
     );
-
-    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    db.open();
-    {
-        QSqlQuery upd;
-        upd.prepare("UPDATE ingresos SET "
-                    "verifactu_csv = :csv, verifactu_timestamp = :ts, "
-                    "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
-                    "WHERE n_recibo = :n_recibo");
-        if (result.isSuccess()) {
-            upd.bindValue(":csv",    result.csv);
-            upd.bindValue(":ts",     timestamp);
-            upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
-            upd.bindValue(":error",  "");
-            upd.bindValue(":url",    result.validationUrl);
-        } else {
-            upd.bindValue(":csv",    "");
-            upd.bindValue(":ts",     timestamp);
-            upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
-            upd.bindValue(":error",  result.errorDescription);
-            upd.bindValue(":url",    "");
-        }
-        upd.bindValue(":n_recibo", ticketNum);
-        upd.exec();
+    if (reqId.isEmpty()) {
+        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for ticket" << ticketNum;
+        return;
     }
-    db.close();
+    m_pendingSubmits.insert(reqId, ticketNum);
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+}
 
+void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
+{
+    auto it = m_pendingSubmits.find(requestId);
+    if (it == m_pendingSubmits.end()) return; // not one of ours
+    const QString ticketNum = it.value();
+    m_pendingSubmits.erase(it);
+
+    updateTicketVerifactuFields(ticketNum, result);
+
+    // Refresh the table so the new estado is visible (only if user is still on this view)
     on_pb_search_clicked();
-    updateRowClickedToFields();
-    isCellClicked = true;
+    if (rowClickedCell >= 0 && rowClickedCell < sqlQueryModel->rowCount()) {
+        updateRowClickedToFields();
+        isCellClicked = true;
+    }
 
     if (result.isSuccess()) {
-        qDebug() << "Verifactu retry successful for ticket" << ticketNum << "- CSV:" << result.csv;
-        QMessageBox::information(this, "Verifactu enviado",
-                                 "Factura enviada correctamente a la AEAT.\n\nCSV: " + result.csv,
-                                 QMessageBox::Ok);
+        qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
+        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
     } else {
-        qWarning() << "Verifactu retry failed for ticket" << ticketNum << "-" << result.errorDescription;
-        QMessageBox::warning(this, "Error al enviar a Verifactu",
-                             "No se ha podido enviar la factura a la AEAT.\n\nError: " + result.errorDescription,
-                             QMessageBox::Ok);
+        qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
+        statusBar()->showMessage(
+            tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
     }
+}
+
+void RecogPrendas::ensureVerifactuConnected()
+{
+    if (m_verifactuIntegration)
+        connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
+                this, &RecogPrendas::onVerifactuRequestFinished, Qt::UniqueConnection);
+}
+
+bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
+{
+    for (auto it = m_pendingSubmits.constBegin(); it != m_pendingSubmits.constEnd(); ++it) {
+        if (it.value() == ticketNum) return true;
+    }
+    return false;
+}
+
+void RecogPrendas::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
+{
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    db.open();
+    QSqlQuery upd;
+    upd.prepare("UPDATE ingresos SET "
+                "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+                "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+                "WHERE n_recibo = :n_recibo");
+    if (result.isSuccess()) {
+        upd.bindValue(":csv",    result.csv);
+        upd.bindValue(":ts",     timestamp);
+        upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+        upd.bindValue(":error",  "");
+        upd.bindValue(":url",    result.validationUrl);
+    } else {
+        upd.bindValue(":csv",    "");
+        upd.bindValue(":ts",     timestamp);
+        upd.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
+        upd.bindValue(":error",  result.errorDescription);
+        upd.bindValue(":url",    "");
+    }
+    upd.bindValue(":n_recibo", ticketNum);
+    if (!upd.exec())
+        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
+                   << "-" << upd.lastError().text();
+    db.close();
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()

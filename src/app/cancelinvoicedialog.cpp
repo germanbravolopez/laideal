@@ -111,11 +111,28 @@ void CancelInvoiceDialog::onSearchClicked()
 void CancelInvoiceDialog::onCancelClicked()
 {
     if (m_loadedTicket.isEmpty() || !m_verifactu) return;
+    if (!m_pendingCancelId.isEmpty()) return; // already in flight
 
     m_btnCancel->setEnabled(false);
     m_lblResult->setText("Enviando anulación a AEAT...");
 
-    VerifactuResult result = m_verifactu->cancelInvoice(m_loadedTicket, m_loadedDate);
+    // Lazy-wire the signal on first use - m_verifactu is set by MainWindow after construction.
+    connect(m_verifactu, &VerifactuIntegration::requestFinished,
+            this, &CancelInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
+
+    m_pendingCancelId = m_verifactu->cancelInvoiceAsync(m_loadedTicket, m_loadedDate);
+    if (m_pendingCancelId.isEmpty()) {
+        m_lblResult->setText(
+            QString("<b style='color:red'>Verifactu no configurado:</b> %1")
+            .arg(m_verifactu->getLastError()));
+        m_btnCancel->setEnabled(true);
+    }
+}
+
+void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
+{
+    if (requestId != m_pendingCancelId) return; // not ours
+    m_pendingCancelId.clear();
 
     if (result.isSuccess()) {
         db.open();
