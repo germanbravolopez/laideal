@@ -61,6 +61,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 
 | Skill | Invoke | When to use |
 |-------|--------|-------------|
+| Tackle an open issue | `/tackle-issue` | When the user names an item from `progress_tracker.md` and wants it fixed end-to-end (plan + implement + docs + commit) |
 | Update documentation | `/update-docs` | After any feature, fix, or new insight |
 | Create/update skills | `/update-skills` | When a new repeatable workflow is found |
 | Coding guidelines | `/coding-guidelines` | Before writing any new code — language, naming, Qt, DB rules |

@@ -31,6 +31,7 @@ Read the full skill file when the skill is relevant to your task.
 
 | Skill | File | Purpose |
 |-------|------|---------|
+| `/tackle-issue` | `.claude/commands/tackle-issue.md` | End-to-end workflow to resolve an open issue from `docs/progress_tracker.md` (read → plan → implement → update docs → commit) |
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
