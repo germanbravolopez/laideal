@@ -496,7 +496,9 @@ void Imprimir::on_bb_ok_cancel_accepted()
         getTicketInfo();
         if (isRecibo || !isRecibo && checkAnyItemPaid()) {
             createTicketExcel(true, false);
-            printTicket();
+            if (AppSettings::instance()->enablePrinting()) {
+                printTicket();
+            }
             if (isRecibo) {
                 int resp = QMessageBox::question(this, "Copia establecimiento",
                                                  "¿Desea copia para el establecimiento?",
@@ -504,7 +506,9 @@ void Imprimir::on_bb_ok_cancel_accepted()
                                                  QMessageBox::Yes);
                 if (resp == QMessageBox::Yes) {
                     createTicketExcel(false, false);
-                    printTicket();
+                    if (AppSettings::instance()->enablePrinting()) {
+                        printTicket();
+                    }
                 }
             }
         } else if (!isRecibo)

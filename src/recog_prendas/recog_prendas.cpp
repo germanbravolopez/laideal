@@ -578,7 +578,9 @@ void RecogPrendas::on_pb_print_clicked()
         ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
         ui_impr->getTicketInfo();
         ui_impr->createTicketExcel(false, false);
-        ui_impr->printTicket();
+        if (AppSettings::instance()->enablePrinting()) {
+            ui_impr->printTicket();
+        }
         this->close();
     }
 }
