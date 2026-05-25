@@ -19,7 +19,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
 
-> Verifactu legal-compliance gaps below come from the audit in `verifactu-requirements.md.bak` (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
+> Verifactu legal-compliance gaps below come from the audit in [`docs/modules/verifactu/verifactu-requirements.md`](modules/verifactu/verifactu-requirements.md) (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
 
 - [ ] **Verifactu — Declaración responsable visible in the software** (Req. 8; Art. 13 RD 1007/2023) — the producer must include a written declaración responsable certifying compliance with RD 1007/2023, **visible inside the software in every version**. Today there is nothing. Fix: add an "Acerca de Verifactu" entry under the Ayuda menu (or repurpose a section of Configuración) that shows a fixed-text declaración including producer NIF + name + address, software name + version (already available via `PROJECT_VERSION`), and a compliance statement. AEAT publishes example templates; use the simplest one. No code dependencies beyond a new `QDialog` with a `QLabel` and the producer details from `AppSettings::businessName()` etc.
 

@@ -25,7 +25,8 @@ docs/
     ├── add_garment.md                 (add garments to existing ticket)
     └── verifactu/                     (AEAT digital invoicing module)
         ├── README.md                  (module reference — start here)
-        └── rest_api.md                (AEAT REST API field reference)
+        ├── rest_api.md                (AEAT REST API field reference)
+        └── verifactu-requirements.md  (RD 1007/2023 + Orden HAC/1177/2024 audit vs code)
 ```
 
 ---
@@ -59,6 +60,7 @@ docs/
 |----------|-------------|-----------|
 | [README.md](./modules/verifactu/README.md) | Module reference: architecture, public API, configuration, DB schema, integration points, environments, errors | 10 min |
 | [rest_api.md](./modules/verifactu/rest_api.md) | AEAT REST API complete field reference | 15 min |
+| [verifactu-requirements.md](./modules/verifactu/verifactu-requirements.md) | Legal-compliance audit: RD 1007/2023 + Orden HAC/1177/2024 requirements vs La Ideal coverage | 10 min |
 
 ---
 

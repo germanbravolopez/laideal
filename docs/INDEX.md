@@ -24,6 +24,7 @@
 | `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
 | `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
 | `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
+| `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
 
 ## Skills (Custom Slash Commands)
 
