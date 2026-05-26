@@ -387,7 +387,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     if (!qr.isNull()) {
         QImage qrImg = qr.scaled(140, 140, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
         excel.insertImage(row, 1, qrImg);
-        row = row + 8;
+        row = row + 9;
         // Disp. Final Primera RD 1007/2023: invoices submitted in Veri*factu mode must
         // print the verification leyenda alongside the QR. Only emit it for rows actually
         // accepted by AEAT (estado = ENVIADA) so we never claim verifiability for tickets
