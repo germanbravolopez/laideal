@@ -8,8 +8,10 @@
 #include <QDate>
 #include <QImage>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QEventLoop>
+#include <QTextStream>
 #include <QTimer>
 
 Imprimir::Imprimir(QWidget *parent)
@@ -158,8 +160,9 @@ QString Imprimir::addExtraInfoToInvoice(QString title, QString request)
 
 void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
 {
-    // Check that excel is accessible
-    QString excelPath = AppSettings::instance()->printTemplatePath();
+    // The xlsx is regenerated on every print at a fixed path under the user's
+    // home dir - no user-configurable template setting any more.
+    QString excelPath = AppSettings::ticketExcelPath();
     if (QFile::exists(excelPath)) {
         QFile::remove(excelPath);
     }
@@ -481,23 +484,34 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
 
 void Imprimir::printTicket()
 {
-    // Call the batch script to print the excel
-    QProcess process;
-    QString batchPath = AppSettings::instance()->printScriptPath();
-    if (!QFile::exists(batchPath)) {
-        qCritical() << "Imprimir::printTicket: print script not found at path" << batchPath;
+    // Open the regenerated xlsx via Excel COM (VBScript) and send it to the
+    // default printer. We regenerate the .vbs each call (templated with the
+    // current xlsx path) instead of shipping a separate .bat / settings entry.
+    const QString xlsxPath = QDir::toNativeSeparators(AppSettings::ticketExcelPath());
+    const QString vbsPath  = AppSettings::ticketPrintScriptPath();
+
+    QFile vbs(vbsPath);
+    if (!vbs.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qCritical() << "Imprimir::printTicket: cannot write VBScript to" << vbsPath;
         QMessageBox::critical(this, "Imprimir",
-                              "No se puede encontrar el archivo batch para imprimir el ticket.",
+                              "No se pudo preparar el script de impresión.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    } else {
-        // Change the cursor to a loading icon
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        // Start printing process
-        process.start(batchPath);
-        process.waitForFinished();
-        // Restore the cursor to default
-        QApplication::restoreOverrideCursor();
+        return;
     }
+    QTextStream out(&vbs);
+    out << "Set objExcel = CreateObject(\"Excel.Application\")\r\n"
+        << "objExcel.Visible = False\r\n"
+        << "Set objWorkbook = objExcel.Workbooks.Open(\"" << xlsxPath << "\")\r\n"
+        << "objWorkbook.PrintOut\r\n"
+        << "objWorkbook.Close False\r\n"
+        << "objExcel.Quit\r\n";
+    vbs.close();
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QProcess process;
+    process.start("cscript", {"//nologo", "//B", vbsPath});
+    process.waitForFinished(60000);
+    QApplication::restoreOverrideCursor();
 }
 
 void Imprimir::on_bb_ok_cancel_accepted()

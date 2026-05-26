@@ -30,21 +30,25 @@ public:
     QString iconPath() const;
     void setIconPath(const QString &v);
 
-    // --- Report output directories ---
-    QString contabilidadPath() const;
-    void setContabilidadPath(const QString &v);
-    QString listadosPrendasPath() const;
-    void setListadosPrendasPath(const QString &v);
-    QString listadosGastosPath() const;
-    void setListadosGastosPath(const QString &v);
+    // --- Report output directory ---
+    // Single user-configurable root; subdirs are hardcoded inside the getters
+    // so the JSON exposes only one path. mkpath() is the caller's responsibility
+    // (run on demand, not on settings save) - see Contabilidad / Listado.
+    QString reportsRoot() const;
+    void setReportsRoot(const QString &v);
+    QString contabilidadPath() const;        // <root>/Contabilidad
+    QString listadosPrendasPath() const;     // <root>/Listados/Prendas
+    QString listadosGastosPath() const;      // <root>/Listados/Gastos
 
-    // --- Print resources ---
+    // --- Print ---
     bool enablePrinting() const;
     void setEnablePrinting(bool v);
-    QString printTemplatePath() const;
-    void setPrintTemplatePath(const QString &v);
-    QString printScriptPath() const;
-    void setPrintScriptPath(const QString &v);
+    // Fixed file paths under the user's home directory (consistent with
+    // ~/.laideal_settings.json and ~/.laideal.log). The Excel file is recreated
+    // on every print; the VBScript is regenerated next to it. Both are app-internal
+    // and not user-configurable any more.
+    static QString ticketExcelPath();        // ~/.laideal_ticket.xlsx
+    static QString ticketPrintScriptPath();  // ~/.laideal_print.vbs
 
     // --- Business identity ---
     QString businessName() const;
@@ -73,6 +77,10 @@ public:
 private:
     AppSettings();
     void migrateFromLegacyFiles();
+    // Folds legacy {reports.contabilidad_path, reports.listados_*_path,
+    // print.template_path, print.script_path} into a single reports.root and
+    // removes the obsolete keys. Idempotent.
+    void migrateLegacyKeys();
     void applyDefaults();
 
     QString str(const QStringList &path, const QString &def = {}) const;
@@ -85,6 +93,7 @@ private:
     // Navigate / create nested JSON objects along a key path.
     QJsonObject nested(const QJsonObject &root, const QStringList &path) const;
     void        setNested(QJsonObject &root, const QStringList &path, const QJsonValue &value);
+    void        removeNested(QJsonObject &root, const QStringList &path);
 
     QJsonObject m_data;
     QString     m_filePath;

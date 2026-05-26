@@ -105,18 +105,22 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 - `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Archivo → Log de depuración…) to show the customer the path with an "Abrir archivo" button that opens the log directly
 
 ### AppSettings (`src/appsettings/`)
-Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` on first run.
+Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load.
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `app.iconPath`, `app.ivaRate`, `print.enable` (bool — replaces the removed debug flag), report output paths, business name/address/city/phone (`business.phone` — used in ticket header and RGPD clause), Verifactu NIF/name/serviceKey/production.
+Settings groups: `db.path`, `app.iconPath`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production.
+
+App-internal fixed paths (not user-configurable): `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated each print), `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` (rewritten each print, templated with the xlsx path, executed via `cscript //nologo //B`).
+
+Migration: `migrateLegacyKeys()` strips `Contabilidad` / `Listados/Prendas` / `Listados/Gastos` suffixes from any of the three legacy report-path values to derive `reports.root`; obsolete keys (`reports.contabilidad_path`, `reports.listados_prendas_path`, `reports.listados_gastos_path`, `print.template_path`, `print.script_path`) are removed via the `removeNested()` helper.
 
 ### sql_lite (`src/sql_lite/`)
 Stateless free functions; all modules include this header.
 
 Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
-- `migrateDatabase(db)` — adds the 5 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
+- `migrateDatabase(db)` — adds the 6 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked

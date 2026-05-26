@@ -32,8 +32,8 @@ ui->printTicket();
 
 1. User enters a ticket number in the dialog shown by `getTicketInfo()`.
 2. All matching rows from `ingresos` are loaded into `sqlQueryModel`.
-3. `createTicketExcel()` builds an `.xlsx` file via `QXlsx` with appropriate column widths, page margins, styles, and row content.
-4. `printTicket()` launches an external `.bat` script that sends the Excel to the printer.
+3. `createTicketExcel()` builds an `.xlsx` file via `QXlsx` with appropriate column widths, page margins, styles, and row content. The file path is the hardcoded `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated every print; not user-configurable).
+4. `printTicket()` regenerates a small VBScript at `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` with the current xlsx path templated in (six lines: open Excel COM, `PrintOut`, close), then invokes `cscript //nologo //B` on it via `QProcess` with a 60 s timeout. No separate `.bat` is shipped or required — the file `resources/print_ticket.bat` is left as reference only.
 
 Column widths and page margins are set at the top of `createTicketExcel()` to keep the ticket within the thermal printer's printable area: `setColumnWidth(1, 4)`, `setColumnWidth(2, 20)`, `setColumnWidth(3, 7.5)` (31.5 units total), and `setPageMargins(0.6, 0.6, 0.4, 0.4)` (inches; left/right/top/bottom — header/footer default to 0.3″ inside QXlsx because the upstream serializer only emits `<pageMargins>` when all six values are set). `setPageMargins` is a small local patch on the vendored QXlsx — see [Completed Milestones in progress_tracker.md](../progress_tracker.md).
 
@@ -93,5 +93,6 @@ When a QR is rendered AND the row's `verifactu_estado` equals `"ENVIADA"`, the c
 ## Dependencies
 
 - `QXlsx` — third-party Excel r/w library in `QXlsx/` (vendored). Minimal local patch: `Worksheet::setPageMargins` + `Document::setPageMargins`. Avoid further modifications.
+- `cscript` (Windows Script Host) — invoked at print time to run the inline-generated VBScript that drives Excel COM.
 - `verifactu` — `VerifactuIntegration::generateQR()` for the `/GetQrCode` fallback
 - External `.bat` printing script — path set at deploy time

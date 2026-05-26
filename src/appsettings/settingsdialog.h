@@ -42,11 +42,7 @@ private:
     QLineEdit *m_ivaRate;
     QCheckBox *m_enablePrinting;
 
-    QLineEdit *m_contabilidadPath;
-    QLineEdit *m_listadosPrendasPath;
-    QLineEdit *m_listadosGastosPath;
-    QLineEdit *m_templatePath;
-    QLineEdit *m_scriptPath;
+    QLineEdit *m_reportsRoot;
 
     QLineEdit *m_businessName;
     QLineEdit *m_businessAddress;

@@ -1,6 +1,7 @@
 #include "appsettings.h"
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QDebug>
@@ -33,6 +34,8 @@ void AppSettings::applyDefaults()
         setDbl({"taxes", "iva_rate"}, 21.0);
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
+    if (reportsRoot().isEmpty())
+        setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
 }
 
 bool AppSettings::load()
@@ -64,6 +67,7 @@ bool AppSettings::load()
     }
 
     m_data = doc.object();
+    migrateLegacyKeys();
     applyDefaults();
     qDebug() << "AppSettings: loaded from" << m_filePath;
     return true;
@@ -79,6 +83,51 @@ bool AppSettings::save() const
     file.write(QJsonDocument(m_data).toJson(QJsonDocument::Indented));
     file.close();
     return true;
+}
+
+void AppSettings::migrateLegacyKeys()
+{
+    // Fold legacy {reports.contabilidad_path, reports.listados_*_path} into
+    // a single reports.root. Heuristic: strip the well-known suffix from any
+    // of the three legacy values; fall back to the parent dir of contabilidad_path;
+    // fall back to the parent's parent of listados_prendas_path. Idempotent -
+    // does nothing once reports.root is set.
+    if (reportsRoot().isEmpty()) {
+        const QString legacyContab  = str({"reports", "contabilidad_path"});
+        const QString legacyPrendas = str({"reports", "listados_prendas_path"});
+        const QString legacyGastos  = str({"reports", "listados_gastos_path"});
+
+        auto stripSuffix = [](QString p, const QString &suffix) -> QString {
+            p = QDir::cleanPath(p);
+            if (p.endsWith("/" + suffix, Qt::CaseInsensitive))
+                return p.left(p.size() - suffix.size() - 1);
+            return QString();
+        };
+
+        QString root;
+        if (!legacyContab.isEmpty())
+            root = stripSuffix(legacyContab, "Contabilidad");
+        if (root.isEmpty() && !legacyPrendas.isEmpty())
+            root = stripSuffix(legacyPrendas, "Listados/Prendas");
+        if (root.isEmpty() && !legacyGastos.isEmpty())
+            root = stripSuffix(legacyGastos, "Listados/Gastos");
+        // Last-resort fallback: the parent dir of contabilidad_path, even if the
+        // suffix doesn't match. Better than nothing - the user can still edit it.
+        if (root.isEmpty() && !legacyContab.isEmpty())
+            root = QFileInfo(QDir::cleanPath(legacyContab)).absolutePath();
+
+        if (!root.isEmpty()) {
+            setStr({"reports", "root"}, root);
+            qDebug() << "AppSettings: migrated three legacy report paths into reports.root =" << root;
+        }
+    }
+
+    // Drop obsolete keys (no longer read; clutter otherwise).
+    removeNested(m_data, {"reports", "contabilidad_path"});
+    removeNested(m_data, {"reports", "listados_prendas_path"});
+    removeNested(m_data, {"reports", "listados_gastos_path"});
+    removeNested(m_data, {"print",   "template_path"});
+    removeNested(m_data, {"print",   "script_path"});
 }
 
 void AppSettings::migrateFromLegacyFiles()
@@ -121,16 +170,14 @@ QString AppSettings::iconPath() const { return str({"app", "icon_path"}); }
 void    AppSettings::setIconPath(const QString &v) { setStr({"app", "icon_path"}, v); }
 
 // ---------------------------------------------------------------------------
-// Reports
+// Reports - single user-configurable root + hardcoded subdirs
 // ---------------------------------------------------------------------------
-QString AppSettings::contabilidadPath() const { return str({"reports", "contabilidad_path"}); }
-void    AppSettings::setContabilidadPath(const QString &v) { setStr({"reports", "contabilidad_path"}, v); }
+QString AppSettings::reportsRoot() const          { return str({"reports", "root"}); }
+void    AppSettings::setReportsRoot(const QString &v) { setStr({"reports", "root"}, v); }
 
-QString AppSettings::listadosPrendasPath() const { return str({"reports", "listados_prendas_path"}); }
-void    AppSettings::setListadosPrendasPath(const QString &v) { setStr({"reports", "listados_prendas_path"}, v); }
-
-QString AppSettings::listadosGastosPath() const { return str({"reports", "listados_gastos_path"}); }
-void    AppSettings::setListadosGastosPath(const QString &v) { setStr({"reports", "listados_gastos_path"}, v); }
+QString AppSettings::contabilidadPath() const     { return QDir(reportsRoot()).filePath("Contabilidad"); }
+QString AppSettings::listadosPrendasPath() const  { return QDir(reportsRoot()).filePath("Listados/Prendas"); }
+QString AppSettings::listadosGastosPath() const   { return QDir(reportsRoot()).filePath("Listados/Gastos"); }
 
 // ---------------------------------------------------------------------------
 // Print
@@ -138,11 +185,8 @@ void    AppSettings::setListadosGastosPath(const QString &v) { setStr({"reports"
 bool AppSettings::enablePrinting() const { return str({"print", "enable"}) == "Yes"; }
 void AppSettings::setEnablePrinting(bool v) { setStr({"print", "enable"}, v ? "Yes" : "No"); }
 
-QString AppSettings::printTemplatePath() const { return str({"print", "template_path"}); }
-void    AppSettings::setPrintTemplatePath(const QString &v) { setStr({"print", "template_path"}, v); }
-
-QString AppSettings::printScriptPath() const { return str({"print", "script_path"}); }
-void    AppSettings::setPrintScriptPath(const QString &v) { setStr({"print", "script_path"}, v); }
+QString AppSettings::ticketExcelPath()       { return QDir::homePath() + "/.laideal_ticket.xlsx"; }
+QString AppSettings::ticketPrintScriptPath() { return QDir::homePath() + "/.laideal_print.vbs"; }
 
 // ---------------------------------------------------------------------------
 // Business
@@ -203,6 +247,17 @@ void AppSettings::setNested(QJsonObject &root, const QStringList &path, const QJ
                         ? root[path[0]].toObject()
                         : QJsonObject{};
     setNested(child, path.mid(1), value);
+    root[path[0]] = child;
+}
+
+void AppSettings::removeNested(QJsonObject &root, const QStringList &path)
+{
+    if (path.isEmpty()) return;
+    if (path.size() == 1) { root.remove(path[0]); return; }
+    if (!root.contains(path[0]) || !root[path[0]].isObject()) return;
+
+    QJsonObject child = root[path[0]].toObject();
+    removeNested(child, path.mid(1));
     root[path[0]] = child;
 }
 

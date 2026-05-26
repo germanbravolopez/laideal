@@ -34,7 +34,7 @@ ui->show();
 
 ## Output
 
-The HTML report is written to `AppSettings::instance()->contabilidadPath()` (configurable via Settings) and opened automatically via `QDesktopServices::openUrl()`.
+The HTML report is written to `AppSettings::instance()->contabilidadPath()` (= `<reports.root>/Contabilidad`) and opened automatically via `QDesktopServices::openUrl()`. Trimestral reports land directly in that folder; mensual reports under `Contabilidad/Mensual`, anual reports under `Contabilidad/Anual` (appended in `contabilidad.cpp`). `QDir::mkpath()` is called on demand.
 
 ## IVA breakdown
 

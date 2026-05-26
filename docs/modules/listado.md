@@ -60,4 +60,4 @@ After the initial load `verticalHeader()->setDefaultSectionSize(rowHeight(0))` l
 `QDialog` for adding a new client row. Fields: name, landline, mobile, address. Calls `insertNewItemToTable(db, ..., "clientes")` on accept.
 
 ### GenListado
-`QDialog` for generating garment or expense PDF reports. Configurable by year and grouping mode (by date or by supplier). Generates HTML and renders to PDF via `QTextDocument` + `QPrinter`. Output paths are read from `AppSettings` (`listadosPrendasPath`, `listadosGastosPath`).
+`QDialog` for generating garment or expense PDF reports. Configurable by year and grouping mode (by date or by supplier). Generates HTML and renders to PDF via `QTextDocument` + `QPrinter`. Output paths are read from `AppSettings::listadosPrendasPath()` (→ `<reports.root>/Listados/Prendas`) and `AppSettings::listadosGastosPath()` (→ `<reports.root>/Listados/Gastos`); both call `QDir::mkpath()` on demand.

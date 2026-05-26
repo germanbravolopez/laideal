@@ -95,20 +95,17 @@ void SettingsDialog::buildReportsTab(QTabWidget *tabs)
     auto *fl = new QFormLayout(w);
     fl->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
-    m_contabilidadPath = new QLineEdit(s->contabilidadPath());
-    fl->addRow(tr("Contabilidad (PDF):"), browseRow(m_contabilidadPath, true, this));
+    m_reportsRoot = new QLineEdit(s->reportsRoot());
+    fl->addRow(tr("Carpeta raíz de informes:"), browseRow(m_reportsRoot, true, this));
 
-    m_listadosPrendasPath = new QLineEdit(s->listadosPrendasPath());
-    fl->addRow(tr("Listado de prendas (PDF):"), browseRow(m_listadosPrendasPath, true, this));
-
-    m_listadosGastosPath = new QLineEdit(s->listadosGastosPath());
-    fl->addRow(tr("Listado de gastos (PDF):"), browseRow(m_listadosGastosPath, true, this));
-
-    m_templatePath = new QLineEdit(s->printTemplatePath());
-    fl->addRow(tr("Plantilla Excel tickets (.xlsx):"), browseRow(m_templatePath, false, this));
-
-    m_scriptPath = new QLineEdit(s->printScriptPath());
-    fl->addRow(tr("Script de impresión (.bat):"), browseRow(m_scriptPath, false, this));
+    auto *note = new QLabel(tr(
+        "<i>Los informes se guardarán en subcarpetas dentro de esta ruta:"
+        "<br>&nbsp;&nbsp;&bull; Contabilidad/Mensual, Contabilidad/Anual"
+        "<br>&nbsp;&nbsp;&bull; Listados/Prendas"
+        "<br>&nbsp;&nbsp;&bull; Listados/Gastos</i>"));
+    note->setWordWrap(true);
+    note->setStyleSheet("color: gray;");
+    fl->addRow(note);
 
     tabs->addTab(w, tr("Rutas de salida"));
 }
@@ -182,11 +179,7 @@ void SettingsDialog::accept()
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
 
-    s->setContabilidadPath(m_contabilidadPath->text().trimmed());
-    s->setListadosPrendasPath(m_listadosPrendasPath->text().trimmed());
-    s->setListadosGastosPath(m_listadosGastosPath->text().trimmed());
-    s->setPrintTemplatePath(m_templatePath->text().trimmed());
-    s->setPrintScriptPath(m_scriptPath->text().trimmed());
+    s->setReportsRoot(m_reportsRoot->text().trimmed());
 
     s->setBusinessName(m_businessName->text().trimmed());
     s->setBusinessAddress(m_businessAddress->text().trimmed());

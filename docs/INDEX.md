@@ -115,6 +115,8 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 |-------|--------------|
 | Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
 | All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
+| Reports root and hardcoded subdirs (Contabilidad / Listados/Prendas / Listados/Gastos) | `src/appsettings/appsettings.h` (`reportsRoot`, `contabilidadPath`, `listadosPrendasPath`, `listadosGastosPath`) |
+| Fixed ticket file paths (~/.laideal_ticket.xlsx, ~/.laideal_print.vbs) | `src/appsettings/appsettings.h` (`ticketExcelPath`, `ticketPrintScriptPath`) — regenerated each print |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
 | Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `createTicketExcel`) — pixmap from save flow or REST `/GetQrCode`; the legal verification leyenda is written below the QR when `verifactu_estado == ENVIADA` |
