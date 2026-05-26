@@ -359,13 +359,6 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.write(row, 3, ticketTotal, formatTotals);
         row++;
     }
-    // Insert Verifactu QR code at the bottom
-    QPixmap qr = resolveQrCode();
-    if (!qr.isNull()) {
-        QImage qrImg = qr.scaled(140, 140, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
-        excel.insertImage(row, 1, qrImg);
-        row = row + 8;
-    }
     // Insert receipt information
     if (addPayedInfo) {
         QXlsx::Format formatPayed;
@@ -386,6 +379,29 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.write(row, 1, QString("(Copia para el establecimiento)"));
     }
     row ++;
+    // Insert Verifactu QR code at the bottom
+    QPixmap qr = resolveQrCode();
+    if (!qr.isNull()) {
+        QImage qrImg = qr.scaled(140, 140, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
+        excel.insertImage(row, 1, qrImg);
+        row = row + 8;
+        // Disp. Final Primera RD 1007/2023: invoices submitted in Veri*factu mode must
+        // print the verification leyenda alongside the QR. Only emit it for rows actually
+        // accepted by AEAT (estado = ENVIADA) so we never claim verifiability for tickets
+        // still PENDIENTE, in ERROR, or ANULADA.
+        const QString estado = sqlQueryModel->data(
+            sqlQueryModel->index(0, TABLE_VERIFACTU_ESTADO)).toString();
+        if (estado == verifactuEstadoToString(VerifactuEstado::Enviada)) {
+            QXlsx::Format formatVerifactuLeyenda;
+            formatVerifactuLeyenda.setFontSize(7);
+            formatVerifactuLeyenda.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+            excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
+            excel.write(row, 1, QString("Factura verificable en la sede electrónica de la AEAT"),
+                        formatVerifactuLeyenda);
+            excel.setRowHeight(row, 9.6);
+            row++;
+        }
+    }
     excel.setRowHeight(row, 9.6); // Add empty row
     row++;
     // Insert policy - only on the client copy; the establishment copy omits it

@@ -117,7 +117,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
-| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `createTicketExcel`) — pixmap from save flow or REST `/GetQrCode` |
+| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `createTicketExcel`) — pixmap from save flow or REST `/GetQrCode`; the legal verification leyenda is written below the QR when `verifactu_estado == ENVIADA` |
 | Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |

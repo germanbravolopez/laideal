@@ -88,6 +88,8 @@ The receipt embeds the Verifactu QR (140×140) at the bottom via `QXlsx::Documen
 
 QR image bytes are **not** persisted in the DB; they are always reconstructed from the response or the REST endpoint.
 
+When a QR is rendered AND the row's `verifactu_estado` equals `"ENVIADA"`, the centred legend `Factura verificable en la sede electrónica de la AEAT` is written immediately below the QR (font 7, merged A:C) — required by Disposición Final Primera RD 1007/2023. The estado check uses the canonical `verifactuEstadoToString(VerifactuEstado::Enviada)` helper from `verifactumanager.h` (transitively included via `verifactuintegration.h`), so PENDIENTE / ERROR / ANULADA rows never carry the verifiability claim even if a QR somehow becomes available.
+
 ## Dependencies
 
 - `QXlsx` — third-party Excel r/w library in `QXlsx/` (vendored). Minimal local patch: `Worksheet::setPageMargins` + `Document::setPageMargins`. Avoid further modifications.
