@@ -115,7 +115,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 
 ## DB persistence (`ingresos` table)
 
-Five columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
+Six columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
 
 | Column | Content |
 |--------|---------|
@@ -124,6 +124,7 @@ Five columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 | `verifactu_estado` | See `VerifactuEstado` table above |
 | `verifactu_error` | Error description when `estado = ERROR`; empty otherwise |
 | `verifactu_url_qr` | AEAT `ValidationUrl` (for QR/portal verification); empty if not submitted |
+| `verifactu_xml` | Raw AEAT-style XML from `Return.Xml` of the `/Create` reply; empty if not submitted or pre-fix. Source for the "Exportar registros AEAT (XML)" action (Art. 14.1 RD 1007/2023). |
 
 `Contabilidad::totalPriceBetweenDates()` excludes `verifactu_estado = 'ANULADA'` rows from quarterly income — cancelled invoices must not appear in taxable income. All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
 
@@ -137,6 +138,7 @@ Five columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 | `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB AND checks `hasPendingSubmit(ticketNum)` (in-memory dedup — async submit hasn't updated DB yet, so DB-only check would double-fire from the pay-all loop). If both clear, calls `retryVerifactuSubmit()`. |
 | `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` (async, status bar). |
 | `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…) | Async cancel — dialog stays open with "Enviando anulación..." label until AEAT replies. `m_pendingCancelId` guards re-entry. |
+| `MainWindow::on_actionExportar_registros_aeat_triggered()` (Herramientas → Exportar registros AEAT (XML)...) | Prompts for a date range and output path, then writes a single envelope file `<RegistrosFacturacionLaIdeal>` with one `<Registro>` per qualifying ticket (estado=ENVIADA AND non-empty `verifactu_xml` AND fecha_recepcion in range). Each row's stored payload is inlined with the `<?xml ?>` declaration stripped so the outer document stays well-formed. Required by Art. 14.1 RD 1007/2023 ("acceso completo e inmediato"). |
 | `Imprimir::createTicketExcel()` | Embeds the QR pixmap at the bottom of the receipt (140×140). `resolveQrCode()` returns the in-memory pixmap if present, otherwise fires `generateQRAsync()` and waits up to 5s in a local `QEventLoop`. Times out gracefully — prints without QR + log warning. Save-time prints never hit this path because the DB CSV is empty. |
 
 ---
@@ -170,8 +172,9 @@ Endpoints used:
 | `ValidationUrl` | `result.validationUrl` | `verifactu_url_qr` |
 | `ErrorCode` | `result.errorCode` | (only when `estado = ERROR`) |
 | `ErrorDescription` | `result.errorDescription` | `verifactu_error` |
+| `Xml` | `result.rawXml` | `verifactu_xml` (source for the AEAT export action) |
 
-Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pixmap), `ExternKey` (blockchain id), `StatusResponse` (`ResultCode` used instead), `Xml` / `Response` (XML payloads — JSON is sufficient for our flow).
+Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pixmap), `ExternKey` (blockchain id), `StatusResponse` (`ResultCode` used instead), `Response` (raw HTTP response — JSON is parsed and the AEAT XML is the only payload we keep).
 
 ---
 

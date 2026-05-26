@@ -37,6 +37,7 @@
 #define TABLE_VERIFACTU_ESTADO  17
 #define TABLE_VERIFACTU_ERROR   18
 #define TABLE_VERIFACTU_URL_QR  19
+#define TABLE_VERIFACTU_XML     20
 
 class Imprimir : public QDialog
 {

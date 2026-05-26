@@ -23,6 +23,12 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QDateEdit>
+#include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QRegularExpression>
+#include <QXmlStreamWriter>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -411,7 +417,8 @@ void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const Ver
     db.open();
     QSqlQuery q;
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
-              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+              "verifactu_xml = :xml "
               "WHERE n_recibo = :n_recibo");
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     if (result.isSuccess()) {
@@ -420,12 +427,14 @@ void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const Ver
         q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
         q.bindValue(":error",  "");
         q.bindValue(":url",    result.validationUrl);
+        q.bindValue(":xml",    result.rawXml);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
         q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
         q.bindValue(":error",  result.errorDescription);
         q.bindValue(":url",    "");
+        q.bindValue(":xml",    "");
     }
     q.bindValue(":n_recibo", ticketNum);
     if (!q.exec())
@@ -452,11 +461,13 @@ void MainWindow::saveTicket()
             q.prepare("INSERT INTO ingresos "
                       "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
                       "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
-                      "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr) "
+                      "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr, "
+                      "verifactu_xml) "
                       "VALUES "
                       "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
                       ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
-                      ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr);");
+                      ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr, "
+                      ":verifactu_xml);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -488,6 +499,7 @@ void MainWindow::saveTicket()
             q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
             q.bindValue(":verifactu_error",     "");
             q.bindValue(":verifactu_url_qr",    "");
+            q.bindValue(":verifactu_xml",       "");
             if (!q.exec())
                 qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
                            << "row" << row << "-" << q.lastError().text();
@@ -939,6 +951,135 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     dlg.db = db;
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
+}
+
+// Art. 14.1 RD 1007/2023 requires "acceso completo e inmediato" to the AEAT records
+// in legible XML. We persist the AEAT-style XML returned by Irene Solutions in
+// ingresos.verifactu_xml; this action dumps a date range into a single envelope file
+// that can be handed to Hacienda on request.
+void MainWindow::on_actionExportar_registros_aeat_triggered()
+{
+    // Step 1: date-range + output-path picker (small inline dialog)
+    QDialog dlg(this);
+    dlg.setWindowTitle("Exportar registros AEAT (XML)");
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    QDateEdit *fromDate = new QDateEdit(QDate::currentDate().addMonths(-3), &dlg);
+    fromDate->setCalendarPopup(true);
+    fromDate->setDisplayFormat("dd-MM-yyyy");
+
+    QDateEdit *toDate = new QDateEdit(QDate::currentDate(), &dlg);
+    toDate->setCalendarPopup(true);
+    toDate->setDisplayFormat("dd-MM-yyyy");
+
+    form->addRow("Desde:", fromDate);
+    form->addRow("Hasta:", toDate);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(buttons);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const QDate from = fromDate->date();
+    const QDate to   = toDate->date();
+    if (from > to) {
+        QMessageBox::warning(this, "Exportar registros AEAT",
+                             "La fecha 'Desde' debe ser anterior o igual a 'Hasta'.",
+                             QMessageBox::Ok);
+        return;
+    }
+
+    const QString suggestedName = QString("aeat_registros_%1_%2.xml")
+        .arg(from.toString("yyyyMMdd"), to.toString("yyyyMMdd"));
+    const QString filePath = QFileDialog::getSaveFileName(
+        this, "Guardar archivo de registros AEAT",
+        QDir::homePath() + "/" + suggestedName, "XML (*.xml)");
+    if (filePath.isEmpty()) return;
+
+    // Step 2: query rows with non-empty stored XML
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, fecha_recepcion, importe, verifactu_csv, verifactu_xml "
+              "FROM ingresos "
+              "WHERE verifactu_estado = :estado "
+              "  AND verifactu_xml IS NOT NULL AND verifactu_xml != '' "
+              "ORDER BY fecha_recepcion, n_recibo");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+    if (!q.exec()) {
+        qWarning() << "Exportar registros AEAT: SELECT failed -" << q.lastError().text();
+        db.close();
+        QMessageBox::critical(this, "Exportar registros AEAT",
+                              "Error al consultar la base de datos.",
+                              QMessageBox::Ok);
+        return;
+    }
+
+    // Step 3: write the envelope file
+    QFile out(filePath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        db.close();
+        QMessageBox::critical(this, "Exportar registros AEAT",
+                              "No se pudo abrir el archivo de salida para escritura.",
+                              QMessageBox::Ok);
+        return;
+    }
+
+    QXmlStreamWriter w(&out);
+    w.setAutoFormatting(true);
+    w.writeStartDocument();
+    w.writeStartElement("RegistrosFacturacionLaIdeal");
+    w.writeAttribute("fechaDesde", from.toString("dd-MM-yyyy"));
+    w.writeAttribute("fechaHasta", to.toString("dd-MM-yyyy"));
+    w.writeAttribute("generadoEl", QDateTime::currentDateTime().toString(Qt::ISODate));
+    w.writeAttribute("nif",        AppSettings::instance()->verifactuNif());
+    w.writeAttribute("emisor",     AppSettings::instance()->verifactuName());
+
+    // Strip the XML declaration of each stored payload so the outer document stays
+    // well-formed when payloads are concatenated.
+    static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
+
+    int count = 0;
+    while (q.next()) {
+        const QString fechaStr = q.value("fecha_recepcion").toString();
+        const QDate fecha = QDate::fromString(fechaStr, "dd-MM-yyyy");
+        if (!fecha.isValid() || fecha < from || fecha > to)
+            continue;
+
+        QString payload = q.value("verifactu_xml").toString();
+        payload.remove(xmlDeclRx);
+
+        w.writeStartElement("Registro");
+        w.writeAttribute("nRecibo",        q.value("n_recibo").toString());
+        w.writeAttribute("fechaRecepcion", fechaStr);
+        w.writeAttribute("importe",        q.value("importe").toString());
+        w.writeAttribute("csv",            q.value("verifactu_csv").toString());
+        // Flush the writer's state before injecting raw bytes (QXmlStreamWriter
+        // writes directly to the device, so this keeps the byte stream consistent).
+        w.writeCharacters(QString());
+        out.write(payload.toUtf8());
+        w.writeEndElement(); // Registro
+        ++count;
+    }
+
+    w.writeEndElement(); // RegistrosFacturacionLaIdeal
+    w.writeEndDocument();
+    out.close();
+    db.close();
+
+    if (count == 0) {
+        QMessageBox::information(this, "Exportar registros AEAT",
+            QString("No se encontraron registros enviados a AEAT entre %1 y %2.\n"
+                    "El archivo se ha creado vacío.")
+                .arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy")),
+            QMessageBox::Ok);
+    } else {
+        QMessageBox::information(this, "Exportar registros AEAT",
+            QString("Se han exportado %1 registros al archivo:\n%2").arg(count).arg(filePath),
+            QMessageBox::Ok);
+    }
 }
 
 void MainWindow::on_actionMostrar_log_triggered()

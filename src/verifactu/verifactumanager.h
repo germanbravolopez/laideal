@@ -53,6 +53,7 @@ struct VerifactuResult
     QString validationUrl;
     QPixmap qrCode;
     QString rawResponse;
+    QString rawXml; // AEAT-style XML payload (Return.Xml from Irene Solutions /Create reply)
 
     VerifactuResult() : status(INVALID_CONFIG) {}
 

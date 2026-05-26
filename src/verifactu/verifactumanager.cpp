@@ -307,6 +307,7 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
                 result.status = VerifactuResult::SUCCESS;
                 result.csv           = ret.value("CSV").toString();
                 result.validationUrl = ret.value("ValidationUrl").toString();
+                result.rawXml        = ret.value("Xml").toString();
                 QString qrBase64     = ret.value("QrCode").toString();
                 if (!qrBase64.isEmpty())
                     result.qrCode = decodeImageFromBase64(qrBase64);

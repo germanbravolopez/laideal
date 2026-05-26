@@ -69,9 +69,10 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 14.1 RD 1007/2023. The Administration can require "acceso completo e inmediato" in legible format. Orden HAC/1177/2024 fixes XML (UTF-8) as the export format with the AEAT schema.
 
-**[MISSING]**
-- The Irene Solutions Kivu gateway returns the AEAT-style XML in the `Return.Xml` field of every `/Create` response (already visible in the logs), but La Ideal does not persist that XML and has no export action.
-- **Gap**: add an action under Herramientas → Exportar registros AEAT (XML) that dumps `ingresos` rows in the schema-compliant XML format on demand. Two implementation options: (a) persist `Return.Xml` per row and concatenate on export; (b) re-query AEAT for the period. Option (a) is simpler.
+**[COVERED]**
+- The AEAT-style XML returned by Irene Solutions in `Return.Xml` of every `/Create` response is extracted in `VerifactuManager::processResponse()` into `VerifactuResult::rawXml` and persisted to a `verifactu_xml TEXT` column on `ingresos` (added in `migrateDatabase()`). Initial INSERT writes empty, the async `updateTicketVerifactuFields()` patches the column when AEAT replies. ✓
+- New action `MainWindow → Herramientas → Exportar registros AEAT (XML)...` (`on_actionExportar_registros_aeat_triggered()`) prompts for a date range and output path, then writes a single envelope file `<RegistrosFacturacionLaIdeal fechaDesde="…" fechaHasta="…" generadoEl="…" nif="…" emisor="…">` containing one `<Registro nRecibo="…" fechaRecepcion="…" importe="…" csv="…">` element per qualifying ticket (estado=ENVIADA AND non-empty XML AND fecha_recepcion in range). The stored payload is inlined with its `<?xml ?>` declaration stripped so the outer document stays well-formed. ✓
+- Caveat: tickets submitted before this feature landed do not have `verifactu_xml` stored (no retroactive AEAT lookup); they are silently skipped from the export.
 
 ## 8. Declaración responsable del fabricante
 
@@ -112,7 +113,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 4 | Retention (4 años) | PARTIAL — no enforced backup/archive |
 | 5 | Trazabilidad | PARTIAL — single-user assumed |
 | 6 | Event log | COVERED (VERIFACTU mode) |
-| 7 | XML export for Hacienda | MISSING |
+| 7 | XML export for Hacienda | COVERED |
 | 8 | Declaración responsable | COVERED |
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |

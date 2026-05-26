@@ -651,6 +651,7 @@ prenda</string>
     <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="actionAnular_factura_verifactu"/>
+    <addaction name="actionExportar_registros_aeat"/>
     <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
@@ -856,6 +857,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
+   </property>
+  </action>
+  <action name="actionExportar_registros_aeat">
+   <property name="text">
+    <string>Exportar registros AEAT (XML)...</string>
+   </property>
+   <property name="toolTip">
+    <string>Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)</string>
    </property>
   </action>
   <action name="actionMostrar_log">
