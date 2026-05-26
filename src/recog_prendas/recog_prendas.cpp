@@ -67,6 +67,14 @@ void RecogPrendas::resetAllContents()
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_EDIT_LOCK)).toBool();
+    static const char *const opNames[] = {
+        "PAY_YES", "PAY_NO", "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE", "SEPARATE_GARM"
+    };
+    const QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
+    const QString rowHash   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString();
+    qDebug() << "RecogPrendas::updateDb:" << opNames[op]
+             << "ticket=" << ticketNum << "hash=" << rowHash
+             << "editLock=" << editLock << "nGarm=" << nGarm;
     QSqlQuery q;
     switch (op) {
     case PAY_YES:

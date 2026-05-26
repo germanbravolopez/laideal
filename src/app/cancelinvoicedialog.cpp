@@ -1,10 +1,12 @@
 #include "cancelinvoicedialog.h"
+#include <QDebug>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
+#include <QSqlError>
 #include <QSqlQuery>
 
 CancelInvoiceDialog::CancelInvoiceDialog(QWidget *parent)
@@ -135,12 +137,16 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     m_pendingCancelId.clear();
 
     if (result.isSuccess()) {
+        qDebug() << "CancelInvoiceDialog: UPDATE ingresos SET verifactu_estado = ANULADA WHERE n_recibo ="
+                 << m_loadedTicket << "(AEAT cancel confirmed)";
         db.open();
         QSqlQuery q(db);
         q.prepare("UPDATE ingresos SET verifactu_estado = :estado WHERE n_recibo = :num");
         q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
         q.bindValue(":num", m_loadedTicket);
-        q.exec();
+        if (!q.exec())
+            qWarning() << "CancelInvoiceDialog: UPDATE estado=ANULADA failed for ticket"
+                       << m_loadedTicket << "-" << q.lastError().text();
         db.close();
 
         m_lblResult->setText(

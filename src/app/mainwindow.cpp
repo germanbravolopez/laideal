@@ -466,6 +466,9 @@ void MainWindow::saveTicket()
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
             QString hash = genHash16();
+            qDebug() << "saveTicket: INSERT row" << row << "ticket=" << ui->le_nr_ticket->text()
+                     << "importe=" << ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text()
+                     << "hash=" << hash;
             db.open();
             QSqlQuery q;
             q.prepare("INSERT INTO ingresos "

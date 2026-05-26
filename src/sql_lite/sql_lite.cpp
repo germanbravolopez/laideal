@@ -42,6 +42,7 @@ static QString monthStr(int month)
 void migrateDatabase(QSqlDatabase &db)
 {
     if (dbNotConfigured(db, __func__)) return;
+    qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
     db.open();
     QSqlQuery q(db);
     // Each exec() silently fails if the column already exists - safe to call repeatedly.
@@ -226,6 +227,7 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
 {
     if (dbNotConfigured(db, __func__)) return false;
 
+    qDebug() << "updateItemToClient: UPDATE clientes SET" << column << "= ? WHERE nombre =" << client;
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
@@ -243,6 +245,8 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
 {
     if (dbNotConfigured(db, __func__)) return false;
 
+    qDebug() << "addNewClient: INSERT INTO clientes nombre=" << client << "tel_fijo=" << telFijo
+             << "movil=" << movil;
     db.open();
     QSqlQuery q(db);
     q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) "
@@ -356,6 +360,8 @@ void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
     const QString yStr = QString::number(year);
     const QString val  = QString::number(value);
 
+    qDebug() << "updateLockInIngresos: UPDATE ingresos+gastos SET edit_lock =" << val
+             << "WHERE month=" << mStr << "year=" << yStr;
     db.open();
     QSqlQuery q(db);
     if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
@@ -369,6 +375,7 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
 {
     if (dbNotConfigured(db, __func__)) return 0;
 
+    qDebug() << "updateComasInDecimalData: scanning" << table << "for comma decimals in column" << item;
     int errorCnt = 0;
 
     if (table == "ingresos") {

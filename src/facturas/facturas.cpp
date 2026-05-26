@@ -88,6 +88,12 @@ bool Facturas::validateForm()
 void Facturas::saveFactura()
 {
     int idMax = readMaxValueInColumnFromTable(db, "id", "gastos");
+    qDebug() << "saveFactura: INSERT INTO gastos id=" << (idMax + 1)
+             << "n_factura=" << ui->le_fra->text()
+             << "empresa=" << ui->cb_empresa->currentText()
+             << "fecha=" << ui->de_fecha->date().toString("dd-MM-yyyy")
+             << "iva=" << ui->cb_iva->currentText()
+             << "importe=" << ui->le_importe->text();
     db.open();
     QSqlQuery q;
     q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe, edit_lock) "

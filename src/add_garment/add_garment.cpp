@@ -206,6 +206,12 @@ bool AddGarment::validateForm()
 void AddGarment::saveFactura()
 {
     QString hash = genHash16();
+    qDebug() << "AddGarment::saveFactura: INSERT INTO ingresos ticket=" << ui->le_n_recibo->text()
+             << "cliente=" << ui->le_cliente->text()
+             << "prenda=" << ui->cb_prenda->currentText()
+             << "cantidad=" << ui->le_cantidad->text()
+             << "importe=" << ui->le_importe->text()
+             << "hash=" << hash;
     db.open();
     QSqlQuery q;
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
