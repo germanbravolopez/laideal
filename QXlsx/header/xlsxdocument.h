@@ -72,6 +72,9 @@ public:
     bool setRowFormat(int rowFirst, int rowLast, const Format &format);
     bool setRowHidden(int rowFirst, int rowLast, bool hidden);
 
+    bool setPageMargins(double left, double right, double top, double bottom,
+                        double header = 0.3, double footer = 0.3);
+
     double rowHeight(int row);
     Format rowFormat(int row);
     bool isRowHidden(int row);

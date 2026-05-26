@@ -1487,6 +1487,21 @@ bool Worksheet::setStartPage(int spagen)
 }
 //}}
 
+bool Worksheet::setPageMargins(double left, double right, double top, double bottom,
+                               double header, double footer)
+{
+    Q_D(Worksheet);
+
+    d->PMleft   = QString::number(left);
+    d->PMright  = QString::number(right);
+    d->PMtop    = QString::number(top);
+    d->PMbotton = QString::number(bottom);
+    d->PMheader = QString::number(header);
+    d->PMfooter = QString::number(footer);
+
+    return true;
+}
+
 void WorksheetPrivate::saveXmlSheetData(QXmlStreamWriter &writer) const
 {
     calculateSpans();

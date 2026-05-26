@@ -24,7 +24,7 @@ Shared infrastructure:
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate
-  QXlsx/                          — third-party Excel r/w library (do not modify)
+  QXlsx/                          — third-party Excel r/w library (vendored; minimal local patch: setPageMargins)
 ```
 
 ---

@@ -78,7 +78,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
 | Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
 | Link (URL) delegate | `src/tableview/linkdelegate.h` | `.cpp` |
-| Excel library | `QXlsx/` (entire directory) | third-party — do not modify |
+| Excel library | `QXlsx/` (entire directory) | third-party (vendored) — only a tiny local patch added: `Worksheet::setPageMargins` + `Document::setPageMargins` |
 
 ## Build Files
 

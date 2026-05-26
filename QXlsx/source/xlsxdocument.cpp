@@ -1025,6 +1025,20 @@ bool Document::setRowHeight(int rowFirst, int rowLast, double height)
 }
 
 /*!
+  Sets the page \a left, \a right, \a top and \a bottom margins (in inches),
+  along with the \a header and \a footer margins, on the current worksheet.
+
+  Returns true if success.
+*/
+bool Document::setPageMargins(double left, double right, double top, double bottom,
+                              double header, double footer)
+{
+    if (Worksheet *sheet = currentWorksheet())
+        return sheet->setPageMargins(left, right, top, bottom, header, footer);
+    return false;
+}
+
+/*!
  Returns height of \a row in points.
 */
 double Document::rowHeight(int row)

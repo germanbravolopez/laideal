@@ -32,8 +32,10 @@ ui->printTicket();
 
 1. User enters a ticket number in the dialog shown by `getTicketInfo()`.
 2. All matching rows from `ingresos` are loaded into `sqlQueryModel`.
-3. `createTicketExcel()` builds an `.xlsx` file via `QXlsx` with appropriate column widths, styles, and row content.
+3. `createTicketExcel()` builds an `.xlsx` file via `QXlsx` with appropriate column widths, page margins, styles, and row content.
 4. `printTicket()` launches an external `.bat` script that sends the Excel to the printer.
+
+Column widths and page margins are set at the top of `createTicketExcel()` to keep the ticket within the thermal printer's printable area: `setColumnWidth(1, 4)`, `setColumnWidth(2, 20)`, `setColumnWidth(3, 7.5)` (31.5 units total), and `setPageMargins(0.6, 0.6, 0.4, 0.4)` (inches; left/right/top/bottom — header/footer default to 0.3″ inside QXlsx because the upstream serializer only emits `<pageMargins>` when all six values are set). `setPageMargins` is a small local patch on the vendored QXlsx — see [Completed Milestones in progress_tracker.md](../progress_tracker.md).
 
 ## Excel ticket layout
 
@@ -88,6 +90,6 @@ QR image bytes are **not** persisted in the DB; they are always reconstructed fr
 
 ## Dependencies
 
-- `QXlsx` — third-party Excel r/w library in `QXlsx/` (do not modify)
+- `QXlsx` — third-party Excel r/w library in `QXlsx/` (vendored). Minimal local patch: `Worksheet::setPageMargins` + `Document::setPageMargins`. Avoid further modifications.
 - `verifactu` — `VerifactuIntegration::generateQR()` for the `/GetQrCode` fallback
 - External `.bat` printing script — path set at deploy time
