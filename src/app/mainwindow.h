@@ -88,6 +88,7 @@ private slots:
     void on_actionCrear_hash_en_ingresos_triggered();
     void on_actionAnular_factura_verifactu_triggered();
     void on_actionMostrar_log_triggered();
+    void on_actionAcerca_de_Verifactu_triggered();
 
 private:
     Ui::MainWindow *ui;

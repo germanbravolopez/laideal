@@ -77,9 +77,11 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 13 RD 1007/2023. The producer must include "una declaración responsable" by which they certify compliance with the regulation. It must be "por escrito y de modo visible en el propio sistema informático en cada una de sus versiones" and include the producer's identifying and location data.
 
-**[MISSING]**
-- There is no declaración responsable shown anywhere in the application.
-- **Gap**: add an "Acerca de" / "About" dialog (`MainWindow → Ayuda → Acerca de Verifactu`) that displays the declaración responsable — producer NIF + name + address, software name + version, statement of compliance, signature/date. The text is fixed; only producer identifying data and version vary. The AEAT publishes example templates.
+**[COVERED]**
+- `MainWindow → Ayuda → Acerca de Verifactu...` opens a dialog (`on_actionAcerca_de_Verifactu_triggered()` in `mainwindow.cpp`) with the fixed-text declaración responsable.
+- Producer NIF, name and address come from `AppSettings::verifactuNif()`, `verifactuName()` (falling back to `businessName()`), `businessAddress()` and `businessCity()` — the user-business doubles as producer for this bespoke deployment.
+- Software name (`La Ideal`) and version are interpolated from `PROJECT_VERSION_MAJOR/MINOR` (generated `version.h`), so the declaration is automatically per-version as required by Art. 13.
+- The body cites RD 1007/2023 and Orden HAC/1177/2024 explicitly and states VERI*FACTU mode.
 
 ## 9. QR y texto obligatorio en el ticket
 
@@ -111,7 +113,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 5 | Trazabilidad | PARTIAL — single-user assumed |
 | 6 | Event log | COVERED (VERIFACTU mode) |
 | 7 | XML export for Hacienda | MISSING |
-| 8 | Declaración responsable | MISSING |
+| 8 | Declaración responsable | COVERED |
 | 9 | QR + mandatory text | PARTIAL — text missing next to QR |
 | 10 | No doble-uso software | COVERED |
 

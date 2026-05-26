@@ -667,9 +667,16 @@ prenda</string>
     <addaction name="actionListado_de_proveedores"/>
     <addaction name="actionListado_de_servicios"/>
    </widget>
+   <widget class="QMenu" name="menuAyuda">
+    <property name="title">
+     <string>Ayuda</string>
+    </property>
+    <addaction name="actionAcerca_de_Verifactu"/>
+   </widget>
    <addaction name="menuArchivo"/>
    <addaction name="menuHerramientas"/>
    <addaction name="menuVisualizar"/>
+   <addaction name="menuAyuda"/>
   </widget>
   <action name="actionRecibo">
    <property name="text">
@@ -857,6 +864,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Muestra la ubicación del archivo de log para enviar al soporte técnico</string>
+   </property>
+  </action>
+  <action name="actionAcerca_de_Verifactu">
+   <property name="text">
+    <string>Acerca de Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)</string>
    </property>
   </action>
  </widget>

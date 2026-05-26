@@ -17,7 +17,12 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include "version.h"
 #include <QStatusBar>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -92,6 +97,7 @@ void MainWindow::mainwindowInitialSettings()
     ui->menuHerramientas->setToolTipsVisible(true);
     ui->menuImprimir_ticket->setToolTipsVisible(true);
     ui->menuVisualizar->setToolTipsVisible(true);
+    ui->menuAyuda->setToolTipsVisible(true);
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     ui->table_ticket->verticalHeader()->setVisible(false);
@@ -947,4 +953,56 @@ void MainWindow::on_actionMostrar_log_triggered()
     msg.exec();
     if (msg.clickedButton() == openBtn)
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+// Declaración responsable visible in the software, as required by Art. 13
+// RD 1007/2023. Producer data is taken from AppSettings (the same NIF/name
+// used as Verifactu emitter, since the software is deployed bespoke for the
+// business that uses it). The compliance text is fixed; only producer data
+// and the software version vary across installations.
+void MainWindow::on_actionAcerca_de_Verifactu_triggered()
+{
+    AppSettings *s = AppSettings::instance();
+    const QString nif     = s->verifactuNif().isEmpty()    ? QStringLiteral("-") : s->verifactuNif();
+    const QString name    = !s->verifactuName().isEmpty()  ? s->verifactuName()
+                          : (!s->businessName().isEmpty() ? s->businessName() : QStringLiteral("-"));
+    const QString address = s->businessAddress().isEmpty() ? QStringLiteral("-") : s->businessAddress();
+    const QString city    = s->businessCity().isEmpty()    ? QStringLiteral("-") : s->businessCity();
+    const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);
+    const QString software = QStringLiteral("La Ideal");
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Acerca de Verifactu");
+    dlg.setMinimumWidth(600);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    QLabel *body = new QLabel(&dlg);
+    body->setTextFormat(Qt::RichText);
+    body->setWordWrap(true);
+    body->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    body->setText(
+        QString("<h3 align=\"center\">DECLARACIÓN RESPONSABLE</h3>"
+                "<p align=\"center\"><i>Artículo 13 del Real Decreto 1007/2023, de 5 de diciembre</i></p>"
+                "<p><b>%1</b>, con NIF <b>%2</b> y domicilio en %3, %4, "
+                "en calidad de productor del sistema informático de facturación denominado "
+                "<b>%5</b> versión <b>%6</b>,</p>"
+                "<p><b>DECLARA</b> bajo su responsabilidad:</p>"
+                "<p>Que el sistema informático arriba identificado cumple con todos los requisitos "
+                "establecidos en el Real Decreto 1007/2023, de 5 de diciembre, por el que se aprueba "
+                "el Reglamento que establece los requisitos que deben adoptar los sistemas informáticos "
+                "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
+                "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
+                "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
+                "en el momento de su generación.</p>")
+            .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
+                 address.toHtmlEscaped(), city.toHtmlEscaped(),
+                 software, version));
+    layout->addWidget(body);
+
+    QPushButton *btnClose = new QPushButton("Cerrar", &dlg);
+    layout->addWidget(btnClose, 0, Qt::AlignRight);
+    connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.exec();
 }

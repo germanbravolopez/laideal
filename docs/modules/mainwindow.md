@@ -24,6 +24,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 | `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir`. `verifactuIntegration = nullptr` so no QR fetch at save time. Excel is generated unconditionally; `printTicket()` runs only when `AppSettings::enablePrinting()` is true. |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 | `on_actionAnular_factura_verifactu_triggered()` | Opens `CancelInvoiceDialog`; shows warning if Verifactu not configured |
+| `on_actionAcerca_de_Verifactu_triggered()` | Opens the Ayuda → Acerca de Verifactu dialog showing the fixed-text declaración responsable required by Art. 13 RD 1007/2023. Producer NIF/name/address come from `AppSettings`; software version comes from `PROJECT_VERSION_MAJOR/MINOR` in the generated `version.h` |
 
 ## Table column indices (mainwindow.h)
 
