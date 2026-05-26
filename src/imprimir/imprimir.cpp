@@ -171,7 +171,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     excel.setColumnWidth(1, 4);
     excel.setColumnWidth(2, 20);
     excel.setColumnWidth(3, 7.5);
-    excel.setPageMargins(0.6, 0.6, 0.4, 0.4);
+    excel.setPageMargins(0.2, 0.1, 0.1, 0.4);
 
     // Header of the ticket
     AppSettings *settings = AppSettings::instance();
