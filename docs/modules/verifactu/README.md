@@ -115,7 +115,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 
 ## DB persistence (`ingresos` table)
 
-Six columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
+Seven columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
 
 | Column | Content |
 |--------|---------|
@@ -125,6 +125,7 @@ Six columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempo
 | `verifactu_error` | Error description when `estado = ERROR`; empty otherwise |
 | `verifactu_url_qr` | AEAT `ValidationUrl` (for QR/portal verification); empty if not submitted |
 | `verifactu_xml` | Raw AEAT-style XML from `Return.Xml` of the `/Create` reply; empty if not submitted or pre-fix. Source for the "Exportar registros AEAT (XML)" action (Art. 14.1 RD 1007/2023). |
+| `verifactu_hash` | 64-char hex SHA-256 chained hash extracted from `<sum1:Huella>` in `verifactu_xml`; empty if not submitted or pre-fix. Local tamper-detection (Art. 12 RD 1007/2023). AEAT term: "Huella". |
 
 `Contabilidad::totalPriceBetweenDates()` excludes `verifactu_estado = 'ANULADA'` rows from quarterly income — cancelled invoices must not appear in taxable income. All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
 
@@ -173,6 +174,7 @@ Endpoints used:
 | `ErrorCode` | `result.errorCode` | (only when `estado = ERROR`) |
 | `ErrorDescription` | `result.errorDescription` | `verifactu_error` |
 | `Xml` | `result.rawXml` | `verifactu_xml` (source for the AEAT export action) |
+| `<sum1:Huella>` inside `Xml` | `result.rawHash` (regex-extracted, upper-case hex) | `verifactu_hash` (Art. 12 RD 1007/2023) |
 
 Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pixmap), `ExternKey` (blockchain id), `StatusResponse` (`ResultCode` used instead), `Response` (raw HTTP response — JSON is parsed and the AEAT XML is the only payload we keep).
 

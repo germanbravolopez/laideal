@@ -120,7 +120,7 @@ Stateless free functions; all modules include this header.
 
 Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
-- `migrateDatabase(db)` — adds the 6 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
+- `migrateDatabase(db)` — adds the 7 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
@@ -156,6 +156,7 @@ Notable items:
 | verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
 | verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 | verifactu_xml | TEXT | Raw AEAT-style XML returned by Irene Solutions (`Return.Xml`); empty if not submitted or pre-fix. Source for `Herramientas → Exportar registros AEAT (XML)...` (Art. 14.1 RD 1007/2023) |
+| verifactu_hash | TEXT | 64-char hex SHA-256 chained hash (`<sum1:Huella>` extracted from `verifactu_xml`); empty if not submitted or pre-fix. Local copy of AEAT's hash-chain value for tamper-detection (Art. 12 RD 1007/2023). AEAT regulatory term is "Huella"; column is named `verifactu_hash` to keep identifiers in English |
 
 ### `prendas` (garment catalogue)
 

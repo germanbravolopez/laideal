@@ -34,10 +34,10 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 12 RD 1007/2023, Anexo de la Orden HAC/1177/2024. Cada registro debe incluir una huella SHA-256 sobre campos clave + la huella del registro anterior, formando una cadena.
 
-**[PARTIAL]**
+**[COVERED]**
 - In VERIFACTU mode, the SHA-256 hash chain is computed and persisted by the AEAT/IreneSolutions side; the submission response includes the chained `Huella` value in the SOAP XML (e.g. `<sum1:Huella>4486F3131E8AAFA0559F7CB23A1605EC177A15B61F8C595ED2910599CEAC7FCB</sum1:Huella>`).
-- La Ideal stores the **CSV** (AEAT's unique identifier) per row in `verifactu_csv`. The CSV is sufficient to locate the AEAT-side record but is not the chained hash.
-- **Gap**: the `Huella` field from the response is not persisted locally. Hacienda-side audit can still verify via CSV, but local tamper-detection requires holding the chained hash too.
+- La Ideal extracts `<...:Huella>...</...:Huella>` from `Return.Xml` in `VerifactuManager::processResponse()` (regex tolerant of any namespace prefix; upper-cased hex) into `VerifactuResult::rawHash`, and persists it to the new `verifactu_hash TEXT` column on `ingresos` via the existing async update path. ✓
+- Local tamper-detection: holding the per-row chained hash lets an audit recompute the chain and detect any silent edit or insertion in `ingresos`, independently of AEAT.
 
 ## 4. Conservación de registros
 
@@ -109,7 +109,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 |---|-------------|--------|
 | 1 | Integrity / inalterabilidad | PARTIAL — no rectificativa UI |
 | 2 | Numeración correlativa | COVERED |
-| 3 | Hash chain (SHA-256) | PARTIAL — `Huella` not stored locally |
+| 3 | Hash chain (SHA-256) | COVERED |
 | 4 | Retention (4 años) | PARTIAL — no enforced backup/archive |
 | 5 | Trazabilidad | PARTIAL — single-user assumed |
 | 6 | Event log | COVERED (VERIFACTU mode) |

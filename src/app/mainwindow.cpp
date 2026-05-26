@@ -418,7 +418,7 @@ void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const Ver
     QSqlQuery q;
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml "
+              "verifactu_xml = :xml, verifactu_hash = :hash "
               "WHERE n_recibo = :n_recibo");
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     if (result.isSuccess()) {
@@ -428,6 +428,7 @@ void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const Ver
         q.bindValue(":error",  "");
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
+        q.bindValue(":hash",   result.rawHash);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -435,6 +436,7 @@ void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const Ver
         q.bindValue(":error",  result.errorDescription);
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
+        q.bindValue(":hash",   "");
     }
     q.bindValue(":n_recibo", ticketNum);
     if (!q.exec())
@@ -462,12 +464,12 @@ void MainWindow::saveTicket()
                       "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
                       "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
                       "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr, "
-                      "verifactu_xml) "
+                      "verifactu_xml, verifactu_hash) "
                       "VALUES "
                       "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
                       ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
                       ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr, "
-                      ":verifactu_xml);");
+                      ":verifactu_xml, :verifactu_hash);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -500,6 +502,7 @@ void MainWindow::saveTicket()
             q.bindValue(":verifactu_error",     "");
             q.bindValue(":verifactu_url_qr",    "");
             q.bindValue(":verifactu_xml",       "");
+            q.bindValue(":verifactu_hash",      "");
             if (!q.exec())
                 qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
                            << "row" << row << "-" << q.lastError().text();

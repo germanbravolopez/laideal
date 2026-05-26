@@ -133,6 +133,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |
 | Verifactu XML export for Hacienda (Art. 14.1) | `src/app/mainwindow.cpp` (`on_actionExportar_registros_aeat_triggered`); column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |
+| Verifactu chained hash (AEAT "Huella", Art. 12) | column `verifactu_hash` in `ingresos`; extraction in `VerifactuManager::processResponse()` (regex over `Return.Xml`) → `VerifactuResult::rawHash` |
 | verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
 | Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`totalPriceBetweenDates`) + `docs/modules/contabilidad.md` |
 | Verifactu integration points (save, retry, cancel, print) | `docs/modules/verifactu/README.md` (Integration points section) |

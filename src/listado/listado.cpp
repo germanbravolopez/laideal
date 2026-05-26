@@ -189,6 +189,8 @@ void Listado::populateTable()
             table_listado->horizontalHeader()->moveSection(INGRESOS_IDX_VERIFACTU_URL_QR, INGRESOS_IDX_VERIFACTU_ERROR);
             // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
             table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_XML, true);
+            // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
+            table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_HASH, true);
         }
         // Resize table
         table_listado->resizeColumnsToContents();

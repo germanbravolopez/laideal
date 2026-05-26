@@ -54,6 +54,9 @@ struct VerifactuResult
     QPixmap qrCode;
     QString rawResponse;
     QString rawXml; // AEAT-style XML payload (Return.Xml from Irene Solutions /Create reply)
+    // 64-char hex SHA-256 chained hash extracted from <sum1:Huella> in rawXml
+    // (AEAT regulatory term: "Huella"). Art. 12 RD 1007/2023.
+    QString rawHash;
 
     VerifactuResult() : status(INVALID_CONFIG) {}
 

@@ -23,6 +23,7 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 
 ### 3. Implement
 
+- **Apply `/coding-guidelines` to every new identifier you introduce.** Read the skill file at the start of implementation if you haven't already this session, and at minimum check the language rule (English names + comments for all code; Spanish only for user-facing UI strings). When the legal or business term is Spanish (e.g. `Huella`, `Recibo`, `Factura`), still name code identifiers with the English equivalent (`rawHash`, `receipt`, `invoice`) and mention the Spanish term in a comment if it aids tracing back to the regulation.
 - Read existing call sites before changing signatures — `Grep` first, edit second.
 - Track multi-step work with `TodoWrite`. Mark steps complete as you finish them.
 - Don't bundle unrelated cleanup into the fix unless the user asked. Dead code touched by the refactor is fair game; dead code in untouched modules is a separate task.

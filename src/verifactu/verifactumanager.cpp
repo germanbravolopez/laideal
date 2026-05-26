@@ -9,6 +9,7 @@
 #include <QUrlQuery>
 #include <QByteArray>
 #include <QEventLoop>
+#include <QRegularExpression>
 
 VerifactuManager::VerifactuManager(const QString &configPath, QObject *parent)
     : QObject(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
@@ -308,6 +309,14 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
                 result.csv           = ret.value("CSV").toString();
                 result.validationUrl = ret.value("ValidationUrl").toString();
                 result.rawXml        = ret.value("Xml").toString();
+                // Extract <sum1:Huella> (or any prefix) from the AEAT XML so we
+                // can persist it for local tamper-detection - Art. 12 RD 1007/2023.
+                // "Huella" is the regulatory term for the chained SHA-256 hash.
+                static const QRegularExpression hashRx(
+                    QStringLiteral("<[^>]*Huella[^>]*>\\s*([0-9A-Fa-f]+)\\s*</[^>]*Huella>"));
+                QRegularExpressionMatch m = hashRx.match(result.rawXml);
+                if (m.hasMatch())
+                    result.rawHash = m.captured(1).trimmed().toUpper();
                 QString qrBase64     = ret.value("QrCode").toString();
                 if (!qrBase64.isEmpty())
                     result.qrCode = decodeImageFromBase64(qrBase64);

@@ -51,6 +51,7 @@ void migrateDatabase(QSqlDatabase &db)
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_error TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_xml TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_hash TEXT");
     db.close();
 }
 
