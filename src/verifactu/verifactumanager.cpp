@@ -262,7 +262,9 @@ void VerifactuManager::logResponse(const QByteArray &response) const
 
     QJsonObject obj = doc.object();
 
-    // Truncate QrCode - it's a large base64 BMP that floods the log
+    // Truncate the base64 BMP that floods the log. Two response shapes to handle:
+    // - /Create:     Return is an object with a "QrCode" string field
+    // - /GetQrCode:  Return is itself the base64 BMP string (no wrapping object)
     if (obj.contains("Return") && obj["Return"].isObject()) {
         QJsonObject ret = obj["Return"].toObject();
         if (ret.contains("QrCode") && !ret["QrCode"].isNull()) {
@@ -270,6 +272,9 @@ void VerifactuManager::logResponse(const QByteArray &response) const
             ret["QrCode"] = QString("[base64 BMP, %1 chars]").arg(len);
             obj["Return"] = ret;
         }
+    } else if (obj.contains("Return") && obj["Return"].isString()) {
+        int len = obj["Return"].toString().length();
+        obj["Return"] = QString("[base64 BMP, %1 chars]").arg(len);
     }
 
     qDebug().noquote() << "Server response:\n" << QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
