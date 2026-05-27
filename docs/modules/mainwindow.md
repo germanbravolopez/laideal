@@ -24,6 +24,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 | `printRecibo()` / `printFra()` | Creates Excel and triggers `Imprimir`. `verifactuIntegration = nullptr` so no QR fetch at save time. Excel is generated unconditionally; `printTicket()` runs only when `AppSettings::enablePrinting()` is true. |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 | `on_actionAnular_factura_verifactu_triggered()` | Opens `CancelInvoiceDialog`; shows warning if Verifactu not configured |
+| `on_actionRectificar_factura_verifactu_triggered()` | Opens `RectifyInvoiceDialog` (R1-R5 factura rectificativa); shows warning if Verifactu not configured. Art. 8.2.a RD 1007/2023 |
 | `on_actionAcerca_de_Verifactu_triggered()` | Opens the Ayuda → Acerca de Verifactu dialog showing the fixed-text declaración responsable required by Art. 13 RD 1007/2023. Producer NIF/name/address come from `AppSettings`; software version comes from `PROJECT_VERSION_MAJOR/MINOR` in the generated `version.h` |
 
 ## Table column indices (mainwindow.h)
@@ -57,9 +58,11 @@ When the AEAT reply arrives, `onVerifactuRequestFinished()` UPDATEs `verifactu_c
 ## Child windows
 
 Opened via menu actions. Each child holds its own `db` reference set by `MainWindow` at open time:
-`Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`, `CancelInvoiceDialog`
+`Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`, `CancelInvoiceDialog`, `RectifyInvoiceDialog`
 
-`CancelInvoiceDialog` (`src/app/cancelinvoicedialog.h/cpp`) is a modal dialog (no `.ui` file) opened from Herramientas → Anular factura Verifactu. It searches `ingresos` by ticket number, shows Verifactu details, calls `VerifactuIntegration::cancelInvoice()`, and on success updates `verifactu_estado`, `verifactu_timestamp`, and `verifactu_error` for all rows of that ticket.
+`CancelInvoiceDialog` (`src/app/cancelinvoicedialog.h/cpp`) is a modal dialog (no `.ui` file) opened from Herramientas → Anular factura Verifactu. It searches `ingresos` by ticket number, shows Verifactu details, calls `VerifactuIntegration::cancelInvoiceAsync()`, and on success updates `verifactu_estado` to `ANULADA` for all rows of that ticket.
+
+`RectifyInvoiceDialog` (`src/app/rectifyinvoicedialog.h/cpp`) is a modal dialog (no `.ui` file) opened from Herramientas → Rectificar factura Verifactu. It searches `ingresos` by ticket number, lets the operator pick R1-R5 + sustitución/diferencias (S/I) + corrected total or delta + date, calls `VerifactuIntegration::submitRectificationAsync()`, and on success inserts a NEW `ingresos` row with the next available `n_recibo`, `verifactu_estado = ENVIADA`, `verifactu_rectifies_n_recibo` pointing back to the original and the rectification's own CSV/XML/hash. For substitution mode (`S`) it additionally marks the original rows `verifactu_estado = RECTIFICADA` so they are excluded from `totalPriceBetweenDates()`. For differences (`I`) the original rows stay `ENVIADA` and the delta row alone reconciles accounting.
 
 ## Known issues
 

@@ -53,6 +53,10 @@ void migrateDatabase(QSqlDatabase &db)
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_xml TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_hash TEXT");
+    // Rectificativa link: on a rectifying row, points back to the original n_recibo.
+    // verifactu_rectification_type is "S" (sustitucion) or "I" (diferencias).
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectifies_n_recibo TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectification_type TEXT");
     db.close();
 }
 
@@ -272,10 +276,13 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
     QSqlQuery q(db);
 
     if (table == "ingresos") {
-        // Exclude ANULADA rows: a Verifactu-cancelled invoice must not contribute to taxable income.
-        // Rows without verifactu_estado (NULL or empty, pre-v8.0) are included as normal.
+        // Exclude ANULADA (cancelled) and RECTIFICADA (superseded by a substitution
+        // rectificativa) rows from taxable income. The rectifying row itself carries
+        // the corrected total and counts normally. Rows without verifactu_estado
+        // (NULL or empty, pre-v8.0) are included as normal.
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
-               "(verifactu_estado IS NULL OR verifactu_estado = '' OR verifactu_estado != 'ANULADA') AND "
+               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
                + startDate.toString("yyyy-MM-dd") + "')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"

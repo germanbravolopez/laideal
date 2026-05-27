@@ -16,11 +16,11 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 8.1 RD 1007/2023. Los registros "no puedan ser alterados sin que el sistema informático lo detecte y avise de ello." Si hay un error, debe corregirse mediante **anulación** o **factura rectificativa** — nunca borrando.
 
-**[PARTIAL]**
+**[COVERED]**
 - `Listado::on_actionEliminar_fila_triggered()` blocks row deletion when `tableName == "ingresos"` (the invoices table). No UI path can delete a submitted invoice. ✓
-- Cancellation flow exists: `CancelInvoiceDialog` → `cancelInvoiceAsync` → AEAT, sets `verifactu_estado = 'ANULADA'`. ✓
-- **Gap**: there is no UI for **factura rectificativa** (R1–R5 corrective invoices); already tracked as a Non-Blocking issue but should be promoted to Blocking since the law mandates it as one of only two legal correction paths.
-- **Gap**: the DB is SQLite; nothing prevents an operator with file-system access from editing it directly. The regulation tolerates this (it requires *the software* to detect/warn, not the OS to prevent), but row-level integrity could be strengthened with a per-row hash check on read.
+- Cancellation flow: `CancelInvoiceDialog` → `cancelInvoiceAsync` → AEAT, sets `verifactu_estado = 'ANULADA'`. ✓
+- Rectification flow: `RectifyInvoiceDialog` → `VerifactuIntegration::submitRectificationAsync()` → AEAT. Supports R1-R5 invoice types and both `RectificationType` variants (`S` = sustitución, `I` = diferencias). Substitution marks the original rows `verifactu_estado = 'RECTIFICADA'` so they are excluded from `totalPriceBetweenDates()` without losing the audit trail; the new rectificativa row links back via `verifactu_rectifies_n_recibo`. ✓
+- Note: the DB is SQLite; nothing prevents an operator with file-system access from editing it directly. The regulation tolerates this (it requires *the software* to detect/warn, not the OS to prevent), and the per-row `verifactu_hash` SHA-256 chain (Req. 3) gives a tamper-detection signal on read.
 
 ## 2. Numeración correlativa automática
 
@@ -107,7 +107,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| 1 | Integrity / inalterabilidad | PARTIAL — no rectificativa UI |
+| 1 | Integrity / inalterabilidad | COVERED |
 | 2 | Numeración correlativa | COVERED |
 | 3 | Hash chain (SHA-256) | COVERED |
 | 4 | Retention (4 años) | PARTIAL — no enforced backup/archive |
@@ -118,4 +118,4 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
-**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`.
+**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-27, all Verifactu compliance gaps are covered.

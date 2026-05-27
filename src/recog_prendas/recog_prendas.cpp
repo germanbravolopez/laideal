@@ -452,8 +452,10 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(TABLE_VERIFACTU_ESTADO,    true);
         ui->tableView->setColumnHidden(TABLE_VERIFACTU_ERROR,     true);
         ui->tableView->setColumnHidden(TABLE_VERIFACTU_URL_QR,    true);
-        ui->tableView->setColumnHidden(TABLE_VERIFACTU_XML,       true);
-        ui->tableView->setColumnHidden(TABLE_VERIFACTU_HASH,      true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_XML,        true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_HASH,       true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_RECTIFIES,  true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_RECT_TYPE,  true);
         ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));

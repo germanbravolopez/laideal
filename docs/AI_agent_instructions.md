@@ -29,6 +29,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Settings dialog (UI to edit settings) | `src/appsettings/settingsdialog.h` / `.cpp` |
 | Main window logic | `src/app/mainwindow.h` / `.cpp` |
 | Invoice cancellation dialog | `src/app/cancelinvoicedialog.h` / `.cpp` |
+| Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` / `.cpp` |
 | Ticket save flow | `src/app/mainwindow.cpp` (`saveTicket`) |
 | All DB free functions | `src/sql_lite/sql_lite.h` / `.cpp` |
 | Generic list viewer | `src/listado/listado.h` / `.cpp` |
@@ -86,6 +87,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 5. **English only** in all documentation.
 6. **Preserve history** — never delete progress tracker entries; move old ones to Archive.
 7. **Avoid emojis** — do not use emojis in titles or other places
+8. **Consider `/coding-guidelines`** for code updates or creation.
 
 ## Key Business Logic
 

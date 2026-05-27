@@ -73,7 +73,7 @@ Writes to the `facturas` table. Populated from `empresas` and `servicios` tables
 Generates HTML accounting reports. Three modes: `Mensual`, `Trimestral`, `Anual`.
 Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 `revertirOn = true` unlocks a previously locked quarter.
-Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado = 'ANULADA'` rows (cancelled invoices must not appear in taxable income). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
+Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
 
 ### Imprimir (`src/imprimir/`)
 Creates Excel via `QXlsx`, then launches an external process to print.
@@ -120,7 +120,7 @@ Stateless free functions; all modules include this header.
 
 Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
-- `migrateDatabase(db)` — adds the 7 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`; idempotent (safe to call on every startup)
+- `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type); idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
@@ -152,11 +152,13 @@ Notable items:
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
-| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, `PENDIENTE` if not yet submitted (Verifactu not configured, or unpaid ticket awaiting submission at pickup). Legacy rows from before Verifactu may have NULL/empty. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
+| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, `RECTIFICADA` if superseded by a substitution rectificativa (R1-R5 with mode S), `PENDIENTE` if not yet submitted (Verifactu not configured, or unpaid ticket awaiting submission at pickup). Legacy rows from before Verifactu may have NULL/empty. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
 | verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
 | verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 | verifactu_xml | TEXT | Raw AEAT-style XML returned by Irene Solutions (`Return.Xml`); empty if not submitted or pre-fix. Source for `Herramientas → Exportar registros AEAT (XML)...` (Art. 14.1 RD 1007/2023) |
 | verifactu_hash | TEXT | 64-char hex SHA-256 chained hash (`<sum1:Huella>` extracted from `verifactu_xml`); empty if not submitted or pre-fix. Local copy of AEAT's hash-chain value for tamper-detection (Art. 12 RD 1007/2023). AEAT regulatory term is "Huella"; column is named `verifactu_hash` to keep identifiers in English |
+| verifactu_rectifies_n_recibo | TEXT | On a rectificativa row, points back to the `n_recibo` of the original ticket being corrected; empty on non-rectifying rows. Combined with `verifactu_estado = RECTIFICADA` on the original gives a bidirectional audit link (Art. 8.2.a RD 1007/2023) |
+| verifactu_rectification_type | TEXT | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows. Mirrors the `RectificationType` sent to AEAT |
 
 ### `prendas` (garment catalogue)
 
@@ -231,7 +233,7 @@ AEAT QR validation:
 
 `VerifactuResult::Status` values (API call result): `SUCCESS`, `PENDING`, `ERROR`, `NETWORK_ERROR`, `INVALID_CONFIG`
 
-`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted` ↔ `"PENDIENTE"`, `Enviada` ↔ `"ENVIADA"`, `Anulada` ↔ `"ANULADA"`, `Error` ↔ `"ERROR"`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) to `NotSubmitted`.
+`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted` ↔ `"PENDIENTE"`, `Enviada` ↔ `"ENVIADA"`, `Anulada` ↔ `"ANULADA"`, `Rectificada` ↔ `"RECTIFICADA"`, `Error` ↔ `"ERROR"`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) to `NotSubmitted`.
 
 ---
 

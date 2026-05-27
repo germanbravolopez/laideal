@@ -967,6 +967,24 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     dlg.exec();
 }
 
+// Art. 8.2.a RD 1007/2023 - rectificativa (R1-R5) is one of the two legal
+// correction paths for an already-registered factura (the other is anulacion).
+void MainWindow::on_actionRectificar_factura_verifactu_triggered()
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "Rectify invoice action: Verifactu not configured";
+        QMessageBox::warning(this, "Verifactu no configurado",
+                             "Verifactu no está configurado correctamente.\n"
+                             "Configura las credenciales en Archivo → Configuración.",
+                             QMessageBox::Ok);
+        return;
+    }
+    RectifyInvoiceDialog dlg(this);
+    dlg.db = db;
+    dlg.m_verifactu = m_verifactuIntegration;
+    dlg.exec();
+}
+
 // Art. 14.1 RD 1007/2023 requires "acceso completo e inmediato" to the AEAT records
 // in legible XML. We persist the AEAT-style XML returned by Irene Solutions in
 // ingresos.verifactu_xml; this action dumps a date range into a single envelope file
@@ -1013,15 +1031,16 @@ void MainWindow::on_actionExportar_registros_aeat_triggered()
         QDir::homePath() + "/" + suggestedName, "XML (*.xml)");
     if (filePath.isEmpty()) return;
 
-    // Step 2: query rows with non-empty stored XML
+    // Step 2: query rows with non-empty stored XML. We include every row that was
+    // submitted to AEAT regardless of its current local estado (ENVIADA, ANULADA,
+    // RECTIFICADA) - Hacienda has the corresponding records on their side too.
+    // The verifactu_xml column itself is the proof of submission.
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, fecha_recepcion, importe, verifactu_csv, verifactu_xml "
               "FROM ingresos "
-              "WHERE verifactu_estado = :estado "
-              "  AND verifactu_xml IS NOT NULL AND verifactu_xml != '' "
+              "WHERE verifactu_xml IS NOT NULL AND verifactu_xml != '' "
               "ORDER BY fecha_recepcion, n_recibo");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
     if (!q.exec()) {
         qWarning() << "Exportar registros AEAT: SELECT failed -" << q.lastError().text();
         db.close();

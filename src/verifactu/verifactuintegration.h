@@ -33,6 +33,30 @@ public:
         const QDate &invoiceDate
     );
 
+    // Async submit of a rectificativa (R1-R5). Builds an F2-style simplified invoice
+    // (La Ideal only issues simplified) with R1-R5 type + RectificationType S/I.
+    //
+    // For BY_DIFFERENCES (I): correctedTaxBase carries the DELTA (signed) and
+    //   originalTaxBase/Amount are ignored.
+    // For BY_SUBSTITUTION (S): correctedTaxBase/Amount carry the new totals (TaxItems),
+    //   originalTaxBase/Amount are emitted as RectificationTaxBase/RectificationTaxAmount.
+    //
+    // The new invoice gets its own unique InvoiceID (newInvoiceNumber). The original
+    // is identified for local audit only; AEAT links the two via RectificationItems
+    // (not yet implemented - reserved for a future regulation-tightening if needed).
+    QString submitRectificationAsync(
+        const QString &newInvoiceNumber,
+        const QDate &invoiceDate,
+        VerifactuInvoice::InvoiceType invoiceType,
+        VerifactuInvoice::RectificationType rectificationType,
+        double correctedTaxBase,
+        double correctedTaxAmount,
+        double originalTaxBase,
+        double originalTaxAmount,
+        double taxRate,
+        const QString &description = QString()
+    );
+
     QString generateQRAsync(
         const QString &invoiceNumber,
         const QDate &invoiceDate,

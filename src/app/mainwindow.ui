@@ -651,6 +651,7 @@ prenda</string>
     <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="actionAnular_factura_verifactu"/>
+    <addaction name="actionRectificar_factura_verifactu"/>
     <addaction name="actionExportar_registros_aeat"/>
     <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
@@ -857,6 +858,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
+   </property>
+  </action>
+  <action name="actionRectificar_factura_verifactu">
+   <property name="text">
+    <string>Rectificar factura Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Emitir una factura rectificativa (R1-R5) de una factura previamente enviada a la AEAT (Art. 8.2.a RD 1007/2023)</string>
    </property>
   </action>
   <action name="actionExportar_registros_aeat">

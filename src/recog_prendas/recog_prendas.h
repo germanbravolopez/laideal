@@ -32,8 +32,10 @@ struct VerifactuResult;
 #define TABLE_VERIFACTU_ESTADO    17
 #define TABLE_VERIFACTU_ERROR     18
 #define TABLE_VERIFACTU_URL_QR    19
-#define TABLE_VERIFACTU_XML       20
-#define TABLE_VERIFACTU_HASH      21
+#define TABLE_VERIFACTU_XML        20
+#define TABLE_VERIFACTU_HASH       21
+#define TABLE_VERIFACTU_RECTIFIES  22
+#define TABLE_VERIFACTU_RECT_TYPE  23
 
 namespace Ui {
 class RecogPrendas;

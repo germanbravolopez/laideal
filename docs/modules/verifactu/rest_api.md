@@ -42,6 +42,7 @@ The `Invoice` object is the main input parameter for all operations (submit, can
 - **Type**: Alphanumeric (1)
 - **Default**: I
 - **Required if**: InvoiceType is R1, R2, R3, R4, or R5
+- **In LAIDEAL**: `m_rectificationType` of `VerifactuInvoice`. Set by `RectifyInvoiceDialog` via `setRectificationType()`. Serialized only when invoice type is R1-R5.
 
 ### IsInvoiceFix
 - **Description**: Correction of a previously rejected invoice
@@ -138,17 +139,17 @@ The `Invoice` object is the main input parameter for all operations (submit, can
 ### RectificationItems
 - **Description**: Array of corrected invoices (corrective invoices only)
 - **Type**: Array of InvoiceRectification
-- **In LAIDEAL**: Not implemented (reserved for future)
+- **In LAIDEAL**: Not implemented. The local link is kept instead in `ingresos.verifactu_rectifies_n_recibo`; AEAT identifies the rectificativa standalone by `InvoiceID` + `RectificationType`.
 
 ### RectificationTaxBase
 - **Description**: Corrected tax base for substitution correctives (`'S'`)
 - **Type**: Decimal (3,2)
-- **In LAIDEAL**: Not implemented
+- **In LAIDEAL**: `m_rectificationTaxBase` of `VerifactuInvoice`. For substitution mode it carries the ORIGINAL tax base being replaced; `TaxItems[0].TaxBase` carries the new (corrected) total.
 
 ### RectificationTaxAmount
 - **Description**: Corrected tax amount (substitution correctives `'S'`)
 - **Type**: Decimal (3,2)
-- **In LAIDEAL**: Not implemented
+- **In LAIDEAL**: `m_rectificationTaxAmount` of `VerifactuInvoice`. Mirrors RectificationTaxBase: original tax amount being replaced.
 
 ### RectificationTaxAmountSurcharge
 - **Description**: Corrected equivalence surcharge amount (substitution correctives `'S'`)
@@ -435,8 +436,8 @@ REQUIRED:
 | Field | Status | Notes |
 |-------|--------|-------|
 | Status | Partial | Used for DRAFT in testing |
-| InvoiceType | Complete | F1, F2, F3, R1 supported |
-| RectificationType | Pending | For future correctives |
+| InvoiceType | Complete | F1, F2, F3, R1-R5 supported |
+| RectificationType | Complete | S (substitution) and I (differences) |
 | IsInvoiceFix | Pending | For corrections |
 | IsRejected | Pending | For corrections with rejection |
 | InvoiceID | Complete | |

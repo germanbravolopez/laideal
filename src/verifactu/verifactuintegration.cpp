@@ -72,6 +72,56 @@ QString VerifactuIntegration::cancelInvoiceAsync(
     return m_manager->cancelInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
+QString VerifactuIntegration::submitRectificationAsync(
+    const QString &newInvoiceNumber,
+    const QDate &invoiceDate,
+    VerifactuInvoice::InvoiceType invoiceType,
+    VerifactuInvoice::RectificationType rectificationType,
+    double correctedTaxBase,
+    double correctedTaxAmount,
+    double originalTaxBase,
+    double originalTaxAmount,
+    double taxRate,
+    const QString &description)
+{
+    if (!isConfigured()) {
+        m_lastError = "Verifactu no está configurado correctamente";
+        qWarning() << m_lastError;
+        return QString();
+    }
+    if (!VerifactuInvoice::isRectificationInvoiceType(invoiceType)) {
+        m_lastError = "Tipo de factura no rectificativo";
+        qWarning() << m_lastError;
+        return QString();
+    }
+
+    VerifactuInvoice invoice;
+    invoice.setInvoiceNumber(newInvoiceNumber);
+    invoice.setInvoiceDate(invoiceDate);
+    invoice.setInvoiceType(invoiceType);
+    invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
+    invoice.setSellerName(m_manager->getConfig()->getEmitterName());
+    invoice.setDescription(description.isEmpty()
+        ? "Rectificativa de servicios de lavanderia"
+        : description);
+
+    // TaxItems hold the corrected values (substitution: new totals; differences: delta).
+    VerifactuTaxItem taxItem;
+    taxItem.setTaxBase(correctedTaxBase);
+    taxItem.setTaxRate(taxRate);
+    taxItem.setTaxAmount(correctedTaxAmount);
+    invoice.addTaxItem(taxItem);
+
+    invoice.setRectificationType(rectificationType);
+    if (rectificationType == VerifactuInvoice::BY_SUBSTITUTION) {
+        invoice.setRectificationTaxBase(originalTaxBase);
+        invoice.setRectificationTaxAmount(originalTaxAmount);
+    }
+
+    invoice.calculateTotals();
+    return m_manager->submitInvoiceAsync(invoice);
+}
+
 QString VerifactuIntegration::generateQRAsync(
     const QString &invoiceNumber,
     const QDate &invoiceDate,

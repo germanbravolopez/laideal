@@ -20,7 +20,7 @@ For the full AEAT REST API field reference see [`rest_api.md`](./rest_api.md).
 ## Architecture
 
 ```
-MainWindow / RecogPrendas / CancelInvoiceDialog / Imprimir
+MainWindow / RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog / Imprimir
         │
         ▼
 VerifactuIntegration (facade)
@@ -53,6 +53,19 @@ QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
 
 // Cancel a previously submitted invoice
 QString reqId = m_verifactuIntegration->cancelInvoiceAsync(invoiceNumber, invoiceDate);
+
+// Submit a rectificativa (R1-R5) of a previously submitted invoice.
+// For BY_DIFFERENCES (I): newTaxBase/Amount carry the delta (signed); origTaxBase/Amount are ignored.
+// For BY_SUBSTITUTION (S): newTaxBase/Amount carry the corrected total;
+//                          origTaxBase/Amount carry the values being replaced
+//                          (sent as RectificationTaxBase / RectificationTaxAmount).
+QString reqId = m_verifactuIntegration->submitRectificationAsync(
+    newInvoiceNumber, invoiceDate,
+    VerifactuInvoice::RECTIFICATION_R1,
+    VerifactuInvoice::BY_DIFFERENCES,
+    newTaxBase, newTaxAmount,
+    origTaxBase, origTaxAmount,
+    ivaRate, "Rectificativa de ticket ...");
 
 // Re-fetch QR for an already-submitted invoice (used by Imprimir reprint path)
 QString reqId = m_verifactuIntegration->generateQRAsync(
@@ -90,6 +103,7 @@ Defined in `verifactumanager.h` alongside `verifactuEstadoToString()` / `verifac
 | `NotSubmitted` | `"PENDIENTE"` | Verifactu not configured at save time, or unpaid ticket awaiting submission at pickup. `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) here |
 | `Enviada` | `"ENVIADA"` | Submitted successfully to AEAT |
 | `Anulada` | `"ANULADA"` | Cancelled via `CancelInvoiceDialog` |
+| `Rectificada` | `"RECTIFICADA"` | Superseded by a substitution (`S`) rectificativa from `RectifyInvoiceDialog`. Excluded from `totalPriceBetweenDates()` so the new rectificativa row carries the corrected total without double-counting |
 | `Error` | `"ERROR"` | Submission or cancellation failed |
 
 Never hardcode the string values — always go through the helpers.
@@ -115,7 +129,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 
 ## DB persistence (`ingresos` table)
 
-Seven columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
+Nine columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idempotent `ALTER TABLE ADD COLUMN`):
 
 | Column | Content |
 |--------|---------|
@@ -126,8 +140,10 @@ Seven columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idem
 | `verifactu_url_qr` | AEAT `ValidationUrl` (for QR/portal verification); empty if not submitted |
 | `verifactu_xml` | Raw AEAT-style XML from `Return.Xml` of the `/Create` reply; empty if not submitted or pre-fix. Source for the "Exportar registros AEAT (XML)" action (Art. 14.1 RD 1007/2023). |
 | `verifactu_hash` | 64-char hex SHA-256 chained hash extracted from `<sum1:Huella>` in `verifactu_xml`; empty if not submitted or pre-fix. Local tamper-detection (Art. 12 RD 1007/2023). AEAT term: "Huella". |
+| `verifactu_rectifies_n_recibo` | On a rectificativa row, points back to the `n_recibo` of the original ticket being corrected; empty on non-rectifying rows |
+| `verifactu_rectification_type` | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows |
 
-`Contabilidad::totalPriceBetweenDates()` excludes `verifactu_estado = 'ANULADA'` rows from quarterly income — cancelled invoices must not appear in taxable income. All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
+`Contabilidad::totalPriceBetweenDates()` excludes both `verifactu_estado = 'ANULADA'` and `verifactu_estado = 'RECTIFICADA'` rows from quarterly income — cancelled invoices and rows superseded by a substitution rectificativa must not contribute to taxable income (the rectifying row carries the corrected total). All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
 
 ---
 
@@ -139,7 +155,8 @@ Seven columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idem
 | `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB AND checks `hasPendingSubmit(ticketNum)` (in-memory dedup — async submit hasn't updated DB yet, so DB-only check would double-fire from the pay-all loop). If both clear, calls `retryVerifactuSubmit()`. |
 | `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` (async, status bar). |
 | `CancelInvoiceDialog` (Herramientas → Anular factura Verifactu…) | Async cancel — dialog stays open with "Enviando anulación..." label until AEAT replies. `m_pendingCancelId` guards re-entry. |
-| `MainWindow::on_actionExportar_registros_aeat_triggered()` (Herramientas → Exportar registros AEAT (XML)...) | Prompts for a date range and output path, then writes a single envelope file `<RegistrosFacturacionLaIdeal>` with one `<Registro>` per qualifying ticket (estado=ENVIADA AND non-empty `verifactu_xml` AND fecha_recepcion in range). Each row's stored payload is inlined with the `<?xml ?>` declaration stripped so the outer document stays well-formed. Required by Art. 14.1 RD 1007/2023 ("acceso completo e inmediato"). |
+| `RectifyInvoiceDialog` (Herramientas → Rectificar factura Verifactu…) | Async R1-R5 rectificativa — operator picks tipo (R1-R5), modo (S/I), date and corrected total or delta. Submits via `submitRectificationAsync()`; on success inserts a new `ingresos` row with the next available `n_recibo` linked back via `verifactu_rectifies_n_recibo`, and for substitution mode marks the original rows `verifactu_estado = RECTIFICADA`. `m_pendingRectifyId` guards re-entry. Art. 8.2.a RD 1007/2023. |
+| `MainWindow::on_actionExportar_registros_aeat_triggered()` (Herramientas → Exportar registros AEAT (XML)...) | Prompts for a date range and output path, then writes a single envelope file `<RegistrosFacturacionLaIdeal>` with one `<Registro>` per qualifying ticket (non-empty `verifactu_xml` AND fecha_recepcion in range; ANY `verifactu_estado` since ENVIADA/ANULADA/RECTIFICADA rows were all sent to AEAT). Each row's stored payload is inlined with the `<?xml ?>` declaration stripped so the outer document stays well-formed. Required by Art. 14.1 RD 1007/2023 ("acceso completo e inmediato"). |
 | `Imprimir::createTicketExcel()` | Embeds the QR pixmap at the bottom of the receipt (140×140). `resolveQrCode()` returns the in-memory pixmap if present, otherwise fires `generateQRAsync()` and waits up to 5s in a local `QEventLoop`. Times out gracefully — prints without QR + log warning. Save-time prints never hit this path because the DB CSV is empty. |
 
 ---

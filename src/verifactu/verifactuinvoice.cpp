@@ -31,10 +31,9 @@ QJsonObject VerifactuTaxItem::toJson() const
 
 bool VerifactuTaxItem::isValid() const
 {
-    if (m_taxBase < 0) {
-        m_validationError = "La base imponible no puede ser negativa";
-        return false;
-    }
+    // Negative base is allowed: a rectificativa por diferencias representing a
+    // downward correction (e.g. -20.00 EUR delta) is a legitimate use of this
+    // type. AEAT validates the sign in context.
 
     if (m_operationType != EXEMPT && m_taxRate < 0) {
         m_validationError = "El tipo de impuesto no puede ser negativo";
@@ -116,6 +115,18 @@ QJsonObject VerifactuInvoice::toJson() const
     json["TotalAmount"] = m_totalAmount;
     json["TotalTaxAmount"] = m_totalTaxAmount;
 
+    // Rectificativa metadata (R1-R5). RectificationType is mandatory when the
+    // invoice is corrective; RectificationTaxBase/Amount only matter for the
+    // substitution variant (S) - they carry the values being replaced.
+    if (isRectificationInvoiceType(m_invoiceType)) {
+        json["RectificationType"] = rectificationTypeToString(
+            m_hasRectification ? m_rectificationType : BY_DIFFERENCES);
+        if (m_hasRectification && m_rectificationType == BY_SUBSTITUTION) {
+            json["RectificationTaxBase"]   = m_rectificationTaxBase;
+            json["RectificationTaxAmount"] = m_rectificationTaxAmount;
+        }
+    }
+
     return json;
 }
 
@@ -141,8 +152,10 @@ bool VerifactuInvoice::isValid() const
         return false;
     }
 
-    // buyer required except for simplified invoices (F2)
-    if (m_invoiceType != SIMPLIFIED) {
+    // Buyer required except for F2 (simplified) and rectificativas of simplified
+    // invoices (R5 by definition, plus R1-R4 when the original was simplified -
+    // La Ideal only issues F2, so all our rectificativas inherit no-buyer).
+    if (m_invoiceType != SIMPLIFIED && !isRectificationInvoiceType(m_invoiceType)) {
         if (m_buyerNIF.isEmpty()) {
             m_validationError = "NIF del comprador no configurado";
             return false;
@@ -176,11 +189,38 @@ QString VerifactuInvoice::getValidationError() const
 QString VerifactuInvoice::invoiceTypeToString(InvoiceType type) const
 {
     switch (type) {
-        case NORMAL:        return "F1";  // standard invoice
-        case SIMPLIFIED:    return "F2";  // simplified invoice
-        case SUBSTITUTE:    return "F3";  // substitute for simplified
-        case RECTIFICATION: return "R1";  // corrective invoice
-        default:            return "F1";
+        case NORMAL:           return "F1";  // standard invoice
+        case SIMPLIFIED:       return "F2";  // simplified invoice
+        case SUBSTITUTE:       return "F3";  // substitute for simplified
+        case RECTIFICATION_R1: return "R1";  // corrective - legal error
+        case RECTIFICATION_R2: return "R2";  // corrective - buyer insolvency
+        case RECTIFICATION_R3: return "R3";  // corrective - bad debts
+        case RECTIFICATION_R4: return "R4";  // corrective - other
+        case RECTIFICATION_R5: return "R5";  // corrective on simplified invoices
+        default:               return "F1";
+    }
+}
+
+QString VerifactuInvoice::rectificationTypeToString(RectificationType type)
+{
+    switch (type) {
+        case BY_SUBSTITUTION: return "S";
+        case BY_DIFFERENCES:  return "I";
+        default:              return "I";
+    }
+}
+
+bool VerifactuInvoice::isRectificationInvoiceType(InvoiceType type)
+{
+    switch (type) {
+        case RECTIFICATION_R1:
+        case RECTIFICATION_R2:
+        case RECTIFICATION_R3:
+        case RECTIFICATION_R4:
+        case RECTIFICATION_R5:
+            return true;
+        default:
+            return false;
     }
 }
 
