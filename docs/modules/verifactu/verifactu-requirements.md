@@ -46,7 +46,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 **[PARTIAL]**
 - `ingresos` rows are never deleted by the application.
 - DB lives at a hardcoded path on a single machine — no enforced backup, no archival, no retention policy.
-- **Gap**: no automated backup or archive procedure. The regulation requires a "procedimiento de descarga, volcado y archivo seguro" (Art. 8.2.c). A nightly SQLite backup + 4-year retention guarantee would close this.
+- Gap tracked as a non-blocking issue in `docs/progress_tracker.md` ("Verifactu Req. 4 — automated SQLite backup + 4-year retention"). Closing it requires a scheduled nightly backup + rotation policy that covers the 4-year tax prescription period.
 
 ## 5. Trazabilidad
 
@@ -55,7 +55,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 **[PARTIAL]**
 - `verifactu_timestamp` records the AEAT submission time per row. ✓
 - The app is single-user (no login system), so "who" is implicitly the single operator. The machine identity is also fixed (hardcoded DB path).
-- **Gap**: with several operators sharing one machine, the law expects per-user identification. For a one-shop / one-operator deployment this is arguably satisfied by context; for a multi-operator setup it is not. The "declaración responsable" can address single-user scope explicitly.
+- Gap tracked as a non-blocking issue in `docs/progress_tracker.md` ("Verifactu Req. 5 — per-user identification"). Acceptable under the current one-shop / one-operator deployment; the closure for multi-operator setups would prompt for an operator code at app start and stamp it on each `ingresos` write.
 
 ## 6. Registro de eventos del sistema
 
@@ -110,12 +110,12 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 1 | Integrity / inalterabilidad | COVERED |
 | 2 | Numeración correlativa | COVERED |
 | 3 | Hash chain (SHA-256) | COVERED |
-| 4 | Retention (4 años) | PARTIAL — no enforced backup/archive |
-| 5 | Trazabilidad | PARTIAL — single-user assumed |
+| 4 | Retention (4 años) | PARTIAL — no enforced backup/archive (tracked in `progress_tracker.md`) |
+| 5 | Trazabilidad | PARTIAL — single-user assumed (tracked in `progress_tracker.md`) |
 | 6 | Event log | COVERED (VERIFACTU mode) |
 | 7 | XML export for Hacienda | COVERED |
 | 8 | Declaración responsable | COVERED |
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
-**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-27, all Verifactu compliance gaps are covered.
+**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-27, no Verifactu compliance gap blocks the release; the two PARTIAL items (Req. 4 backup/retention, Req. 5 per-user trazabilidad) are tracked under Open Non-Blocking Issues.

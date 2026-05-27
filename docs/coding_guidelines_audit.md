@@ -78,14 +78,7 @@ When listing findings, classify into one of three tiers:
 
 ### Tier 1 — Real discrepancies
 
-| # | File | Issue | Suggested fix |
-|---|------|-------|---------------|
-| 1 | [src/tableview/tableview.cpp:14-15](../src/tableview/tableview.cpp#L14-L15) | Old `SIGNAL(...)` / `SLOT(...)` macro syntax (single occurrence) | `connect(this, &TableView::customContextMenuRequested, this, &TableView::showContextMenu);` |
-| 2 | [src/imprimir/imprimir.cpp:395](../src/imprimir/imprimir.cpp#L395) | Local `QString estado = ...` (Spanish identifier in recently-written code) | Rename to `state` or `verifactuState` |
-| 3 | [src/app/cancelinvoicedialog.cpp:79-83](../src/app/cancelinvoicedialog.cpp#L79-L83) | Locals `cliente` / `fecha` / `estado` (Spanish identifiers in recent code) | Rename to `client` / `date` / `state` |
-| 4 | [src/recog_prendas/recog_prendas.cpp:595](../src/recog_prendas/recog_prendas.cpp#L595) | Local `estado` (recent code) | Rename to `state` |
-| 5 | [src/verifactu/verifactuinvoice.h:10,60](../src/verifactu/verifactuinvoice.h#L10) | Two classes (`VerifactuTaxItem` + `VerifactuInvoice`) in one header | Split into `verifactutaxitem.h` + `verifactuinvoice.h`; update includes |
-| 6 | [src/listado/genlistado.h:40](../src/listado/genlistado.h#L40) | Typo `add_sufix_to_filename()` (English-spelling issue inside a legacy snake_case name) | Rename to `add_suffix_to_filename()` (still snake_case, the legacy module is grandfathered) |
+All six Tier 1 findings from the 2026-05-26 audit have been migrated to `docs/progress_tracker.md` (Open Non-Blocking Issues) as a single bundled cleanup entry. Re-run the audit before re-populating this section.
 
 ### Tier 2 — Architecturally justified
 

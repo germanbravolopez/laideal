@@ -123,8 +123,6 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 
 `VerifactuIntegration::loadEmitterConfiguration()` reads these on `initialize()` and pushes them into `VerifactuConfig`. `initialize()` is non-fatal — it only warns if NIF or name is empty, and the rest of the app remains usable (tickets save without an AEAT submission, with `verifactu_estado = "PENDIENTE"`).
 
-> **Internal note**: `VerifactuConfig` also caches a copy to `<AppDataLocation>/verifactu_config.ini` via `QSettings` on every `save()`. This is a legacy artifact — the JSON is authoritative; the INI is never read back because `loadEmitterConfiguration()` always overwrites from AppSettings on startup.
-
 ---
 
 ## DB persistence (`ingresos` table)
