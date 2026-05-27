@@ -451,6 +451,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::DescendingOrder);
         // Hide internal columns not meant for display
+        ui->tableView->setColumnHidden(TABLE_EDIT_LOCK,           true);
         ui->tableView->setColumnHidden(TABLE_HASH,                true);
         ui->tableView->setColumnHidden(TABLE_VERIFACTU_CSV,       true);
         ui->tableView->setColumnHidden(TABLE_VERIFACTU_TIMESTAMP, true);

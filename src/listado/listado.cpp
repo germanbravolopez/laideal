@@ -187,6 +187,10 @@ void Listado::populateTable()
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_STATE, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_IDX_VERIFACTU_URL_QR, new LinkDelegate(this));
             table_listado->horizontalHeader()->moveSection(INGRESOS_IDX_VERIFACTU_URL_QR, INGRESOS_IDX_VERIFACTU_ERROR);
+            // edit_lock is an internal flag (set by Contabilidad on quarter close); not user-facing.
+            table_listado->setColumnHidden(INGRESOS_IDX_EDIT_LOCK, true);
+            // verifactu_csv is redundant with the clickable verifactu_url_qr link in this view.
+            table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_CSV, true);
             // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
             table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline

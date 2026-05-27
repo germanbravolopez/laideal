@@ -976,6 +976,10 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
     dlg.db = db;
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
+    // Rectificativa eagerly INSERTs its row (claims the next n_recibo) on submit,
+    // so the local counter has advanced regardless of AEAT success/failure. Refresh
+    // the MainWindow ticket-number field so the next save uses a fresh number.
+    setNextTicketNumber();
 }
 
 // Art. 14.1 RD 1007/2023 requires "acceso completo e inmediato" to the AEAT records
