@@ -12,16 +12,17 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Current Status — May 2026
 
-**Active branch**: `feature/add_mdiago_verifactu`
-**Version**: 8.0 (ready to release — ships with TESTING environment; switch to PRODUCTION after meeting with IreneSolutions)
+**Active branch**: `master`
+**Latest release**: [8.0](https://github.com/germanbravolopez/laideal/releases/tag/8.0) — merged via PR #30 (commit `1a0d3ca`). Ships with TESTING environment; flip `verifactu.production` to `true` after the meeting with IreneSolutions provides the live ServiceKey.
+**Next**: maintenance / 8.1 backlog — see Open Non-Blocking Issues.
 
 ---
 
-## Blocking Issues (must fix before merging `feature/add_mdiago_verifactu`)
+## Blocking Issues (must fix before the next release)
 
 > Verifactu legal-compliance gaps below come from the audit in [`docs/modules/verifactu/verifactu-requirements.md`](modules/verifactu/verifactu-requirements.md) (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
 
-_(All known Verifactu compliance gaps closed.)_
+_(No blocking issues for the next release. All Verifactu compliance gaps closed in 8.0.)_
 
 ---
 
