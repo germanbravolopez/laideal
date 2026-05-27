@@ -249,11 +249,15 @@ void RectifyInvoiceDialog::onRectifyClicked()
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &RectifyInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
 
-    // New rectificativa gets the next available n_recibo.
+    // Allocate the next n_recibo AND eagerly insert a PENDIENTE placeholder row so the
+    // number is claimed locally before the AEAT round-trip. Otherwise a regular
+    // MainWindow::saveTicket happening during the seconds-long AEAT call could pick the
+    // same number. Same pattern as MainWindow::saveTicket -> updateTicketVerifactuFields.
     m_newInvoiceNumber = QString::number(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos") + 1);
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
+    insertPlaceholderRow();
 
     const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
@@ -286,8 +290,9 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
     if (requestId != m_pendingRectifyId) return; // not ours
     m_pendingRectifyId.clear();
 
+    applyRectificationResult(result);
+
     if (result.isSuccess()) {
-        persistRectification(result);
         m_lblResult->setText(
             QString("<b style='color:green'>Rectificativa enviada.</b><br>"
                     "Nuevo ticket: %1<br>CSV: %2")
@@ -304,16 +309,15 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
     }
 }
 
-void RectifyInvoiceDialog::persistRectification(const VerifactuResult &result)
+void RectifyInvoiceDialog::insertPlaceholderRow()
 {
-    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const QString fechaStr  = m_newInvoiceDate.toString("dd-MM-yyyy");
-    const QString modeStr   = VerifactuInvoice::rectificationTypeToString(
+    const QString fechaStr = m_newInvoiceDate.toString("dd-MM-yyyy");
+    const QString modeStr  = VerifactuInvoice::rectificationTypeToString(
         m_submittedIsSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
                                   : VerifactuInvoice::BY_DIFFERENCES);
-    const QString hash      = genHash16();
+    const QString hash = genHash16();
 
-    qDebug() << "RectifyInvoiceDialog::persistRectification:"
+    qDebug() << "RectifyInvoiceDialog::insertPlaceholderRow:"
              << "newTicket=" << m_newInvoiceNumber
              << "rectifies=" << m_loadedTicket
              << "mode=" << modeStr
@@ -354,23 +358,68 @@ void RectifyInvoiceDialog::persistRectification(const VerifactuResult &result)
                                         modeStr));
     q.bindValue(":edit_lock",       "0");
     q.bindValue(":hash",            hash);
-    q.bindValue(":vcsv",            result.csv);
-    q.bindValue(":vts",             timestamp);
-    q.bindValue(":vestado",         verifactuEstadoToString(VerifactuEstado::Enviada));
+    // Placeholder: AEAT metadata patched by applyRectificationResult() on reply.
+    q.bindValue(":vcsv",            "");
+    q.bindValue(":vts",             "");
+    q.bindValue(":vestado",         verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.bindValue(":verror",          "");
-    q.bindValue(":vurl",            result.validationUrl);
-    q.bindValue(":vxml",            result.rawXml);
-    q.bindValue(":vhash",           result.rawHash);
+    q.bindValue(":vurl",            "");
+    q.bindValue(":vxml",            "");
+    q.bindValue(":vhash",           "");
     q.bindValue(":vrectifies",      m_loadedTicket);
     q.bindValue(":vrecttype",       modeStr);
     if (!q.exec())
-        qWarning() << "RectifyInvoiceDialog: INSERT rectificativa row failed for new ticket"
+        qWarning() << "RectifyInvoiceDialog: INSERT placeholder rectificativa row failed for new ticket"
+                   << m_newInvoiceNumber << "-" << q.lastError().text();
+    db.close();
+}
+
+void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
+{
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const VerifactuEstado estado = result.isSuccess() ? VerifactuEstado::Enviada
+                                                      : VerifactuEstado::Error;
+
+    qDebug() << "RectifyInvoiceDialog::applyRectificationResult:"
+             << "newTicket=" << m_newInvoiceNumber
+             << "estado="    << verifactuEstadoToString(estado)
+             << "csv="       << (result.isSuccess() ? result.csv : QString())
+             << "error="     << (result.isSuccess() ? QString() : result.errorDescription);
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET "
+              "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "WHERE n_recibo = :num AND verifactu_rectifies_n_recibo = :orig");
+    if (result.isSuccess()) {
+        q.bindValue(":csv",    result.csv);
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+        q.bindValue(":error",  "");
+        q.bindValue(":url",    result.validationUrl);
+        q.bindValue(":xml",    result.rawXml);
+        q.bindValue(":hash",   result.rawHash);
+    } else {
+        q.bindValue(":csv",    "");
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
+        q.bindValue(":error",  result.errorDescription);
+        q.bindValue(":url",    "");
+        q.bindValue(":xml",    "");
+        q.bindValue(":hash",   "");
+    }
+    q.bindValue(":num",  m_newInvoiceNumber);
+    q.bindValue(":orig", m_loadedTicket);
+    if (!q.exec())
+        qWarning() << "RectifyInvoiceDialog: UPDATE placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
 
     // For substitution (S), mark the original rows as RECTIFICADA so they no longer
     // count toward accounting. Differences (I) leaves the original untouched - the
-    // delta row alone reconciles the books.
-    if (m_submittedIsSubstitution) {
+    // delta row alone reconciles the books. Only on AEAT success.
+    if (result.isSuccess() && m_submittedIsSubstitution) {
         qDebug() << "RectifyInvoiceDialog: UPDATE ingresos SET verifactu_estado = RECTIFICADA WHERE n_recibo ="
                  << m_loadedTicket;
         QSqlQuery up(db);

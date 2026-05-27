@@ -56,6 +56,7 @@ Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OB
 Generic list-view window. Set `tableName` property at runtime to display any table.
 Used for: `ingresos`, `gastos`, `prendas`, `clientes`, `proveedores`, `servicios`.
 Features: add row, delete row, text filter (`FilterWidget`), PDF export.
+Inline cell editing is disabled for `ingresos` (Verifactu Req. 1, Art. 8.1 RD 1007/2023): row deletion is blocked AND `setEditTriggers(NoEditTriggers)` so no column can be edited from the list view. All `ingresos` changes flow through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog so AEAT, the chained Huella and the accounting lock stay in sync.
 Search is diacritic-insensitive: typing "garcia" matches "García" via `MySortFilterProxyModel::setNormalizedFilter`.
 Signals `populateClientes()` / `populatePrendas()` back to `MainWindow` after edits.
 

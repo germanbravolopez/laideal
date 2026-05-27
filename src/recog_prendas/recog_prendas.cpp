@@ -238,7 +238,12 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.clear();
             db.close();
 
-            // Insert separated garments
+            // Insert separated garments. The split row intentionally leaves verifactu_*
+            // columns NULL: the AEAT submission for this ticket covered the full importe
+            // and the chained Huella is attached to the original rows - re-submitting
+            // the split-off row would create a duplicate-InvoiceID error at AEAT.
+            // Helpers treat NULL/empty verifactu_estado as legacy (NotSubmitted), which
+            // is the desired accounting/print behaviour for split rows.
             float newImpIns = nGarm * readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
             QString hash = genHash16();
             db.open();
@@ -602,7 +607,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     if (!isCellClicked) return;
 
     QString ticketNum   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
-    QString estado      = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    QString state       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
     QString csv         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_CSV)).toString();
     QString timestamp   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_TIMESTAMP)).toString();
     QString error       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ERROR)).toString();
@@ -622,7 +627,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
         layout->addWidget(lbl);
     };
 
-    addRow("Estado:", estado);
+    addRow("Estado:", state);
     addRow("CSV:", csv);
     addRow("Fecha envío:", timestamp);
     if (!error.isEmpty())
@@ -635,7 +640,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
         layout->addWidget(urlLabel);
     }
 
-    if (verifactuEstadoFromString(estado) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+    if (verifactuEstadoFromString(state) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
         connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
             dlg->accept();

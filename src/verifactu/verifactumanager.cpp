@@ -10,6 +10,7 @@
 #include <QByteArray>
 #include <QEventLoop>
 #include <QRegularExpression>
+#include <QPointer>
 
 VerifactuManager::VerifactuManager(const QString &configPath, QObject *parent)
     : QObject(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
@@ -79,7 +80,12 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     qDebug() << "Submitting invoice" << invoice.getInvoiceNumber() << "(" << reqId << ")";
-    qDebug().noquote() << "Payload:" << QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+    // Redact ServiceKey before logging - the JSON ends up in ~/.laideal.log and the key
+    // is the AEAT API credential.
+    QJsonObject loggable = invoiceJson;
+    loggable["ServiceKey"] = QStringLiteral("[redacted, %1 chars]")
+        .arg(invoiceJson.value("ServiceKey").toString().length());
+    qDebug().noquote() << "Payload:" << QString::fromUtf8(QJsonDocument(loggable).toJson(QJsonDocument::Indented));
     qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
@@ -201,13 +207,22 @@ VerifactuResult VerifactuManager::testConnection()
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Create");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(10000);
-    QNetworkReply *reply = m_networkManager->post(request, payload);
+    QPointer<QNetworkReply> reply = m_networkManager->post(request, payload);
 
     qDebug() << "Testing Verifactu connection to" << (m_config->getEndpointUrl() + "/Create");
 
     QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    connect(reply.data(), &QNetworkReply::finished, &loop, &QEventLoop::quit);
     loop.exec();
+
+    // The dialog can be closed while the loop is running and the QNetworkAccessManager
+    // can deleteLater the reply out from under us. QPointer keeps the access safe.
+    if (reply.isNull()) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Sin respuesta (cancelada)";
+        m_lastError = result.errorDescription;
+        return result;
+    }
 
     QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     QString errStr = reply->errorString();
@@ -317,8 +332,11 @@ VerifactuResult VerifactuManager::processResponse(const QByteArray &response, bo
                 // Extract <sum1:Huella> (or any prefix) from the AEAT XML so we
                 // can persist it for local tamper-detection - Art. 12 RD 1007/2023.
                 // "Huella" is the regulatory term for the chained SHA-256 hash.
+                // The element name must be exactly Huella (optional namespace prefix);
+                // not a substring like HuellaPrevia which would also have matched a
+                // looser pattern.
                 static const QRegularExpression hashRx(
-                    QStringLiteral("<[^>]*Huella[^>]*>\\s*([0-9A-Fa-f]+)\\s*</[^>]*Huella>"));
+                    QStringLiteral("<(?:\\w+:)?Huella(?:\\s[^>]*)?>\\s*([0-9A-Fa-f]+)\\s*</(?:\\w+:)?Huella>"));
                 QRegularExpressionMatch m = hashRx.match(result.rawXml);
                 if (m.hasMatch())
                     result.rawHash = m.captured(1).trimmed().toUpper();

@@ -296,20 +296,20 @@ bool GenListado::check_years_invoice_type_for_row(int row)
     return print_current_row_date && print_current_row_cont;
 }
 
-QString GenListado::add_sufix_to_filename()
+QString GenListado::add_suffix_to_filename()
 {
-    QString filename_sufix = "";
+    QString filename_suffix = "";
     // add group of rows
-    filename_sufix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_") + "_";
+    filename_suffix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_") + "_";
     // add accountings
-    filename_sufix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_") + "_";
+    filename_suffix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_") + "_";
     // add date info
     if (ui->checkb_allys->isChecked())
-        filename_sufix += "todos_los_años";
+        filename_suffix += "todos_los_años";
     else
-        filename_sufix += ui->cb_fechas->currentText();
+        filename_suffix += ui->cb_fechas->currentText();
 
-    return filename_sufix;
+    return filename_suffix;
 }
 
 void GenListado::on_bb_ok_cancel_accepted()
@@ -329,7 +329,7 @@ void GenListado::on_bb_ok_cancel_accepted()
         QString path = AppSettings::instance()->listadosGastosPath();
         QString filename = "/listado_gastos_" +
                 QDate::currentDate().toString("yyyy-MM-dd_") +
-                add_sufix_to_filename() +
+                add_suffix_to_filename() +
                 ".pdf";
         // create directory in case it does not exists
         if (!QFile::exists(path))

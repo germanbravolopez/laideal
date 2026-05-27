@@ -11,8 +11,8 @@ TableView::TableView(QWidget *parent)
     context_menu->addAction(action2);
     // connect context menu
     this->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(this, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(showContextMenu(QPoint)));
+    connect(this, &TableView::customContextMenuRequested,
+            this, &TableView::showContextMenu);
     connect(this, &QTableView::doubleClicked,
             this, &TableView::doubleClick);
 }

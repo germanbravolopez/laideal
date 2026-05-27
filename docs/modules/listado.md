@@ -36,7 +36,7 @@ signals:
 - Text filter via `FilterWidget` (backed by `MySortFilterProxyModel`)
 - **Diacritic-insensitive search**: typing "garcia" matches "García". Implemented via `MySortFilterProxyModel::setNormalizedFilter` called from `textFilterChanged()`.
 - PDF export via `GenListado` dialog (`actionGenerar_pdf_con_el_listado`)
-- Inline cell editing via double-click; locked rows (`edit_lock=1`) show a warning
+- Inline cell editing via double-click for editable tables; locked rows (`edit_lock=1`) show a warning. **`ingresos` is read-only in this view** — `setEditTriggers(NoEditTriggers)` is applied so the operator cannot bypass AEAT / the chained Huella / the accounting lock by editing cells directly. All `ingresos` changes must go through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog (Verifactu Req. 1, Art. 8.1 RD 1007/2023).
 - Auto-resize window to table content, capped at the current screen's available width (`screen()->availableGeometry().width()`) so the window never extends off-screen
 
 ## Data loading strategy (`populateTable`)

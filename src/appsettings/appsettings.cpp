@@ -75,13 +75,34 @@ bool AppSettings::load()
 
 bool AppSettings::save() const
 {
-    QFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qWarning() << "AppSettings: cannot write to" << m_filePath;
+    // Atomic write: serialize to a sibling .tmp file, fsync-equivalent flush, then
+    // rename over the target. A crash mid-write leaves the previous settings intact
+    // instead of producing a zero-byte JSON that would lose the DB path / Verifactu
+    // credentials on next start.
+    const QString tmpPath = m_filePath + ".tmp";
+    QFile tmp(tmpPath);
+    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qWarning() << "AppSettings: cannot write to" << tmpPath;
         return false;
     }
-    file.write(QJsonDocument(m_data).toJson(QJsonDocument::Indented));
-    file.close();
+    const QByteArray bytes = QJsonDocument(m_data).toJson(QJsonDocument::Indented);
+    if (tmp.write(bytes) != bytes.size()) {
+        qWarning() << "AppSettings: short write to" << tmpPath;
+        tmp.close();
+        QFile::remove(tmpPath);
+        return false;
+    }
+    tmp.flush();
+    tmp.close();
+
+    // QFile::rename is not atomic on Windows when the target exists, so remove first.
+    // The window between remove and rename is small; the .tmp still exists on disk
+    // so a crash here is recoverable by hand.
+    QFile::remove(m_filePath);
+    if (!QFile::rename(tmpPath, m_filePath)) {
+        qWarning() << "AppSettings: rename" << tmpPath << "->" << m_filePath << "failed";
+        return false;
+    }
     return true;
 }
 

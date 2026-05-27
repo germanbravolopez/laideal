@@ -78,11 +78,11 @@ void CancelInvoiceDialog::onSearchClicked()
         return;
     }
 
-    QString cliente = q.value(0).toString();
-    QString fecha   = q.value(1).toString();
-    double  importe = q.value(2).toDouble();
-    QString csv     = q.value(3).toString();
-    QString estado  = q.value(4).toString();
+    QString client = q.value(0).toString();
+    QString date   = q.value(1).toString();
+    double  total  = q.value(2).toDouble();
+    QString csv    = q.value(3).toString();
+    QString state  = q.value(4).toString();
     db.close();
 
     m_lblInfo->setText(
@@ -91,21 +91,21 @@ void CancelInvoiceDialog::onSearchClicked()
                 "<b>Importe total:</b> %3 €<br>"
                 "<b>CSV Verifactu:</b> %4<br>"
                 "<b>Estado:</b> %5")
-        .arg(cliente, fecha,
-             QString::number(importe, 'f', 2),
+        .arg(client, date,
+             QString::number(total, 'f', 2),
              csv.isEmpty() ? "-" : csv,
-             verifactuEstadoToString(verifactuEstadoFromString(estado))));
+             verifactuEstadoToString(verifactuEstadoFromString(state))));
 
-    const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
-    if (estadoEnum == VerifactuEstado::Enviada) {
+    const VerifactuEstado stateEnum = verifactuEstadoFromString(state);
+    if (stateEnum == VerifactuEstado::Enviada) {
         m_loadedTicket = ticketNum;
-        m_loadedDate   = QDate::fromString(fecha, "dd-MM-yyyy");
+        m_loadedDate   = QDate::fromString(date, "dd-MM-yyyy");
         m_loadedCSV    = csv;
         m_btnCancel->setEnabled(true);
     } else {
-        QString reason = (estadoEnum == VerifactuEstado::Anulada) ? "Este ticket ya está anulado en AEAT." :
-                         (estadoEnum == VerifactuEstado::Error)    ? "Este ticket tuvo un error al enviarse - no hay nada que anular." :
-                                                                     "Este ticket no fue enviado a AEAT - no hay nada que anular.";
+        QString reason = (stateEnum == VerifactuEstado::Anulada) ? "Este ticket ya está anulado en AEAT." :
+                         (stateEnum == VerifactuEstado::Error)    ? "Este ticket tuvo un error al enviarse - no hay nada que anular." :
+                                                                    "Este ticket no fue enviado a AEAT - no hay nada que anular.";
         m_lblResult->setText(reason);
     }
 }

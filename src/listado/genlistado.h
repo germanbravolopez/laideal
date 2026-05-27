@@ -37,7 +37,7 @@ private slots:
     QString generate_html_gastos_table_with_specific_conditions();
     QString generate_html_gastos_table();
     bool check_years_invoice_type_for_row(int row);
-    QString add_sufix_to_filename();
+    QString add_suffix_to_filename();
 
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();

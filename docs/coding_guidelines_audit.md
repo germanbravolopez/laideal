@@ -78,7 +78,7 @@ When listing findings, classify into one of three tiers:
 
 ### Tier 1 — Real discrepancies
 
-All six Tier 1 findings from the 2026-05-26 audit have been migrated to `docs/progress_tracker.md` (Open Non-Blocking Issues) as a single bundled cleanup entry. Re-run the audit before re-populating this section.
+Five of the six Tier-1 findings from the 2026-05-26 audit were closed in the code-review fixes commit (see `docs/progress_tracker.md` Completed Milestones): SIGNAL/SLOT macro in [src/tableview/tableview.cpp](../src/tableview/tableview.cpp); Spanish locals in [src/imprimir/imprimir.cpp](../src/imprimir/imprimir.cpp), [src/app/cancelinvoicedialog.cpp](../src/app/cancelinvoicedialog.cpp) and [src/recog_prendas/recog_prendas.cpp](../src/recog_prendas/recog_prendas.cpp); `add_sufix_to_filename` typo in [src/listado/genlistado.h](../src/listado/genlistado.h)/[.cpp](../src/listado/genlistado.cpp). The remaining open item is the two-classes-in-one-header in [src/verifactu/verifactuinvoice.h](../src/verifactu/verifactuinvoice.h) - tracked under Open Non-Blocking Issues. Re-run the audit before re-populating this section.
 
 ### Tier 2 — Architecturally justified
 

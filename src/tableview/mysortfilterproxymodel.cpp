@@ -50,6 +50,10 @@ bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
     if (!hasRegex && !hasNormalized)
         return true;
 
+    // Search only the first 10 source columns. ingresos has 24 columns but the
+    // verifactu_* metadata (csv / xml / hash / url / estado / error / rectifies / ...)
+    // lives past column 14 and is not user-facing - we'd surface noise (and risk
+    // leaking the chained hash into the visible filter) by scanning it.
     int colCount = qMin(sourceModel()->columnCount(), 10);
     for (int c = 0; c < colCount; ++c) {
         QModelIndex idx = sourceModel()->index(sourceRow, c, sourceParent);
@@ -78,9 +82,9 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
                       left.column() == INGRESOS_IDX_DATE_PAY ||
                       left.column() == INGRESOS_IDX_DATE_PKU)))
         return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
-    else if (table_name == "gastos" && (left.column() == GASTOS_IDX_IMPORTE || left.column() == GASTOS_IDX_ID) ||
-             table_name == "ingresos" && left.column() == INGRESOS_IDX_IMPORTE ||
-             table_name == "prendas" && (left.column() == LIST_PRENDAS_IDX_LIMP || left.column() == LIST_PRENDAS_IDX_PLAN))
+    else if ((table_name == "gastos"   && (left.column() == GASTOS_IDX_IMPORTE || left.column() == GASTOS_IDX_ID)) ||
+             (table_name == "ingresos" && left.column() == INGRESOS_IDX_IMPORTE) ||
+             (table_name == "prendas"  && (left.column() == LIST_PRENDAS_IDX_LIMP || left.column() == LIST_PRENDAS_IDX_PLAN)))
         return leftData.toFloat() < rightData.toFloat();
     else
         return QString::localeAwareCompare(leftData.toString(), rightData.toString()) < 0;

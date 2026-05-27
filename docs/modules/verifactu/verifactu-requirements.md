@@ -18,6 +18,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 **[COVERED]**
 - `Listado::on_actionEliminar_fila_triggered()` blocks row deletion when `tableName == "ingresos"` (the invoices table). No UI path can delete a submitted invoice. ✓
+- `Listado::populateTable()` calls `setEditTriggers(NoEditTriggers)` on the `ingresos` view, so no UI path can inline-edit any column either - all changes must flow through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog, which keep AEAT and the accounting lock in sync. ✓
 - Cancellation flow: `CancelInvoiceDialog` → `cancelInvoiceAsync` → AEAT, sets `verifactu_estado = 'ANULADA'`. ✓
 - Rectification flow: `RectifyInvoiceDialog` → `VerifactuIntegration::submitRectificationAsync()` → AEAT. Supports R1-R5 invoice types and both `RectificationType` variants (`S` = sustitución, `I` = diferencias). Substitution marks the original rows `verifactu_estado = 'RECTIFICADA'` so they are excluded from `totalPriceBetweenDates()` without losing the audit trail; the new rectificativa row links back via `verifactu_rectifies_n_recibo`. ✓
 - Note: the DB is SQLite; nothing prevents an operator with file-system access from editing it directly. The regulation tolerates this (it requires *the software* to detect/warn, not the OS to prevent), and the per-row `verifactu_hash` SHA-256 chain (Req. 3) gives a tamper-detection signal on read.

@@ -83,8 +83,9 @@ All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against
 The receipt embeds the Verifactu QR (140×140) at the bottom via `QXlsx::Document::insertImage()`. Order of fallback inside `resolveQrCode()`:
 
 1. If the caller pre-populated `qrCode` (e.g., the pixmap from a fresh `/Create` response in the save flow), use it.
-2. Otherwise, if `verifactuIntegration` is configured and the ticket row in `ingresos` has a non-empty `verifactu_csv`, call `VerifactuIntegration::generateQR(invoiceNumber, invoiceDate, taxBase, ivaRate)` → REST `/GetQrCode` and use the returned pixmap.
-3. If neither yields a pixmap (no Verifactu, network error, etc.) the receipt is printed without a QR.
+2. Otherwise, aggregate `verifactu_estado` across all rows of the ticket: emit a QR only when at least one row has a non-empty `verifactu_csv` AND no row is in `ANULADA` / `RECTIFICADA` / `ERROR`. This handles split-garment rows (legacy/empty estado on the split-off row, ENVIADA on the original) and prevents a misleading QR on tickets superseded by an anulación or rectificativa.
+3. When the conditions in (2) are met and `verifactuIntegration` is configured, call `VerifactuIntegration::generateQR(invoiceNumber, invoiceDate, taxBase, ivaRate)` → REST `/GetQrCode` and use the returned pixmap.
+4. If none of the above yields a pixmap (no Verifactu, network error, ticket not eligible) the receipt is printed without a QR.
 
 QR image bytes are **not** persisted in the DB; they are always reconstructed from the response or the REST endpoint.
 

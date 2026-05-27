@@ -96,8 +96,26 @@ QPixmap Imprimir::resolveQrCode()
     if (!sqlQueryModel || sqlQueryModel->rowCount() == 0)
         return QPixmap();
 
-    QString csv = sqlQueryModel->data(sqlQueryModel->index(0, TABLE_VERIFACTU_CSV)).toString();
-    if (csv.isEmpty())
+    // Aggregate across rows of the ticket. A single n_recibo can hold:
+    //  - rows submitted to AEAT (verifactu_csv set, estado=ENVIADA)
+    //  - rows added later via split-garment / add-garment (estado empty / PENDIENTE)
+    //  - rows superseded by anulacion / rectificativa (ANULADA / RECTIFICADA)
+    //  - rows that failed submission (ERROR)
+    // Only emit a QR when at least one row carries a real CSV AND no row is in a
+    // state that would make the QR misleading (ANULADA / RECTIFICADA / ERROR).
+    bool hasCsv = false;
+    bool anyBlocking = false;
+    for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        if (!sqlQueryModel->data(sqlQueryModel->index(row, TABLE_VERIFACTU_CSV)).toString().isEmpty())
+            hasCsv = true;
+        const VerifactuEstado e = verifactuEstadoFromString(
+            sqlQueryModel->data(sqlQueryModel->index(row, TABLE_VERIFACTU_ESTADO)).toString());
+        if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error) {
+            anyBlocking = true;
+            break;
+        }
+    }
+    if (!hasCsv || anyBlocking)
         return QPixmap();
 
     QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, TABLE_TICKET)).toString();
@@ -392,9 +410,9 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         // print the verification leyenda alongside the QR. Only emit it for rows actually
         // accepted by AEAT (estado = ENVIADA) so we never claim verifiability for tickets
         // still PENDIENTE, in ERROR, or ANULADA.
-        const QString estado = sqlQueryModel->data(
+        const QString verifactuState = sqlQueryModel->data(
             sqlQueryModel->index(0, TABLE_VERIFACTU_ESTADO)).toString();
-        if (estado == verifactuEstadoToString(VerifactuEstado::Enviada)) {
+        if (verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)) {
             QXlsx::Format formatVerifactuLeyenda;
             formatVerifactuLeyenda.setFontSize(7);
             formatVerifactuLeyenda.setHorizontalAlignment(QXlsx::Format::AlignHCenter);

@@ -38,7 +38,15 @@ private slots:
 
 private:
     void setFormEnabled(bool enabled);
-    void persistRectification(const VerifactuResult &result);
+    // Inserts the rectificativa row at submit time with estado=PENDIENTE so the
+    // n_recibo is claimed locally before the AEAT round-trip - prevents a regular
+    // MainWindow::saveTicket from re-using the same number while we wait.
+    void insertPlaceholderRow();
+    // Patches the row inserted by insertPlaceholderRow with the AEAT reply: csv /
+    // xml / hash / url + estado=ENVIADA on success, or estado=ERROR + description
+    // on failure. For substitution-mode success it also marks the original rows
+    // RECTIFICADA.
+    void applyRectificationResult(const VerifactuResult &result);
 
     // Top row - ticket lookup
     QLineEdit *m_leTicketNum;

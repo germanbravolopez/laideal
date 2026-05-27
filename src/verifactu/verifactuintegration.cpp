@@ -175,6 +175,10 @@ bool VerifactuIntegration::loadEmitterConfiguration()
     }
 
     m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterName);
+    // setSystemData(name, version, developer) - the developer arg goes only to
+    // VerifactuConfig::m_systemDeveloper which has no live reader (see dead_code_report).
+    // The producer info that actually matters legally is in the Acerca de Verifactu
+    // dialog, sourced from AppSettings.
     m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION), "LAIDEAL");
     m_manager->getConfig()->setServiceKey(serviceKey);
 

@@ -449,14 +449,20 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
 {
     if (dbNotConfigured(db, __func__)) return;
 
-    QString query = "INSERT INTO " + table + " VALUES (";
-    for (int i = 0; i < items.count(); ++i) {
-        query += "'" + items.value(i) + "'";
-        query += (i == items.count() - 1) ? ");" : ", ";
-    }
+    // Build positional placeholders so values bind safely - never concatenate user input
+    // into the SQL (a client named O'Brien would otherwise break the statement, and a
+    // hostile value could close the literal and inject DDL).
+    QString placeholders;
+    for (int i = 0; i < items.count(); ++i)
+        placeholders += (i == 0 ? "?" : ", ?");
+
+    qDebug() << "insertNewItemToTable: INSERT INTO" << table << "VALUES (" << items.count() << "items )";
     db.open();
     QSqlQuery q(db);
-    if (!q.exec(query))
+    q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
+    for (const QString &item : items)
+        q.addBindValue(item);
+    if (!q.exec())
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     db.close();
 }
