@@ -128,6 +128,7 @@ void AppSettings::migrateLegacyKeys()
     removeNested(m_data, {"reports", "listados_gastos_path"});
     removeNested(m_data, {"print",   "template_path"});
     removeNested(m_data, {"print",   "script_path"});
+    removeNested(m_data, {"app",     "icon_path"});
 }
 
 void AppSettings::migrateFromLegacyFiles()
@@ -162,12 +163,6 @@ void AppSettings::migrateFromLegacyFiles()
 // ---------------------------------------------------------------------------
 QString AppSettings::dbPath() const { return str({"database", "path"}); }
 void    AppSettings::setDbPath(const QString &v) { setStr({"database", "path"}, v); }
-
-// ---------------------------------------------------------------------------
-// Application
-// ---------------------------------------------------------------------------
-QString AppSettings::iconPath() const { return str({"app", "icon_path"}); }
-void    AppSettings::setIconPath(const QString &v) { setStr({"app", "icon_path"}, v); }
 
 // ---------------------------------------------------------------------------
 // Reports - single user-configurable root + hardcoded subdirs

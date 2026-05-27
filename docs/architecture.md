@@ -109,7 +109,7 @@ Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on s
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `app.iconPath`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production.
+Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production. The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
 
 App-internal fixed paths (not user-configurable): `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated each print), `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` (rewritten each print, templated with the xlsx path, executed via `cscript //nologo //B`).
 

@@ -4,7 +4,7 @@ Central application controller. Owns the SQLite `db` connection and instantiates
 
 ## Source files
 
-- `src/app/main.cpp` — entry point; loads font and app icon (icon path is hardcoded — known issue)
+- `src/app/main.cpp` — entry point; loads the bundled app icon from the Qt resource `:/icons/laideal.ico` (also embedded in the exe as `IDI_ICON1` for Explorer/shortcut visibility)
 - `src/app/mainwindow.h/cpp` — main window class
 
 ## Key methods

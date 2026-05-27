@@ -83,13 +83,6 @@ void MainWindow::mainwindowInitialSettings()
             }
         });
         if (dlg.exec() == QDialog::Accepted) {
-            // Apply icon change immediately (no restart needed)
-            QString iconPath = AppSettings::instance()->iconPath();
-            if (!iconPath.isEmpty()) {
-                QIcon icon(iconPath);
-                QApplication::setWindowIcon(icon);
-                setWindowIcon(icon);
-            }
             // Reload Verifactu with potentially new credentials
             initializeVerifactu();
         }

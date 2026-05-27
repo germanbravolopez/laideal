@@ -19,6 +19,7 @@ add_executable(laideal
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
     main.cpp
+    ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
     ${EXE_SOURCES}
 )
 

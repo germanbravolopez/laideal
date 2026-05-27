@@ -43,12 +43,9 @@ int main(int argc, char *argv[])
     MainWindow w;
     w.setWindowState(Qt::WindowMaximized);
 
-    QString iconPath = settings->iconPath();
-    if (!iconPath.isEmpty()) {
-        QIcon icon(iconPath);
-        a.setWindowIcon(icon);
-        w.setWindowIcon(icon);
-    }
+    QIcon icon(":/icons/laideal.ico");
+    a.setWindowIcon(icon);
+    w.setWindowIcon(icon);
 
     w.show();
     return a.exec();

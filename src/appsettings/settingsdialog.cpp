@@ -68,9 +68,6 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     dbContainer->setLayout(dbLayout);
     fl->addRow(tr("Base de datos (.db):"), dbContainer);
 
-    m_iconPath = new QLineEdit(s->iconPath());
-    fl->addRow(tr("Icono de la aplicación (.ico):"), browseRow(m_iconPath, false, this));
-
     m_ivaRate = new QLineEdit(QString::number(s->ivaRate(), 'f', 1));
     m_ivaRate->setValidator(new QDoubleValidator(0.0, 100.0, 2, m_ivaRate));
     m_ivaRate->setFixedWidth(80);
@@ -175,7 +172,6 @@ void SettingsDialog::accept()
     AppSettings *s = AppSettings::instance();
 
     s->setDbPath(m_dbPath->text().trimmed());
-    s->setIconPath(m_iconPath->text().trimmed());
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
 

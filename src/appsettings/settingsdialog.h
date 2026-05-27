@@ -7,7 +7,7 @@
 
 // Settings dialog - all user-configurable options across the application.
 // Reads from and writes to AppSettings. Call exec(); on Accepted the caller
-// should re-apply settings that take effect at runtime (icon, Verifactu).
+// should re-apply settings that take effect at runtime (Verifactu).
 // DB path changes require an application restart.
 class SettingsDialog : public QDialog
 {
@@ -38,7 +38,6 @@ private:
     void buildVerifactuTab(class QTabWidget *tabs);
 
     QLineEdit *m_dbPath;
-    QLineEdit *m_iconPath;
     QLineEdit *m_ivaRate;
     QCheckBox *m_enablePrinting;
 

@@ -26,10 +26,6 @@ public:
     QString dbPath() const;
     void setDbPath(const QString &v);
 
-    // --- Application ---
-    QString iconPath() const;
-    void setIconPath(const QString &v);
-
     // --- Report output directory ---
     // Single user-configurable root; subdirs are hardcoded inside the getters
     // so the JSON exposes only one path. mkpath() is the caller's responsibility
