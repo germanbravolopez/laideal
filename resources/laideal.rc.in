@@ -1,5 +1,7 @@
 #include <winver.h>
 
+IDI_ICON1 ICON DISCARDABLE "@CMAKE_SOURCE_DIR@/icon/lavadora.ico"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION    @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@
  PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@
@@ -24,7 +26,7 @@ BEGIN
             VALUE "OriginalFilename", "laideal.exe\0"
             VALUE "ProductName",      "laideal\0"
             VALUE "ProductVersion",   "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@\0"
-            VALUE "LegalCopyright",   "German Bravo Lopez (C), 2024\0"
+            VALUE "LegalCopyright",   "German Bravo Lopez (C), @CURRENT_YEAR@\0"
         END
     END
     BLOCK "VarFileInfo"

@@ -2,15 +2,25 @@
 #include "ui_recog_prendas.h"
 #include "sql_lite.h"
 #include "imprimir.h"
+#include "appsettings.h"
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
+#include "verifactuintegration.h"
+#include <QDateTime>
+#include <QDialog>
+#include <QPushButton>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QStatusBar>
 
 RecogPrendas::RecogPrendas(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::RecogPrendas)
 {
     ui->setupUi(this);
-    initial_settings();
+    initialSettings();
 }
 
 RecogPrendas::~RecogPrendas()
@@ -18,18 +28,18 @@ RecogPrendas::~RecogPrendas()
     delete ui;
 }
 
-void RecogPrendas::initial_settings()
+void RecogPrendas::initialSettings()
 {
-    reset_all_contents();
+    resetAllContents();
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
     ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
     ui->le_search->setFocus();
     ui->tableView->verticalHeader()->setVisible(false);
 }
 
-void RecogPrendas::reset_all_contents()
+void RecogPrendas::resetAllContents()
 {
-    is_cell_clicked = false;
+    isCellClicked = false;
     ui->le_nr_ticket->clear();
     ui->le_phone->clear();
     ui->le_client->clear();
@@ -42,25 +52,42 @@ void RecogPrendas::reset_all_contents()
     ui->le_total_price->clear();
     ui->pb_payment->setChecked(false);
     ui->pb_state->setChecked(false);
+    ui->pb_payment->setEnabled(false);
+    ui->pb_state->setEnabled(false);
+    ui->pb_pay_all->setEnabled(false);
+    ui->pb_pku_all->setEnabled(false);
+    ui->pb_separ_garm->setEnabled(false);
+    ui->pb_print->setEnabled(false);
+    ui->pb_verifactu->setEnabled(false);
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
 }
 
-void RecogPrendas::update_db(UpdateDBop op, int n_garm)
+void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
-    bool edit_lock = sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_EDIT_LOCK)).toBool();
+    bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_EDIT_LOCK)).toBool();
+    static const char *const opNames[] = {
+        "PAY_YES", "PAY_NO", "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE", "SEPARATE_GARM"
+    };
+    const QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
+    const QString rowHash   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString();
+    qDebug() << "RecogPrendas::updateDb:" << opNames[op]
+             << "ticket=" << ticketNum << "hash=" << rowHash
+             << "editLock=" << editLock << "nGarm=" << nGarm;
     QSqlQuery q;
     switch (op) {
     case PAY_YES:
-        // If edit_lock payment info cannot be changed
-        if (!edit_lock) {
+        // If editLock payment info cannot be changed
+        if (!editLock) {
             // dont update payment date for blocked quarters
-            if (read_lock_for_month_and_year(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1)
+            if (readLockForMonthAndYear(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1) {
+                qWarning() << "updateDb PAY_YES: attempt to update payment date for a blocked quarter:" << ui->de_date_paym->date().toString("dd-MM-yyyy");
                 QMessageBox::warning(this, tr("Trimestre bloqueado"),
                                      tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
                                      QMessageBox::Ok, QMessageBox::Ok);
-            else {
+            } else {
+                QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
                 db.open();
                 q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
                           "n_recibo = :n_re AND hash = :hash");
@@ -68,22 +95,38 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
                 q.bindValue(":new_fecha_pago", ui->de_date_paym->date().toString("dd-MM-yyyy"));
                 q.bindValue(":new_pagado",     ui->pb_payment->text());
                 // Set id values
-                q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-                q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+                q.bindValue(":n_re", ticketNum);
+                q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
                 // Write to db
-                q.exec();
+                if (!q.exec())
+                    qWarning() << "updateDb PAY_YES UPDATE failed -" << q.lastError().text();
                 q.clear();
+                // Check verifactu_estado from DB (not model) so pay-all loop does not double-submit
+                QSqlQuery chk;
+                chk.prepare("SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n LIMIT 1");
+                chk.bindValue(":n", ticketNum);
+                chk.exec();
+                QString estadoDb = chk.next() ? chk.value(0).toString() : "";
                 db.close();
+                // Dedup pay-all loop: if a submit is already in flight for this ticket,
+                // a per-row check of estadoDb is not enough because the async DB write
+                // hasn't happened yet. hasPendingSubmit() consults the in-memory map.
+                if (verifactuEstadoFromString(estadoDb) == VerifactuEstado::NotSubmitted
+                        && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
+                        && !hasPendingSubmit(ticketNum)) {
+                    retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());
+                }
             }
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     case PAY_NO:
-        // If edit_lock payment info cannot be changed
-        if (!edit_lock) {
+        // If editLock payment info cannot be changed
+        if (!editLock) {
             db.open();
             QSqlQuery q;
             q.prepare("UPDATE ingresos SET fecha_pago = :new_fecha_pago, pagado = :new_pagado WHERE "
@@ -92,17 +135,19 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             q.bindValue(":new_fecha_pago", "");
             q.bindValue(":new_pagado",     ui->pb_payment->text());
             // Set id values
-            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+            q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb PAY_NO UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     case PKU_YES:
         db.open();
@@ -112,10 +157,11 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         q.bindValue(":new_fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
         q.bindValue(":new_estado",         ui->pb_state->text());
         // Set id values
-        q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+        q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+        q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb PKU_YES UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -127,10 +173,11 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         q.bindValue(":new_fecha_recogida", "");
         q.bindValue(":new_estado",         ui->pb_state->text());
         // Set id values
-        q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+        q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+        q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb PKU_NO UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
@@ -141,15 +188,16 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
         // Set new values
         q.bindValue(":new_observaciones", ui->le_obsv->text());
         // Set id values
-        q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-        q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+        q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+        q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
         // Write to db
-        q.exec();
+        if (!q.exec())
+            qWarning() << "updateDb OBSV UPDATE failed -" << q.lastError().text();
         q.clear();
         db.close();
         break;
     case SIZE_AND_PRICE:
-        if (!edit_lock && ui->pb_payment->text() == "NO") {
+        if (!editLock && ui->pb_payment->text() == "NO") {
             db.open();
             q.prepare("UPDATE ingresos SET size = :new_size, importe = :new_importe WHERE "
                       "n_recibo = :n_re AND hash = :hash");
@@ -157,40 +205,47 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
             q.bindValue(":new_size", ui->le_size->text());
             q.bindValue(":new_importe", ui->le_price->text());
             // Set id values
-            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+            q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SIZE_AND_PRICE UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
         break;
     case SEPARATE_GARM:
-        // If edit_lock payment info cannot be changed
-        if (!edit_lock) {
+        // If editLock payment info cannot be changed
+        if (!editLock) {
             // Update current garments
-            int new_qty_upd = ui->le_qty->text().toInt() - n_garm;
-            float new_imp_upd = QString::number(new_qty_upd).toFloat() * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
-            if (new_imp_upd < 0) {
+            int newQtyUpd = ui->le_qty->text().toInt() - nGarm;
+            float newImpUpd = QString::number(newQtyUpd).toFloat() * readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
+            if (newImpUpd < 0) {
                 break;
             }
             db.open();
             q.prepare("UPDATE ingresos SET cantidad = :new_cant, importe = :new_impor WHERE "
                       "n_recibo = :n_re AND hash = :hash");
             // Set new values
-            q.bindValue(":new_cant",  QString::number(new_qty_upd));
-            q.bindValue(":new_impor", QString::number(new_imp_upd, 'f', 2).replace(",","."));
+            q.bindValue(":new_cant",  QString::number(newQtyUpd));
+            q.bindValue(":new_impor", QString::number(newImpUpd, 'f', 2).replace(",","."));
             // Set id values
-            q.bindValue(":n_re", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-            q.bindValue(":hash", sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_HASH)).toString());
+            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+            q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_HASH)).toString());
             // Write to db
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SEPARATE_GARM UPDATE failed -" << q.lastError().text();
             q.clear();
             db.close();
 
-            // Insert separated garments
-            float new_imp_ins = n_garm * read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
-            QString hash = gen_hash_16();
+            // Insert separated garments. The split row intentionally leaves verifactu_*
+            // columns NULL: the AEAT submission for this ticket covered the full importe
+            // and the chained Huella is attached to the original rows - re-submitting
+            // the split-off row would create a duplicate-InvoiceID error at AEAT.
+            // Helpers treat NULL/empty verifactu_estado as legacy (NotSubmitted), which
+            // is the desired accounting/print behaviour for split rows.
+            float newImpIns = nGarm * readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
+            QString hash = genHash16();
             db.open();
             q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
                       "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
@@ -207,22 +262,24 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
                 q.bindValue(":fecha_recogida", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
             else
                 q.bindValue(":fecha_recogida", "");
-            q.bindValue(":importe", QString::number(new_imp_ins, 'f', 2).replace(",","."));
-            q.bindValue(":cantidad", QString::number(n_garm));
+            q.bindValue(":importe", QString::number(newImpIns, 'f', 2).replace(",","."));
+            q.bindValue(":cantidad", QString::number(nGarm));
             q.bindValue(":prenda", ui->le_garm->text());
             q.bindValue(":size", ui->le_size->text().replace(",","."));
             q.bindValue(":observaciones", ui->le_obsv->text());
             q.bindValue(":servicio", ui->le_servic->text());
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
-            q.exec();
+            if (!q.exec())
+                qWarning() << "updateDb SEPARATE_GARM INSERT failed -" << q.lastError().text();
             q.clear();
             db.close();
         }
-        else
+        else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
                                  tr("El ticket actual se encuentra bloqueado por la contabilidad."),
                                  QMessageBox::Ok, QMessageBox::Ok);
+        }
         break;
     default:
         break;
@@ -230,38 +287,47 @@ void RecogPrendas::update_db(UpdateDBop op, int n_garm)
     // Search again
     on_pb_search_clicked();
     // Load again data from table
-    update_row_clicked_to_fields();
-    is_cell_clicked = true;
+    updateRowClickedToFields();
+    isCellClicked = true;
 }
 
-void RecogPrendas::update_row_clicked_to_fields()
+void RecogPrendas::updateRowClickedToFields()
 {
     // Update content from clicked row
-    ui->le_nr_ticket->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_TICKET)).toString());
-    ui->le_client->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_CLIENT)).toString());
-    ui->le_phone->setText(select_from_where_like(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
-    ui->le_garm->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_GARMENT)).toString());
-    ui->le_qty->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_QUANTITY)).toString());
-    ui->le_servic->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SERVICE)).toString());
-    ui->le_size->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_SIZE)).toString());
-    ui->le_price->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_PRICE)).toString());
-    ui->le_obsv->setText(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_OBSERV)).toString());
-    ui->pb_payment->setChecked(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_IS_PAYED)).toString() == "SI");
-    ui->pb_state->setChecked(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_STATE)).toString() == "Recogido");
-    ui->de_date_recep->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
-    ui->de_date_paym->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
-    ui->de_date_pickup->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(row_clicked_cell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
+    ui->le_nr_ticket->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString());
+    ui->le_client->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_CLIENT)).toString());
+    ui->le_phone->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
+    ui->le_garm->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_GARMENT)).toString());
+    ui->le_qty->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_QUANTITY)).toString());
+    ui->le_servic->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_SERVICE)).toString());
+    ui->le_size->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_SIZE)).toString());
+    ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_PRICE)).toString());
+    ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_OBSERV)).toString());
+    ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_IS_PAYED)).toString() == "SI");
+    ui->pb_state->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_STATE)).toString() == "Recogido");
+    ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString(),"dd-MM-yyyy"));
+    ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PAY)).toString(),"dd-MM-yyyy"));
+    ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_PKU)).toString(),"dd-MM-yyyy"));
+    // pb_payment kept disabled - per-garment payment would submit a Verifactu invoice
+    // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
+    ui->pb_state->setEnabled(true);
+    ui->pb_pay_all->setEnabled(true);
+    ui->pb_pku_all->setEnabled(true);
+    ui->pb_separ_garm->setEnabled(true);
+    ui->pb_print->setEnabled(true);
+    QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
 
-float RecogPrendas::calculate_price()
+float RecogPrendas::calculatePrice()
 {
-    float item_price = read_garment_price(db, ui->le_garm->text(), ui->le_servic->text());
+    float itemPrice = readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
     if (ui->le_size->text().contains(",")) {
-        QStringList size_splitted = ui->le_size->text().split(",");
-        ui->le_size->setText(size_splitted.first() + "." + size_splitted.last());
+        QStringList sizeSplitted = ui->le_size->text().split(",");
+        ui->le_size->setText(sizeSplitted.first() + "." + sizeSplitted.last());
     }
-    float calculated_price = item_price * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
-    return calculated_price;
+    float calculatedPrice = itemPrice * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
+    return calculatedPrice;
 }
 
 void RecogPrendas::on_le_search_returnPressed()
@@ -276,102 +342,150 @@ void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
 
 void RecogPrendas::on_pb_search_clicked()
 {
-    reset_all_contents();
+    resetAllContents();
     if (ui->le_search->text() != "") {
-        bool ok = false, total_price_active = true;
+        bool ok = false, totalPriceActive = true;
+        QString nameSearchFilter;
         ui->le_search->text().toUInt(&ok);
         if (ok) {
-            if(ui->le_search->text().length() >= 9) {
-                // Phone number
-                QString client_from_phone = select_from_where_like(db, "nombre", "clientes", "tel_fijo",
-                                                                      ui->le_search->text() + "' OR movil like '" + ui->le_search->text(), true, true);
-                if (!client_from_phone.isNull()) {
+            if (ui->le_search->text().length() >= 9) {
+                // Phone number - search tel_fijo OR movil
+                db.open();
+                QSqlQuery phoneQ(db);
+                phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
+                phoneQ.bindValue(":phone", ui->le_search->text());
+                phoneQ.bindValue(":movil", ui->le_search->text());
+                phoneQ.exec();
+                QString clientFromPhone;
+                if (phoneQ.first())
+                    clientFromPhone = phoneQ.value(0).toString();
+                else {
+                    QMessageBox::warning(this, tr("Búsqueda vacía"),
+                                          tr("No se ha encontrado ningún cliente con el teléfono indicado."),
+                                          QMessageBox::Ok, QMessageBox::Ok);
+                }
+                db.close();
+
+                if (!clientFromPhone.isNull()) {
                     db.open();
-                    sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente = '" + client_from_phone + "'");
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
+                    q.bindValue(":cliente", clientFromPhone);
+                    q.exec();
+                    sqlQueryModel->setQuery(std::move(q));
                     db.close();
                 }
             }
             else {
                 // Ticket number
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + ui->le_search->text() + "'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+                q.bindValue(":n_recibo", ui->le_search->text());
+                q.exec();
+                sqlQueryModel->setQuery(std::move(q));
                 db.close();
-                total_price_active = true;
+                totalPriceActive = true;
             }
         }
-        // Search is not a number
         else if (ui->le_search->text().isSimpleText()) {
-            // Text (client, address or another)
-            QDate date_slash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
-            QDate date_dash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
-            QDate date = (!date_slash.isNull()) ? date_slash :
-                         (!date_dash.isNull()) ? date_dash: QDate::currentDate();
-            QString date_type = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
-                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
-                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
-            if (!date_slash.isNull() || !date_dash.isNull()) {
-                // Text is date
+            QDate dateSlash = QDate::fromString(ui->le_search->text(), "dd/MM/yyyy");
+            QDate dateDash = QDate::fromString(ui->le_search->text(), "dd-MM-yyyy");
+            QDate date = (!dateSlash.isNull()) ? dateSlash :
+                         (!dateDash.isNull()) ? dateDash: QDate::currentDate();
+            // date_type values come from a hard-coded ComboBox - not user input
+            QString dateType = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
+                               (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
+                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
+            if (!dateSlash.isNull() || !dateDash.isNull()) {
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE " + date_type + " = '" + date.toString("dd-MM-yyyy") + "'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos WHERE " + dateType + " = :date");
+                q.bindValue(":date", date.toString("dd-MM-yyyy"));
+                q.exec();
+                sqlQueryModel->setQuery(std::move(q));
                 db.close();
             }
             else {
-                // Text is not a date
+                // SQLite LIKE is ASCII-only and won't match García when searching "garcia".
+                // Load all rows and filter client-side so normalization handles diacritics.
                 db.open();
-                sql_query_model->setQuery("SELECT * FROM ingresos WHERE cliente like '%" + ui->le_search->text() + "%'");
+                QSqlQuery q(db);
+                q.prepare("SELECT * FROM ingresos");
+                q.exec();
+                sqlQueryModel->setQuery(std::move(q));
                 db.close();
+                nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
             }
         }
-        else
+        else {
+            qWarning() << "Search: unrecognized input:" << ui->le_search->text();
             QMessageBox::warning(this, tr("Búsqueda incorrecta"),
                                   tr("El contenido de la búsqueda no se ha identificado.\n"
                                   "Hablar con Germán..."),
                                   QMessageBox::Ok, QMessageBox::Ok);
+        }
         // Complete model and set to the view
-        sql_query_model->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("Nº"));
-        sql_query_model->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("Cliente"));
-        sql_query_model->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("Recepción"));
-        sql_query_model->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("Pago"));
-        sql_query_model->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("Recogida"));
-        sql_query_model->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("Importe"));
-        sql_query_model->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("Pagado"));
-        sql_query_model->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("Estado"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Cant."));
-        sql_query_model->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("Prenda"));
-        sql_query_model->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Tam."));
-        sql_query_model->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("Serv."));
-        sql_query_model->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
-        sql_query_model->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
+        sqlQueryModel->setHeaderData(TABLE_TICKET   , Qt::Horizontal, tr("Nº"));
+        sqlQueryModel->setHeaderData(TABLE_CLIENT   , Qt::Horizontal, tr("Cliente"));
+        sqlQueryModel->setHeaderData(TABLE_DATE_RCP , Qt::Horizontal, tr("Recepción"));
+        sqlQueryModel->setHeaderData(TABLE_DATE_PAY , Qt::Horizontal, tr("Pago"));
+        sqlQueryModel->setHeaderData(TABLE_DATE_PKU , Qt::Horizontal, tr("Recogida"));
+        sqlQueryModel->setHeaderData(TABLE_PRICE    , Qt::Horizontal, tr("Importe"));
+        sqlQueryModel->setHeaderData(TABLE_IS_PAYED , Qt::Horizontal, tr("Pagado"));
+        sqlQueryModel->setHeaderData(TABLE_STATE    , Qt::Horizontal, tr("Estado"));
+        sqlQueryModel->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Cant."));
+        sqlQueryModel->setHeaderData(TABLE_GARMENT  , Qt::Horizontal, tr("Prenda"));
+        sqlQueryModel->setHeaderData(TABLE_SIZE     , Qt::Horizontal, tr("Tam."));
+        sqlQueryModel->setHeaderData(TABLE_SERVICE  , Qt::Horizontal, tr("Serv."));
+        sqlQueryModel->setHeaderData(TABLE_OBSERV   , Qt::Horizontal, tr("Obs."));
+        sqlQueryModel->setHeaderData(TABLE_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         proxyModel = new MySortFilterProxyModel(this);
-        proxyModel->setSourceModel(sql_query_model);
+        if (!nameSearchFilter.isEmpty())
+            proxyModel->setNormalizedFilter(nameSearchFilter, TABLE_CLIENT);
+        // Fetch all source rows before handing to proxy (needed for name search with full SELECT)
+        while (sqlQueryModel->canFetchMore())
+            sqlQueryModel->fetchMore();
+        proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
-        ui->tableView->sortByColumn(0, Qt::AscendingOrder);
-        //ui->tableView->setColumnHidden(TABLE_CLIENT, true);
+        ui->tableView->sortByColumn(0, Qt::DescendingOrder);
+        // Hide internal columns not meant for display
+        ui->tableView->setColumnHidden(TABLE_EDIT_LOCK,           true);
+        ui->tableView->setColumnHidden(TABLE_HASH,                true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_CSV,       true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_TIMESTAMP, true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_ESTADO,    true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_ERROR,     true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_URL_QR,    true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_XML,        true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_HASH,       true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_RECTIFIES,  true);
+        ui->tableView->setColumnHidden(TABLE_VERIFACTU_RECT_TYPE,  true);
         ui->tableView->setItemDelegateForColumn(TABLE_PRICE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(TABLE_IS_PAYED, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
         ui->tableView->resizeColumnsToContents();
         ui->tableView->resizeRowsToContents();
-        // Fill total_price if enabled
-        if (total_price_active) {
-            float total_price = 0.0;
-            for (int row = 0; row < sql_query_model->rowCount(); row++)
-                total_price = total_price + sql_query_model->data(sql_query_model->index(row, TABLE_PRICE)).toFloat();
-            ui->le_total_price->setText(QString::number(total_price, 'f', 2));
+        // Fill total_price from proxy rows (reflects the filtered set in all search modes)
+        if (totalPriceActive) {
+            float totalPrice = 0.0;
+            for (int row = 0; row < proxyModel->rowCount(); row++)
+                totalPrice += proxyModel->data(proxyModel->index(row, TABLE_PRICE)).toFloat();
+            ui->le_total_price->setText(QString::number(totalPrice, 'f', 2));
         }
         else
             ui->le_total_price->setText("");
     }
     else {
-        sql_query_model->clear();
-        ui->tableView->setModel(sql_query_model);
+        sqlQueryModel->clear();
+        ui->tableView->setModel(sqlQueryModel);
     }
 }
 
 void RecogPrendas::on_pb_reset_clicked()
 {
-    reset_all_contents();
+    resetAllContents();
     ui->le_search->setText("");
     on_pb_search_clicked();
 }
@@ -381,14 +495,14 @@ void RecogPrendas::on_pb_payment_toggled(bool checked)
     if (checked) {
         ui->pb_payment->setText("SI");
         ui->pb_payment->setStyleSheet("background-color: green; font-size: 18px");
-        if (is_cell_clicked)
-            update_db(PAY_YES);
+        if (isCellClicked)
+            updateDb(PAY_YES);
     }
     else {
         ui->pb_payment->setText("NO");
         ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
-        if (is_cell_clicked)
-            update_db(PAY_NO);
+        if (isCellClicked)
+            updateDb(PAY_NO);
     }
 }
 
@@ -397,71 +511,77 @@ void RecogPrendas::on_pb_state_toggled(bool checked)
     if (checked) {
         ui->pb_state->setText("Recogido");
         ui->pb_state->setStyleSheet("background-color: green; font-size: 18px");
-        if (is_cell_clicked)
-            update_db(PKU_YES);
+        if (isCellClicked)
+            updateDb(PKU_YES);
     }
     else {
         ui->pb_state->setText("En tienda");
         ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
-        if (is_cell_clicked)
-            update_db(PKU_NO);
+        if (isCellClicked)
+            updateDb(PKU_NO);
     }
 }
 
 void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
 {
     // Check if another row is clicked
-    if (index.row() != row_clicked_cell)
-        is_cell_clicked = false;
+    if (index.row() != rowClickedCell)
+        isCellClicked = false;
     // Update pointers to cell clicked
-    row_clicked_cell = index.row();
-    column_clicked_cell = index.column();
-    update_row_clicked_to_fields();
+    rowClickedCell = index.row();
+    columnClickedCell = index.column();
+    updateRowClickedToFields();
+    // Enable action buttons now that a row is selected (pb_payment stays disabled - see updateRowClickedToFields)
+    ui->pb_state->setEnabled(true);
+    ui->pb_pay_all->setEnabled(true);
+    ui->pb_pku_all->setEnabled(true);
+    ui->pb_separ_garm->setEnabled(true);
+    ui->pb_print->setEnabled(true);
     // Set clicked cell
-    is_cell_clicked = true;
+    isCellClicked = true;
 }
 
 void RecogPrendas::on_le_obsv_editingFinished()
 {
-    if (is_cell_clicked)
-        update_db(OBSV);
+    if (isCellClicked)
+        updateDb(OBSV);
 }
 
 void RecogPrendas::on_le_size_editingFinished()
 {
-    if (is_cell_clicked && ui->le_garm->text().contains("m2")) {
-        float price = calculate_price();
+    if (isCellClicked && ui->le_garm->text().contains("m2")) {
+        float price = calculatePrice();
         if (price > 0) {
             ui->le_price->setText(QString::number(price));
-            update_db(SIZE_AND_PRICE);
+            updateDb(SIZE_AND_PRICE);
         }
     }
 }
 
 void RecogPrendas::on_pb_pay_all_clicked()
 {
-    int current_row = row_clicked_cell;
-    for (int row = 0; row < sql_query_model->rowCount(); row++) {
-        on_tableView_clicked(sql_query_model->index(row, 0));
+    int currentRow = rowClickedCell;
+    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
+        on_tableView_clicked(sqlQueryModel->index(row, 0));
         on_pb_payment_toggled(true);
     }
-    if (current_row >= 0)
-        on_tableView_clicked(sql_query_model->index(current_row, 0));
+    if (currentRow >= 0)
+        on_tableView_clicked(sqlQueryModel->index(currentRow, 0));
     else
-        reset_all_contents();
+        resetAllContents();
 }
 
 void RecogPrendas::on_pb_pku_all_clicked()
 {
-    int current_row = row_clicked_cell;
-    for (int row = 0; row < sql_query_model->rowCount(); row++) {
-        on_tableView_clicked(sql_query_model->index(row, 0));
+    int currentRow = rowClickedCell;
+    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
+        on_tableView_clicked(sqlQueryModel->index(row, 0));
         on_pb_state_toggled(true);
     }
-    if (current_row >= 0)
-        on_tableView_clicked(sql_query_model->index(current_row, 0));
+    if (currentRow >= 0)
+        on_tableView_clicked(sqlQueryModel->index(currentRow, 0));
     else
-        reset_all_contents();
+        resetAllContents();
 }
 
 void RecogPrendas::on_pb_print_clicked()
@@ -470,14 +590,191 @@ void RecogPrendas::on_pb_print_clicked()
         Imprimir *ui_impr;
         ui_impr = new Imprimir(this);
         ui_impr->db = db;
-        ui_impr->is_recibo = false;
-        ui_impr->is_complete_invoice = false;
+        ui_impr->isRecibo = false;
+        ui_impr->isCompleteInvoice = false;
+        ui_impr->verifactuIntegration = m_verifactuIntegration;
         ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
-        ui_impr->get_ticket_info();
-        ui_impr->create_ticket_excel(false, false);
-        ui_impr->print_ticket();
+        ui_impr->getTicketInfo();
+        ui_impr->createTicketExcel(false, false);
+        if (AppSettings::instance()->enablePrinting()) {
+            ui_impr->printTicket();
+        }
         this->close();
     }
+}
+
+void RecogPrendas::on_pb_verifactu_clicked()
+{
+    if (!isCellClicked) return;
+
+    QString ticketNum   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_TICKET)).toString();
+    QString state       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ESTADO)).toString();
+    QString csv         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_CSV)).toString();
+    QString timestamp   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_TIMESTAMP)).toString();
+    QString error       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_ERROR)).toString();
+    QString url         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_VERIFACTU_URL_QR)).toString();
+    QString dateStr     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, TABLE_DATE_RCP)).toString();
+    QDate invoiceDate   = QDate::fromString(dateStr, "dd-MM-yyyy");
+
+    QDialog *dlg = new QDialog(this);
+    dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+
+    QVBoxLayout *layout = new QVBoxLayout(dlg);
+
+    auto addRow = [&](const QString &label, const QString &value) {
+        QLabel *lbl = new QLabel(QString("<b>%1</b> %2").arg(label, value.isEmpty() ? "-" : value));
+        lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->addWidget(lbl);
+    };
+
+    addRow("Estado:", state);
+    addRow("CSV:", csv);
+    addRow("Fecha envío:", timestamp);
+    if (!error.isEmpty())
+        addRow("Error:", error);
+    if (!url.isEmpty()) {
+        QLabel *urlLabel = new QLabel(
+            QString("<b>Validación AEAT:</b> <a href='%1'>Abrir en AEAT</a>").arg(url));
+        urlLabel->setOpenExternalLinks(true);
+        urlLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        layout->addWidget(urlLabel);
+    }
+
+    if (verifactuEstadoFromString(state) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+        QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
+        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
+            dlg->accept();
+            retryVerifactuSubmit(ticketNum, invoiceDate);
+        });
+        layout->addWidget(btnRetry);
+    }
+
+    QPushButton *btnClose = new QPushButton("Cerrar", dlg);
+    connect(btnClose, &QPushButton::clicked, dlg, &QDialog::accept);
+    layout->addWidget(btnClose);
+
+    dlg->setMinimumWidth(420);
+    dlg->exec();
+}
+
+void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate)
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "retryVerifactuSubmit: Verifactu not configured for ticket" << ticketNum;
+        return;
+    }
+
+    double total = 0.0;
+    db.open();
+    {
+        QSqlQuery q;
+        q.prepare("SELECT SUM(CAST(importe AS REAL)) FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", ticketNum);
+        q.exec();
+        if (q.next())
+            total = q.value(0).toDouble();
+    }
+    db.close();
+
+    double ivaRate = AppSettings::instance()->ivaRate();
+    ensureVerifactuConnected();
+    const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
+        ticketNum,
+        invoiceDate,
+        total / (1.0 + ivaRate / 100.0),
+        ivaRate,
+        "Servicios de lavanderia"
+    );
+    if (reqId.isEmpty()) {
+        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for ticket" << ticketNum;
+        return;
+    }
+    m_pendingSubmits.insert(reqId, ticketNum);
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+}
+
+void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
+{
+    auto it = m_pendingSubmits.find(requestId);
+    if (it == m_pendingSubmits.end()) return; // not one of ours
+    const QString ticketNum = it.value();
+    m_pendingSubmits.erase(it);
+
+    updateTicketVerifactuFields(ticketNum, result);
+
+    // Refresh the table so the new estado is visible (only if user is still on this view)
+    on_pb_search_clicked();
+    if (rowClickedCell >= 0 && rowClickedCell < sqlQueryModel->rowCount()) {
+        updateRowClickedToFields();
+        isCellClicked = true;
+    }
+
+    if (result.isSuccess()) {
+        qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
+        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
+    } else {
+        qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
+        statusBar()->showMessage(
+            tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+    }
+}
+
+void RecogPrendas::ensureVerifactuConnected()
+{
+    if (m_verifactuIntegration)
+        connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
+                this, &RecogPrendas::onVerifactuRequestFinished, Qt::UniqueConnection);
+}
+
+bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
+{
+    for (auto it = m_pendingSubmits.constBegin(); it != m_pendingSubmits.constEnd(); ++it) {
+        if (it.value() == ticketNum) return true;
+    }
+    return false;
+}
+
+void RecogPrendas::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
+{
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString estado    = verifactuEstadoToString(
+        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
+    qDebug() << "RecogPrendas::updateTicketVerifactuFields: ticket" << ticketNum
+             << "estado=" << estado
+             << "csv=" << (result.isSuccess() ? result.csv : QString())
+             << "hash=" << (result.isSuccess() ? result.rawHash : QString())
+             << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
+             << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
+    db.open();
+    QSqlQuery upd;
+    upd.prepare("UPDATE ingresos SET "
+                "verifactu_csv = :csv, verifactu_timestamp = :ts, "
+                "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+                "verifactu_xml = :xml, verifactu_hash = :hash "
+                "WHERE n_recibo = :n_recibo");
+    if (result.isSuccess()) {
+        upd.bindValue(":csv",    result.csv);
+        upd.bindValue(":ts",     timestamp);
+        upd.bindValue(":estado", estado);
+        upd.bindValue(":error",  "");
+        upd.bindValue(":url",    result.validationUrl);
+        upd.bindValue(":xml",    result.rawXml);
+        upd.bindValue(":hash",   result.rawHash);
+    } else {
+        upd.bindValue(":csv",    "");
+        upd.bindValue(":ts",     timestamp);
+        upd.bindValue(":estado", estado);
+        upd.bindValue(":error",  result.errorDescription);
+        upd.bindValue(":url",    "");
+        upd.bindValue(":xml",    "");
+        upd.bindValue(":hash",   "");
+    }
+    upd.bindValue(":n_recibo", ticketNum);
+    if (!upd.exec())
+        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
+                   << "-" << upd.lastError().text();
+    db.close();
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()
@@ -488,14 +785,18 @@ void RecogPrendas::on_pb_separ_garm_clicked()
             int number = QInputDialog::getInt(this, "Separar prendas",
                                               "¿Cuántas prendas se van a pagar o entregar?", 1, 1, ui->le_qty->text().toInt() - 1, 1, &ok);
             if (ok) {
-                update_db(SEPARATE_GARM, number);
+                updateDb(SEPARATE_GARM, number);
             }
-        } else
+        } else {
+            qWarning() << "Garment split blocked: quantity is not greater than 1";
             QMessageBox::warning(this, "Separar prendas",
                                      "La cantidad de la prenda seleccionada no es mayor de 1, no se puede separar en varios recibos.",
                                      QMessageBox::Ok, QMessageBox::Ok);
-    } else
+        }
+    } else {
+        qWarning() << "Garment split blocked: garment has a non-zero size";
         QMessageBox::warning(this, "Separar prendas",
                                  "No se pueden separar prendas que tienen un tamaño distinto de 0.",
                                  QMessageBox::Ok, QMessageBox::Ok);
+    }
 }

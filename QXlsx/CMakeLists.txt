@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(QXlsx
-    VERSION 1.4.4
+    VERSION 1.5.0
     LANGUAGES CXX
 )
 
@@ -12,11 +12,17 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 if(NOT DEFINED QT_VERSION_MAJOR)
     find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Gui REQUIRED)
 endif()
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Gui REQUIRED)
+
+if(Qt6Gui_VERSION VERSION_GREATER_EQUAL "6.10.0")
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+endif()
+
 set(EXPORT_NAME QXlsxQt${QT_VERSION_MAJOR})
 
 if (QT_VERSION_MAJOR EQUAL 6)
@@ -28,22 +34,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
-if(NOT DEFINED ${QXLSX_PARENTPATH})
-	set(QXLSX_PARENTPATH ${CMAKE_CURRENT_SOURCE_DIR}/../)
-endif(NOT DEFINED ${QXLSX_PARENTPATH})
+if(NOT DEFINED QXLSX_PARENTPATH)
+    set(QXLSX_PARENTPATH ${CMAKE_CURRENT_SOURCE_DIR}/../)
+endif()
 
-if(NOT DEFINED ${QXLSX_HEADERPATH})
-	set(QXLSX_HEADERPATH ${CMAKE_CURRENT_SOURCE_DIR}/../QXlsx/header/)
-endif(NOT DEFINED ${QXLSX_HEADERPATH})
+if(NOT DEFINED QXLSX_HEADERPATH)
+    set(QXLSX_HEADERPATH ${CMAKE_CURRENT_SOURCE_DIR}/../QXlsx/header/)
+endif()
 
-if(NOT DEFINED ${QXLSX_SOURCEPATH})
-	set(QXLSX_SOURCEPATH ${CMAKE_CURRENT_SOURCE_DIR}/../QXlsx/source/)
-endif(NOT DEFINED ${QXLSX_SOURCEPATH})
-
-message("Current Path of QXlsx")
-message(${QXLSX_PARENTPATH})
-message(${QXLSX_HEADERPATH})
-message(${QXLSX_SOURCEPATH})
+if(NOT DEFINED QXLSX_SOURCEPATH)
+    set(QXLSX_SOURCEPATH ${CMAKE_CURRENT_SOURCE_DIR}/../QXlsx/source/)
+endif()
 
 # Due historical reasons this value is kept off
 option(BUILD_SHARED_LIBS "Build in shared lib mode" OFF)
@@ -83,6 +84,7 @@ set(SRC_FILES
     source/xlsxdocument.cpp
     source/xlsxrelationships.cpp
     source/xlsxutility.cpp
+    source/xlsxreadsax.cpp
     header/xlsxabstractooxmlfile_p.h
     header/xlsxchartsheet_p.h
     header/xlsxdocpropsapp_p.h
@@ -112,6 +114,7 @@ set(SRC_FILES
     header/xlsxdrawing_p.h
     header/xlsxrichstring_p.h
     header/xlsxutility_p.h
+    header/xlsxreadsax.h
 )
 
 set(QXLSX_PUBLIC_HEADERS
@@ -152,7 +155,7 @@ target_compile_definitions(QXlsx PRIVATE
     QT_USE_QSTRINGBUILDER
     QT_NO_SIGNALS_SLOTS_KEYWORDS
     QT_USE_FAST_OPERATOR_PLUS
-    QT_DISABLE_DEPRECATED_BEFORE=0x060200
+    QT_DISABLE_DEPRECATED_BEFORE=0x060600
 )
 
 if (NOT WIN32)
@@ -179,42 +182,46 @@ PRIVATE
     ${QXLSX_HEADERPATH}
 PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/header>
-    $<INSTALL_INTERFACE:include/QXlsxQt${QT_VERSION_MAJOR}>
+    $<INSTALL_INTERFACE:include/QXlsx>
 )
 
 set_target_properties(QXlsx PROPERTIES
     OUTPUT_NAME ${EXPORT_NAME}
     VERSION ${PROJECT_VERSION}
-    SOVERSION 0.${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
     PUBLIC_HEADER "${QXLSX_PUBLIC_HEADERS}"
 )
 
+set(CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${EXPORT_NAME}" )
 install(TARGETS QXlsx
-    EXPORT ${EXPORT_NAME}Targets DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    EXPORT ${EXPORT_NAME}Targets DESTINATION ${CMAKECONFIG_INSTALL_DIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT devel
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/QXlsxQt${QT_VERSION_MAJOR} COMPONENT devel
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/QXlsx COMPONENT devel
 )
 
 install(EXPORT ${EXPORT_NAME}Targets
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${EXPORT_NAME}/
+    DESTINATION "${CMAKECONFIG_INSTALL_DIR}"
     FILE ${EXPORT_NAME}Targets.cmake
     NAMESPACE QXlsx::
     COMPONENT devel
 )
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/qxlsx-config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}Config.cmake
-    @ONLY
+configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/qxlsx-config.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}Config.cmake"
+        INSTALL_DESTINATION  ${CMAKECONFIG_INSTALL_DIR}
+        PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR CMAKECONFIG_INSTALL_DIR
 )
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/qxlsx-config-version.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}ConfigVersion.cmake
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/qxlsx-config-version.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}ConfigVersion.cmake"
     @ONLY
 )
 install(
     FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}Config.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}ConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${EXPORT_NAME}/
+        "${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}Config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_NAME}ConfigVersion.cmake"
+    DESTINATION "${CMAKECONFIG_INSTALL_DIR}"
 )
 include(CPackConfig)

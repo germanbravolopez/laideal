@@ -1,6 +1,7 @@
 #include "add_garment.h"
 #include "ui_add_garment.h"
 #include "sql_lite.h"
+#include <QSqlError>
 #include "imprimir.h"
 
 AddGarment::AddGarment(QWidget *parent) :
@@ -8,7 +9,7 @@ AddGarment::AddGarment(QWidget *parent) :
     ui(new Ui::AddGarment)
 {
     ui->setupUi(this);
-    initial_settings();
+    initialSettings();
 }
 
 AddGarment::~AddGarment()
@@ -16,17 +17,17 @@ AddGarment::~AddGarment()
     delete ui;
 }
 
-void AddGarment::initial_settings()
+void AddGarment::initialSettings()
 {
-    reset_all_contents();
+    resetAllContents();
     ui->pb_pagado->setStyleSheet("background-color: red; font-size: 18px");
     ui->pb_estado->setStyleSheet("background-color: red; font-size: 18px");
     ui->le_n_recibo->setFocus();
 }
 
-void AddGarment::reset_all_contents()
+void AddGarment::resetAllContents()
 {
-    ticket_found = false;
+    ticketFound = false;
     ui->le_n_recibo->clear();
     ui->le_cliente->clear();
     ui->de_fecha_rcp->setDate(QDate::currentDate());
@@ -45,31 +46,35 @@ void AddGarment::reset_all_contents()
 void AddGarment::on_pb_search_pressed()
 {
     db.open();
-    sql_query_model->setQuery("SELECT * FROM ingresos WHERE n_recibo = '" + ui->le_n_recibo->text() + "'");
+    QSqlQuery q(db);
+    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+    q.bindValue(":n_recibo", ui->le_n_recibo->text());
+    q.exec();
+    sqlQueryModel->setQuery(std::move(q));
     db.close();
     // check if not empty
-    if (sql_query_model->rowCount() > 0) {
-        ticket_found = true;
-        fill_content_from_db();
-        populate_garments();
+    if (sqlQueryModel->rowCount() > 0) {
+        ticketFound = true;
+        fillContentFromDb();
+        populateGarments();
     } else {
-        ticket_found = false;
+        ticketFound = false;
         QMessageBox::warning(this, "Añadir prenda",
                              "No se han encontrado ningún Nº de recibo para el número introducido.",
                              QMessageBox::Ok, QMessageBox::Ok);
     }
 }
 
-void AddGarment::fill_content_from_db()
+void AddGarment::fillContentFromDb()
 {
-    ui->le_cliente->setText(sql_query_model->data(sql_query_model->index(0, TABLE_CLIENT)).toString());
-    ui->de_fecha_rcp->setDate(QDate::fromString(sql_query_model->data(sql_query_model->index(0, TABLE_DATE_RCP)).toString(), "dd-MM-yyyy"));
+    ui->le_cliente->setText(sqlQueryModel->data(sqlQueryModel->index(0, TABLE_CLIENT)).toString());
+    ui->de_fecha_rcp->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(0, TABLE_DATE_RCP)).toString(), "dd-MM-yyyy"));
 }
 
-void AddGarment::populate_garments()
+void AddGarment::populateGarments()
 {
-    QStringList garment_list = read_column_from_table(db, "nombre", "prendas", "");
-    ui->cb_prenda->addItems(garment_list);
+    QStringList garmentList = readColumnFromTable(db, "nombre", "prendas", "");
+    ui->cb_prenda->addItems(garmentList);
     ui->cb_prenda->setCurrentText("");
 }
 
@@ -97,10 +102,10 @@ void AddGarment::on_pb_estado_toggled(bool checked)
     }
 }
 
-void AddGarment::set_garment_price()
+void AddGarment::setGarmentPrice()
 {
     if (ui->le_cantidad->text() != "") {
-        float price = ui->le_cantidad->text().toFloat() * read_garment_price(db, ui->cb_prenda->currentText(), ui->cb_servicio->currentText());
+        float price = ui->le_cantidad->text().toFloat() * readGarmentPrice(db, ui->cb_prenda->currentText(), ui->cb_servicio->currentText());
         if (price < 0) {
             ui->le_importe->setText("0.00");
         } else {
@@ -116,23 +121,23 @@ void AddGarment::set_garment_price()
 
 void AddGarment::on_le_cantidad_textChanged(const QString &arg1)
 {
-    set_garment_price();
+    setGarmentPrice();
 }
 
 void AddGarment::on_le_size_textChanged(const QString &arg1)
 {
-    set_garment_price();
+    setGarmentPrice();
 }
 
 void AddGarment::on_cb_servicio_currentTextChanged(const QString &arg1)
 {
-    set_garment_price();
+    setGarmentPrice();
 }
 
 void AddGarment::on_cb_prenda_currentTextChanged(const QString &arg1)
 {
     if (ui->cb_prenda->findText(arg1, Qt::MatchExactly) != -1)
-        set_garment_price();
+        setGarmentPrice();
 }
 
 void AddGarment::on_buttonBox_clicked(QAbstractButton *button)
@@ -140,24 +145,26 @@ void AddGarment::on_buttonBox_clicked(QAbstractButton *button)
     if (button == ui->buttonBox->button(QDialogButtonBox::Cancel))
         this->close();
     else if (button == ui->buttonBox->button(QDialogButtonBox::Reset))
-        reset_all_contents();
+        resetAllContents();
     else if (button == ui->buttonBox->button(QDialogButtonBox::Save)) {
-        if (validate_form()) {
-            save_factura();
-            reset_all_contents();
+        if (validateForm()) {
+            saveFactura();
+            resetAllContents();
             this->close();
         }
     }
-    else
+    else {
+        qCritical() << "AddGarment::on_buttonBox_clicked: button not defined";
         QMessageBox::critical(this, "Añadir prenda",
                               "Botón no definido.",
                               QMessageBox::Ok, QMessageBox::Ok);
+        }
 }
 
-bool AddGarment::validate_form()
+bool AddGarment::validateForm()
 {
     bool ok = 1;
-    if (ticket_found) {
+    if (ticketFound) {
         // Avoid n_recibo, client, garment, quantity to be empty
         if (ui->le_n_recibo->text() != "" &&
                 ui->le_cliente->text() != "" &&
@@ -172,7 +179,7 @@ bool AddGarment::validate_form()
             }
             // Check current month is not blocked for payment
             if (ui->pb_pagado->isChecked()) {
-                if (read_lock_for_month_and_year(db, "ingresos", ui->de_fecha_pago->date().month(), ui->de_fecha_pago->date().year()) == 1) {
+                if (readLockForMonthAndYear(db, "ingresos", ui->de_fecha_pago->date().month(), ui->de_fecha_pago->date().year()) == 1) {
                     ok = 0;
                     QMessageBox::warning(this, tr("Añadir prenda"),
                                          tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
@@ -188,16 +195,23 @@ bool AddGarment::validate_form()
         }
     } else {
         ok = 0;
-        QMessageBox::critical(nullptr, "Añadir prenda",
+        qWarning() << "AddGarment::validateForm: no ticket found for receipt number" << ui->le_n_recibo->text();
+        QMessageBox::warning(nullptr, "Añadir prenda",
                               "No se ha buscado ningún Nº recibo previo a guardar los datos actuales.",
                               QMessageBox::Ok, QMessageBox::Ok);
     }
     return ok;
 }
 
-void AddGarment::save_factura()
+void AddGarment::saveFactura()
 {
-    QString hash = gen_hash_16();
+    QString hash = genHash16();
+    qDebug() << "AddGarment::saveFactura: INSERT INTO ingresos ticket=" << ui->le_n_recibo->text()
+             << "cliente=" << ui->le_cliente->text()
+             << "prenda=" << ui->cb_prenda->currentText()
+             << "cantidad=" << ui->le_cantidad->text()
+             << "importe=" << ui->le_importe->text()
+             << "hash=" << hash;
     db.open();
     QSqlQuery q;
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
@@ -223,7 +237,8 @@ void AddGarment::save_factura()
     q.bindValue(":servicio", ui->cb_servicio->currentText());
     q.bindValue(":edit_lock", "0");
     q.bindValue(":hash", hash);
-    q.exec();
+    if (!q.exec())
+        qWarning() << "AddGarment INSERT failed for ticket" << ui->le_n_recibo->text() << "-" << q.lastError().text();
     q.clear();
     db.close();
 }

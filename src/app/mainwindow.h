@@ -7,6 +7,10 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QStyleFactory>
+#include <QHash>
+#include "verifactuintegration.h"
+#include "cancelinvoicedialog.h"
+#include "rectifyinvoicedialog.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -27,30 +31,33 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     QSqlDatabase db;
-    int pb_added_rows = 0;
-    bool debug = false;
+    int pbAddedRows = 0;
 
 private slots:
-    void mainwindow_initial_settings();
-    void reset_all_contents();
+    void mainwindowInitialSettings();
+    void initializeVerifactu();
+    void resetAllContents();
 
     // Custom functions
-    void set_next_ticket_number();
-    void populate_cb_client();
-    void resize_table();
-    void set_service_to_cb(int initial_row);
-    void set_garment_to_cb_and_populate(int initial_row);
-    void set_garment_price(int garment_row, QString garment_text, QString service_text);
+    void setNextTicketNumber();
+    void populateCbClient();
+    void resizeTable();
+    void setServiceToCb(int initialRow);
+    void setGarmentToCbAndPopulate(int initialRow);
+    void setGarmentPrice(int garmentRow, QString garmentText, QString serviceText);
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
 
-    bool validate_ticket();
-    QString remove_special_char(QString str);
-    void check_client_data();
-    bool save_ticket();
-    void print_recibo();
-    void print_fra();
+    bool validateTicket();
+    QString removeSpecialChar(QString str);
+    void checkClientData();
+    void verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount);
+    void saveTicket();
+    void printRecibo();
+    void printFra();
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
+    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
@@ -63,9 +70,9 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
-    void on_populate_prendas();
+    void repopulatePrendas();
     void on_actionListado_de_prendas_triggered();
-    void on_populate_clientes();
+    void repopulateClientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionListado_de_servicios_triggered();
@@ -77,13 +84,21 @@ private slots:
     void on_actionRevertir_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
     void on_actionLimpiar_base_de_datos_triggered();
-    void limpiar_base_de_datos(bool print);
-    void on_actionModo_debug_triggered(bool checked);
+    void cleanDatabase(bool print);
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
+    void on_actionAnular_factura_verifactu_triggered();
+    void on_actionRectificar_factura_verifactu_triggered();
+    void on_actionExportar_registros_aeat_triggered();
+    void on_actionMostrar_log_triggered();
+    void on_actionAcerca_de_Verifactu_triggered();
 
 private:
     Ui::MainWindow *ui;
+    VerifactuIntegration *m_verifactuIntegration;
+    // Async submit tracking: reqId -> ticket number, so the requestFinished handler
+    // can look up which DB rows to update for each Verifactu response.
+    QHash<QString, QString> m_pendingSubmits;
 };
 
 #endif // MAINWINDOW_H

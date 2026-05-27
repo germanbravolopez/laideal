@@ -1,12 +1,34 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "sql_lite.h"
+#include "applogger.h"
+#include <QDateTime>
+#include <QSqlError>
+#include <QDesktopServices>
+#include <QFileInfo>
+#include <QUrl>
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
 #include "contabilidad.h"
 #include "facturas.h"
 #include "add_garment.h"
+#include "appsettings.h"
+#include "settingsdialog.h"
+#include "verifactumanager.h"
+#include "verifactuconfig.h"
+#include "version.h"
+#include <QStatusBar>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QDateEdit>
+#include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QRegularExpression>
+#include <QXmlStreamWriter>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -15,7 +37,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
-    mainwindow_initial_settings();
+    mainwindowInitialSettings();
+    initializeVerifactu();
 }
 
 MainWindow::~MainWindow()
@@ -23,13 +46,57 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::mainwindow_initial_settings()
+void MainWindow::mainwindowInitialSettings()
 {
+    migrateDatabase(db);
+
+    // Settings action - prepended to Archivo menu
+    QAction *actionConfig = new QAction(tr("Configuración..."), this);
+    connect(actionConfig, &QAction::triggered, this, [this]() {
+        SettingsDialog dlg(this);
+        connect(&dlg, &SettingsDialog::testConnectionRequested,
+                &dlg, [&dlg](const QString &nif, const QString &name,
+                             const QString &serviceKey, bool production) {
+            if (nif.isEmpty() || name.isEmpty() || serviceKey.isEmpty()) {
+                QMessageBox::warning(&dlg, tr("Datos incompletos"),
+                    tr("Introduce NIF, nombre y clave de servicio antes de probar la conexión."));
+                return;
+            }
+            VerifactuManager mgr;
+            mgr.getConfig()->setEmitterData(nif, name, name);
+            mgr.getConfig()->setServiceKey(serviceKey);
+            mgr.getConfig()->setEnvironment(production
+                ? VerifactuConfig::PRODUCTION
+                : VerifactuConfig::TESTING);
+
+            VerifactuResult result = mgr.testConnection();
+            const QString env = production ? "PRODUCCIÓN" : "TESTING";
+            const QString endpoint = mgr.getConfig()->getEndpointUrl();
+            if (result.isSuccess()) {
+                QMessageBox::information(&dlg, tr("Conexión correcta"),
+                    tr("Servidor accesible (%1).\n\nEntorno: %2\nNIF: %3\nEndpoint: %4")
+                        .arg(result.errorDescription, env, nif, endpoint));
+            } else {
+                QMessageBox::warning(&dlg, tr("Conexión fallida"),
+                    tr("No se pudo conectar al servidor.\n\nDetalle: %1\nEntorno: %2\nEndpoint: %3")
+                        .arg(result.errorDescription, env, endpoint));
+            }
+        });
+        if (dlg.exec() == QDialog::Accepted) {
+            // Reload Verifactu with potentially new credentials
+            initializeVerifactu();
+        }
+    });
+    ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);
+    ui->menuArchivo->insertAction(ui->menuArchivo->actions().at(1), ui->actionMostrar_log);
+    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(2));
+
     // Taskbar
     ui->menuArchivo->setToolTipsVisible(true);
     ui->menuHerramientas->setToolTipsVisible(true);
     ui->menuImprimir_ticket->setToolTipsVisible(true);
     ui->menuVisualizar->setToolTipsVisible(true);
+    ui->menuAyuda->setToolTipsVisible(true);
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     ui->table_ticket->verticalHeader()->setVisible(false);
@@ -39,18 +106,35 @@ void MainWindow::mainwindow_initial_settings()
     ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 150);
     // Push button settings
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
-    reset_all_contents();
+    resetAllContents();
 }
 
-void MainWindow::reset_all_contents()
+void MainWindow::initializeVerifactu()
+{
+    m_verifactuIntegration = new VerifactuIntegration(this);
+
+    if (!m_verifactuIntegration->initialize()) {
+        qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
+        QMessageBox::warning(this, "Advertencia",
+            QString("No se pudo inicializar Verifactu:\n%1\n\n"
+                    "Las facturas se guardarán localmente.\n"
+                    "Configura Verifactu más tarde.")
+            .arg(m_verifactuIntegration->getLastError()));
+    }
+
+    connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
+            this, &MainWindow::onVerifactuRequestFinished);
+}
+
+void MainWindow::resetAllContents()
 {
     ui->cb_client->clear();
     ui->table_ticket->clearContents();
-    set_next_ticket_number();
-    populate_cb_client();
-    resize_table();
-    set_service_to_cb(0); // Set rows starting from 0
-    set_garment_to_cb_and_populate(0); // Set rows starting from 0
+    setNextTicketNumber();
+    populateCbClient();
+    resizeTable();
+    setServiceToCb(0); // Set rows starting from 0
+    setGarmentToCbAndPopulate(0); // Set rows starting from 0
     ui->le_addr->clear();
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
@@ -63,116 +147,112 @@ void MainWindow::reset_all_contents()
  * CUSTOM FUNCTIONS
  *******************************************************************************************/
 
-void MainWindow::set_next_ticket_number()
+void MainWindow::setNextTicketNumber()
 {
-    ui->le_nr_ticket->setText(QString::number(read_max_value_in_column_from_table(db, "n_recibo", "ingresos") + 1));
+    ui->le_nr_ticket->setText(QString::number(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos") + 1));
 }
 
-void MainWindow::populate_cb_client()
+void MainWindow::populateCbClient()
 {
-    ui->cb_client->addItems(read_column_from_table(db, "nombre", "clientes", ""));
+    ui->cb_client->addItems(readColumnFromTable(db, "nombre", "clientes", ""));
     ui->cb_client->setCurrentText("");
 }
 
-void MainWindow::resize_table()
+void MainWindow::resizeTable()
 {
-    for (int row = 0; row < pb_added_rows; row++) {
+    for (int row = 0; row < pbAddedRows; row++) {
         ui->table_ticket->removeRow(ui->table_ticket->rowCount() - 1);
     }
-    pb_added_rows = 0;
+    pbAddedRows = 0;
 }
 
-void MainWindow::set_service_to_cb(int initial_row = 0)
+void MainWindow::setServiceToCb(int initialRow = 0)
 {
-    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
+    for (int row = initialRow; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBox = new QComboBox();
         comBox->addItem("Limp.");
         comBox->addItem("Plan.");
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_SERV, comBox);
-        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV)),
-                SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbServChanged(QString))
-                );
+                &QComboBox::currentTextChanged,
+                this, &MainWindow::cbServChanged);
     }
 }
 
-void MainWindow::set_garment_to_cb_and_populate(int initial_row = 0)
+void MainWindow::setGarmentToCbAndPopulate(int initialRow = 0)
 {
-    // Get garment from db to a string list
-    QStringList garment_list = read_column_from_table(db, "nombre", "prendas", "");
-    // Create cb for all garment and populate the list
-    for (int row = initial_row; row < ui->table_ticket->rowCount(); row++) {
+    QStringList garmentList = readColumnFromTable(db, "nombre", "prendas", "");
+    for (int row = initialRow; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBoxPrenda = new QComboBox();
         comBoxPrenda->setAutoFillBackground(true);
         comBoxPrenda->setEditable(true);
-        comBoxPrenda->addItems(garment_list);
+        comBoxPrenda->addItems(garmentList);
         comBoxPrenda->setCurrentText("");
         comBoxPrenda->setObjectName("cb_prenda_" + QString::number(row));
         ui->table_ticket->setCellWidget(row, TABLE_TICKET_GARM, comBoxPrenda);
-        // Connect each ComboBox to a different function
         connect(qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM)),
-                SIGNAL(currentTextChanged(QString)),
-                this, SLOT(cbGarmChanged(QString))
-                );
+                &QComboBox::currentTextChanged,
+                this, &MainWindow::cbGarmChanged);
     }
 }
 
-void MainWindow::set_garment_price(int garment_row,
-                                   QString garment_text,
-                                   QString service_text)
+void MainWindow::setGarmentPrice(int garmentRow,
+                                 QString garmentText,
+                                 QString serviceText)
 {
-    QTableWidgetItem *qnty_item(ui->table_ticket->item(garment_row, TABLE_TICKET_QNTY));
+    QTableWidgetItem *qntyItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_QNTY));
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setText("");
-    if (qnty_item) {
-        float price = qnty_item->text().toFloat() * read_garment_price(db, garment_text, service_text);
+    if (qntyItem) {
+        float price = qntyItem->text().toFloat() * readGarmentPrice(db, garmentText, serviceText);
         if (price < 0) {
             price = 0.0;
         } else {
             // Check if any size is filled
-            QTableWidgetItem *size_item(ui->table_ticket->item(garment_row, TABLE_TICKET_SIZE));
-            if (size_item && size_item->text() != "" && size_item->text().toFloat() != 0.0) {
-                float size = size_item->text().toFloat() * price;
+            QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
+            if (sizeItem && sizeItem->text() != "" && sizeItem->text().toFloat() != 0.0) {
+                float size = sizeItem->text().toFloat() * price;
                 item->setText(QString::number(size, 'f', 2));
             }
             else
                 item->setText(QString::number(price, 'f', 2));
         }
     }
-    else
+    else {
+        qWarning() << "setGarmentPrice: quantity field is empty for row" << garmentRow;
         QMessageBox::warning(nullptr, "Error en la casilla de cantidad",
                               "Cantidad de prendas está vacía.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
+    }
+    ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, item);
 }
 
 void MainWindow::cbGarmChanged(const QString &text)
 {
-    int garment_row = ui->table_ticket->currentRow();
-    QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_SERV));
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garment_row, TABLE_TICKET_GARM));
+    int garmentRow = ui->table_ticket->currentRow();
+    QComboBox *cbService = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garmentRow, TABLE_TICKET_SERV));
+    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garmentRow, TABLE_TICKET_GARM));
     // Check garment is included in combobox
-    if (cb_garment->findText(text, Qt::MatchExactly) != -1)
-        set_garment_price(garment_row, text, cb_service->currentText());
-    else if (cb_garment->currentText() == "") {
+    if (cbGarment->findText(text, Qt::MatchExactly) != -1)
+        setGarmentPrice(garmentRow, text, cbService->currentText());
+    else if (cbGarment->currentText() == "") {
         QTableWidgetItem *item = new QTableWidgetItem;
-        ui->table_ticket->setItem(garment_row, TABLE_TICKET_PRIC, item);
+        ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, item);
     }
 }
 
 void MainWindow::cbServChanged(const QString &text)
 {
-    int service_row = ui->table_ticket->currentRow();
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(service_row, TABLE_TICKET_GARM));
-    if (cb_garment->currentText() != "")
-        set_garment_price(service_row, cb_garment->currentText(), text);
+    int serviceRow = ui->table_ticket->currentRow();
+    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(serviceRow, TABLE_TICKET_GARM));
+    if (cbGarment->currentText() != "")
+        setGarmentPrice(serviceRow, cbGarment->currentText(), text);
 }
 
-bool MainWindow::validate_ticket()
+bool MainWindow::validateTicket()
 {
     QMessageBox msgBox;
-    float total_cost = 0.0;
+    float totalCost = 0.0;
     if (ui->cb_client->currentText().isEmpty()) {
         msgBox.setText("No se ha introducido ningún cliente.");
         msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
@@ -196,8 +276,8 @@ bool MainWindow::validate_ticket()
                     return 0;
                 }
                 else {
-                    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-                    if (cb_garment->currentText().isEmpty()) {
+                    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+                    if (cbGarment->currentText().isEmpty()) {
                         msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
                         msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                         msgBox.exec();
@@ -205,13 +285,13 @@ bool MainWindow::validate_ticket()
                     }
                 }
                 // If there is data in the row get the float and accumulate
-                total_cost = total_cost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
+                totalCost = totalCost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
             }
         }
-        if (total_cost == 0.0) {
-            QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
-            QString left_side = cb_garment->currentText().left(8);
-            if (left_side == "Alfombra")
+        if (totalCost == 0.0) {
+            QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
+            QString leftSide = cbGarment->currentText().left(8);
+            if (leftSide == "Alfombra")
                 return 1;
             msgBox.setText("La suma de los IMPORTES individuales es 0.");
             msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
@@ -220,7 +300,7 @@ bool MainWindow::validate_ticket()
         }
         else {
             // If there is data in lbl_cost_total it has to match with the previous calculation
-            if (ui->le_cost_total->text().toFloat() != total_cost) {
+            if (ui->le_cost_total->text().toFloat() != totalCost) {
                 msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
                 msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                 msgBox.exec();
@@ -228,7 +308,7 @@ bool MainWindow::validate_ticket()
             }
             else {
                 // if the current date belongs to a locked quarter, data cannot be saved
-                if (read_lock_for_month_and_year(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
+                if (readLockForMonthAndYear(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
                     msgBox.setText("No se puede introducir un nuevo recibo en un trimestre que tiene la contabilidad cerrada.");
                     msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
                     msgBox.exec();
@@ -241,7 +321,7 @@ bool MainWindow::validate_ticket()
     }
 }
 
-QString MainWindow::remove_special_char(QString str)
+QString MainWindow::removeSpecialChar(QString str)
 {
     str = str.normalized(QString::NormalizationForm_D).toLatin1();
     int index = str.indexOf("?");
@@ -252,46 +332,148 @@ QString MainWindow::remove_special_char(QString str)
     return str;
 }
 
-void MainWindow::check_client_data()
+void MainWindow::checkClientData()
 {
     QString currentClient = ui->cb_client->currentText();
     if (ui->cb_client->findText(currentClient) >= 0) {
-        update_item_to_client(db, "tel_fijo",  ui->le_phone->text(),  currentClient);
-        update_item_to_client(db, "movil",     ui->le_mobile->text(), currentClient);
-        update_item_to_client(db, "direccion", ui->le_addr->text(),   currentClient);
+        updateItemToClient(db, "tel_fijo",  ui->le_phone->text(),  currentClient);
+        updateItemToClient(db, "movil",     ui->le_mobile->text(), currentClient);
+        updateItemToClient(db, "direccion", ui->le_addr->text(),   currentClient);
     }
     else {
-        currentClient = remove_special_char(currentClient.simplified().toLower());
-        bool client_found = false;
+        currentClient = removeSpecialChar(currentClient.simplified().toLower());
+        bool clientFound = false;
         for (int idx = 0; idx < ui->cb_client->count(); idx++) {
-            QString client_in_cb = remove_special_char(ui->cb_client->itemText(idx).simplified().toLower());
-            if (currentClient == client_in_cb)
-                client_found = true;
+            QString clientInCb = removeSpecialChar(ui->cb_client->itemText(idx).simplified().toLower());
+            if (currentClient == clientInCb)
+                clientFound = true;
         }
-        if (!client_found)
-            add_new_client(db, ui->cb_client->currentText(), ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
-        else
-
+        if (!clientFound)
+            addNewClient(db, ui->cb_client->currentText(), ui->le_phone->text(), ui->le_addr->text(), ui->le_mobile->text());
+        else {
+            qDebug() << "checkClientData: client found in database after removing special characters like accents or 'ñ'. "
+                     << "The data entered for the client in this receipt has not been added to the client in the client list. "
+                     << "If you want to update the data, add manually in the client list.";
             QMessageBox::information(this, "Listado de clientes",
                                   "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
                                   "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado de clientes. "
                                   "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
                                   QMessageBox::Ok,
                                   QMessageBox::Ok);
+        }
     }
 
 }
 
-bool MainWindow::save_ticket()
+void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
 {
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qDebug() << "Verifactu not configured - skipping invoice submission for ticket" << ticketNum;
+        return;
+    }
+    double ivaRate = AppSettings::instance()->ivaRate();
+    const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
+        ticketNum,
+        invoiceDate,
+        totalAmount / (1.0 + ivaRate / 100.0),
+        ivaRate,
+        "Servicios de lavanderia"
+    );
+    if (reqId.isEmpty()) {
+        qWarning() << "Verifactu submit rejected for ticket" << ticketNum;
+        return;
+    }
+    m_pendingSubmits.insert(reqId, ticketNum);
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+}
+
+void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
+{
+    auto it = m_pendingSubmits.find(requestId);
+    if (it == m_pendingSubmits.end()) return; // not one of ours (cancel/QR/etc. or other consumer)
+    const QString ticketNum = it.value();
+    m_pendingSubmits.erase(it);
+
+    updateTicketVerifactuFields(ticketNum, result);
+
+    if (result.isSuccess()) {
+        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
+    } else {
+        statusBar()->showMessage(
+            tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
+    }
+}
+
+void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
+{
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString estado    = verifactuEstadoToString(
+        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
+    qDebug() << "MainWindow::updateTicketVerifactuFields: ticket" << ticketNum
+             << "estado=" << estado
+             << "csv=" << (result.isSuccess() ? result.csv : QString())
+             << "hash=" << (result.isSuccess() ? result.rawHash : QString())
+             << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
+             << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
+    db.open();
+    QSqlQuery q;
+    q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "WHERE n_recibo = :n_recibo");
+    if (result.isSuccess()) {
+        q.bindValue(":csv",    result.csv);
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", estado);
+        q.bindValue(":error",  "");
+        q.bindValue(":url",    result.validationUrl);
+        q.bindValue(":xml",    result.rawXml);
+        q.bindValue(":hash",   result.rawHash);
+    } else {
+        q.bindValue(":csv",    "");
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", estado);
+        q.bindValue(":error",  result.errorDescription);
+        q.bindValue(":url",    "");
+        q.bindValue(":xml",    "");
+        q.bindValue(":hash",   "");
+    }
+    q.bindValue(":n_recibo", ticketNum);
+    if (!q.exec())
+        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
+                   << "-" << q.lastError().text();
+    db.close();
+}
+
+
+void MainWindow::saveTicket()
+{
+    // Rows are always written with verifactu_estado = PENDIENTE (or empty if Verifactu is
+    // not configured for this ticket). The async submit handler patches the rows with
+    // CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
+    qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
+             << "rows:" << ui->table_ticket->rowCount();
+
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
-            QString hash = gen_hash_16();
+            QString hash = genHash16();
+            qDebug() << "saveTicket: INSERT row" << row << "ticket=" << ui->le_nr_ticket->text()
+                     << "importe=" << ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text()
+                     << "hash=" << hash;
             db.open();
             QSqlQuery q;
-            q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
-                      "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
+            q.prepare("INSERT INTO ingresos "
+                      "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
+                      "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                      "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr, "
+                      "verifactu_xml, verifactu_hash) "
+                      "VALUES "
+                      "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
+                      ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
+                      ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr, "
+                      ":verifactu_xml, :verifactu_hash);");
             q.bindValue(":n_recibo", ui->le_nr_ticket->text());
             q.bindValue(":cliente", ui->cb_client->currentText());
             q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
@@ -304,8 +486,8 @@ bool MainWindow::save_ticket()
             q.bindValue(":pagado", ui->pb_payment->text());
             q.bindValue(":estado", "En tienda");
             q.bindValue(":cantidad", ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text());
-            QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-            q.bindValue(":prenda", cb_garment->currentText());
+            QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+            q.bindValue(":prenda", cbGarment->currentText());
             if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
                 q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().replace(",","."));
             else
@@ -314,48 +496,61 @@ bool MainWindow::save_ticket()
                 q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
             else
                 q.bindValue(":observaciones", "");
-            QComboBox *cb_service = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
-            q.bindValue(":servicio", cb_service->currentText());
+            QComboBox *cbService = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
+            q.bindValue(":servicio", cbService->currentText());
             q.bindValue(":edit_lock", "0");
             q.bindValue(":hash", hash);
-            q.exec();
+            q.bindValue(":verifactu_csv",       "");
+            q.bindValue(":verifactu_timestamp", "");
+            q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+            q.bindValue(":verifactu_error",     "");
+            q.bindValue(":verifactu_url_qr",    "");
+            q.bindValue(":verifactu_xml",       "");
+            q.bindValue(":verifactu_hash",      "");
+            if (!q.exec())
+                qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
+                           << "row" << row << "-" << q.lastError().text();
             q.clear();
             db.close();
         }
     }
-    // return boolean of payed ticket
-    if (ui->pb_payment->text() == "SI")
-        return true;
-    else
-        return false;
 }
 
-void MainWindow::print_recibo()
+void MainWindow::printRecibo()
+{
+    // Save-time print: AEAT submission is in flight (async). DB still has empty CSV,
+    // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
+    // given a reprint via RecogPrendas after AEAT replies.
+    Imprimir *ui_impr;
+    ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->isRecibo = true;
+    ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = nullptr;
+    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
+    ui_impr->getTicketInfo();
+    ui_impr->createTicketExcel(true, ui->pb_payment->isChecked());
+    if (AppSettings::instance()->enablePrinting()) {
+        ui_impr->printTicket();
+        ui_impr->createTicketExcel(false, ui->pb_payment->isChecked());
+        ui_impr->printTicket();
+    }
+}
+
+void MainWindow::printFra()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
-    ui_impr->is_recibo = true;
-    ui_impr->is_complete_invoice = false;
+    ui_impr->isRecibo = false;
+    ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = nullptr;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
-    ui_impr->get_ticket_info();
-    ui_impr->create_ticket_excel(true, ui->pb_payment->isChecked());
-    ui_impr->print_ticket();
-    ui_impr->create_ticket_excel(false, ui->pb_payment->isChecked());
-    ui_impr->print_ticket();
-}
-
-void MainWindow::print_fra()
-{
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
-    ui_impr->is_recibo = false;
-    ui_impr->is_complete_invoice = false;
-    ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
-    ui_impr->get_ticket_info();
-    ui_impr->create_ticket_excel(false, false);
-    ui_impr->print_ticket();
+    ui_impr->getTicketInfo();
+    ui_impr->createTicketExcel(false, false);
+    if (AppSettings::instance()->enablePrinting()) {
+        ui_impr->printTicket();
+    }
 }
 
 /********************************************************************************************
@@ -378,16 +573,23 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 {
     if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
-        reset_all_contents();
+        resetAllContents();
     else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
-        if (validate_ticket()) {
-            check_client_data();
-            bool payed = save_ticket();
-            if (!debug)
-                print_recibo();
-            if (!debug && payed)
-                print_fra();
-            reset_all_contents();
+        if (validateTicket()) {
+            checkClientData();
+            const QString ticketNum   = ui->le_nr_ticket->text();
+            const QDate   invoiceDate = ui->de_date_recep->date();
+            const bool    isPaid      = ui->pb_payment->text() == "SI";
+            const double  totalAmount = ui->le_cost_total->text().toDouble();
+
+            saveTicket();
+            if (isPaid) {
+                verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+                printFra();
+            } else {
+                printRecibo();
+            }
+            resetAllContents();
         }
     }
 }
@@ -395,39 +597,39 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 {
     if (arg1 != "") {
-        ui->le_phone->setText(search_item_from_client(db, "tel_fijo", arg1, false));
-        ui->le_mobile->setText(search_item_from_client(db, "movil", arg1, false));
-        ui->le_addr->setText(search_item_from_client(db, "direccion", arg1, false));
+        ui->le_phone->setText(searchItemFromClient(db, "tel_fijo", arg1, false));
+        ui->le_mobile->setText(searchItemFromClient(db, "movil", arg1, false));
+        ui->le_addr->setText(searchItemFromClient(db, "direccion", arg1, false));
     }
 }
 
 void MainWindow::on_table_ticket_cellChanged(int row, int column)
 {
-    QComboBox *cb_garment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
     if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE) {
-        if (cb_garment->currentText() != "")
-            cbGarmChanged(cb_garment->currentText());
+        if (cbGarment->currentText() != "")
+            cbGarmChanged(cbGarment->currentText());
     }
     else if (column == TABLE_TICKET_PRIC) {
-        float total_price = 0.0;
-        for (int row_cnt = 0; row_cnt < ui->table_ticket->rowCount(); row_cnt++) {
-            QTableWidgetItem *price_item(ui->table_ticket->item(row_cnt, column));
-            if (price_item && price_item->text() != "" && price_item->text().toFloat() != 0.0) {
-                float price_value = price_item->text().toFloat();
-                price_item->setText(QString::number(price_value, 'f', 2));
-                total_price = total_price + price_value;
+        float totalPrice = 0.0;
+        for (int rowCnt = 0; rowCnt < ui->table_ticket->rowCount(); rowCnt++) {
+            QTableWidgetItem *priceItem(ui->table_ticket->item(rowCnt, column));
+            if (priceItem && priceItem->text() != "" && priceItem->text().toFloat() != 0.0) {
+                float priceValue = priceItem->text().toFloat();
+                priceItem->setText(QString::number(priceValue, 'f', 2));
+                totalPrice = totalPrice + priceValue;
             }
         }
-        ui->le_cost_total->setText(QString::number(total_price, 'f', 2));
+        ui->le_cost_total->setText(QString::number(totalPrice, 'f', 2));
     }
 }
 
 void MainWindow::on_pb_add_row_clicked()
 {
-    pb_added_rows++;
+    pbAddedRows++;
     ui->table_ticket->insertRow(ui->table_ticket->rowCount());
-    set_service_to_cb(ui->table_ticket->rowCount() - 1);
-    set_garment_to_cb_and_populate(ui->table_ticket->rowCount() - 1);
+    setServiceToCb(ui->table_ticket->rowCount() - 1);
+    setGarmentToCbAndPopulate(ui->table_ticket->rowCount() - 1);
 }
 
 /********************************************************************************************
@@ -444,14 +646,14 @@ void MainWindow::on_actionIngresos_triggered()
     QString title = "Ingresos";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "ingresos";
+    ui_listado->tableName = "ingresos";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
@@ -460,21 +662,21 @@ void MainWindow::on_actionGastos_triggered()
     QString title = "Gastos";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "gastos";
+    ui_listado->tableName = "gastos";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
-void MainWindow::on_populate_prendas()
+void MainWindow::repopulatePrendas()
 {
-    set_garment_to_cb_and_populate(0);
-    limpiar_base_de_datos(false);
+    setGarmentToCbAndPopulate(0);
+    cleanDatabase(false);
 }
 
 void MainWindow::on_actionListado_de_prendas_triggered()
@@ -482,20 +684,20 @@ void MainWindow::on_actionListado_de_prendas_triggered()
     QString title = "Listado de prendas";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "prendas";
+    ui_listado->tableName = "prendas";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
-void MainWindow::on_populate_clientes()
+void MainWindow::repopulateClientes()
 {
-    populate_cb_client();
+    populateCbClient();
 }
 
 void MainWindow::on_actionListado_de_clientes_triggered()
@@ -503,14 +705,14 @@ void MainWindow::on_actionListado_de_clientes_triggered()
     QString title = "Listado de clientes";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "clientes";
+    ui_listado->tableName = "clientes";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
@@ -519,14 +721,14 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     QString title = "Listado de proveedores";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "proveedores";
+    ui_listado->tableName = "proveedores";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
@@ -535,14 +737,14 @@ void MainWindow::on_actionListado_de_servicios_triggered()
     QString title = "Listado de servicios";
     Listado *ui_listado;
     ui_listado = new Listado(this);
-    ui_listado->table_name = "servicios";
+    ui_listado->tableName = "servicios";
     ui_listado->db = db;
     ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
-    ui_listado->populate_table();
-    connect(ui_listado, &Listado::populate_clientes, this, &MainWindow::on_populate_clientes);
-    connect(ui_listado, &Listado::populate_prendas, this, &MainWindow::on_populate_prendas);
+    ui_listado->populateTable();
+    connect(ui_listado, &Listado::populateClientes, this, &MainWindow::repopulateClientes);
+    connect(ui_listado, &Listado::populatePrendas, this, &MainWindow::repopulatePrendas);
     ui_listado->show();
 }
 
@@ -551,6 +753,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
     RecogPrendas *ui_recog;
     ui_recog = new RecogPrendas(this);
     ui_recog->db = db;
+    ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
 }
@@ -560,8 +763,9 @@ void MainWindow::on_actionRecibo_triggered()
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
-    ui_impr->is_recibo = true;
-    ui_impr->is_complete_invoice = false;
+    ui_impr->isRecibo = true;
+    ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir recibo");
     ui_impr->show();
 }
@@ -571,8 +775,9 @@ void MainWindow::on_actionFactura_triggered()
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
-    ui_impr->is_recibo = false;
-    ui_impr->is_complete_invoice = false;
+    ui_impr->isRecibo = false;
+    ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir factura");
     ui_impr->show();
 }
@@ -582,8 +787,9 @@ void MainWindow::on_actionFactura_completa_triggered()
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
     ui_impr->db = db;
-    ui_impr->is_recibo = false;
-    ui_impr->is_complete_invoice = true;
+    ui_impr->isRecibo = false;
+    ui_impr->isCompleteInvoice = true;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
     ui_impr->setWindowTitle("Imprimir factura completa");
     ui_impr->show();
 }
@@ -602,8 +808,8 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
     ui_rev_cont = new Contabilidad(this);
     ui_rev_cont->db = db;
     ui_rev_cont->setWindowTitle("Revertir Contabilidad");
-    ui_rev_cont-> revertir_on = true;
-    ui_rev_cont-> reset_all_contents();
+    ui_rev_cont->revertirOn = true;
+    ui_rev_cont->resetAllContents();
     ui_rev_cont->show();
 }
 
@@ -612,40 +818,35 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     Facturas *ui_facturas;
     ui_facturas = new Facturas(this);
     ui_facturas->db = db;
-    ui_facturas->populate_empresas();
-    ui_facturas->populate_servicios();
+    ui_facturas->populateEmpresas();
+    ui_facturas->populateServicios();
     ui_facturas->show();
 }
 
 void MainWindow::on_actionLimpiar_base_de_datos_triggered()
 {
-    limpiar_base_de_datos(true);
+    cleanDatabase(true);
 }
 
-void MainWindow::limpiar_base_de_datos(bool print)
+void MainWindow::cleanDatabase(bool print)
 {
     // Change the cursor to a loading icon
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    int gastos_cnt = update_comas_in_decimal_data(db, "gastos", "importe");
-    int ingresos_cnt = update_comas_in_decimal_data(db, "ingresos", "importe");
-    ingresos_cnt += update_comas_in_decimal_data(db, "ingresos", "size");
-    int prendas_cnt = update_comas_in_decimal_data(db, "prendas", "precio_limpieza");
-    prendas_cnt += update_comas_in_decimal_data(db, "prendas", "precio_plancha");
+    int gastosCnt = updateComasInDecimalData(db, "gastos", "importe");
+    int ingresosCnt = updateComasInDecimalData(db, "ingresos", "importe");
+    ingresosCnt += updateComasInDecimalData(db, "ingresos", "size");
+    int prendasCnt = updateComasInDecimalData(db, "prendas", "precio_limpieza");
+    prendasCnt += updateComasInDecimalData(db, "prendas", "precio_plancha");
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
     if (print)
         QMessageBox::information(this, "Limpieza de la base de datos",
                                  "Se han corregido los siguientes importes decimales que se encontraban"
                                  " en la base de datos con ',' en lugar de '.':\n"
-                                 + QString::number(gastos_cnt) + " en la tabla de gastos.\n"
-                                 + QString::number(ingresos_cnt) + " en la tabla de ingresos.\n"
-                                 + QString::number(prendas_cnt) + " en la tabla de lista de prendas.",
+                                 + QString::number(gastosCnt) + " en la tabla de gastos.\n"
+                                 + QString::number(ingresosCnt) + " en la tabla de ingresos.\n"
+                                 + QString::number(prendasCnt) + " en la tabla de lista de prendas.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-}
-
-void MainWindow::on_actionModo_debug_triggered(bool checked)
-{
-    debug = checked;
 }
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
@@ -667,36 +868,36 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     QSqlQuery q;
     if (q.exec("SELECT * FROM ingresos")) {
         while (q.next()) {
-            if (q.value(14).toString() == "") {
-                QString n_recibo = q.value(0).toString();
-                QString cliente = q.value(1).toString();
-                QString fecha_recepcion = q.value(2).toString();
-                QString fecha_pago = q.value(3).toString();
-                QString fecha_recogida = q.value(4).toString();
-                QString importe = q.value(5).toString();
-                QString pagado = q.value(6).toString();
-                QString estado = q.value(7).toString();
-                QString cantidad = q.value(8).toString();
-                QString prenda = q.value(9).toString();
-                QString size = q.value(10).toString();
-                QString servicio = q.value(11).toString();
-                QString observaciones = q.value(12).toString();
-                QString edit_lock = q.value(13).toString();
+            if (q.value(INGRESOS_IDX_HASH).toString() == "") {
+                QString nRecibo = q.value(INGRESOS_IDX_ID).toString();
+                QString cliente = q.value(INGRESOS_IDX_CLIENT).toString();
+                QString fechaRecepcion = q.value(INGRESOS_IDX_DATE_RCP).toString();
+                QString fechaPago = q.value(INGRESOS_IDX_DATE_PAY).toString();
+                QString fechaRecogida = q.value(INGRESOS_IDX_DATE_PKU).toString();
+                QString importe = q.value(INGRESOS_IDX_IMPORTE).toString();
+                QString pagado = q.value(INGRESOS_IDX_PAYED).toString();
+                QString estado = q.value(INGRESOS_IDX_STATE).toString();
+                QString cantidad = q.value(INGRESOS_IDX_CANTIDAD).toString();
+                QString prenda = q.value(INGRESOS_IDX_PRENDA).toString();
+                QString size = q.value(INGRESOS_IDX_SIZE).toString();
+                QString servicio = q.value(INGRESOS_IDX_SERVICIO).toString();
+                QString observaciones = q.value(INGRESOS_IDX_OBSV).toString();
+                QString editLock = q.value(INGRESOS_IDX_EDIT_LOCK).toString();
 
                 QSqlQuery q1;
-                QString new_hash = gen_hash_16();
+                QString newHash = genHash16();
 
                 q1.prepare("UPDATE ingresos SET hash = :newHash WHERE n_recibo = :n_recibo AND "
                           "cliente = :cliente AND fecha_recepcion = :fecha_recepcion AND fecha_pago = :fecha_pago AND "
                           "fecha_recogida = :fecha_recogida AND importe = :importe AND pagado = :pagado AND estado = :estado AND "
                           "cantidad = :cantidad AND prenda = :prenda AND size = :size AND servicio = :servicio AND "
                           "observaciones = :observaciones AND edit_lock = :edit_lock");
-                q1.bindValue(":newHash", new_hash);
-                q1.bindValue(":n_recibo", n_recibo);
+                q1.bindValue(":newHash", newHash);
+                q1.bindValue(":n_recibo", nRecibo);
                 q1.bindValue(":cliente", cliente);
-                q1.bindValue(":fecha_recepcion", fecha_recepcion);
-                q1.bindValue(":fecha_pago", fecha_pago);
-                q1.bindValue(":fecha_recogida", fecha_recogida);
+                q1.bindValue(":fecha_recepcion", fechaRecepcion);
+                q1.bindValue(":fecha_pago", fechaPago);
+                q1.bindValue(":fecha_recogida", fechaRecogida);
                 q1.bindValue(":importe", importe);
                 q1.bindValue(":pagado", pagado);
                 q1.bindValue(":estado", estado);
@@ -705,7 +906,7 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
                 q1.bindValue(":size", size);
                 q1.bindValue(":servicio", servicio);
                 q1.bindValue(":observaciones", observaciones);
-                q1.bindValue(":edit_lock", edit_lock);
+                q1.bindValue(":edit_lock", editLock);
                 q1.exec();
 
                 cnt++;
@@ -714,28 +915,265 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     }
 
     // Check how many tickets contains duplicated hashes
-    QList<int> duplicated_tickets;
+    QList<int> duplicatedTickets;
     if (q.exec("SELECT n_recibo, COUNT(*) FROM ingresos GROUP BY hash HAVING COUNT(*) > 1")) {
         while (q.next()) {
-            duplicated_tickets.append(q.value(0).toInt());
+            duplicatedTickets.append(q.value(0).toInt());
         }
     }
-    std::sort(duplicated_tickets.begin(), duplicated_tickets.end());
-    QStringList duplicated_tickets_s;
-    for (const int& num : duplicated_tickets) {
-        duplicated_tickets_s.append(QString::number(num));
+    std::sort(duplicatedTickets.begin(), duplicatedTickets.end());
+    QStringList duplicatedTicketsS;
+    for (const int& num : duplicatedTickets) {
+        duplicatedTicketsS.append(QString::number(num));
     }
 
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
 
-    if (duplicated_tickets.isEmpty())
+    if (duplicatedTickets.isEmpty()) {
+        qDebug() << "No duplicated hashes found in ingresos after update.";
         QMessageBox::information(this, "Crear hash en ingresos",
                                  "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
                                  QMessageBox::Ok, QMessageBox::Ok);
-    else
-        QMessageBox::information(this, "Crear hash en ingresos",
+    } else {
+        qWarning() << "Duplicated hashes found in ingresos after update for tickets:" << duplicatedTicketsS;
+        QMessageBox::warning(this, "Crear hash en ingresos",
                                  "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.\n\n"
-                                 "Los siguientes recibos tienen hashes duplicados: " + duplicated_tickets_s.join(", "),
+                                 "Los siguientes recibos tienen hashes duplicados: " + duplicatedTicketsS.join(", "),
                                  QMessageBox::Ok, QMessageBox::Ok);
+    }
+}
+
+void MainWindow::on_actionAnular_factura_verifactu_triggered()
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "Cancel invoice action: Verifactu not configured";
+        QMessageBox::warning(this, "Verifactu no configurado",
+                             "Verifactu no está configurado correctamente.\n"
+                             "Configura las credenciales en Archivo → Configuración.",
+                             QMessageBox::Ok);
+        return;
+    }
+    CancelInvoiceDialog dlg(this);
+    dlg.db = db;
+    dlg.m_verifactu = m_verifactuIntegration;
+    dlg.exec();
+}
+
+// Art. 8.2.a RD 1007/2023 - rectificativa (R1-R5) is one of the two legal
+// correction paths for an already-registered factura (the other is anulacion).
+void MainWindow::on_actionRectificar_factura_verifactu_triggered()
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        qWarning() << "Rectify invoice action: Verifactu not configured";
+        QMessageBox::warning(this, "Verifactu no configurado",
+                             "Verifactu no está configurado correctamente.\n"
+                             "Configura las credenciales en Archivo → Configuración.",
+                             QMessageBox::Ok);
+        return;
+    }
+    RectifyInvoiceDialog dlg(this);
+    dlg.db = db;
+    dlg.m_verifactu = m_verifactuIntegration;
+    dlg.exec();
+    // Rectificativa eagerly INSERTs its row (claims the next n_recibo) on submit,
+    // so the local counter has advanced regardless of AEAT success/failure. Refresh
+    // the MainWindow ticket-number field so the next save uses a fresh number.
+    setNextTicketNumber();
+}
+
+// Art. 14.1 RD 1007/2023 requires "acceso completo e inmediato" to the AEAT records
+// in legible XML. We persist the AEAT-style XML returned by Irene Solutions in
+// ingresos.verifactu_xml; this action dumps a date range into a single envelope file
+// that can be handed to Hacienda on request.
+void MainWindow::on_actionExportar_registros_aeat_triggered()
+{
+    // Step 1: date-range + output-path picker (small inline dialog)
+    QDialog dlg(this);
+    dlg.setWindowTitle("Exportar registros AEAT (XML)");
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    QDateEdit *fromDate = new QDateEdit(QDate::currentDate().addMonths(-3), &dlg);
+    fromDate->setCalendarPopup(true);
+    fromDate->setDisplayFormat("dd-MM-yyyy");
+
+    QDateEdit *toDate = new QDateEdit(QDate::currentDate(), &dlg);
+    toDate->setCalendarPopup(true);
+    toDate->setDisplayFormat("dd-MM-yyyy");
+
+    form->addRow("Desde:", fromDate);
+    form->addRow("Hasta:", toDate);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(buttons);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const QDate from = fromDate->date();
+    const QDate to   = toDate->date();
+    if (from > to) {
+        QMessageBox::warning(this, "Exportar registros AEAT",
+                             "La fecha 'Desde' debe ser anterior o igual a 'Hasta'.",
+                             QMessageBox::Ok);
+        return;
+    }
+
+    const QString suggestedName = QString("aeat_registros_%1_%2.xml")
+        .arg(from.toString("yyyyMMdd"), to.toString("yyyyMMdd"));
+    const QString filePath = QFileDialog::getSaveFileName(
+        this, "Guardar archivo de registros AEAT",
+        QDir::homePath() + "/" + suggestedName, "XML (*.xml)");
+    if (filePath.isEmpty()) return;
+
+    // Step 2: query rows with non-empty stored XML. We include every row that was
+    // submitted to AEAT regardless of its current local estado (ENVIADA, ANULADA,
+    // RECTIFICADA) - Hacienda has the corresponding records on their side too.
+    // The verifactu_xml column itself is the proof of submission.
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, fecha_recepcion, importe, verifactu_csv, verifactu_xml "
+              "FROM ingresos "
+              "WHERE verifactu_xml IS NOT NULL AND verifactu_xml != '' "
+              "ORDER BY fecha_recepcion, n_recibo");
+    if (!q.exec()) {
+        qWarning() << "Exportar registros AEAT: SELECT failed -" << q.lastError().text();
+        db.close();
+        QMessageBox::critical(this, "Exportar registros AEAT",
+                              "Error al consultar la base de datos.",
+                              QMessageBox::Ok);
+        return;
+    }
+
+    // Step 3: write the envelope file
+    QFile out(filePath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        db.close();
+        QMessageBox::critical(this, "Exportar registros AEAT",
+                              "No se pudo abrir el archivo de salida para escritura.",
+                              QMessageBox::Ok);
+        return;
+    }
+
+    QXmlStreamWriter w(&out);
+    w.setAutoFormatting(true);
+    w.writeStartDocument();
+    w.writeStartElement("RegistrosFacturacionLaIdeal");
+    w.writeAttribute("fechaDesde", from.toString("dd-MM-yyyy"));
+    w.writeAttribute("fechaHasta", to.toString("dd-MM-yyyy"));
+    w.writeAttribute("generadoEl", QDateTime::currentDateTime().toString(Qt::ISODate));
+    w.writeAttribute("nif",        AppSettings::instance()->verifactuNif());
+    w.writeAttribute("emisor",     AppSettings::instance()->verifactuName());
+
+    // Strip the XML declaration of each stored payload so the outer document stays
+    // well-formed when payloads are concatenated.
+    static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
+
+    int count = 0;
+    while (q.next()) {
+        const QString fechaStr = q.value("fecha_recepcion").toString();
+        const QDate fecha = QDate::fromString(fechaStr, "dd-MM-yyyy");
+        if (!fecha.isValid() || fecha < from || fecha > to)
+            continue;
+
+        QString payload = q.value("verifactu_xml").toString();
+        payload.remove(xmlDeclRx);
+
+        w.writeStartElement("Registro");
+        w.writeAttribute("nRecibo",        q.value("n_recibo").toString());
+        w.writeAttribute("fechaRecepcion", fechaStr);
+        w.writeAttribute("importe",        q.value("importe").toString());
+        w.writeAttribute("csv",            q.value("verifactu_csv").toString());
+        // Flush the writer's state before injecting raw bytes (QXmlStreamWriter
+        // writes directly to the device, so this keeps the byte stream consistent).
+        w.writeCharacters(QString());
+        out.write(payload.toUtf8());
+        w.writeEndElement(); // Registro
+        ++count;
+    }
+
+    w.writeEndElement(); // RegistrosFacturacionLaIdeal
+    w.writeEndDocument();
+    out.close();
+    db.close();
+
+    if (count == 0) {
+        QMessageBox::information(this, "Exportar registros AEAT",
+            QString("No se encontraron registros enviados a AEAT entre %1 y %2.\n"
+                    "El archivo se ha creado vacío.")
+                .arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy")),
+            QMessageBox::Ok);
+    } else {
+        QMessageBox::information(this, "Exportar registros AEAT",
+            QString("Se han exportado %1 registros al archivo:\n%2").arg(count).arg(filePath),
+            QMessageBox::Ok);
+    }
+}
+
+void MainWindow::on_actionMostrar_log_triggered()
+{
+    const QString path = AppLogger::logFilePath();
+    QMessageBox msg(this);
+    msg.setWindowTitle("Log de depuración");
+    msg.setText(QString("El archivo de log se encuentra en:\n%1\n\n"
+                        "Envíe este archivo al soporte técnico cuando tenga un problema.").arg(path));
+    msg.setStandardButtons(QMessageBox::Ok);
+    QPushButton *openBtn = msg.addButton("Abrir archivo", QMessageBox::ActionRole);
+    msg.exec();
+    if (msg.clickedButton() == openBtn)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+// Declaración responsable visible in the software, as required by Art. 13
+// RD 1007/2023. Producer data is taken from AppSettings (the same NIF/name
+// used as Verifactu emitter, since the software is deployed bespoke for the
+// business that uses it). The compliance text is fixed; only producer data
+// and the software version vary across installations.
+void MainWindow::on_actionAcerca_de_Verifactu_triggered()
+{
+    AppSettings *s = AppSettings::instance();
+    const QString nif     = s->verifactuNif().isEmpty()    ? QStringLiteral("-") : s->verifactuNif();
+    const QString name    = !s->verifactuName().isEmpty()  ? s->verifactuName()
+                          : (!s->businessName().isEmpty() ? s->businessName() : QStringLiteral("-"));
+    const QString address = s->businessAddress().isEmpty() ? QStringLiteral("-") : s->businessAddress();
+    const QString city    = s->businessCity().isEmpty()    ? QStringLiteral("-") : s->businessCity();
+    const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);
+    const QString software = QStringLiteral("La Ideal");
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Acerca de Verifactu");
+    dlg.setMinimumWidth(600);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    QLabel *body = new QLabel(&dlg);
+    body->setTextFormat(Qt::RichText);
+    body->setWordWrap(true);
+    body->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    body->setText(
+        QString("<h3 align=\"center\">DECLARACIÓN RESPONSABLE</h3>"
+                "<p align=\"center\"><i>Artículo 13 del Real Decreto 1007/2023, de 5 de diciembre</i></p>"
+                "<p><b>%1</b>, con NIF <b>%2</b> y domicilio en %3, %4, "
+                "en calidad de productor del sistema informático de facturación denominado "
+                "<b>%5</b> versión <b>%6</b>,</p>"
+                "<p><b>DECLARA</b> bajo su responsabilidad:</p>"
+                "<p>Que el sistema informático arriba identificado cumple con todos los requisitos "
+                "establecidos en el Real Decreto 1007/2023, de 5 de diciembre, por el que se aprueba "
+                "el Reglamento que establece los requisitos que deben adoptar los sistemas informáticos "
+                "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
+                "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
+                "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
+                "en el momento de su generación.</p>")
+            .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
+                 address.toHtmlEscaped(), city.toHtmlEscaped(),
+                 software, version));
+    layout->addWidget(body);
+
+    QPushButton *btnClose = new QPushButton("Cerrar", &dlg);
+    layout->addWidget(btnClose, 0, Qt::AlignRight);
+    connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.exec();
 }

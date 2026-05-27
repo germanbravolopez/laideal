@@ -18,14 +18,14 @@ public:
     explicit Facturas(QWidget *parent = nullptr);
     ~Facturas();
     QSqlDatabase db;
-    void populate_empresas();
-    void populate_servicios();
+    void populateEmpresas();
+    void populateServicios();
 
 private slots:
-    void initial_settings();
-    void reset_all_contents();
-    bool validate_form();
-    void save_factura();
+    void initialSettings();
+    void resetAllContents();
+    bool validateForm();
+    void saveFactura();
 
     void on_buttonBox_clicked(QAbstractButton *button);
     void on_le_importe_textEdited(const QString &arg1);

@@ -24,24 +24,24 @@ public:
     explicit Contabilidad(QWidget *parent = nullptr);
     ~Contabilidad();
     QSqlDatabase db;
-    bool revertir_on = false;
-    void reset_all_contents();
+    bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
+    void resetAllContents();
 
 private slots:
-    void initial_settings();
+    void initialSettings();
 
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
     void on_cb_config_currentTextChanged(const QString &arg1);
 
-    void generate_contabilidad();
-    float get_total_income(QString table, int iva, int trim_for_year_config);
-    void update_lock();
-    void write_html(QString filename, QString html);
-    QString create_html_header();
-    QString create_html_tables(int trim_for_year_config);
-    QString create_html_table_ingresos(int trim_for_year_config);
-    QString create_html_table_gastos(int trim_for_year_config);
+    void generateContabilidad();
+    float getTotalIncome(QString table, int iva, int trimForYearConfig);
+    void updateLock();
+    void writeHtml(QString filename, QString html);
+    QString createHtmlHeader();
+    QString createHtmlTables(int trimForYearConfig);
+    QString createHtmlTableIngresos(int trimForYearConfig);
+    QString createHtmlTableGastos(int trimForYearConfig);
 
 
 private:

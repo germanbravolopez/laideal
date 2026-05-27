@@ -2,13 +2,14 @@
 #include "ui_contabilidad.h"
 #include "sql_lite.h"
 #include "qprinter.h"
+#include "appsettings.h"
 
 Contabilidad::Contabilidad(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::Contabilidad)
 {
     ui->setupUi(this);
-    initial_settings();
+    initialSettings();
 }
 
 Contabilidad::~Contabilidad()
@@ -16,69 +17,89 @@ Contabilidad::~Contabilidad()
     delete ui;
 }
 
-void Contabilidad::initial_settings()
+void Contabilidad::initialSettings()
 {
     ui->sb_year->setRange(2019, QDate::currentDate().year());
     ui->sb_trim->setRange(1, 4);
-    reset_all_contents();
+    resetAllContents();
 }
 
-void Contabilidad::reset_all_contents()
+void Contabilidad::resetAllContents()
 {
     ui->cb_config->setCurrentText(C_TRIMESTRAL);
-    ui->cb_config->setDisabled(revertir_on);
+    ui->cb_config->setDisabled(revertirOn); // disable configuration combobox when reverting contabilidad mode
     ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
     ui->checkBox_lock->setChecked(false);
-    ui->checkBox_lock->setDisabled(revertir_on);
+    ui->checkBox_lock->setDisabled(revertirOn); // disable lock checkbox when reverting
 }
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
-    int edit_lock = read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value());
+    int editLock = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value());
     if (ui->cb_config->currentText() == C_TRIMESTRAL) {
-        switch (edit_lock) {
+        switch (editLock) {
         case 0:
             // contabilidad not done
-            if (revertir_on)
-                QMessageBox::information(this, "Revertir contabilidad",
-                                         "La contabilidad del trimestre "
-                                         + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value())
-                                         + " no está realizada.",
+            if (revertirOn) {
+                // revert contabilidad mode
+                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad was not done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << " (editLock = 0). Just showing information message without generating the report or updating the lock.";
+                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " no estaba aun realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
-            else
-                generate_contabilidad();
-
-            if (ui->checkBox_lock->isChecked())
-                update_lock();
+            }
+            else {
+                generateContabilidad();
+                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad is done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << ". Proceeding with report generation + editLock = " << ui->checkBox_lock->isChecked() << ".";
+                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha realizado."
+                                         + (ui->checkBox_lock->isChecked() ?
+                                                " El trimestre se ha bloqueado para evitar modificaciones posteriores." :
+                                                " El trimestre no se ha bloqueado, por lo que se pueden realizar modificaciones posteriores."),
+                                         QMessageBox::Ok, QMessageBox::Ok);
+            }
+            if (ui->checkBox_lock->isChecked()) {
+                updateLock();
+            }
             break;
         case 1:
             // contabilidad done
-            if (revertir_on)
-                update_lock();
+            if (revertirOn) {
+                // revert contabilidad mode
+                updateLock();
+                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad reverted for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << " (editLock = 0).";
+                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha revertido.",
+                                         QMessageBox::Ok, QMessageBox::Ok);
+            }
             else {
-                generate_contabilidad();
-                QMessageBox::information(this, "Contabilidad",
-                                         "La contabilidad del trimestre "
-                                         + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value())
-                                         + " ya se ha realizado.",
+                generateContabilidad();
+                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad already done for trim" << ui->sb_trim->value()
+                         << "year" << ui->sb_year->value() << "and editLock was already set, so just generating the report.";
+                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
+                                         + " para el año " + QString::number(ui->sb_year->value()) + " ya estaba realizada."
+                                         + " Documentacion generada de nuevo.",
                                          QMessageBox::Ok, QMessageBox::Ok);
             }
             break;
         default:
+            qWarning() << "Contabilidad::on_bb_ok_cancel_accepted: invalid lock value read from database:" << editLock;
             QMessageBox::warning(this, "Contabilidad",
                                  "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
                                  QMessageBox::Ok, QMessageBox::Ok);
             break;
         }
     }
-    else
-        generate_contabilidad();
+    else {
+        generateContabilidad();
+    }
 
-    if (!(edit_lock == 0 && revertir_on))
+    if (!(editLock == 0 && revertirOn)) {
         this->close();
+    }
 }
 
 void Contabilidad::on_bb_ok_cancel_rejected()
@@ -106,23 +127,25 @@ void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
         ui->lbl_trim->setVisible(false);
         ui->sb_trim->setVisible(false);
     }
-    else
+    else {
+        qCritical() << "Contabilidad::on_cb_config_currentTextChanged: unsupported configuration option" << arg1;
         QMessageBox::critical(this, "Contabilidad",
                               "No se puede configurar de la forma indicada.",
                               QMessageBox::Ok, QMessageBox::Ok);
+    }
 }
 
-void Contabilidad::generate_contabilidad()
+void Contabilidad::generateContabilidad()
 {
-    QString contabilidad_html = "<!DOCTYPE html><html>";
+    QString contabilidadHtml = "<!DOCTYPE html><html>";
     QString path, filename;
 
     if (ui->cb_config->currentText() == C_TRIMESTRAL) {
-        contabilidad_html = contabilidad_html + create_html_header()
+        contabilidadHtml = contabilidadHtml + createHtmlHeader()
                 + "<h1 style='text-align:center;'>Contabilidad</h1>"
                 + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
-                + create_html_tables(0) + "</body></html>";
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad";
+                + createHtmlTables(0) + "</body></html>";
+        path = AppSettings::instance()->contabilidadPath();
         filename = "/contabilidad_trimestral_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -130,18 +153,18 @@ void Contabilidad::generate_contabilidad()
                 ".pdf";
     }
     else if (ui->cb_config->currentText() == C_MENSUAL) {
-        QString contabilidad_status;
-        if (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
-            contabilidad_status = "(Contabilidad cerrada)";
+        QString contabilidadStatus;
+        if (readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
+            contabilidadStatus = "(Contabilidad cerrada)";
         else
-            contabilidad_status = "(Contabilidad no cerrada)";
+            contabilidadStatus = "(Contabilidad no cerrada)";
 
-        contabilidad_html = contabilidad_html + create_html_header()
+        contabilidadHtml = contabilidadHtml + createHtmlHeader()
                 + "<h1 style='text-align:center;'>Reporte Mensual</h1>"
                 + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value())
-                + " " + contabilidad_status + "</h2>"
-                + create_html_tables(0) + "</body></html>";
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Mensual";
+                + " " + contabilidadStatus + "</h2>"
+                + createHtmlTables(0) + "</body></html>";
+        path = AppSettings::instance()->contabilidadPath() + "/Mensual";
         filename = "/reporte_mensual_" +
                 QString::number(ui->sb_year->value()) +
                 "_" +
@@ -149,28 +172,28 @@ void Contabilidad::generate_contabilidad()
                 ".pdf";
     }
     else {
-        QString contabilidad_status;
-        if (read_lock_for_month_and_year(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
-            contabilidad_status = "(Contabilidad cerrada)";
+        QString contabilidadStatus;
+        if (readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
+            contabilidadStatus = "(Contabilidad cerrada)";
         else
-            contabilidad_status = "(Contabilidad no cerrada)";
+            contabilidadStatus = "(Contabilidad no cerrada)";
 
-        contabilidad_html = contabilidad_html + create_html_header()
+        contabilidadHtml = contabilidadHtml + createHtmlHeader()
                 + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
         for (int trim = 1; trim < 5; trim++) {
-            QString contabilidad_status;
-            if (read_lock_for_month_and_year(db, "ingresos", trim * 3, ui->sb_year->value()) == 1)
-                contabilidad_status = "(Contabilidad cerrada)";
+            QString trimStatus;
+            if (readLockForMonthAndYear(db, "ingresos", trim * 3, ui->sb_year->value()) == 1)
+                trimStatus = "(Contabilidad cerrada)";
             else
-                contabilidad_status = "(Contabilidad no cerrada)";
+                trimStatus = "(Contabilidad no cerrada)";
 
-            contabilidad_html = contabilidad_html
-                + "<h2>Trimestre: " + QString::number(trim) + " " + contabilidad_status + "</h2>"
-                + create_html_tables(trim);
+            contabilidadHtml = contabilidadHtml
+                + "<h2>Trimestre: " + QString::number(trim) + " " + trimStatus + "</h2>"
+                + createHtmlTables(trim);
         }
-        contabilidad_html = contabilidad_html + "</body></html>";
+        contabilidadHtml = contabilidadHtml + "</body></html>";
 
-        path = "C:/Users/rocio/OneDrive/Desktop/Tintoreria/Contabilidad/Anual";
+        path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" +
                 QString::number(ui->sb_year->value()) +
                 ".pdf";
@@ -178,98 +201,85 @@ void Contabilidad::generate_contabilidad()
     // create directory in case it does not exists
     if (!QFile::exists(path))
         QDir().mkpath(path);
-    write_html(path + filename, contabilidad_html);
+    writeHtml(path + filename, contabilidadHtml);
 }
 
-float Contabilidad::get_total_income(QString table,
-                                     int iva,
-                                     int trim_for_year_config)
+float Contabilidad::getTotalIncome(QString table,
+                                   int iva,
+                                   int trimForYearConfig)
 {
-    QDate start_date, end_date;
+    QDate startDate, endDate;
     if (ui->cb_config->currentText() == C_MENSUAL) {
-        start_date.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
+        startDate.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
         if (ui->sb_trim->value() == 12)
-            end_date.setDate(ui->sb_year->value() + 1, 1, 1);
+            endDate.setDate(ui->sb_year->value() + 1, 1, 1);
         else
-            end_date.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
+            endDate.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
     }
     else {
         int trim;
         if (ui->cb_config->currentText() == C_TRIMESTRAL)
             trim = ui->sb_trim->value();
         else
-            trim = trim_for_year_config;
+            trim = trimForYearConfig;
 
         switch (trim) {
         case 1:
-            start_date.setDate(ui->sb_year->value(), 1, 1);
-            end_date.setDate(ui->sb_year->value(), 4, 1);
+            startDate.setDate(ui->sb_year->value(), 1, 1);
+            endDate.setDate(ui->sb_year->value(), 4, 1);
             break;
         case 2:
-            start_date.setDate(ui->sb_year->value(), 4, 1);
-            end_date.setDate(ui->sb_year->value(), 7, 1);
+            startDate.setDate(ui->sb_year->value(), 4, 1);
+            endDate.setDate(ui->sb_year->value(), 7, 1);
             break;
         case 3:
-            start_date.setDate(ui->sb_year->value(), 7, 1);
-            end_date.setDate(ui->sb_year->value(), 10, 1);
+            startDate.setDate(ui->sb_year->value(), 7, 1);
+            endDate.setDate(ui->sb_year->value(), 10, 1);
             break;
         case 4:
-            start_date.setDate(ui->sb_year->value(), 10, 1);
-            end_date.setDate(ui->sb_year->value() + 1, 1, 1);
+            startDate.setDate(ui->sb_year->value(), 10, 1);
+            endDate.setDate(ui->sb_year->value() + 1, 1, 1);
             break;
         default:
             break;
         }
     }
 
-    return total_price_between_dates(db, table, start_date, end_date, iva);
+    return totalPriceBetweenDates(db, table, startDate, endDate, iva);
 }
 
-void Contabilidad::update_lock()
+void Contabilidad::updateLock()
 {
     switch (ui->sb_trim->value()) {
     case 1:
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 1, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 2, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 3, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 1, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 2, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 3, ui->sb_year->value());
         break;
     case 2:
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 4, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 5, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 6, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 4, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 5, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 6, ui->sb_year->value());
         break;
     case 3:
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 7, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 8, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 9, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 7, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 8, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 9, ui->sb_year->value());
         break;
     case 4:
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 10, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 11, ui->sb_year->value());
-        update_lock_in_ingresos(db, static_cast<int>(!revertir_on), 12, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 10, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 11, ui->sb_year->value());
+        updateLockInIngresos(db, static_cast<int>(!revertirOn), 12, ui->sb_year->value());
         break;
     default:
         break;
     }
-    if (revertir_on) {
-        QMessageBox::information(this, "Revertir Contabilidad",
-                                 "Contabilidad revertida con éxito para el trimestre "
-                                 + ui->sb_trim->text() +
-                                 " del año "
-                                 + ui->sb_year->text() + ".",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-    } else {
-        QMessageBox::information(this, "Contabilidad",
-                                 "Contabilidad realizada con éxito para el trimestre "
-                                 + ui->sb_trim->text() +
-                                 " del año "
-                                 + ui->sb_year->text() + ".",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-    }
+    qDebug() << "Contabilidad::updateLock: edit_lock set to" << static_cast<int>(!revertirOn)
+             << "for trim" << ui->sb_trim->value() << "year" << ui->sb_year->value();
 }
 
-void Contabilidad::write_html(QString filename,
-                              QString html)
+void Contabilidad::writeHtml(QString filename,
+                             QString html)
 {
     QTextDocument document;
     document.setHtml(html);
@@ -286,9 +296,9 @@ void Contabilidad::write_html(QString filename,
     //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
 }
 
-QString Contabilidad::create_html_header()
+QString Contabilidad::createHtmlHeader()
 {
-    QString contabilidad_html_header =
+    QString contabilidadHtmlHeader =
     "<head>"
         "<meta charset='UTF-8'>"
         "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
@@ -304,23 +314,26 @@ QString Contabilidad::create_html_header()
     "</head>"
     "<body>"
         "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-        "<p><span class='text-small'>Tintorería La Ideal</span><br><span class='text-small'>Plaza San Pantaleón 1, bajo 2</span><br><span class='text-small'>18012 Granada</span></p>";
+        "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
+        "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
+        "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>";
 
-    return contabilidad_html_header;
+    return contabilidadHtmlHeader;
 }
 
-QString Contabilidad::create_html_tables(int trim_for_year_config)
+QString Contabilidad::createHtmlTables(int trimForYearConfig)
 {
-    return create_html_table_ingresos(trim_for_year_config) + create_html_table_gastos(trim_for_year_config);
+    return createHtmlTableIngresos(trimForYearConfig) + createHtmlTableGastos(trimForYearConfig);
 }
 
-QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
+QString Contabilidad::createHtmlTableIngresos(int trimForYearConfig)
 {
-    float total_income_ing = get_total_income("ingresos", 0, trim_for_year_config);
-    float base_ing = total_income_ing / 1.21;
-    float iva_ing = total_income_ing - base_ing;
+    float totalIncomeIng = getTotalIncome("ingresos", 0, trimForYearConfig);
+    float ivaRate = static_cast<float>(AppSettings::instance()->ivaRate());
+    float baseIng = totalIncomeIng / (1.0f + ivaRate / 100.0f);
+    float ivaIng = totalIncomeIng - baseIng;
 
-    QString contabilidad_html_table =
+    QString contabilidadHtmlTable =
     "<h3>Tabla Ingresos</h3>"
     "<figure class='table' style='float:left;'>"
         "<table>"
@@ -334,39 +347,39 @@ QString Contabilidad::create_html_table_ingresos(int trim_for_year_config)
                 "<tr>"
                     "<th<'>Importe</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(total_income_ing, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(totalIncomeIng, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
                 "<tr>"
                     "<th<'>Base</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(base_ing, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(baseIng, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
                 "<tr>"
                     "<th<'>IVA</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(iva_ing, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(ivaIng, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
             "</tbody>"
         "</table>"
     "</figure>";
 
-    return contabilidad_html_table;
+    return contabilidadHtmlTable;
 }
 
-QString Contabilidad::create_html_table_gastos(int trim_for_year_config)
+QString Contabilidad::createHtmlTableGastos(int trimForYearConfig)
 {
-    float total_income_g10 = get_total_income("gastos", 10, trim_for_year_config);
-    float base_g10 = total_income_g10 / 1.1;
-    float iva_g10 = total_income_g10 - base_g10;
-    float total_income_g21 = get_total_income("gastos", 21, trim_for_year_config);
-    float base_g21 = total_income_g21 / 1.21;
-    float iva_g21 = total_income_g21 - base_g21;
-    float total_income_gni = get_total_income("gastos", 0, trim_for_year_config);
+    float totalIncomeG10 = getTotalIncome("gastos", 10, trimForYearConfig);
+    float baseG10 = totalIncomeG10 / 1.1;
+    float ivaG10 = totalIncomeG10 - baseG10;
+    float totalIncomeG21 = getTotalIncome("gastos", 21, trimForYearConfig);
+    float baseG21 = totalIncomeG21 / 1.21;
+    float ivaG21 = totalIncomeG21 - baseG21;
+    float totalIncomeGni = getTotalIncome("gastos", 0, trimForYearConfig);
 
-    QString contabilidad_html_table =
+    QString contabilidadHtmlTable =
     "<h3>Tabla Gastos</h3>"
     "<figure class='table' style='float:left;'>"
         "<table>"
@@ -383,51 +396,51 @@ QString Contabilidad::create_html_table_gastos(int trim_for_year_config)
                 "<tr>"
                     "<th<'>Importe</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(total_income_g10, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(totalIncomeG10, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(total_income_g21, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(totalIncomeG21, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(total_income_gni, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(totalIncomeGni, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(total_income_g10 + total_income_g21 + total_income_gni, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(totalIncomeG10 + totalIncomeG21 + totalIncomeGni, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
                 "<tr>"
                     "<th<'>Base</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(base_g10, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(baseG10, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(base_g21, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(baseG21, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
                         "<p style='text-align:right;'>-</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(base_g10 + base_g21, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(baseG10 + baseG21, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
                 "<tr>"
                     "<th<'>IVA</th>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(iva_g10, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(ivaG10, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(iva_g21, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(ivaG21, 'f', 2) + " €</p>"
                     "</td>"
                     "<td>"
                         "<p style='text-align:right;'>-</p>"
                     "</td>"
                     "<td>"
-                        "<p style='text-align:right;'>" + QString::number(iva_g10 + iva_g21, 'f', 2) + " €</p>"
+                        "<p style='text-align:right;'>" + QString::number(ivaG10 + ivaG21, 'f', 2) + " €</p>"
                     "</td>"
                 "</tr>"
             "</tbody>"
         "</table>"
     "</figure>";
 
-    return contabilidad_html_table;
+    return contabilidadHtmlTable;
 }

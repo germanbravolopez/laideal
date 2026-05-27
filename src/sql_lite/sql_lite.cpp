@@ -1,431 +1,482 @@
 #include "sql_lite.h"
 
-int read_max_value_in_column_from_table(QSqlDatabase &db,
-                                        QString column,
-                                        QString table)
+#include <QDebug>
+#include <QMessageBox>
+#include <QRandomGenerator>
+#include <QSqlError>
+#include <QSqlQuery>
+
+// ---------------------------------------------------------------------------
+// DB path - set once in main() before MainWindow is constructed
+// ---------------------------------------------------------------------------
+
+static QString s_dbPath;
+
+void setDbPath(const QString &path) { s_dbPath = path; }
+QString dbPath() { return s_dbPath; }
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+// Guard used at the top of every function that opens the database.
+// Returns true if the path is missing, so callers can early-return.
+static bool dbNotConfigured(const QSqlDatabase &db, const char *caller)
 {
-    int max_value = 0;
+    if (!db.databaseName().isEmpty())
+        return false;
+    qWarning() << caller << "- database path not configured, skipping query";
+    return true;
+}
+
+// Zero-pad months 1 and 2 so LIKE '%01-2024' does not match month 10 or 11.
+static QString monthStr(int month)
+{
+    return month < 10 ? QStringLiteral("0%1").arg(month) : QString::number(month);
+}
+
+// ---------------------------------------------------------------------------
+// Public functions
+// ---------------------------------------------------------------------------
+
+void migrateDatabase(QSqlDatabase &db)
+{
+    if (dbNotConfigured(db, __func__)) return;
+    qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
     db.open();
-    QSqlQuery q;
+    QSqlQuery q(db);
+    // Each exec() silently fails if the column already exists - safe to call repeatedly.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_estado TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_error TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_url_qr TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_xml TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_hash TEXT");
+    // Rectificativa link: on a rectifying row, points back to the original n_recibo.
+    // verifactu_rectification_type is "S" (sustitucion) or "I" (diferencias).
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectifies_n_recibo TEXT");
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectification_type TEXT");
+    db.close();
+}
+
+int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    int maxValue = 0;
+    db.open();
+    QSqlQuery q(db);
     q.exec("SELECT MAX(" + column + ") FROM " + table);
     if (q.isSelect()) {
         if (q.first())
-            max_value = q.value(0).toInt();
-        else
+            maxValue = q.value(0).toInt();
+        else {
+            qWarning() << "readMaxValueInColumnFromTable: empty result for column" << column << "in" << table;
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar read_max_value_in_column_from_table.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-    }
-    else
+                                 "Búsqueda vacía al usar readMaxValueInColumnFromTable.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+        }
+    } else {
+        qCritical() << "readMaxValueInColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_max_value_in_column_from_table.",
+                              "Acceso a la tabla da un error al usar readMaxValueInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
-    return max_value;
+    return maxValue;
 }
 
-int read_max_n_min_year_in_column_from_table(QSqlDatabase &db,
-                                             bool max_n_min,
-                                             QString column,
-                                             QString table)
+int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table)
 {
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    QString query = maxNMin
+        ? "SELECT MAX(substr(" + column + ",7,4)) FROM " + table
+        : "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
+
     int value = 0;
-    QString query;
-    if (max_n_min)
-        query = "SELECT MAX(substr(" + column + ",7,4)) FROM " + table;
-    else
-        query = "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
     db.open();
-    QSqlQuery q;
+    QSqlQuery q(db);
     q.exec(query);
     if (q.isSelect()) {
         if (q.first())
             value = q.value(0).toInt();
-        else
+        else {
+            qWarning() << "readMaxNMinYearInColumnFromTable: empty result for column" << column << "in" << table;
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "Búsqueda vacía al usar read_max_n_min_year_in_column_from_table.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-    }
-    else
+                                 "Búsqueda vacía al usar readMaxNMinYearInColumnFromTable.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+        }
+    } else {
+        qCritical() << "readMaxNMinYearInColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_max_n_min_year_in_column_from_table.",
+                              "Acceso a la tabla da un error al usar readMaxNMinYearInColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
     return value;
 }
 
-QStringList read_column_from_table(QSqlDatabase &db,
-                                   QString column,
-                                   QString table,
-                                   QString order_by_column)
+QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table,
+                                const QString &orderByColumn)
 {
-    db.open();
-    QSqlQuery q;
+    if (dbNotConfigured(db, __func__)) return {};
+
     QStringList list;
-    if (order_by_column == "")
+    db.open();
+    QSqlQuery q(db);
+    if (orderByColumn.isEmpty())
         q.exec("SELECT " + column + " FROM " + table + ";");
     else
-        q.exec("SELECT " + column + " FROM " + table + " ORDER BY " + order_by_column + " ASC;");
+        q.exec("SELECT " + column + " FROM " + table + " ORDER BY " + orderByColumn + " ASC;");
     if (q.isSelect()) {
-        while(q.next())
+        while (q.next())
             list.append(q.value(0).toString());
-    }
-    else
+    } else {
+        qCritical() << "readColumnFromTable: query error for column" << column << "in" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_column_from_table.",
+                              "Acceso a la tabla da un error al usar readColumnFromTable.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
     return list;
 }
 
-float read_garment_price(QSqlDatabase &db,
-                         QString garment,
-                         QString service)
+float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &service)
 {
-    float price = 0.0;
+    if (dbNotConfigured(db, __func__)) return 0.0f;
+
+    float price = 0.0f;
     db.open();
-    QSqlQuery q;
-    if (service == "Limp.")
-        q.exec("SELECT precio_limpieza FROM prendas WHERE nombre LIKE '" + garment + "'");
-    else if (service == "Plan.")
-        q.exec("SELECT precio_plancha FROM prendas WHERE nombre LIKE '" + garment + "'");
+    QSqlQuery q(db);
+    if (service == "Limp.") {
+        q.prepare("SELECT precio_limpieza FROM prendas WHERE nombre LIKE :garment");
+        q.bindValue(":garment", garment);
+        q.exec();
+    } else if (service == "Plan.") {
+        q.prepare("SELECT precio_plancha FROM prendas WHERE nombre LIKE :garment");
+        q.bindValue(":garment", garment);
+        q.exec();
+    }
     if (q.isSelect()) {
         if (q.first()) {
-            if (!q.value(0).toString().contains(","))
+            if (!q.value(0).toString().contains(',')) {
                 price = q.value(0).toFloat();
-            else {
+            } else {
+                qCritical() << "readGarmentPrice: comma decimal found in prendas for garment" << garment;
                 QMessageBox::critical(nullptr, "Error en la base de datos",
                                       "En la tabla prendas se ha detectado que hay valores decimales guardados con ','. "
                                       "Utilizar herramienta de limpiado de importes decimales.",
                                       QMessageBox::Ok, QMessageBox::Ok);
-                price = -1;
+                price = -1.0f;
             }
-        }
-        else {
+        } else {
+            qWarning() << "readGarmentPrice: garment not found:" << garment << "service:" << service;
             QMessageBox::warning(nullptr, "Error base de datos",
-                                  "No se ha encontrado la prenda '" + garment +
-                                  "' al usar read_garment_price para el servicio '" + service + "'.\n"
-                                  "Añadir un precio en el listado de prendas antes de continuar con esta acción.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-            price = -1;
+                                 "No se ha encontrado la prenda '" + garment +
+                                 "' al usar readGarmentPrice para el servicio '" + service + "'.\n"
+                                 "Añadir un precio en el listado de prendas antes de continuar con esta acción.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+            price = -1.0f;
         }
-    }
-    else
+    } else {
+        qCritical() << "readGarmentPrice: query error for garment" << garment << "service" << service;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_garment_price.",
+                              "Acceso a la tabla da un error al usar readGarmentPrice.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
     return price;
 }
 
-QString select_from_where_like(QSqlDatabase &db,
-                               QString item_to_get,
-                               QString table,
-                               QString column_to_search,
-                               QString item_to_search,
-                               bool exact_match,
-                               bool print_msg)
+QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
+                            const QString &columnToSearch, const QString &itemToSearch,
+                            bool exactMatch, bool printMsg)
 {
-    QString item_to_search_text;
+    if (dbNotConfigured(db, __func__)) return {};
+
+    QString result;
     db.open();
-    QSqlQuery q;
-    if (exact_match)
-        q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "'");
-    else
-        q.exec("SELECT " + item_to_get + " FROM " + table + " WHERE " + column_to_search + " like '" + item_to_search + "%'");
+    QSqlQuery q(db);
+    q.prepare("SELECT " + itemToGet + " FROM " + table + " WHERE " + columnToSearch + " LIKE :item");
+    q.bindValue(":item", exactMatch ? itemToSearch : itemToSearch + "%");
+    q.exec();
     if (q.isSelect()) {
-        if (q.first())
-            item_to_search_text = q.value(0).toString();
-        else if (print_msg)
+        if (q.first()) {
+            result = q.value(0).toString();
+        } else if (printMsg) {
+            qWarning() << "selectFromWhereLike: item not found:" << itemToSearch << "in column" << columnToSearch;
             QMessageBox::warning(nullptr, "Búsqueda vacía",
-                                  "El elemento '" + item_to_search + "' no se ha encontrado en la base de datos para '" + column_to_search + "'.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-    }
-    else if (print_msg)
+                                 "El elemento '" + itemToSearch + "' no se ha encontrado en la base de datos para '"
+                                 + columnToSearch + "'.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+        }
+    } else if (printMsg) {
+        qCritical() << "selectFromWhereLike: query error for" << itemToSearch << "in column" << columnToSearch;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar select_from_where_like.",
+                              "Acceso a la tabla da un error al usar selectFromWhereLike.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
-    return item_to_search_text;
+    return result;
 }
 
-QString search_item_from_client(QSqlDatabase &db,
-                                QString item,
-                                QString client,
-                                bool print_msg)
+QString searchItemFromClient(QSqlDatabase &db, const QString &item, const QString &client, bool printMsg)
 {
-    return select_from_where_like(db, item, "clientes", "nombre", client, false, print_msg);
+    return selectFromWhereLike(db, item, "clientes", "nombre", client, false, printMsg);
 }
 
-bool update_item_to_client(QSqlDatabase &db,
-                           QString column,
-                           QString item,
-                           QString client)
+bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client)
 {
-    QSqlQuery q;
+    if (dbNotConfigured(db, __func__)) return false;
+
+    qDebug() << "updateItemToClient: UPDATE clientes SET" << column << "= ? WHERE nombre =" << client;
     db.open();
+    QSqlQuery q(db);
     q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
     q.bindValue(":item", item);
     q.bindValue(":client", client);
     bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateItemToClient: failed to update column" << column << "for client" << client << "-" << q.lastError().text();
     db.close();
     return ok;
 }
 
-bool add_new_client(QSqlDatabase &db,
-                    QString client,
-                    QString tel_fijo,
-                    QString direccion,
-                    QString movil)
+bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
+                  const QString &direccion, const QString &movil)
 {
-    QSqlQuery q;
+    if (dbNotConfigured(db, __func__)) return false;
+
+    qDebug() << "addNewClient: INSERT INTO clientes nombre=" << client << "tel_fijo=" << telFijo
+             << "movil=" << movil;
     db.open();
-    q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) VALUES(:nombre, :tel_fijo, :direccion, :movil)");
-    q.bindValue(":nombre", client);
-    q.bindValue(":tel_fijo", tel_fijo);
+    QSqlQuery q(db);
+    q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) "
+              "VALUES (:nombre, :tel_fijo, :direccion, :movil)");
+    q.bindValue(":nombre",    client);
+    q.bindValue(":tel_fijo",  telFijo);
     q.bindValue(":direccion", direccion);
-    q.bindValue(":movil", movil);
+    q.bindValue(":movil",     movil);
     bool ok = q.exec();
+    if (!ok)
+        qWarning() << "addNewClient: failed to insert client" << client << "-" << q.lastError().text();
     db.close();
     return ok;
 }
 
-float total_price_between_dates(QSqlDatabase &db,
-                                QString table,
-                                QDate start_date,
-                                QDate end_date,
-                                int iva)
+float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
+                             QDate startDate, QDate endDate, int iva)
 {
+    if (dbNotConfigured(db, __func__)) return 0.0f;
+
+    float totalPrice = 0.0f;
     db.open();
-    QSqlQuery q;
-    float total_price = 0.0;
+    QSqlQuery q(db);
+
     if (table == "ingresos") {
+        // Exclude ANULADA (cancelled) and RECTIFICADA (superseded by a substitution
+        // rectificativa) rows from taxable income. The rectifying row itself carries
+        // the corrected total and counts normally. Rows without verifactu_estado
+        // (NULL or empty, pre-v8.0) are included as normal.
         q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
-               + start_date.toString("yyyy-MM-dd") + "')) AND "
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
                "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
-               + end_date.toString("yyyy-MM-dd") + "'))");
-        if (q.isSelect()) {
-            while(q.next()) {
-                if (!q.value(0).toString().contains(","))
-                    total_price = total_price + q.value(0).toFloat();
-                else
-                    QMessageBox::critical(nullptr, "Error en la base de datos",
-                                          "En la tabla " + table + " "
-                                          "se ha detectado que hay valores decimales guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
-                                          QMessageBox::Ok, QMessageBox::Ok);
-            }
-        }
-        else
-            QMessageBox::critical(nullptr, "Error base de datos",
-                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-    }
-    else if (table == "gastos") {
-        q.exec("SELECT importe FROM gastos WHERE (iva = "
-               + QString::number(iva)
-               + ") AND (date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) BETWEEN date('"
-               + start_date.toString("yyyy-MM-dd") + "') AND date('"
-               + end_date.toString("yyyy-MM-dd") + "'))");
-        if (q.isSelect()) {
-            while(q.next()) {
-                if (!q.value(0).toString().contains(","))
-                    total_price = total_price + q.value(0).toFloat();
-                else
-                    QMessageBox::critical(nullptr, "Error en la base de datos",
-                                          "En la tabla " + table + " "
-                                          "se ha detectado que hay valores decimales guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
-                                          QMessageBox::Ok, QMessageBox::Ok);
-            }
-        }
-        else
-            QMessageBox::critical(nullptr, "Error base de datos",
-                                  "Acceso a la tabla da un error al usar total_price_between_dates.",
-                                  QMessageBox::Ok, QMessageBox::Ok);
-    }
-    else
+               + endDate.toString("yyyy-MM-dd") + "'))");
+    } else if (table == "gastos") {
+        // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
+        // first day of the next quarter are not double-counted in the current quarter.
+        q.exec("SELECT importe FROM gastos WHERE (iva = " + QString::number(iva) + ") AND "
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
+               + endDate.toString("yyyy-MM-dd") + "'))");
+    } else {
+        qCritical() << "totalPriceBetweenDates: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "total_price_between_dates cannot work with different table.",
+                              "totalPriceBetweenDates: tabla no soportada: " + table,
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
-    db.close();
-    return total_price;
-}
+        db.close();
+        return 0.0f;
+    }
 
-int read_lock_for_month_and_year(QSqlDatabase &db,
-                                 QString table,
-                                 int month,
-                                 int year)
-{
-    // For months 1 and 2 to not mix with 11 and 12
-    QString month_fix;
-    if (month == 1)
-        month_fix = "01";
-    else if (month == 2)
-        month_fix = "02";
-    else
-        month_fix = QString::number(month);
-
-    db.open();
-    QSqlQuery q;
-    int edit_lock = 2; // means that the search has not found any data
-    if (table == "ingresos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago like '%" + month_fix + "-" + QString::number(year) + "'");
-    else if (table == "gastos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha like '%" + month_fix + "-" + QString::number(year) + "'");
-    else
-        QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
-                              "Tabla solicitada no está soportada por la función 'read_lock_for_month_and_year'.",
-                              QMessageBox::Ok, QMessageBox::Ok);
     if (q.isSelect()) {
-        if(q.first())
-            edit_lock = q.value(0).toInt();
-        else
-            edit_lock = 0;
-    }
-    else
+        while (q.next()) {
+            if (!q.value(0).toString().contains(',')) {
+                totalPrice += q.value(0).toFloat();
+            } else {
+                qCritical() << "totalPriceBetweenDates: comma decimal found in" << table;
+                QMessageBox::critical(nullptr, "Error en la base de datos",
+                                      "En la tabla " + table + " se ha detectado que hay valores decimales "
+                                      "guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
+                                      QMessageBox::Ok, QMessageBox::Ok);
+            }
+        }
+    } else {
+        qCritical() << "totalPriceBetweenDates: query error for table" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar read_lock_for_month_and_year.",
+                              "Acceso a la tabla da un error al usar totalPriceBetweenDates.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    q.clear();
+    }
     db.close();
-    return edit_lock;
+    return totalPrice;
 }
 
-void update_lock_in_ingresos(QSqlDatabase &db,
-                             int value,
-                             int month,
-                             int year)
+int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year)
 {
-    // For months 1 and 2 to not mix with 11 and 12
-    QString month_fix;
-    if (month == 1)
-        month_fix = "01";
-    else if (month == 2)
-        month_fix = "02";
-    else
-        month_fix = QString::number(month);
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    const QString mStr = monthStr(month);
+    const QString yStr = QString::number(year);
 
     db.open();
-    QSqlQuery q;
-    q.exec("UPDATE ingresos SET edit_lock ="
-           + QString::number(value)
-           + " WHERE fecha_pago like '%"
-           + month_fix + "-"
-           + QString::number(year) + "'");
-    q.clear();
-    q.exec("UPDATE gastos SET edit_lock ="
-           + QString::number(value)
-           + " WHERE fecha like '%"
-           + month_fix + "-"
-           + QString::number(year) + "'");
-    q.clear();
+    QSqlQuery q(db);
+    int editLock = 2; // 2 = no data found for period
+    if (table == "ingresos")
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'");
+    else if (table == "gastos")
+        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'");
+    else {
+        qCritical() << "readLockForMonthAndYear: unsupported table:" << table;
+        QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
+                              "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
+                              QMessageBox::Ok, QMessageBox::Ok);
+    }
+
+    if (q.isSelect())
+        editLock = q.first() ? q.value(0).toInt() : 0;
+    else {
+        qCritical() << "readLockForMonthAndYear: query error for table" << table << "month" << mStr << "year" << yStr;
+        QMessageBox::critical(nullptr, "Error base de datos",
+                              "Acceso a la tabla da un error al usar readLockForMonthAndYear.",
+                              QMessageBox::Ok, QMessageBox::Ok);
+    }
+    db.close();
+    return editLock;
+}
+
+void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
+{
+    if (dbNotConfigured(db, __func__)) return;
+
+    const QString mStr = monthStr(month);
+    const QString yStr = QString::number(year);
+    const QString val  = QString::number(value);
+
+    qDebug() << "updateLockInIngresos: UPDATE ingresos+gastos SET edit_lock =" << val
+             << "WHERE month=" << mStr << "year=" << yStr;
+    db.open();
+    QSqlQuery q(db);
+    if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
+        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
+    if (!q.exec("UPDATE gastos SET edit_lock = " + val + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'"))
+        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
     db.close();
 }
 
-int update_comas_in_decimal_data(QSqlDatabase &db,
-                                 QString table,
-                                 QString item)
+int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item)
 {
-    int error_cnt = 0;
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    qDebug() << "updateComasInDecimalData: scanning" << table << "for comma decimals in column" << item;
+    int errorCnt = 0;
+
     if (table == "ingresos") {
-        QStringList items = read_column_from_table(db, item, table, "");
-        QStringList ids_1 = read_column_from_table(db, "n_recibo", table, "");
-        QStringList ids_2 = read_column_from_table(db, "hash", table, "");
+        QStringList items  = readColumnFromTable(db, item,       table, "");
+        QStringList ids1   = readColumnFromTable(db, "n_recibo", table, "");
+        QStringList ids2   = readColumnFromTable(db, "hash",     table, "");
 
-        for (int fra = 0; fra < items.count(); fra++) {
-            if (items[fra].contains(",")) {
-                QSqlQuery q;
-                db.open();
-                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE ("
-                          "n_recibo = :id_1 AND "
-                          "hash     = :id_2)");
-                q.bindValue(":value", items[fra].replace(",","."));
-                q.bindValue(":id_1", ids_1[fra]);
-                q.bindValue(":id_2", ids_2[fra]);
-                q.exec();
-                db.close();
-                error_cnt++;
-            }
+        for (int i = 0; i < items.count(); ++i) {
+            if (!items[i].contains(',')) continue;
+            db.open();
+            QSqlQuery q(db);
+            q.prepare("UPDATE " + table + " SET " + item + " = :value "
+                      "WHERE n_recibo = :id1 AND hash = :id2");
+            q.bindValue(":value", QString(items[i]).replace(',', '.'));
+            q.bindValue(":id1",   ids1[i]);
+            q.bindValue(":id2",   ids2[i]);
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "hash" << ids2[i] << "-" << q.lastError().text();
+            db.close();
+            ++errorCnt;
         }
-    }
-    else if (table == "gastos") {
-        QStringList items = read_column_from_table(db, item, table, "id");
-        QStringList ids = read_column_from_table(db, "id", table, "id");
-        for (int fra = 0; fra < items.count(); fra++) {
-            if (items[fra].contains(",")) {
-                QSqlQuery q;
-                db.open();
-                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE id = :id");
-                q.bindValue(":value", items[fra].replace(",","."));
-                q.bindValue(":id", ids[fra]);
-                q.exec();
-                db.close();
-                error_cnt++;
-            }
+    } else if (table == "gastos") {
+        QStringList items = readColumnFromTable(db, item, table, "id");
+        QStringList ids   = readColumnFromTable(db, "id", table, "id");
+
+        for (int i = 0; i < items.count(); ++i) {
+            if (!items[i].contains(',')) continue;
+            db.open();
+            QSqlQuery q(db);
+            q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE id = :id");
+            q.bindValue(":value", QString(items[i]).replace(',', '.'));
+            q.bindValue(":id",   ids[i]);
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "id" << ids[i] << "-" << q.lastError().text();
+            db.close();
+            ++errorCnt;
         }
-    }
-    else if (table == "prendas") {
-        QStringList items = read_column_from_table(db, item, table, "nombre");
-        QStringList ids = read_column_from_table(db, "nombre", table, "nombre");
-        for (int prenda = 0; prenda < items.count(); prenda++) {
-            if (items[prenda].contains(",")) {
-                QSqlQuery q;
-                db.open();
-                q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE nombre = :id");
-                q.bindValue(":value", items[prenda].replace(",","."));
-                q.bindValue(":id", ids[prenda]);
-                q.exec();
-                db.close();
-                error_cnt++;
-            }
+    } else if (table == "prendas") {
+        QStringList items = readColumnFromTable(db, item,     table, "nombre");
+        QStringList ids   = readColumnFromTable(db, "nombre", table, "nombre");
+
+        for (int i = 0; i < items.count(); ++i) {
+            if (!items[i].contains(',')) continue;
+            db.open();
+            QSqlQuery q(db);
+            q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE nombre = :id");
+            q.bindValue(":value", QString(items[i]).replace(',', '.'));
+            q.bindValue(":id",   ids[i]);
+            if (!q.exec())
+                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "nombre" << ids[i] << "-" << q.lastError().text();
+            db.close();
+            ++errorCnt;
         }
-    }
-    else
-        QMessageBox::critical(nullptr, "Error en update_comas_in_decimal_data",
-                              "La tabla especificada en " + table + " no está soportada.",
+    } else {
+        qCritical() << "updateComasInDecimalData: unsupported table:" << table;
+        QMessageBox::critical(nullptr, "Error en updateComasInDecimalData",
+                              "La tabla especificada '" + table + "' no está soportada.",
                               QMessageBox::Ok, QMessageBox::Ok);
-    return error_cnt;
+    }
+    return errorCnt;
 }
 
-void insert_new_item_to_table(QSqlDatabase &db,
-                              QStringList items,
-                              QString table)
+void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
 {
+    if (dbNotConfigured(db, __func__)) return;
+
+    // Build positional placeholders so values bind safely - never concatenate user input
+    // into the SQL (a client named O'Brien would otherwise break the statement, and a
+    // hostile value could close the literal and inject DDL).
+    QString placeholders;
+    for (int i = 0; i < items.count(); ++i)
+        placeholders += (i == 0 ? "?" : ", ?");
+
+    qDebug() << "insertNewItemToTable: INSERT INTO" << table << "VALUES (" << items.count() << "items )";
     db.open();
-    QSqlQuery q;
-    QString query;
-    query = "INSERT INTO " + table + " VALUES (";
-    for (int item = 0; item < items.count(); item++) {
-        query += "'" + items.value(item) + "'";
-        if (item == items.count() - 1)
-            query += ");";
-        else
-            query += ", ";
-    }
-    q.exec(query);
-    q.clear();
+    QSqlQuery q(db);
+    q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
+    for (const QString &item : items)
+        q.addBindValue(item);
+    if (!q.exec())
+        qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     db.close();
 }
 
-QString gen_hash_16()
+QString genHash16()
 {
     static const char alphanum[] =
         "0123456789"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "abcdefghijklmnopqrstuvwxyz";
-    const int len = 16;
-    QString tmp_s;
-    tmp_s.reserve(len);
-
-    for (int i = 0; i < len; ++i) {
-        tmp_s += alphanum[rand() % (sizeof(alphanum) - 1)];
-    }
-
-    return tmp_s;
+    constexpr int len = 16;
+    QString hash;
+    hash.reserve(len);
+    for (int i = 0; i < len; ++i)
+        hash += alphanum[QRandomGenerator::global()->bounded(static_cast<quint32>(sizeof(alphanum) - 1))];
+    return hash;
 }

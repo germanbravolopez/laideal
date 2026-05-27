@@ -1,6 +1,7 @@
 configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h @ONLY)
 
 if (WIN32)
+    string(TIMESTAMP CURRENT_YEAR "%Y")
     configure_file(
         ${CMAKE_SOURCE_DIR}/resources/laideal.rc.in
         ${CMAKE_CURRENT_BINARY_DIR}/laideal.rc @ONLY
@@ -13,7 +14,12 @@ add_executable(laideal
     mainwindow.ui
     mainwindow.h
     mainwindow.cpp
+    cancelinvoicedialog.h
+    cancelinvoicedialog.cpp
+    rectifyinvoicedialog.h
+    rectifyinvoicedialog.cpp
     main.cpp
+    ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
     ${EXE_SOURCES}
 )
 
@@ -23,17 +29,17 @@ target_link_libraries(laideal
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
+    logging
+    appsettings
     sql_lite
     imprimir
-    Listado
+    listado
     recog_prendas
-    sql_lite
-    MySortFilterProxyModel
-    FilterWidget
-    TableView
+    tableview
     contabilidad
     facturas
     add_garment
+    verifactu
 )
 
 set_target_properties(laideal PROPERTIES

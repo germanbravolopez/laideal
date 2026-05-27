@@ -1,0 +1,100 @@
+#ifndef APPSETTINGS_H
+#define APPSETTINGS_H
+
+#include <QString>
+#include <QJsonObject>
+#include <QStringList>
+
+// Singleton that loads/saves ~/.laideal_settings.json and exposes all
+// user-configurable settings. Call load() once in main() before MainWindow
+// is constructed. All modules read from instance() at point of use.
+class AppSettings
+{
+public:
+    static AppSettings *instance();
+
+    // Load from ~/.laideal_settings.json. Migrates legacy ~/.laideal_cfg and
+    // ~/.verifactu_key on first run. Returns true if the file was found and parsed.
+    bool load();
+
+    // Persist current state back to the JSON file.
+    bool save() const;
+
+    QString filePath() const { return m_filePath; }
+
+    // --- Database ---
+    QString dbPath() const;
+    void setDbPath(const QString &v);
+
+    // --- Report output directory ---
+    // Single user-configurable root; subdirs are hardcoded inside the getters
+    // so the JSON exposes only one path. mkpath() is the caller's responsibility
+    // (run on demand, not on settings save) - see Contabilidad / Listado.
+    QString reportsRoot() const;
+    void setReportsRoot(const QString &v);
+    QString contabilidadPath() const;        // <root>/Contabilidad
+    QString listadosPrendasPath() const;     // <root>/Listados/Prendas
+    QString listadosGastosPath() const;      // <root>/Listados/Gastos
+
+    // --- Print ---
+    bool enablePrinting() const;
+    void setEnablePrinting(bool v);
+    // Fixed file paths under the user's home directory (consistent with
+    // ~/.laideal_settings.json and ~/.laideal.log). The Excel file is recreated
+    // on every print; the VBScript is regenerated next to it. Both are app-internal
+    // and not user-configurable any more.
+    static QString ticketExcelPath();        // ~/.laideal_ticket.xlsx
+    static QString ticketPrintScriptPath();  // ~/.laideal_print.vbs
+
+    // --- Business identity ---
+    QString businessName() const;
+    void setBusinessName(const QString &v);
+    QString businessAddress() const;
+    void setBusinessAddress(const QString &v);
+    QString businessCity() const;
+    void setBusinessCity(const QString &v);
+    QString businessPhone() const;
+    void setBusinessPhone(const QString &v);
+
+    // --- Taxes ---
+    double ivaRate() const;      // percentage, e.g. 21.0
+    void setIvaRate(double v);
+
+    // --- Verifactu ---
+    QString verifactuNif() const;
+    void setVerifactuNif(const QString &v);
+    QString verifactuName() const;
+    void setVerifactuName(const QString &v);
+    QString verifactuServiceKey() const;
+    void setVerifactuServiceKey(const QString &v);
+    bool verifactuProduction() const;
+    void setVerifactuProduction(bool v);
+
+private:
+    AppSettings();
+    void migrateFromLegacyFiles();
+    // Folds legacy {reports.contabilidad_path, reports.listados_*_path,
+    // print.template_path, print.script_path} into a single reports.root and
+    // removes the obsolete keys. Idempotent.
+    void migrateLegacyKeys();
+    void applyDefaults();
+
+    QString str(const QStringList &path, const QString &def = {}) const;
+    double  dbl(const QStringList &path, double def = 0.0) const;
+    bool    bln(const QStringList &path, bool def = false) const;
+    void    setStr(const QStringList &path, const QString &value);
+    void    setDbl(const QStringList &path, double value);
+    void    setBln(const QStringList &path, bool value);
+
+    // Navigate / create nested JSON objects along a key path.
+    QJsonObject nested(const QJsonObject &root, const QStringList &path) const;
+    void        setNested(QJsonObject &root, const QStringList &path, const QJsonValue &value);
+    void        removeNested(QJsonObject &root, const QStringList &path);
+
+    QJsonObject m_data;
+    QString     m_filePath;
+
+    static AppSettings *s_instance;
+};
+
+#endif // APPSETTINGS_H

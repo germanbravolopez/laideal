@@ -628,7 +628,6 @@ prenda</string>
     <property name="title">
      <string>Archivo</string>
     </property>
-    <addaction name="actionModo_debug"/>
     <addaction name="actionLimpiar_base_de_datos"/>
     <addaction name="actionCrear_hash_en_ingresos"/>
     <addaction name="separator"/>
@@ -648,12 +647,15 @@ prenda</string>
     </widget>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
+    <addaction name="actionAnadir_nuevas_prendas"/>
+    <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
+    <addaction name="actionAnular_factura_verifactu"/>
+    <addaction name="actionRectificar_factura_verifactu"/>
+    <addaction name="actionExportar_registros_aeat"/>
     <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
-    <addaction name="separator"/>
-    <addaction name="actionAnadir_nuevas_prendas"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -667,25 +669,17 @@ prenda</string>
     <addaction name="actionListado_de_proveedores"/>
     <addaction name="actionListado_de_servicios"/>
    </widget>
+   <widget class="QMenu" name="menuAyuda">
+    <property name="title">
+     <string>Ayuda</string>
+    </property>
+    <addaction name="actionAcerca_de_Verifactu"/>
+   </widget>
    <addaction name="menuArchivo"/>
    <addaction name="menuHerramientas"/>
    <addaction name="menuVisualizar"/>
+   <addaction name="menuAyuda"/>
   </widget>
-  <action name="actionModo_debug">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Modo debug</string>
-   </property>
-   <property name="toolTip">
-    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Configurar applicación en modo debug.
-Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+D</string>
-   </property>
-  </action>
   <action name="actionRecibo">
    <property name="text">
     <string>Recibo</string>
@@ -718,7 +712,7 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
   </action>
   <action name="actionFormulario_facturas">
    <property name="text">
-    <string>Formulario facturas</string>
+    <string>Añadir factura de gastos</string>
    </property>
    <property name="shortcut">
     <string>Alt+F</string>
@@ -856,6 +850,46 @@ Desactivar impresión del ticket al guardarlo.&lt;/p&gt;&lt;/body&gt;&lt;/html&g
    </property>
    <property name="toolTip">
     <string>Crear hashes para los recibos que no tengan ya un hash en ingresos</string>
+   </property>
+  </action>
+  <action name="actionAnular_factura_verifactu">
+   <property name="text">
+    <string>Anular factura Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
+   </property>
+  </action>
+  <action name="actionRectificar_factura_verifactu">
+   <property name="text">
+    <string>Rectificar factura Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Emitir una factura rectificativa (R1-R5) de una factura previamente enviada a la AEAT (Art. 8.2.a RD 1007/2023)</string>
+   </property>
+  </action>
+  <action name="actionExportar_registros_aeat">
+   <property name="text">
+    <string>Exportar registros AEAT (XML)...</string>
+   </property>
+   <property name="toolTip">
+    <string>Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)</string>
+   </property>
+  </action>
+  <action name="actionMostrar_log">
+   <property name="text">
+    <string>Log de depuración...</string>
+   </property>
+   <property name="toolTip">
+    <string>Muestra la ubicación del archivo de log para enviar al soporte técnico</string>
+   </property>
+  </action>
+  <action name="actionAcerca_de_Verifactu">
+   <property name="text">
+    <string>Acerca de Verifactu...</string>
+   </property>
+   <property name="toolTip">
+    <string>Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)</string>
    </property>
   </action>
  </widget>

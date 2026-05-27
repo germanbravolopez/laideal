@@ -2,10 +2,15 @@
 #define RECOGPRENDAS_H
 
 #include <QMainWindow>
+#include <QDate>
 #include <QMessageBox>
 #include <QSqlQueryModel>
+#include <QHash>
 
 #include "mysortfilterproxymodel.h"
+
+class VerifactuIntegration;
+struct VerifactuResult;
 
 #define TABLE_TICKET     0
 #define TABLE_CLIENT     1
@@ -20,7 +25,17 @@
 #define TABLE_SIZE      10
 #define TABLE_SERVICE   11
 #define TABLE_OBSERV    12
-#define TABLE_EDIT_LOCK 13
+#define TABLE_EDIT_LOCK          13
+// TABLE_HASH = 14 is defined in imprimir.h
+#define TABLE_VERIFACTU_CSV       15
+#define TABLE_VERIFACTU_TIMESTAMP 16
+#define TABLE_VERIFACTU_ESTADO    17
+#define TABLE_VERIFACTU_ERROR     18
+#define TABLE_VERIFACTU_URL_QR    19
+#define TABLE_VERIFACTU_XML        20
+#define TABLE_VERIFACTU_HASH       21
+#define TABLE_VERIFACTU_RECTIFIES  22
+#define TABLE_VERIFACTU_RECT_TYPE  23
 
 namespace Ui {
 class RecogPrendas;
@@ -35,10 +50,11 @@ public:
     ~RecogPrendas();
 
     QSqlDatabase db;
-    QSqlQueryModel *sql_query_model = new QSqlQueryModel;
+    VerifactuIntegration *m_verifactuIntegration = nullptr;
+    QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel;
-    bool is_cell_clicked = false;
-    int row_clicked_cell, column_clicked_cell;
+    bool isCellClicked = false;
+    int rowClickedCell, columnClickedCell;
 
     enum UpdateDBop {
         PAY_YES,
@@ -51,11 +67,11 @@ public:
     };
 
 private slots:
-    void initial_settings();
-    void reset_all_contents();
-    void update_db(UpdateDBop op, int n_garm = 0);
-    void update_row_clicked_to_fields();
-    float calculate_price();
+    void initialSettings();
+    void resetAllContents();
+    void updateDb(UpdateDBop op, int nGarm = 0);
+    void updateRowClickedToFields();
+    float calculatePrice();
 
     void on_le_search_returnPressed();
     void on_cb_search_date_currentTextChanged(const QString &arg1);
@@ -70,9 +86,19 @@ private slots:
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
+    void on_pb_verifactu_clicked();
+    void retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate);
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     Ui::RecogPrendas *ui;
+    // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
+    // loop so multiple garments of the same ticket only fire one AEAT submission.
+    QHash<QString, QString> m_pendingSubmits;
+
+    void ensureVerifactuConnected();
+    bool hasPendingSubmit(const QString &ticketNum) const;
+    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 };
 
 #endif // RECOGPRENDAS_H
