@@ -2,37 +2,47 @@ Releases:
 
 8.0
 	- New feature: Verifactu integration - AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
-		- Submits simplified (F2) invoices to AEAT automatically when a ticket is saved
-		- QR code embedded at the bottom of the printed receipt
-		- Verifactu status, CSV, and AEAT validation link accessible per ticket in RecogPrendas
+		- Submits simplified (F2) invoices to AEAT; UI fully async, never blocks on the network
+		- Submission deferred to payment: tickets saved unpaid stay PENDIENTE and auto-submit when paid at pickup
+		- QR + "Factura verificable en la sede electronica de la AEAT" legend printed on ENVIADA tickets
 		- Invoice cancellation: Herramientas -> Anular factura Verifactu
-		- Retry failed submissions from RecogPrendas
+		- Invoice rectification (R1-R5, sustitucion / diferencias): Herramientas -> Rectificar factura Verifactu (Art. 8.2.a RD 1007/2023)
+		- AEAT XML export by date range: Herramientas -> Exportar registros AEAT (XML) (Art. 14.1 RD 1007/2023)
+		- Declaracion responsable del fabricante dialog: Ayuda -> Acerca de Verifactu (Art. 13 RD 1007/2023)
+		- AEAT chained hash (Huella, SHA-256) persisted per row for local tamper detection (Art. 12 RD 1007/2023)
+		- Verifactu status, CSV, AEAT validation link and "Reintentar envio" accessible per ticket in RecogPrendas
+		- "Probar conexion" button in settings validates ServiceKey and endpoint reachability
+		- Cancelled (ANULADA) and superseded-by-substitution (RECTIFICADA) rows excluded from quarterly income totals
+		- TESTING and PRODUCTION environments supported; v8.0 ships with TESTING (switch after meeting with IreneSolutions)
 		- Graceful degradation: unconfigured Verifactu does not block ticket saving
-		- TESTING and PRODUCTION environments supported; v8.0 ships with TESTING
 	- New feature: centralised settings - all hardcoded paths and values moved to ~/.laideal_settings.json
-		- Covers DB path, business identity, IVA rate, report paths, Verifactu credentials, print toggle
-		- Settings dialog accessible via Archivo -> Configuracion
-		- First run or missing DB path opens the settings dialog automatically
-	- New feature: persistent debug log - all output written to ~/.laideal.log (5 MB rotation)
-		- Accessible via Archivo -> Log de depuracion
+		- Covers DB path, business identity (name / address / city / phone), IVA rate, single reports root, Verifactu credentials, print toggle
+		- Settings dialog accessible via Archivo -> Configuracion; first run or missing DB path opens it automatically
+		- Legacy ~/.laideal_cfg and ~/.verifactu_key migrated on first launch
+	- New feature: persistent debug log at ~/.laideal.log (5 MB rotation, thread-safe)
+		- Every DB write logs at debug level; failures log a warning with the SQL error text
+		- Archivo -> Log de depuracion shows the path and opens the file directly
 	- Accounting fixes
-		- Cancelled Verifactu invoices excluded from quarterly income totals
-		- Fixed gastos quarter-boundary double-count
-		- Contextual confirmation dialogs in contabilidad (lock/revert)
-	- Receipt improvements
-		- Ticket header sourced from AppSettings (business name, NIF, address, phone)
-		- General conditions rewritten for legal correctness (RD 1453/1987)
-		- RGPD first-layer notice added to client receipt copy
-		- Conditions omitted from establishment copy
-	- Search: diacritic-insensitive filtering in RecogPrendas and Listado (e.g. "garcia" matches "Garcia")
-	- Ingresos Listado loads most-recent rows first; clickable Verifactu URL column
-	- Herramientas menu reorganised; debug mode replaced by print toggle in settings
-	- Code quality: applied coding guidelines to all source modules
-		- Renamed all identifiers from snake_case to camelCase
-		- Translated all developer comments and debug messages to English
-		- Converted SIGNAL/SLOT macro syntax to new-style pointer syntax throughout
-		- Fixed SQL injection vulnerability in add_garment search (parameterised query)
-	- Build: version number managed from root CMakeLists.txt and propagated automatically
+		- ANULADA and RECTIFICADA Verifactu rows excluded from quarterly income totals
+		- Fixed gastos quarter-boundary double-count (half-open date interval)
+		- Contextual confirmation dialogs in contabilidad (lock / revert)
+	- Receipt and printing improvements
+		- Ticket header sourced from AppSettings (business name, NIF, address, city, phone)
+		- General conditions rewritten for legal correctness (RD 1453/1987) + RGPD first-layer notice
+		- Conditions printed on client copy only; establishment copy omits them
+		- Thermal printer column widths (4 / 20 / 7.5) and page margins (0.2 / 0.1 / 0.1 / 0.4) tuned on the physical printer
+		- Print toggle in settings replaces the old debug mode (Excel still generated for inspection)
+	- Search and UX
+		- Diacritic-insensitive search in RecogPrendas and Listado ("garcia" matches "Garcia")
+		- Ingresos Listado loads most-recent rows first; clickable Verifactu validation URL column
+		- Herramientas menu reorganised; Anular and Rectificar actions added
+		- Per-garment payment disabled to prevent AEAT duplicate-InvoiceID rejection (pay via "Pagar todo")
+	- Code quality
+		- Coding guidelines applied to all source modules (camelCase identifiers, English comments / debug strings, new-style signal-slot syntax)
+		- SQL injection fix in add_garment search (parameterised query)
+		- Em-dash and other non-ASCII punctuation purged from sources (Windows code-page hazard)
+		- Verifactu module rewritten to fully async API (request ID + requestFinished signal)
+	- Build: version number managed from root CMakeLists.txt and propagated to the generated version.h
 
 r7.1
 	- New feature: print listado de prendas to pdf
