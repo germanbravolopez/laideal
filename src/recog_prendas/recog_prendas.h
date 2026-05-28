@@ -98,7 +98,6 @@ private:
 
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;
-    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
     void printFactura(const QString &ticketNum, bool askSecondCopy);
 };
 

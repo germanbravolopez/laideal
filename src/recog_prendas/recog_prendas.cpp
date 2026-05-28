@@ -723,7 +723,7 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
     const QString ticketNum = it.value();
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(ticketNum, result);
+    updateTicketVerifactuFields(db, ticketNum, result);
 
     // Refresh the table so the new estado is visible (only if user is still on this view)
     on_pb_search_clicked();
@@ -755,48 +755,6 @@ bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
         if (it.value() == ticketNum) return true;
     }
     return false;
-}
-
-void RecogPrendas::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
-{
-    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const QString estado    = verifactuEstadoToString(
-        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
-    qDebug() << "RecogPrendas::updateTicketVerifactuFields: ticket" << ticketNum
-             << "estado=" << estado
-             << "csv=" << (result.isSuccess() ? result.csv : QString())
-             << "hash=" << (result.isSuccess() ? result.rawHash : QString())
-             << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
-             << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
-    db.open();
-    QSqlQuery upd;
-    upd.prepare("UPDATE ingresos SET "
-                "verifactu_csv = :csv, verifactu_timestamp = :ts, "
-                "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-                "verifactu_xml = :xml, verifactu_hash = :hash "
-                "WHERE n_recibo = :n_recibo");
-    if (result.isSuccess()) {
-        upd.bindValue(":csv",    result.csv);
-        upd.bindValue(":ts",     timestamp);
-        upd.bindValue(":estado", estado);
-        upd.bindValue(":error",  "");
-        upd.bindValue(":url",    result.validationUrl);
-        upd.bindValue(":xml",    result.rawXml);
-        upd.bindValue(":hash",   result.rawHash);
-    } else {
-        upd.bindValue(":csv",    "");
-        upd.bindValue(":ts",     timestamp);
-        upd.bindValue(":estado", estado);
-        upd.bindValue(":error",  result.errorDescription);
-        upd.bindValue(":url",    "");
-        upd.bindValue(":xml",    "");
-        upd.bindValue(":hash",   "");
-    }
-    upd.bindValue(":n_recibo", ticketNum);
-    if (!upd.exec())
-        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
-                   << "-" << upd.lastError().text();
-    db.close();
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()

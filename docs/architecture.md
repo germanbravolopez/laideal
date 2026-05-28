@@ -227,7 +227,7 @@ on_bb_save_reset_clicked(Save)
 Async tail (when AEAT replies later than 3 s, or for not-paid tickets that get paid later via RecogPrendas):
   VerifactuIntegration::requestFinished(reqId, result)
   └── MainWindow::onVerifactuRequestFinished
-        ├── updateTicketVerifactuFields(...) — UPDATE ingresos with CSV/timestamp/estado
+        ├── sql_lite::updateTicketVerifactuFields(db, ticketNum, result) — UPDATE ingresos with CSV/timestamp/estado
         └── statusBar message                — "Ticket NNNN enviado (CSV: ...)" or "Error: ..."
 ```
 

@@ -60,7 +60,6 @@ private slots:
     void printRecibo();
     void printFra(const QPixmap &qrCode = QPixmap());
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
-    void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
