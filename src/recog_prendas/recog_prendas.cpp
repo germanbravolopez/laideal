@@ -570,15 +570,15 @@ void RecogPrendas::on_le_size_editingFinished()
 
 void RecogPrendas::on_pb_pay_all_clicked()
 {
-    int currentRow = rowClickedCell;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
         on_tableView_clicked(sqlQueryModel->index(row, 0));
         on_pb_payment_toggled(true);
     }
-    if (currentRow >= 0)
-        on_tableView_clicked(sqlQueryModel->index(currentRow, 0));
-    else
-        resetAllContents();
+    // Capture the ticket before resetAllContents() clears le_nr_ticket.
+    const QString ticketForPrint = ui->le_nr_ticket->text();
+    // After paying everything, auto-print the factura and offer a second copy.
+    printFactura(ticketForPrint, /*askSecondCopy=*/true);
+    resetAllContents();
 }
 
 void RecogPrendas::on_pb_pku_all_clicked()
@@ -596,21 +596,37 @@ void RecogPrendas::on_pb_pku_all_clicked()
 
 void RecogPrendas::on_pb_print_clicked()
 {
-    if (!ui->le_nr_ticket->text().isEmpty()) {
-        Imprimir *ui_impr;
-        ui_impr = new Imprimir(this);
-        ui_impr->db = db;
-        ui_impr->isRecibo = false;
-        ui_impr->isCompleteInvoice = false;
-        ui_impr->verifactuIntegration = m_verifactuIntegration;
-        ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
-        ui_impr->getTicketInfo();
-        ui_impr->createTicketExcel(false, false);
-        if (AppSettings::instance()->enablePrinting()) {
-            ui_impr->printTicket();
-        }
-        this->close();
-    }
+    if (ui->le_nr_ticket->text().isEmpty())
+        return;
+    printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false);
+    resetAllContents();
+}
+
+void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy)
+{
+    if (ticketNum.isEmpty())
+        return;
+    qDebug() << "RecogPrendas::printFactura: ticket=" << ticketNum
+             << "askSecondCopy=" << askSecondCopy;
+    Imprimir *ui_impr = new Imprimir(this);
+    ui_impr->db = db;
+    ui_impr->isRecibo = false;
+    ui_impr->isCompleteInvoice = false;
+    ui_impr->verifactuIntegration = m_verifactuIntegration;
+    ui_impr->le_n_ticket->setText(ticketNum);
+    ui_impr->getTicketInfo();
+    ui_impr->createTicketExcel(false, false);
+    if (!AppSettings::instance()->enablePrinting())
+        return;
+    ui_impr->printTicket();
+    if (!askSecondCopy)
+        return;
+    const auto resp = QMessageBox::question(this, tr("Segunda copia"),
+                                            tr("¿Imprimir una segunda copia de la factura?"),
+                                            QMessageBox::Yes | QMessageBox::No,
+                                            QMessageBox::No);
+    if (resp == QMessageBox::Yes)
+        ui_impr->printTicket();
 }
 
 void RecogPrendas::on_pb_verifactu_clicked()
