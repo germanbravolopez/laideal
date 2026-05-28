@@ -574,10 +574,6 @@ void RecogPrendas::on_pb_pay_all_clicked()
         on_tableView_clicked(sqlQueryModel->index(row, 0));
         on_pb_payment_toggled(true);
     }
-    // Capture the ticket before resetAllContents() clears le_nr_ticket.
-    const QString ticketForPrint = ui->le_nr_ticket->text();
-    // After paying everything, auto-print the factura and offer a second copy.
-    printFactura(ticketForPrint, /*askSecondCopy=*/true);
     resetAllContents();
 }
 

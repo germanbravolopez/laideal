@@ -107,16 +107,17 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
    Commit the version bump + notes on the branch as a single `release X.Y` commit.
-4. Merge the branch to `master`. Either open a PR on GitHub and merge it, or do it locally:
+4. Merge the branch to `master` PR-style, with a merge commit so the release shows up as a single point on `master`'s history. Either open a PR on GitHub and merge it (default "Create a merge commit" option), or do it locally:
    ```powershell
    git checkout master
-   git merge --ff-only develop
+   git merge --no-ff develop -m "Merge branch 'develop' for release X.Y"
+   git push origin master
    ```
-   Prefer a fast-forward merge so the history stays linear; the final `release X.Y` commit becomes the tagged release commit.
-5. Tag the release commit on `master` and push everything:
+   The merge commit on `master` is the release commit that gets tagged in the next step.
+5. Tag the merge commit on `master` and push the tag:
    ```powershell
    git tag -a X.Y -m "Release X.Y"
-   git push origin master X.Y
+   git push origin X.Y
    ```
 6. Publish on GitHub - see [Release procedure](#release-procedure) below for the artifacts and the GitHub publish step.
 
@@ -156,10 +157,26 @@ Artifacts:
 - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
 - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
 
-These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step collapses to:
+These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step is:
 
 ```powershell
-gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt
+$ver = 'X.Y'
+# Extract just the new X.Y section from releases_notes.txt into a temp .md so the
+# GitHub release body shows only this release's bullets, not the whole accumulated file.
+# Strips the leading tab (the section's indent under the version title) and the title line.
+$tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
+$raw = Get-Content releases_notes.txt -Raw
+$m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
+$body = ($m.Groups[1].Value -split "`r?`n" | ForEach-Object { $_ -replace '^\t', '' }) -join "`n"
+Set-Content -Path $tmpNotes -Value $body.TrimEnd() -Encoding utf8
+
+gh release create $ver `
+    releases/old_releases/$ver.zip `
+    releases/setup_outputs/laideal_setup_$ver.exe `
+    --title "Release $ver" `
+    --notes-file $tmpNotes
+
+Remove-Item $tmpNotes
 ```
 
 ---

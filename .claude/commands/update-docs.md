@@ -38,6 +38,17 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 ### 6. `docs/README.md` — update when new doc files are added
 - Add the new file to the navigation table under the right section
 
+### 7. `README.md` (repo root) — update when user-visible behaviour, build, or workflow changed
+- Update the Features list if a user-visible feature was added/removed/renamed
+- Update Requirements / Build / Configuration if the toolchain, build commands, or settings keys changed
+- Update Development workflow or Release procedure if the branching, merge, tag, or release-pipeline steps changed
+- Skip if the change is purely internal (refactor, docs-only, bug fix with no behaviour change)
+
+### 8. `releases_notes.txt` (repo root) — update when shipping a release
+- Only edit as part of a `release X.Y` commit on the working branch (see Development workflow in README)
+- Add a new `X.Y` section at the **top** with customer-facing changes in plain language (English, matching the existing entries — Inno Setup shows this file to end users at install time, and the same content is reused as the GitHub release body)
+- Do **not** add an entry for in-progress work; the entry lands in the same commit that bumps `CMakeLists.txt` to the new version
+
 ---
 
 ## Document size limits
