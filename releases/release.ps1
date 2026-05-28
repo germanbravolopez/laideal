@@ -91,7 +91,12 @@ Copy-Item $builtExe -Destination $StagingDir
 
 Step "Running windeployqt"
 $stagedExe = Join-Path $StagingDir 'laideal.exe'
-& windeployqt --release --no-translations --no-system-d3d-compiler $stagedExe
+# Do NOT pass --release. windeployqt auto-detects the build type from the .exe PE
+# header, and on MinGW Qt installs it mis-identifies the release plugin DLLs (e.g.
+# plugins/platforms/qwindows.dll) as "debug" via its heuristic. With --release set
+# explicitly it then filters those out and aborts with "Unable to find the platform
+# plugin." Letting it auto-detect deploys the correct plugins.
+& windeployqt --no-translations --no-system-d3d-compiler $stagedExe
 if ($LASTEXITCODE -ne 0) { Fail "windeployqt failed" }
 
 Step "Creating zip $ZipPath"
