@@ -31,14 +31,14 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 ## Build
 
-```bash
-git clone <repo-url>
-cd laideal
-cmake -B build
-cmake --build build --config Release
+From a PowerShell prompt in the repo root (Qt cmd prompt no longer required - the build script prepends Qt + MinGW to `PATH` itself):
+
+```powershell
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
-Or open `CMakeLists.txt` directly in Qt Creator and build with the *Release* configuration.
+The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration.
 
 ---
 
@@ -85,28 +85,32 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
 
 ---
 
-## Deploy
-
-Package the application for distribution using **windeployqt** and **Inno Setup**:
-
-- [windeployqt guide](https://medium.com/swlh/how-to-deploy-your-qt-cross-platform-applications-to-windows-operating-system-by-using-windeployqt-a7cd5663d46e)
-- [Inno Setup installer tutorial](https://www.youtube.com/watch?v=Y9Ovo2XJHDs)
-- Installer tool: [Inno Setup](https://jrsoftware.org/isinfo.php)
-
 ## Release procedure
 
-1. Update the version number in `CMakeLists.txt`
-2. Update `releases_notes.txt`
-3. Build with the *Release* configuration in Qt Creator
-4. Close Qt Creator
-5. Open a Qt command prompt with administrator rights
-6. `cd C:\Users\gebra\work\tintoreria\laideal\releases`
-7. Run `deploy_laideal_run_in_qt_cmd.bat`
-8. Enter the release tag when prompted (e.g. `8.0`)
-9. Commit the version bump and release notes (`git add CMakeLists.txt releases_notes.txt && git commit -m "release X.Y"`)
-10. Tag the release commit (`git tag -a X.Y -m "Release X.Y"`)
-11. Push commits and the tag (`git push && git push origin X.Y`)
-12. Create the GitHub release: `gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt` (or use the GitHub web UI: Releases → Draft a new release → select the tag → attach the installer from `releases/setup_outputs/` and the zip from `releases/old_releases/`)
+The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1`. No Qt cmd prompt needed - the script loads the Qt environment itself.
+
+**Release toolchain** (pinned by `releases\release.ps1`):
+
+| Tool | Expected location |
+|------|-------------------|
+| Qt (MinGW 64-bit) | `C:\Qt\6.4.3\mingw_64` |
+| MinGW | `C:\Qt\Tools\mingw1120_64` |
+| Inno Setup 6 | `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` |
+| PowerShell | 5.1+ (ships with Windows 10/11) |
+
+To repoint at a different Qt version, edit the `$QtBinDir` / `$MingwBinDir` constants at the top of `releases\release.ps1`.
+
+1. Bump the version in `CMakeLists.txt` (the `project(laideal VERSION X.Y ...)` line) and add the X.Y section to `releases_notes.txt`. Commit.
+2. From any PowerShell prompt in the repo root:
+   ```powershell
+   .\releases\release.ps1 X.Y
+   ```
+   (or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a zip/installer for that version already exists.
+3. After it finishes, the artifacts are at:
+   - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
+   - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
+4. Tag the release commit and push: `git tag -a X.Y -m "Release X.Y" && git push && git push origin X.Y`.
+5. Publish to GitHub: open the repo on GitHub -> Releases -> Draft a new release -> select the X.Y tag -> attach `releases\old_releases\X.Y.zip` and `releases\setup_outputs\laideal_setup_X.Y.exe` -> paste the X.Y section from `releases_notes.txt` into the description. (If the [GitHub CLI](https://cli.github.com/) is installed, this collapses to `gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt`.)
 
 ---
 

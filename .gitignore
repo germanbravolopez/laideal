@@ -3,12 +3,10 @@
 # release files
 releases/old_releases
 releases/setup_outputs
-releases/*.zip
-releases/r*
-laideal_upd.iss
 
 # build files
 build
+build-release
 
 # temporary or log files
 *.bak
@@ -22,6 +20,7 @@ build
 # binaries
 *.dll
 *.exe
+*.zip
 
 # local settings
 .claude/settings.local.json
