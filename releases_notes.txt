@@ -1,162 +1,162 @@
 Releases:
 
 8.2
-	- Bug fix: factura is no longer auto-printed when pressing "Pagar todo"
-		- 8.1 added an automatic print right after "Pagar todo" plus a "second copy?" prompt, but Verifactu's QR has to come back from the AEAT relay first; if the network was slow or the endpoint blipped, the factura sometimes printed without a QR. The print button on the RecogPrendas window stays - press it when the row shows ENVIADA so the QR is on the receipt. The second-copy prompt moves with the auto-print and is gone too; click the print button twice for the second copy.
+- Bug fix: factura is no longer auto-printed when pressing "Pagar todo"
+  - 8.1 added an automatic print right after "Pagar todo" plus a "second copy?" prompt, but Verifactu's QR has to come back from the AEAT relay first; if the network was slow or the endpoint blipped, the factura sometimes printed without a QR. The print button on the RecogPrendas window stays - press it when the row shows ENVIADA so the QR is on the receipt. The second-copy prompt moves with the auto-print and is gone too; click the print button twice for the second copy.
 
 8.1
-	- Bug fix: search by client name in Recogida de prendas now returns all the tickets for that client
-		- Previously, for clients with many receipts some tickets could be silently hidden from the result; the search is now complete regardless of how many rows the ingresos table has.
-	- New: "Pagar todo" now automatically prints the factura and asks if a second copy is needed
-		- After all garments are marked paid, the factura is sent to the printer and a dialog "¿Imprimir una segunda copia de la factura?" offers the establishment copy
-		- The print button no longer closes Recogida de prendas; it resets the form instead, so chaining to the next client does not require reopening the window
-	- Build / release tooling (internal): single PowerShell command (releases\release.ps1 X.Y) now builds, runs windeployqt, zips and produces the Inno Setup installer in one step; build switched from MinGW Makefiles to Ninja to avoid antivirus blocks on %TEMP%\*.bat; README Build and Release procedure sections rewritten to match
+- Bug fix: search by client name in Recogida de prendas now returns all the tickets for that client
+  - Previously, for clients with many receipts some tickets could be silently hidden from the result; the search is now complete regardless of how many rows the ingresos table has.
+- New: "Pagar todo" now automatically prints the factura and asks if a second copy is needed
+  - After all garments are marked paid, the factura is sent to the printer and a dialog "¿Imprimir una segunda copia de la factura?" offers the establishment copy
+  - The print button no longer closes Recogida de prendas; it resets the form instead, so chaining to the next client does not require reopening the window
+- Build / release tooling (internal): single PowerShell command (releases\release.ps1 X.Y) now builds, runs windeployqt, zips and produces the Inno Setup installer in one step; build switched from MinGW Makefiles to Ninja to avoid antivirus blocks on %TEMP%\*.bat; README Build and Release procedure sections rewritten to match
 
 8.0
-	- New feature: Verifactu integration - AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
-		- Submits simplified (F2) invoices to AEAT; UI fully async, never blocks on the network
-		- Submission deferred to payment: tickets saved unpaid stay PENDIENTE and auto-submit when paid at pickup
-		- QR + "Factura verificable en la sede electronica de la AEAT" legend printed on ENVIADA tickets
-		- Invoice cancellation: Herramientas -> Anular factura Verifactu
-		- Invoice rectification (R1-R5, sustitucion / diferencias): Herramientas -> Rectificar factura Verifactu (Art. 8.2.a RD 1007/2023)
-		- AEAT XML export by date range: Herramientas -> Exportar registros AEAT (XML) (Art. 14.1 RD 1007/2023)
-		- Declaracion responsable del fabricante dialog: Ayuda -> Acerca de Verifactu (Art. 13 RD 1007/2023)
-		- AEAT chained hash (Huella, SHA-256) persisted per row for local tamper detection (Art. 12 RD 1007/2023)
-		- Verifactu status, CSV, AEAT validation link and "Reintentar envio" accessible per ticket in RecogPrendas
-		- "Probar conexion" button in settings validates ServiceKey and endpoint reachability
-		- Cancelled (ANULADA) and superseded-by-substitution (RECTIFICADA) rows excluded from quarterly income totals
-		- TESTING and PRODUCTION environments supported; v8.0 ships with TESTING (switch after meeting with IreneSolutions)
-		- Graceful degradation: unconfigured Verifactu does not block ticket saving
-	- New feature: centralised settings - all hardcoded paths and values moved to ~/.laideal_settings.json
-		- Covers DB path, business identity (name / address / city / phone), IVA rate, single reports root, Verifactu credentials, print toggle
-		- Settings dialog accessible via Archivo -> Configuracion; first run or missing DB path opens it automatically
-		- Legacy ~/.laideal_cfg and ~/.verifactu_key migrated on first launch
-	- New feature: persistent debug log at ~/.laideal.log (5 MB rotation, thread-safe)
-		- Every DB write logs at debug level; failures log a warning with the SQL error text
-		- Archivo -> Log de depuracion shows the path and opens the file directly
-	- Accounting fixes
-		- ANULADA and RECTIFICADA Verifactu rows excluded from quarterly income totals
-		- Fixed gastos quarter-boundary double-count (half-open date interval)
-		- Contextual confirmation dialogs in contabilidad (lock / revert)
-	- Receipt and printing improvements
-		- Ticket header sourced from AppSettings (business name, NIF, address, city, phone)
-		- General conditions rewritten for legal correctness (RD 1453/1987) + RGPD first-layer notice
-		- Conditions printed on client copy only; establishment copy omits them
-		- Thermal printer column widths (4 / 20 / 7.5) and page margins (0.2 / 0.1 / 0.1 / 0.4) tuned on the physical printer
-		- Print toggle in settings replaces the old debug mode (Excel still generated for inspection)
-	- Search and UX
-		- Diacritic-insensitive search in RecogPrendas and Listado ("garcia" matches "Garcia")
-		- Ingresos Listado loads most-recent rows first; clickable Verifactu validation URL column
-		- Herramientas menu reorganised; Anular and Rectificar actions added
-		- Per-garment payment disabled to prevent AEAT duplicate-InvoiceID rejection (pay via "Pagar todo")
-	- Code quality
-		- Coding guidelines applied to all source modules (camelCase identifiers, English comments / debug strings, new-style signal-slot syntax)
-		- SQL injection fix in add_garment search (parameterised query)
-		- Em-dash and other non-ASCII punctuation purged from sources (Windows code-page hazard)
-		- Verifactu module rewritten to fully async API (request ID + requestFinished signal)
-	- Build: version number managed from root CMakeLists.txt and propagated to the generated version.h
+- New feature: Verifactu integration - AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
+  - Submits simplified (F2) invoices to AEAT; UI fully async, never blocks on the network
+  - Submission deferred to payment: tickets saved unpaid stay PENDIENTE and auto-submit when paid at pickup
+  - QR + "Factura verificable en la sede electronica de la AEAT" legend printed on ENVIADA tickets
+  - Invoice cancellation: Herramientas -> Anular factura Verifactu
+  - Invoice rectification (R1-R5, sustitucion / diferencias): Herramientas -> Rectificar factura Verifactu (Art. 8.2.a RD 1007/2023)
+  - AEAT XML export by date range: Herramientas -> Exportar registros AEAT (XML) (Art. 14.1 RD 1007/2023)
+  - Declaracion responsable del fabricante dialog: Ayuda -> Acerca de Verifactu (Art. 13 RD 1007/2023)
+  - AEAT chained hash (Huella, SHA-256) persisted per row for local tamper detection (Art. 12 RD 1007/2023)
+  - Verifactu status, CSV, AEAT validation link and "Reintentar envio" accessible per ticket in RecogPrendas
+  - "Probar conexion" button in settings validates ServiceKey and endpoint reachability
+  - Cancelled (ANULADA) and superseded-by-substitution (RECTIFICADA) rows excluded from quarterly income totals
+  - TESTING and PRODUCTION environments supported; v8.0 ships with TESTING (switch after meeting with IreneSolutions)
+  - Graceful degradation: unconfigured Verifactu does not block ticket saving
+- New feature: centralised settings - all hardcoded paths and values moved to ~/.laideal_settings.json
+  - Covers DB path, business identity (name / address / city / phone), IVA rate, single reports root, Verifactu credentials, print toggle
+  - Settings dialog accessible via Archivo -> Configuracion; first run or missing DB path opens it automatically
+  - Legacy ~/.laideal_cfg and ~/.verifactu_key migrated on first launch
+- New feature: persistent debug log at ~/.laideal.log (5 MB rotation, thread-safe)
+  - Every DB write logs at debug level; failures log a warning with the SQL error text
+  - Archivo -> Log de depuracion shows the path and opens the file directly
+- Accounting fixes
+  - ANULADA and RECTIFICADA Verifactu rows excluded from quarterly income totals
+  - Fixed gastos quarter-boundary double-count (half-open date interval)
+  - Contextual confirmation dialogs in contabilidad (lock / revert)
+- Receipt and printing improvements
+  - Ticket header sourced from AppSettings (business name, NIF, address, city, phone)
+  - General conditions rewritten for legal correctness (RD 1453/1987) + RGPD first-layer notice
+  - Conditions printed on client copy only; establishment copy omits them
+  - Thermal printer column widths (4 / 20 / 7.5) and page margins (0.2 / 0.1 / 0.1 / 0.4) tuned on the physical printer
+  - Print toggle in settings replaces the old debug mode (Excel still generated for inspection)
+- Search and UX
+  - Diacritic-insensitive search in RecogPrendas and Listado ("garcia" matches "Garcia")
+  - Ingresos Listado loads most-recent rows first; clickable Verifactu validation URL column
+  - Herramientas menu reorganised; Anular and Rectificar actions added
+  - Per-garment payment disabled to prevent AEAT duplicate-InvoiceID rejection (pay via "Pagar todo")
+- Code quality
+  - Coding guidelines applied to all source modules (camelCase identifiers, English comments / debug strings, new-style signal-slot syntax)
+  - SQL injection fix in add_garment search (parameterised query)
+  - Em-dash and other non-ASCII punctuation purged from sources (Windows code-page hazard)
+  - Verifactu module rewritten to fully async API (request ID + requestFinished signal)
+- Build: version number managed from root CMakeLists.txt and propagated to the generated version.h
 
 r7.1
-	- New feature: print listado de prendas to pdf
+- New feature: print listado de prendas to pdf
 
 r7.0
-	- Update hardcoded paths for new laptop
+- Update hardcoded paths for new laptop
 
 r6.1
-	- Fix waiting cursor for listados and other tools
+- Fix waiting cursor for listados and other tools
 
 r6.0
-	- New feature: add_garments for new garments to existing tickets
-	- New feature: split garments in recog_prendas
-	- Add hash to garments in ingresos to uniquely identify them in the database
-	- Update wait cursor in different places for time consuming tasks
-	- Perform recog_prendas updates to db based on recibo and hash
+- New feature: add_garments for new garments to existing tickets
+- New feature: split garments in recog_prendas
+- Add hash to garments in ingresos to uniquely identify them in the database
+- Update wait cursor in different places for time consuming tasks
+- Perform recog_prendas updates to db based on recibo and hash
 
 r5.7
-	- Fix deselect cell when data locked in listados
-	- Only lock data when contabilidad was not done before, avoid re-lock
-	- Add checkbox to select if data to be locked
-	- Do not close revertir window if data was not locked
-	- Close recog_prendas after print ticket
-	- Update lists by reordering and not with populate_table()
+- Fix deselect cell when data locked in listados
+- Only lock data when contabilidad was not done before, avoid re-lock
+- Add checkbox to select if data to be locked
+- Do not close revertir window if data was not locked
+- Close recog_prendas after print ticket
+- Update lists by reordering and not with populate_table()
 
 r5.6
-	- Prevent update of locked data in ingresos or gastos
+- Prevent update of locked data in ingresos or gastos
 
 r5.5
-	- Avoid print message "IMPORTE PAGADO" when printing facturas
-	- Fix non-used code and let always override contabilidad reports
+- Avoid print message "IMPORTE PAGADO" when printing facturas
+- Fix non-used code and let always override contabilidad reports
 
 r5.4
-	- Update project to show version details and other properties in the exe file
-	- Update hard paths to external tools (print excel and icon)
+- Update project to show version details and other properties in the exe file
+- Update hard paths to external tools (print excel and icon)
 
 r5.3
-	- Calculate contabilidad per months correctly for last month
-	- Keep name after search in recog_prendas
-	- Bugfix with phone search in recog_prendas
-	- Update size for all kinds of garments that contains m2
+- Calculate contabilidad per months correctly for last month
+- Keep name after search in recog_prendas
+- Bugfix with phone search in recog_prendas
+- Update size for all kinds of garments that contains m2
 
 r5.2
-	- Bugfixes let recog_prendas show the total price of the search
+- Bugfixes let recog_prendas show the total price of the search
 
 r5.1
-	- Bugfixes when deleting garment in mainwindow
-	- Update ingresos to use Listado class and adapt search engine
-	- Populate all data to tables and present it in the correct sorting column
-	- Reduce font in tables to 8pt and keep row height constant
-	- Table in recog_prendas with proxymodel
+- Bugfixes when deleting garment in mainwindow
+- Update ingresos to use Listado class and adapt search engine
+- Populate all data to tables and present it in the correct sorting column
+- Reduce font in tables to 8pt and keep row height constant
+- Table in recog_prendas with proxymodel
 
 r5.0
-	- Save facturas without taxes with IVA type of 0
-	- New feature: Revert accountings
-	- Use Listados to create gastos table view
-	- Handle all sortings (date, numbers and strings) in every table
-	- New dialog (InsertNewItem) to add new clients
-	- Fix ingresos to avoid introduce any ticket in a block quarter
+- Save facturas without taxes with IVA type of 0
+- New feature: Revert accountings
+- Use Listados to create gastos table view
+- Handle all sortings (date, numbers and strings) in every table
+- New dialog (InsertNewItem) to add new clients
+- Fix ingresos to avoid introduce any ticket in a block quarter
 
 r4.4
-	- Fix IVA maths
+- Fix IVA maths
 
 r4.3
-	- Replace background colors by text color in payed and state columns
+- Replace background colors by text color in payed and state columns
 
 r4.2
-	- Use common class for all lists
-	- Add search bar in lists
-	- Make smaller row heights in all tables
-	- Print invoice after payed ticket
-	- Add background colors to payed and state columns in ingresos and recog_prendas
-	- Print functionality in recog_prendas
-	- Add size infor to tickets
-	- Other little updates/fixes
+- Use common class for all lists
+- Add search bar in lists
+- Make smaller row heights in all tables
+- Print invoice after payed ticket
+- Add background colors to payed and state columns in ingresos and recog_prendas
+- Print functionality in recog_prendas
+- Add size infor to tickets
+- Other little updates/fixes
 
 r4.1
-	- Setup icon for the app
+- Setup icon for the app
 
 r4.0
-	- Revert normal combobox to services
-	- Order ingresos and gastos tables with most recent first
-	- Fix messages when new client is typed in mainwindow
-		- Do not change case or other special characters when saving new client
-	- Debug mode for avoid print of ticket in mainwindow
-	- Fix UI facturas, show iva and base calculated, replace producto with description
-	- Fix total cost calculated when ordering gastos per supplier to generate pdf
+- Revert normal combobox to services
+- Order ingresos and gastos tables with most recent first
+- Fix messages when new client is typed in mainwindow
+  - Do not change case or other special characters when saving new client
+- Debug mode for avoid print of ticket in mainwindow
+- Fix UI facturas, show iva and base calculated, replace producto with description
+- Fix total cost calculated when ordering gastos per supplier to generate pdf
 
 r3.0
-	- Print support using excel and batch script
-	- Maximize window at startup and reorganize some code
+- Print support using excel and batch script
+- Maximize window at startup and reorganize some code
 
 r2.0
-	- Fix facturas to add new invoices
-	- Fix saving new rows in lists
-	- Add 2 decimal digits to all currency data
-	- Update UI of search in recogida de prendas
-	- Fix generar listado de gastos
-		- actual expenses of iva, base and importe
-		- when group per supplier, add final acc
-	- Create new table in db for servicios and make them unique in facturas with cb
+- Fix facturas to add new invoices
+- Fix saving new rows in lists
+- Add 2 decimal digits to all currency data
+- Update UI of search in recogida de prendas
+- Fix generar listado de gastos
+  - actual expenses of iva, base and importe
+  - when group per supplier, add final acc
+- Create new table in db for servicios and make them unique in facturas with cb
 
 r1.0
-	- La Ideal software full application initial release.
+- La Ideal software full application initial release.
 
