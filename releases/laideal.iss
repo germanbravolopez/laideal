@@ -38,6 +38,14 @@ SetupIconFile=..\icon\lavadora.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; In-place upgrade support for the in-app updater (Ayuda -> Buscar
+; actualizaciones). When the user starts the installer while laideal.exe is
+; still running, Inno detects it, prompts to close, replaces files, and
+; relaunches. CloseApplicationsFilter limits the scan to our exe so we don't
+; touch any unrelated open file under {app}.
+CloseApplications=yes
+RestartApplications=yes
+CloseApplicationsFilter=*.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

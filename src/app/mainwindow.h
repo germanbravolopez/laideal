@@ -11,6 +11,7 @@
 #include "verifactuintegration.h"
 #include "cancelinvoicedialog.h"
 #include "rectifyinvoicedialog.h"
+#include "updater.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -92,6 +93,14 @@ private slots:
     void on_actionExportar_registros_aeat_triggered();
     void on_actionMostrar_log_triggered();
     void on_actionAcerca_de_Verifactu_triggered();
+    void on_actionBuscar_actualizaciones_triggered();
+
+    // Updater signal handlers
+    void onUpdateAvailable(const QString &latestVersion,
+                           const QString &releaseNotes,
+                           const QUrl &installerUrl);
+    void onUpdaterNoUpdateAvailable();
+    void onUpdaterCheckFailed(const QString &error);
 
 private:
     Ui::MainWindow *ui;
@@ -99,6 +108,7 @@ private:
     // Async submit tracking: reqId -> ticket number, so the requestFinished handler
     // can look up which DB rows to update for each Verifactu response.
     QHash<QString, QString> m_pendingSubmits;
+    Updater *m_updater;
 };
 
 #endif // MAINWINDOW_H

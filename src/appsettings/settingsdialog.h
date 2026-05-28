@@ -40,6 +40,7 @@ private:
     QLineEdit *m_dbPath;
     QLineEdit *m_ivaRate;
     QCheckBox *m_enablePrinting;
+    QCheckBox *m_checkUpdatesOnStartup;
 
     QLineEdit *m_reportsRoot;
 

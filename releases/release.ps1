@@ -74,6 +74,11 @@ foreach ($p in @($StagingDir, $ZipPath, $InstallerPath)) {
     if (Test-Path $p) { Fail "Already exists - delete first: $p" }
 }
 
+if (Test-Path $BuildDir) {
+    Step "Cleaning build dir $BuildDir"
+    Remove-Item -Recurse -Force $BuildDir
+}
+
 Step "Configuring CMake (Release, Ninja)"
 & cmake -S $RepoRoot -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release
 if ($LASTEXITCODE -ne 0) { Fail "CMake configure failed" }

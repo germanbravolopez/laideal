@@ -17,7 +17,9 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include "updaterdialog.h"
 #include "version.h"
+#include <QTimer>
 #include <QStatusBar>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -39,6 +41,19 @@ MainWindow::MainWindow(QWidget *parent)
     db.setDatabaseName(DB_PATH);
     mainwindowInitialSettings();
     initializeVerifactu();
+
+    m_updater = new Updater(this);
+    connect(m_updater, &Updater::updateAvailable,    this, &MainWindow::onUpdateAvailable);
+    connect(m_updater, &Updater::noUpdateAvailable,  this, &MainWindow::onUpdaterNoUpdateAvailable);
+    connect(m_updater, &Updater::checkFailed,        this, &MainWindow::onUpdaterCheckFailed);
+
+    // Startup auto-check (silent on no-update / failure). Deferred so the
+    // main window is fully shown before the dialog can pop up over it.
+    if (AppSettings::instance()->checkUpdatesOnStartup()) {
+        QTimer::singleShot(1500, this, [this]() {
+            m_updater->checkForUpdates(/*silentOnNoUpdate=*/true);
+        });
+    }
 }
 
 MainWindow::~MainWindow()
@@ -1176,4 +1191,36 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
     connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
 
     dlg.exec();
+}
+
+// Manual menu trigger: always reports the outcome, even no-update / failure.
+void MainWindow::on_actionBuscar_actualizaciones_triggered()
+{
+    m_updater->checkForUpdates(/*silentOnNoUpdate=*/false);
+}
+
+void MainWindow::onUpdateAvailable(const QString &latestVersion,
+                                   const QString &releaseNotes,
+                                   const QUrl &installerUrl)
+{
+    UpdaterDialog dlg(m_updater, latestVersion, releaseNotes, installerUrl, this);
+    dlg.exec();
+}
+
+void MainWindow::onUpdaterNoUpdateAvailable()
+{
+    if (m_updater->isSilentCheck())
+        return;
+    QMessageBox::information(this, tr("Sin actualizaciones"),
+        tr("Está usando la versión más reciente (%1).").arg(Updater::currentVersion()));
+}
+
+void MainWindow::onUpdaterCheckFailed(const QString &error)
+{
+    if (m_updater->isSilentCheck()) {
+        qDebug() << "Updater: silent check failed -" << error;
+        return;
+    }
+    QMessageBox::warning(this, tr("Comprobación fallida"),
+        tr("No se pudo comprobar si hay actualizaciones:\n%1").arg(error));
 }

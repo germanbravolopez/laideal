@@ -40,6 +40,7 @@ target_link_libraries(laideal
     facturas
     add_garment
     verifactu
+    updater
 )
 
 set_target_properties(laideal PROPERTIES

@@ -17,6 +17,8 @@ MainWindow (src/app/)
                 ├── VerifactuConfig
                 └── VerifactuInvoice + VerifactuTaxItem
 
+  └── Updater + UpdaterDialog (src/updater/)     — in-app GitHub-releases updater
+
 Shared infrastructure:
   src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
@@ -97,6 +99,20 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red |
 | `LinkDelegate` | `linkdelegate.h/.cpp` | `QStyledItemDelegate` that renders non-empty cells as blue underlined text; used for the `verifactu_url_qr` column in the Ingresos Listado |
 
+### Updater (`src/updater/`)
+In-app updater. Two entry points: an unattended startup check (gated by `AppSettings::checkUpdatesOnStartup()`, default on) and a manual menu action (Ayuda → Buscar actualizaciones…). Both paths run through one `Updater` instance owned by `MainWindow`.
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `Updater` | `updater.h/.cpp` | Async REST client against the GitHub Releases API. `checkForUpdates(silentOnNoUpdate)` GETs `https://api.github.com/repos/germanbravolopez/laideal/releases/latest`, compares `tag_name` to the compile-time `PROJECT_VERSION` macro (passed in via `target_compile_definitions`), and emits `updateAvailable(version, notes, installerUrl)`, `noUpdateAvailable`, or `checkFailed`. `downloadInstaller(url)` saves the `laideal_setup_X.Y.exe` asset to `%TEMP%` and emits `downloadFinished(localPath)`. `compareVersions` is `major.minor` numeric (tolerates a leading `v`). |
+| `UpdaterDialog` | `updaterdialog.h/.cpp` | Modal dialog wired to an `Updater`. Shows current vs. latest version + the GitHub release body as plain text in a `QTextEdit`. On "Actualizar ahora": collapses to a progress bar, drives `downloadInstaller`, then `QProcess::startDetached(installerPath)` + `qApp->quit()` so Inno Setup can replace the running files. |
+
+In-place upgrade path: `releases/laideal.iss` sets `CloseApplications=yes` + `RestartApplications=yes` + `CloseApplicationsFilter=*.exe`. If the running app has not finished exiting by the time the installer starts touching `{app}\laideal.exe`, Inno detects it (filtered to .exe so we don't touch unrelated open files under `{app}`), prompts, and relaunches once install completes.
+
+Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome.
+
+Repo visibility: `/releases/latest` requires the repo to be **public** under unauthenticated calls (private repos return 404). If the repo is ever flipped back to private the updater will fail in `silent` mode silently and surface "Not Found" via the menu action.
+
 ### AppLogger (`src/logging/`)
 Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `qWarning`, `qCritical`, and `qFatal` output to `~/.laideal.log` using `qInstallMessageHandler`. No changes required at any call site.
 
@@ -110,7 +126,7 @@ Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on s
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production. The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
+Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production, `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
 
 App-internal fixed paths (not user-configurable): `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated each print), `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` (rewritten each print, templated with the xlsx path, executed via `cscript //nologo //B`).
 

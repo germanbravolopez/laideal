@@ -74,6 +74,8 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
+| In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
+| Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
@@ -142,3 +144,4 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |
+| In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` + `src/updater/updaterdialog.h`; setting `updater.check_on_startup` in `~/.laideal_settings.json`; in-place install via `releases/laideal.iss` (`CloseApplications=yes`, `RestartApplications=yes`) |

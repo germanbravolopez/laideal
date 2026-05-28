@@ -77,6 +77,13 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_enablePrinting->setChecked(s->enablePrinting());
     fl->addRow(m_enablePrinting);
 
+    m_checkUpdatesOnStartup = new QCheckBox(tr("Buscar actualizaciones al iniciar la aplicación"));
+    m_checkUpdatesOnStartup->setChecked(s->checkUpdatesOnStartup());
+    m_checkUpdatesOnStartup->setToolTip(tr(
+        "Comprueba en GitHub si hay una versión más reciente al arrancar. "
+        "Si la red no está disponible la comprobación se ignora."));
+    fl->addRow(m_checkUpdatesOnStartup);
+
     auto *settingsPathLabel = new QLabel(
         tr("Archivo de configuración: <b>%1</b>").arg(s->filePath()));
     settingsPathLabel->setWordWrap(true);
@@ -174,6 +181,7 @@ void SettingsDialog::accept()
     s->setDbPath(m_dbPath->text().trimmed());
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
+    s->setCheckUpdatesOnStartup(m_checkUpdatesOnStartup->isChecked());
 
     s->setReportsRoot(m_reportsRoot->text().trimmed());
 
