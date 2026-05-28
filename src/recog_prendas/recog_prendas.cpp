@@ -343,6 +343,8 @@ void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
 void RecogPrendas::on_pb_search_clicked()
 {
     resetAllContents();
+    qDebug() << "RecogPrendas::on_pb_search_clicked: input=" << ui->le_search->text()
+             << "dateMode=" << ui->cb_search_date->currentText();
     if (ui->le_search->text() != "") {
         bool ok = false, totalPriceActive = true;
         QString nameSearchFilter;
@@ -414,8 +416,17 @@ void RecogPrendas::on_pb_search_clicked()
                 q.prepare("SELECT * FROM ingresos");
                 q.exec();
                 sqlQueryModel->setQuery(std::move(q));
+                // QSqlQueryModel lazy-fetches in 256-row batches and fetchMore() needs the
+                // db connection open. Drain the full result set here, BEFORE closing - if
+                // we close first, canFetchMore() returns false and the proxy filter only
+                // sees the first 256 rows, silently dropping tickets for prolific clients
+                // (or any client whose receipts landed past row 256 of ingresos).
+                while (sqlQueryModel->canFetchMore())
+                    sqlQueryModel->fetchMore();
                 db.close();
                 nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
+                qDebug() << "RecogPrendas::on_pb_search_clicked: name search loaded"
+                         << sqlQueryModel->rowCount() << "rows; filter=" << nameSearchFilter;
             }
         }
         else {
@@ -444,9 +455,6 @@ void RecogPrendas::on_pb_search_clicked()
         proxyModel = new MySortFilterProxyModel(this);
         if (!nameSearchFilter.isEmpty())
             proxyModel->setNormalizedFilter(nameSearchFilter, TABLE_CLIENT);
-        // Fetch all source rows before handing to proxy (needed for name search with full SELECT)
-        while (sqlQueryModel->canFetchMore())
-            sqlQueryModel->fetchMore();
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(0, Qt::DescendingOrder);
@@ -467,6 +475,8 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setItemDelegateForColumn(TABLE_STATE, new TextColorDelegate(ui->tableView, this));
         ui->tableView->resizeColumnsToContents();
         ui->tableView->resizeRowsToContents();
+        qDebug() << "RecogPrendas::on_pb_search_clicked: result"
+                 << proxyModel->rowCount() << "of" << sqlQueryModel->rowCount() << "rows match";
         // Fill total_price from proxy rows (reflects the filtered set in all search modes)
         if (totalPriceActive) {
             float totalPrice = 0.0;
