@@ -31,14 +31,17 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 ## Build
 
-From a PowerShell prompt in the repo root (Qt cmd prompt no longer required - the build script prepends Qt + MinGW to `PATH` itself):
+From a PowerShell prompt in the repo root:
 
 ```powershell
+# Add Qt + MinGW + CMake to PATH for this shell session
+$env:PATH = "C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+
 cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration.
+The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
 
 ---
 
@@ -94,11 +97,12 @@ The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup i
 | Tool | Expected location |
 |------|-------------------|
 | Qt (MinGW 64-bit) | `C:\Qt\6.4.3\mingw_64` |
+| CMake | `C:\Qt\Tools\CMake_64` |
 | MinGW | `C:\Qt\Tools\mingw1120_64` |
 | Inno Setup 6 | `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` |
 | PowerShell | 5.1+ (ships with Windows 10/11) |
 
-To repoint at a different Qt version, edit the `$QtBinDir` / `$MingwBinDir` constants at the top of `releases\release.ps1`.
+To repoint at a different Qt / CMake version, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` constants at the top of `releases\release.ps1`.
 
 1. Bump the version in `CMakeLists.txt` (the `project(laideal VERSION X.Y ...)` line) and add the X.Y section to `releases_notes.txt`. Commit.
 2. From any PowerShell prompt in the repo root:

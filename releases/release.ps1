@@ -34,6 +34,7 @@ $IssFile           = Join-Path $ReleasesDir 'laideal.iss'
 
 $QtBinDir          = 'C:\Qt\6.4.3\mingw_64\bin'
 $MingwBinDir       = 'C:\Qt\Tools\mingw1120_64\bin'
+$CMakeBinDir       = 'C:\Qt\Tools\CMake_64\bin'
 $InnoSetupCompiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 
 function Step([string]$msg) {
@@ -48,10 +49,11 @@ function Fail([string]$msg) {
 
 if (-not (Test-Path $QtBinDir))          { Fail "Qt bin dir not found at $QtBinDir" }
 if (-not (Test-Path $MingwBinDir))       { Fail "MinGW bin dir not found at $MingwBinDir" }
+if (-not (Test-Path $CMakeBinDir))       { Fail "CMake bin dir not found at $CMakeBinDir" }
 if (-not (Test-Path $InnoSetupCompiler)) { Fail "Inno Setup compiler not found at $InnoSetupCompiler" }
 
 if ($env:PATH -notlike "*$QtBinDir*") {
-    $env:PATH = "$QtBinDir;$MingwBinDir;$env:PATH"
+    $env:PATH = "$CMakeBinDir;$MingwBinDir;$QtBinDir;$env:PATH"
 }
 
 Step "Release pipeline for v$Version"
