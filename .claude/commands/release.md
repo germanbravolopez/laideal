@@ -80,7 +80,7 @@ The tag points at the merge commit on `master`, not at the version-bump commit o
 
 Requires the GitHub CLI. The release body should be **only the new `X.Y` section** of `releases_notes.txt`, converted to markdown — not the whole accumulated file. Extract it to a temp `.md` file, publish, then delete the temp file.
 
-The conversion strips the tab indent that puts the section under the version heading in `releases_notes.txt` so top-level bullets start at column 0, and drops the bare `X.Y` title line (GitHub already shows the tag name as the release title). Nested bullets keep their relative indent.
+`releases_notes.txt` uses plain Markdown-compatible indentation (top-level bullets at column 0, nested bullets at 2 spaces) so the section body can be lifted straight into the GitHub release body. The only conversion step is to drop the bare `X.Y` title line — GitHub already shows the tag name as the release title — which the regex already does by capturing only what follows the title line.
 
 ```powershell
 $ver = 'X.Y'
@@ -89,9 +89,8 @@ $raw = Get-Content releases_notes.txt -Raw
 # Capture from the bare 'X.Y' line up to (but not including) the next bare 'N.M' line or EOF.
 $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
 if (-not $m.Success) { throw "No section for $ver found in releases_notes.txt" }
-# Strip one leading tab per line (the section's indent under the version title) and trim trailing blanks.
-$body = ($m.Groups[1].Value -split "`r?`n" | ForEach-Object { $_ -replace '^\t', '' }) -join "`n"
-$body = $body.TrimEnd()
+# Body is already Markdown-indented (column-0 bullets, 2-space nesting); just trim trailing blanks.
+$body = $m.Groups[1].Value.TrimEnd()
 Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `

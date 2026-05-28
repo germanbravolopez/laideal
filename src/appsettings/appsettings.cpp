@@ -36,6 +36,10 @@ void AppSettings::applyDefaults()
         setStr({"verifactu", "environment"}, "TESTING");
     if (reportsRoot().isEmpty())
         setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
+    // Default: opt-in startup check. bln() has a default-fallback parameter,
+    // but the key must be persisted so future save() preserves it across upgrades.
+    if (!m_data.value("updater").toObject().contains("check_on_startup"))
+        setBln({"updater", "check_on_startup"}, true);
 }
 
 bool AppSettings::load()
@@ -239,6 +243,12 @@ void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifac
 
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
+
+// ---------------------------------------------------------------------------
+// Updater
+// ---------------------------------------------------------------------------
+bool AppSettings::checkUpdatesOnStartup() const    { return bln({"updater", "check_on_startup"}, true); }
+void AppSettings::setCheckUpdatesOnStartup(bool v) { setBln({"updater", "check_on_startup"}, v); }
 
 // ---------------------------------------------------------------------------
 // JSON helpers

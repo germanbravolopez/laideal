@@ -17,7 +17,13 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include "updaterdialog.h"
 #include "version.h"
+#include <QTimer>
+#include <QTextEdit>
+#include <QFontDatabase>
+#include <QTextCursor>
+#include <QFile>
 #include <QStatusBar>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -39,6 +45,19 @@ MainWindow::MainWindow(QWidget *parent)
     db.setDatabaseName(DB_PATH);
     mainwindowInitialSettings();
     initializeVerifactu();
+
+    m_updater = new Updater(this);
+    connect(m_updater, &Updater::updateAvailable,    this, &MainWindow::onUpdateAvailable);
+    connect(m_updater, &Updater::noUpdateAvailable,  this, &MainWindow::onUpdaterNoUpdateAvailable);
+    connect(m_updater, &Updater::checkFailed,        this, &MainWindow::onUpdaterCheckFailed);
+
+    // Startup auto-check (silent on no-update / failure). Deferred so the
+    // main window is fully shown before the dialog can pop up over it.
+    if (AppSettings::instance()->checkUpdatesOnStartup()) {
+        QTimer::singleShot(1500, this, [this]() {
+            m_updater->checkForUpdates(/*silentOnNoUpdate=*/true);
+        });
+    }
 }
 
 MainWindow::~MainWindow()
@@ -1176,4 +1195,74 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
     connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
 
     dlg.exec();
+}
+
+// Reads the bundled releases_notes.txt (a Qt resource compiled into the exe via
+// resources/laideal.qrc) and shows the full version history in a read-only
+// monospace dialog. Same content the Inno Setup installer shows at install time
+// and the GitHub release page reuses for the latest section.
+void MainWindow::on_actionNotas_de_la_version_triggered()
+{
+    QFile f(":/docs/releases_notes.txt");
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Notas de la versión"),
+            tr("No se pudieron cargar las notas de la versión "
+               "(recurso :/docs/releases_notes.txt no disponible)."));
+        return;
+    }
+    const QString notes = QString::fromUtf8(f.readAll());
+    f.close();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Notas de la versión"));
+    dlg.resize(680, 560);
+
+    auto *layout = new QVBoxLayout(&dlg);
+    auto *view = new QTextEdit(&dlg);
+    view->setReadOnly(true);
+    view->setLineWrapMode(QTextEdit::WidgetWidth);
+    QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    view->setFont(mono);
+    view->setPlainText(notes);
+    // Land at the top so the newest release shows first.
+    view->moveCursor(QTextCursor::Start);
+    layout->addWidget(view);
+
+    auto *btn = new QPushButton(tr("Cerrar"), &dlg);
+    layout->addWidget(btn, 0, Qt::AlignRight);
+    connect(btn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.exec();
+}
+
+// Manual menu trigger: always reports the outcome, even no-update / failure.
+void MainWindow::on_actionBuscar_actualizaciones_triggered()
+{
+    m_updater->checkForUpdates(/*silentOnNoUpdate=*/false);
+}
+
+void MainWindow::onUpdateAvailable(const QString &latestVersion,
+                                   const QString &releaseNotes,
+                                   const QUrl &installerUrl)
+{
+    UpdaterDialog dlg(m_updater, latestVersion, releaseNotes, installerUrl, this);
+    dlg.exec();
+}
+
+void MainWindow::onUpdaterNoUpdateAvailable()
+{
+    if (m_updater->isSilentCheck())
+        return;
+    QMessageBox::information(this, tr("Sin actualizaciones"),
+        tr("Está usando la versión más reciente (%1).").arg(Updater::currentVersion()));
+}
+
+void MainWindow::onUpdaterCheckFailed(const QString &error)
+{
+    if (m_updater->isSilentCheck()) {
+        qDebug() << "Updater: silent check failed -" << error;
+        return;
+    }
+    QMessageBox::warning(this, tr("Comprobación fallida"),
+        tr("No se pudo comprobar si hay actualizaciones:\n%1").arg(error));
 }

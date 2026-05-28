@@ -43,6 +43,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` / `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` / `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` / `.cpp` |
+| In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` / `.cpp` + `src/updater/updaterdialog.h` / `.cpp` |
 | Excel library (3rd-party) | `QXlsx/` — vendored; only a tiny local patch added (`setPageMargins` on `Worksheet`/`Document`). Avoid further modifications. |
 | Build config (root) | `CMakeLists.txt` |
 

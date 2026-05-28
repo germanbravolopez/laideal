@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(laideal VERSION 8.2 LANGUAGES CXX)
+project(laideal VERSION 8.3 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -29,3 +29,4 @@ add_subdirectory(src/contabilidad)
 add_subdirectory(src/facturas)
 add_subdirectory(src/add_garment)
 add_subdirectory(src/verifactu)
+add_subdirectory(src/updater)

@@ -70,6 +70,10 @@ public:
     bool verifactuProduction() const;
     void setVerifactuProduction(bool v);
 
+    // --- Updater ---
+    bool checkUpdatesOnStartup() const;
+    void setCheckUpdatesOnStartup(bool v);
+
 private:
     AppSettings();
     void migrateFromLegacyFiles();
