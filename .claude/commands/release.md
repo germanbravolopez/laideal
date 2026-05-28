@@ -55,27 +55,50 @@ Wait for it to finish and verify both artifacts exist:
 
 If the script fails, **stop**. Do not merge to `master`. Diagnose with the user, fix on the working branch, amend or add a follow-up commit, and rerun.
 
-### 4. Merge via a GitHub PR to `master` (README step 4)
+### 4. Open a GitHub PR to `master` (README step 4)
 
-`master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Open the PR, merge it with a merge commit (not squash, not rebase — the project convention is that each release is one discrete merge point on `master`), then sync `master` locally.
+`master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Push the working branch and open the PR — but do **not** merge yet; step 5 reviews the diff first.
 
 ```powershell
 # Push the working branch first so the PR has something to point at.
 git push -u origin <working-branch>
 
-# Open the PR. Title and body are short; the GitHub release in step 6 carries
+# Open the PR. Title and body are short; the GitHub release in step 8 carries
 # the full notes, so the PR body just points there.
 gh pr create --base master --head <working-branch> `
     --title "Release X.Y" `
     --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
+```
 
+Capture the PR number from `gh pr create`'s output (or `gh pr view --json number -q .number`) — step 5 needs it.
+
+### 5. Review the PR at high effort before merging (NEW)
+
+A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a high-effort review on the PR diff — not the default level. The diff of a release is usually wider than a single feature PR (the working branch may have accumulated weeks of changes), so the broader-coverage tiers are appropriate even though they may surface lower-confidence findings.
+
+```
+/code-review max <PR#>
+```
+
+`max` widens coverage relative to the default `medium` at the cost of more uncertain findings — the right tradeoff for the release gate. It runs locally so the step is not billed (unlike `/code-review ultra`, which is the cloud multi-agent variant).
+
+**What to do with the findings**:
+- **Genuine bugs / regressions / release-blockers**: fix on the working branch, push, and the PR updates automatically. Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
+- **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes — those are the high-blast-radius areas where false-positive triage should err on the side of fixing.
+- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them as new entries in `docs/progress_tracker.md` Open Non-Blocking Issues, do not block the release on them.
+
+Only proceed to step 6 once the user has confirmed the review is clean (or that remaining findings are intentionally deferred).
+
+### 6. Merge the PR
+
+```powershell
 # Merge with --merge (the merge-commit option, not --squash and not --rebase) +
 # --admin so the merge proceeds even if required-reviews / required-checks
-# aren't satisfied. This is a solo project; PR exists to honour the protection
-# rule, not to gate on review.
+# aren't satisfied. This is a solo project; the PR exists to honour the
+# protection rule, not to gate on automated review.
 gh pr merge <working-branch> --merge --admin --delete-branch=false
 
-# Bring the merge commit into the local master so step 5 can tag it.
+# Bring the merge commit into the local master so step 7 can tag it.
 git checkout master
 git pull --ff-only origin master
 ```
@@ -84,16 +107,16 @@ git pull --ff-only origin master
 
 Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
-### 5. Tag the merge commit (README step 5)
+### 7. Tag the merge commit (README step 5)
 
 ```powershell
 git tag -a X.Y -m "Release X.Y"
 git push origin X.Y
 ```
 
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 4; only the tag is pushed here.
+The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here.
 
-### 6. Publish on GitHub (README step 6)
+### 8. Publish on GitHub (README step 6)
 
 Requires the GitHub CLI. The release body should be **only the new `X.Y` section** of `releases_notes.txt`, converted to markdown — not the whole accumulated file. Extract it to a temp `.md` file, publish, then delete the temp file.
 
@@ -121,7 +144,7 @@ Remove-Item $tmpNotes
 
 Verify visually (or with `gh release view X.Y`) that the body renders as a clean bulleted list. If the regex misses (e.g. the section uses an unexpected separator) or the list looks wrong, fall back to passing `--notes-file releases_notes.txt` once, then edit the release on GitHub.
 
-### 7. Post-release housekeeping
+### 9. Post-release housekeeping
 
 - Confirm `git status` on `master` is clean and on the merge commit.
 - Surface the GitHub release URL from `gh release create` output.
