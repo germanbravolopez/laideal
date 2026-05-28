@@ -34,14 +34,16 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 From a PowerShell prompt in the repo root:
 
 ```powershell
-# Add Qt + MinGW + CMake to PATH for this shell session
-$env:PATH = "C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+# Add Qt + MinGW + CMake + Ninja to PATH for this shell session
+$env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
 
-cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
 The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
+
+> The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
 
 ---
 
@@ -99,10 +101,11 @@ The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup i
 | Qt (MinGW 64-bit) | `C:\Qt\6.4.3\mingw_64` |
 | CMake | `C:\Qt\Tools\CMake_64` |
 | MinGW | `C:\Qt\Tools\mingw1120_64` |
+| Ninja | `C:\Qt\Tools\Ninja` |
 | Inno Setup 6 | `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` |
 | PowerShell | 5.1+ (ships with Windows 10/11) |
 
-To repoint at a different Qt / CMake version, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` constants at the top of `releases\release.ps1`.
+To repoint at a different Qt / CMake / Ninja install, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` / `$NinjaBinDir` constants at the top of `releases\release.ps1`.
 
 1. Bump the version in `CMakeLists.txt` (the `project(laideal VERSION X.Y ...)` line) and add the X.Y section to `releases_notes.txt`. Commit.
 2. From any PowerShell prompt in the repo root:
