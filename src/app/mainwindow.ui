@@ -674,6 +674,7 @@ prenda</string>
      <string>Ayuda</string>
     </property>
     <addaction name="actionBuscar_actualizaciones"/>
+    <addaction name="actionNotas_de_la_version"/>
     <addaction name="separator"/>
     <addaction name="actionAcerca_de_Verifactu"/>
    </widget>
@@ -900,6 +901,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Comprueba en GitHub si hay una versión más reciente y la instala</string>
+   </property>
+  </action>
+  <action name="actionNotas_de_la_version">
+   <property name="text">
+    <string>Notas de la versión...</string>
+   </property>
+   <property name="toolTip">
+    <string>Muestra el historial de cambios de todas las versiones publicadas</string>
    </property>
   </action>
  </widget>

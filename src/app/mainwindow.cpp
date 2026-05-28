@@ -20,6 +20,10 @@
 #include "updaterdialog.h"
 #include "version.h"
 #include <QTimer>
+#include <QTextEdit>
+#include <QFontDatabase>
+#include <QTextCursor>
+#include <QFile>
 #include <QStatusBar>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -1189,6 +1193,44 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
     QPushButton *btnClose = new QPushButton("Cerrar", &dlg);
     layout->addWidget(btnClose, 0, Qt::AlignRight);
     connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.exec();
+}
+
+// Reads the bundled releases_notes.txt (a Qt resource compiled into the exe via
+// resources/laideal.qrc) and shows the full version history in a read-only
+// monospace dialog. Same content the Inno Setup installer shows at install time
+// and the GitHub release page reuses for the latest section.
+void MainWindow::on_actionNotas_de_la_version_triggered()
+{
+    QFile f(":/docs/releases_notes.txt");
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Notas de la versión"),
+            tr("No se pudieron cargar las notas de la versión "
+               "(recurso :/docs/releases_notes.txt no disponible)."));
+        return;
+    }
+    const QString notes = QString::fromUtf8(f.readAll());
+    f.close();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Notas de la versión"));
+    dlg.resize(680, 560);
+
+    auto *layout = new QVBoxLayout(&dlg);
+    auto *view = new QTextEdit(&dlg);
+    view->setReadOnly(true);
+    view->setLineWrapMode(QTextEdit::WidgetWidth);
+    QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    view->setFont(mono);
+    view->setPlainText(notes);
+    // Land at the top so the newest release shows first.
+    view->moveCursor(QTextCursor::Start);
+    layout->addWidget(view);
+
+    auto *btn = new QPushButton(tr("Cerrar"), &dlg);
+    layout->addWidget(btn, 0, Qt::AlignRight);
+    connect(btn, &QPushButton::clicked, &dlg, &QDialog::accept);
 
     dlg.exec();
 }

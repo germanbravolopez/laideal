@@ -94,6 +94,7 @@ private slots:
     void on_actionMostrar_log_triggered();
     void on_actionAcerca_de_Verifactu_triggered();
     void on_actionBuscar_actualizaciones_triggered();
+    void on_actionNotas_de_la_version_triggered();
 
     // Updater signal handlers
     void onUpdateAvailable(const QString &latestVersion,
