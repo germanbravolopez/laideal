@@ -212,13 +212,19 @@ on_bb_save_reset_clicked(Save)
   ├── checkClientData()                      — adds/updates client in `clientes`
   ├── saveTicket()                           — writes N rows to `ingresos` with verifactu_estado = PENDIENTE
   ├── if (isPaid):
-  │     ├── verifactuSubmitInvoice(...)      — fires async submit; status bar "Enviando..."
-  │     └── printFra()                       — Excel + printTicket (factura simplificada, no CSV/QR yet)
+  │     ├── reqId = verifactuSubmitInvoice(...)  — fires async submit; status bar "Enviando..."
+  │     ├── QEventLoop, 3 s timeout              — waits for VerifactuIntegration::requestFinished(reqId, result)
+  │     │   onVerifactuRequestFinished runs first (FIFO connect order) and UPDATEs ingresos
+  │     │   to verifactu_estado = ENVIADA / ERROR before the lambda quits the loop
+  │     └── if (result.isSuccess() && !result.qrCode.isNull()):
+  │             printFra(result.qrCode)        — factura simplificada with QR + AEAT leyenda
+  │         else (timeout, or success w/o QR, or error):
+  │             printRecibo()                   — paid recibo: "Importe pagado" stamp on customer copy
   ├── else (not paid):
   │     └── printRecibo()                    — Excel + printTicket (claim receipt, two copies)
   └── resetAllContents()                     — clears form for next ticket
 
-Async tail (when AEAT replies):
+Async tail (when AEAT replies later than 3 s, or for not-paid tickets that get paid later via RecogPrendas):
   VerifactuIntegration::requestFinished(reqId, result)
   └── MainWindow::onVerifactuRequestFinished
         ├── updateTicketVerifactuFields(...) — UPDATE ingresos with CSV/timestamp/estado

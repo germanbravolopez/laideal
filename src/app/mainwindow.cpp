@@ -20,6 +20,7 @@
 #include "updaterdialog.h"
 #include "version.h"
 #include <QTimer>
+#include <QEventLoop>
 #include <QTextEdit>
 #include <QFontDatabase>
 #include <QTextCursor>
@@ -384,11 +385,11 @@ void MainWindow::checkClientData()
 
 }
 
-void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
+QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qDebug() << "Verifactu not configured - skipping invoice submission for ticket" << ticketNum;
-        return;
+        return QString();
     }
     double ivaRate = AppSettings::instance()->ivaRate();
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
@@ -400,10 +401,11 @@ void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &i
     );
     if (reqId.isEmpty()) {
         qWarning() << "Verifactu submit rejected for ticket" << ticketNum;
-        return;
+        return QString();
     }
     m_pendingSubmits.insert(reqId, ticketNum);
     statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+    return reqId;
 }
 
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
@@ -556,7 +558,7 @@ void MainWindow::printRecibo()
     }
 }
 
-void MainWindow::printFra()
+void MainWindow::printFra(const QPixmap &qrCode)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
@@ -564,10 +566,13 @@ void MainWindow::printFra()
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
+    ui_impr->qrCode = qrCode;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
-    ui_impr->createTicketExcel(false, false);
+    ui_impr->createTicketExcel(true, false);
     if (AppSettings::instance()->enablePrinting()) {
+        ui_impr->printTicket();
+        ui_impr->createTicketExcel(true, false);
         ui_impr->printTicket();
     }
 }
@@ -603,8 +608,36 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 
             saveTicket();
             if (isPaid) {
-                verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
-                printFra();
+                const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+
+                QPixmap qrCode;
+                bool gotSuccessfulReply = false;
+
+                if (!reqId.isEmpty()) {
+                    QEventLoop loop;
+                    QTimer timeout;
+                    timeout.setSingleShot(true);
+                    QMetaObject::Connection conn = connect(m_verifactuIntegration,
+                        &VerifactuIntegration::requestFinished, this,
+                        [&](const QString &id, const VerifactuResult &res) {
+                            if (id != reqId) return;
+                            gotSuccessfulReply = res.isSuccess() && !res.qrCode.isNull();
+                            qrCode = res.qrCode;
+                            loop.quit();
+                        });
+                    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+                    timeout.start(3000);
+                    loop.exec();
+                    QObject::disconnect(conn);
+                }
+
+                qDebug() << "saveTicket: ticket" << ticketNum
+                         << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
+                         << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
+                if (gotSuccessfulReply)
+                    printFra(qrCode);
+                else
+                    printRecibo();
             } else {
                 printRecibo();
             }

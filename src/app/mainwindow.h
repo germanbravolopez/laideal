@@ -53,10 +53,12 @@ private slots:
     bool validateTicket();
     QString removeSpecialChar(QString str);
     void checkClientData();
-    void verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount);
+    // Returns the in-flight reqId, or empty if Verifactu is not configured /
+    // submit was rejected.
+    QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount);
     void saveTicket();
     void printRecibo();
-    void printFra();
+    void printFra(const QPixmap &qrCode = QPixmap());
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
     void updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result);
 
