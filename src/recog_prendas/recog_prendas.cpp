@@ -453,12 +453,12 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         proxyModel = new MySortFilterProxyModel(this);
+        // lessThan() keys on table_name to pick the date / numeric comparators.
+        proxyModel->table_name = "ingresos";
         if (!nameSearchFilter.isEmpty())
             proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
-        // Must come before sortByColumn or the default sort is a no-op.
-        ui->tableView->setSortingEnabled(true);
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         // Hide internal columns not meant for display
         ui->tableView->setColumnHidden(INGRESOS_COL_EDIT_LOCK,           true);
