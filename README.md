@@ -90,7 +90,43 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
 
 ---
 
+## Development workflow
+
+**Never commit directly to `master`.** `master` only ever moves through merges from a working branch, and every commit on `master` corresponds to a release tag.
+
+1. Create or check out a working branch (e.g. `develop`, or a feature branch like `feature/fix-search`):
+   ```powershell
+   git checkout -b develop
+   ```
+2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (Completed Milestones / Open Issues), the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
+3. Before merging to `master`, the branch must be **release-ready**:
+   - All planned changes are applied and reviewed.
+   - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
+   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
+   - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
+   - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
+   - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
+   Commit the version bump + notes on the branch as a single `release X.Y` commit.
+4. Merge the branch to `master`. Either open a PR on GitHub and merge it, or do it locally:
+   ```powershell
+   git checkout master
+   git merge --ff-only develop
+   ```
+   Prefer a fast-forward merge so the history stays linear; the final `release X.Y` commit becomes the tagged release commit.
+5. Tag the release commit on `master` and push everything:
+   ```powershell
+   git tag -a X.Y -m "Release X.Y"
+   git push origin master X.Y
+   ```
+6. Publish on GitHub - see [Release procedure](#release-procedure) below for the artifacts and the GitHub publish step.
+
+After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
+
+---
+
 ## Release procedure
+
+This section covers only the **build and installer step**. The end-to-end flow (branching, version bump, merge, tag, push, GitHub publish) lives in [Development workflow](#development-workflow) above.
 
 The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1`. No Qt cmd prompt needed - the script loads the Qt environment itself.
 
@@ -107,17 +143,24 @@ The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup i
 
 To repoint at a different Qt / CMake / Ninja install, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` / `$NinjaBinDir` constants at the top of `releases\release.ps1`.
 
-1. Bump the version in `CMakeLists.txt` (the `project(laideal VERSION X.Y ...)` line) and add the X.Y section to `releases_notes.txt`. Commit.
-2. From any PowerShell prompt in the repo root:
-   ```powershell
-   .\releases\release.ps1 X.Y
-   ```
-   (or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a zip/installer for that version already exists.
-3. After it finishes, the artifacts are at:
-   - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
-   - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
-4. Tag the release commit and push: `git tag -a X.Y -m "Release X.Y" && git push && git push origin X.Y`.
-5. Publish to GitHub: open the repo on GitHub -> Releases -> Draft a new release -> select the X.Y tag -> attach `releases\old_releases\X.Y.zip` and `releases\setup_outputs\laideal_setup_X.Y.exe` -> paste the X.Y section from `releases_notes.txt` into the description. (If the [GitHub CLI](https://cli.github.com/) is installed, this collapses to `gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt`.)
+From any PowerShell prompt in the repo root (after `CMakeLists.txt` has been bumped to the target version on the working branch):
+
+```powershell
+.\releases\release.ps1 X.Y
+```
+
+(or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a zip/installer for that version already exists.
+
+Artifacts:
+
+- `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
+- `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
+
+These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step collapses to:
+
+```powershell
+gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "X.Y" --notes-file releases_notes.txt
+```
 
 ---
 
