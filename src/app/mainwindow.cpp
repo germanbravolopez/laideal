@@ -878,21 +878,21 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     QSqlQuery q;
     if (q.exec("SELECT * FROM ingresos")) {
         while (q.next()) {
-            if (q.value(INGRESOS_IDX_HASH).toString() == "") {
-                QString nRecibo = q.value(INGRESOS_IDX_ID).toString();
-                QString cliente = q.value(INGRESOS_IDX_CLIENT).toString();
-                QString fechaRecepcion = q.value(INGRESOS_IDX_DATE_RCP).toString();
-                QString fechaPago = q.value(INGRESOS_IDX_DATE_PAY).toString();
-                QString fechaRecogida = q.value(INGRESOS_IDX_DATE_PKU).toString();
-                QString importe = q.value(INGRESOS_IDX_IMPORTE).toString();
-                QString pagado = q.value(INGRESOS_IDX_PAYED).toString();
-                QString estado = q.value(INGRESOS_IDX_STATE).toString();
-                QString cantidad = q.value(INGRESOS_IDX_CANTIDAD).toString();
-                QString prenda = q.value(INGRESOS_IDX_PRENDA).toString();
-                QString size = q.value(INGRESOS_IDX_SIZE).toString();
-                QString servicio = q.value(INGRESOS_IDX_SERVICIO).toString();
-                QString observaciones = q.value(INGRESOS_IDX_OBSV).toString();
-                QString editLock = q.value(INGRESOS_IDX_EDIT_LOCK).toString();
+            if (q.value(INGRESOS_COL_HASH).toString() == "") {
+                QString nRecibo = q.value(INGRESOS_COL_N_RECIBO).toString();
+                QString cliente = q.value(INGRESOS_COL_CLIENTE).toString();
+                QString fechaRecepcion = q.value(INGRESOS_COL_FECHA_RECEPCION).toString();
+                QString fechaPago = q.value(INGRESOS_COL_FECHA_PAGO).toString();
+                QString fechaRecogida = q.value(INGRESOS_COL_FECHA_RECOGIDA).toString();
+                QString importe = q.value(INGRESOS_COL_IMPORTE).toString();
+                QString pagado = q.value(INGRESOS_COL_PAGADO).toString();
+                QString estado = q.value(INGRESOS_COL_ESTADO).toString();
+                QString cantidad = q.value(INGRESOS_COL_CANTIDAD).toString();
+                QString prenda = q.value(INGRESOS_COL_PRENDA).toString();
+                QString size = q.value(INGRESOS_COL_SIZE).toString();
+                QString servicio = q.value(INGRESOS_COL_SERVICIO).toString();
+                QString observaciones = q.value(INGRESOS_COL_OBSERVACIONES).toString();
+                QString editLock = q.value(INGRESOS_COL_EDIT_LOCK).toString();
 
                 QSqlQuery q1;
                 QString newHash = genHash16();

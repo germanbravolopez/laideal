@@ -4,36 +4,15 @@
 #include <QDate>
 #include <QSortFilterProxyModel>
 
+// INGRESOS_COL_* lives in sql_lite.h - this header used to also carry an
+// INGRESOS_IDX_* duplicate set with diverging names. Consumers that need
+// the ingresos column indices must include "sql_lite.h" directly.
+
 #define GASTOS_IDX_ID          0
 #define GASTOS_IDX_CLIENT      4
 #define GASTOS_IDX_FECHA       5
 #define GASTOS_IDX_IMPORTE     7
 #define GASTOS_IDX_CONTAB      8
-
-#define INGRESOS_IDX_ID             0
-#define INGRESOS_IDX_CLIENT         1
-#define INGRESOS_IDX_DATE_RCP       2
-#define INGRESOS_IDX_DATE_PAY       3
-#define INGRESOS_IDX_DATE_PKU       4
-#define INGRESOS_IDX_IMPORTE        5
-#define INGRESOS_IDX_PAYED          6
-#define INGRESOS_IDX_STATE          7
-#define INGRESOS_IDX_CANTIDAD       8
-#define INGRESOS_IDX_PRENDA         9
-#define INGRESOS_IDX_SIZE           10
-#define INGRESOS_IDX_SERVICIO       11
-#define INGRESOS_IDX_OBSV           12
-#define INGRESOS_IDX_EDIT_LOCK            13
-#define INGRESOS_IDX_HASH                 14
-#define INGRESOS_IDX_VERIFACTU_CSV        15
-#define INGRESOS_IDX_VERIFACTU_TIMESTAMP  16
-#define INGRESOS_IDX_VERIFACTU_ESTADO     17
-#define INGRESOS_IDX_VERIFACTU_ERROR      18
-#define INGRESOS_IDX_VERIFACTU_URL_QR     19
-#define INGRESOS_IDX_VERIFACTU_XML        20
-#define INGRESOS_IDX_VERIFACTU_HASH       21
-#define INGRESOS_IDX_VERIFACTU_RECTIFIES  22
-#define INGRESOS_IDX_VERIFACTU_RECT_TYPE  23
 
 #define LIST_PRENDAS_IDX_NAME  0
 #define LIST_PRENDAS_IDX_LIMP  1

@@ -8,34 +8,12 @@
 #include <QHash>
 
 #include "mysortfilterproxymodel.h"
+#include "sql_lite.h"
 
 class VerifactuIntegration;
 struct VerifactuResult;
 
-#define TABLE_TICKET     0
-#define TABLE_CLIENT     1
-#define TABLE_DATE_RCP   2
-#define TABLE_DATE_PAY   3
-#define TABLE_DATE_PKU   4
-#define TABLE_PRICE      5
-#define TABLE_IS_PAYED   6
-#define TABLE_STATE      7
-#define TABLE_QUANTITY   8
-#define TABLE_GARMENT    9
-#define TABLE_SIZE      10
-#define TABLE_SERVICE   11
-#define TABLE_OBSERV    12
-#define TABLE_EDIT_LOCK          13
-// TABLE_HASH = 14 is defined in imprimir.h
-#define TABLE_VERIFACTU_CSV       15
-#define TABLE_VERIFACTU_TIMESTAMP 16
-#define TABLE_VERIFACTU_ESTADO    17
-#define TABLE_VERIFACTU_ERROR     18
-#define TABLE_VERIFACTU_URL_QR    19
-#define TABLE_VERIFACTU_XML        20
-#define TABLE_VERIFACTU_HASH       21
-#define TABLE_VERIFACTU_RECTIFIES  22
-#define TABLE_VERIFACTU_RECT_TYPE  23
+// `ingresos` column indices come from sql_lite.h (INGRESOS_COL_*).
 
 namespace Ui {
 class RecogPrendas;
