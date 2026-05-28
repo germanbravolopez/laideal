@@ -1,5 +1,13 @@
 Releases:
 
+8.1
+	- Bug fix: search by client name in Recogida de prendas now returns all the tickets for that client
+		- Previously, for clients with many receipts some tickets could be silently hidden from the result; the search is now complete regardless of how many rows the ingresos table has.
+	- New: "Pagar todo" now automatically prints the factura and asks if a second copy is needed
+		- After all garments are marked paid, the factura is sent to the printer and a dialog "¿Imprimir una segunda copia de la factura?" offers the establishment copy
+		- The print button no longer closes Recogida de prendas; it resets the form instead, so chaining to the next client does not require reopening the window
+	- Build / release tooling (internal): single PowerShell command (releases\release.ps1 X.Y) now builds, runs windeployqt, zips and produces the Inno Setup installer in one step; build switched from MinGW Makefiles to Ninja to avoid antivirus blocks on %TEMP%\*.bat; README Build and Release procedure sections rewritten to match
+
 8.0
 	- New feature: Verifactu integration - AEAT mandatory digital invoicing (required for Spanish businesses from 2026)
 		- Submits simplified (F2) invoices to AEAT; UI fully async, never blocks on the network

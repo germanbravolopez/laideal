@@ -13,8 +13,8 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 ## Current Status — May 2026
 
 **Active branch**: `master`
-**Latest release**: [8.0](https://github.com/germanbravolopez/laideal/releases/tag/8.0) — merged via PR #30 (commit `1a0d3ca`). Ships with TESTING environment; flip `verifactu.production` to `true` after the meeting with IreneSolutions provides the live ServiceKey.
-**Next**: maintenance / 8.1 backlog — see Open Non-Blocking Issues.
+**Latest release**: [8.1](https://github.com/germanbravolopez/laideal/releases/tag/8.1) — quick-turn bugfix / UX release on top of 8.0. Customer-facing fixes: name-search no longer drops tickets past row 256 of `ingresos`, and "Pagar todo" now auto-prints the factura plus offers a second copy (the print button stops closing RecogPrendas — it resets, so chaining to the next client is one search away). Internal: release pipeline collapsed to one PowerShell command, build switched from MinGW Makefiles to Ninja to dodge antivirus blocks on `%TEMP%\*.bat`. 8.0 release notes (Verifactu) still apply. Previous release [8.0](https://github.com/germanbravolopez/laideal/releases/tag/8.0) was merged via PR #30 (commit `1a0d3ca`); still ships with TESTING environment - flip `verifactu.production` to `true` after the meeting with IreneSolutions provides the live ServiceKey.
+**Next**: maintenance / 8.2 backlog — see Open Non-Blocking Issues.
 
 ---
 
