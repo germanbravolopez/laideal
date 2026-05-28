@@ -55,17 +55,34 @@ Wait for it to finish and verify both artifacts exist:
 
 If the script fails, **stop**. Do not merge to `master`. Diagnose with the user, fix on the working branch, amend or add a follow-up commit, and rerun.
 
-### 4. Merge PR-style to `master` (README step 4)
+### 4. Merge via a GitHub PR to `master` (README step 4)
+
+`master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Open the PR, merge it with a merge commit (not squash, not rebase — the project convention is that each release is one discrete merge point on `master`), then sync `master` locally.
 
 ```powershell
+# Push the working branch first so the PR has something to point at.
+git push -u origin <working-branch>
+
+# Open the PR. Title and body are short; the GitHub release in step 6 carries
+# the full notes, so the PR body just points there.
+gh pr create --base master --head <working-branch> `
+    --title "Release X.Y" `
+    --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
+
+# Merge with --merge (the merge-commit option, not --squash and not --rebase) +
+# --admin so the merge proceeds even if required-reviews / required-checks
+# aren't satisfied. This is a solo project; PR exists to honour the protection
+# rule, not to gate on review.
+gh pr merge <working-branch> --merge --admin --delete-branch=false
+
+# Bring the merge commit into the local master so step 5 can tag it.
 git checkout master
-git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y"
-git push origin master
+git pull --ff-only origin master
 ```
 
-`--no-ff` is mandatory — the project's convention is that each release shows up as a single discrete merge point on `master`'s history. Do **not** fast-forward.
+`--merge` is mandatory — `--squash` or `--rebase` defeat the "release = single point on master" convention. `--delete-branch=false` keeps `<working-branch>` alive locally and on the remote for the next release cycle; do NOT pass `--delete-branch` unless the user asks.
 
-If the user prefers a GitHub PR instead of a local merge, stop here and tell them: open the PR for `<working-branch>` -> `master`, use the default "Create a merge commit" button (not "Squash" or "Rebase"), then resume at step 5 once `master` is updated locally (`git checkout master && git pull`).
+Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
 ### 5. Tag the merge commit (README step 5)
 
@@ -74,7 +91,7 @@ git tag -a X.Y -m "Release X.Y"
 git push origin X.Y
 ```
 
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed in step 4; only the tag is pushed here.
+The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 4; only the tag is pushed here.
 
 ### 6. Publish on GitHub (README step 6)
 
@@ -118,7 +135,7 @@ Verify visually (or with `gh release view X.Y`) that the body renders as a clean
 
 ## Rules
 
-- **Never skip `--no-ff`** on the merge. Linear/fast-forward history defeats the "release = single point on master" convention.
+- **Always produce a merge commit on `master`** — `gh pr merge --merge` (preferred) or `git merge --no-ff` (fallback). Never `--squash`, `--rebase`, or fast-forward; those defeat the "release = single point on master" convention.
 - **Never commit to `master` directly.** Even if a last-minute fix is needed mid-release, commit it on the working branch and re-merge.
 - **One release at a time.** If two unrelated changesets are sitting on the working branch, ask the user whether to split them into two releases or bundle.
 - **Stop on the first failure.** Build error, missing doc, dirty tree, tag conflict — surface it and wait, don't paper over.

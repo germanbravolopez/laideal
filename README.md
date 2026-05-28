@@ -109,12 +109,26 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
    Commit the version bump + notes on the branch as a single `release X.Y` commit.
-4. Merge the branch to `master` PR-style, with a merge commit so the release shows up as a single point on `master`'s history. Either open a PR on GitHub and merge it (default "Create a merge commit" option), or do it locally:
+4. Merge the branch to `master` through a pull request, with a merge commit so the release shows up as a single point on `master`'s history. `master` has a branch protection rule that requires a PR, so this is the path of least resistance. With the [GitHub CLI](https://cli.github.com/):
+   ```powershell
+   git push -u origin develop
+   gh pr create --base master --head develop `
+       --title "Release X.Y" `
+       --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
+   gh pr merge develop --merge --admin --delete-branch=false
+   git checkout master
+   git pull --ff-only origin master
+   ```
+   `--merge` produces the merge commit (NOT `--squash`, NOT `--rebase`). `--admin` lets the merge proceed despite required-reviews on a solo project. `--delete-branch=false` keeps `develop` alive for the next cycle.
+
+   Fallback if `gh` is unavailable or the PR can't merge cleanly, do it locally:
    ```powershell
    git checkout master
    git merge --no-ff develop -m "Merge branch 'develop' for release X.Y"
    git push origin master
    ```
+   The push will be flagged as `Bypassed rule violations` but admins can override - decide whether to tighten or relax the rule afterwards.
+
    The merge commit on `master` is the release commit that gets tagged in the next step.
 5. Tag the merge commit on `master` and push the tag:
    ```powershell
@@ -165,12 +179,13 @@ These are what you attach to the GitHub release (step 6 of Development workflow)
 $ver = 'X.Y'
 # Extract just the new X.Y section from releases_notes.txt into a temp .md so the
 # GitHub release body shows only this release's bullets, not the whole accumulated file.
-# Strips the leading tab (the section's indent under the version title) and the title line.
+# The file uses Markdown-compatible indentation (top-level bullets at column 0,
+# nested at 2 spaces), so no de-indenting is needed - just drop the title line
+# (the regex captures only what follows it) and trim trailing blanks.
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
 $raw = Get-Content releases_notes.txt -Raw
 $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
-$body = ($m.Groups[1].Value -split "`r?`n" | ForEach-Object { $_ -replace '^\t', '' }) -join "`n"
-Set-Content -Path $tmpNotes -Value $body.TrimEnd() -Encoding utf8
+Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
 
 gh release create $ver `
     releases/old_releases/$ver.zip `
