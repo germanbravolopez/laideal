@@ -157,10 +157,26 @@ Artifacts:
 - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
 - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
 
-These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step collapses to:
+These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step is:
 
 ```powershell
-gh release create X.Y releases/old_releases/X.Y.zip releases/setup_outputs/laideal_setup_X.Y.exe --title "Release X.Y" --notes-file releases_notes.txt
+$ver = 'X.Y'
+# Extract just the new X.Y section from releases_notes.txt into a temp .md so the
+# GitHub release body shows only this release's bullets, not the whole accumulated file.
+# Strips the leading tab (the section's indent under the version title) and the title line.
+$tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
+$raw = Get-Content releases_notes.txt -Raw
+$m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
+$body = ($m.Groups[1].Value -split "`r?`n" | ForEach-Object { $_ -replace '^\t', '' }) -join "`n"
+Set-Content -Path $tmpNotes -Value $body.TrimEnd() -Encoding utf8
+
+gh release create $ver `
+    releases/old_releases/$ver.zip `
+    releases/setup_outputs/laideal_setup_$ver.exe `
+    --title "Release $ver" `
+    --notes-file $tmpNotes
+
+Remove-Item $tmpNotes
 ```
 
 ---

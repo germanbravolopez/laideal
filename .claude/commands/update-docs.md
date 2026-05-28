@@ -46,7 +46,7 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 
 ### 8. `releases_notes.txt` (repo root) — update when shipping a release
 - Only edit as part of a `release X.Y` commit on the working branch (see Development workflow in README)
-- Add a new `X.Y` section at the **top** with customer-facing changes in plain language (Spanish, matching the existing entries — Inno Setup shows this file to end users at install time)
+- Add a new `X.Y` section at the **top** with customer-facing changes in plain language (English, matching the existing entries — Inno Setup shows this file to end users at install time, and the same content is reused as the GitHub release body)
 - Do **not** add an entry for in-progress work; the entry lands in the same commit that bumps `CMakeLists.txt` to the new version
 
 ---

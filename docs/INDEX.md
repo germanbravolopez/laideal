@@ -36,6 +36,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
+| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, build via `releases\release.ps1`, PR-style merge to master, tag, GitHub publish |
 | `/review` | Built-in | Review a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
