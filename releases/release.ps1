@@ -54,8 +54,14 @@ if (-not (Test-Path $CMakeBinDir))       { Fail "CMake bin dir not found at $CMa
 if (-not (Test-Path $NinjaBinDir))       { Fail "Ninja bin dir not found at $NinjaBinDir" }
 if (-not (Test-Path $InnoSetupCompiler)) { Fail "Inno Setup compiler not found at $InnoSetupCompiler" }
 
-if ($env:PATH -notlike "*$QtBinDir*") {
-    $env:PATH = "$NinjaBinDir;$CMakeBinDir;$MingwBinDir;$QtBinDir;$env:PATH"
+# Prepend any of the four tool dirs that are not already on PATH. Previously this
+# only checked $QtBinDir, which made the script silently skip the prefix when Qt
+# was on PATH from another source while Ninja was not - cmake -G Ninja then
+# failed with "unable to find a build program corresponding to Ninja".
+foreach ($dir in @($NinjaBinDir, $CMakeBinDir, $MingwBinDir, $QtBinDir)) {
+    if ($env:PATH -notlike "*$dir*") {
+        $env:PATH = "$dir;$env:PATH"
+    }
 }
 
 Step "Release pipeline for v$Version"
