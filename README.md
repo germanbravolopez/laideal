@@ -14,6 +14,8 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
 - **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
+- **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
+- **In-app release notes** — Ayuda → Notas de la versión shows the bundled `releases_notes.txt` with the full version history, offline.
 
 ---
 
