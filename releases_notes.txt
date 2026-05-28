@@ -1,5 +1,11 @@
 Releases:
 
+8.3
+- New: in-app updater
+  - Ayuda -> Buscar actualizaciones... checks GitHub for a newer release and, if you confirm, downloads the installer and runs it. The app closes and the installer replaces it in place - no manual download or uninstall step. Your database, settings (~/.laideal_settings.json) and log (~/.laideal.log) are preserved.
+  - The same check also runs silently at startup so a new release is surfaced as soon as it is available. Turn it off in Archivo -> Configuracion -> "Buscar actualizaciones al iniciar la aplicacion" if you prefer manual checks.
+- New: Ayuda -> Notas de la version... shows the full history of changes shipped in every release, offline. Same content shown by the installer at install time.
+
 8.2
 - Bug fix: factura is no longer auto-printed when pressing "Pagar todo"
   - 8.1 added an automatic print right after "Pagar todo" plus a "second copy?" prompt, but Verifactu's QR has to come back from the AEAT relay first; if the network was slow or the endpoint blipped, the factura sometimes printed without a QR. The print button on the RecogPrendas window stays - press it when the row shows ENVIADA so the QR is on the receipt. The second-copy prompt moves with the auto-print and is gone too; click the print button twice for the second copy.
