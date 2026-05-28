@@ -30,7 +30,7 @@ public:
     QSqlDatabase db;
     VerifactuIntegration *m_verifactuIntegration = nullptr;
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
-    MySortFilterProxyModel *proxyModel;
+    MySortFilterProxyModel *proxyModel = nullptr;
     bool isCellClicked = false;
     int rowClickedCell, columnClickedCell;
 
@@ -77,6 +77,8 @@ private:
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;
     void printFactura(const QString &ticketNum, bool askSecondCopy);
+    // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
+    void selectSourceRow(int sourceRow, int sourceCol);
 };
 
 #endif // RECOGPRENDAS_H

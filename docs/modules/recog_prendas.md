@@ -102,7 +102,11 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled to prevent per-garment payment from triggering a Verifactu submission per garment (would cause duplicate-InvoiceID rejection at AEAT). Pay via `pb_pay_all` instead. The pay-all loop calls `on_pb_payment_toggled(true)` programmatically and Qt still fires `toggled` on a disabled button, so the full-ticket pay flow is intact. See "Per-payment Verifactu InvoiceID seq" in `docs/progress_tracker.md` for the future fix that would restore per-garment payment. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`. The pay-all / pku-all loops bypass the view and call `selectSourceRow()` directly with source rows — they iterate `sqlQueryModel->rowCount()` so they act on all loaded rows regardless of the active header sort.
+
+## Header-click sorting
+
+`ui->tableView->setSortingEnabled(true)` is set on every search (in `on_pb_search_clicked` after `setModel(proxyModel)`), so any column header can be clicked to re-sort the result. The sort uses `MySortFilterProxyModel::lessThan()`, which already special-cases the three date columns (parsed as `dd-MM-yyyy`) and `importe` (parsed as float) so they sort numerically rather than as strings. Default sort on every new search is `n_recibo` descending.
 
 ## Notes
 

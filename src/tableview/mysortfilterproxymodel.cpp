@@ -1,4 +1,5 @@
 #include "mysortfilterproxymodel.h"
+#include "ingresos_schema.h"
 #include <QtWidgets>
 #include <QMessageBox>
 

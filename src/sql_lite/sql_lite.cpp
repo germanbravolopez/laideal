@@ -1,6 +1,6 @@
 #include "sql_lite.h"
 
-#include "../verifactu/verifactumanager.h"
+#include "../verifactu/verifactutypes.h"
 
 #include <QDateTime>
 #include <QDebug>

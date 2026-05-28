@@ -457,7 +457,9 @@ void RecogPrendas::on_pb_search_clicked()
             proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
-        ui->tableView->sortByColumn(0, Qt::DescendingOrder);
+        // Must come before sortByColumn or the default sort is a no-op.
+        ui->tableView->setSortingEnabled(true);
+        ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         // Hide internal columns not meant for display
         ui->tableView->setColumnHidden(INGRESOS_COL_EDIT_LOCK,           true);
         ui->tableView->setColumnHidden(INGRESOS_COL_HASH,                true);
@@ -534,20 +536,23 @@ void RecogPrendas::on_pb_state_toggled(bool checked)
 
 void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
 {
-    // Check if another row is clicked
-    if (index.row() != rowClickedCell)
+    // index is in proxy coords; rowClickedCell is consumed as a source row.
+    const QModelIndex sourceIndex = proxyModel ? proxyModel->mapToSource(index) : index;
+    selectSourceRow(sourceIndex.row(), sourceIndex.column());
+}
+
+void RecogPrendas::selectSourceRow(int sourceRow, int sourceCol)
+{
+    if (sourceRow != rowClickedCell)
         isCellClicked = false;
-    // Update pointers to cell clicked
-    rowClickedCell = index.row();
-    columnClickedCell = index.column();
+    rowClickedCell = sourceRow;
+    columnClickedCell = sourceCol;
     updateRowClickedToFields();
-    // Enable action buttons now that a row is selected (pb_payment stays disabled - see updateRowClickedToFields)
     ui->pb_state->setEnabled(true);
     ui->pb_pay_all->setEnabled(true);
     ui->pb_pku_all->setEnabled(true);
     ui->pb_separ_garm->setEnabled(true);
     ui->pb_print->setEnabled(true);
-    // Set clicked cell
     isCellClicked = true;
 }
 
@@ -571,7 +576,7 @@ void RecogPrendas::on_le_size_editingFinished()
 void RecogPrendas::on_pb_pay_all_clicked()
 {
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        on_tableView_clicked(sqlQueryModel->index(row, 0));
+        selectSourceRow(row, 0);
         on_pb_payment_toggled(true);
     }
     resetAllContents();
@@ -581,11 +586,11 @@ void RecogPrendas::on_pb_pku_all_clicked()
 {
     int currentRow = rowClickedCell;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        on_tableView_clicked(sqlQueryModel->index(row, 0));
+        selectSourceRow(row, 0);
         on_pb_state_toggled(true);
     }
     if (currentRow >= 0)
-        on_tableView_clicked(sqlQueryModel->index(currentRow, 0));
+        selectSourceRow(currentRow, 0);
     else
         resetAllContents();
 }
