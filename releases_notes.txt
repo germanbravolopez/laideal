@@ -1,5 +1,9 @@
 Releases:
 
+8.2
+	- Bug fix: factura is no longer auto-printed when pressing "Pagar todo"
+		- 8.1 added an automatic print right after "Pagar todo" plus a "second copy?" prompt, but Verifactu's QR has to come back from the AEAT relay first; if the network was slow or the endpoint blipped, the factura sometimes printed without a QR. The print button on the RecogPrendas window stays - press it when the row shows ENVIADA so the QR is on the receipt. The second-copy prompt moves with the auto-print and is gone too; click the print button twice for the second copy.
+
 8.1
 	- Bug fix: search by client name in Recogida de prendas now returns all the tickets for that client
 		- Previously, for clients with many receipts some tickets could be silently hidden from the result; the search is now complete regardless of how many rows the ingresos table has.
