@@ -62,6 +62,9 @@ void RecogPrendas::resetAllContents()
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
+    // Clear the SQL query model and the view
+    sqlQueryModel->clear();
+    ui->tableView->setModel(sqlQueryModel);
 }
 
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
@@ -135,7 +138,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":new_fecha_pago", "");
             q.bindValue(":new_pagado",     ui->pb_payment->text());
             // Set id values
-            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString());
+            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString()); // fix with le_nr_ticket->text()?
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_HASH)).toString());
             // Write to db
             if (!q.exec())
@@ -498,8 +501,6 @@ void RecogPrendas::on_pb_search_clicked()
 void RecogPrendas::on_pb_reset_clicked()
 {
     resetAllContents();
-    ui->le_search->setText("");
-    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_payment_toggled(bool checked)
