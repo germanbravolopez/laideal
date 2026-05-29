@@ -81,10 +81,10 @@ Capture the PR number from `gh pr create`'s output (or `gh pr view --json number
 A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a high-effort review on the PR diff — not the default level. The diff of a release is usually wider than a single feature PR (the working branch may have accumulated weeks of changes), so the broader-coverage tiers are appropriate even though they may surface lower-confidence findings.
 
 ```
-/code-review max <PR#>
+/code-review high <PR#>
 ```
 
-`max` widens coverage relative to the default `medium` at the cost of more uncertain findings — the right tradeoff for the release gate. It runs locally so the step is not billed (unlike `/code-review ultra`, which is the cloud multi-agent variant).
+`high` widens coverage relative to the default `medium` while keeping the false-positive rate manageable — the right tradeoff for the release gate on a small solo project. `max` was tried for the 8.4 gate and produced too much volume for the gain over `high`; `max` / `ultra` (the cloud multi-agent variant) remain available if a particular release ever warrants a deeper sweep. Runs locally, not billed.
 
 **What to do with the findings**:
 - **Genuine bugs / regressions / release-blockers**: fix on the working branch, push, and the PR updates automatically. Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
