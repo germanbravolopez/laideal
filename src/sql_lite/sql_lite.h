@@ -43,4 +43,14 @@ QString     genHash16();
 void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                         const VerifactuResult &result);
 
+// Next free verifactu_invoice_seq for a ticket. Returns max(seq)+1 over rows
+// matching n_recibo, or 0 if the ticket has never been submitted.
+int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
+
+// Patch the rows of (n_recibo, verifactu_invoice_seq) with the AEAT reply.
+// Used by the new partial-payment dialog so each payment event's rows get
+// their own seq + AEAT metadata without touching the rest of the ticket.
+void        updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNum,
+                                              int seq, const VerifactuResult &result);
+
 #endif // SQL_LITE_H

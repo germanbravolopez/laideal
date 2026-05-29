@@ -197,6 +197,7 @@ void Listado::populateTable()
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH, true);
+            table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ, true);
             // Verifactu integrity (Art. 8.1 RD 1007/2023): no inline edits on submitted
             // records. All ingresos changes must flow through RecogPrendas / Cancel /
             // Rectify which keep AEAT, the chained hash and the accounting lock in sync.

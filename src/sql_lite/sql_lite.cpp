@@ -60,6 +60,11 @@ void migrateDatabase(QSqlDatabase &db)
     // verifactu_rectification_type is "S" (sustitucion) or "I" (diferencias).
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectifies_n_recibo TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectification_type TEXT");
+    // Partial-payment sequence (8.5+). Each payment event for a given n_recibo
+    // submits as InvoiceID "<n_recibo>-<seq>" so multiple partial payments do
+    // not collide at AEAT. Legacy rows (8.0-8.4) leave it 0 - those tickets
+    // were submitted as "<n_recibo>" (no seq), which is its own distinct ID.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_seq INTEGER DEFAULT 0");
     db.close();
 }
 
@@ -511,6 +516,69 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     if (!q.exec())
         qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
                    << "-" << q.lastError().text();
+    db.close();
+}
+
+int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+    int next = 0;
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT COALESCE(MAX(verifactu_invoice_seq), -1) + 1 FROM ingresos "
+              "WHERE n_recibo = :n AND verifactu_estado IS NOT NULL "
+              "AND verifactu_estado != ''");
+    q.bindValue(":n", ticketNum);
+    if (q.exec() && q.first())
+        next = q.value(0).toInt();
+    else if (q.lastError().isValid())
+        qWarning() << "nextVerifactuInvoiceSeq: SELECT failed for" << ticketNum
+                   << "-" << q.lastError().text();
+    db.close();
+    return next;
+}
+
+void updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNum,
+                                       int seq, const VerifactuResult &result)
+{
+    if (dbNotConfigured(db, __func__)) return;
+
+    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString estado    = verifactuEstadoToString(
+        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
+    qDebug() << "updateTicketVerifactuFieldsForSeq: ticket" << ticketNum << "seq=" << seq
+             << "estado=" << estado
+             << "csv=" << (result.isSuccess() ? result.csv : QString())
+             << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
+             << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq");
+    if (result.isSuccess()) {
+        q.bindValue(":csv",    result.csv);
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", estado);
+        q.bindValue(":error",  "");
+        q.bindValue(":url",    result.validationUrl);
+        q.bindValue(":xml",    result.rawXml);
+        q.bindValue(":hash",   result.rawHash);
+    } else {
+        q.bindValue(":csv",    "");
+        q.bindValue(":ts",     timestamp);
+        q.bindValue(":estado", estado);
+        q.bindValue(":error",  result.errorDescription);
+        q.bindValue(":url",    "");
+        q.bindValue(":xml",    "");
+        q.bindValue(":hash",   "");
+    }
+    q.bindValue(":n_recibo", ticketNum);
+    q.bindValue(":seq",      seq);
+    if (!q.exec())
+        qWarning() << "updateTicketVerifactuFieldsForSeq UPDATE failed for ticket" << ticketNum
+                   << "seq" << seq << "-" << q.lastError().text();
     db.close();
 }
 
