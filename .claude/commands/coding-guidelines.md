@@ -99,6 +99,8 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 - Header guard format: `#ifndef CLASSNAME_H` / `#define CLASSNAME_H` / `#endif // CLASSNAME_H`
 - Include order: own header first, then Qt headers (`<QObject>`, etc.), then project headers (`"sql_lite.h"`).
 - Comment only the **why**, not the **what** — good names make the what obvious.
+- **Do not duplicate Markdown docs in code comments.** If you have just written (or are about to write) the same explanation in `docs/architecture.md` / `docs/modules/*.md` / `docs/progress_tracker.md`, do NOT also paste it in a code comment. The docs are the long-form reference; code comments are short pointers to the surprising bit. A multi-paragraph block comment in front of a function is almost always wrong — move it to the doc and leave at most one line in the code (e.g. `// Why 3 s: see docs/architecture.md "Data Flow: Ticket Save"`).
+- Function-header comments in headers (`.h`) should be one short line stating the contract (return value, what counts as failure). Anything longer belongs in the module doc.
 - Use `// TODO:` for planned work, `// FIXME:` for known bugs. Do not commit code with `std::exit()` or `abort()` outside of main.
 - Keep functions under ~40 lines. If a method grows beyond that, extract a named helper.
 

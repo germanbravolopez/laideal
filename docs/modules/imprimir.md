@@ -74,9 +74,9 @@ All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against
 | 4 | Pre-cleaning advisory | If garment state implies risk of damage or uncertain outcome, client will be informed before treatment | Art. 6 RD 1453/1987 (information obligation) |
 | 5 | RGPD notice | Data processed by `businessName()` to manage the service; rights under Arts.15-22 RGPD via `businessPhone()` (falls back to "ver cartel en tienda") | LOPDGDD Art. 11 / RGPD Art. 13 layered-notice |
 
-## Table column indices (imprimir.h)
+## `ingresos` column indices
 
-`TABLE_TICKET=0`, `TABLE_CLIENT=1`, `TABLE_DATE_RCP=2`, `TABLE_DATE_PAY=3`, `TABLE_DATE_PKU=4`, `TABLE_PRICE=5`, `TABLE_IS_PAYED=6`, `TABLE_STATE=7`, `TABLE_QUANTITY=8`, `TABLE_GARMENT=9`, `TABLE_SIZE=10`, `TABLE_SERVICE=11`, `TABLE_OBSERV=12`, `TABLE_EDIT_LOCK=13`, `TABLE_HASH=14`, `TABLE_VERIFACTU_CSV=15`, `TABLE_VERIFACTU_TS=16`, `TABLE_VERIFACTU_ESTADO=17`, `TABLE_VERIFACTU_ERROR=18`, `TABLE_VERIFACTU_URL_QR=19`
+Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` (`INGRESOS_COL_N_RECIBO=0` ... `INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE=23`). Used here for every `sqlQueryModel->index(row, col)` lookup in `imprimir.cpp`. The same constants are shared by `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and `add_garment` — previously each module carried its own near-duplicate set with diverging names.
 
 ## Verifactu QR
 

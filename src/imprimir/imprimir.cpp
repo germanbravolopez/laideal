@@ -71,7 +71,7 @@ void Imprimir::getTicketInfo()
 
 bool Imprimir::checkTicketPaid(int row)
 {
-    if (sqlQueryModel->data(sqlQueryModel->index(row, TABLE_IS_PAYED)).toString() == "NO")
+    if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() == "NO")
         return false;
     return true;
 }
@@ -106,10 +106,10 @@ QPixmap Imprimir::resolveQrCode()
     bool hasCsv = false;
     bool anyBlocking = false;
     for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
-        if (!sqlQueryModel->data(sqlQueryModel->index(row, TABLE_VERIFACTU_CSV)).toString().isEmpty())
+        if (!sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_CSV)).toString().isEmpty())
             hasCsv = true;
         const VerifactuEstado e = verifactuEstadoFromString(
-            sqlQueryModel->data(sqlQueryModel->index(row, TABLE_VERIFACTU_ESTADO)).toString());
+            sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString());
         if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error) {
             anyBlocking = true;
             break;
@@ -118,15 +118,15 @@ QPixmap Imprimir::resolveQrCode()
     if (!hasCsv || anyBlocking)
         return QPixmap();
 
-    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, TABLE_TICKET)).toString();
-    QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, TABLE_DATE_RCP)).toString();
+    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
+    QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
     QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
     if (!invoiceDate.isValid())
         return QPixmap();
 
     double total = 0.0;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        total += sqlQueryModel->data(sqlQueryModel->index(row, TABLE_PRICE)).toDouble();
+        total += sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
     }
 
     double ivaRate = AppSettings::instance()->ivaRate();
@@ -243,16 +243,16 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     row++;
     // Client data
     excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("Cliente: " + sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_CLIENT)).toString()));
+    excel.write(row, 1, QString("Cliente: " + sqlQueryModel->data(sqlQueryModel->index(0 , INGRESOS_COL_CLIENTE)).toString()));
     row++;
     // Ticket dates
     excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
-    excel.write(row, 1, QString("Recepción: " + sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_DATE_RCP)).toString().replace("-","/")));
+    excel.write(row, 1, QString("Recepción: " + sqlQueryModel->data(sqlQueryModel->index(0 , INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-","/")));
     row++;
     // Extra information in case of complete invoice: address and DNI
     if (isCompleteInvoice) {
         QString clientAddress;
-        clientAddress = searchItemFromClient(db, "direccion", sqlQueryModel->data(sqlQueryModel->index(0 , TABLE_CLIENT)).toString(), false);
+        clientAddress = searchItemFromClient(db, "direccion", sqlQueryModel->data(sqlQueryModel->index(0 , INGRESOS_COL_CLIENTE)).toString(), false);
         if (clientAddress == "")
             clientAddress = addExtraInfoToInvoice("Añadir dirección de facturación", "Dirección:");
         // Cut address string in case it is too long
@@ -296,37 +296,37 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     float ticketTotalF = 0.0;
     for (int rowCnt = 0; rowCnt < sqlQueryModel->rowCount(); rowCnt++) {
         if (isRecibo || !isRecibo && checkTicketPaid(rowCnt)) {
-            QString garmentName = sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_GARMENT)).toString();
+            QString garmentName = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_PRENDA)).toString();
             // Complete garment with size info
-            QString size = QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_SIZE)).toFloat(), 'f', 2);
+            QString size = QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_SIZE)).toFloat(), 'f', 2);
             if (size != "" && size != "0.00") {
                 garmentName.append(" - " + size);
             }
             //// Complete "Alfombra" getting also the observation value (number)
             //QString leftSide = garmentName.left(8);
-            //QString obsv = sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_OBSERV)).toString();
+            //QString obsv = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_OBSERVACIONES)).toString();
             //if (leftSide == "Alfombra" && obsv != "") {
             //    garmentName.append(" - " + obsv);
             //}
             // Content of each garment in the ticket
-            excel.write(row, 1, sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_QUANTITY)).toString(), formatUdsCost);
+            excel.write(row, 1, sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_CANTIDAD)).toString(), formatUdsCost);
             excel.write(row, 2, garmentName, formatGarm);
-            excel.write(row, 3, QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_PRICE)).toFloat(), 'f', 2), formatUdsCost);
+            excel.write(row, 3, QString::number(sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toFloat(), 'f', 2), formatUdsCost);
             row++;
             //// Add extra information for each garment for facturas simplificadas
-            //if (!isRecibo && sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_IS_PAYED)).toString() == "SI") {
+            //if (!isRecibo && sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_PAGADO)).toString() == "SI") {
             //    formatGarm.setFontSize(10);
-            //    excel.write(row, 2, "Pagad.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_DATE_PAY)).toString().replace("-","/"), formatGarm);
+            //    excel.write(row, 2, "Pagad.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_FECHA_PAGO)).toString().replace("-","/"), formatGarm);
             //    formatGarm.setFontSize(11);
             //    row++;
-            //    if (sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_STATE)).toString() == "Recogido") {
+            //    if (sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_ESTADO)).toString() == "Recogido") {
             //        formatGarm.setFontSize(10);
-            //        excel.write(row, 2, "Recog.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_DATE_PKU)).toString().replace("-","/"), formatGarm);
+            //        excel.write(row, 2, "Recog.: " + sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_FECHA_RECOGIDA)).toString().replace("-","/"), formatGarm);
             //        formatGarm.setFontSize(11);
             //        row++;
             //    }
             //}
-            ticketTotalF = ticketTotalF + sqlQueryModel->data(sqlQueryModel->index(rowCnt, TABLE_PRICE)).toFloat();
+            ticketTotalF = ticketTotalF + sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toFloat();
         }
     }
     // Calculate total price and IVA
@@ -411,7 +411,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         // accepted by AEAT (estado = ENVIADA) so we never claim verifiability for tickets
         // still PENDIENTE, in ERROR, or ANULADA.
         const QString verifactuState = sqlQueryModel->data(
-            sqlQueryModel->index(0, TABLE_VERIFACTU_ESTADO)).toString();
+            sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
         if (verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)) {
             QXlsx::Format formatVerifactuLeyenda;
             formatVerifactuLeyenda.setFontSize(7);

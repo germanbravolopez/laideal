@@ -17,6 +17,7 @@ set(PROJECT_SOURCES
     verifactuconfig.cpp
     verifactuinvoice.h
     verifactuinvoice.cpp
+    verifactutypes.h
     verifactumanager.h
     verifactumanager.cpp
     verifactuintegration.h

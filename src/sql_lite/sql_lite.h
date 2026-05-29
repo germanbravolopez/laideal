@@ -7,6 +7,10 @@
 #include <QString>
 #include <QStringList>
 
+#include "ingresos_schema.h"
+
+struct VerifactuResult;
+
 // Configured once at startup by main() via setDbPath().
 // All sql_lite functions expand DB_PATH to the runtime-configured value.
 void    setDbPath(const QString &path);
@@ -32,5 +36,11 @@ void        updateLockInIngresos(QSqlDatabase &db, int value, int month, int yea
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
+
+// Patch an existing ingresos row with the AEAT reply (CSV, timestamp, estado, error,
+// QR URL, signed XML, hash). Used by the async submit handlers in MainWindow and
+// RecogPrendas once Verifactu finishes. Matches WHERE n_recibo = ticketNum.
+void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
+                                        const VerifactuResult &result);
 
 #endif // SQL_LITE_H

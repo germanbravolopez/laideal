@@ -41,42 +41,102 @@ release X.Y - <one-line summary of what this release ships>
 
 The summary should mention the headline customer-facing change(s). Example from history: `release 8.1 - quick-turn bugfix / UX release on top of 8.0: ...`.
 
-### 3. Build the artifacts (README "Release procedure")
+### 3. Sanity build (catch compile errors before opening the PR)
+
+A plain Release build into the normal `build\` directory - same incantation the README documents. Cheap, fast, and catches the obvious "merged a branch that doesn't compile" foot-gun before bothering reviewers or the release-artifact pipeline.
 
 ```powershell
-.\releases\release.ps1 X.Y
+# Add Qt + MinGW + CMake + Ninja to PATH for this shell session.
+$env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
-This runs configure -> build -> `windeployqt` -> zip -> Inno Setup, end-to-end. The script aborts upfront if `CMakeLists.txt` does not match `X.Y` or if a zip/installer for `X.Y` already exists, so failures here usually mean step 1 was incomplete.
+Expected output: `build\src\app\laideal.exe` exists and the build ends with no errors. Warnings are tolerated; errors are not. The user may run this via Qt Creator instead - that's equivalent.
 
-Wait for it to finish and verify both artifacts exist:
-- `releases\old_releases\X.Y.zip`
-- `releases\setup_outputs\laideal_setup_X.Y.exe`
+If the build fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code.
 
-If the script fails, **stop**. Do not merge to `master`. Diagnose with the user, fix on the working branch, amend or add a follow-up commit, and rerun.
+This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
 
-### 4. Merge PR-style to `master` (README step 4)
+### 4. Open a GitHub PR to `master` (README step 4)
+
+`master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Push the working branch and open the PR — but do **not** merge yet; step 5 reviews the diff first.
 
 ```powershell
+# Push the working branch first so the PR has something to point at.
+git push -u origin <working-branch>
+
+# Open the PR. Title and body are short; the GitHub release in step 9 carries
+# the full notes, so the PR body just points there.
+gh pr create --base master --head <working-branch> `
+    --title "Release X.Y" `
+    --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
+```
+
+Capture the PR number from `gh pr create`'s output (or `gh pr view --json number -q .number`) — step 5 needs it.
+
+### 5. Review the PR at high effort before merging (NEW)
+
+A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a high-effort review on the PR diff — not the default level. The diff of a release is usually wider than a single feature PR (the working branch may have accumulated weeks of changes), so the broader-coverage tiers are appropriate even though they may surface lower-confidence findings.
+
+```
+/code-review max <PR#>
+```
+
+`max` widens coverage relative to the default `medium` at the cost of more uncertain findings — the right tradeoff for the release gate. It runs locally so the step is not billed (unlike `/code-review ultra`, which is the cloud multi-agent variant).
+
+**What to do with the findings**:
+- **Genuine bugs / regressions / release-blockers**: fix on the working branch, push, and the PR updates automatically. Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
+- **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes — those are the high-blast-radius areas where false-positive triage should err on the side of fixing.
+- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them as new entries in `docs/progress_tracker.md` Open Non-Blocking Issues, do not block the release on them.
+
+Only proceed to step 6 once the user has confirmed the review is clean (or that remaining findings are intentionally deferred).
+
+### 6. Merge the PR
+
+```powershell
+# Merge with --merge (the merge-commit option, not --squash and not --rebase) +
+# --admin so the merge proceeds even if required-reviews / required-checks
+# aren't satisfied. This is a solo project; the PR exists to honour the
+# protection rule, not to gate on automated review.
+gh pr merge <working-branch> --merge --admin --delete-branch=false
+
+# Bring the merge commit into the local master so step 7 can tag it.
 git checkout master
-git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y"
-git push origin master
+git pull --ff-only origin master
 ```
 
-`--no-ff` is mandatory — the project's convention is that each release shows up as a single discrete merge point on `master`'s history. Do **not** fast-forward.
+`--merge` is mandatory — `--squash` or `--rebase` defeat the "release = single point on master" convention. `--delete-branch=false` keeps `<working-branch>` alive locally and on the remote for the next release cycle; do NOT pass `--delete-branch` unless the user asks.
 
-If the user prefers a GitHub PR instead of a local merge, stop here and tell them: open the PR for `<working-branch>` -> `master`, use the default "Create a merge commit" button (not "Squash" or "Rebase"), then resume at step 5 once `master` is updated locally (`git checkout master && git pull`).
+Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
-### 5. Tag the merge commit (README step 5)
+### 7. Tag the merge commit (README step 5)
 
 ```powershell
 git tag -a X.Y -m "Release X.Y"
 git push origin X.Y
 ```
 
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed in step 4; only the tag is pushed here.
+The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here.
 
-### 6. Publish on GitHub (README step 6)
+### 8. Build the release artifacts from the tagged commit (README "Release procedure")
+
+You should be on `master` at the merge commit after step 6, with the tag now placed in step 7. Run the release script from there so the zip + installer are built from the exact commit that will be shipped:
+
+```powershell
+.\releases\release.ps1 X.Y
+```
+
+The script does configure -> build -> `windeployqt` -> zip -> Inno Setup, into `build-release\` (its own directory, not the `build\` from step 3). Aborts upfront if `CMakeLists.txt` does not match `X.Y` or if a zip/installer for `X.Y` already exists.
+
+Verify both artifacts exist before step 9:
+- `releases\old_releases\X.Y.zip`
+- `releases\setup_outputs\laideal_setup_X.Y.exe`
+
+If the script fails here it usually means a build difference between the working branch and the merge commit, or a stale `build-release\`. Diagnose with the user; do **not** delete the tag without confirming - the merge commit is already public.
+
+### 9. Publish on GitHub (README step 6)
 
 Requires the GitHub CLI. The release body should be **only the new `X.Y` section** of `releases_notes.txt`, converted to markdown — not the whole accumulated file. Extract it to a temp `.md` file, publish, then delete the temp file.
 
@@ -104,7 +164,7 @@ Remove-Item $tmpNotes
 
 Verify visually (or with `gh release view X.Y`) that the body renders as a clean bulleted list. If the regex misses (e.g. the section uses an unexpected separator) or the list looks wrong, fall back to passing `--notes-file releases_notes.txt` once, then edit the release on GitHub.
 
-### 7. Post-release housekeeping
+### 10. Post-release housekeeping
 
 - Confirm `git status` on `master` is clean and on the merge commit.
 - Surface the GitHub release URL from `gh release create` output.
@@ -118,7 +178,7 @@ Verify visually (or with `gh release view X.Y`) that the body renders as a clean
 
 ## Rules
 
-- **Never skip `--no-ff`** on the merge. Linear/fast-forward history defeats the "release = single point on master" convention.
+- **Always produce a merge commit on `master`** — `gh pr merge --merge` (preferred) or `git merge --no-ff` (fallback). Never `--squash`, `--rebase`, or fast-forward; those defeat the "release = single point on master" convention.
 - **Never commit to `master` directly.** Even if a last-minute fix is needed mid-release, commit it on the working branch and re-merge.
 - **One release at a time.** If two unrelated changesets are sitting on the working branch, ask the user whether to split them into two releases or bundle.
 - **Stop on the first failure.** Build error, missing doc, dirty tree, tag conflict — surface it and wait, don't paper over.

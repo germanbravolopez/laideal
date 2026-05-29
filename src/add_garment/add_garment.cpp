@@ -67,8 +67,8 @@ void AddGarment::on_pb_search_pressed()
 
 void AddGarment::fillContentFromDb()
 {
-    ui->le_cliente->setText(sqlQueryModel->data(sqlQueryModel->index(0, TABLE_CLIENT)).toString());
-    ui->de_fecha_rcp->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(0, TABLE_DATE_RCP)).toString(), "dd-MM-yyyy"));
+    ui->le_cliente->setText(sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString());
+    ui->de_fecha_rcp->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString(), "dd-MM-yyyy"));
 }
 
 void AddGarment::populateGarments()

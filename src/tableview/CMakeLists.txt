@@ -15,5 +15,6 @@ add_library(tableview STATIC
 target_link_libraries(tableview
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
+    sql_lite
 )
 target_include_directories(tableview INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

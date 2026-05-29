@@ -20,6 +20,7 @@
 #include "updaterdialog.h"
 #include "version.h"
 #include <QTimer>
+#include <QEventLoop>
 #include <QTextEdit>
 #include <QFontDatabase>
 #include <QTextCursor>
@@ -384,11 +385,11 @@ void MainWindow::checkClientData()
 
 }
 
-void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
+QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qDebug() << "Verifactu not configured - skipping invoice submission for ticket" << ticketNum;
-        return;
+        return QString();
     }
     double ivaRate = AppSettings::instance()->ivaRate();
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
@@ -400,10 +401,11 @@ void MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &i
     );
     if (reqId.isEmpty()) {
         qWarning() << "Verifactu submit rejected for ticket" << ticketNum;
-        return;
+        return QString();
     }
     m_pendingSubmits.insert(reqId, ticketNum);
     statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+    return reqId;
 }
 
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
@@ -413,7 +415,7 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
     const QString ticketNum = it.value();
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(ticketNum, result);
+    updateTicketVerifactuFields(db, ticketNum, result);
 
     if (result.isSuccess()) {
         statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
@@ -423,48 +425,6 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
         qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
     }
 }
-
-void MainWindow::updateTicketVerifactuFields(const QString &ticketNum, const VerifactuResult &result)
-{
-    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const QString estado    = verifactuEstadoToString(
-        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
-    qDebug() << "MainWindow::updateTicketVerifactuFields: ticket" << ticketNum
-             << "estado=" << estado
-             << "csv=" << (result.isSuccess() ? result.csv : QString())
-             << "hash=" << (result.isSuccess() ? result.rawHash : QString())
-             << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
-             << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
-    db.open();
-    QSqlQuery q;
-    q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
-              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
-              "WHERE n_recibo = :n_recibo");
-    if (result.isSuccess()) {
-        q.bindValue(":csv",    result.csv);
-        q.bindValue(":ts",     timestamp);
-        q.bindValue(":estado", estado);
-        q.bindValue(":error",  "");
-        q.bindValue(":url",    result.validationUrl);
-        q.bindValue(":xml",    result.rawXml);
-        q.bindValue(":hash",   result.rawHash);
-    } else {
-        q.bindValue(":csv",    "");
-        q.bindValue(":ts",     timestamp);
-        q.bindValue(":estado", estado);
-        q.bindValue(":error",  result.errorDescription);
-        q.bindValue(":url",    "");
-        q.bindValue(":xml",    "");
-        q.bindValue(":hash",   "");
-    }
-    q.bindValue(":n_recibo", ticketNum);
-    if (!q.exec())
-        qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
-                   << "-" << q.lastError().text();
-    db.close();
-}
-
 
 void MainWindow::saveTicket()
 {
@@ -556,7 +516,7 @@ void MainWindow::printRecibo()
     }
 }
 
-void MainWindow::printFra()
+void MainWindow::printFra(const QPixmap &qrCode)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(this);
@@ -564,10 +524,13 @@ void MainWindow::printFra()
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
+    ui_impr->qrCode = qrCode;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
-    ui_impr->createTicketExcel(false, false);
+    ui_impr->createTicketExcel(true, false);
     if (AppSettings::instance()->enablePrinting()) {
+        ui_impr->printTicket();
+        ui_impr->createTicketExcel(false, false);
         ui_impr->printTicket();
     }
 }
@@ -603,8 +566,36 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
 
             saveTicket();
             if (isPaid) {
-                verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
-                printFra();
+                const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+
+                QPixmap qrCode;
+                bool gotSuccessfulReply = false;
+
+                if (!reqId.isEmpty()) {
+                    QEventLoop loop;
+                    QTimer timeout;
+                    timeout.setSingleShot(true);
+                    QMetaObject::Connection conn = connect(m_verifactuIntegration,
+                        &VerifactuIntegration::requestFinished, this,
+                        [&](const QString &id, const VerifactuResult &res) {
+                            if (id != reqId) return;
+                            gotSuccessfulReply = res.isSuccess() && !res.qrCode.isNull();
+                            qrCode = res.qrCode;
+                            loop.quit();
+                        });
+                    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+                    timeout.start(3000);
+                    loop.exec();
+                    QObject::disconnect(conn);
+                }
+
+                qDebug() << "saveTicket: ticket" << ticketNum
+                         << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
+                         << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
+                if (gotSuccessfulReply)
+                    printFra(qrCode);
+                else
+                    printRecibo();
             } else {
                 printRecibo();
             }
@@ -887,21 +878,21 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
     QSqlQuery q;
     if (q.exec("SELECT * FROM ingresos")) {
         while (q.next()) {
-            if (q.value(INGRESOS_IDX_HASH).toString() == "") {
-                QString nRecibo = q.value(INGRESOS_IDX_ID).toString();
-                QString cliente = q.value(INGRESOS_IDX_CLIENT).toString();
-                QString fechaRecepcion = q.value(INGRESOS_IDX_DATE_RCP).toString();
-                QString fechaPago = q.value(INGRESOS_IDX_DATE_PAY).toString();
-                QString fechaRecogida = q.value(INGRESOS_IDX_DATE_PKU).toString();
-                QString importe = q.value(INGRESOS_IDX_IMPORTE).toString();
-                QString pagado = q.value(INGRESOS_IDX_PAYED).toString();
-                QString estado = q.value(INGRESOS_IDX_STATE).toString();
-                QString cantidad = q.value(INGRESOS_IDX_CANTIDAD).toString();
-                QString prenda = q.value(INGRESOS_IDX_PRENDA).toString();
-                QString size = q.value(INGRESOS_IDX_SIZE).toString();
-                QString servicio = q.value(INGRESOS_IDX_SERVICIO).toString();
-                QString observaciones = q.value(INGRESOS_IDX_OBSV).toString();
-                QString editLock = q.value(INGRESOS_IDX_EDIT_LOCK).toString();
+            if (q.value(INGRESOS_COL_HASH).toString() == "") {
+                QString nRecibo = q.value(INGRESOS_COL_N_RECIBO).toString();
+                QString cliente = q.value(INGRESOS_COL_CLIENTE).toString();
+                QString fechaRecepcion = q.value(INGRESOS_COL_FECHA_RECEPCION).toString();
+                QString fechaPago = q.value(INGRESOS_COL_FECHA_PAGO).toString();
+                QString fechaRecogida = q.value(INGRESOS_COL_FECHA_RECOGIDA).toString();
+                QString importe = q.value(INGRESOS_COL_IMPORTE).toString();
+                QString pagado = q.value(INGRESOS_COL_PAGADO).toString();
+                QString estado = q.value(INGRESOS_COL_ESTADO).toString();
+                QString cantidad = q.value(INGRESOS_COL_CANTIDAD).toString();
+                QString prenda = q.value(INGRESOS_COL_PRENDA).toString();
+                QString size = q.value(INGRESOS_COL_SIZE).toString();
+                QString servicio = q.value(INGRESOS_COL_SERVICIO).toString();
+                QString observaciones = q.value(INGRESOS_COL_OBSERVACIONES).toString();
+                QString editLock = q.value(INGRESOS_COL_EDIT_LOCK).toString();
 
                 QSqlQuery q1;
                 QString newHash = genHash16();

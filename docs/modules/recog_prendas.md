@@ -33,38 +33,42 @@ Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Inp
 | Ticket number | All digits, length < 9 | `WHERE n_recibo = :n` |
 | Phone number | All digits, length ≥ 9 | `WHERE tel_fijo LIKE :p OR movil LIKE :p` on `clientes`; then `WHERE cliente = :name` |
 | Date (`dd/MM/yyyy` or `dd-MM-yyyy`) | `QDate::fromString` succeeds | `WHERE <date_column> = :date` |
-| Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setNormalizedFilter(text, TABLE_CLIENT)` — **diacritic-insensitive**: typing "garcia" matches "García" |
+| Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setNormalizedFilter(text, INGRESOS_COL_CLIENTE)` — **diacritic-insensitive**: typing "garcia" matches "García" |
 
 Name search loads all rows because SQLite LIKE is ASCII-only and cannot match accented characters. The proxy model's `removeDiacritics()` + `toLower()` normalization handles the matching client-side.
 
-## Table column indices
+## `ingresos` column indices
 
-Defined in `recog_prendas.h`. `TABLE_HASH` (14) is defined in `imprimir.h` which is included transitively.
+Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the constant name matches the SQL column verbatim. All consumers (`recog_prendas`, `imprimir`, `listado`, `mainwindow`, `mysortfilterproxymodel`, `add_garment`) share this one set — prior to the consolidation each module carried its own near-duplicate macro block and they had already started to diverge (the v8.0 milestone caught a `verifactu_xml`/`verifactu_hash` write being silently dropped on the pay-at-pickup path because one of the duplicate copies of `updateTicketVerifactuFields()` had missed the new columns).
 
-| Constant | Index | Column |
-|----------|-------|--------|
-| `TABLE_TICKET` | 0 | n_recibo |
-| `TABLE_CLIENT` | 1 | cliente |
-| `TABLE_DATE_RCP` | 2 | fecha_recepcion |
-| `TABLE_DATE_PAY` | 3 | fecha_pago |
-| `TABLE_DATE_PKU` | 4 | fecha_recogida |
-| `TABLE_PRICE` | 5 | importe |
-| `TABLE_IS_PAYED` | 6 | pagado |
-| `TABLE_STATE` | 7 | estado |
-| `TABLE_QUANTITY` | 8 | cantidad |
-| `TABLE_GARMENT` | 9 | prenda |
-| `TABLE_SIZE` | 10 | size |
-| `TABLE_SERVICE` | 11 | servicio |
-| `TABLE_OBSERV` | 12 | observaciones |
-| `TABLE_EDIT_LOCK` | 13 | edit_lock |
-| `TABLE_HASH` *(imprimir.h)* | 14 | hash |
-| `TABLE_VERIFACTU_CSV` | 15 | verifactu_csv |
-| `TABLE_VERIFACTU_TIMESTAMP` | 16 | verifactu_timestamp |
-| `TABLE_VERIFACTU_ESTADO` | 17 | verifactu_estado |
-| `TABLE_VERIFACTU_ERROR` | 18 | verifactu_error |
-| `TABLE_VERIFACTU_URL_QR` | 19 | verifactu_url_qr |
+| Constant | Index | DB column |
+|----------|-------|-----------|
+| `INGRESOS_COL_N_RECIBO` | 0 | n_recibo |
+| `INGRESOS_COL_CLIENTE` | 1 | cliente |
+| `INGRESOS_COL_FECHA_RECEPCION` | 2 | fecha_recepcion |
+| `INGRESOS_COL_FECHA_PAGO` | 3 | fecha_pago |
+| `INGRESOS_COL_FECHA_RECOGIDA` | 4 | fecha_recogida |
+| `INGRESOS_COL_IMPORTE` | 5 | importe |
+| `INGRESOS_COL_PAGADO` | 6 | pagado |
+| `INGRESOS_COL_ESTADO` | 7 | estado |
+| `INGRESOS_COL_CANTIDAD` | 8 | cantidad |
+| `INGRESOS_COL_PRENDA` | 9 | prenda |
+| `INGRESOS_COL_SIZE` | 10 | size |
+| `INGRESOS_COL_SERVICIO` | 11 | servicio |
+| `INGRESOS_COL_OBSERVACIONES` | 12 | observaciones |
+| `INGRESOS_COL_EDIT_LOCK` | 13 | edit_lock |
+| `INGRESOS_COL_HASH` | 14 | hash |
+| `INGRESOS_COL_VERIFACTU_CSV` | 15 | verifactu_csv |
+| `INGRESOS_COL_VERIFACTU_TIMESTAMP` | 16 | verifactu_timestamp |
+| `INGRESOS_COL_VERIFACTU_ESTADO` | 17 | verifactu_estado |
+| `INGRESOS_COL_VERIFACTU_ERROR` | 18 | verifactu_error |
+| `INGRESOS_COL_VERIFACTU_URL_QR` | 19 | verifactu_url_qr |
+| `INGRESOS_COL_VERIFACTU_XML` | 20 | verifactu_xml |
+| `INGRESOS_COL_VERIFACTU_HASH` | 21 | verifactu_hash |
+| `INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO` | 22 | verifactu_rectifies_n_recibo |
+| `INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE` | 23 | verifactu_rectification_type |
 
-Columns 14–19 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash) and `on_pb_verifactu_clicked()` (verifactu_*).
+Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash, edit_lock) and `on_pb_verifactu_clicked()` (verifactu_*).
 
 ## Verifactu info button (`pb_verifactu`)
 
@@ -98,7 +102,11 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled to prevent per-garment payment from triggering a Verifactu submission per garment (would cause duplicate-InvoiceID rejection at AEAT). Pay via `pb_pay_all` instead. The pay-all loop calls `on_pb_payment_toggled(true)` programmatically and Qt still fires `toggled` on a disabled button, so the full-ticket pay flow is intact. See "Per-payment Verifactu InvoiceID seq" in `docs/progress_tracker.md` for the future fix that would restore per-garment payment. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`. The pay-all / pku-all loops bypass the view and call `selectSourceRow()` directly with source rows — they iterate `sqlQueryModel->rowCount()` so they act on all loaded rows regardless of the active header sort.
+
+## Header-click sorting
+
+`ui->tableView->setSortingEnabled(true)` is set on every search (in `on_pb_search_clicked` after `setModel(proxyModel)`), so any column header can be clicked to re-sort the result. The sort uses `MySortFilterProxyModel::lessThan()`, which already special-cases the three date columns (parsed as `dd-MM-yyyy`) and `importe` (parsed as float) so they sort numerically rather than as strings. Default sort on every new search is `n_recibo` descending.
 
 ## Notes
 

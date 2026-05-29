@@ -20,7 +20,7 @@ Listado::Listado(QWidget *parent) :
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
     connect(table_listado, &QTableView::clicked, this, [this](const QModelIndex &index) {
-        if (tableName == "ingresos" && index.column() == INGRESOS_IDX_VERIFACTU_URL_QR) {
+        if (tableName == "ingresos" && index.column() == INGRESOS_COL_VERIFACTU_URL_QR) {
             QString url = index.data().toString();
             if (!url.isEmpty())
                 QDesktopServices::openUrl(QUrl(url));
@@ -169,7 +169,7 @@ void Listado::populateTable()
         if (tableName == "gastos")
             table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
         else if (tableName == "ingresos")
-            table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
+            table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
         // Configure NumberDelegate
@@ -182,21 +182,21 @@ void Listado::populateTable()
         }
         table_listado->setFont(QFont(table_listado->font().family(), 8));
         if (tableName == "ingresos") {
-            table_listado->setItemDelegateForColumn(INGRESOS_IDX_IMPORTE, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(INGRESOS_IDX_PAYED, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_IDX_STATE, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_IDX_VERIFACTU_URL_QR, new LinkDelegate(this));
-            table_listado->horizontalHeader()->moveSection(INGRESOS_IDX_VERIFACTU_URL_QR, INGRESOS_IDX_VERIFACTU_ERROR);
+            table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+            table_listado->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
+            table_listado->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
+            table_listado->setItemDelegateForColumn(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
+            table_listado->horizontalHeader()->moveSection(INGRESOS_COL_VERIFACTU_URL_QR, INGRESOS_COL_VERIFACTU_ERROR);
             // hash is not useful at user interface.
-            table_listado->setColumnHidden(INGRESOS_IDX_HASH, true);
+            table_listado->setColumnHidden(INGRESOS_COL_HASH, true);
             // edit_lock is an internal flag (set by Contabilidad on quarter close); not user-facing.
-            table_listado->setColumnHidden(INGRESOS_IDX_EDIT_LOCK, true);
+            table_listado->setColumnHidden(INGRESOS_COL_EDIT_LOCK, true);
             // verifactu_csv is redundant with the clickable verifactu_url_qr link in this view.
-            table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_CSV, true);
+            table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CSV, true);
             // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
-            table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_XML, true);
+            table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
-            table_listado->setColumnHidden(INGRESOS_IDX_VERIFACTU_HASH, true);
+            table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH, true);
             // Verifactu integrity (Art. 8.1 RD 1007/2023): no inline edits on submitted
             // records. All ingresos changes must flow through RecogPrendas / Cancel /
             // Rectify which keep AEAT, the chained hash and the accounting lock in sync.
@@ -261,7 +261,7 @@ void Listado::on_actionActualizar_triggered()
     if (tableName == "gastos")
         table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
     else if (tableName == "ingresos")
-        table_listado->sortByColumn(INGRESOS_IDX_ID, Qt::DescendingOrder);
+        table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
     else
         table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
     table_listado->resizeColumnsToContents();
