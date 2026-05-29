@@ -30,6 +30,10 @@ public:
     bool isRecibo, isCompleteInvoice;
     VerifactuIntegration *verifactuIntegration = nullptr;
     QPixmap qrCode;
+    // -1 (default): print every row of n_recibo (legacy / full-ticket flow).
+    // >=0: scope getTicketInfo to rows with verifactu_invoice_seq = invoiceSeq,
+    // so partial-payment events (8.5+) print only the garments charged that time.
+    int invoiceSeq = -1;
     Imprimir(QWidget *parent = nullptr);
 
     // Public functions

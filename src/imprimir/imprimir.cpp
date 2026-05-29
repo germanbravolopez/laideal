@@ -62,8 +62,15 @@ void Imprimir::getTicketInfo()
     sqlQueryModel = new QSqlQueryModel;
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-    q.bindValue(":n_recibo", le_n_ticket->text());
+    if (invoiceSeq >= 0) {
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
+                  "AND verifactu_invoice_seq = :seq");
+        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":seq", invoiceSeq);
+    } else {
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", le_n_ticket->text());
+    }
     q.exec();
     sqlQueryModel->setQuery(std::move(q));
     db.close();
@@ -119,6 +126,8 @@ QPixmap Imprimir::resolveQrCode()
         return QPixmap();
 
     QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
+    if (invoiceSeq >= 0)
+        invoiceNumber = QString("%1-%2").arg(invoiceNumber).arg(invoiceSeq);
     QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
     QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
     if (!invoiceDate.isValid())
@@ -239,7 +248,10 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     QXlsx::Format formatBoldRightAlign;
     formatBoldRightAlign.setFontBold(true);
     formatBoldRightAlign.setHorizontalAlignment(QXlsx::Format::AlignRight);
-    excel.write(row, 1, QString("Nº: " + le_n_ticket->text()), formatBoldRightAlign);
+    const QString displayInvoiceId = invoiceSeq >= 0
+        ? QString("%1-%2").arg(le_n_ticket->text()).arg(invoiceSeq)
+        : le_n_ticket->text();
+    excel.write(row, 1, QString("Nº: " + displayInvoiceId), formatBoldRightAlign);
     row++;
     // Client data
     excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
