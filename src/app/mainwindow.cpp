@@ -530,7 +530,7 @@ void MainWindow::printFra(const QPixmap &qrCode)
     ui_impr->createTicketExcel(true, false);
     if (AppSettings::instance()->enablePrinting()) {
         ui_impr->printTicket();
-        ui_impr->createTicketExcel(true, false);
+        ui_impr->createTicketExcel(false, false);
         ui_impr->printTicket();
     }
 }

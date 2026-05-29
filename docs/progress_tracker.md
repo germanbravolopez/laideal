@@ -22,7 +22,9 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 > Verifactu legal-compliance gaps below come from the audit in [`docs/modules/verifactu/verifactu-requirements.md`](modules/verifactu/verifactu-requirements.md) (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
 
-_(No blocking issues for the next release. All Verifactu compliance gaps closed in 8.0.)_
+| Issue | File | Notes |
+|-------|------|-------|
+| `RecogPrendas` "Pagar todo" / "Recoger todo" act on the entire `ingresos` table when triggered from a name search | `src/recog_prendas/recog_prendas.cpp` (`on_pb_pay_all_clicked` line 578, `on_pb_pku_all_clicked` line 588, search query line 416) | The name-search code path runs `SELECT * FROM ingresos` with no WHERE clause (so the proxy can filter client-side with diacritic-insensitive matching), and `pb_pay_all` / `pb_pku_all` iterate `sqlQueryModel->rowCount()` source rows. The proxy hides non-matching rows from the view, but the source still contains the **whole table**. A cashier who types a client name, sees 4 visible tickets totalling 80€ in `le_total_price`, and clicks "Pagar todo" silently marks **every** ticket in the database as paid (UPDATE `pagado='SI'`, `fecha_pago=today`, plus a Verifactu submit attempt per non-PENDIENTE row). `le_total_price` itself iterates the proxy (line 485), so the cashier sees a correct preview but the button acts on a different (much larger) set. Pre-existing since 8.1 (the name-search path was added there); discovered by the v8.4 release-PR /code-review max. Fix: pay-all / pku-all must iterate `proxyModel->rowCount()` and map each proxy index to source before calling `selectSourceRow`, OR scope the SELECT to a WHERE clause that respects the search filter. Severity is release-blocker because a single accidental press would corrupt customer billing state across the whole DB. |
 
 ---
 
