@@ -1,5 +1,11 @@
 Releases:
 
+8.4
+- Bug fix: when searching by client name in Recogida de prendas, marking a row as entregada or splitting a garment no longer affects the wrong ticket
+  - The table's column headers are clickable to sort, and the default sort is by ticket number descending. Previously, after any sort changed the visible order, clicking a row stored the visible position instead of the underlying ticket, so the next action (Entregar, Separar prenda) was applied to a different ticket than the one shown. Now the underlying ticket is always resolved before any database write. Pagar todo and Recoger todo were already correct because they iterate every loaded row.
+- Improvement: column-header sort in Recogida de prendas now orders dates chronologically and Importe numerically
+  - Date columns previously sorted as text (so "31-01-2026" came before "02-02-2026") and Importe sorted as text too (so "100" came before "9"). Sorting now uses the actual date and numeric value.
+
 8.3
 - New: in-app updater
   - Ayuda -> Buscar actualizaciones... checks GitHub for a newer release and, if you confirm, downloads the installer and runs it. The app closes and the installer replaces it in place - no manual download or uninstall step. Your database, settings (~/.laideal_settings.json) and log (~/.laideal.log) are preserved.
