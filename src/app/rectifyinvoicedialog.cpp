@@ -184,7 +184,30 @@ void RectifyInvoiceDialog::onSearchClicked()
     const double  importe = q.value(2).toDouble();
     const QString csv     = q.value(3).toString();
     const QString estado  = q.value(4).toString();
+
+    // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
+    // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
+    // applyRectificationResult() below issues `UPDATE ... WHERE n_recibo = X`
+    // which would mark every payment event's rows RECTIFICADA in one shot - that
+    // both loses per-seq AEAT alignment AND silently underreports quarterly
+    // income in `contabilidad` (RECTIFICADA is excluded from totals). Block
+    // until per-seq rectification is implemented.
+    QSqlQuery seqQ(db);
+    seqQ.prepare("SELECT COUNT(*) FROM ingresos "
+                 "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
+    seqQ.bindValue(":num", ticketNum);
+    const bool hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
     db.close();
+
+    if (hasPartialPays) {
+        m_lblInfo->setText(
+            QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2<br>"
+                    "<i>Este ticket tiene varios pagos parciales. La rectificación "
+                    "individual de cada pago no está disponible en esta versión; "
+                    "rectificar desde la sede electrónica de la AEAT.</i>")
+            .arg(cliente, fecha));
+        return;
+    }
 
     m_lblInfo->setText(
         QString("<b>Cliente:</b> %1<br>"
