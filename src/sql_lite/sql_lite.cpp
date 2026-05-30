@@ -65,6 +65,12 @@ void migrateDatabase(QSqlDatabase &db)
     // not collide at AEAT. Legacy rows (8.0-8.4) leave it 0 - those tickets
     // were submitted as "<n_recibo>" (no seq), which is its own distinct ID.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_seq INTEGER DEFAULT 0");
+    // Literal AEAT InvoiceID submitted for the row (8.5+). MainWindow save-time
+    // submission writes the bare "<n_recibo>"; PayDialog partial-pay writes
+    // "<n_recibo>-<seq>"; rectificativa writes its own new "<n_recibo>". Reads
+    // authoritatively for reprint / QR regen so we never have to guess from
+    // seq=0 whether the original AEAT format was bare or "-0".
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
     db.close();
 }
 
@@ -493,7 +499,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :n_recibo");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
@@ -503,6 +509,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
         q.bindValue(":hash",   result.rawHash);
+        q.bindValue(":id",     ticketNum); // save-time submit uses bare n_recibo
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -511,6 +518,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
+        q.bindValue(":id",     "");
     }
     q.bindValue(":n_recibo", ticketNum);
     if (!q.exec())
@@ -551,11 +559,12 @@ void updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNu
              << "csv=" << (result.isSuccess() ? result.csv : QString())
              << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
              << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
+    const QString invoiceId = QString("%1-%2").arg(ticketNum).arg(seq);
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
@@ -565,6 +574,7 @@ void updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNu
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
         q.bindValue(":hash",   result.rawHash);
+        q.bindValue(":id",     invoiceId);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -573,6 +583,7 @@ void updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNu
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
+        q.bindValue(":id",     "");
     }
     q.bindValue(":n_recibo", ticketNum);
     q.bindValue(":seq",      seq);

@@ -125,9 +125,12 @@ QPixmap Imprimir::resolveQrCode()
     if (!hasCsv || anyBlocking)
         return QPixmap();
 
-    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
-    if (invoiceSeq >= 0)
-        invoiceNumber = QString("%1-%2").arg(invoiceNumber).arg(invoiceSeq);
+    // Prefer the literal AEAT InvoiceID stored at submit time so the QR matches
+    // exactly what AEAT has on record (legacy 8.0-8.4 rows have it empty and we
+    // fall back to bare n_recibo - same string they were submitted under).
+    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
+    if (invoiceNumber.isEmpty())
+        invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
     QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
     QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
     if (!invoiceDate.isValid())
@@ -248,9 +251,13 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     QXlsx::Format formatBoldRightAlign;
     formatBoldRightAlign.setFontBold(true);
     formatBoldRightAlign.setHorizontalAlignment(QXlsx::Format::AlignRight);
-    const QString displayInvoiceId = invoiceSeq >= 0
-        ? QString("%1-%2").arg(le_n_ticket->text()).arg(invoiceSeq)
-        : le_n_ticket->text();
+    // Read the literal AEAT InvoiceID from the loaded rows (8.5+); empty on
+    // legacy 8.0-8.4 rows that were submitted as bare n_recibo.
+    QString displayInvoiceId = sqlQueryModel->rowCount() > 0
+        ? sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString()
+        : QString();
+    if (displayInvoiceId.isEmpty())
+        displayInvoiceId = le_n_ticket->text();
     excel.write(row, 1, QString("Nº: " + displayInvoiceId), formatBoldRightAlign);
     row++;
     // Client data

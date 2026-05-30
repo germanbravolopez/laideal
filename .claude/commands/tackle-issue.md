@@ -47,7 +47,11 @@ Do NOT update `docs/AI_agent_instructions.md` unless the fix changes the agent's
 
 Skip updates that have nothing to do with the fix. Don't pad the diff.
 
-### 5. Commit
+### 5. Build project
+
+Execute the commands in the build step from `README.md` to verify that the changes are not breaking the project.
+
+### 6. Commit
 
 Single-line commit message in the project's style (see `git log` recent commits). No `Co-Authored-By` line. Examples that work:
 - `Verifactu: fix testConnection (POST to /Create) and wire it to 'Probar conexion' button`
