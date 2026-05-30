@@ -106,7 +106,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
-              "importe, observaciones, pagado, hash "
+              "importe, observaciones, pagado, hash, edit_lock "
               "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
     q.bindValue(":n", ticketNum);
     if (!q.exec()) {
@@ -116,14 +116,22 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         return false;
     }
 
-    int unpaidCount = 0;
+    int unpaidCount  = 0;
+    int lockedCount  = 0;
     while (q.next()) {
         if (m_cliente.isEmpty()) {
             m_cliente        = q.value(0).toString();
             m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
         }
-        const QString pagado = q.value(8).toString();
+        const QString pagado   = q.value(8).toString();
+        const bool    editLock = q.value(10).toBool();
         if (pagado == "SI") continue;
+        // edit_lock=1 means the row's quarter has been closed by contabilidad
+        // (`updateLockInIngresos`). RecogPrendas::updateDb blocks PAY_YES under
+        // the same condition; skip here so the locked row never enters the
+        // selectable set. Unpaid rows usually have edit_lock=0 (the lock keys
+        // on fecha_pago LIKE), so this is mostly a defensive filter.
+        if (editLock) { ++lockedCount; continue; }
 
         const int r = m_table->rowCount();
         m_table->insertRow(r);
@@ -151,9 +159,12 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         return false;
     }
 
-    m_lblHeader->setText(tr("Ticket %1 - %2 - Recepción %3")
+    QString headerText = tr("Ticket %1 - %2 - Recepción %3")
                          .arg(ticketNum, m_cliente,
-                              m_fechaRecepcion.toString("dd-MM-yyyy")));
+                              m_fechaRecepcion.toString("dd-MM-yyyy"));
+    if (lockedCount > 0)
+        headerText += tr("  (%1 prenda(s) omitida(s) por bloqueo de contabilidad)").arg(lockedCount);
+    m_lblHeader->setText(headerText);
     connect(m_table, &QTableWidget::itemChanged,
             this, [this](QTableWidgetItem *it) {
         if (it && it->column() == COL_CHECK) recomputeTotal();
@@ -288,9 +299,12 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
 {
     db.open();
     QSqlQuery q(db);
+    // AND edit_lock = 0: defensive against a row whose quarter was closed
+    // between loadTicket and persistPayment (very narrow race window, but
+    // free to guard - keeps accounting lock authoritative).
     q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
               "verifactu_invoice_seq = :seq "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0");
     for (const QString &h : m_pendingHashes) {
         q.bindValue(":fp",  m_pendingFechaPago.toString("dd-MM-yyyy"));
         q.bindValue(":seq", seq);
