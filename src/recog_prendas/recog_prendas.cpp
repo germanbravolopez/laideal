@@ -1,5 +1,6 @@
 #include "recog_prendas.h"
 #include "ui_recog_prendas.h"
+#include "pay_dialog.h"
 #include "sql_lite.h"
 #include "imprimir.h"
 #include "appsettings.h"
@@ -577,11 +578,26 @@ void RecogPrendas::on_le_size_editingFinished()
 
 void RecogPrendas::on_pb_pay_all_clicked()
 {
-    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        selectSourceRow(row, 0);
-        on_pb_payment_toggled(true);
+    // Partial-pay (8.5+): open PayDialog for the selected ticket. The dialog
+    // shows every unpaid row pre-checked - the operator can untick the ones
+    // not being charged this time, fires one Verifactu submit for the subset
+    // (InvoiceID "<n_recibo>-<seq>"), persists the chosen rows, and prints.
+    if (!isCellClicked) return;
+    const QString ticketNum = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
+    if (ticketNum.isEmpty()) return;
+
+    PayDialog dlg(this);
+    dlg.db = db;
+    dlg.m_verifactu = m_verifactuIntegration;
+    if (!dlg.loadTicket(ticketNum)) {
+        QMessageBox::information(this, tr("Sin prendas pendientes"),
+                                 tr("El ticket %1 no tiene prendas pendientes de cobrar.")
+                                     .arg(ticketNum));
+        return;
     }
-    resetAllContents();
+    dlg.exec();
+    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_pku_all_clicked()
@@ -601,21 +617,28 @@ void RecogPrendas::on_pb_print_clicked()
 {
     if (ui->le_nr_ticket->text().isEmpty())
         return;
-    printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false);
+    // Reprint scope = the clicked row's payment event (its verifactu_invoice_seq).
+    // Legacy rows (8.0-8.4) have seq=0 - same row set as the full ticket back then.
+    const int seq = isCellClicked
+        ? sqlQueryModel->data(sqlQueryModel->index(rowClickedCell,
+                                INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt()
+        : -1;
+    printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false, seq);
     resetAllContents();
 }
 
-void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy)
+void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq)
 {
     if (ticketNum.isEmpty())
         return;
     qDebug() << "RecogPrendas::printFactura: ticket=" << ticketNum
-             << "askSecondCopy=" << askSecondCopy;
+             << "askSecondCopy=" << askSecondCopy << "invoiceSeq=" << invoiceSeq;
     Imprimir *ui_impr = new Imprimir(this);
     ui_impr->db = db;
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
+    ui_impr->invoiceSeq = invoiceSeq;
     ui_impr->le_n_ticket->setText(ticketNum);
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(false, false);

@@ -76,7 +76,9 @@ private:
 
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;
-    void printFactura(const QString &ticketNum, bool askSecondCopy);
+    // invoiceSeq forwarded to Imprimir so the reprint loads only the rows of
+    // the given payment event. -1 = legacy / all rows for the ticket.
+    void printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq = -1);
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
     void selectSourceRow(int sourceRow, int sourceCol);
 };
