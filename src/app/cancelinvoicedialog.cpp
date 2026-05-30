@@ -83,7 +83,29 @@ void CancelInvoiceDialog::onSearchClicked()
     double  total  = q.value(2).toDouble();
     QString csv    = q.value(3).toString();
     QString state  = q.value(4).toString();
+
+    // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
+    // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs
+    // ("<n_recibo>-0", "<n_recibo>-1", ...). This dialog only knows how to
+    // cancel the bare "<n_recibo>" submission and would mark every row of the
+    // ticket ANULADA via WHERE n_recibo = X, corrupting the other partial-pay
+    // events. Block until per-seq cancellation is implemented.
+    QSqlQuery seqQ(db);
+    seqQ.prepare("SELECT COUNT(*) FROM ingresos "
+                 "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
+    seqQ.bindValue(":num", ticketNum);
+    bool hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
     db.close();
+
+    if (hasPartialPays) {
+        m_lblInfo->setText(
+            QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2<br>"
+                    "<i>Este ticket tiene varios pagos parciales. La anulación "
+                    "individual de cada pago no está disponible en esta versión; "
+                    "anular desde la sede electrónica de la AEAT.</i>")
+            .arg(client, date));
+        return;
+    }
 
     m_lblInfo->setText(
         QString("<b>Cliente:</b> %1<br>"
