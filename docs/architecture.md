@@ -8,6 +8,7 @@
 MainWindow (src/app/)
   ├── Listado           (src/listado/)           — generic list viewer (all tables)
   ├── RecogPrendas      (src/recog_prendas/)     — garment pickup panel
+  │     └── PayDialog   (src/recog_prendas/)     — partial-payment dialog (8.5+)
   ├── Facturas          (src/facturas/)          — formal supplier invoice form
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
   ├── Imprimir          (src/imprimir/)          — print / Excel generation

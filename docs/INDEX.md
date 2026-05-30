@@ -17,7 +17,7 @@
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
 | `docs/modules/sql_lite.md` | DB free-function reference, usage patterns, accounting lock |
 | `docs/modules/listado.md` | Generic list viewer, InsertNewItem dialog, GenListado PDF |
-| `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search |
+| `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search, partial-payment PayDialog (8.5+) |
 | `docs/modules/facturas.md` | Supplier invoice form, validation, auto-calculation |
 | `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
 | `docs/modules/imprimir.md` | Excel/print flow, layout modes, QXlsx dependency |
@@ -66,6 +66,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |
 | List data generator | `src/listado/genlistado.h` | `.cpp` |
 | Garment pickup panel | `src/recog_prendas/recog_prendas.h` | `.cpp` |
+| Partial-payment dialog | `src/recog_prendas/pay_dialog.h` | `.cpp` |
 | Formal invoice form | `src/facturas/facturas.h` | `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` | `.cpp` |
 | Print + Excel | `src/imprimir/imprimir.h` | `.cpp` |
