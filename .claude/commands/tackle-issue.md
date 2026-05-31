@@ -66,9 +66,9 @@ A clean build is a hard prerequisite for step 6 — never commit a fix that didn
 
 ### 6. Commit
 
-- **Single-line subject only** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body), not the length: subjects are routinely 300–600 characters when the fix needs that much context. Match the verbosity of recent commits in `git log` — terse 60-char subjects are *not* the project style. Examples:
-  - Long (typical for multi-file fixes): `sql_lite: collapse updateTicketVerifactuFields + updateTicketVerifactuFieldsForSeq into one seq-scoped helper, and count paid rows in nextVerifactuInvoiceSeq so a local-only PayDialog event (Verifactu disabled / submit failed locally) still increments the next event's seq instead of colliding on seq=0`
-  - Short (only when the fix really is mechanical): `replace em-dash with ASCII '-' across all source files`
+- **Single-line subject, hard cap 300 characters** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body); the 200-char cap is the *length* rule. If you cannot fit the explanation in 300 characters, the long-form belongs in the `docs/progress_tracker.md` milestone you wrote in step 4, not in the commit message — the message points at the change, the tracker carries the rationale. Examples:
+  - Typical (fits in 200): `Verifactu Req. 4: new src/backup/BackupManager (VACUUM INTO + PRAGMA integrity_check + 30-day daily/4-year monthly retention) auto on startup + Herramientas->Hacer copia de seguridad ahora`
+  - Mechanical: `replace em-dash with ASCII '-' across all source files`
 - **Branch**: commit on `develop` (or a feature branch). Never commit to `master` — `master` only fast-forwards at release time.
 - **Stage only the files this issue touched.** Never `git add -A` / `git add .` — pre-existing unrelated edits in the working tree must not ride along. If you find such edits, leave them alone and call them out in your final message.
 - **Never `--amend`.** If the pre-commit hook rejects the commit, fix the issue and create a **new** commit — `--amend` after a hook-rejected commit would overwrite the *previous* commit (the rejected one never landed).
