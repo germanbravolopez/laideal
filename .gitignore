@@ -5,8 +5,7 @@ releases/old_releases
 releases/setup_outputs
 
 # build files
-build
-build-release
+build*
 
 # temporary or log files
 *.bak
