@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake: configure (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-B", "build-debug",
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Debug",
+                "-DCMAKE_PREFIX_PATH=C:/Qt/6.4.3/mingw_64"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\Qt\\Tools\\Ninja;C:\\Qt\\Tools\\CMake_64\\bin;C:\\Qt\\Tools\\mingw1120_64\\bin;C:\\Qt\\6.4.3\\mingw_64\\bin;${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: build laideal (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build", "build-debug",
+                "--target", "laideal"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\Qt\\Tools\\Ninja;C:\\Qt\\Tools\\CMake_64\\bin;C:\\Qt\\Tools\\mingw1120_64\\bin;C:\\Qt\\6.4.3\\mingw_64\\bin;${env:PATH}"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "//": "If the Debug build dir does not exist yet, configure first."
+        }
+    ]
+}

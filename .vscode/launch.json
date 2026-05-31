@@ -1,0 +1,64 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug laideal (MinGW gdb)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/src/app/laideal.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:\\Qt\\6.4.3\\mingw_64\\bin;C:\\Qt\\Tools\\mingw1120_64\\bin;${env:PATH}"
+                },
+                {
+                    "name": "QT_QPA_PLATFORM_PLUGIN_PATH",
+                    "value": "C:\\Qt\\6.4.3\\mingw_64\\plugins\\platforms"
+                }
+            ],
+            "console": "integratedTerminal",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\Qt\\Tools\\mingw1120_64\\bin\\gdb.exe",
+            "preLaunchTask": "CMake: build laideal (Debug)",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb (Qt + STL types render readably)",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Skip stepping into Qt internals - keep step-into focused on project code",
+                    "text": "skip -gfi C:/Qt/6.4.3/mingw_64/include/Qt*/*",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "//": "Alternative launcher that resolves the exe via the CMake Tools 'active launch target' (set in the status bar). Use this if you rename laideal or add other executables.",
+            "name": "Debug current CMake launch target",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:\\Qt\\6.4.3\\mingw_64\\bin;C:\\Qt\\Tools\\mingw1120_64\\bin;${env:PATH}"
+                }
+            ],
+            "console": "integratedTerminal",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\Qt\\Tools\\mingw1120_64\\bin\\gdb.exe",
+            "preLaunchTask": "CMake: build laideal (Debug)",
+            "setupCommands": [
+                { "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ]
+        }
+    ]
+}

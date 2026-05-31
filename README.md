@@ -47,6 +47,12 @@ The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also o
 
 > The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
 
+### Debug in VSCode
+
+The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions. Open the workspace and press **F5**: the build task compiles `laideal` in `build-debug/` (CMAKE_BUILD_TYPE=Debug, separate from the Release `build/` so the two coexist), then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. Default launch config is **Debug laideal (MinGW gdb)**; the alternative **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
+
+If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
+
 ---
 
 ## Configuration
