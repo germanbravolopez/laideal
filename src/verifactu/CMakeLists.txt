@@ -15,6 +15,8 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS
 set(PROJECT_SOURCES
     verifactuconfig.h
     verifactuconfig.cpp
+    verifactutaxitem.h
+    verifactutaxitem.cpp
     verifactuinvoice.h
     verifactuinvoice.cpp
     verifactutypes.h

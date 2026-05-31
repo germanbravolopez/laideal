@@ -75,6 +75,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
+| Verifactu tax-item model | `src/verifactu/verifactutaxitem.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
 | Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
