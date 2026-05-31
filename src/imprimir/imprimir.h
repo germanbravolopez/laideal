@@ -41,6 +41,9 @@ public:
     void createTicketExcel(bool copyForClient, bool addPayedInfo);
     void printTicket();
     QPixmap resolveQrCode();
+    // Literal AEAT InvoiceID for the loaded rows: first non-empty
+    // verifactu_invoice_id, else bare n_recibo (legacy / never submitted).
+    QString displayInvoiceId() const;
 
     // Setup Dialog in code
     QFormLayout *formLayout;

@@ -63,8 +63,12 @@ void Imprimir::getTicketInfo()
     db.open();
     QSqlQuery q(db);
     if (invoiceSeq >= 0) {
+        // verifactu_invoice_seq DEFAULTs to 0 on every row, so a seq filter
+        // alone would also match unpaid rows of the same ticket. Restrict
+        // to paid rows so a seq=0 payment event doesn't pull in still-unpaid
+        // garments (e.g. PayDialog event 0 under disabled Verifactu).
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
-                  "AND verifactu_invoice_seq = :seq");
+                  "AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
         q.bindValue(":n_recibo", le_n_ticket->text());
         q.bindValue(":seq", invoiceSeq);
     } else {
@@ -74,6 +78,20 @@ void Imprimir::getTicketInfo()
     q.exec();
     sqlQueryModel->setQuery(std::move(q));
     db.close();
+}
+
+QString Imprimir::displayInvoiceId() const
+{
+    if (!sqlQueryModel) return le_n_ticket->text();
+    // Scan for the first non-empty literal: row 0 may be an unpaid row of a
+    // multi-event ticket and have invoice_id empty, while a later paid row
+    // carries the real "<n>-<seq>" string AEAT has on record.
+    for (int r = 0; r < sqlQueryModel->rowCount(); ++r) {
+        const QString id = sqlQueryModel->data(
+            sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
+        if (!id.isEmpty()) return id;
+    }
+    return le_n_ticket->text();
 }
 
 bool Imprimir::checkTicketPaid(int row)
@@ -128,9 +146,7 @@ QPixmap Imprimir::resolveQrCode()
     // Prefer the literal AEAT InvoiceID stored at submit time so the QR matches
     // exactly what AEAT has on record (legacy 8.0-8.4 rows have it empty and we
     // fall back to bare n_recibo - same string they were submitted under).
-    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
-    if (invoiceNumber.isEmpty())
-        invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
+    QString invoiceNumber = displayInvoiceId();
     QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
     QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
     if (!invoiceDate.isValid())
@@ -251,14 +267,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     QXlsx::Format formatBoldRightAlign;
     formatBoldRightAlign.setFontBold(true);
     formatBoldRightAlign.setHorizontalAlignment(QXlsx::Format::AlignRight);
-    // Read the literal AEAT InvoiceID from the loaded rows (8.5+); empty on
-    // legacy 8.0-8.4 rows that were submitted as bare n_recibo.
-    QString displayInvoiceId = sqlQueryModel->rowCount() > 0
-        ? sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString()
-        : QString();
-    if (displayInvoiceId.isEmpty())
-        displayInvoiceId = le_n_ticket->text();
-    excel.write(row, 1, QString("Nº: " + displayInvoiceId), formatBoldRightAlign);
+    excel.write(row, 1, QString("Nº: " + displayInvoiceId()), formatBoldRightAlign);
     row++;
     // Client data
     excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
