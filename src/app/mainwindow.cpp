@@ -908,88 +908,109 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 
 void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
 {
-    // Change the cursor to a loading icon
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Perform time consuming process
-    int cnt = 0;
     db.open();
-    QSqlQuery q;
-    if (q.exec("SELECT * FROM ingresos")) {
-        while (q.next()) {
-            if (q.value(INGRESOS_COL_HASH).toString() == "") {
-                QString nRecibo = q.value(INGRESOS_COL_N_RECIBO).toString();
-                QString cliente = q.value(INGRESOS_COL_CLIENTE).toString();
-                QString fechaRecepcion = q.value(INGRESOS_COL_FECHA_RECEPCION).toString();
-                QString fechaPago = q.value(INGRESOS_COL_FECHA_PAGO).toString();
-                QString fechaRecogida = q.value(INGRESOS_COL_FECHA_RECOGIDA).toString();
-                QString importe = q.value(INGRESOS_COL_IMPORTE).toString();
-                QString pagado = q.value(INGRESOS_COL_PAGADO).toString();
-                QString estado = q.value(INGRESOS_COL_ESTADO).toString();
-                QString cantidad = q.value(INGRESOS_COL_CANTIDAD).toString();
-                QString prenda = q.value(INGRESOS_COL_PRENDA).toString();
-                QString size = q.value(INGRESOS_COL_SIZE).toString();
-                QString servicio = q.value(INGRESOS_COL_SERVICIO).toString();
-                QString observaciones = q.value(INGRESOS_COL_OBSERVACIONES).toString();
-                QString editLock = q.value(INGRESOS_COL_EDIT_LOCK).toString();
 
-                QSqlQuery q1;
-                QString newHash = genHash16();
-
-                q1.prepare("UPDATE ingresos SET hash = :newHash WHERE n_recibo = :n_recibo AND "
-                          "cliente = :cliente AND fecha_recepcion = :fecha_recepcion AND fecha_pago = :fecha_pago AND "
-                          "fecha_recogida = :fecha_recogida AND importe = :importe AND pagado = :pagado AND estado = :estado AND "
-                          "cantidad = :cantidad AND prenda = :prenda AND size = :size AND servicio = :servicio AND "
-                          "observaciones = :observaciones AND edit_lock = :edit_lock");
-                q1.bindValue(":newHash", newHash);
-                q1.bindValue(":n_recibo", nRecibo);
-                q1.bindValue(":cliente", cliente);
-                q1.bindValue(":fecha_recepcion", fechaRecepcion);
-                q1.bindValue(":fecha_pago", fechaPago);
-                q1.bindValue(":fecha_recogida", fechaRecogida);
-                q1.bindValue(":importe", importe);
-                q1.bindValue(":pagado", pagado);
-                q1.bindValue(":estado", estado);
-                q1.bindValue(":cantidad", cantidad);
-                q1.bindValue(":prenda", prenda);
-                q1.bindValue(":size", size);
-                q1.bindValue(":servicio", servicio);
-                q1.bindValue(":observaciones", observaciones);
-                q1.bindValue(":edit_lock", editLock);
-                q1.exec();
-
-                cnt++;
+    // Phase A: fill empty / NULL hashes. UPDATE keyed on rowid (SQLite's
+    // intrinsic per-row identifier) instead of the all-fields equality used
+    // by the legacy version, which could stamp two rows with the same hash
+    // when ticket lines happened to be identical across every column.
+    int filled = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT rowid FROM ingresos WHERE hash IS NULL OR hash = ''")) {
+            QList<qint64> emptyRowids;
+            while (q.next())
+                emptyRowids.append(q.value(0).toLongLong());
+            QSqlQuery u(db);
+            u.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+            for (qint64 rid : emptyRowids) {
+                u.bindValue(":h",   genHash16());
+                u.bindValue(":rid", rid);
+                if (u.exec()) ++filled;
+                else qWarning() << "Crear hash: fill UPDATE failed for rowid" << rid
+                                 << "-" << u.lastError().text();
             }
+        } else {
+            qWarning() << "Crear hash: SELECT empties failed -" << q.lastError().text();
         }
     }
 
-    // Check how many tickets contains duplicated hashes
-    QList<int> duplicatedTickets;
-    if (q.exec("SELECT n_recibo, COUNT(*) FROM ingresos GROUP BY hash HAVING COUNT(*) > 1")) {
-        while (q.next()) {
-            duplicatedTickets.append(q.value(0).toInt());
+    // Phase B: resolve collisions (legacy data from the pre-QUuid genHash16
+    // era). For every hash shared by >1 row, keep the first row's hash and
+    // regenerate the rest with the new UUID-based hash so the column ends
+    // up globally unique.
+    int regenerated = 0;
+    int remainingGroups = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT hash FROM ingresos "
+                   "WHERE hash IS NOT NULL AND hash != '' "
+                   "GROUP BY hash HAVING COUNT(*) > 1")) {
+            QStringList collidingHashes;
+            while (q.next())
+                collidingHashes.append(q.value(0).toString());
+
+            QSqlQuery picker(db);
+            QSqlQuery upd(db);
+            upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+            for (const QString &h : collidingHashes) {
+                picker.prepare("SELECT rowid FROM ingresos WHERE hash = :h ORDER BY rowid");
+                picker.bindValue(":h", h);
+                if (!picker.exec()) {
+                    qWarning() << "Crear hash: group SELECT failed for hash" << h
+                               << "-" << picker.lastError().text();
+                    continue;
+                }
+                bool skipFirst = true;
+                while (picker.next()) {
+                    if (skipFirst) { skipFirst = false; continue; }
+                    upd.bindValue(":h",   genHash16());
+                    upd.bindValue(":rid", picker.value(0).toLongLong());
+                    if (upd.exec()) ++regenerated;
+                    else qWarning() << "Crear hash: regen UPDATE failed for rowid"
+                                     << picker.value(0) << "-" << upd.lastError().text();
+                }
+            }
+            remainingGroups = collidingHashes.size(); // before regen
+        } else {
+            qWarning() << "Crear hash: collision SELECT failed -" << q.lastError().text();
         }
     }
-    std::sort(duplicatedTickets.begin(), duplicatedTickets.end());
-    QStringList duplicatedTicketsS;
-    for (const int& num : duplicatedTickets) {
-        duplicatedTicketsS.append(QString::number(num));
-    }
 
-    // Restore the cursor to default
+    // Phase C: defensive re-check - after Phase B the column should be unique;
+    // anything still in there indicates a logic error worth surfacing.
+    int stillColliding = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT COUNT(*) FROM (SELECT hash FROM ingresos "
+                   "WHERE hash IS NOT NULL AND hash != '' "
+                   "GROUP BY hash HAVING COUNT(*) > 1)")) {
+            if (q.next()) stillColliding = q.value(0).toInt();
+        }
+    }
+    db.close();
+
     QApplication::restoreOverrideCursor();
 
-    if (duplicatedTickets.isEmpty()) {
-        qDebug() << "No duplicated hashes found in ingresos after update.";
-        QMessageBox::information(this, "Crear hash en ingresos",
-                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
+    qDebug() << "Crear hash: filled=" << filled
+             << "collision_groups=" << remainingGroups
+             << "regenerated=" << regenerated
+             << "still_colliding_groups=" << stillColliding;
+
+    QString body = tr("Se actualizó la tabla ingresos:\n"
+                      "  • %1 filas con hash vacío rellenadas\n"
+                      "  • %2 grupos de hash duplicado detectados\n"
+                      "  • %3 filas regeneradas para resolverlos")
+                       .arg(filled).arg(remainingGroups).arg(regenerated);
+    if (stillColliding > 0) {
+        body += tr("\n\nAtención: quedan %1 grupos colisionando tras la "
+                   "regeneración. Vuelve a ejecutar la acción; si persiste, "
+                   "consulta el log.").arg(stillColliding);
+        QMessageBox::warning(this, tr("Crear hash en ingresos"), body);
     } else {
-        qWarning() << "Duplicated hashes found in ingresos after update for tickets:" << duplicatedTicketsS;
-        QMessageBox::warning(this, "Crear hash en ingresos",
-                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.\n\n"
-                                 "Los siguientes recibos tienen hashes duplicados: " + duplicatedTicketsS.join(", "),
-                                 QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::information(this, tr("Crear hash en ingresos"), body);
     }
 }
 

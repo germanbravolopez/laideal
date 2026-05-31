@@ -5,7 +5,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QMessageBox>
-#include <QRandomGenerator>
+#include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -556,14 +556,11 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
 
 QString genHash16()
 {
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-    constexpr int len = 16;
-    QString hash;
-    hash.reserve(len);
-    for (int i = 0; i < len; ++i)
-        hash += alphanum[QRandomGenerator::global()->bounded(static_cast<quint32>(sizeof(alphanum) - 1))];
-    return hash;
+    // QUuid::Id128 is the 32-char hex form without braces/dashes. Truncating
+    // to 16 leaves 64 bits of cryptographic entropy - 2^32 row birthday-
+    // collision is around one chance in 4 billion, far below any plausible
+    // ingresos size. Replaces a homegrown alphanum loop on QRandomGenerator
+    // that had a legacy rand()-era predecessor responsible for the
+    // cross-ticket hash collisions surfaced by "Crear hash en ingresos".
+    return QUuid::createUuid().toString(QUuid::Id128).left(16);
 }
