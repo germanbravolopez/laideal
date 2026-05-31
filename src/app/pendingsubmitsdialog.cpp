@@ -1,5 +1,7 @@
 #include "pendingsubmitsdialog.h"
 
+#include "appsettings.h"
+
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -69,24 +71,40 @@ void PendingSubmitsDialog::buildUi()
 bool PendingSubmitsDialog::loadPending()
 {
     m_entries.clear();
+
+    // Two gates protect against surfacing pre-Verifactu legacy tickets:
+    //  - operator toggle (verifactu.pending_recovery_enabled, default true)
+    //  - floor date (verifactu.pending_recovery_floor_date, ISO yyyy-MM-dd,
+    //    default = the planned PROD cutover). Rows with fecha_recepcion
+    //    strictly before this date never count as pending.
+    AppSettings *s = AppSettings::instance();
+    if (!s->verifactuPendingRecoveryEnabled())
+        return false;
+    const QString floorIso = s->verifactuPendingRecoveryFloorDate();
+
     if (!db.open()) {
         qWarning() << "PendingSubmitsDialog: db.open() failed -" << db.lastError().text();
         return false;
     }
 
-    // One entry per distinct n_recibo whose ANY row is PENDIENTE. The aggregate
-    // uses MIN/MAX over fecha/client (constants across rows of the same ticket)
+    // One entry per distinct n_recibo whose ANY row is PENDIENTE. Aggregate
+    // uses MIN over fecha/client (constants across rows of the same ticket)
     // and SUM(importe) for the customer-facing total. The estado filter covers
-    // both legacy empty strings and the canonical "PENDIENTE" so old rows
-    // surface too.
+    // legacy empty strings and the canonical "PENDIENTE". The fecha_recepcion
+    // column stores dd-MM-yyyy; substr-rebuild into yyyy-MM-dd lets SQLite
+    // compare lexicographically against floorIso.
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, MIN(fecha_recepcion), MIN(cliente), SUM(importe) "
         "FROM ingresos "
-        "WHERE verifactu_estado IS NULL OR verifactu_estado = '' "
-        "   OR verifactu_estado = 'PENDIENTE' "
+        "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
+        "       OR verifactu_estado = 'PENDIENTE') "
+        "  AND substr(fecha_recepcion, 7, 4) || '-' "
+        "      || substr(fecha_recepcion, 4, 2) || '-' "
+        "      || substr(fecha_recepcion, 1, 2) >= :floor "
         "GROUP BY n_recibo "
         "ORDER BY n_recibo DESC");
+    q.bindValue(":floor", floorIso);
     if (!q.exec()) {
         qWarning() << "PendingSubmitsDialog: SELECT failed -" << q.lastError().text();
         db.close();

@@ -69,6 +69,16 @@ public:
     void setVerifactuServiceKey(const QString &v);
     bool verifactuProduction() const;
     void setVerifactuProduction(bool v);
+    // Startup recovery for verifactu_estado=PENDIENTE rows. Disabled-by-default
+    // behaviour would silently leave durability gaps unresolved; default is on
+    // but gated by a floor date so legacy pre-Verifactu tickets do not surface.
+    bool    verifactuPendingRecoveryEnabled() const;
+    void    setVerifactuPendingRecoveryEnabled(bool v);
+    // ISO yyyy-MM-dd. Rows with fecha_recepcion strictly before this date are
+    // ignored by the startup recovery dialog. Defaults to the planned PROD
+    // cutover (2026-09-01) so TESTING-era tickets do not get flagged.
+    QString verifactuPendingRecoveryFloorDate() const;
+    void    setVerifactuPendingRecoveryFloorDate(const QString &v);
 
     // --- Updater ---
     bool checkUpdatesOnStartup() const;

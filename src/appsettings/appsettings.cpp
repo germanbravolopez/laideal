@@ -34,6 +34,10 @@ void AppSettings::applyDefaults()
         setDbl({"taxes", "iva_rate"}, 21.0);
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
+    if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
+        setBln({"verifactu", "pending_recovery_enabled"}, true);
+    if (verifactuPendingRecoveryFloorDate().isEmpty())
+        setStr({"verifactu", "pending_recovery_floor_date"}, "2026-09-01");
     if (reportsRoot().isEmpty())
         setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
     // Default: opt-in startup check. bln() has a default-fallback parameter,
@@ -247,6 +251,11 @@ void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifac
 
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
+
+bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, true); }
+void    AppSettings::setVerifactuPendingRecoveryEnabled(bool v) { setBln({"verifactu", "pending_recovery_enabled"}, v); }
+QString AppSettings::verifactuPendingRecoveryFloorDate() const { return str({"verifactu", "pending_recovery_floor_date"}); }
+void    AppSettings::setVerifactuPendingRecoveryFloorDate(const QString &v) { setStr({"verifactu", "pending_recovery_floor_date"}, v); }
 
 // ---------------------------------------------------------------------------
 // Updater
