@@ -14,6 +14,7 @@ MainWindow (src/app/)
   ├── Imprimir          (src/imprimir/)          — print / Excel generation
   ├── AddGarment        (src/add_garment/)       — add garments to existing ticket
   ├── BackupManager     (src/backup/)            — auto + manual SQLite snapshots (Verifactu Req. 4)
+  ├── PendingSubmitsDialog (src/app/)            — startup recovery for verifactu_estado=PENDIENTE rows
   └── VerifactuIntegration (src/verifactu/)      — AEAT digital invoicing
          └── VerifactuManager
                 ├── VerifactuConfig

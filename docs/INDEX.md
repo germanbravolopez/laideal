@@ -61,6 +61,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog | `src/app/cancelinvoicedialog.h` | `.cpp` |
 | Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` | `.cpp` |
+| Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |

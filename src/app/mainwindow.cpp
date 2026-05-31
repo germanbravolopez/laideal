@@ -18,6 +18,7 @@
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
 #include "updaterdialog.h"
+#include "pendingsubmitsdialog.h"
 #include "version.h"
 #include <QTimer>
 #include <QEventLoop>
@@ -59,6 +60,25 @@ MainWindow::MainWindow(QWidget *parent)
             m_updater->checkForUpdates(/*silentOnNoUpdate=*/true);
         });
     }
+
+    // Startup recovery for Verifactu submissions that were in flight when the
+    // app last closed (verifactu_estado='PENDIENTE' with no matching reqId in
+    // memory after a restart). The dialog scans for surviving PENDIENTE rows
+    // and lets the operator decide per ticket; deferred 4s so it lands AFTER
+    // the backup/update prompts have settled.
+    QTimer::singleShot(4000, this, [this]() {
+        auto *dlg = new PendingSubmitsDialog(db, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        if (!dlg->loadPending()) {
+            dlg->deleteLater();
+            return;
+        }
+        connect(dlg, &PendingSubmitsDialog::retryRequested,
+                this, [this](const QString &ticketNum, const QDate &invoiceDate, double totalAmount) {
+            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+        });
+        dlg->open();
+    });
 
     // Verifactu Req. 4: trigger a backup at startup once per 24h. Deferred so
     // it doesn't block the first paint of the window. Silent on success - the

@@ -18,6 +18,8 @@ add_executable(laideal
     cancelinvoicedialog.cpp
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
+    pendingsubmitsdialog.h
+    pendingsubmitsdialog.cpp
     main.cpp
     ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
     ${EXE_SOURCES}
