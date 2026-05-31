@@ -414,7 +414,7 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     q.prepare("UPDATE ingresos SET "
               "verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :num AND verifactu_rectifies_n_recibo = :orig");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
@@ -424,6 +424,9 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
         q.bindValue(":hash",   result.rawHash);
+        // Rectificativa submitted to AEAT under the new n_recibo as its literal
+        // InvoiceID; persist so Imprimir's QR/header reads it authoritatively.
+        q.bindValue(":id",     m_newInvoiceNumber);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -432,6 +435,7 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
+        q.bindValue(":id",     "");
     }
     q.bindValue(":num",  m_newInvoiceNumber);
     q.bindValue(":orig", m_loadedTicket);
