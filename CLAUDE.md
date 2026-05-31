@@ -9,4 +9,4 @@ Quick links:
 - `docs/progress_tracker.md` — what's in progress and what's blocked
 - `.claude/commands/` — available slash commands (`/update-docs`, `/update-skills`, `/coding-guidelines`, `/tackle-issue`)
 
-After completing any task, run `/update-docs` or follow its checklist to keep the documentation current.
+After completing any task, build the code in PowerShell to verify the application is still created fine and run `/update-docs` or follow its checklist to keep the documentation current.
