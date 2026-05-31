@@ -1194,7 +1194,13 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
                 "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
                 "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
                 "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
-                "en el momento de su generación.</p>")
+                "en el momento de su generación.</p>"
+                "<p>Que el sistema se utiliza en una instalación <b>monoperador</b>: existe un único "
+                "usuario operativo, identificado de forma implícita por la sesión de Windows del puesto "
+                "en el que se ejecuta. Bajo este alcance se da por cumplido el requisito de trazabilidad "
+                "por usuario establecido en el artículo 8.1 del Real Decreto 1007/2023. La incorporación "
+                "de un segundo operador exigirá habilitar previamente la identificación individual por "
+                "evento de facturación.</p>")
             .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
                  address.toHtmlEscaped(), city.toHtmlEscaped(),
                  software, version));

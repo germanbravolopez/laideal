@@ -55,10 +55,11 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 8.1 RD 1007/2023. Each invoicing action must be traceable: who, when, from which terminal.
 
-**[PARTIAL]**
+**[COVERED — single-operator scope]**
 - `verifactu_timestamp` records the AEAT submission time per row. ✓
-- The app is single-user (no login system), so "who" is implicitly the single operator. The machine identity is also fixed (hardcoded DB path).
-- Gap tracked as a non-blocking issue in `docs/progress_tracker.md` ("Verifactu Req. 5 — per-user identification"). Acceptable under the current one-shop / one-operator deployment; the closure for multi-operator setups would prompt for an operator code at app start and stamp it on each `ingresos` write.
+- "Who" is the single operator running the shop; the machine identity is fixed (hardcoded DB path on one Windows account).
+- The `Acerca de Verifactu...` declaración responsable now states the **monoperador** scope explicitly and ties it to Art. 8.1: trazabilidad por usuario is satisfied implicitly by the single Windows session, and the declaration calls out that incorporating a second operator requires per-event identification first.
+- If a second clerk is ever added, this requirement re-opens and the original full-fix plan (operator code prompt + new `operador TEXT` column stamped on each `ingresos` write) becomes the path forward.
 
 ## 6. Registro de eventos del sistema
 
@@ -85,7 +86,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 - `MainWindow → Ayuda → Acerca de Verifactu...` opens a dialog (`on_actionAcerca_de_Verifactu_triggered()` in `mainwindow.cpp`) with the fixed-text declaración responsable.
 - Producer NIF, name and address come from `AppSettings::verifactuNif()`, `verifactuName()` (falling back to `businessName()`), `businessAddress()` and `businessCity()` — the user-business doubles as producer for this bespoke deployment.
 - Software name (`La Ideal`) and version are interpolated from `PROJECT_VERSION_MAJOR/MINOR` (generated `version.h`), so the declaration is automatically per-version as required by Art. 13.
-- The body cites RD 1007/2023 and Orden HAC/1177/2024 explicitly and states VERI*FACTU mode.
+- The body cites RD 1007/2023 and Orden HAC/1177/2024 explicitly, states VERI*FACTU mode, and (since 8.5) declares the **monoperador** scope that closes Req. 5 (Art. 8.1 trazabilidad) under the current deployment.
 
 ## 9. QR y texto obligatorio en el ticket
 
@@ -114,11 +115,11 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 2 | Numeración correlativa | COVERED |
 | 3 | Hash chain (SHA-256) | COVERED |
 | 4 | Retention (4 años) | COVERED — `BackupManager` (VACUUM INTO + integrity_check + 30-day daily / 4-year monthly retention; auto + manual triggers) |
-| 5 | Trazabilidad | PARTIAL — single-user assumed (tracked in `progress_tracker.md`) |
+| 5 | Trazabilidad | COVERED — monoperador scope stated in the declaración responsable (Art. 8.1) |
 | 6 | Event log | COVERED (VERIFACTU mode) |
 | 7 | XML export for Hacienda | COVERED |
 | 8 | Declaración responsable | COVERED |
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
-**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-31, no Verifactu compliance gap blocks the release; the remaining PARTIAL item (Req. 5 per-user trazabilidad) is tracked under Open Non-Blocking Issues. Req. 4 was closed in the Post-8.4 milestone via the new `BackupManager` module.
+**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-31, every Verifactu compliance requirement is COVERED. Req. 4 was closed via the new `BackupManager` module; Req. 5 was closed by stating the monoperador scope in the declaración responsable. If the shop later adds a second clerk, Req. 5 re-opens and the full per-operator-stamping fix needs to ship before that second account starts invoicing.
