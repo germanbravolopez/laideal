@@ -2,9 +2,10 @@
 #define VERIFACTUCONFIG_H
 
 #include <QString>
-#include <QSettings>
 
-// Manages Verifactu API configuration: credentials, emitter data, system info, and environment.
+// In-memory Verifactu API configuration: credentials, emitter data, system info,
+// and environment. Populated at startup by VerifactuIntegration from AppSettings
+// (the JSON at ~/.laideal_settings.json); not persisted by this class itself.
 class VerifactuConfig
 {
 public:
@@ -13,7 +14,7 @@ public:
         PRODUCTION
     };
 
-    explicit VerifactuConfig(const QString &configPath = QString());
+    VerifactuConfig();
 
     void setEnvironment(Environment env);
     Environment getEnvironment() const;
@@ -35,14 +36,10 @@ public:
     QString getValidationUrl() const;
     QString getQrUrl() const;
 
-    void save();
-    void load();
-
     bool isValid() const;
     QString getValidationError() const;
 
 private:
-    QSettings *m_settings;
     Environment m_environment;
     QString m_serviceKey;
     QString m_emitterNIF;

@@ -17,7 +17,7 @@ class VerifactuManager : public QObject
     Q_OBJECT
 
 public:
-    explicit VerifactuManager(const QString &configPath = QString(), QObject *parent = nullptr);
+    explicit VerifactuManager(QObject *parent = nullptr);
     ~VerifactuManager();
 
     VerifactuConfig *getConfig() const { return m_config; }

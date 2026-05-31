@@ -13,7 +13,7 @@ VerifactuIntegration::~VerifactuIntegration()
 
 bool VerifactuIntegration::initialize()
 {
-    m_manager = new VerifactuManager(QString(), this);
+    m_manager = new VerifactuManager(this);
 
     if (!loadEmitterConfiguration()) {
         m_lastError = "No se pudo cargar la configuración del emisor";
@@ -186,8 +186,6 @@ bool VerifactuIntegration::loadEmitterConfiguration()
         ? VerifactuConfig::PRODUCTION
         : VerifactuConfig::TESTING;
     m_manager->getConfig()->setEnvironment(env);
-
-    m_manager->getConfig()->save();
 
     if (!m_manager->getConfig()->isValid()) {
         qCritical() << "Verifactu configuration is invalid:" << m_manager->getConfig()->getValidationError();

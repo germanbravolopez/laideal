@@ -1,19 +1,27 @@
 #include "verifactuconfig.h"
-#include <QStandardPaths>
-#include <QDir>
+
 #include <QDebug>
+#include <QFile>
+#include <QStandardPaths>
 
-VerifactuConfig::VerifactuConfig(const QString &configPath)
-    : m_environment(TESTING), m_systemName("LAIDEAL"), m_systemVersion(QString(PROJECT_VERSION)), m_systemDeveloper("LAIDEAL")
+VerifactuConfig::VerifactuConfig()
+    : m_environment(TESTING),
+      m_systemName("LAIDEAL"),
+      m_systemVersion(QString(PROJECT_VERSION)),
+      m_systemDeveloper("LAIDEAL")
 {
-    QString path = configPath.isEmpty()
-        ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/verifactu_config.ini"
-        : configPath;
-
-    QDir().mkpath(QFileInfo(path).dir().absolutePath());
-    m_settings = new QSettings(path, QSettings::IniFormat);
-
-    load();
+    // One-time cleanup of the legacy QSettings INI written by pre-8.5 versions
+    // of this class. The INI was a stale plaintext copy of credentials already
+    // stored in ~/.laideal_settings.json and is no longer consulted. Removing
+    // it shrinks the credential footprint on disk.
+    const QString legacyIni = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                              + "/verifactu_config.ini";
+    if (QFile::exists(legacyIni)) {
+        if (QFile::remove(legacyIni))
+            qDebug() << "VerifactuConfig: removed legacy INI" << legacyIni;
+        else
+            qWarning() << "VerifactuConfig: failed to remove legacy INI" << legacyIni;
+    }
 }
 
 void VerifactuConfig::setEnvironment(Environment env)
@@ -93,50 +101,6 @@ QString VerifactuConfig::getValidationUrl() const
 QString VerifactuConfig::getQrUrl() const
 {
     return getEndpointUrl() + "/GetQrCode";
-}
-
-void VerifactuConfig::save()
-{
-    m_settings->beginGroup("Verifactu");
-    m_settings->setValue("Environment", static_cast<int>(m_environment));
-    m_settings->setValue("ServiceKey", m_serviceKey);
-
-    m_settings->beginGroup("Emitter");
-    m_settings->setValue("NIF", m_emitterNIF);
-    m_settings->setValue("Name", m_emitterName);
-    m_settings->setValue("CompanyName", m_emitterCompanyName);
-    m_settings->endGroup();
-
-    m_settings->beginGroup("System");
-    m_settings->setValue("Name", m_systemName);
-    m_settings->setValue("Version", m_systemVersion);
-    m_settings->setValue("Developer", m_systemDeveloper);
-    m_settings->endGroup();
-
-    m_settings->endGroup();
-    m_settings->sync();
-}
-
-void VerifactuConfig::load()
-{
-    m_settings->beginGroup("Verifactu");
-
-    m_environment = static_cast<Environment>(m_settings->value("Environment", TESTING).toInt());
-    m_serviceKey = m_settings->value("ServiceKey", "").toString();
-
-    m_settings->beginGroup("Emitter");
-    m_emitterNIF = m_settings->value("NIF", "").toString();
-    m_emitterName = m_settings->value("Name", "").toString();
-    m_emitterCompanyName = m_settings->value("CompanyName", "").toString();
-    m_settings->endGroup();
-
-    m_settings->beginGroup("System");
-    m_systemName = m_settings->value("Name", "LAIDEAL").toString();
-    m_systemVersion = m_settings->value("Version", PROJECT_VERSION).toString();
-    m_systemDeveloper = m_settings->value("Developer", "LAIDEAL").toString();
-    m_settings->endGroup();
-
-    m_settings->endGroup();
 }
 
 bool VerifactuConfig::isValid() const
