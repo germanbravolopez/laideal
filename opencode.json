@@ -1,0 +1,56 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "instructions": ["CLAUDE.md"],
+
+  "command": {
+    "update-docs": {
+      "description": "Update project documentation (progress tracker, architecture, INDEX, etc.) after any change",
+      "prompt": "Run the /update-docs checklist from .claude/commands/update-docs.md: update progress_tracker.md, AI_agent_instructions.md, architecture.md, INDEX.md, module docs, README.md, and releases_notes.txt as applicable."
+    },
+    "update-skills": {
+      "description": "Create or update agent skill files in .claude/commands/",
+      "prompt": "Run the /update-skills workflow from .claude/commands/update-skills.md. Create or update a .md skill file in .claude/commands/ for a repeatable workflow."
+    },
+    "coding-guidelines": {
+      "description": "Apply project coding guidelines: language rules, naming conventions, Qt/DB rules",
+      "prompt": "Apply the coding guidelines from .claude/commands/coding-guidelines.md to all new code: English names/comments (Spanish only for UI strings), PascalCase classes, camelCase methods, m_ for members, Qt conventions, DB rules, no SQL concatenation, no hardcoded paths."
+    },
+    "tackle-issue": {
+      "description": "Resolve an open issue from docs/progress_tracker.md end-to-end",
+      "prompt": "Run the /tackle-issue workflow from .claude/commands/tackle-issue.md: locate the issue in progress_tracker.md, decide approach, implement, update docs, build, commit."
+    },
+    "release": {
+      "description": "Ship a release X.Y end-to-end: bump version, build, PR to master, tag, publish",
+      "prompt": "Run the /release workflow from .claude/commands/release.md. Check preconditions (branch, clean tree, version), bump CMakeLists.txt and releases_notes.txt, sanity build, open PR to master, review, merge with --merge, tag, build artifacts via release.ps1, publish on GitHub."
+    }
+  },
+
+  "agent": {
+    "dead-code-finder": {
+      "description": "Scan C++ source tree for methods declared in headers but never called anywhere. Use when auditing a release branch, before a refactor, or to triage cleanup.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": { "*": "deny" }
+      },
+      "prompt": "You are a dead-code auditor for a Qt 5/6 + CMake C++ desktop application.\n\nFor every method declared in any .h under src/, grep for callers across all .cpp/.h files under src/. A method is dead if the only matches are its own declaration and definition.\n\nCritical Qt-specific exclusions — never report these as unused:\n1. Qt auto-connect slots: methods named on_<objectName>_<signal>\n2. Qt virtual overrides: methods with override keyword\n3. Q_OBJECT signals: declared under signals:\n4. Constructors, destructors, and setupUi()\n5. Public static singletons like AppSettings::instance()\n6. Methods that form a deliberate library API across module boundaries\n7. Free helper functions widely used by name lookup\n\nReport format: group by module. For each dead method give file:line, signature, one-line note. Add a Caveats section for transitively-dead methods. Keep report under 600 words. Do not edit any code."
+    }
+  },
+
+  "permission": {
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "websearch": "allow",
+    "webfetch": "allow",
+    "bash": {
+      "git *": "allow",
+      "ls *": "allow",
+      "dir *": "allow",
+      "cat *": "allow",
+      "cmake *": "allow"
+    }
+  }
+}
