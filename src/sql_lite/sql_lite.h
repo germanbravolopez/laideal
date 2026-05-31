@@ -37,20 +37,17 @@ int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, con
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
-// Patch an existing ingresos row with the AEAT reply (CSV, timestamp, estado, error,
-// QR URL, signed XML, hash). Used by the async submit handlers in MainWindow and
-// RecogPrendas once Verifactu finishes. Matches WHERE n_recibo = ticketNum.
+// Patch the rows of (n_recibo, verifactu_invoice_seq) with the AEAT reply
+// (CSV, timestamp, estado, error, QR URL, signed XML, hash, invoice_id).
+// seq=0 binds invoice_id=ticketNum (save-time submit format); seq>0 binds
+// invoice_id="<ticketNum>-<seq>" (PayDialog format). The seq filter prevents
+// a retry of the save-time submit from clobbering later PayDialog rows.
 void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
-                                        const VerifactuResult &result);
+                                        const VerifactuResult &result, int seq = 0);
 
-// Next free verifactu_invoice_seq for a ticket. Returns max(seq)+1 over rows
-// matching n_recibo, or 0 if the ticket has never been submitted.
+// Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
+// only PayDialog event (Verifactu disabled, no estado written) still
+// increments the seq for the next event.
 int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
-
-// Patch the rows of (n_recibo, verifactu_invoice_seq) with the AEAT reply.
-// Used by the new partial-payment dialog so each payment event's rows get
-// their own seq + AEAT metadata without touching the rest of the ticket.
-void        updateTicketVerifactuFieldsForSeq(QSqlDatabase &db, const QString &ticketNum,
-                                              int seq, const VerifactuResult &result);
 
 #endif // SQL_LITE_H

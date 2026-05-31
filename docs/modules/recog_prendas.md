@@ -111,7 +111,7 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 1. Calls `nextVerifactuInvoiceSeq(db, ticketNum)` to get the next free `seq` for this ticket.
 2. Builds `InvoiceID = "<n_recibo>-<seq>"` and fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()` with a 5 s bounded wait.
-3. On success: UPDATEs the chosen rows `pagado='SI'`, `fecha_pago=:date`, `verifactu_invoice_seq=:seq`, calls `updateTicketVerifactuFieldsForSeq()` for the AEAT metadata, and prints the partial factura via `Imprimir` with `invoiceSeq` set so only the paid subset is on the print.
+3. On success: UPDATEs the chosen rows `pagado='SI'`, `fecha_pago=:date`, `verifactu_invoice_seq=:seq`, calls `updateTicketVerifactuFields(db, n_recibo, result, seq)` for the AEAT metadata (single seq-scoped helper used by both save-time and PayDialog paths), and prints the partial factura via `Imprimir` with `invoiceSeq` set so only the paid subset is on the print.
 4. On AEAT timeout / config error: still persists the payment locally and prints a paid recibo without QR.
 
 Remaining unpaid rows of the same ticket stay unpaid; a later payment event picks up `seq = max(seq) + 1`. `pb_print` reads the clicked row's `verifactu_invoice_seq` and forwards it to `printFactura(ticketNum, askSecondCopy, invoiceSeq)` so a reprint matches the AEAT-side invoice exactly.
