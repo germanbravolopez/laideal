@@ -12,6 +12,7 @@
 #include "cancelinvoicedialog.h"
 #include "rectifyinvoicedialog.h"
 #include "updater.h"
+#include "backup_manager.h"
 
 #define TABLE_TICKET_QNTY   0
 #define TABLE_TICKET_GARM   1
@@ -96,6 +97,7 @@ private slots:
     void on_actionAcerca_de_Verifactu_triggered();
     void on_actionBuscar_actualizaciones_triggered();
     void on_actionNotas_de_la_version_triggered();
+    void on_actionHacer_copia_de_seguridad_triggered();
 
     // Updater signal handlers
     void onUpdateAvailable(const QString &latestVersion,
@@ -111,6 +113,7 @@ private:
     // can look up which DB rows to update for each Verifactu response.
     QHash<QString, QString> m_pendingSubmits;
     Updater *m_updater;
+    BackupManager *m_backupManager;
 };
 
 #endif // MAINWINDOW_H

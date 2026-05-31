@@ -40,6 +40,10 @@ void AppSettings::applyDefaults()
     // but the key must be persisted so future save() preserves it across upgrades.
     if (!m_data.value("updater").toObject().contains("check_on_startup"))
         setBln({"updater", "check_on_startup"}, true);
+    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives
+    // the directory). Default opt-in.
+    if (!m_data.value("backup").toObject().contains("enabled"))
+        setBln({"backup", "enabled"}, true);
 }
 
 bool AppSettings::load()
@@ -249,6 +253,14 @@ void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environ
 // ---------------------------------------------------------------------------
 bool AppSettings::checkUpdatesOnStartup() const    { return bln({"updater", "check_on_startup"}, true); }
 void AppSettings::setCheckUpdatesOnStartup(bool v) { setBln({"updater", "check_on_startup"}, v); }
+
+// ---------------------------------------------------------------------------
+// Backup (Verifactu Req. 4)
+// ---------------------------------------------------------------------------
+bool    AppSettings::backupEnabled() const            { return bln({"backup", "enabled"}, true); }
+void    AppSettings::setBackupEnabled(bool v)         { setBln({"backup", "enabled"}, v); }
+QString AppSettings::backupLastTime() const           { return str({"backup", "last_time"}); }
+void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }
 
 // ---------------------------------------------------------------------------
 // JSON helpers

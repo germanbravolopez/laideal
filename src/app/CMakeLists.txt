@@ -41,6 +41,7 @@ target_link_libraries(laideal
     add_garment
     verifactu
     updater
+    backup
 )
 
 set_target_properties(laideal PROPERTIES

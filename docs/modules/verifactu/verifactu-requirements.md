@@ -44,10 +44,12 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 8.2.c RD 1007/2023, Ley 58/2003 LGT. Records must be conserved during the tax prescription period — generally 4 years, longer for some cases.
 
-**[PARTIAL]**
+**[COVERED]**
 - `ingresos` rows are never deleted by the application.
-- DB lives at a hardcoded path on a single machine — no enforced backup, no archival, no retention policy.
-- Gap tracked as a non-blocking issue in `docs/progress_tracker.md` ("Verifactu Req. 4 — automated SQLite backup + 4-year retention"). Closing it requires a scheduled nightly backup + rotation policy that covers the 4-year tax prescription period.
+- `src/backup/BackupManager` snapshots the live SQLite DB via `VACUUM INTO` to `<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db`. The copy is re-opened read-only and validated with `PRAGMA integrity_check`; a failed verdict deletes the copy and surfaces the error.
+- Retention: every backup from the last 30 days is kept; older backups are reduced to one per calendar month for 4 years (matching the LGT prescription window), then deleted.
+- Triggers: (1) auto on app startup once per 24h (silent on success, `QMessageBox` warning on failure); (2) on demand via **Herramientas → Hacer copia de seguridad ahora...**.
+- See `docs/modules/backup.md` for the full contract.
 
 ## 5. Trazabilidad
 
@@ -111,7 +113,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 1 | Integrity / inalterabilidad | COVERED |
 | 2 | Numeración correlativa | COVERED |
 | 3 | Hash chain (SHA-256) | COVERED |
-| 4 | Retention (4 años) | PARTIAL — no enforced backup/archive (tracked in `progress_tracker.md`) |
+| 4 | Retention (4 años) | COVERED — `BackupManager` (VACUUM INTO + integrity_check + 30-day daily / 4-year monthly retention; auto + manual triggers) |
 | 5 | Trazabilidad | PARTIAL — single-user assumed (tracked in `progress_tracker.md`) |
 | 6 | Event log | COVERED (VERIFACTU mode) |
 | 7 | XML export for Hacienda | COVERED |
@@ -119,4 +121,4 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
-**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-27, no Verifactu compliance gap blocks the release; the two PARTIAL items (Req. 4 backup/retention, Req. 5 per-user trazabilidad) are tracked under Open Non-Blocking Issues.
+**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-31, no Verifactu compliance gap blocks the release; the remaining PARTIAL item (Req. 5 per-user trazabilidad) is tracked under Open Non-Blocking Issues. Req. 4 was closed in the Post-8.4 milestone via the new `BackupManager` module.

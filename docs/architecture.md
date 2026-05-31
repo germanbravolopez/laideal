@@ -13,6 +13,7 @@ MainWindow (src/app/)
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
   ├── Imprimir          (src/imprimir/)          — print / Excel generation
   ├── AddGarment        (src/add_garment/)       — add garments to existing ticket
+  ├── BackupManager     (src/backup/)            — auto + manual SQLite snapshots (Verifactu Req. 4)
   └── VerifactuIntegration (src/verifactu/)      — AEAT digital invoicing
          └── VerifactuManager
                 ├── VerifactuConfig
@@ -113,6 +114,22 @@ In-place upgrade path: `releases/laideal.iss` sets `CloseApplications=yes` + `Re
 Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome.
 
 Repo visibility: `/releases/latest` requires the repo to be **public** under unauthenticated calls (private repos return 404). If the repo is ever flipped back to private the updater will fail in `silent` mode silently and surface "Not Found" via the menu action.
+
+### BackupManager (`src/backup/`)
+Closes Verifactu Req. 4 (Art. 8.2.c RD 1007/2023): durable archive of the live SQLite DB during the LGT prescription window. Single class `BackupManager` parented to `MainWindow`.
+
+| Method | Behaviour |
+|--------|-----------|
+| `performBackup()` | Synchronous. Opens a dedicated `QSQLITE` connection named `laideal_backup_snapshot`, runs `VACUUM INTO '<target>'` for a transactionally-consistent snapshot without taking an exclusive lock on the live DB. Re-opens the copy read-only on a second connection (`laideal_backup_verify`) and runs `PRAGMA integrity_check`; any verdict other than `ok` deletes the file. On success, updates `AppSettings::backupLastTime` and calls `pruneOldBackups()`. Returns `{success, backupPath, errorMessage, bytesWritten}`. |
+| `needsBackup(minIntervalSeconds=24*3600)` | True when `AppSettings::backupEnabled()` is on and either no `backup.last_time` is recorded or it is older than the interval. |
+| `pruneOldBackups()` | Keeps every backup from the last 30 days; reduces 31-day-to-4-year backups to one per `(year, month)`; deletes everything older than 4 years. Returns the number of files removed. |
+| `backupDirectory()` | Resolves the configured root, creating it if missing. Default `<DocumentsLocation>/laideal_backups`. |
+
+Triggers wired in `MainWindow`:
+- **Auto**: constructor schedules `performBackup()` via `QTimer::singleShot(3000)` if `needsBackup()` returns true. Silent on success (status-bar message); `QMessageBox::warning` on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
+- **Manual**: `Herramientas → Hacer copia de seguridad ahora...` (`actionHacer_copia_de_seguridad`) runs `performBackup()` under `WaitCursor` and reports path + size in a `QMessageBox` so the operator can grab the file for offsite copy.
+
+Filename convention `laideal_yyyy-MM-dd_HHmmss.sqlite` sorts lexicographically by time, which keeps the pruner trivial. Full module reference at `docs/modules/backup.md`.
 
 ### AppLogger (`src/logging/`)
 Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `qWarning`, `qCritical`, and `qFatal` output to `~/.laideal.log` using `qInstallMessageHandler`. No changes required at any call site.

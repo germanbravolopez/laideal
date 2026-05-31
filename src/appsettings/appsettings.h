@@ -74,6 +74,15 @@ public:
     bool checkUpdatesOnStartup() const;
     void setCheckUpdatesOnStartup(bool v);
 
+    // --- Backup (Verifactu Req. 4: archive period, RD 1007/2023 Art. 8.2.c) ---
+    // Backups are written next to dbPath() (same directory as the live DB);
+    // there is no separate "backup root" setting.
+    bool    backupEnabled() const;
+    void    setBackupEnabled(bool v);
+    // ISO-8601 timestamp of the last successful backup (empty = never).
+    QString backupLastTime() const;
+    void    setBackupLastTime(const QString &v);
+
 private:
     AppSettings();
     void migrateFromLegacyFiles();

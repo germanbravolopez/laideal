@@ -59,6 +59,25 @@ MainWindow::MainWindow(QWidget *parent)
             m_updater->checkForUpdates(/*silentOnNoUpdate=*/true);
         });
     }
+
+    // Verifactu Req. 4: trigger a backup at startup once per 24h. Deferred so
+    // it doesn't block the first paint of the window. Silent on success - the
+    // operator only sees a message if the backup fails (since the regulatory
+    // requirement is durable storage, a failed snapshot is worth surfacing).
+    m_backupManager = new BackupManager(this);
+    if (m_backupManager->needsBackup()) {
+        QTimer::singleShot(3000, this, [this]() {
+            const auto res = m_backupManager->performBackup();
+            if (!res.success) {
+                QMessageBox::warning(this, tr("Copia de seguridad"),
+                                     tr("No se pudo crear la copia automática:\n%1")
+                                         .arg(res.errorMessage));
+            } else {
+                statusBar()->showMessage(
+                    tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
+            }
+        });
+    }
 }
 
 MainWindow::~MainWindow()
@@ -1256,4 +1275,21 @@ void MainWindow::onUpdaterCheckFailed(const QString &error)
     }
     QMessageBox::warning(this, tr("Comprobación fallida"),
         tr("No se pudo comprobar si hay actualizaciones:\n%1").arg(error));
+}
+
+void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
+{
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const auto res = m_backupManager->performBackup();
+    QApplication::restoreOverrideCursor();
+
+    if (!res.success) {
+        QMessageBox::warning(this, tr("Copia de seguridad"),
+                             tr("No se pudo crear la copia:\n%1").arg(res.errorMessage));
+        return;
+    }
+    QMessageBox::information(this, tr("Copia de seguridad"),
+        tr("Copia creada correctamente:\n%1\n\nTamaño: %2 KB")
+            .arg(res.backupPath)
+            .arg(res.bytesWritten / 1024));
 }

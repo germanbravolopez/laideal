@@ -656,6 +656,8 @@ prenda</string>
     <addaction name="separator"/>
     <addaction name="actionGenerar_contabilidad"/>
     <addaction name="actionRevertir_contabilidad"/>
+    <addaction name="separator"/>
+    <addaction name="actionHacer_copia_de_seguridad"/>
    </widget>
    <widget class="QMenu" name="menuVisualizar">
     <property name="title">
@@ -893,6 +895,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)</string>
+   </property>
+  </action>
+  <action name="actionHacer_copia_de_seguridad">
+   <property name="text">
+    <string>Hacer copia de seguridad ahora...</string>
+   </property>
+   <property name="toolTip">
+    <string>Crea una copia íntegra de la base de datos en la carpeta de copias (Art. 8.2.c RD 1007/2023)</string>
    </property>
   </action>
   <action name="actionBuscar_actualizaciones">

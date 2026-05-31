@@ -77,6 +77,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
+| Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
@@ -146,4 +147,5 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` + `src/updater/updaterdialog.h`; setting `updater.check_on_startup` in `~/.laideal_settings.json`; in-place install via `releases/laideal.iss` (`CloseApplications=yes`, `RestartApplications=yes`) |
+| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Herramientas → Hacer copia de seguridad ahora...) | `src/backup/backup_manager.h/.cpp`; settings `backup.directory` / `backup.enabled` / `backup.last_time`; auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
 | In-app version history (Ayuda → Notas de la versión) | `src/app/mainwindow.cpp` (`on_actionNotas_de_la_version_triggered`) reads the bundled `:/docs/releases_notes.txt` resource (declared in `resources/laideal.qrc`); the file is the same one Inno Setup's `InfoBeforeFile` shows at install time |
