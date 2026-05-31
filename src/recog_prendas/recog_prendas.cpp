@@ -603,15 +603,30 @@ void RecogPrendas::on_pb_pay_all_clicked()
 
 void RecogPrendas::on_pb_pku_all_clicked()
 {
-    int currentRow = rowClickedCell;
-    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        selectSourceRow(row, 0);
-        on_pb_state_toggled(true);
-    }
-    if (currentRow >= 0)
-        selectSourceRow(currentRow, 0);
-    else
-        resetAllContents();
+    // Mark every garment of the clicked ticket as Recogido. The legacy version
+    // iterated sqlQueryModel->rowCount() source rows and fired updateDb(PKU_YES)
+    // per row, which on a name search (SELECT * FROM ingresos) had the source
+    // model holding the entire table - so the loop marked every ticket in the
+    // DB picked up. Same blast-radius pattern that was fixed for pay_all in +8.4;
+    // close it here with the same scope: read the clicked row's n_recibo and
+    // run ONE UPDATE bounded to that ticket.
+    if (!isCellClicked) return;
+    const QString ticketNum = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
+    if (ticketNum.isEmpty()) return;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
+              "WHERE n_recibo = :n");
+    q.bindValue(":fr", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
+    q.bindValue(":n",  ticketNum);
+    if (!q.exec())
+        qWarning() << "on_pb_pku_all_clicked: UPDATE failed for ticket"
+                   << ticketNum << "-" << q.lastError().text();
+    db.close();
+
+    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_print_clicked()
