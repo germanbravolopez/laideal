@@ -27,7 +27,7 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 - Read existing call sites before changing signatures — `Grep` first, edit second.
 - Track multi-step work with `TodoWrite`. Mark steps complete as you finish them.
 - Don't bundle unrelated cleanup into the fix unless the user asked. Dead code touched by the refactor is fair game; dead code in untouched modules is a separate task.
-- The user verifies builds in Qt Creator manually — there is no automated build in the local environment. Be precise about syntax. **Never claim "compiles" — say "build needs verification".**
+- Be precise about syntax — step 5 will compile the change, but a clean build is much faster to reach if the code is right the first time.
 
 ### 4. Update docs (`/update-docs` checklist)
 
@@ -49,17 +49,32 @@ Skip updates that have nothing to do with the fix. Don't pad the diff.
 
 ### 5. Build project
 
-Execute the commands in the build step from `README.md` to verify that the changes are not breaking the project.
+Verify the change compiles before committing. From the repo root in PowerShell:
+
+```powershell
+cmake --build build
+```
+
+This is the incremental build — the `build/` directory is already configured from a prior `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` run (see README §Build for the full first-time setup). Pipe to `tail -40` or `Select-Object -Last 40` to keep the output from flooding context; the only line that must be present at the end is `Linking CXX executable src\app\laideal.exe` (or the static-lib equivalent for the modules you touched).
+
+If the build fails:
+- Compiler errors → fix them and re-run; don't proceed to step 6.
+- `Permission denied` linking `laideal.exe` → the running app is holding the file. Tell the user to close it, then re-run.
+- PATH errors (cmake/ninja/qt not found) → the shell doesn't have the toolchain on PATH. Prepend the line from README §Build that sets `$env:PATH`, then re-run.
+
+A clean build is a hard prerequisite for step 6 — never commit a fix that didn't link.
 
 ### 6. Commit
 
-Single-line commit message in the project's style (see `git log` recent commits). No `Co-Authored-By` line. Examples that work:
-- `Verifactu: fix testConnection (POST to /Create) and wire it to 'Probar conexion' button`
-- `RecogPrendas: keep pb_payment disabled to prevent Verifactu duplicate-InvoiceID`
-- `replace em-dash with ASCII '-' across all source files`
+- **Single-line subject only** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body), not the length: subjects are routinely 300–600 characters when the fix needs that much context. Match the verbosity of recent commits in `git log` — terse 60-char subjects are *not* the project style. Examples:
+  - Long (typical for multi-file fixes): `sql_lite: collapse updateTicketVerifactuFields + updateTicketVerifactuFieldsForSeq into one seq-scoped helper, and count paid rows in nextVerifactuInvoiceSeq so a local-only PayDialog event (Verifactu disabled / submit failed locally) still increments the next event's seq instead of colliding on seq=0`
+  - Short (only when the fix really is mechanical): `replace em-dash with ASCII '-' across all source files`
+- **Branch**: commit on `develop` (or a feature branch). Never commit to `master` — `master` only fast-forwards at release time.
+- **Stage only the files this issue touched.** Never `git add -A` / `git add .` — pre-existing unrelated edits in the working tree must not ride along. If you find such edits, leave them alone and call them out in your final message.
+- **Never `--amend`.** If the pre-commit hook rejects the commit, fix the issue and create a **new** commit — `--amend` after a hook-rejected commit would overwrite the *previous* commit (the rejected one never landed).
 
 After the commit:
-- Run `git status` to confirm a clean tree.
+- Run `git status` to confirm no remaining modifications to the files this issue touched. Pre-existing unrelated modifications still showing as `M` are fine — flag them in your final message but don't fold them in.
 - Output the commit hash and short summary.
 
 ---
