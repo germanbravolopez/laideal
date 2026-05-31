@@ -619,11 +619,22 @@ void RecogPrendas::on_pb_print_clicked()
     if (ui->le_nr_ticket->text().isEmpty())
         return;
     // Reprint scope = the clicked row's payment event (its verifactu_invoice_seq).
-    // Legacy rows (8.0-8.4) have seq=0 - same row set as the full ticket back then.
-    const int seq = isCellClicked
-        ? sqlQueryModel->data(sqlQueryModel->index(rowClickedCell,
-                                INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt()
-        : -1;
+    // Refuse when the clicked row is unpaid: seq=0 there is the DEFAULT, not
+    // a real event, and Imprimir would filter to that row's siblings and
+    // print garments the customer never paid for.
+    int seq = -1;
+    if (isCellClicked) {
+        const QString pagado = sqlQueryModel->data(sqlQueryModel->index(
+                                   rowClickedCell, INGRESOS_COL_PAGADO)).toString();
+        if (pagado != "SI") {
+            QMessageBox::information(this, tr("Reimprimir factura"),
+                tr("La prenda seleccionada no está pagada. Selecciona una prenda "
+                   "ya pagada del evento de pago que quieras reimprimir."));
+            return;
+        }
+        seq = sqlQueryModel->data(sqlQueryModel->index(
+                  rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
+    }
     printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false, seq);
     resetAllContents();
 }
