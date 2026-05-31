@@ -226,6 +226,36 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
+    // Race guard: edit_lock could have flipped 0->1 between loadTicket() and
+    // now (accountant closed the quarter in another window). Submitting to
+    // AEAT for an amount we can't actually mark paid locally would
+    // desynchronize the books from AEAT - abort before any AEAT call.
+    {
+        db.open();
+        QSqlQuery lockQ(db);
+        QString placeholders;
+        for (int i = 0; i < hashes.size(); ++i) {
+            if (i) placeholders += ',';
+            placeholders += ':' + QString("h%1").arg(i);
+        }
+        lockQ.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n "
+                      "AND edit_lock = 1 AND hash IN (" + placeholders + ")");
+        lockQ.bindValue(":n", m_ticketNum);
+        for (int i = 0; i < hashes.size(); ++i)
+            lockQ.bindValue(QString(":h%1").arg(i), hashes[i]);
+        int locked = 0;
+        if (lockQ.exec() && lockQ.first())
+            locked = lockQ.value(0).toInt();
+        db.close();
+        if (locked > 0) {
+            QMessageBox::warning(this, tr("Trimestre bloqueado"),
+                                 tr("Una o más prendas seleccionadas pertenecen a un trimestre "
+                                    "que se ha bloqueado durante la operación. Cierra y vuelve "
+                                    "a abrir el cobro para refrescar el estado del ticket."));
+            return;
+        }
+    }
+
     const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum);
     const QString invoiceId = QString("%1-%2").arg(m_ticketNum).arg(seq);
 
@@ -320,9 +350,9 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
         qDebug() << "PayDialog::persistPayment: Verifactu disabled, leaving verifactu_* empty";
         return;
     }
-    // updateTicketVerifactuFieldsForSeq matches WHERE n_recibo=? AND verifactu_invoice_seq=?
+    // updateTicketVerifactuFields scopes WHERE n_recibo=? AND verifactu_invoice_seq=?
     // which is exactly the rows we just stamped above.
-    updateTicketVerifactuFieldsForSeq(db, m_ticketNum, seq, result);
+    updateTicketVerifactuFields(db, m_ticketNum, result, seq);
 }
 
 void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
