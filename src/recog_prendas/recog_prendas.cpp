@@ -43,6 +43,7 @@ void RecogPrendas::resetAllContents()
     isCellClicked = false;
     ui->le_nr_ticket->clear();
     ui->le_phone->clear();
+    ui->le_mobile->clear();
     ui->le_client->clear();
     ui->le_garm->clear();
     ui->le_qty->clear();
@@ -300,7 +301,8 @@ void RecogPrendas::updateRowClickedToFields()
     // Update content from clicked row
     ui->le_nr_ticket->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString());
     ui->le_client->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CLIENTE)).toString());
-    ui->le_phone->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
+    ui->le_phone->setText(selectFromWhereLike(db, "tel_fijo", "clientes", "nombre", ui->le_client->text(), true, false));
+    ui->le_mobile->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
     ui->le_garm->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PRENDA)).toString());
     ui->le_qty->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CANTIDAD)).toString());
     ui->le_servic->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString());

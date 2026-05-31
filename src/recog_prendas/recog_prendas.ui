@@ -50,6 +50,9 @@ factura</string>
     </item>
     <item row="3" column="5">
      <widget class="QPushButton" name="pb_verifactu">
+      <property name="enabled">
+       <bool>false</bool>
+      </property>
       <property name="font">
        <font>
         <pointsize>12</pointsize>
@@ -60,9 +63,6 @@ factura</string>
       </property>
       <property name="text">
        <string>Verifactu</string>
-      </property>
-      <property name="enabled">
-       <bool>false</bool>
       </property>
      </widget>
     </item>
@@ -81,25 +81,6 @@ factura</string>
         </property>
         <property name="text">
          <string>Obs.:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="3" colspan="3">
-       <widget class="QLineEdit" name="le_phone">
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="locale">
-         <locale language="Spanish" country="Spain"/>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -300,22 +281,6 @@ factura</string>
         </property>
        </widget>
       </item>
-      <item row="1" column="2">
-       <widget class="QLabel" name="lbl_phone">
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="locale">
-         <locale language="Spanish" country="Spain"/>
-        </property>
-        <property name="text">
-         <string>Móvil:</string>
-        </property>
-       </widget>
-      </item>
       <item row="4" column="5">
        <widget class="QLineEdit" name="le_price">
         <property name="font">
@@ -501,6 +466,76 @@ factura</string>
           <string>Recogida</string>
          </property>
         </item>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QLineEdit" name="le_mobile">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="4">
+       <widget class="QLabel" name="lbl_mobile">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="text">
+         <string>Móvil:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLineEdit" name="le_phone">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="lbl_phone">
+        <property name="font">
+         <font>
+          <family>Arial</family>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="locale">
+         <locale language="Spanish" country="Spain"/>
+        </property>
+        <property name="text">
+         <string>Teléfono:</string>
+        </property>
        </widget>
       </item>
      </layout>
@@ -847,6 +882,7 @@ factura</string>
   <tabstop>pb_search</tabstop>
   <tabstop>le_nr_ticket</tabstop>
   <tabstop>le_phone</tabstop>
+  <tabstop>le_mobile</tabstop>
   <tabstop>le_client</tabstop>
   <tabstop>le_garm</tabstop>
   <tabstop>le_qty</tabstop>
