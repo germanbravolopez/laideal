@@ -123,5 +123,5 @@ Remaining unpaid rows of the same ticket stay unpaid; a later payment event pick
 
 - All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
 - Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
-- `pb_pay_all` opens `PayDialog` for the clicked ticket (single ticket scope). `pb_pku_all` still loops `sqlQueryModel->rowCount()` — for name searches (`SELECT *` loads the whole table) this means it would mark every ticket in the DB as picked up. Tracked in Open Non-Blocking Issues for 8.6.
+- `pb_pay_all` opens `PayDialog` for the clicked ticket (single-ticket scope). `pb_pku_all` is likewise single-ticket scoped: it reads the clicked row's `n_recibo` and runs one `UPDATE ... WHERE n_recibo = :n` (no per-row loop over the model), so a name search no longer marks every ticket in the DB as Recogido.
 - Total price display (`le_total_price`) sums from the proxy model rows, not the raw SQL result, so it always reflects the filtered set.
