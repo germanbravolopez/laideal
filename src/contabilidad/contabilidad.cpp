@@ -29,7 +29,11 @@ void Contabilidad::initialSettings()
 {
     // Lower bound of the year selector taken from the oldest income record
     // rather than a hardcoded year, so the range tracks the actual data.
-    const int firstYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_pago", "ingresos");
+    // Use fecha_recepcion, not fecha_pago: every ingresos row has a reception
+    // date, whereas fecha_pago is empty on unpaid rows and SQLite MIN() of a
+    // column containing '' returns '' (-> 0), which would collapse the range
+    // to the current year and block selecting/reverting prior-year accounting.
+    const int firstYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_recepcion", "ingresos");
     const int currentYear = QDate::currentDate().year();
     ui->sb_year->setRange(firstYear > 0 ? firstYear : currentYear, currentYear);
     ui->sb_trim->setRange(1, 4);
