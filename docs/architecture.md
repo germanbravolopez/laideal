@@ -146,6 +146,8 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load.
 
+The Verifactu **service key is encrypted at rest** with Windows DPAPI (per-user `CryptProtectData`, no prompt): `setVerifactuServiceKey()` stores `dpapi:v1:<base64>` and `verifactuServiceKey()` decrypts on read, so callers only ever see plaintext. `encryptSecretsAtRest()` runs in `load()` and re-encrypts any legacy plaintext value (then `save()`s). The blob is bound to the Windows user+machine, so it is not portable — a decrypt failure returns empty and the operator re-enters the key. Requires linking `crypt32` (Windows only).
+
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
 Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production, `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
@@ -286,7 +288,7 @@ AEAT QR validation:
 
 | Issue | File | Priority | Notes |
 |-------|------|----------|-------|
-| ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
+| ~~ServiceKey stored in plaintext JSON~~ | ~~`~/.laideal_settings.json`~~ | — | Fixed: encrypted at rest with Windows DPAPI (per-user), `dpapi:v1:` marker; auto-migrated on load. See AppSettings section |
 | ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; save-time failure shows warning dialog |
 | ~~Clients missing from Listado but present in MainWindow combobox~~ | ~~`src/listado/listado.cpp`~~ | — | Discarded: no current mechanism. `Listado::populateTable()` drains `fetchMore` for non-`ingresos` tables (loads every `clientes` row, replacing the old flaky scroll-to-bottom hack in b39cda7), and both the combobox and the view read `clientes.nombre` through the same SQLite driver so encoding cannot diverge. Reopen only if observed again. |
 

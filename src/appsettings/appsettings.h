@@ -101,6 +101,10 @@ private:
     // removes the obsolete keys. Idempotent.
     void migrateLegacyKeys();
     void applyDefaults();
+    // Encrypts any at-rest secret (currently the Verifactu service key) that is
+    // still stored in plaintext, using Windows DPAPI scoped to the current user.
+    // Idempotent. Returns true if it changed m_data (so the caller can persist).
+    bool encryptSecretsAtRest();
 
     QString str(const QStringList &path, const QString &def = {}) const;
     double  dbl(const QStringList &path, double def = 0.0) const;

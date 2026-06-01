@@ -116,7 +116,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | edit_lock | Column in `ingresos`: `0` = editable, `1` = locked by accounting close |
 | hash | 16-char alphanumeric identifier on each `ingresos` row for deduplication |
 | CSV (Verifactu) | "Código de Seguridad de la Versión" — the unique code AEAT issues per invoice |
-| ServiceKey | API key for the Verifactu REST service. External — not in source control |
+| ServiceKey | API key for the Verifactu REST service. External — not in source control. Stored encrypted at rest in `~/.laideal_settings.json` via Windows DPAPI (per-user, `dpapi:v1:` prefix); `AppSettings` getter/setter decrypt/encrypt transparently |
 | Trimestre | Quarter (Q1–Q4) — the unit for accounting lock and report generation |
 | QR (Verifactu) | QR image generated per invoice, shown to client for AEAT validation |
 | TESTING / PRODUCTION | Verifactu environments. TESTING uses fictitious data. PRODUCTION submits to AEAT |
