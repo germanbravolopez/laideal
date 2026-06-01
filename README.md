@@ -1,5 +1,13 @@
 # La Ideal
 
+[![CI](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml)
+[![Release](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/germanbravolopez/laideal)](https://github.com/germanbravolopez/laideal/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/germanbravolopez/laideal/total)](https://github.com/germanbravolopez/laideal/releases)
+![Top language](https://img.shields.io/github/languages/top/germanbravolopez/laideal)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
+[![License](https://img.shields.io/badge/license-Proprietary-red)](./License.txt)
+
 Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt** (5.15+/6.x) on Windows, using a local SQLite database.
 
 ---
