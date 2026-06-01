@@ -141,7 +141,7 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    git tag -a X.Y -m "Release X.Y"
    git push origin X.Y
    ```
-6. Publish on GitHub - see [Release procedure](#release-procedure) below for the artifacts and the GitHub publish step.
+6. **Pushing the tag in step 5 is the publish trigger** - `.github/workflows/release.yml` runs on any `X.Y` tag and builds, packages, and publishes the GitHub Release automatically (artifacts + notes). Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
 
 After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
 
@@ -149,9 +149,22 @@ After publishing, the working branch can either continue (rename + reuse for the
 
 ## Release procedure
 
-This section covers only the **build and installer step**. The end-to-end flow (branching, version bump, merge, tag, push, GitHub publish) lives in [Development workflow](#development-workflow) above.
+This section covers the **build, installer, and publish step**. The end-to-end flow (branching, version bump, merge, tag, push) lives in [Development workflow](#development-workflow) above.
 
-The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1`. No Qt cmd prompt needed - the script loads the Qt environment itself.
+### Automated (default): push the tag, CI does the rest
+
+`.github/workflows/release.yml` runs on every `X.Y` tag push and reproduces the full pipeline on a `windows-latest` runner, then publishes the GitHub Release itself:
+
+1. Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
+2. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, which auto-installs the matching MinGW 11.2.0 toolchain), Ninja, and Inno Setup 6.
+3. Configure -> build (Release) -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
+4. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+
+So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
+
+### Local fallback: `releases\release.ps1`
+
+The same pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1` for offline builds or when you need the artifacts without publishing. No Qt cmd prompt needed - the script loads the Qt environment itself. It does **not** publish to GitHub; attach the artifacts manually (see the `gh release create` snippet at the end of this section).
 
 **Release toolchain** (pinned by `releases\release.ps1`):
 
@@ -179,7 +192,7 @@ Artifacts:
 - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
 - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
 
-These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step is:
+When using this local fallback, attach these manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what `release.yml` runs:
 
 ```powershell
 $ver = 'X.Y'

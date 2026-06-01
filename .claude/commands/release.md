@@ -1,6 +1,6 @@
 # /release — Ship a Release X.Y End-to-End
 
-Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, build artifacts, merge to `master` PR-style, tag the merge commit, and publish on GitHub.
+Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers `.github/workflows/release.yml` to build the artifacts and publish the GitHub Release automatically. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
@@ -13,8 +13,8 @@ The root `README.md` is the source of truth. If a step here ever drifts from the
 1. **Current branch is not `master`.** Releases are cut from a working branch (`develop` or `feature/...`) and merged into `master` — never committed straight to it. If on `master`, stop and ask the user which branch to release from.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
 3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
-4. **No existing artifacts for this version.** `releases\old_releases\X.Y.zip` and `releases\setup_outputs\laideal_setup_X.Y.exe` must not exist. `release.ps1` aborts on its own if they do, but flag it upfront so the user can confirm overwrite vs. bump.
-5. **No existing `X.Y` git tag.** `git tag -l X.Y` must be empty.
+4. **`releases_notes.txt` has an `X.Y` section.** `release.yml` now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (Local-artifact files `releases\old_releases\X.Y.zip` / `setup_outputs\laideal_setup_X.Y.exe` only matter for the local fallback in step 8b — CI builds fresh on a runner.)
+5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404. (The workflow can replace an existing release, but for a clean cut both should be absent.)
 
 If any precondition fails, stop and surface the problem — don't try to "fix it up" without asking.
 
@@ -118,40 +118,33 @@ git tag -a X.Y -m "Release X.Y"
 git push origin X.Y
 ```
 
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here.
+The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here. **Pushing the tag is the publish trigger** — `.github/workflows/release.yml` starts on the `X.Y` tag and builds + packages + publishes the GitHub Release on its own. Steps 3 and 5 already validated the tagged code, so this is normally hands-off.
 
-### 8. Build the release artifacts from the tagged commit (README "Release procedure")
+### 8. Watch the release workflow (it builds the artifacts and publishes)
 
-You should be on `master` at the merge commit after step 6, with the tag now placed in step 7. Run the release script from there so the zip + installer are built from the exact commit that will be shipped:
+The tag push in step 7 kicked off `release.yml`. Watch it to completion instead of building/publishing by hand:
 
 ```powershell
-.\releases\release.ps1 X.Y
+gh run watch (gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-The script does configure -> build -> `windeployqt` -> zip -> Inno Setup, into `build-release\` (its own directory, not the `build\` from step 3). Aborts upfront if `CMakeLists.txt` does not match `X.Y` or if a zip/installer for `X.Y` already exists.
+On success it has built (CMake + Ninja, Release) -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and the `releases_notes.txt` `X.Y` section as the body. Confirm with `gh release view X.Y` that both assets are present and the body renders as a clean bulleted list.
 
-Verify both artifacts exist before step 9:
-- `releases\old_releases\X.Y.zip`
-- `releases\setup_outputs\laideal_setup_X.Y.exe`
+**If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
 
-If the script fails here it usually means a build difference between the working branch and the merge commit, or a stale `build-release\`. Diagnose with the user; do **not** delete the tag without confirming - the merge commit is already public.
+#### 8b. Local fallback (only if CI is unavailable)
 
-### 9. Publish on GitHub (README step 6)
-
-Requires the GitHub CLI. The release body should be **only the new `X.Y` section** of `releases_notes.txt`, converted to markdown — not the whole accumulated file. Extract it to a temp `.md` file, publish, then delete the temp file.
-
-`releases_notes.txt` uses plain Markdown-compatible indentation (top-level bullets at column 0, nested bullets at 2 spaces) so the section body can be lifted straight into the GitHub release body. The only conversion step is to drop the bare `X.Y` title line — GitHub already shows the tag name as the release title — which the regex already does by capturing only what follows the title line.
+If GitHub Actions can't run, build and publish locally from the tagged `master` commit. This is exactly what the workflow automates:
 
 ```powershell
+.\releases\release.ps1 X.Y   # configure -> build -> windeployqt -> zip -> Inno Setup, into build-release\
+
 $ver = 'X.Y'
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
 $raw = Get-Content releases_notes.txt -Raw
-# Capture from the bare 'X.Y' line up to (but not including) the next bare 'N.M' line or EOF.
 $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
 if (-not $m.Success) { throw "No section for $ver found in releases_notes.txt" }
-# Body is already Markdown-indented (column-0 bullets, 2-space nesting); just trim trailing blanks.
-$body = $m.Groups[1].Value.TrimEnd()
-Set-Content -Path $tmpNotes -Value $body -Encoding utf8
+Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
 
 gh release create $ver `
     releases/old_releases/$ver.zip `
@@ -162,9 +155,7 @@ gh release create $ver `
 Remove-Item $tmpNotes
 ```
 
-Verify visually (or with `gh release view X.Y`) that the body renders as a clean bulleted list. If the regex misses (e.g. the section uses an unexpected separator) or the list looks wrong, fall back to passing `--notes-file releases_notes.txt` once, then edit the release on GitHub.
-
-### 10. Post-release housekeeping
+### 9. Post-release housekeeping
 
 - Confirm `git status` on `master` is clean and on the merge commit.
 - Surface the GitHub release URL from `gh release create` output.

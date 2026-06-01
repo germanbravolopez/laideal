@@ -36,7 +36,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
-| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, build via `releases\release.ps1`, PR-style merge to master, tag, GitHub publish |
+| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which triggers `release.yml` CI to build + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
 | `/review` | Built-in | Review a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
@@ -98,6 +98,10 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |
+| `.github/workflows/ci.yml` | CI — builds on every push/PR (Qt 6.4.3 MinGW + CMake + Ninja), uploads `laideal.exe` artifact |
+| `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |
+| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for `release.yml` |
+| `releases/laideal.iss` | Inno Setup installer recipe (paths relative to `releases/`; `/DMyAppVersion=X.Y`) |
 
 ## Key Concepts / Glossary
 

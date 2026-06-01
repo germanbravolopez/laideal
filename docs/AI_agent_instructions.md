@@ -17,7 +17,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 - **Requirements**: CMake 3.5+, Qt 5.15+/6.x, C++17
 - **Qt modules needed**: `Widgets`, `Sql`, `PrintSupport`, `Network`
 - Open `CMakeLists.txt` in Qt Creator, or: `cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`
-- Full release pipeline (build + windeployqt + zip + Inno Setup installer) in one command: `releases\release.ps1 <version>` - see root `README.md` "Release procedure"
+- Release is automated: pushing an `X.Y` tag triggers `.github/workflows/release.yml`, which builds + windeployqt + zips + compiles the Inno Setup installer and publishes the GitHub Release. `releases\release.ps1 <version>` runs the same pipeline locally (offline fallback, no publish). See root `README.md` "Release procedure"
 
 ## File Map — Where to Find What
 
