@@ -288,7 +288,7 @@ AEAT QR validation:
 |-------|------|----------|-------|
 | ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
 | ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; save-time failure shows warning dialog |
-| Clients missing from Listado but present in MainWindow combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Low | Investigate encoding/collation differences between `readColumnFromTable` and `QSqlTableModel`; tilde issue in name search is now fixed separately |
+| ~~Clients missing from Listado but present in MainWindow combobox~~ | ~~`src/listado/listado.cpp`~~ | — | Discarded: no current mechanism. `Listado::populateTable()` drains `fetchMore` for non-`ingresos` tables (loads every `clientes` row, replacing the old flaky scroll-to-bottom hack in b39cda7), and both the combobox and the view read `clientes.nombre` through the same SQLite driver so encoding cannot diverge. Reopen only if observed again. |
 
 ---
 
