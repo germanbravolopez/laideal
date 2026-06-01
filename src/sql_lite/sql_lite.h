@@ -31,6 +31,9 @@ bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QS
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
 float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
+// Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
+// "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
+int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
 void        updateLockInIngresos(QSqlDatabase &db, int value, int month, int year);
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);

@@ -4,6 +4,7 @@
 #include "sql_lite.h"
 #include "mysortfilterproxymodel.h"
 #include "appsettings.h"
+#include "reporthtml.h"
 
 #include <QMessageBox>
 
@@ -61,42 +62,16 @@ void GenListado::print_table()
 
 QString GenListado::generate_html_prendas_table()
 {
-    QString html_table;
-    html_table = "<!DOCTYPE html>"
-        "<html>"
-        "<head>"
-            "<meta charset='UTF-8'>"
-            "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
-            "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-            "<style>"
-                "table, tr, td {"
-                    "text-align: left;"
-                    "border: 1px solid black;"
-                    "border-collapse: collapse;"
-                    "padding:2px 3px;"
-                "}"
-                "th {"
-                    "text-align: center;"
-                    "border: 1px solid black;"
-                    "border-collapse: collapse;"
-                    "padding:2px 3px;"
-                "}"
-            "</style>"
-        "</head>"
-        "<body>"
-            "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-            "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
-            "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
-            "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>"
-            "<h1 style='text-align:left;'>Listado de Prendas</h1>"
-            "<figure class='table' style='float:left;'>"
-                "<table>"
-                    "<thead>"
-                        "<tr>"
-                            "<th>Nombre</th>"
-                            "<th>Precio Limpieza</th>"
-                            "<th>Precio Plancha</th>";
-    html_table += "</tr>" "</thead>" "<tbody>";
+    QString html_table = ReportHtml::documentOpen("Listado de Prendas")
+            + ReportHtml::tableOpen() +
+                "<thead>"
+                    "<tr>"
+                        "<th>Nombre</th>"
+                        "<th style='text-align:right;'>Precio Limpieza</th>"
+                        "<th style='text-align:right;'>Precio Plancha</th>"
+                    "</tr>"
+                "</thead>"
+                "<tbody>";
 
     // add each line of data
     int row_printed = 0;
@@ -105,25 +80,23 @@ QString GenListado::generate_html_prendas_table()
         if (row_printed % 2 == 0)
             html_table += "<tr>";
         else
-            html_table += "<tr style='background-color: #E3E1D3;'>";
+            html_table += "<tr style='background-color: #f6f7f9;'>";
         // set row content
         html_table += "<td>" + model->index(row, 0).data().toString() + "</td>";
         if (model->index(row, 1).data().toFloat() == 0.0)
             html_table += "<td></td>";
         else
-            html_table += "<td><p style='text-align:right;'>"
-                    + QString::number(model->index(row, 1).data().toFloat(), 'f', 2)
-                    + " €</p></td>";
+            html_table += "<td style='text-align:right;'>"
+                    + ReportHtml::formatEuro(model->index(row, 1).data().toFloat()) + "</td>";
         if (model->index(row, 2).data().toFloat() == 0.0)
             html_table += "<td></td>";
         else
-            html_table += "<td><p style='text-align:right;'>"
-                    + QString::number(model->index(row, 2).data().toFloat(), 'f', 2)
-                    + " €</p></td>";
+            html_table += "<td style='text-align:right;'>"
+                    + ReportHtml::formatEuro(model->index(row, 2).data().toFloat()) + "</td>";
         html_table += "</tr>";
         row_printed++;
     }
-    html_table += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
+    html_table += "</tbody></table>" + ReportHtml::documentClose();
     return html_table;
 }
 
@@ -153,45 +126,17 @@ QString GenListado::generate_html_gastos_table_with_specific_conditions()
 
 QString GenListado::generate_html_gastos_table()
 {
-    QString html_table;
-    html_table = "<!DOCTYPE html>"
-        "<html>"
-        "<head>"
-            "<meta charset='UTF-8'>"
-            "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
-            "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-            "<style>"
-                "table, tr, td {"
-                    "text-align: left;"
-                    "border: 1px solid black;"
-                    "border-collapse: collapse;"
-                    "padding:2px 3px;"
-                "}"
-                "th {"
-                    "text-align: center;"
-                    "border: 1px solid black;"
-                    "border-collapse: collapse;"
-                    "padding:2px 3px;"
-                "}"
-            "</style>"
-        "</head>"
-        "<body>"
-            "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-            "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
-            "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
-            "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>"
-            "<h1 style='text-align:left;'>Listado de Gastos</h1>"
-            "<figure class='table' style='float:left;'>"
-                "<table>"
-                    "<thead>"
-                        "<tr>"
-                            "<th>N. Fra</th>"
-                            "<th>Servicio</th>"
-                            "<th>Empresa</th>"
-                            "<th>Fecha</th>"
-                            "<th>IVA<br>[€]</th>"
-                            "<th>Base<br>[€]</th>"
-                            "<th>Importe<br>[€]</th>";
+    QString html_table = ReportHtml::documentOpen("Listado de Gastos")
+            + ReportHtml::tableOpen() +
+                "<thead>"
+                    "<tr>"
+                        "<th>N. Fra</th>"
+                        "<th>Servicio</th>"
+                        "<th>Empresa</th>"
+                        "<th>Fecha</th>"
+                        "<th style='text-align:right;'>IVA</th>"
+                        "<th style='text-align:right;'>Base</th>"
+                        "<th style='text-align:right;'>Importe</th>";
     if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS)
         html_table += "<th>Cerrado por contabilidad</th>";
     html_table += "</tr>" "</thead>" "<tbody>";
@@ -219,11 +164,11 @@ QString GenListado::generate_html_gastos_table()
                     if (row_printed % 2 == 0)
                         html_table += "<tr>";
                     else
-                        html_table += "<tr style='background-color: #E3E1D3;'>";
+                        html_table += "<tr style='background-color: #f6f7f9;'>";
                     // set total costs row
-                    html_table +="<td colspan='6', style='text-align:right;'>IMPORTE TOTAL:</td>"
-                                        "<td colspan='2', style='text-align:left;'>" + QString::number(importe_tot, 'f', 2) +
-                                        " €</td></tr>";
+                    html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
+                                        "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot) +
+                                        "</td></tr>";
                     importe_tot = 0.0;
                     row_printed++;
                 }
@@ -234,15 +179,15 @@ QString GenListado::generate_html_gastos_table()
             if (row_printed % 2 == 0)
                 html_table += "<tr>";
             else
-                html_table += "<tr style='background-color: #E3E1D3;'>";
+                html_table += "<tr style='background-color: #f6f7f9;'>";
             // set row content
             html_table +="<td>" + model->index(row, 1).data().toString() + "</td>"
                                 "<td>" + model->index(row, 2).data().toString() + "</td>"
                                 "<td>" + model->index(row, 4).data().toString() + "</td>"
                                 "<td>" + model->index(row, 5).data().toString() + "</td>"
-                                "<td>" + iva + "</td>"
-                                "<td>" + base + "</td>"
-                                "<td>" + importe + "</td>";
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(iva.toFloat()) + "</td>"
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(base.toFloat()) + "</td>"
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(importe.toFloat()) + "</td>";
             if (ui->cb_tipo_gastos->currentText() == C_INCL_TODOS) {
                 if (model->index(row, 8).data().toBool())
                     html_table += "<td>Si</td>";
@@ -259,13 +204,13 @@ QString GenListado::generate_html_gastos_table()
         if (row_printed % 2 == 0)
             html_table += "<tr>";
         else
-            html_table += "<tr style='background-color: #E3E1D3;'>";
+            html_table += "<tr style='background-color: #f6f7f9;'>";
         // set total costs row
-        html_table +="<td colspan='6', style='text-align:right;'>IMPORTE TOTAL:</td>"
-                            "<td colspan='2', style='text-align:left;'>" + QString::number(importe_tot, 'f', 2) +
-                            " €</td></tr>";
+        html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
+                            "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot) +
+                            "</td></tr>";
     }
-    html_table += "</tbody>" "</table>" "</figure>" "</body>" "</html>";
+    html_table += "</tbody></table>" + ReportHtml::documentClose();
     if (row_printed == 0)
         return C_NO_ROWS;
     else

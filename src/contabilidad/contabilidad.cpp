@@ -3,6 +3,7 @@
 #include "sql_lite.h"
 #include "qprinter.h"
 #include "appsettings.h"
+#include "reporthtml.h"
 
 Contabilidad::Contabilidad(QWidget *parent) :
     QMainWindow(parent),
@@ -137,66 +138,45 @@ void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 
 void Contabilidad::generateContabilidad()
 {
-    QString contabilidadHtml = "<!DOCTYPE html><html>";
-    QString path, filename;
+    const int year = ui->sb_year->value();
+    QString contabilidadHtml, path, filename;
 
     if (ui->cb_config->currentText() == C_TRIMESTRAL) {
-        contabilidadHtml = contabilidadHtml + createHtmlHeader()
-                + "<h1 style='text-align:center;'>Contabilidad</h1>"
-                + "<h2>Trimestre: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value()) + "</h2>"
-                + createHtmlTables(0) + "</body></html>";
+        contabilidadHtml = ReportHtml::documentOpen("Contabilidad - Trimestre " + QString::number(ui->sb_trim->value())
+                                                    + " · " + QString::number(year),
+                                                    periodSubtitle(0))
+                + renderSection(computeFigures(0), "Resumen del periodo")
+                + ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath();
-        filename = "/contabilidad_trimestral_" +
-                QString::number(ui->sb_year->value()) +
-                "_" +
-                QString::number(ui->sb_trim->value()) +
-                ".pdf";
+        filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
     }
     else if (ui->cb_config->currentText() == C_MENSUAL) {
-        QString contabilidadStatus;
-        if (readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
-            contabilidadStatus = "(Contabilidad cerrada)";
-        else
-            contabilidadStatus = "(Contabilidad no cerrada)";
-
-        contabilidadHtml = contabilidadHtml + createHtmlHeader()
-                + "<h1 style='text-align:center;'>Reporte Mensual</h1>"
-                + "<h2>Mes: " + QString::number(ui->sb_trim->value()) + ", Año: " + QString::number(ui->sb_year->value())
-                + " " + contabilidadStatus + "</h2>"
-                + createHtmlTables(0) + "</body></html>";
+        bool cerrada = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year) == 1;
+        contabilidadHtml = ReportHtml::documentOpen("Reporte Mensual - Mes " + QString::number(ui->sb_trim->value())
+                                                    + " · " + QString::number(year),
+                                                    periodSubtitle(0) + (cerrada ? " · Contabilidad cerrada"
+                                                                                  : " · Contabilidad no cerrada"))
+                + renderSection(computeFigures(0), "Resumen del periodo")
+                + ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Mensual";
-        filename = "/reporte_mensual_" +
-                QString::number(ui->sb_year->value()) +
-                "_" +
-                QString::number(ui->sb_trim->value()) +
-                ".pdf";
+        filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
     }
     else {
-        QString contabilidadStatus;
-        if (readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()) == 1)
-            contabilidadStatus = "(Contabilidad cerrada)";
-        else
-            contabilidadStatus = "(Contabilidad no cerrada)";
-
-        contabilidadHtml = contabilidadHtml + createHtmlHeader()
-                + "<h1 style='text-align:center;'>Reporte Anual - " + QString::number(ui->sb_year->value()) + "</h1>";
+        contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year));
+        PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
-            QString trimStatus;
-            if (readLockForMonthAndYear(db, "ingresos", trim * 3, ui->sb_year->value()) == 1)
-                trimStatus = "(Contabilidad cerrada)";
-            else
-                trimStatus = "(Contabilidad no cerrada)";
-
-            contabilidadHtml = contabilidadHtml
-                + "<h2>Trimestre: " + QString::number(trim) + " " + trimStatus + "</h2>"
-                + createHtmlTables(trim);
+            bool cerrada = readLockForMonthAndYear(db, "ingresos", trim * 3, year) == 1;
+            PeriodFigures f = computeFigures(trim);
+            annual.accumulate(f);
+            contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
+                    + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
+                    + renderSection(f, "Resumen del trimestre");
         }
-        contabilidadHtml = contabilidadHtml + "</body></html>";
-
+        contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
+                + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year))
+                + ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Anual";
-        filename = "/reporte_anual_" +
-                QString::number(ui->sb_year->value()) +
-                ".pdf";
+        filename = "/reporte_anual_" + QString::number(year) + ".pdf";
     }
     // create directory in case it does not exists
     if (!QFile::exists(path))
@@ -204,48 +184,67 @@ void Contabilidad::generateContabilidad()
     writeHtml(path + filename, contabilidadHtml);
 }
 
+void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive)
+{
+    const int year = ui->sb_year->value();
+    if (ui->cb_config->currentText() == C_MENSUAL) {
+        const int month = ui->sb_trim->value();
+        start.setDate(year, month, 1);
+        if (month == 12)
+            endExclusive.setDate(year + 1, 1, 1);
+        else
+            endExclusive.setDate(year, month + 1, 1);
+        return;
+    }
+
+    const int trim = (ui->cb_config->currentText() == C_TRIMESTRAL) ? ui->sb_trim->value() : trimForYearConfig;
+    switch (trim) {
+    case 1: start.setDate(year, 1, 1);  endExclusive.setDate(year, 4, 1);      break;
+    case 2: start.setDate(year, 4, 1);  endExclusive.setDate(year, 7, 1);      break;
+    case 3: start.setDate(year, 7, 1);  endExclusive.setDate(year, 10, 1);     break;
+    case 4: start.setDate(year, 10, 1); endExclusive.setDate(year + 1, 1, 1);  break;
+    default: break;
+    }
+}
+
 float Contabilidad::getTotalIncome(QString table,
                                    int iva,
                                    int trimForYearConfig)
 {
     QDate startDate, endDate;
-    if (ui->cb_config->currentText() == C_MENSUAL) {
-        startDate.setDate(ui->sb_year->value(), ui->sb_trim->value(), 1);
-        if (ui->sb_trim->value() == 12)
-            endDate.setDate(ui->sb_year->value() + 1, 1, 1);
-        else
-            endDate.setDate(ui->sb_year->value(), ui->sb_trim->value() + 1, 1);
-    }
-    else {
-        int trim;
-        if (ui->cb_config->currentText() == C_TRIMESTRAL)
-            trim = ui->sb_trim->value();
-        else
-            trim = trimForYearConfig;
-
-        switch (trim) {
-        case 1:
-            startDate.setDate(ui->sb_year->value(), 1, 1);
-            endDate.setDate(ui->sb_year->value(), 4, 1);
-            break;
-        case 2:
-            startDate.setDate(ui->sb_year->value(), 4, 1);
-            endDate.setDate(ui->sb_year->value(), 7, 1);
-            break;
-        case 3:
-            startDate.setDate(ui->sb_year->value(), 7, 1);
-            endDate.setDate(ui->sb_year->value(), 10, 1);
-            break;
-        case 4:
-            startDate.setDate(ui->sb_year->value(), 10, 1);
-            endDate.setDate(ui->sb_year->value() + 1, 1, 1);
-            break;
-        default:
-            break;
-        }
-    }
-
+    periodRange(trimForYearConfig, startDate, endDate);
     return totalPriceBetweenDates(db, table, startDate, endDate, iva);
+}
+
+QString Contabilidad::periodSubtitle(int trimForYearConfig)
+{
+    QDate start, endExclusive;
+    periodRange(trimForYearConfig, start, endExclusive);
+    return "Periodo: " + start.toString("dd-MM-yyyy") + " a " + endExclusive.addDays(-1).toString("dd-MM-yyyy");
+}
+
+Contabilidad::PeriodFigures Contabilidad::computeFigures(int trimForYearConfig)
+{
+    PeriodFigures f;
+    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
+
+    f.ingImporte = getTotalIncome("ingresos", 0, trimForYearConfig);
+    f.ingBase    = f.ingImporte / (1.0 + ivaRate / 100.0);
+    f.ingIva     = f.ingImporte - f.ingBase;
+
+    f.gas10Importe = getTotalIncome("gastos", 10, trimForYearConfig);
+    f.gas10Base    = f.gas10Importe / 1.10;
+    f.gas10Iva     = f.gas10Importe - f.gas10Base;
+    f.gas21Importe = getTotalIncome("gastos", 21, trimForYearConfig);
+    f.gas21Base    = f.gas21Importe / 1.21;
+    f.gas21Iva     = f.gas21Importe - f.gas21Base;
+    f.gasNiImporte = getTotalIncome("gastos", 0, trimForYearConfig);
+
+    QDate start, endExclusive;
+    periodRange(trimForYearConfig, start, endExclusive);
+    f.ingTickets  = countOperationsBetweenDates(db, "ingresos", start, endExclusive);
+    f.gasFacturas = countOperationsBetweenDates(db, "gastos", start, endExclusive);
+    return f;
 }
 
 void Contabilidad::updateLock()
@@ -296,151 +295,78 @@ void Contabilidad::writeHtml(QString filename,
     //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
 }
 
-QString Contabilidad::createHtmlHeader()
+QString Contabilidad::renderSection(const PeriodFigures &f, const QString &summaryHeading)
 {
-    QString contabilidadHtmlHeader =
-    "<head>"
-        "<meta charset='UTF-8'>"
-        "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        "<style>"
-            "table, tr, th, td {"
-                "text-align: left;"
-                "border: 1px solid black;"
-                "border-collapse: collapse;"
-                "padding:3px 4px;"
-            "}"
-        "</style>"
-    "</head>"
-    "<body>"
-        "<p style='text-align:right;'>Granada, " + QDate::currentDate().toString("dd-MM-yyyy") + "</p>"
-        "<p><span class='text-small'>" + AppSettings::instance()->businessName() + "</span><br>"
-        "<span class='text-small'>" + AppSettings::instance()->businessAddress() + "</span><br>"
-        "<span class='text-small'>" + AppSettings::instance()->businessCity() + "</span></p>";
-
-    return contabilidadHtmlHeader;
+    return createHtmlTableIngresos(f) + createHtmlTableGastos(f) + createHtmlSummary(f, summaryHeading);
 }
 
-QString Contabilidad::createHtmlTables(int trimForYearConfig)
+// Right-aligned currency cell.
+static QString euroCell(double value)
 {
-    return createHtmlTableIngresos(trimForYearConfig) + createHtmlTableGastos(trimForYearConfig);
+    return "<td style='text-align:right;'>" + ReportHtml::formatEuro(value) + "</td>";
 }
 
-QString Contabilidad::createHtmlTableIngresos(int trimForYearConfig)
+QString Contabilidad::createHtmlTableIngresos(const PeriodFigures &f)
 {
-    float totalIncomeIng = getTotalIncome("ingresos", 0, trimForYearConfig);
-    float ivaRate = static_cast<float>(AppSettings::instance()->ivaRate());
-    float baseIng = totalIncomeIng / (1.0f + ivaRate / 100.0f);
-    float ivaIng = totalIncomeIng - baseIng;
-
-    QString contabilidadHtmlTable =
-    "<h3>Tabla Ingresos</h3>"
-    "<figure class='table' style='float:left;'>"
-        "<table>"
-            "<thead>"
-                "<tr>"
-                    "<th>&nbsp;</th>"
-                    "<th>Ingreso total</th>"
-                "</tr>"
-            "</thead>"
-            "<tbody>"
-                "<tr>"
-                    "<th<'>Importe</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(totalIncomeIng, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-                "<tr>"
-                    "<th<'>Base</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(baseIng, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-                "<tr>"
-                    "<th<'>IVA</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(ivaIng, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-            "</tbody>"
-        "</table>"
-    "</figure>";
-
-    return contabilidadHtmlTable;
+    return
+    "<h3>Ingresos</h3>"
+    + ReportHtml::tableOpen(true) +
+        "<tr><th>Concepto</th><th style='text-align:right;'>Importe</th></tr>"
+        "<tr><td>Importe total (IVA incluido)</td>" + euroCell(f.ingImporte) + "</tr>"
+        "<tr style='background-color:#f6f7f9;'><td>Base imponible</td>" + euroCell(f.ingBase) + "</tr>"
+        "<tr><td>IVA repercutido</td>" + euroCell(f.ingIva) + "</tr>"
+    "</table>";
 }
 
-QString Contabilidad::createHtmlTableGastos(int trimForYearConfig)
+QString Contabilidad::createHtmlTableGastos(const PeriodFigures &f)
 {
-    float totalIncomeG10 = getTotalIncome("gastos", 10, trimForYearConfig);
-    float baseG10 = totalIncomeG10 / 1.1;
-    float ivaG10 = totalIncomeG10 - baseG10;
-    float totalIncomeG21 = getTotalIncome("gastos", 21, trimForYearConfig);
-    float baseG21 = totalIncomeG21 / 1.21;
-    float ivaG21 = totalIncomeG21 - baseG21;
-    float totalIncomeGni = getTotalIncome("gastos", 0, trimForYearConfig);
+    return
+    "<h3>Gastos</h3>"
+    + ReportHtml::tableOpen(true) +
+        "<tr>"
+            "<th>Concepto</th>"
+            "<th style='text-align:right;'>IVA 10%</th>"
+            "<th style='text-align:right;'>IVA 21%</th>"
+            "<th style='text-align:right;'>Sin IVA</th>"
+            "<th style='text-align:right;'>Total</th>"
+        "</tr>"
+        "<tr>"
+            "<td>Importe</td>"
+            + euroCell(f.gas10Importe) + euroCell(f.gas21Importe) + euroCell(f.gasNiImporte) + euroCell(f.gastosImporteTotal()) +
+        "</tr>"
+        "<tr style='background-color:#f6f7f9;'>"
+            "<td>Base imponible</td>"
+            + euroCell(f.gas10Base) + euroCell(f.gas21Base) + euroCell(f.gasNiImporte) + euroCell(f.gastosBaseTotal()) +
+        "</tr>"
+        "<tr>"
+            "<td>IVA soportado</td>"
+            + euroCell(f.gas10Iva) + euroCell(f.gas21Iva) + "<td style='text-align:right;'>-</td>" + euroCell(f.gastosIvaTotal()) +
+        "</tr>"
+    "</table>";
+}
 
-    QString contabilidadHtmlTable =
-    "<h3>Tabla Gastos</h3>"
-    "<figure class='table' style='float:left;'>"
-        "<table>"
-            "<thead>"
-                "<tr>"
-                    "<th>&nbsp;</th>"
-                    "<th>IVA = 10%</th>"
-                    "<th>IVA = 21%</th>"
-                    "<th>Sin IVA</th>"
-                    "<th><p style='text-align:center;'>Total</p></th>"
-                "</tr>"
-            "</thead>"
-            "<tbody>"
-                "<tr>"
-                    "<th<'>Importe</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(totalIncomeG10, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(totalIncomeG21, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(totalIncomeGni, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(totalIncomeG10 + totalIncomeG21 + totalIncomeGni, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-                "<tr>"
-                    "<th<'>Base</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(baseG10, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(baseG21, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>-</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(baseG10 + baseG21, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-                "<tr>"
-                    "<th<'>IVA</th>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(ivaG10, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(ivaG21, 'f', 2) + " €</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>-</p>"
-                    "</td>"
-                    "<td>"
-                        "<p style='text-align:right;'>" + QString::number(ivaG10 + ivaG21, 'f', 2) + " €</p>"
-                    "</td>"
-                "</tr>"
-            "</tbody>"
-        "</table>"
-    "</figure>";
+QString Contabilidad::createHtmlSummary(const PeriodFigures &f, const QString &heading)
+{
+    const QString ivaLabel = f.resultadoIva() >= 0.0 ? "Resultado IVA (a ingresar)"
+                                                      : "Resultado IVA (a compensar)";
+    const QString resLabel = f.resultadoPeriodo() >= 0.0 ? "Resultado del periodo (beneficio)"
+                                                         : "Resultado del periodo (p&eacute;rdida)";
+    // Emphasised total rows: subtle accent background + bold value.
+    const QString totalRow = "background-color:#d9e0e7; font-weight:bold;";
 
-    return contabilidadHtmlTable;
+    return
+    "<h3>" + heading + "</h3>"
+    + ReportHtml::tableOpen(true) +
+        "<tr><th>Liquidaci&oacute;n de IVA</th><th style='text-align:right;'>Importe</th></tr>"
+        "<tr><td>IVA repercutido (ingresos)</td>" + euroCell(f.ingIva) + "</tr>"
+        "<tr style='background-color:#f6f7f9;'><td>IVA soportado (gastos)</td>" + euroCell(f.gastosIvaTotal()) + "</tr>"
+        "<tr style='" + totalRow + "'><td>" + ivaLabel + "</td>"
+            "<td style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(f.resultadoIva()) + "</td></tr>"
+        "<tr><td>Base ingresos</td>" + euroCell(f.ingBase) + "</tr>"
+        "<tr style='background-color:#f6f7f9;'><td>Base gastos</td>" + euroCell(f.gastosBaseTotal()) + "</tr>"
+        "<tr style='" + totalRow + "'><td>" + resLabel + "</td>"
+            "<td style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(f.resultadoPeriodo()) + "</td></tr>"
+        "<tr><td>N&uacute;mero de tickets (ingresos)</td><td style='text-align:right;'>" + QString::number(f.ingTickets) + "</td></tr>"
+        "<tr style='background-color:#f6f7f9;'><td>N&uacute;mero de facturas (gastos)</td><td style='text-align:right;'>" + QString::number(f.gasFacturas) + "</td></tr>"
+    "</table>";
 }

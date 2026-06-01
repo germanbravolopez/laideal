@@ -26,6 +26,8 @@ Shared infrastructure:
   src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
+  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format),
+                                      used by Contabilidad and Listado (GenListado)
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate
@@ -76,7 +78,8 @@ Formal supplier invoice entry form. Distinct from receipts.
 Writes to the `facturas` table. Populated from `empresas` and `servicios` tables.
 
 ### Contabilidad (`src/contabilidad/`)
-Generates HTML accounting reports. Three modes: `Mensual`, `Trimestral`, `Anual`.
+Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.
+Per period it prints Ingresos, Gastos and a Resumen block (Liquidación de IVA = IVA repercutido − soportado; Resultado del periodo = base ingresos − base gastos; ticket/invoice counts). The annual mode adds a consolidated summary of the four quarters. Figures are gathered once into a `PeriodFigures` struct; the period date range flows through `periodRange()`. Counts come from `sql_lite::countOperationsBetweenDates()`.
 Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 `revertirOn = true` unlocks a previously locked quarter.
 Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.

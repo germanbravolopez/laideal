@@ -340,6 +340,47 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
     return totalPrice;
 }
 
+int countOperationsBetweenDates(QSqlDatabase &db, const QString &table,
+                                QDate startDate, QDate endDate)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    int count = 0;
+    db.open();
+    QSqlQuery q(db);
+
+    if (table == "ingresos") {
+        // Distinct paid tickets, excluding ANULADA / RECTIFICADA, mirroring the
+        // estado + date filter of totalPriceBetweenDates so the operation count
+        // matches the income total shown alongside it.
+        q.exec("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE (pagado = 'SI') AND "
+               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
+               + endDate.toString("yyyy-MM-dd") + "'))");
+    } else if (table == "gastos") {
+        q.exec("SELECT COUNT(*) FROM gastos WHERE "
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
+               + startDate.toString("yyyy-MM-dd") + "')) AND "
+               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
+               + endDate.toString("yyyy-MM-dd") + "'))");
+    } else {
+        qCritical() << "countOperationsBetweenDates: unsupported table:" << table;
+        db.close();
+        return 0;
+    }
+
+    if (q.isSelect() && q.next())
+        count = q.value(0).toInt();
+    else
+        qWarning() << "countOperationsBetweenDates: query error for table" << table << q.lastError().text();
+
+    db.close();
+    return count;
+}
+
 int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return 0;

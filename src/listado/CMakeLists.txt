@@ -14,6 +14,7 @@ target_link_libraries(listado
     Qt${QT_VERSION_MAJOR}::PrintSupport
     sql_lite
     appsettings
+    reporthtml
     PUBLIC
     tableview
 )

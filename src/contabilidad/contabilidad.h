@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDate>
 
 #define C_MENSUAL    "Mensual"
 #define C_TRIMESTRAL "Trimestral"
@@ -38,14 +39,42 @@ private slots:
     float getTotalIncome(QString table, int iva, int trimForYearConfig);
     void updateLock();
     void writeHtml(QString filename, QString html);
-    QString createHtmlHeader();
-    QString createHtmlTables(int trimForYearConfig);
-    QString createHtmlTableIngresos(int trimForYearConfig);
-    QString createHtmlTableGastos(int trimForYearConfig);
-
 
 private:
     Ui::Contabilidad *ui;
+
+    // All money figures of one accounting period (a quarter, a month, or - when
+    // accumulated across the four quarters - a full year). Computed once per
+    // period so the ingresos/gastos tables and the summary share the same numbers.
+    struct PeriodFigures {
+        double ingImporte = 0.0, ingBase = 0.0, ingIva = 0.0;
+        double gas10Importe = 0.0, gas10Base = 0.0, gas10Iva = 0.0;
+        double gas21Importe = 0.0, gas21Base = 0.0, gas21Iva = 0.0;
+        double gasNiImporte = 0.0;                 // gastos without IVA (base == importe)
+        int ingTickets = 0, gasFacturas = 0;       // operation counts
+
+        double gastosImporteTotal() const { return gas10Importe + gas21Importe + gasNiImporte; }
+        double gastosBaseTotal()    const { return gas10Base + gas21Base + gasNiImporte; }
+        double gastosIvaTotal()     const { return gas10Iva + gas21Iva; }
+        double resultadoIva()       const { return ingIva - gastosIvaTotal(); }   // VAT to settle (modelo 303)
+        double resultadoPeriodo()   const { return ingBase - gastosBaseTotal(); } // taxable result
+
+        void accumulate(const PeriodFigures &o) {
+            ingImporte += o.ingImporte; ingBase += o.ingBase; ingIva += o.ingIva;
+            gas10Importe += o.gas10Importe; gas10Base += o.gas10Base; gas10Iva += o.gas10Iva;
+            gas21Importe += o.gas21Importe; gas21Base += o.gas21Base; gas21Iva += o.gas21Iva;
+            gasNiImporte += o.gasNiImporte;
+            ingTickets += o.ingTickets; gasFacturas += o.gasFacturas;
+        }
+    };
+
+    void periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive);
+    QString periodSubtitle(int trimForYearConfig);
+    PeriodFigures computeFigures(int trimForYearConfig);
+    QString renderSection(const PeriodFigures &f, const QString &summaryHeading);
+    QString createHtmlTableIngresos(const PeriodFigures &f);
+    QString createHtmlTableGastos(const PeriodFigures &f);
+    QString createHtmlSummary(const PeriodFigures &f, const QString &heading);
 };
 
 #endif // CONTABILIDAD_H

@@ -80,6 +80,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
 | Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
+| Shared PDF report scaffolding (style + header + euro format) | `src/reporthtml/reporthtml.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
