@@ -105,13 +105,17 @@ void AddGarment::on_pb_estado_toggled(bool checked)
 void AddGarment::setGarmentPrice()
 {
     if (ui->le_cantidad->text() != "") {
-        float price = ui->le_cantidad->text().toFloat() * readGarmentPrice(db, ui->cb_prenda->currentText(), ui->cb_servicio->currentText());
+        // Normalise comma decimals (Spanish input) before parsing, matching the
+        // save-time replace(",","."). Otherwise a size like "2,6" parses as 0.0,
+        // which here zeros the importe entirely for size-dependent (m2) garments.
+        float price = ui->le_cantidad->text().trimmed().replace(",", ".").toFloat()
+                      * readGarmentPrice(db, ui->cb_prenda->currentText(), ui->cb_servicio->currentText());
         if (price < 0) {
             ui->le_importe->setText("0.00");
         } else {
-            if (ui->le_size->text() != "") {
-                price = ui->le_size->text().toFloat() * price;
-            }
+            const float sizeValue = ui->le_size->text().trimmed().replace(",", ".").toFloat();
+            if (sizeValue != 0.0f)
+                price = sizeValue * price;
             ui->le_importe->setText(QString::number(price, 'f', 2));
         }
     } else {

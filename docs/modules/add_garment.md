@@ -34,9 +34,11 @@ Price is computed reactively on garment, service, quantity, or size change:
 
 ```
 price = quantity * readGarmentPrice(db, garment, service)
-if size != "":
+if size != 0:
     price *= size
 ```
+
+Quantity and size are normalised with `.trimmed().replace(",", ".")` before `toFloat()` — Spanish input often uses a comma decimal (e.g. `2,6` m²), and `QString::toFloat()` is C-locale only, so without normalisation the value parses as `0.0` and the size factor is dropped (here it would zero the importe). This matches the save-time `replace(",",".")` used when binding `:importe` / `:size`. `MainWindow::setGarmentPrice` applies the same normalisation.
 
 ## Notes
 

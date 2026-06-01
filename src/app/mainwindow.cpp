@@ -263,16 +263,21 @@ void MainWindow::setGarmentPrice(int garmentRow,
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setText("");
     if (qntyItem) {
-        float price = qntyItem->text().toFloat() * readGarmentPrice(db, garmentText, serviceText);
+        // Quantity and size may be typed with a comma decimal (Spanish keyboards);
+        // normalise to a dot before parsing, matching how both are stored at save
+        // time (replace(",",".")). Without this a size like "2,6" parses as 0.0 and
+        // the size factor (m2 garments, e.g. cortinas) is silently dropped, so the
+        // importe shown and stored is lower than the printed receipt expects.
+        float price = qntyItem->text().trimmed().replace(",", ".").toFloat()
+                      * readGarmentPrice(db, garmentText, serviceText);
         if (price < 0) {
             price = 0.0;
         } else {
             // Check if any size is filled
             QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
-            if (sizeItem && sizeItem->text() != "" && sizeItem->text().toFloat() != 0.0) {
-                float size = sizeItem->text().toFloat() * price;
-                item->setText(QString::number(size, 'f', 2));
-            }
+            float sizeValue = sizeItem ? sizeItem->text().trimmed().replace(",", ".").toFloat() : 0.0f;
+            if (sizeValue != 0.0f)
+                item->setText(QString::number(sizeValue * price, 'f', 2));
             else
                 item->setText(QString::number(price, 'f', 2));
         }
