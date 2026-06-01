@@ -48,8 +48,7 @@ public:
     void retranslateUi(QMainWindow *Listado);
     void populateTable();
 
-    explicit Listado(QWidget *parent = nullptr);
-    QSqlDatabase db;
+    explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
     QSqlTableModel *model;
     MySortFilterProxyModel *proxyModel;
@@ -65,6 +64,7 @@ private slots:
     void handleDoubleClick(const QModelIndex &index);
 
 private:
+    QSqlDatabase db;
 
 signals:
     void populateClientes();

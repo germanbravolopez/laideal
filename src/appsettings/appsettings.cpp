@@ -6,6 +6,70 @@
 #include <QJsonDocument>
 #include <QDebug>
 
+#ifdef Q_OS_WIN
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <dpapi.h>
+#endif
+
+namespace {
+// Marker for a value encrypted at rest. A stored value without this prefix is
+// treated as legacy plaintext (and re-encrypted on the next launch).
+const QString kEncPrefix = QStringLiteral("dpapi:v1:");
+
+bool isEncrypted(const QString &stored) { return stored.startsWith(kEncPrefix); }
+
+#ifdef Q_OS_WIN
+// Encrypt with Windows DPAPI scoped to the current user (CRYPTPROTECT_UI_FORBIDDEN
+// = no UI). On failure, fall back to returning the plaintext rather than losing the
+// secret - better a working-but-unencrypted key than a broken AEAT connection.
+QString encryptSecret(const QString &plain)
+{
+    if (plain.isEmpty()) return plain;
+    const QByteArray in = plain.toUtf8();
+    DATA_BLOB inBlob{ static_cast<DWORD>(in.size()), reinterpret_cast<BYTE*>(const_cast<char*>(in.constData())) };
+    DATA_BLOB outBlob{ 0, nullptr };
+    if (!CryptProtectData(&inBlob, L"laideal verifactu service key", nullptr, nullptr,
+                          nullptr, CRYPTPROTECT_UI_FORBIDDEN, &outBlob)) {
+        qWarning() << "AppSettings: CryptProtectData failed; storing service key unencrypted";
+        return plain;
+    }
+    const QByteArray cipher(reinterpret_cast<const char*>(outBlob.pbData), static_cast<int>(outBlob.cbData));
+    LocalFree(outBlob.pbData);
+    return kEncPrefix + QString::fromLatin1(cipher.toBase64());
+}
+
+// Decrypt a value produced by encryptSecret. Legacy plaintext (no prefix) is
+// returned unchanged. A decrypt failure (e.g. the file was copied from another
+// Windows user/machine) returns empty so the caller surfaces a clear "no key".
+QString decryptSecret(const QString &stored)
+{
+    if (!isEncrypted(stored)) return stored;
+    const QByteArray cipher = QByteArray::fromBase64(stored.mid(kEncPrefix.size()).toLatin1());
+    if (cipher.isEmpty()) return QString();
+    DATA_BLOB inBlob{ static_cast<DWORD>(cipher.size()), reinterpret_cast<BYTE*>(const_cast<char*>(cipher.constData())) };
+    DATA_BLOB outBlob{ 0, nullptr };
+    if (!CryptUnprotectData(&inBlob, nullptr, nullptr, nullptr, nullptr,
+                            CRYPTPROTECT_UI_FORBIDDEN, &outBlob)) {
+        qWarning() << "AppSettings: CryptUnprotectData failed (key bound to a different Windows user/machine?); clearing field";
+        return QString();
+    }
+    const QString plain = QString::fromUtf8(reinterpret_cast<const char*>(outBlob.pbData), static_cast<int>(outBlob.cbData));
+    LocalFree(outBlob.pbData);
+    return plain;
+}
+#else
+// Non-Windows builds (none shipped) keep the value as-is so the code still compiles.
+QString encryptSecret(const QString &plain) { return plain; }
+QString decryptSecret(const QString &stored) { return isEncrypted(stored) ? stored.mid(kEncPrefix.size()) : stored; }
+#endif
+} // namespace
+
 AppSettings *AppSettings::s_instance = nullptr;
 
 AppSettings *AppSettings::instance()
@@ -34,12 +98,20 @@ void AppSettings::applyDefaults()
         setDbl({"taxes", "iva_rate"}, 21.0);
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
+    if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
+        setBln({"verifactu", "pending_recovery_enabled"}, true);
+    if (verifactuPendingRecoveryFloorDate().isEmpty())
+        setStr({"verifactu", "pending_recovery_floor_date"}, "2026-09-01");
     if (reportsRoot().isEmpty())
         setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
     // Default: opt-in startup check. bln() has a default-fallback parameter,
     // but the key must be persisted so future save() preserves it across upgrades.
     if (!m_data.value("updater").toObject().contains("check_on_startup"))
         setBln({"updater", "check_on_startup"}, true);
+    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives
+    // the directory). Default opt-in.
+    if (!m_data.value("backup").toObject().contains("enabled"))
+        setBln({"backup", "enabled"}, true);
 }
 
 bool AppSettings::load()
@@ -48,6 +120,7 @@ bool AppSettings::load()
 
     if (!file.exists()) {
         migrateFromLegacyFiles();
+        encryptSecretsAtRest();   // a key brought in from ~/.verifactu_key must not land as plaintext
         applyDefaults();
         save();
         qDebug() << "AppSettings: created new settings file at" << m_filePath;
@@ -72,7 +145,12 @@ bool AppSettings::load()
 
     m_data = doc.object();
     migrateLegacyKeys();
+    const bool reEncrypted = encryptSecretsAtRest();
     applyDefaults();
+    // Persist immediately if a legacy plaintext key was just encrypted, so the
+    // plaintext no longer lingers on disk until the next unrelated settings change.
+    if (reEncrypted)
+        save();
     qDebug() << "AppSettings: loaded from" << m_filePath;
     return true;
 }
@@ -183,6 +261,16 @@ void AppSettings::migrateFromLegacyFiles()
     }
 }
 
+bool AppSettings::encryptSecretsAtRest()
+{
+    const QString stored = str({"verifactu", "service_key"});
+    if (stored.isEmpty() || isEncrypted(stored))
+        return false;
+    setStr({"verifactu", "service_key"}, encryptSecret(stored));
+    qDebug() << "AppSettings: encrypted plaintext Verifactu service key at rest (DPAPI)";
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------
@@ -238,17 +326,31 @@ void    AppSettings::setVerifactuNif(const QString &v) { setStr({"verifactu", "n
 QString AppSettings::verifactuName() const       { return str({"verifactu", "company_name"}); }
 void    AppSettings::setVerifactuName(const QString &v) { setStr({"verifactu", "company_name"}, v); }
 
-QString AppSettings::verifactuServiceKey() const { return str({"verifactu", "service_key"}); }
-void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifactu", "service_key"}, v); }
+// Stored encrypted at rest (Windows DPAPI, per-user); callers always see plaintext.
+QString AppSettings::verifactuServiceKey() const { return decryptSecret(str({"verifactu", "service_key"})); }
+void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifactu", "service_key"}, encryptSecret(v)); }
 
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
+
+bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, true); }
+void    AppSettings::setVerifactuPendingRecoveryEnabled(bool v) { setBln({"verifactu", "pending_recovery_enabled"}, v); }
+QString AppSettings::verifactuPendingRecoveryFloorDate() const { return str({"verifactu", "pending_recovery_floor_date"}); }
+void    AppSettings::setVerifactuPendingRecoveryFloorDate(const QString &v) { setStr({"verifactu", "pending_recovery_floor_date"}, v); }
 
 // ---------------------------------------------------------------------------
 // Updater
 // ---------------------------------------------------------------------------
 bool AppSettings::checkUpdatesOnStartup() const    { return bln({"updater", "check_on_startup"}, true); }
 void AppSettings::setCheckUpdatesOnStartup(bool v) { setBln({"updater", "check_on_startup"}, v); }
+
+// ---------------------------------------------------------------------------
+// Backup (Verifactu Req. 4)
+// ---------------------------------------------------------------------------
+bool    AppSettings::backupEnabled() const            { return bln({"backup", "enabled"}, true); }
+void    AppSettings::setBackupEnabled(bool v)         { setBln({"backup", "enabled"}, v); }
+QString AppSettings::backupLastTime() const           { return str({"backup", "last_time"}); }
+void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }
 
 // ---------------------------------------------------------------------------
 // JSON helpers

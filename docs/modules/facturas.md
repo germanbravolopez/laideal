@@ -9,8 +9,7 @@ Formal supplier invoice entry form. Distinct from customer receipts (`ingresos`)
 ## Key interface
 
 ```cpp
-Facturas *ui = new Facturas(this);
-ui->db = db;
+Facturas *ui = new Facturas(db, this);  // db injected via constructor
 ui->populateEmpresas();   // fill supplier combobox from `proveedores`
 ui->populateServicios();  // fill service combobox from `servicios`
 ui->show();

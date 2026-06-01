@@ -14,8 +14,8 @@
 #include <QTextStream>
 #include <QTimer>
 
-Imprimir::Imprimir(QWidget *parent)
-    : QDialog(parent)
+Imprimir::Imprimir(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     setupUi(this);
 }
@@ -62,11 +62,36 @@ void Imprimir::getTicketInfo()
     sqlQueryModel = new QSqlQueryModel;
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-    q.bindValue(":n_recibo", le_n_ticket->text());
+    if (invoiceSeq >= 0) {
+        // verifactu_invoice_seq DEFAULTs to 0 on every row, so a seq filter
+        // alone would also match unpaid rows of the same ticket. Restrict
+        // to paid rows so a seq=0 payment event doesn't pull in still-unpaid
+        // garments (e.g. PayDialog event 0 under disabled Verifactu).
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
+                  "AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":seq", invoiceSeq);
+    } else {
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", le_n_ticket->text());
+    }
     q.exec();
     sqlQueryModel->setQuery(std::move(q));
     db.close();
+}
+
+QString Imprimir::displayInvoiceId() const
+{
+    if (!sqlQueryModel) return le_n_ticket->text();
+    // Scan for the first non-empty literal: row 0 may be an unpaid row of a
+    // multi-event ticket and have invoice_id empty, while a later paid row
+    // carries the real "<n>-<seq>" string AEAT has on record.
+    for (int r = 0; r < sqlQueryModel->rowCount(); ++r) {
+        const QString id = sqlQueryModel->data(
+            sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
+        if (!id.isEmpty()) return id;
+    }
+    return le_n_ticket->text();
 }
 
 bool Imprimir::checkTicketPaid(int row)
@@ -118,7 +143,10 @@ QPixmap Imprimir::resolveQrCode()
     if (!hasCsv || anyBlocking)
         return QPixmap();
 
-    QString invoiceNumber = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_N_RECIBO)).toString();
+    // Prefer the literal AEAT InvoiceID stored at submit time so the QR matches
+    // exactly what AEAT has on record (legacy 8.0-8.4 rows have it empty and we
+    // fall back to bare n_recibo - same string they were submitted under).
+    QString invoiceNumber = displayInvoiceId();
     QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
     QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
     if (!invoiceDate.isValid())
@@ -239,7 +267,7 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
     QXlsx::Format formatBoldRightAlign;
     formatBoldRightAlign.setFontBold(true);
     formatBoldRightAlign.setHorizontalAlignment(QXlsx::Format::AlignRight);
-    excel.write(row, 1, QString("Nº: " + le_n_ticket->text()), formatBoldRightAlign);
+    excel.write(row, 1, QString("Nº: " + displayInvoiceId()), formatBoldRightAlign);
     row++;
     // Client data
     excel.mergeCells("A" + QString::number(row) + ":C" + QString::number(row));
@@ -400,8 +428,11 @@ void Imprimir::createTicketExcel(bool copyForClient, bool addPayedInfo)
         excel.write(row, 1, QString("(Copia para el establecimiento)"));
     }
     row ++;
-    // Insert Verifactu QR code at the bottom
-    QPixmap qr = resolveQrCode();
+    // Insert Verifactu QR code at the bottom - only on facturas. Recibos are
+    // claim tickets, not tax documents: they carry no Verifactu metadata, so
+    // a QR would mislead the customer into thinking the receipt was submitted
+    // to AEAT.
+    QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
         QImage qrImg = qr.scaled(140, 140, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
         excel.insertImage(row, 1, qrImg);
@@ -534,37 +565,108 @@ void Imprimir::printTicket()
 
 void Imprimir::on_bb_ok_cancel_accepted()
 {
-    if (le_n_ticket->text() == selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
-        getTicketInfo();
-        if (isRecibo || !isRecibo && checkAnyItemPaid()) {
-            createTicketExcel(true, false);
-            if (AppSettings::instance()->enablePrinting()) {
-                printTicket();
-            }
-            if (isRecibo) {
-                int resp = QMessageBox::question(this, "Copia establecimiento",
-                                                 "¿Desea copia para el establecimiento?",
-                                                 QMessageBox::Yes | QMessageBox::No,
-                                                 QMessageBox::Yes);
-                if (resp == QMessageBox::Yes) {
-                    createTicketExcel(false, false);
-                    if (AppSettings::instance()->enablePrinting()) {
-                        printTicket();
-                    }
-                }
-            }
-        } else if (!isRecibo)
-            QMessageBox::information(this, "Imprimir",
-                                     "No hay ninguna prenda pagada en el recibo " + le_n_ticket->text() + ".",
-                                     QMessageBox::Ok,
-                                     QMessageBox::Ok);
-    } else {
+    if (le_n_ticket->text() != selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
         QMessageBox::information(this, "Imprimir",
                               "El número de recibo " + le_n_ticket->text() + " no se ha encontrado en la base de datos.\n"
                               "Utilizar otro número o buscarlo en la lista de ingresos.",
                               QMessageBox::Ok,
                               QMessageBox::Ok);
+        return;
     }
+
+    // Factura path: enumerate the (seq, invoice_id) pairs that have actually
+    // been submitted to AEAT for this n_recibo. A multi-seq ticket cannot be
+    // printed as one factura because there is no AEAT submission for the bare
+    // <n_recibo> covering the whole. A single-seq ticket - including legacy
+    // 8.0-8.4 tickets where every row has seq=0 and an empty invoice_id - is
+    // scoped to that seq so getTicketInfo filters out leftover unpaid rows
+    // and the printed Nº matches what AEAT has on record.
+    QList<QPair<int, QString>> events; // (seq, literal invoice_id; empty = bare n_recibo / legacy)
+    if (!isRecibo) {
+        db.open();
+        QSqlQuery sq(db);
+        sq.prepare("SELECT verifactu_invoice_seq, "
+                   "       COALESCE(MAX(verifactu_invoice_id), '') "
+                   "FROM ingresos "
+                   "WHERE n_recibo = :n AND verifactu_estado IS NOT NULL "
+                   "AND verifactu_estado != '' "
+                   "GROUP BY verifactu_invoice_seq "
+                   "ORDER BY verifactu_invoice_seq");
+        sq.bindValue(":n", le_n_ticket->text());
+        if (sq.exec()) {
+            while (sq.next())
+                events.append({ sq.value(0).toInt(), sq.value(1).toString() });
+        }
+        db.close();
+    }
+
+    auto labelFor = [this](const QPair<int, QString> &ev) {
+        // Authoritative when set: literal column matches what AEAT received.
+        if (!ev.second.isEmpty()) return ev.second;
+        // Empty column + seq=0: legacy 8.0-8.4 bare-n_recibo submit.
+        if (ev.first == 0) return le_n_ticket->text();
+        // Empty column + seq>0: PayDialog event whose AEAT submit failed (or
+        // landed on a build before Phase G wrote invoice_id). Best effort -
+        // the format AEAT would have if the submit had succeeded.
+        return QString("%1-%2").arg(le_n_ticket->text()).arg(ev.first);
+    };
+
+    if (events.size() > 1) {
+        QStringList options;
+        for (const auto &ev : events)
+            options << labelFor(ev);
+        const QString allOption = tr("Imprimir todas");
+        options << allOption;
+        bool ok = false;
+        const QString choice = QInputDialog::getItem(this, tr("Múltiples pagos parciales"),
+            tr("Este ticket tiene %1 facturas distintas en AEAT.\n¿Cuál imprimir?").arg(events.size()),
+            options, options.size() - 1, /*editable=*/false, &ok);
+        if (!ok) return;
+
+        QList<QPair<int, QString>> toPrint;
+        if (choice == allOption) {
+            toPrint = events;
+        } else {
+            toPrint << events[options.indexOf(choice)];
+        }
+        for (const auto &ev : toPrint) {
+            invoiceSeq = ev.first;
+            getTicketInfo();
+            createTicketExcel(/*copyForClient=*/true, /*addPayedInfo=*/false);
+            if (AppSettings::instance()->enablePrinting())
+                printTicket();
+        }
+        return;
+    }
+
+    // Single-seq factura: scope to the only seq so getTicketInfo filters out
+    // any leftover unpaid rows and verifactu_invoice_id resolves from a paid
+    // row instead of row 0 (which may be unpaid).
+    if (!isRecibo && events.size() == 1)
+        invoiceSeq = events.first().first;
+    getTicketInfo();
+    if (isRecibo || (!isRecibo && checkAnyItemPaid())) {
+        createTicketExcel(true, false);
+        if (AppSettings::instance()->enablePrinting()) {
+            printTicket();
+        }
+        if (isRecibo) {
+            int resp = QMessageBox::question(this, "Copia establecimiento",
+                                             "¿Desea copia para el establecimiento?",
+                                             QMessageBox::Yes | QMessageBox::No,
+                                             QMessageBox::Yes);
+            if (resp == QMessageBox::Yes) {
+                createTicketExcel(false, false);
+                if (AppSettings::instance()->enablePrinting()) {
+                    printTicket();
+                }
+            }
+        }
+    } else if (!isRecibo)
+        QMessageBox::information(this, "Imprimir",
+                                 "No hay ninguna prenda pagada en el recibo " + le_n_ticket->text() + ".",
+                                 QMessageBox::Ok,
+                                 QMessageBox::Ok);
 }
 
 void Imprimir::on_bb_ok_cancel_rejected()

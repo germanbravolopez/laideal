@@ -53,6 +53,7 @@ docs/
 | [modules/contabilidad.md](./modules/contabilidad.md) | Accounting report modes and period locking |
 | [modules/imprimir.md](./modules/imprimir.md) | Excel/print flow and layout modes |
 | [modules/add_garment.md](./modules/add_garment.md) | Add-garment workflow and validation |
+| [modules/backup.md](./modules/backup.md) | Automated DB snapshots (Verifactu Req. 4): VACUUM INTO + integrity check + retention contract |
 
 ### Verifactu — AEAT digital invoicing
 

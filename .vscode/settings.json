@@ -1,0 +1,22 @@
+{
+    "//": "VSCode CMake Tools settings. The Qt + MinGW + Ninja toolchain that release.ps1 prepends is mirrored here via cmake.environment so the extension can configure/build without a pre-sourced shell.",
+
+    "cmake.generator": "Ninja",
+    "cmake.buildDirectory": "${workspaceFolder}/build-debug",
+    "cmake.preferredGenerators": ["Ninja"],
+
+    "cmake.environment": {
+        "PATH": "C:\\Qt\\Tools\\Ninja;C:\\Qt\\Tools\\CMake_64\\bin;C:\\Qt\\Tools\\mingw1120_64\\bin;C:\\Qt\\6.4.3\\mingw_64\\bin;${env:PATH}"
+    },
+
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.4.3/mingw_64",
+        "CMAKE_BUILD_TYPE": "Debug"
+    },
+
+    "//launchTarget": "Default target the green Run/Debug button drives. Matches the executable produced by src/app/CMakeLists.txt.",
+    "cmake.launchTargetName": "laideal",
+    "cmake.debugConfig": {
+        "console": "integratedTerminal"
+    }
+}

@@ -31,16 +31,28 @@ bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QS
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
 float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
+// Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
+// "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
+int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
-void        updateLockInIngresos(QSqlDatabase &db, int value, int month, int year);
+// Set edit_lock = value on both ingresos and gastos rows whose date falls in the
+// given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
+void        updateLockForMonth(QSqlDatabase &db, int value, int month, int year);
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
-// Patch an existing ingresos row with the AEAT reply (CSV, timestamp, estado, error,
-// QR URL, signed XML, hash). Used by the async submit handlers in MainWindow and
-// RecogPrendas once Verifactu finishes. Matches WHERE n_recibo = ticketNum.
+// Patch the rows of (n_recibo, verifactu_invoice_seq) with the AEAT reply
+// (CSV, timestamp, estado, error, QR URL, signed XML, hash, invoice_id).
+// seq=0 binds invoice_id=ticketNum (save-time submit format); seq>0 binds
+// invoice_id="<ticketNum>-<seq>" (PayDialog format). The seq filter prevents
+// a retry of the save-time submit from clobbering later PayDialog rows.
 void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
-                                        const VerifactuResult &result);
+                                        const VerifactuResult &result, int seq = 0);
+
+// Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
+// only PayDialog event (Verifactu disabled, no estado written) still
+// increments the seq for the next event.
+int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
 
 #endif // SQL_LITE_H

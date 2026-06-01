@@ -12,10 +12,10 @@
 #include <QRegularExpression>
 #include <QPointer>
 
-VerifactuManager::VerifactuManager(const QString &configPath, QObject *parent)
+VerifactuManager::VerifactuManager(QObject *parent)
     : QObject(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
 {
-    m_config = new VerifactuConfig(configPath);
+    m_config = new VerifactuConfig();
     m_networkManager = new QNetworkAccessManager(this);
 }
 

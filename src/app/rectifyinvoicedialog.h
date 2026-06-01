@@ -25,9 +25,8 @@ class RectifyInvoiceDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit RectifyInvoiceDialog(QWidget *parent = nullptr);
+    explicit RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent = nullptr);
 
-    QSqlDatabase db;
     VerifactuIntegration *m_verifactu = nullptr;
 
 private slots:
@@ -77,6 +76,8 @@ private:
     QDate   m_newInvoiceDate;
     double  m_submittedAmount = 0.0;    // signed for I, full corrected for S
     bool    m_submittedIsSubstitution = false;
+
+    QSqlDatabase db;
 };
 
 #endif // RECTIFYINVOICEDIALOG_H

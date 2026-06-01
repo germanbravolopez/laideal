@@ -18,6 +18,7 @@
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
 #include "updaterdialog.h"
+#include "pendingsubmitsdialog.h"
 #include "version.h"
 #include <QTimer>
 #include <QEventLoop>
@@ -59,6 +60,44 @@ MainWindow::MainWindow(QWidget *parent)
             m_updater->checkForUpdates(/*silentOnNoUpdate=*/true);
         });
     }
+
+    // Startup recovery for Verifactu submissions that were in flight when the
+    // app last closed (verifactu_estado='PENDIENTE' with no matching reqId in
+    // memory after a restart). The dialog scans for surviving PENDIENTE rows
+    // and lets the operator decide per ticket; deferred 4s so it lands AFTER
+    // the backup/update prompts have settled.
+    QTimer::singleShot(4000, this, [this]() {
+        auto *dlg = new PendingSubmitsDialog(db, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        if (!dlg->loadPending()) {
+            dlg->deleteLater();
+            return;
+        }
+        connect(dlg, &PendingSubmitsDialog::retryRequested,
+                this, [this](const QString &ticketNum, const QDate &invoiceDate, double totalAmount) {
+            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+        });
+        dlg->open();
+    });
+
+    // Verifactu Req. 4: trigger a backup at startup once per 24h. Deferred so
+    // it doesn't block the first paint of the window. Silent on success - the
+    // operator only sees a message if the backup fails (since the regulatory
+    // requirement is durable storage, a failed snapshot is worth surfacing).
+    m_backupManager = new BackupManager(this);
+    if (m_backupManager->needsBackup()) {
+        QTimer::singleShot(3000, this, [this]() {
+            const auto res = m_backupManager->performBackup();
+            if (!res.success) {
+                QMessageBox::warning(this, tr("Copia de seguridad"),
+                                     tr("No se pudo crear la copia automática:\n%1")
+                                         .arg(res.errorMessage));
+            } else {
+                statusBar()->showMessage(
+                    tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
+            }
+        });
+    }
 }
 
 MainWindow::~MainWindow()
@@ -83,7 +122,7 @@ void MainWindow::mainwindowInitialSettings()
                 return;
             }
             VerifactuManager mgr;
-            mgr.getConfig()->setEmitterData(nif, name, name);
+            mgr.getConfig()->setEmitterData(nif, name);
             mgr.getConfig()->setServiceKey(serviceKey);
             mgr.getConfig()->setEnvironment(production
                 ? VerifactuConfig::PRODUCTION
@@ -224,16 +263,21 @@ void MainWindow::setGarmentPrice(int garmentRow,
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setText("");
     if (qntyItem) {
-        float price = qntyItem->text().toFloat() * readGarmentPrice(db, garmentText, serviceText);
+        // Quantity and size may be typed with a comma decimal (Spanish keyboards);
+        // normalise to a dot before parsing, matching how both are stored at save
+        // time (replace(",",".")). Without this a size like "2,6" parses as 0.0 and
+        // the size factor (m2 garments, e.g. cortinas) is silently dropped, so the
+        // importe shown and stored is lower than the printed receipt expects.
+        float price = qntyItem->text().trimmed().replace(",", ".").toFloat()
+                      * readGarmentPrice(db, garmentText, serviceText);
         if (price < 0) {
             price = 0.0;
         } else {
             // Check if any size is filled
             QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
-            if (sizeItem && sizeItem->text() != "" && sizeItem->text().toFloat() != 0.0) {
-                float size = sizeItem->text().toFloat() * price;
-                item->setText(QString::number(size, 'f', 2));
-            }
+            float sizeValue = sizeItem ? sizeItem->text().trimmed().replace(",", ".").toFloat() : 0.0f;
+            if (sizeValue != 0.0f)
+                item->setText(QString::number(sizeValue * price, 'f', 2));
             else
                 item->setText(QString::number(price, 'f', 2));
         }
@@ -501,8 +545,7 @@ void MainWindow::printRecibo()
     // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
     // given a reprint via RecogPrendas after AEAT replies.
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -519,8 +562,7 @@ void MainWindow::printRecibo()
 void MainWindow::printFra(const QPixmap &qrCode)
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -655,10 +697,8 @@ void MainWindow::on_actionIngresos_triggered()
 {
     QString title = "Ingresos";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "ingresos";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "ingresos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -671,10 +711,8 @@ void MainWindow::on_actionGastos_triggered()
 {
     QString title = "Gastos";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "gastos";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "gastos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -693,10 +731,8 @@ void MainWindow::on_actionListado_de_prendas_triggered()
 {
     QString title = "Listado de prendas";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "prendas";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "prendas";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -714,10 +750,8 @@ void MainWindow::on_actionListado_de_clientes_triggered()
 {
     QString title = "Listado de clientes";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "clientes";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "clientes";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -730,10 +764,8 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
 {
     QString title = "Listado de proveedores";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "proveedores";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "proveedores";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -746,10 +778,8 @@ void MainWindow::on_actionListado_de_servicios_triggered()
 {
     QString title = "Listado de servicios";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "servicios";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "servicios";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -761,8 +791,7 @@ void MainWindow::on_actionListado_de_servicios_triggered()
 void MainWindow::on_actionRecogida_de_prendas_triggered()
 {
     RecogPrendas *ui_recog;
-    ui_recog = new RecogPrendas(this);
-    ui_recog->db = db;
+    ui_recog = new RecogPrendas(db, this);
     ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
@@ -771,8 +800,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
 void MainWindow::on_actionRecibo_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -783,8 +811,7 @@ void MainWindow::on_actionRecibo_triggered()
 void MainWindow::on_actionFactura_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -795,8 +822,7 @@ void MainWindow::on_actionFactura_triggered()
 void MainWindow::on_actionFactura_completa_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = true;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -807,16 +833,14 @@ void MainWindow::on_actionFactura_completa_triggered()
 void MainWindow::on_actionGenerar_contabilidad_triggered()
 {
     Contabilidad *ui_contabilidad;
-    ui_contabilidad = new Contabilidad(this);
-    ui_contabilidad->db = db;
+    ui_contabilidad = new Contabilidad(db, this);
     ui_contabilidad->show();
 }
 
 void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
-    ui_rev_cont = new Contabilidad(this);
-    ui_rev_cont->db = db;
+    ui_rev_cont = new Contabilidad(db, this);
     ui_rev_cont->setWindowTitle("Revertir Contabilidad");
     ui_rev_cont->revertirOn = true;
     ui_rev_cont->resetAllContents();
@@ -826,8 +850,7 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
 void MainWindow::on_actionFormulario_facturas_triggered()
 {
     Facturas *ui_facturas;
-    ui_facturas = new Facturas(this);
-    ui_facturas->db = db;
+    ui_facturas = new Facturas(db, this);
     ui_facturas->populateEmpresas();
     ui_facturas->populateServicios();
     ui_facturas->show();
@@ -862,95 +885,115 @@ void MainWindow::cleanDatabase(bool print)
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
-    ui_add_garment = new AddGarment(this);
-    ui_add_garment->db = db;
+    ui_add_garment = new AddGarment(db, this);
     ui_add_garment->show();
 }
 
 void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
 {
-    // Change the cursor to a loading icon
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Perform time consuming process
-    int cnt = 0;
     db.open();
-    QSqlQuery q;
-    if (q.exec("SELECT * FROM ingresos")) {
-        while (q.next()) {
-            if (q.value(INGRESOS_COL_HASH).toString() == "") {
-                QString nRecibo = q.value(INGRESOS_COL_N_RECIBO).toString();
-                QString cliente = q.value(INGRESOS_COL_CLIENTE).toString();
-                QString fechaRecepcion = q.value(INGRESOS_COL_FECHA_RECEPCION).toString();
-                QString fechaPago = q.value(INGRESOS_COL_FECHA_PAGO).toString();
-                QString fechaRecogida = q.value(INGRESOS_COL_FECHA_RECOGIDA).toString();
-                QString importe = q.value(INGRESOS_COL_IMPORTE).toString();
-                QString pagado = q.value(INGRESOS_COL_PAGADO).toString();
-                QString estado = q.value(INGRESOS_COL_ESTADO).toString();
-                QString cantidad = q.value(INGRESOS_COL_CANTIDAD).toString();
-                QString prenda = q.value(INGRESOS_COL_PRENDA).toString();
-                QString size = q.value(INGRESOS_COL_SIZE).toString();
-                QString servicio = q.value(INGRESOS_COL_SERVICIO).toString();
-                QString observaciones = q.value(INGRESOS_COL_OBSERVACIONES).toString();
-                QString editLock = q.value(INGRESOS_COL_EDIT_LOCK).toString();
 
-                QSqlQuery q1;
-                QString newHash = genHash16();
-
-                q1.prepare("UPDATE ingresos SET hash = :newHash WHERE n_recibo = :n_recibo AND "
-                          "cliente = :cliente AND fecha_recepcion = :fecha_recepcion AND fecha_pago = :fecha_pago AND "
-                          "fecha_recogida = :fecha_recogida AND importe = :importe AND pagado = :pagado AND estado = :estado AND "
-                          "cantidad = :cantidad AND prenda = :prenda AND size = :size AND servicio = :servicio AND "
-                          "observaciones = :observaciones AND edit_lock = :edit_lock");
-                q1.bindValue(":newHash", newHash);
-                q1.bindValue(":n_recibo", nRecibo);
-                q1.bindValue(":cliente", cliente);
-                q1.bindValue(":fecha_recepcion", fechaRecepcion);
-                q1.bindValue(":fecha_pago", fechaPago);
-                q1.bindValue(":fecha_recogida", fechaRecogida);
-                q1.bindValue(":importe", importe);
-                q1.bindValue(":pagado", pagado);
-                q1.bindValue(":estado", estado);
-                q1.bindValue(":cantidad", cantidad);
-                q1.bindValue(":prenda", prenda);
-                q1.bindValue(":size", size);
-                q1.bindValue(":servicio", servicio);
-                q1.bindValue(":observaciones", observaciones);
-                q1.bindValue(":edit_lock", editLock);
-                q1.exec();
-
-                cnt++;
+    // Phase A: fill empty / NULL hashes. UPDATE keyed on rowid (SQLite's
+    // intrinsic per-row identifier) instead of the all-fields equality used
+    // by the legacy version, which could stamp two rows with the same hash
+    // when ticket lines happened to be identical across every column.
+    int filled = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT rowid FROM ingresos WHERE hash IS NULL OR hash = ''")) {
+            QList<qint64> emptyRowids;
+            while (q.next())
+                emptyRowids.append(q.value(0).toLongLong());
+            QSqlQuery u(db);
+            u.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+            for (qint64 rid : emptyRowids) {
+                u.bindValue(":h",   genHash16());
+                u.bindValue(":rid", rid);
+                if (u.exec()) ++filled;
+                else qWarning() << "Crear hash: fill UPDATE failed for rowid" << rid
+                                 << "-" << u.lastError().text();
             }
+        } else {
+            qWarning() << "Crear hash: SELECT empties failed -" << q.lastError().text();
         }
     }
 
-    // Check how many tickets contains duplicated hashes
-    QList<int> duplicatedTickets;
-    if (q.exec("SELECT n_recibo, COUNT(*) FROM ingresos GROUP BY hash HAVING COUNT(*) > 1")) {
-        while (q.next()) {
-            duplicatedTickets.append(q.value(0).toInt());
+    // Phase B: resolve collisions (legacy data from the pre-QUuid genHash16
+    // era). For every hash shared by >1 row, keep the first row's hash and
+    // regenerate the rest with the new UUID-based hash so the column ends
+    // up globally unique.
+    int regenerated = 0;
+    int remainingGroups = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT hash FROM ingresos "
+                   "WHERE hash IS NOT NULL AND hash != '' "
+                   "GROUP BY hash HAVING COUNT(*) > 1")) {
+            QStringList collidingHashes;
+            while (q.next())
+                collidingHashes.append(q.value(0).toString());
+
+            QSqlQuery picker(db);
+            QSqlQuery upd(db);
+            upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+            for (const QString &h : collidingHashes) {
+                picker.prepare("SELECT rowid FROM ingresos WHERE hash = :h ORDER BY rowid");
+                picker.bindValue(":h", h);
+                if (!picker.exec()) {
+                    qWarning() << "Crear hash: group SELECT failed for hash" << h
+                               << "-" << picker.lastError().text();
+                    continue;
+                }
+                bool skipFirst = true;
+                while (picker.next()) {
+                    if (skipFirst) { skipFirst = false; continue; }
+                    upd.bindValue(":h",   genHash16());
+                    upd.bindValue(":rid", picker.value(0).toLongLong());
+                    if (upd.exec()) ++regenerated;
+                    else qWarning() << "Crear hash: regen UPDATE failed for rowid"
+                                     << picker.value(0) << "-" << upd.lastError().text();
+                }
+            }
+            remainingGroups = collidingHashes.size(); // before regen
+        } else {
+            qWarning() << "Crear hash: collision SELECT failed -" << q.lastError().text();
         }
     }
-    std::sort(duplicatedTickets.begin(), duplicatedTickets.end());
-    QStringList duplicatedTicketsS;
-    for (const int& num : duplicatedTickets) {
-        duplicatedTicketsS.append(QString::number(num));
-    }
 
-    // Restore the cursor to default
+    // Phase C: defensive re-check - after Phase B the column should be unique;
+    // anything still in there indicates a logic error worth surfacing.
+    int stillColliding = 0;
+    {
+        QSqlQuery q(db);
+        if (q.exec("SELECT COUNT(*) FROM (SELECT hash FROM ingresos "
+                   "WHERE hash IS NOT NULL AND hash != '' "
+                   "GROUP BY hash HAVING COUNT(*) > 1)")) {
+            if (q.next()) stillColliding = q.value(0).toInt();
+        }
+    }
+    db.close();
+
     QApplication::restoreOverrideCursor();
 
-    if (duplicatedTickets.isEmpty()) {
-        qDebug() << "No duplicated hashes found in ingresos after update.";
-        QMessageBox::information(this, "Crear hash en ingresos",
-                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
+    qDebug() << "Crear hash: filled=" << filled
+             << "collision_groups=" << remainingGroups
+             << "regenerated=" << regenerated
+             << "still_colliding_groups=" << stillColliding;
+
+    QString body = tr("Se actualizó la tabla ingresos:\n"
+                      "  • %1 filas con hash vacío rellenadas\n"
+                      "  • %2 grupos de hash duplicado detectados\n"
+                      "  • %3 filas regeneradas para resolverlos")
+                       .arg(filled).arg(remainingGroups).arg(regenerated);
+    if (stillColliding > 0) {
+        body += tr("\n\nAtención: quedan %1 grupos colisionando tras la "
+                   "regeneración. Vuelve a ejecutar la acción; si persiste, "
+                   "consulta el log.").arg(stillColliding);
+        QMessageBox::warning(this, tr("Crear hash en ingresos"), body);
     } else {
-        qWarning() << "Duplicated hashes found in ingresos after update for tickets:" << duplicatedTicketsS;
-        QMessageBox::warning(this, "Crear hash en ingresos",
-                                 "Se han actualizado correctamente " + QString::number(cnt) + " filas de la tabla ingresos.\n\n"
-                                 "Los siguientes recibos tienen hashes duplicados: " + duplicatedTicketsS.join(", "),
-                                 QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::information(this, tr("Crear hash en ingresos"), body);
     }
 }
 
@@ -964,8 +1007,7 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
                              QMessageBox::Ok);
         return;
     }
-    CancelInvoiceDialog dlg(this);
-    dlg.db = db;
+    CancelInvoiceDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
 }
@@ -982,8 +1024,7 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
                              QMessageBox::Ok);
         return;
     }
-    RectifyInvoiceDialog dlg(this);
-    dlg.db = db;
+    RectifyInvoiceDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
     // Rectificativa eagerly INSERTs its row (claims the next n_recibo) on submit,
@@ -1175,7 +1216,13 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
                 "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
                 "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
                 "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
-                "en el momento de su generación.</p>")
+                "en el momento de su generación.</p>"
+                "<p>Que el sistema se utiliza en una instalación <b>monoperador</b>: existe un único "
+                "usuario operativo, identificado de forma implícita por la sesión de Windows del puesto "
+                "en el que se ejecuta. Bajo este alcance se da por cumplido el requisito de trazabilidad "
+                "por usuario establecido en el artículo 8.1 del Real Decreto 1007/2023. La incorporación "
+                "de un segundo operador exigirá habilitar previamente la identificación individual por "
+                "evento de facturación.</p>")
             .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
                  address.toHtmlEscaped(), city.toHtmlEscaped(),
                  software, version));
@@ -1256,4 +1303,21 @@ void MainWindow::onUpdaterCheckFailed(const QString &error)
     }
     QMessageBox::warning(this, tr("Comprobación fallida"),
         tr("No se pudo comprobar si hay actualizaciones:\n%1").arg(error));
+}
+
+void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
+{
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const auto res = m_backupManager->performBackup();
+    QApplication::restoreOverrideCursor();
+
+    if (!res.success) {
+        QMessageBox::warning(this, tr("Copia de seguridad"),
+                             tr("No se pudo crear la copia:\n%1").arg(res.errorMessage));
+        return;
+    }
+    QMessageBox::information(this, tr("Copia de seguridad"),
+        tr("Copia creada correctamente:\n%1\n\nTamaño: %2 KB")
+            .arg(res.backupPath)
+            .arg(res.bytesWritten / 1024));
 }

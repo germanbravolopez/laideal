@@ -13,7 +13,7 @@ VerifactuIntegration::~VerifactuIntegration()
 
 bool VerifactuIntegration::initialize()
 {
-    m_manager = new VerifactuManager(QString(), this);
+    m_manager = new VerifactuManager(this);
 
     if (!loadEmitterConfiguration()) {
         m_lastError = "No se pudo cargar la configuración del emisor";
@@ -174,20 +174,14 @@ bool VerifactuIntegration::loadEmitterConfiguration()
         return false;
     }
 
-    m_manager->getConfig()->setEmitterData(emitterNIF, emitterName, emitterName);
-    // setSystemData(name, version, developer) - the developer arg goes only to
-    // VerifactuConfig::m_systemDeveloper which has no live reader (see dead_code_report).
-    // The producer info that actually matters legally is in the Acerca de Verifactu
-    // dialog, sourced from AppSettings.
-    m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION), "LAIDEAL");
+    m_manager->getConfig()->setEmitterData(emitterNIF, emitterName);
+    m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION));
     m_manager->getConfig()->setServiceKey(serviceKey);
 
     VerifactuConfig::Environment env = settings->verifactuProduction()
         ? VerifactuConfig::PRODUCTION
         : VerifactuConfig::TESTING;
     m_manager->getConfig()->setEnvironment(env);
-
-    m_manager->getConfig()->save();
 
     if (!m_manager->getConfig()->isValid()) {
         qCritical() << "Verifactu configuration is invalid:" << m_manager->getConfig()->getValidationError();

@@ -1,5 +1,13 @@
 # La Ideal
 
+[![CI](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml)
+[![Release](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/germanbravolopez/laideal)](https://github.com/germanbravolopez/laideal/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/germanbravolopez/laideal/total)](https://github.com/germanbravolopez/laideal/releases)
+![Top language](https://img.shields.io/github/languages/top/germanbravolopez/laideal)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
+[![License](https://img.shields.io/badge/license-Proprietary-red)](./License.txt)
+
 Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt** (5.15+/6.x) on Windows, using a local SQLite database.
 
 ---
@@ -46,6 +54,12 @@ cmake --build build
 The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
 
 > The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
+
+### Debug in VSCode
+
+The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions. Open the workspace and press **F5**: the build task compiles `laideal` in `build-debug/` (CMAKE_BUILD_TYPE=Debug, separate from the Release `build/` so the two coexist), then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. Default launch config is **Debug laideal (MinGW gdb)**; the alternative **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
+
+If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
 
 ---
 
@@ -135,7 +149,7 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    git tag -a X.Y -m "Release X.Y"
    git push origin X.Y
    ```
-6. Publish on GitHub - see [Release procedure](#release-procedure) below for the artifacts and the GitHub publish step.
+6. **Pushing the tag in step 5 is the publish trigger** - `.github/workflows/release.yml` runs on any `X.Y` tag and builds, packages, and publishes the GitHub Release automatically (artifacts + notes). Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
 
 After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
 
@@ -143,9 +157,22 @@ After publishing, the working branch can either continue (rename + reuse for the
 
 ## Release procedure
 
-This section covers only the **build and installer step**. The end-to-end flow (branching, version bump, merge, tag, push, GitHub publish) lives in [Development workflow](#development-workflow) above.
+This section covers the **build, installer, and publish step**. The end-to-end flow (branching, version bump, merge, tag, push) lives in [Development workflow](#development-workflow) above.
 
-The release pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1`. No Qt cmd prompt needed - the script loads the Qt environment itself.
+### Automated (default): push the tag, CI does the rest
+
+`.github/workflows/release.yml` runs on every `X.Y` tag push and reproduces the full pipeline on a `windows-latest` runner, then publishes the GitHub Release itself:
+
+1. Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
+2. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, which auto-installs the matching MinGW 11.2.0 toolchain), Ninja, and Inno Setup 6.
+3. Configure -> build (Release) -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
+4. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+
+So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
+
+### Local fallback: `releases\release.ps1`
+
+The same pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1` for offline builds or when you need the artifacts without publishing. No Qt cmd prompt needed - the script loads the Qt environment itself. It does **not** publish to GitHub; attach the artifacts manually (see the `gh release create` snippet at the end of this section).
 
 **Release toolchain** (pinned by `releases\release.ps1`):
 
@@ -173,7 +200,7 @@ Artifacts:
 - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
 - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
 
-These are what you attach to the GitHub release (step 6 of Development workflow). With the [GitHub CLI](https://cli.github.com/) installed, the publish step is:
+When using this local fallback, attach these manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what `release.yml` runs:
 
 ```powershell
 $ver = 'X.Y'

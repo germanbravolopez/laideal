@@ -53,6 +53,8 @@ private:
     QLineEdit *m_vName;
     QLineEdit *m_vKey;
     QCheckBox *m_vProduction;
+    QCheckBox *m_vPendingRecoveryEnabled;
+    class QDateEdit *m_vPendingRecoveryFloor;
 };
 
 #endif // SETTINGSDIALOG_H

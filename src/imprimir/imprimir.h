@@ -25,18 +25,24 @@ class Imprimir : public QDialog
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
     QSqlQueryModel *sqlQueryModel;
     bool isRecibo, isCompleteInvoice;
     VerifactuIntegration *verifactuIntegration = nullptr;
     QPixmap qrCode;
-    Imprimir(QWidget *parent = nullptr);
+    // -1 (default): print every row of n_recibo (legacy / full-ticket flow).
+    // >=0: scope getTicketInfo to rows with verifactu_invoice_seq = invoiceSeq,
+    // so partial-payment events (8.5+) print only the garments charged that time.
+    int invoiceSeq = -1;
+    Imprimir(const QSqlDatabase &database, QWidget *parent = nullptr);
 
     // Public functions
     void getTicketInfo();
     void createTicketExcel(bool copyForClient, bool addPayedInfo);
     void printTicket();
     QPixmap resolveQrCode();
+    // Literal AEAT InvoiceID for the loaded rows: first non-empty
+    // verifactu_invoice_id, else bare n_recibo (legacy / never submitted).
+    QString displayInvoiceId() const;
 
     // Setup Dialog in code
     QFormLayout *formLayout;
@@ -53,7 +59,7 @@ private slots:
     void on_bb_ok_cancel_rejected();
 
 private:
-
+    QSqlDatabase db;
 };
 
 #endif // IMPRIMIR_H

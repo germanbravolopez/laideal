@@ -1,5 +1,6 @@
 #include "recog_prendas.h"
 #include "ui_recog_prendas.h"
+#include "pay_dialog.h"
 #include "sql_lite.h"
 #include "imprimir.h"
 #include "appsettings.h"
@@ -15,9 +16,10 @@
 #include <QSqlQuery>
 #include <QStatusBar>
 
-RecogPrendas::RecogPrendas(QWidget *parent) :
+RecogPrendas::RecogPrendas(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::RecogPrendas)
+    ui(new Ui::RecogPrendas),
+    db(database)
 {
     ui->setupUi(this);
     initialSettings();
@@ -42,6 +44,7 @@ void RecogPrendas::resetAllContents()
     isCellClicked = false;
     ui->le_nr_ticket->clear();
     ui->le_phone->clear();
+    ui->le_mobile->clear();
     ui->le_client->clear();
     ui->le_garm->clear();
     ui->le_qty->clear();
@@ -62,6 +65,9 @@ void RecogPrendas::resetAllContents()
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
+    // Clear the SQL query model and the view
+    sqlQueryModel->clear();
+    ui->tableView->setModel(sqlQueryModel);
 }
 
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
@@ -135,7 +141,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             q.bindValue(":new_fecha_pago", "");
             q.bindValue(":new_pagado",     ui->pb_payment->text());
             // Set id values
-            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString());
+            q.bindValue(":n_re", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString()); // fix with le_nr_ticket->text()?
             q.bindValue(":hash", sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_HASH)).toString());
             // Write to db
             if (!q.exec())
@@ -296,7 +302,8 @@ void RecogPrendas::updateRowClickedToFields()
     // Update content from clicked row
     ui->le_nr_ticket->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString());
     ui->le_client->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CLIENTE)).toString());
-    ui->le_phone->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
+    ui->le_phone->setText(selectFromWhereLike(db, "tel_fijo", "clientes", "nombre", ui->le_client->text(), true, false));
+    ui->le_mobile->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
     ui->le_garm->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PRENDA)).toString());
     ui->le_qty->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CANTIDAD)).toString());
     ui->le_servic->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString());
@@ -472,6 +479,8 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH,       true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO,  true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE,  true);
+        ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ,         true);
+        ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_ID,          true);
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(ui->tableView, this));
@@ -498,8 +507,6 @@ void RecogPrendas::on_pb_search_clicked()
 void RecogPrendas::on_pb_reset_clicked()
 {
     resetAllContents();
-    ui->le_search->setText("");
-    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_payment_toggled(bool checked)
@@ -575,45 +582,91 @@ void RecogPrendas::on_le_size_editingFinished()
 
 void RecogPrendas::on_pb_pay_all_clicked()
 {
-    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        selectSourceRow(row, 0);
-        on_pb_payment_toggled(true);
+    // Partial-pay (8.5+): open PayDialog for the selected ticket. The dialog
+    // shows every unpaid row pre-checked - the operator can untick the ones
+    // not being charged this time, fires one Verifactu submit for the subset
+    // (InvoiceID "<n_recibo>-<seq>"), persists the chosen rows, and prints.
+    if (!isCellClicked) return;
+    const QString ticketNum = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
+    if (ticketNum.isEmpty()) return;
+
+    PayDialog dlg(db, this);
+    dlg.m_verifactu = m_verifactuIntegration;
+    if (!dlg.loadTicket(ticketNum)) {
+        QMessageBox::information(this, tr("Sin prendas pendientes"),
+                                 tr("El ticket %1 no tiene prendas pendientes de cobrar.")
+                                     .arg(ticketNum));
+        return;
     }
-    resetAllContents();
+    dlg.exec();
+    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_pku_all_clicked()
 {
-    int currentRow = rowClickedCell;
-    for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        selectSourceRow(row, 0);
-        on_pb_state_toggled(true);
-    }
-    if (currentRow >= 0)
-        selectSourceRow(currentRow, 0);
-    else
-        resetAllContents();
+    // Mark every garment of the clicked ticket as Recogido. The legacy version
+    // iterated sqlQueryModel->rowCount() source rows and fired updateDb(PKU_YES)
+    // per row, which on a name search (SELECT * FROM ingresos) had the source
+    // model holding the entire table - so the loop marked every ticket in the
+    // DB picked up. Same blast-radius pattern that was fixed for pay_all in +8.4;
+    // close it here with the same scope: read the clicked row's n_recibo and
+    // run ONE UPDATE bounded to that ticket.
+    if (!isCellClicked) return;
+    const QString ticketNum = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
+    if (ticketNum.isEmpty()) return;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
+              "WHERE n_recibo = :n");
+    q.bindValue(":fr", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
+    q.bindValue(":n",  ticketNum);
+    if (!q.exec())
+        qWarning() << "on_pb_pku_all_clicked: UPDATE failed for ticket"
+                   << ticketNum << "-" << q.lastError().text();
+    db.close();
+
+    on_pb_search_clicked();
 }
 
 void RecogPrendas::on_pb_print_clicked()
 {
     if (ui->le_nr_ticket->text().isEmpty())
         return;
-    printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false);
+    // Reprint scope = the clicked row's payment event (its verifactu_invoice_seq).
+    // Refuse when the clicked row is unpaid: seq=0 there is the DEFAULT, not
+    // a real event, and Imprimir would filter to that row's siblings and
+    // print garments the customer never paid for.
+    int seq = -1;
+    if (isCellClicked) {
+        const QString pagado = sqlQueryModel->data(sqlQueryModel->index(
+                                   rowClickedCell, INGRESOS_COL_PAGADO)).toString();
+        if (pagado != "SI") {
+            QMessageBox::information(this, tr("Reimprimir factura"),
+                tr("La prenda seleccionada no está pagada. Selecciona una prenda "
+                   "ya pagada del evento de pago que quieras reimprimir."));
+            return;
+        }
+        seq = sqlQueryModel->data(sqlQueryModel->index(
+                  rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
+    }
+    printFactura(ui->le_nr_ticket->text(), /*askSecondCopy=*/false, seq);
     resetAllContents();
 }
 
-void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy)
+void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq)
 {
     if (ticketNum.isEmpty())
         return;
     qDebug() << "RecogPrendas::printFactura: ticket=" << ticketNum
-             << "askSecondCopy=" << askSecondCopy;
-    Imprimir *ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+             << "askSecondCopy=" << askSecondCopy << "invoiceSeq=" << invoiceSeq;
+    Imprimir *ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
+    ui_impr->invoiceSeq = invoiceSeq;
     ui_impr->le_n_ticket->setText(ticketNum);
     ui_impr->getTicketInfo();
     ui_impr->createTicketExcel(false, false);

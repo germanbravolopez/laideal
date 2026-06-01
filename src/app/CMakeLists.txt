@@ -18,6 +18,8 @@ add_executable(laideal
     cancelinvoicedialog.cpp
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
+    pendingsubmitsdialog.h
+    pendingsubmitsdialog.cpp
     main.cpp
     ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
     ${EXE_SOURCES}
@@ -41,6 +43,7 @@ target_link_libraries(laideal
     add_garment
     verifactu
     updater
+    backup
 )
 
 set_target_properties(laideal PROPERTIES

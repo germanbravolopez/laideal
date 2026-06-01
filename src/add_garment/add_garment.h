@@ -16,9 +16,8 @@ class AddGarment : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit AddGarment(QWidget *parent = nullptr);
+    explicit AddGarment(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~AddGarment();
-    QSqlDatabase db;
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     bool ticketFound = false;
 
@@ -41,7 +40,7 @@ private slots:
 
 private:
     Ui::AddGarment *ui;
-
+    QSqlDatabase db;
 };
 
 #endif // ADDGARMENT_H

@@ -17,7 +17,7 @@
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
 | `docs/modules/sql_lite.md` | DB free-function reference, usage patterns, accounting lock |
 | `docs/modules/listado.md` | Generic list viewer, InsertNewItem dialog, GenListado PDF |
-| `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search |
+| `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search, partial-payment PayDialog (8.5+) |
 | `docs/modules/facturas.md` | Supplier invoice form, validation, auto-calculation |
 | `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
 | `docs/modules/imprimir.md` | Excel/print flow, layout modes, QXlsx dependency |
@@ -36,7 +36,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
-| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, build via `releases\release.ps1`, PR-style merge to master, tag, GitHub publish |
+| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which triggers `release.yml` CI to build + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
 | `/review` | Built-in | Review a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
@@ -61,11 +61,13 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog | `src/app/cancelinvoicedialog.h` | `.cpp` |
 | Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` | `.cpp` |
+| Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |
 | List data generator | `src/listado/genlistado.h` | `.cpp` |
 | Garment pickup panel | `src/recog_prendas/recog_prendas.h` | `.cpp` |
+| Partial-payment dialog | `src/recog_prendas/pay_dialog.h` | `.cpp` |
 | Formal invoice form | `src/facturas/facturas.h` | `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` | `.cpp` |
 | Print + Excel | `src/imprimir/imprimir.h` | `.cpp` |
@@ -74,8 +76,11 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
+| Verifactu tax-item model | `src/verifactu/verifactutaxitem.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
+| Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
+| Shared PDF report scaffolding (style + header + euro format) | `src/reporthtml/reporthtml.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
@@ -94,6 +99,10 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |
+| `.github/workflows/ci.yml` | CI — builds on every push/PR (Qt 6.4.3 MinGW + CMake + Ninja), uploads `laideal.exe` artifact |
+| `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |
+| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for `release.yml` |
+| `releases/laideal.iss` | Inno Setup installer recipe (paths relative to `releases/`; `/DMyAppVersion=X.Y`) |
 
 ## Key Concepts / Glossary
 
@@ -107,7 +116,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | edit_lock | Column in `ingresos`: `0` = editable, `1` = locked by accounting close |
 | hash | 16-char alphanumeric identifier on each `ingresos` row for deduplication |
 | CSV (Verifactu) | "Código de Seguridad de la Versión" — the unique code AEAT issues per invoice |
-| ServiceKey | API key for the Verifactu REST service. External — not in source control |
+| ServiceKey | API key for the Verifactu REST service. External — not in source control. Stored encrypted at rest in `~/.laideal_settings.json` via Windows DPAPI (per-user, `dpapi:v1:` prefix); `AppSettings` getter/setter decrypt/encrypt transparently |
 | Trimestre | Quarter (Q1–Q4) — the unit for accounting lock and report generation |
 | QR (Verifactu) | QR image generated per invoice, shown to client for AEAT validation |
 | TESTING / PRODUCTION | Verifactu environments. TESTING uses fictitious data. PRODUCTION submits to AEAT |
@@ -145,4 +154,5 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` + `src/updater/updaterdialog.h`; setting `updater.check_on_startup` in `~/.laideal_settings.json`; in-place install via `releases/laideal.iss` (`CloseApplications=yes`, `RestartApplications=yes`) |
+| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Herramientas → Hacer copia de seguridad ahora...) | `src/backup/backup_manager.h/.cpp`; settings `backup.directory` / `backup.enabled` / `backup.last_time`; auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
 | In-app version history (Ayuda → Notas de la versión) | `src/app/mainwindow.cpp` (`on_actionNotas_de_la_version_triggered`) reads the bundled `:/docs/releases_notes.txt` resource (declared in `resources/laideal.qrc`); the file is the same one Inno Setup's `InfoBeforeFile` shows at install time |

@@ -36,8 +36,8 @@ VerifactuInvoice::InvoiceType invoiceTypeFromIndex(int idx)
 
 } // namespace
 
-RectifyInvoiceDialog::RectifyInvoiceDialog(QWidget *parent)
-    : QDialog(parent)
+RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     setWindowTitle("Factura rectificativa Verifactu");
     setMinimumWidth(520);
@@ -184,7 +184,30 @@ void RectifyInvoiceDialog::onSearchClicked()
     const double  importe = q.value(2).toDouble();
     const QString csv     = q.value(3).toString();
     const QString estado  = q.value(4).toString();
+
+    // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
+    // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
+    // applyRectificationResult() below issues `UPDATE ... WHERE n_recibo = X`
+    // which would mark every payment event's rows RECTIFICADA in one shot - that
+    // both loses per-seq AEAT alignment AND silently underreports quarterly
+    // income in `contabilidad` (RECTIFICADA is excluded from totals). Block
+    // until per-seq rectification is implemented.
+    QSqlQuery seqQ(db);
+    seqQ.prepare("SELECT COUNT(*) FROM ingresos "
+                 "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
+    seqQ.bindValue(":num", ticketNum);
+    const bool hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
     db.close();
+
+    if (hasPartialPays) {
+        m_lblInfo->setText(
+            QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2<br>"
+                    "<i>Este ticket tiene varios pagos parciales. La rectificación "
+                    "individual de cada pago no está disponible en esta versión; "
+                    "rectificar desde la sede electrónica de la AEAT.</i>")
+            .arg(cliente, fecha));
+        return;
+    }
 
     m_lblInfo->setText(
         QString("<b>Cliente:</b> %1<br>"
@@ -391,7 +414,7 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     q.prepare("UPDATE ingresos SET "
               "verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :num AND verifactu_rectifies_n_recibo = :orig");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
@@ -401,6 +424,9 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
         q.bindValue(":hash",   result.rawHash);
+        // Rectificativa submitted to AEAT under the new n_recibo as its literal
+        // InvoiceID; persist so Imprimir's QR/header reads it authoritatively.
+        q.bindValue(":id",     m_newInvoiceNumber);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -409,6 +435,7 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
+        q.bindValue(":id",     "");
     }
     q.bindValue(":num",  m_newInvoiceNumber);
     q.bindValue(":orig", m_loadedTicket);

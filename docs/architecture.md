@@ -8,10 +8,13 @@
 MainWindow (src/app/)
   ├── Listado           (src/listado/)           — generic list viewer (all tables)
   ├── RecogPrendas      (src/recog_prendas/)     — garment pickup panel
+  │     └── PayDialog   (src/recog_prendas/)     — partial-payment dialog (8.5+)
   ├── Facturas          (src/facturas/)          — formal supplier invoice form
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
   ├── Imprimir          (src/imprimir/)          — print / Excel generation
   ├── AddGarment        (src/add_garment/)       — add garments to existing ticket
+  ├── BackupManager     (src/backup/)            — auto + manual SQLite snapshots (Verifactu Req. 4)
+  ├── PendingSubmitsDialog (src/app/)            — startup recovery for verifactu_estado=PENDIENTE rows
   └── VerifactuIntegration (src/verifactu/)      — AEAT digital invoicing
          └── VerifactuManager
                 ├── VerifactuConfig
@@ -23,6 +26,8 @@ Shared infrastructure:
   src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
+  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format),
+                                      used by Contabilidad and Listado (GenListado)
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate
@@ -73,7 +78,8 @@ Formal supplier invoice entry form. Distinct from receipts.
 Writes to the `facturas` table. Populated from `empresas` and `servicios` tables.
 
 ### Contabilidad (`src/contabilidad/`)
-Generates HTML accounting reports. Three modes: `Mensual`, `Trimestral`, `Anual`.
+Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.
+Per period it prints Ingresos, Gastos and a Resumen block (Liquidación de IVA = IVA repercutido − soportado; Resultado del periodo = base ingresos − base gastos; ticket/invoice counts). The annual mode adds a consolidated summary of the four quarters. Figures are gathered once into a `PeriodFigures` struct; the period date range flows through `periodRange()`. Counts come from `sql_lite::countOperationsBetweenDates()`.
 Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 `revertirOn = true` unlocks a previously locked quarter.
 Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
@@ -113,6 +119,22 @@ Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructe
 
 Repo visibility: `/releases/latest` requires the repo to be **public** under unauthenticated calls (private repos return 404). If the repo is ever flipped back to private the updater will fail in `silent` mode silently and surface "Not Found" via the menu action.
 
+### BackupManager (`src/backup/`)
+Closes Verifactu Req. 4 (Art. 8.2.c RD 1007/2023): durable archive of the live SQLite DB during the LGT prescription window. Single class `BackupManager` parented to `MainWindow`.
+
+| Method | Behaviour |
+|--------|-----------|
+| `performBackup()` | Synchronous. Opens a dedicated `QSQLITE` connection named `laideal_backup_snapshot`, runs `VACUUM INTO '<target>'` for a transactionally-consistent snapshot without taking an exclusive lock on the live DB. Re-opens the copy read-only on a second connection (`laideal_backup_verify`) and runs `PRAGMA integrity_check`; any verdict other than `ok` deletes the file. On success, updates `AppSettings::backupLastTime` and calls `pruneOldBackups()`. Returns `{success, backupPath, errorMessage, bytesWritten}`. |
+| `needsBackup(minIntervalSeconds=24*3600)` | True when `AppSettings::backupEnabled()` is on and either no `backup.last_time` is recorded or it is older than the interval. |
+| `pruneOldBackups()` | Keeps every backup from the last 30 days; reduces 31-day-to-4-year backups to one per `(year, month)`; deletes everything older than 4 years. Returns the number of files removed. |
+| `backupDirectory()` | Resolves the configured root, creating it if missing. Default `<DocumentsLocation>/laideal_backups`. |
+
+Triggers wired in `MainWindow`:
+- **Auto**: constructor schedules `performBackup()` via `QTimer::singleShot(3000)` if `needsBackup()` returns true. Silent on success (status-bar message); `QMessageBox::warning` on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
+- **Manual**: `Herramientas → Hacer copia de seguridad ahora...` (`actionHacer_copia_de_seguridad`) runs `performBackup()` under `WaitCursor` and reports path + size in a `QMessageBox` so the operator can grab the file for offsite copy.
+
+Filename convention `laideal_yyyy-MM-dd_HHmmss.sqlite` sorts lexicographically by time, which keeps the pruner trivial. Full module reference at `docs/modules/backup.md`.
+
 ### AppLogger (`src/logging/`)
 Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `qWarning`, `qCritical`, and `qFatal` output to `~/.laideal.log` using `qInstallMessageHandler`. No changes required at any call site.
 
@@ -123,6 +145,8 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load.
+
+The Verifactu **service key is encrypted at rest** with Windows DPAPI (per-user `CryptProtectData`, no prompt): `setVerifactuServiceKey()` stores `dpapi:v1:<base64>` and `verifactuServiceKey()` decrypts on read, so callers only ever see plaintext. `encryptSecretsAtRest()` runs in `load()` and re-encrypts any legacy plaintext value (then `save()`s). The blob is bound to the Windows user+machine, so it is not portable — a decrypt failure returns empty and the operator re-enters the key. Requires linking `crypt32` (Windows only).
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
@@ -141,7 +165,7 @@ Notable items:
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
-- `updateLockInIngresos()` → locks/unlocks a month+year in `ingresos`
+- `updateLockForMonth()` → locks/unlocks a month+year in both `ingresos` and `gastos`
 - `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
 
 ---
@@ -264,9 +288,9 @@ AEAT QR validation:
 
 | Issue | File | Priority | Notes |
 |-------|------|----------|-------|
-| ServiceKey stored in plaintext JSON | `~/.laideal_settings.json` | Medium | Consider encryption at rest |
+| ~~ServiceKey stored in plaintext JSON~~ | ~~`~/.laideal_settings.json`~~ | — | Fixed: encrypted at rest with Windows DPAPI (per-user), `dpapi:v1:` marker; auto-migrated on load. See AppSettings section |
 | ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; save-time failure shows warning dialog |
-| Clients missing from Listado but present in MainWindow combobox | `src/listado/listado.cpp`, `src/app/mainwindow.cpp` | Low | Investigate encoding/collation differences between `readColumnFromTable` and `QSqlTableModel`; tilde issue in name search is now fixed separately |
+| ~~Clients missing from Listado but present in MainWindow combobox~~ | ~~`src/listado/listado.cpp`~~ | — | Discarded: no current mechanism. `Listado::populateTable()` drains `fetchMore` for non-`ingresos` tables (loads every `clientes` row, replacing the old flaky scroll-to-bottom hack in b39cda7), and both the combobox and the view read `clientes.nombre` through the same SQLite driver so encoding cannot diverge. Reopen only if observed again. |
 
 ---
 

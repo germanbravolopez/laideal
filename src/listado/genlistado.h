@@ -22,9 +22,8 @@ class GenListado : public QDialog
     Q_OBJECT
 
 public:
-    explicit GenListado(QWidget *parent = nullptr);
+    explicit GenListado(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~GenListado();
-    QSqlDatabase db;
     QAbstractItemModel *model;
     QString table_name;
     void print_table();
@@ -45,6 +44,7 @@ private slots:
 
 private:
     Ui::GenListado *ui;
+    QSqlDatabase db;
 };
 
 #endif // GENLISTADO_H

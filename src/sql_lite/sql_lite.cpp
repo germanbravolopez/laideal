@@ -5,7 +5,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QMessageBox>
-#include <QRandomGenerator>
+#include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -60,6 +60,17 @@ void migrateDatabase(QSqlDatabase &db)
     // verifactu_rectification_type is "S" (sustitucion) or "I" (diferencias).
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectifies_n_recibo TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectification_type TEXT");
+    // Partial-payment sequence (8.5+). Each payment event for a given n_recibo
+    // submits as InvoiceID "<n_recibo>-<seq>" so multiple partial payments do
+    // not collide at AEAT. Legacy rows (8.0-8.4) leave it 0 - those tickets
+    // were submitted as "<n_recibo>" (no seq), which is its own distinct ID.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_seq INTEGER DEFAULT 0");
+    // Literal AEAT InvoiceID submitted for the row (8.5+). MainWindow save-time
+    // submission writes the bare "<n_recibo>"; PayDialog partial-pay writes
+    // "<n_recibo>-<seq>"; rectificativa writes its own new "<n_recibo>". Reads
+    // authoritatively for reprint / QR regen so we never have to guess from
+    // seq=0 whether the original AEAT format was bare or "-0".
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
     db.close();
 }
 
@@ -283,21 +294,24 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
         // rectificativa) rows from taxable income. The rectifying row itself carries
         // the corrected total and counts normally. Rows without verifactu_estado
         // (NULL or empty, pre-v8.0) are included as normal.
-        q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
-               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else if (table == "gastos") {
         // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
         // first day of the next quarter are not double-counted in the current quarter.
-        q.exec("SELECT importe FROM gastos WHERE (iva = " + QString::number(iva) + ") AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT importe FROM gastos WHERE (iva = :iva) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.bindValue(":iva",   iva);
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else {
         qCritical() << "totalPriceBetweenDates: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
@@ -329,6 +343,49 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
     return totalPrice;
 }
 
+int countOperationsBetweenDates(QSqlDatabase &db, const QString &table,
+                                QDate startDate, QDate endDate)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    int count = 0;
+    db.open();
+    QSqlQuery q(db);
+
+    if (table == "ingresos") {
+        // Distinct paid tickets, excluding ANULADA / RECTIFICADA, mirroring the
+        // estado + date filter of totalPriceBetweenDates so the operation count
+        // matches the income total shown alongside it.
+        q.prepare("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE (pagado = 'SI') AND "
+                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
+    } else if (table == "gastos") {
+        q.prepare("SELECT COUNT(*) FROM gastos WHERE "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
+    } else {
+        qCritical() << "countOperationsBetweenDates: unsupported table:" << table;
+        db.close();
+        return 0;
+    }
+
+    if (q.isSelect() && q.next())
+        count = q.value(0).toInt();
+    else
+        qWarning() << "countOperationsBetweenDates: query error for table" << table << q.lastError().text();
+
+    db.close();
+    return count;
+}
+
 int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return 0;
@@ -336,14 +393,19 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     const QString mStr = monthStr(month);
     const QString yStr = QString::number(year);
 
+    const QString pattern = "%-" + mStr + "-" + yStr;
     db.open();
     QSqlQuery q(db);
     int editLock = 2; // 2 = no data found for period
-    if (table == "ingresos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'");
-    else if (table == "gastos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'");
-    else {
+    if (table == "ingresos") {
+        q.prepare("SELECT edit_lock FROM ingresos WHERE fecha_pago LIKE :pat");
+        q.bindValue(":pat", pattern);
+        q.exec();
+    } else if (table == "gastos") {
+        q.prepare("SELECT edit_lock FROM gastos WHERE fecha LIKE :pat");
+        q.bindValue(":pat", pattern);
+        q.exec();
+    } else {
         qCritical() << "readLockForMonthAndYear: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
                               "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
@@ -362,22 +424,28 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     return editLock;
 }
 
-void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
+void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;
 
-    const QString mStr = monthStr(month);
-    const QString yStr = QString::number(year);
-    const QString val  = QString::number(value);
+    const QString mStr    = monthStr(month);
+    const QString yStr    = QString::number(year);
+    const QString pattern = "%-" + mStr + "-" + yStr;
 
-    qDebug() << "updateLockInIngresos: UPDATE ingresos+gastos SET edit_lock =" << val
+    qDebug() << "updateLockForMonth: UPDATE ingresos+gastos SET edit_lock =" << value
              << "WHERE month=" << mStr << "year=" << yStr;
     db.open();
     QSqlQuery q(db);
-    if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
-    if (!q.exec("UPDATE gastos SET edit_lock = " + val + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
+    q.prepare("UPDATE ingresos SET edit_lock = :val WHERE fecha_pago LIKE :pat");
+    q.bindValue(":val", value);
+    q.bindValue(":pat", pattern);
+    if (!q.exec())
+        qWarning() << "updateLockForMonth: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
+    q.prepare("UPDATE gastos SET edit_lock = :val WHERE fecha LIKE :pat");
+    q.bindValue(":val", value);
+    q.bindValue(":pat", pattern);
+    if (!q.exec())
+        qWarning() << "updateLockForMonth: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
     db.close();
 }
 
@@ -471,25 +539,30 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
 }
 
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
-                                 const VerifactuResult &result)
+                                 const VerifactuResult &result, int seq)
 {
     if (dbNotConfigured(db, __func__)) return;
 
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const QString estado    = verifactuEstadoToString(
         result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
-    qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum
+    // seq=0 = save-time / retry submit (bare n_recibo as InvoiceID).
+    // seq>0 = PayDialog event (<n_recibo>-<seq>). The WHERE clause always
+    // scopes by seq so a retry of save-time never clobbers PayDialog rows.
+    const QString invoiceId = seq == 0
+        ? ticketNum
+        : QString("%1-%2").arg(ticketNum).arg(seq);
+    qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
              << "estado=" << estado
              << "csv=" << (result.isSuccess() ? result.csv : QString())
-             << "hash=" << (result.isSuccess() ? result.rawHash : QString())
              << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
              << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
-              "verifactu_xml = :xml, verifactu_hash = :hash "
-              "WHERE n_recibo = :n_recibo");
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
+              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);
@@ -498,6 +571,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
         q.bindValue(":hash",   result.rawHash);
+        q.bindValue(":id",     invoiceId);
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
@@ -506,24 +580,44 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
+        q.bindValue(":id",     "");
     }
     q.bindValue(":n_recibo", ticketNum);
+    q.bindValue(":seq",      seq);
     if (!q.exec())
         qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
+                   << "seq" << seq << "-" << q.lastError().text();
+    db.close();
+}
+
+int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+    int next = 0;
+    db.open();
+    QSqlQuery q(db);
+    // Count paid rows so a local-only event (Verifactu disabled, estado='')
+    // still increments seq for the next event - otherwise two disabled-AEAT
+    // partial pays would both land on seq=0 and collide.
+    q.prepare("SELECT COALESCE(MAX(verifactu_invoice_seq), -1) + 1 FROM ingresos "
+              "WHERE n_recibo = :n AND pagado = 'SI'");
+    q.bindValue(":n", ticketNum);
+    if (q.exec() && q.first())
+        next = q.value(0).toInt();
+    else if (q.lastError().isValid())
+        qWarning() << "nextVerifactuInvoiceSeq: SELECT failed for" << ticketNum
                    << "-" << q.lastError().text();
     db.close();
+    return next;
 }
 
 QString genHash16()
 {
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-    constexpr int len = 16;
-    QString hash;
-    hash.reserve(len);
-    for (int i = 0; i < len; ++i)
-        hash += alphanum[QRandomGenerator::global()->bounded(static_cast<quint32>(sizeof(alphanum) - 1))];
-    return hash;
+    // QUuid::Id128 is the 32-char hex form without braces/dashes. Truncating
+    // to 16 leaves 64 bits of cryptographic entropy - 2^32 row birthday-
+    // collision is around one chance in 4 billion, far below any plausible
+    // ingresos size. Replaces a homegrown alphanum loop on QRandomGenerator
+    // that had a legacy rand()-era predecessor responsible for the
+    // cross-ticket hash collisions surfaced by "Crear hash en ingresos".
+    return QUuid::createUuid().toString(QUuid::Id128).left(16);
 }

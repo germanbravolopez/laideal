@@ -1,8 +1,8 @@
 #include "insertnewitem.h"
 #include "sql_lite.h"
 
-InsertNewItem::InsertNewItem(QWidget *parent)
-    : QDialog{parent}
+InsertNewItem::InsertNewItem(const QSqlDatabase &database, QWidget *parent)
+    : QDialog{parent}, db(database)
 {
     setupUi(this);
 }

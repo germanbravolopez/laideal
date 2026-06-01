@@ -9,8 +9,7 @@
 ## Key interface
 
 ```cpp
-RecogPrendas *ui = new RecogPrendas(this);
-ui->db = db;
+RecogPrendas *ui = new RecogPrendas(db, this);  // db injected via constructor
 ui->show();
 ```
 
@@ -67,6 +66,7 @@ Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the con
 | `INGRESOS_COL_VERIFACTU_HASH` | 21 | verifactu_hash |
 | `INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO` | 22 | verifactu_rectifies_n_recibo |
 | `INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE` | 23 | verifactu_rectification_type |
+| `INGRESOS_COL_VERIFACTU_INVOICE_SEQ` | 24 | verifactu_invoice_seq |
 
 Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash, edit_lock) and `on_pb_verifactu_clicked()` (verifactu_*).
 
@@ -100,9 +100,20 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 |--------|-------------|
 | `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print` | Any row is selected |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
-| `pb_payment` | **Never** — kept disabled to prevent per-garment payment from triggering a Verifactu submission per garment (would cause duplicate-InvoiceID rejection at AEAT). Pay via `pb_pay_all` instead. The pay-all loop calls `on_pb_payment_toggled(true)` programmatically and Qt still fires `toggled` on a disabled button, so the full-ticket pay flow is intact. See "Per-payment Verifactu InvoiceID seq" in `docs/progress_tracker.md` for the future fix that would restore per-garment payment. |
+| `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`. The pay-all / pku-all loops bypass the view and call `selectSourceRow()` directly with source rows — they iterate `sqlQueryModel->rowCount()` so they act on all loaded rows regardless of the active header sort.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
+
+## Partial-payment dialog (8.5+)
+
+`pb_pay_all` opens `PayDialog` (`src/recog_prendas/pay_dialog.{h,cpp}`) with the clicked ticket pre-loaded. The dialog lists every unpaid row of the ticket with a per-row checkbox pre-checked; the operator unticks the rows the client is not paying this time, sees the live "Total seleccionado" update, and clicks Cobrar. PayDialog then:
+
+1. Calls `nextVerifactuInvoiceSeq(db, ticketNum)` to get the next free `seq` for this ticket.
+2. Builds `InvoiceID = "<n_recibo>-<seq>"` and fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()` with a 5 s bounded wait.
+3. On success: UPDATEs the chosen rows `pagado='SI'`, `fecha_pago=:date`, `verifactu_invoice_seq=:seq`, calls `updateTicketVerifactuFields(db, n_recibo, result, seq)` for the AEAT metadata (single seq-scoped helper used by both save-time and PayDialog paths), and prints the partial factura via `Imprimir` with `invoiceSeq` set so only the paid subset is on the print.
+4. On AEAT timeout / config error: still persists the payment locally and prints a paid recibo without QR.
+
+Remaining unpaid rows of the same ticket stay unpaid; a later payment event picks up `seq = max(seq) + 1`. `pb_print` reads the clicked row's `verifactu_invoice_seq` and forwards it to `printFactura(ticketNum, askSecondCopy, invoiceSeq)` so a reprint matches the AEAT-side invoice exactly.
 
 ## Header-click sorting
 
@@ -112,5 +123,5 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 - All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
 - Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
-- `PAY_ALL` and `PKU_ALL` buttons mark all visible rows paid or picked up in one operation.
+- `pb_pay_all` opens `PayDialog` for the clicked ticket (single-ticket scope). `pb_pku_all` is likewise single-ticket scoped: it reads the clicked row's `n_recibo` and runs one `UPDATE ... WHERE n_recibo = :n` (no per-row loop over the model), so a name search no longer marks every ticket in the DB as Recogido.
 - Total price display (`le_total_price`) sums from the proxy model rows, not the raw SQL result, so it always reflects the filtered set.

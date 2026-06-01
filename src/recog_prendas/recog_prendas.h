@@ -24,10 +24,9 @@ class RecogPrendas : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit RecogPrendas(QWidget *parent = nullptr);
+    explicit RecogPrendas(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~RecogPrendas();
 
-    QSqlDatabase db;
     VerifactuIntegration *m_verifactuIntegration = nullptr;
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel = nullptr;
@@ -70,13 +69,16 @@ private slots:
 
 private:
     Ui::RecogPrendas *ui;
+    QSqlDatabase db;
     // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
     // loop so multiple garments of the same ticket only fire one AEAT submission.
     QHash<QString, QString> m_pendingSubmits;
 
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;
-    void printFactura(const QString &ticketNum, bool askSecondCopy);
+    // invoiceSeq forwarded to Imprimir so the reprint loads only the rows of
+    // the given payment event. -1 = legacy / all rows for the ticket.
+    void printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq = -1);
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
     void selectSourceRow(int sourceRow, int sourceCol);
 };

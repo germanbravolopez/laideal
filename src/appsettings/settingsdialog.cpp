@@ -10,6 +10,8 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDoubleValidator>
+#include <QDate>
+#include <QDateEdit>
 
 // Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
@@ -148,10 +150,22 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vProduction = new QCheckBox(tr("Entorno de PRODUCCIÓN (marcar solo para uso real con AEAT)"));
     m_vProduction->setChecked(s->verifactuProduction());
 
+    m_vPendingRecoveryEnabled = new QCheckBox(tr(
+        "Avisar al arrancar de envíos AEAT pendientes (verifactu_estado=PENDIENTE)"));
+    m_vPendingRecoveryEnabled->setChecked(s->verifactuPendingRecoveryEnabled());
+
+    m_vPendingRecoveryFloor = new QDateEdit;
+    m_vPendingRecoveryFloor->setDisplayFormat("dd-MM-yyyy");
+    m_vPendingRecoveryFloor->setCalendarPopup(true);
+    const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
+    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor : QDate(2026, 9, 1));
+
     fl->addRow(tr("NIF del emisor:"),     m_vNif);
     fl->addRow(tr("Nombre empresa:"),     m_vName);
     fl->addRow(tr("Clave de servicio:"),  m_vKey);
     fl->addRow(m_vProduction);
+    fl->addRow(m_vPendingRecoveryEnabled);
+    fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
 
     auto *note = new QLabel(tr(
         "<i>La clave de servicio se obtiene en "
@@ -194,6 +208,9 @@ void SettingsDialog::accept()
     s->setVerifactuName(m_vName->text().trimmed());
     s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
+    s->setVerifactuPendingRecoveryEnabled(m_vPendingRecoveryEnabled->isChecked());
+    s->setVerifactuPendingRecoveryFloorDate(
+        m_vPendingRecoveryFloor->date().toString(Qt::ISODate));
 
     if (!s->save()) {
         qWarning() << "SettingsDialog: failed to save settings to" << s->filePath();

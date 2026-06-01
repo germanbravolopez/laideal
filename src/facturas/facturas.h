@@ -15,9 +15,8 @@ class Facturas : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit Facturas(QWidget *parent = nullptr);
+    explicit Facturas(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~Facturas();
-    QSqlDatabase db;
     void populateEmpresas();
     void populateServicios();
 
@@ -33,6 +32,7 @@ private slots:
 
 private:
     Ui::Facturas *ui;
+    QSqlDatabase db;
 };
 
 #endif // FACTURAS_H
