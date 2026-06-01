@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tag matches CMakeLists.txt version
+        shell: pwsh
+        run: |
+          $cmake = Get-Content CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
+            throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
+          }
+          if ($matches[1] -ne '${{ github.ref_name }}') {
+            throw "Tag '${{ github.ref_name }}' doesn't match CMakeLists.txt version '$($matches[1])'. Update CMakeLists.txt first."
+          }
+          Write-Host "Version validated: $($matches[1])"
+
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      - name: Install Qt + MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.4.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Configure CMake
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "releases\${{ github.ref_name }}" -Force
+          Copy-Item "build\src\app\laideal.exe" -Destination "releases\${{ github.ref_name }}\"
+
+      - name: Run windeployqt
+        shell: pwsh
+        run: windeployqt --no-translations --no-system-d3d-compiler "releases\${{ github.ref_name }}\laideal.exe"
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "releases\old_releases" -Force
+          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::CreateFromDirectory("releases\${{ github.ref_name }}", "releases\old_releases\${{ github.ref_name }}.zip")
+
+      - name: Compile Inno Setup installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "releases\setup_outputs" -Force
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ github.ref_name }}" releases\laideal.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
+
+      - name: Extract release notes for this version
+        id: release_notes
+        shell: pwsh
+        run: |
+          $ver = '${{ github.ref_name }}'
+          $raw = Get-Content releases_notes.txt -Raw
+          $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
+          if ($m.Success) {
+            $body = $m.Groups[1].Value.TrimEnd()
+            $tmp = Join-Path $env:TEMP "laideal_release_$ver.md"
+            Set-Content -Path $tmp -Value $body -Encoding utf8
+            echo "NOTES_PATH=$tmp" >> $env:GITHUB_OUTPUT
+            echo "HAS_NOTES=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "HAS_NOTES=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = '${{ github.ref_name }}'
+          $zip = "releases\old_releases\$ver.zip"
+          $installer = "releases\setup_outputs\laideal_setup_$ver.exe"
+          $notes = '${{ steps.release_notes.outputs.NOTES_PATH }}'
+          $hasNotes = '${{ steps.release_notes.outputs.HAS_NOTES }}'
+          if ($hasNotes -eq 'true') {
+            gh release create $ver $zip $installer --title "Release $ver" --notes-file $notes
+          } else {
+            gh release create $ver $zip $installer --title "Release $ver"
+          }
+
+      - name: Clean up staging
+        shell: pwsh
+        run: Remove-Item -Recurse -Force "releases\${{ github.ref_name }}"
