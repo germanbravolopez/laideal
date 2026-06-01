@@ -1,5 +1,26 @@
 Releases:
 
+9.0
+- New: partial payment of a ticket ("Cobrar" in Recogida de prendas)
+  - "Pagar todo" now opens a Cobrar dialog listing every unpaid garment of the ticket, each pre-selected. Untick the garments the client is not paying this time and press Cobrar: only those are charged and a Verifactu invoice is issued for that payment. The rest stay unpaid and can be charged later as a separate payment, each with its own invoice number (e.g. 3245-1, 3245-2). The printed factura covers exactly the garments paid in that event.
+- New: cancel a specific Verifactu invoice of a ticket (Herramientas -> Anular factura Verifactu)
+  - A ticket paid in several events now shows one line per payment, each with its own Anular button, so you can cancel a single event with the AEAT instead of the whole ticket.
+- New: pending Verifactu submissions are recovered at startup
+  - If a ticket was saved while Verifactu was unreachable or not configured, the app now lists those tickets on startup and lets you retry, mark as error, or postpone each one. Can be limited by date and switched off in Configuracion.
+- New: automatic database backups
+  - The app makes a verified backup of the database on startup (kept daily for 30 days, monthly for 4 years), and you can make one on demand from Herramientas -> Hacer copia de seguridad ahora. Backups are stored next to the database.
+- New: landline phone field in the Recogida de prendas form.
+- Improvement: clearer accounting (Contabilidad) reports
+  - The quarterly / monthly / annual PDF now shows the IVA settlement (IVA repercutido vs soportado), the net result of the period, the date range, and the number of tickets and invoices, plus a consolidated annual summary. The listados PDFs were restyled to match.
+- Improvement: the Verifactu ServiceKey is now stored encrypted
+  - The AEAT ServiceKey in the settings file is encrypted for the current Windows user instead of kept as plain text; an existing key is migrated automatically. Note: after reinstalling Windows or moving to another user/PC the key must be entered again.
+- Bug fix: "Recoger todo" and "Pagar todo" no longer affect other clients' tickets when searching by name
+  - When a name search returned several clients' tickets, these buttons could act on every loaded ticket. They now act only on the selected ticket.
+- Bug fix: size-dependent garments (e.g. cortinas charged per m2) are priced correctly with comma decimals
+  - A size like "2,6" entered with a comma is no longer read as 0, so the charged amount matches the stored size.
+- Bug fix: the garment claim receipt (recibo) no longer shows a Verifactu QR
+  - The QR belongs on the factura (tax document), not on the claim ticket.
+
 8.4
 - Bug fix: when searching by client name in Recogida de prendas, marking a row as entregada or splitting a garment no longer affects the wrong ticket
   - The table's column headers are clickable to sort, and the default sort is by ticket number descending. Previously, after any sort changed the visible order, clicking a row stored the visible position instead of the underlying ticket, so the next action (Entregar, Separar prenda) was applied to a different ticket than the one shown. Now the underlying ticket is always resolved before any database write. Pagar todo and Recoger todo were already correct because they iterate every loaded row.
