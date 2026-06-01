@@ -209,6 +209,6 @@ Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pix
 
 ## Security
 
-- ServiceKey lives in plaintext JSON (`~/.laideal_settings.json`). Acceptable for single-user desktop deployment; consider encryption for multi-user scenarios. Tracked in [`progress_tracker.md`](../../progress_tracker.md) under non-blocking issues.
+- ServiceKey is encrypted at rest in `~/.laideal_settings.json` with Windows DPAPI (per-user `CryptProtectData`, `dpapi:v1:` marker); `AppSettings` decrypts transparently on read and legacy plaintext is auto-migrated on load. Note DPAPI binds the ciphertext to the Windows user+machine, so the key must be re-entered after a reinstall or migration to another account.
 - Never mix real data into TESTING.
 - Always validate end-to-end in TESTING before switching `verifactu.production` to `true`.
