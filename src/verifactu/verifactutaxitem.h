@@ -24,19 +24,12 @@ public:
 
     VerifactuTaxItem();
 
-    void setTaxType(TaxType type) { m_taxType = type; }
     void setTaxRate(double rate) { m_taxRate = rate; }
     void setTaxBase(double base) { m_taxBase = base; }
     void setTaxAmount(double amount) { m_taxAmount = amount; }
-    void setOperationType(OperationType type) { m_operationType = type; }
-    void setDescription(const QString &desc) { m_description = desc; }
 
-    TaxType getTaxType() const { return m_taxType; }
-    double getTaxRate() const { return m_taxRate; }
     double getTaxBase() const { return m_taxBase; }
     double getTaxAmount() const { return m_taxAmount; }
-    OperationType getOperationType() const { return m_operationType; }
-    QString getDescription() const { return m_description; }
 
     QJsonObject toJson() const;
     bool isValid() const;

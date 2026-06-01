@@ -7,8 +7,7 @@
 VerifactuConfig::VerifactuConfig()
     : m_environment(TESTING),
       m_systemName("LAIDEAL"),
-      m_systemVersion(QString(PROJECT_VERSION)),
-      m_systemDeveloper("LAIDEAL")
+      m_systemVersion(QString(PROJECT_VERSION))
 {
     // One-time cleanup of the legacy QSettings INI written by pre-8.5 versions
     // of this class. The INI was a stale plaintext copy of credentials already
@@ -44,11 +43,10 @@ QString VerifactuConfig::getServiceKey() const
     return m_serviceKey;
 }
 
-void VerifactuConfig::setEmitterData(const QString &nif, const QString &name, const QString &companyName)
+void VerifactuConfig::setEmitterData(const QString &nif, const QString &name)
 {
     m_emitterNIF = nif;
     m_emitterName = name;
-    m_emitterCompanyName = companyName.isEmpty() ? name : companyName;
 }
 
 QString VerifactuConfig::getEmitterNIF() const
@@ -61,16 +59,10 @@ QString VerifactuConfig::getEmitterName() const
     return m_emitterName;
 }
 
-QString VerifactuConfig::getEmitterCompanyName() const
-{
-    return m_emitterCompanyName;
-}
-
-void VerifactuConfig::setSystemData(const QString &name, const QString &version, const QString &developer)
+void VerifactuConfig::setSystemData(const QString &name, const QString &version)
 {
     m_systemName = name;
     m_systemVersion = version;
-    m_systemDeveloper = developer;
 }
 
 QString VerifactuConfig::getSystemName() const
@@ -81,11 +73,6 @@ QString VerifactuConfig::getSystemName() const
 QString VerifactuConfig::getSystemVersion() const
 {
     return m_systemVersion;
-}
-
-QString VerifactuConfig::getSystemDeveloper() const
-{
-    return m_systemDeveloper;
 }
 
 QString VerifactuConfig::getEndpointUrl() const

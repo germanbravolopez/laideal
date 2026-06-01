@@ -160,17 +160,4 @@ bool VerifactuInvoice::isRectificationInvoiceType(InvoiceType type)
     }
 }
 
-QString VerifactuInvoice::operationTypeToString(VerifactuTaxItem::OperationType type) const
-{
-    return VerifactuTaxItem::operationTypeToString(type);
-}
 
-QString VerifactuInvoice::taxTypeToString(VerifactuTaxItem::TaxType type) const
-{
-    switch (type) {
-        case VerifactuTaxItem::VAT: return "VAT";
-        case VerifactuTaxItem::IGIC: return "IGIC";
-        case VerifactuTaxItem::OTHER: return "OTHER";
-        default: return "VAT";
-    }
-}

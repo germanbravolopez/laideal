@@ -122,7 +122,7 @@ void MainWindow::mainwindowInitialSettings()
                 return;
             }
             VerifactuManager mgr;
-            mgr.getConfig()->setEmitterData(nif, name, name);
+            mgr.getConfig()->setEmitterData(nif, name);
             mgr.getConfig()->setServiceKey(serviceKey);
             mgr.getConfig()->setEnvironment(production
                 ? VerifactuConfig::PRODUCTION

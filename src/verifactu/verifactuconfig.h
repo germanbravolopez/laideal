@@ -22,15 +22,13 @@ public:
     void setServiceKey(const QString &key);
     QString getServiceKey() const;
 
-    void setEmitterData(const QString &nif, const QString &name, const QString &companyName = QString());
+    void setEmitterData(const QString &nif, const QString &name);
     QString getEmitterNIF() const;
     QString getEmitterName() const;
-    QString getEmitterCompanyName() const;
 
-    void setSystemData(const QString &name, const QString &version, const QString &developer);
+    void setSystemData(const QString &name, const QString &version);
     QString getSystemName() const;
     QString getSystemVersion() const;
-    QString getSystemDeveloper() const;
 
     QString getEndpointUrl() const;
     QString getValidationUrl() const;
@@ -44,10 +42,8 @@ private:
     QString m_serviceKey;
     QString m_emitterNIF;
     QString m_emitterName;
-    QString m_emitterCompanyName;
     QString m_systemName;
     QString m_systemVersion;
-    QString m_systemDeveloper;
     mutable QString m_validationError;
 
     const QString PROD_ENDPOINT = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices";

@@ -41,12 +41,6 @@ public:
     void setSellerNIF(const QString &nif) { m_sellerNIF = nif; }
     void setSellerName(const QString &name) { m_sellerName = name; }
 
-    void setBuyerNIF(const QString &nif) { m_buyerNIF = nif; }
-    void setBuyerName(const QString &name) { m_buyerName = name; }
-
-    void setTotalAmount(double amount) { m_totalAmount = amount; }
-    void setTotalTaxAmount(double amount) { m_totalTaxAmount = amount; }
-
     // Rectificativa fields - only meaningful when invoice type is R1-R5.
     // For substitution (S) these carry the ORIGINAL values being replaced.
     // For differences (I) they are not required by AEAT.
@@ -63,21 +57,14 @@ public:
 
     QString getInvoiceNumber() const { return m_invoiceNumber; }
     QDate getInvoiceDate() const { return m_invoiceDate; }
-    InvoiceType getInvoiceType() const { return m_invoiceType; }
-    QString getDescription() const { return m_description; }
 
     QString getSellerNIF() const { return m_sellerNIF; }
     QString getSellerName() const { return m_sellerName; }
 
-    QString getBuyerNIF() const { return m_buyerNIF; }
-    QString getBuyerName() const { return m_buyerName; }
-
     double getTotalAmount() const { return m_totalAmount; }
-    double getTotalTaxAmount() const { return m_totalTaxAmount; }
 
     void addTaxItem(const VerifactuTaxItem &item) { m_taxItems.append(item); }
     const QList<VerifactuTaxItem> &getTaxItems() const { return m_taxItems; }
-    void clearTaxItems() { m_taxItems.clear(); }
 
     QJsonObject toJson() const;
     bool isValid() const;
@@ -109,8 +96,6 @@ private:
     mutable QString m_validationError;
 
     QString invoiceTypeToString(InvoiceType type) const;
-    QString operationTypeToString(VerifactuTaxItem::OperationType type) const;
-    QString taxTypeToString(VerifactuTaxItem::TaxType type) const;
 };
 
 #endif // VERIFACTUINVOICE_H
