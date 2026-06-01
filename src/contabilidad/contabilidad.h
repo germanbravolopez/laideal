@@ -1,30 +1,31 @@
 #ifndef CONTABILIDAD_H
 #define CONTABILIDAD_H
 
-#include <QMainWindow>
+#include <QDialog>
 #include <QMessageBox>
 #include <QSqlQueryModel>
+#include <QSqlDatabase>
 #include <QMessageBox>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDate>
 
-#define C_MENSUAL    "Mensual"
-#define C_TRIMESTRAL "Trimestral"
-#define C_ANUAL      "Anual"
-
 namespace Ui {
 class Contabilidad;
 }
 
-class Contabilidad : public QMainWindow
+class Contabilidad : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit Contabilidad(QWidget *parent = nullptr);
+    // Accounting period mode. Values match the cb_config combobox item order
+    // (see contabilidad.ui), so the logic no longer depends on the Spanish
+    // display strings: renaming an item cannot silently break the comparisons.
+    enum ConfigMode { Mensual = 0, Trimestral = 1, Anual = 2 };
+
+    explicit Contabilidad(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~Contabilidad();
-    QSqlDatabase db;
     bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
     void resetAllContents();
 
@@ -42,6 +43,10 @@ private slots:
 
 private:
     Ui::Contabilidad *ui;
+    QSqlDatabase db;
+
+    // Current accounting mode, read from the combobox index (not its text).
+    ConfigMode currentMode() const;
 
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per

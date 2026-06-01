@@ -16,9 +16,10 @@
 #include <QSqlQuery>
 #include <QStatusBar>
 
-RecogPrendas::RecogPrendas(QWidget *parent) :
+RecogPrendas::RecogPrendas(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::RecogPrendas)
+    ui(new Ui::RecogPrendas),
+    db(database)
 {
     ui->setupUi(this);
     initialSettings();
@@ -590,8 +591,7 @@ void RecogPrendas::on_pb_pay_all_clicked()
         sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
     if (ticketNum.isEmpty()) return;
 
-    PayDialog dlg(this);
-    dlg.db = db;
+    PayDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
     if (!dlg.loadTicket(ticketNum)) {
         QMessageBox::information(this, tr("Sin prendas pendientes"),
@@ -662,8 +662,7 @@ void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy, in
         return;
     qDebug() << "RecogPrendas::printFactura: ticket=" << ticketNum
              << "askSecondCopy=" << askSecondCopy << "invoiceSeq=" << invoiceSeq;
-    Imprimir *ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    Imprimir *ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;

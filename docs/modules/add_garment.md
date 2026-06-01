@@ -9,8 +9,7 @@ Adds new garment rows to an existing ticket already in the database. Used when a
 ## Key interface
 
 ```cpp
-AddGarment *ui = new AddGarment(this);
-ui->db = db;
+AddGarment *ui = new AddGarment(db, this);  // db injected via constructor
 ui->show();
 ```
 

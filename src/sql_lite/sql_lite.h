@@ -35,7 +35,9 @@ float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate
 // "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
 int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
-void        updateLockInIngresos(QSqlDatabase &db, int value, int month, int year);
+// Set edit_lock = value on both ingresos and gastos rows whose date falls in the
+// given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
+void        updateLockForMonth(QSqlDatabase &db, int value, int month, int year);
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();

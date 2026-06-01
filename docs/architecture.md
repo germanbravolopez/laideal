@@ -165,7 +165,7 @@ Notable items:
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
-- `updateLockInIngresos()` → locks/unlocks a month+year in `ingresos`
+- `updateLockForMonth()` → locks/unlocks a month+year in both `ingresos` and `gastos`
 - `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
 
 ---

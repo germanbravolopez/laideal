@@ -294,21 +294,24 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
         // rectificativa) rows from taxable income. The rectifying row itself carries
         // the corrected total and counts normally. Rows without verifactu_estado
         // (NULL or empty, pre-v8.0) are included as normal.
-        q.exec("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
-               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
+                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else if (table == "gastos") {
         // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
         // first day of the next quarter are not double-counted in the current quarter.
-        q.exec("SELECT importe FROM gastos WHERE (iva = " + QString::number(iva) + ") AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT importe FROM gastos WHERE (iva = :iva) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.bindValue(":iva",   iva);
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else {
         qCritical() << "totalPriceBetweenDates: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error base de datos",
@@ -353,19 +356,21 @@ int countOperationsBetweenDates(QSqlDatabase &db, const QString &table,
         // Distinct paid tickets, excluding ANULADA / RECTIFICADA, mirroring the
         // estado + date filter of totalPriceBetweenDates so the operation count
         // matches the income total shown alongside it.
-        q.exec("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE (pagado = 'SI') AND "
-               "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-               " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE (pagado = 'SI') AND "
+                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else if (table == "gastos") {
-        q.exec("SELECT COUNT(*) FROM gastos WHERE "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date('"
-               + startDate.toString("yyyy-MM-dd") + "')) AND "
-               "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date('"
-               + endDate.toString("yyyy-MM-dd") + "'))");
+        q.prepare("SELECT COUNT(*) FROM gastos WHERE "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
+                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+        q.exec();
     } else {
         qCritical() << "countOperationsBetweenDates: unsupported table:" << table;
         db.close();
@@ -388,14 +393,19 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     const QString mStr = monthStr(month);
     const QString yStr = QString::number(year);
 
+    const QString pattern = "%-" + mStr + "-" + yStr;
     db.open();
     QSqlQuery q(db);
     int editLock = 2; // 2 = no data found for period
-    if (table == "ingresos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'");
-    else if (table == "gastos")
-        q.exec("SELECT edit_lock FROM " + table + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'");
-    else {
+    if (table == "ingresos") {
+        q.prepare("SELECT edit_lock FROM ingresos WHERE fecha_pago LIKE :pat");
+        q.bindValue(":pat", pattern);
+        q.exec();
+    } else if (table == "gastos") {
+        q.prepare("SELECT edit_lock FROM gastos WHERE fecha LIKE :pat");
+        q.bindValue(":pat", pattern);
+        q.exec();
+    } else {
         qCritical() << "readLockForMonthAndYear: unsupported table:" << table;
         QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
                               "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
@@ -414,22 +424,28 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     return editLock;
 }
 
-void updateLockInIngresos(QSqlDatabase &db, int value, int month, int year)
+void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;
 
-    const QString mStr = monthStr(month);
-    const QString yStr = QString::number(year);
-    const QString val  = QString::number(value);
+    const QString mStr    = monthStr(month);
+    const QString yStr    = QString::number(year);
+    const QString pattern = "%-" + mStr + "-" + yStr;
 
-    qDebug() << "updateLockInIngresos: UPDATE ingresos+gastos SET edit_lock =" << val
+    qDebug() << "updateLockForMonth: UPDATE ingresos+gastos SET edit_lock =" << value
              << "WHERE month=" << mStr << "year=" << yStr;
     db.open();
     QSqlQuery q(db);
-    if (!q.exec("UPDATE ingresos SET edit_lock = " + val + " WHERE fecha_pago LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
-    if (!q.exec("UPDATE gastos SET edit_lock = " + val + " WHERE fecha LIKE '%-" + mStr + "-" + yStr + "'"))
-        qWarning() << "updateLockInIngresos: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
+    q.prepare("UPDATE ingresos SET edit_lock = :val WHERE fecha_pago LIKE :pat");
+    q.bindValue(":val", value);
+    q.bindValue(":pat", pattern);
+    if (!q.exec())
+        qWarning() << "updateLockForMonth: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
+    q.prepare("UPDATE gastos SET edit_lock = :val WHERE fecha LIKE :pat");
+    q.bindValue(":val", value);
+    q.bindValue(":pat", pattern);
+    if (!q.exec())
+        qWarning() << "updateLockForMonth: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
     db.close();
 }
 

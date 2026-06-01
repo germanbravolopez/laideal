@@ -34,8 +34,8 @@ constexpr int COL_OBS      = 6;
 constexpr int COL_HASH     = 7;
 } // namespace
 
-PayDialog::PayDialog(QWidget *parent)
-    : QDialog(parent)
+PayDialog::PayDialog(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     buildUi();
 }
@@ -127,7 +127,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         const bool    editLock = q.value(10).toBool();
         if (pagado == "SI") continue;
         // edit_lock=1 means the row's quarter has been closed by contabilidad
-        // (`updateLockInIngresos`). RecogPrendas::updateDb blocks PAY_YES under
+        // (`updateLockForMonth`). RecogPrendas::updateDb blocks PAY_YES under
         // the same condition; skip here so the locked row never enters the
         // selectable set. Unpaid rows usually have edit_lock=0 (the lock keys
         // on fecha_pago LIKE), so this is mostly a defensive filter.
@@ -357,8 +357,7 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
 
 void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
 {
-    auto *ui_impr = new Imprimir(this);
-    ui_impr->db                  = db;
+    auto *ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo            = qrCode.isNull(); // recibo (no QR) when AEAT didn't reply
     ui_impr->isCompleteInvoice   = false;
     ui_impr->verifactuIntegration = nullptr;

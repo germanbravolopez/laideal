@@ -26,9 +26,8 @@ class CancelInvoiceDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit CancelInvoiceDialog(QWidget *parent = nullptr);
+    explicit CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent = nullptr);
 
-    QSqlDatabase db;
     VerifactuIntegration *m_verifactu = nullptr;
 
 private slots:
@@ -55,6 +54,7 @@ private:
     QVector<Event>   m_events;
     QString          m_pendingCancelId;
     int              m_pendingCancelRow = -1; // row index in m_events for the in-flight cancel
+    QSqlDatabase     db;
 
     void buildUi();
     void rebuildTable();

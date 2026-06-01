@@ -9,8 +9,7 @@ Creates Excel files for printing receipts and formal invoices, then launches an 
 ## Key interface
 
 ```cpp
-Imprimir *ui = new Imprimir(this);
-ui->db = db;
+Imprimir *ui = new Imprimir(db, this);  // db injected via constructor
 ui->isRecibo = true;            // receipt layout
 ui->isCompleteInvoice = false;  // true adds extra fields (policy, stamp, etc.)
 ui->verifactuIntegration = m_verifactuIntegration; // enables /GetQrCode fallback

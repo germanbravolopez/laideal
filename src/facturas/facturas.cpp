@@ -3,9 +3,10 @@
 #include "sql_lite.h"
 #include <QSqlError>
 
-Facturas::Facturas(QWidget *parent) :
+Facturas::Facturas(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::Facturas)
+    ui(new Ui::Facturas),
+    db(database)
 {
     ui->setupUi(this);
     initialSettings();

@@ -9,8 +9,7 @@
 ## Key interface
 
 ```cpp
-RecogPrendas *ui = new RecogPrendas(this);
-ui->db = db;
+RecogPrendas *ui = new RecogPrendas(db, this);  // db injected via constructor
 ui->show();
 ```
 

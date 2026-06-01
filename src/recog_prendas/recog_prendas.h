@@ -24,10 +24,9 @@ class RecogPrendas : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit RecogPrendas(QWidget *parent = nullptr);
+    explicit RecogPrendas(const QSqlDatabase &database, QWidget *parent = nullptr);
     ~RecogPrendas();
 
-    QSqlDatabase db;
     VerifactuIntegration *m_verifactuIntegration = nullptr;
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel = nullptr;
@@ -70,6 +69,7 @@ private slots:
 
 private:
     Ui::RecogPrendas *ui;
+    QSqlDatabase db;
     // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
     // loop so multiple garments of the same ticket only fire one AEAT submission.
     QHash<QString, QString> m_pendingSubmits;

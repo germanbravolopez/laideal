@@ -8,9 +8,10 @@
 
 #include <QMessageBox>
 
-GenListado::GenListado(QWidget *parent) :
+GenListado::GenListado(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::GenListado)
+    ui(new Ui::GenListado),
+    db(database)
 {
     ui->setupUi(this);
     initial_settings();

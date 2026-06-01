@@ -545,8 +545,7 @@ void MainWindow::printRecibo()
     // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
     // given a reprint via RecogPrendas after AEAT replies.
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -563,8 +562,7 @@ void MainWindow::printRecibo()
 void MainWindow::printFra(const QPixmap &qrCode)
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -699,10 +697,8 @@ void MainWindow::on_actionIngresos_triggered()
 {
     QString title = "Ingresos";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "ingresos";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "ingresos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -715,10 +711,8 @@ void MainWindow::on_actionGastos_triggered()
 {
     QString title = "Gastos";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "gastos";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "gastos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -737,10 +731,8 @@ void MainWindow::on_actionListado_de_prendas_triggered()
 {
     QString title = "Listado de prendas";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "prendas";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "prendas";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -758,10 +750,8 @@ void MainWindow::on_actionListado_de_clientes_triggered()
 {
     QString title = "Listado de clientes";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "clientes";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "clientes";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -774,10 +764,8 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
 {
     QString title = "Listado de proveedores";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "proveedores";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "proveedores";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -790,10 +778,8 @@ void MainWindow::on_actionListado_de_servicios_triggered()
 {
     QString title = "Listado de servicios";
     Listado *ui_listado;
-    ui_listado = new Listado(this);
-    ui_listado->tableName = "servicios";
-    ui_listado->db = db;
-    ui_listado->setObjectName(title);
+    ui_listado = new Listado(db, this);
+    ui_listado->tableName = "servicios";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
     ui_listado->populateTable();
@@ -805,8 +791,7 @@ void MainWindow::on_actionListado_de_servicios_triggered()
 void MainWindow::on_actionRecogida_de_prendas_triggered()
 {
     RecogPrendas *ui_recog;
-    ui_recog = new RecogPrendas(this);
-    ui_recog->db = db;
+    ui_recog = new RecogPrendas(db, this);
     ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
@@ -815,8 +800,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
 void MainWindow::on_actionRecibo_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -827,8 +811,7 @@ void MainWindow::on_actionRecibo_triggered()
 void MainWindow::on_actionFactura_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -839,8 +822,7 @@ void MainWindow::on_actionFactura_triggered()
 void MainWindow::on_actionFactura_completa_triggered()
 {
     Imprimir *ui_impr;
-    ui_impr = new Imprimir(this);
-    ui_impr->db = db;
+    ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = true;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -851,16 +833,14 @@ void MainWindow::on_actionFactura_completa_triggered()
 void MainWindow::on_actionGenerar_contabilidad_triggered()
 {
     Contabilidad *ui_contabilidad;
-    ui_contabilidad = new Contabilidad(this);
-    ui_contabilidad->db = db;
+    ui_contabilidad = new Contabilidad(db, this);
     ui_contabilidad->show();
 }
 
 void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
-    ui_rev_cont = new Contabilidad(this);
-    ui_rev_cont->db = db;
+    ui_rev_cont = new Contabilidad(db, this);
     ui_rev_cont->setWindowTitle("Revertir Contabilidad");
     ui_rev_cont->revertirOn = true;
     ui_rev_cont->resetAllContents();
@@ -870,8 +850,7 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
 void MainWindow::on_actionFormulario_facturas_triggered()
 {
     Facturas *ui_facturas;
-    ui_facturas = new Facturas(this);
-    ui_facturas->db = db;
+    ui_facturas = new Facturas(db, this);
     ui_facturas->populateEmpresas();
     ui_facturas->populateServicios();
     ui_facturas->show();
@@ -906,8 +885,7 @@ void MainWindow::cleanDatabase(bool print)
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
-    ui_add_garment = new AddGarment(this);
-    ui_add_garment->db = db;
+    ui_add_garment = new AddGarment(db, this);
     ui_add_garment->show();
 }
 
@@ -1029,8 +1007,7 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
                              QMessageBox::Ok);
         return;
     }
-    CancelInvoiceDialog dlg(this);
-    dlg.db = db;
+    CancelInvoiceDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
 }
@@ -1047,8 +1024,7 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
                              QMessageBox::Ok);
         return;
     }
-    RectifyInvoiceDialog dlg(this);
-    dlg.db = db;
+    RectifyInvoiceDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
     dlg.exec();
     // Rectificativa eagerly INSERTs its row (claims the next n_recibo) on submit,

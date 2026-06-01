@@ -36,8 +36,8 @@ VerifactuInvoice::InvoiceType invoiceTypeFromIndex(int idx)
 
 } // namespace
 
-RectifyInvoiceDialog::RectifyInvoiceDialog(QWidget *parent)
-    : QDialog(parent)
+RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     setWindowTitle("Factura rectificativa Verifactu");
     setMinimumWidth(520);

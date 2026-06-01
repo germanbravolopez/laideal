@@ -37,7 +37,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `addNewClient(db, name, telFijo, direccion, movil)` | `bool` | Insert a row into `clientes` |
 | `totalPriceBetweenDates(db, table, start, end, iva)` | `float` | Sum of `importe` for a date range and IVA rate. For `ingresos`: excludes `verifactu_estado = 'ANULADA'` rows. Both tables use `[start, end)` half-open interval |
 | `readLockForMonthAndYear(db, table, month, year)` | `int` | `1` if quarter is accounting-locked, `0` if open |
-| `updateLockInIngresos(db, value, month, year)` | `void` | Lock (`1`) or unlock (`0`) a month+year in `ingresos` |
+| `updateLockForMonth(db, value, month, year)` | `void` | Lock (`1`) or unlock (`0`) a month+year in both `ingresos` and `gastos` |
 | `updateComasInDecimalData(db, table, item)` | `int` | Replace comma decimal separators with dots |
 | `insertNewItemToTable(db, items, table)` | `void` | Generic row insert |
 | `genHash16()` | `QString` | Generate a 16-char alphanumeric deduplication hash |

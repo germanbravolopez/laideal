@@ -21,8 +21,8 @@ constexpr int COL_ACTION     = 4;
 constexpr int COL_COUNT      = 5;
 } // namespace
 
-CancelInvoiceDialog::CancelInvoiceDialog(QWidget *parent)
-    : QDialog(parent)
+CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     setWindowTitle(tr("Anular Factura Verifactu"));
     setMinimumSize(620, 360);

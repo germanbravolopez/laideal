@@ -4,9 +4,10 @@
 #include <QSqlError>
 #include "imprimir.h"
 
-AddGarment::AddGarment(QWidget *parent) :
+AddGarment::AddGarment(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::AddGarment)
+    ui(new Ui::AddGarment),
+    db(database)
 {
     ui->setupUi(this);
     initialSettings();

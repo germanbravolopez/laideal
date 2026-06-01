@@ -13,8 +13,7 @@ Generic list-view window. Set `tableName` at runtime to display any DB table. Us
 ## Key interface
 
 ```cpp
-Listado *ui_listado = new Listado(this);
-ui_listado->db = db;
+Listado *ui_listado = new Listado(db, this);  // db injected via constructor
 ui_listado->tableName = "prendas";  // set before calling populateTable()
 ui_listado->populateTable();
 ui_listado->show();

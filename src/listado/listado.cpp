@@ -5,8 +5,9 @@
 #include "numberformatdelegate.h"
 #include "textcolordelegate.h"
 
-Listado::Listado(QWidget *parent) :
-    QMainWindow(parent)
+Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
+    QMainWindow(parent),
+    db(database)
 {
     setupUi(this);
     connect(table_listado->action1, &QAction::triggered,
@@ -275,8 +276,7 @@ void Listado::on_actionAnadir_fila_triggered()
 {
     if (tableName == "clientes") {
         InsertNewItem *ui_insert_new;
-        ui_insert_new = new InsertNewItem(this);
-        ui_insert_new->db = db;
+        ui_insert_new = new InsertNewItem(db, this);
         ui_insert_new->exec();
         populateTable();
     } else if (tableName == "prendas") {
@@ -329,15 +329,13 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
 {
     if (tableName == "gastos") {
         GenListado *ui_generar_listado;
-        ui_generar_listado = new GenListado(this);
-        ui_generar_listado->db = db;
+        ui_generar_listado = new GenListado(db, this);
         ui_generar_listado->model = table_listado->model();
         ui_generar_listado->exec();
         populateTable();
     } else if (tableName == "prendas") {
             GenListado *ui_generar_listado;
-            ui_generar_listado = new GenListado(this);
-            ui_generar_listado->db = db;
+            ui_generar_listado = new GenListado(db, this);
             ui_generar_listado->model = table_listado->model();
             ui_generar_listado->table_name = tableName;
             ui_generar_listado->print_table();

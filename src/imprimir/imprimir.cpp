@@ -14,8 +14,8 @@
 #include <QTextStream>
 #include <QTimer>
 
-Imprimir::Imprimir(QWidget *parent)
-    : QDialog(parent)
+Imprimir::Imprimir(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     setupUi(this);
 }

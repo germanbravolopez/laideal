@@ -25,9 +25,8 @@ class PayDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit PayDialog(QWidget *parent = nullptr);
+    explicit PayDialog(const QSqlDatabase &database, QWidget *parent = nullptr);
 
-    QSqlDatabase db;
     VerifactuIntegration *m_verifactu = nullptr;
 
     // Loads the ticket's unpaid rows into the table widget. Returns false if
@@ -41,6 +40,7 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
+    QSqlDatabase db;
     void buildUi();
     void setFormEnabled(bool enabled);
     void recomputeTotal();

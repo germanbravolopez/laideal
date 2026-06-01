@@ -25,7 +25,6 @@ class Imprimir : public QDialog
     Q_OBJECT
 
 public:
-    QSqlDatabase db;
     QSqlQueryModel *sqlQueryModel;
     bool isRecibo, isCompleteInvoice;
     VerifactuIntegration *verifactuIntegration = nullptr;
@@ -34,7 +33,7 @@ public:
     // >=0: scope getTicketInfo to rows with verifactu_invoice_seq = invoiceSeq,
     // so partial-payment events (8.5+) print only the garments charged that time.
     int invoiceSeq = -1;
-    Imprimir(QWidget *parent = nullptr);
+    Imprimir(const QSqlDatabase &database, QWidget *parent = nullptr);
 
     // Public functions
     void getTicketInfo();
@@ -60,7 +59,7 @@ private slots:
     void on_bb_ok_cancel_rejected();
 
 private:
-
+    QSqlDatabase db;
 };
 
 #endif // IMPRIMIR_H

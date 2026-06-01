@@ -5,10 +5,12 @@
 #include "appsettings.h"
 #include "reporthtml.h"
 
-Contabilidad::Contabilidad(QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::Contabilidad)
+Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::Contabilidad),
+    db(database)
 {
+    setAttribute(Qt::WA_DeleteOnClose); // self-delete on close: callers show() non-modally and drop the pointer
     ui->setupUi(this);
     initialSettings();
 }
@@ -18,18 +20,26 @@ Contabilidad::~Contabilidad()
     delete ui;
 }
 
+Contabilidad::ConfigMode Contabilidad::currentMode() const
+{
+    return static_cast<ConfigMode>(ui->cb_config->currentIndex());
+}
+
 void Contabilidad::initialSettings()
 {
-    ui->sb_year->setRange(2019, QDate::currentDate().year());
+    // Lower bound of the year selector taken from the oldest income record
+    // rather than a hardcoded year, so the range tracks the actual data.
+    const int firstYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_pago", "ingresos");
+    const int currentYear = QDate::currentDate().year();
+    ui->sb_year->setRange(firstYear > 0 ? firstYear : currentYear, currentYear);
     ui->sb_trim->setRange(1, 4);
     resetAllContents();
 }
 
 void Contabilidad::resetAllContents()
 {
-    ui->cb_config->setCurrentText(C_TRIMESTRAL);
+    ui->cb_config->setCurrentIndex(Trimestral);
     ui->cb_config->setDisabled(revertirOn); // disable configuration combobox when reverting contabilidad mode
-    ui->sb_trim->minimum();
     ui->sb_year->setValue(QDate::currentDate().year());
     ui->checkBox_lock->setChecked(false);
     ui->checkBox_lock->setDisabled(revertirOn); // disable lock checkbox when reverting
@@ -38,7 +48,7 @@ void Contabilidad::resetAllContents()
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
     int editLock = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value());
-    if (ui->cb_config->currentText() == C_TRIMESTRAL) {
+    if (currentMode() == Trimestral) {
         switch (editLock) {
         case 0:
             // contabilidad not done
@@ -110,21 +120,19 @@ void Contabilidad::on_bb_ok_cancel_rejected()
 
 void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 {
-    if (arg1 == C_MENSUAL) {
+    if (currentMode() == Mensual) {
         ui->lbl_trim->setVisible(true);
         ui->sb_trim->setVisible(true);
         ui->lbl_trim->setText("Mes:");
         ui->sb_trim->setRange(1, 12);
-        ui->sb_trim->minimum();
     }
-    else if (arg1 == C_TRIMESTRAL) {
+    else if (currentMode() == Trimestral) {
         ui->lbl_trim->setVisible(true);
         ui->sb_trim->setVisible(true);
         ui->lbl_trim->setText("Trimestre:");
         ui->sb_trim->setRange(1, 4);
-        ui->sb_trim->minimum();
     }
-    else if (arg1 == C_ANUAL) {
+    else if (currentMode() == Anual) {
         ui->lbl_trim->setVisible(false);
         ui->sb_trim->setVisible(false);
     }
@@ -141,7 +149,7 @@ void Contabilidad::generateContabilidad()
     const int year = ui->sb_year->value();
     QString contabilidadHtml, path, filename;
 
-    if (ui->cb_config->currentText() == C_TRIMESTRAL) {
+    if (currentMode() == Trimestral) {
         contabilidadHtml = ReportHtml::documentOpen("Contabilidad - Trimestre " + QString::number(ui->sb_trim->value())
                                                     + " · " + QString::number(year),
                                                     periodSubtitle(0))
@@ -150,7 +158,7 @@ void Contabilidad::generateContabilidad()
         path = AppSettings::instance()->contabilidadPath();
         filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
     }
-    else if (ui->cb_config->currentText() == C_MENSUAL) {
+    else if (currentMode() == Mensual) {
         bool cerrada = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year) == 1;
         contabilidadHtml = ReportHtml::documentOpen("Reporte Mensual - Mes " + QString::number(ui->sb_trim->value())
                                                     + " · " + QString::number(year),
@@ -187,7 +195,7 @@ void Contabilidad::generateContabilidad()
 void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive)
 {
     const int year = ui->sb_year->value();
-    if (ui->cb_config->currentText() == C_MENSUAL) {
+    if (currentMode() == Mensual) {
         const int month = ui->sb_trim->value();
         start.setDate(year, month, 1);
         if (month == 12)
@@ -197,7 +205,7 @@ void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endEx
         return;
     }
 
-    const int trim = (ui->cb_config->currentText() == C_TRIMESTRAL) ? ui->sb_trim->value() : trimForYearConfig;
+    const int trim = (currentMode() == Trimestral) ? ui->sb_trim->value() : trimForYearConfig;
     switch (trim) {
     case 1: start.setDate(year, 1, 1);  endExclusive.setDate(year, 4, 1);      break;
     case 2: start.setDate(year, 4, 1);  endExclusive.setDate(year, 7, 1);      break;
@@ -249,32 +257,35 @@ Contabilidad::PeriodFigures Contabilidad::computeFigures(int trimForYearConfig)
 
 void Contabilidad::updateLock()
 {
+    // Doing the contabilidad locks the period (edit_lock = 1); reverting unlocks it (0).
+    const int lockValue = revertirOn ? 0 : 1;
+    const int year = ui->sb_year->value();
     switch (ui->sb_trim->value()) {
     case 1:
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 1, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 2, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 3, ui->sb_year->value());
+        updateLockForMonth(db, lockValue, 1, year);
+        updateLockForMonth(db, lockValue, 2, year);
+        updateLockForMonth(db, lockValue, 3, year);
         break;
     case 2:
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 4, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 5, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 6, ui->sb_year->value());
+        updateLockForMonth(db, lockValue, 4, year);
+        updateLockForMonth(db, lockValue, 5, year);
+        updateLockForMonth(db, lockValue, 6, year);
         break;
     case 3:
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 7, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 8, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 9, ui->sb_year->value());
+        updateLockForMonth(db, lockValue, 7, year);
+        updateLockForMonth(db, lockValue, 8, year);
+        updateLockForMonth(db, lockValue, 9, year);
         break;
     case 4:
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 10, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 11, ui->sb_year->value());
-        updateLockInIngresos(db, static_cast<int>(!revertirOn), 12, ui->sb_year->value());
+        updateLockForMonth(db, lockValue, 10, year);
+        updateLockForMonth(db, lockValue, 11, year);
+        updateLockForMonth(db, lockValue, 12, year);
         break;
     default:
         break;
     }
-    qDebug() << "Contabilidad::updateLock: edit_lock set to" << static_cast<int>(!revertirOn)
-             << "for trim" << ui->sb_trim->value() << "year" << ui->sb_year->value();
+    qDebug() << "Contabilidad::updateLock: edit_lock set to" << lockValue
+             << "for trim" << ui->sb_trim->value() << "year" << year;
 }
 
 void Contabilidad::writeHtml(QString filename,
