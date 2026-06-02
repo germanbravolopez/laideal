@@ -302,8 +302,9 @@ void RecogPrendas::updateRowClickedToFields()
     // Update content from clicked row
     ui->le_nr_ticket->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString());
     ui->le_client->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CLIENTE)).toString());
-    ui->le_phone->setText(selectFromWhereLike(db, "tel_fijo", "clientes", "nombre", ui->le_client->text(), true, false));
-    ui->le_mobile->setText(selectFromWhereLike(db, "movil", "clientes", "nombre", ui->le_client->text(), true, false));
+    const QStringList phones = readClientPhones(db, ui->le_client->text()); // {tel_fijo, movil} in one query
+    ui->le_phone->setText(phones.value(0));
+    ui->le_mobile->setText(phones.value(1));
     ui->le_garm->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PRENDA)).toString());
     ui->le_qty->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CANTIDAD)).toString());
     ui->le_servic->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString());

@@ -51,8 +51,14 @@ void Contabilidad::resetAllContents()
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
-    int editLock = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value() * 3, ui->sb_year->value());
+    // Stays false except when reverting a quarter that was never done: there we
+    // keep the dialog open so the operator can act on the info message.
+    bool keepDialogOpen = false;
     if (currentMode() == Trimestral) {
+        // Read the lock across the whole quarter, not just its last month: a
+        // quarter with income only in its first months would otherwise read as
+        // "no data" and never get locked.
+        int editLock = readLockForQuarter(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value());
         switch (editLock) {
         case 0:
             // contabilidad not done
@@ -63,6 +69,7 @@ void Contabilidad::on_bb_ok_cancel_accepted()
                 QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
                                          + " para el año " + QString::number(ui->sb_year->value()) + " no estaba aun realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
+                keepDialogOpen = true;
             }
             else {
                 generateContabilidad();
@@ -112,7 +119,7 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         generateContabilidad();
     }
 
-    if (!(editLock == 0 && revertirOn)) {
+    if (!keepDialogOpen) {
         this->close();
     }
 }
@@ -177,7 +184,7 @@ void Contabilidad::generateContabilidad()
         contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year));
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
-            bool cerrada = readLockForMonthAndYear(db, "ingresos", trim * 3, year) == 1;
+            bool cerrada = readLockForQuarter(db, "ingresos", trim, year) == 1;
             PeriodFigures f = computeFigures(trim);
             annual.accumulate(f);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)

@@ -130,7 +130,7 @@ Closes Verifactu Req. 4 (Art. 8.2.c RD 1007/2023): durable archive of the live S
 | `backupDirectory()` | Resolves the configured root, creating it if missing. Default `<DocumentsLocation>/laideal_backups`. |
 
 Triggers wired in `MainWindow`:
-- **Auto**: constructor schedules `performBackup()` via `QTimer::singleShot(3000)` if `needsBackup()` returns true. Silent on success (status-bar message); `QMessageBox::warning` on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
+- **Auto**: `MainWindow` schedules the backup via `QTimer::singleShot(3000)` if `needsBackup()` returns true, then runs `performBackup()` on a `QThread::create` worker (it uses its own dedicated DB connections and touches no GUI, so `VACUUM INTO` + `integrity_check` don't block the event loop); the `Result` is marshalled back to the GUI thread with `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`. Silent on success (status-bar message); `QMessageBox::warning` on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
 - **Manual**: `Herramientas → Hacer copia de seguridad ahora...` (`actionHacer_copia_de_seguridad`) runs `performBackup()` under `WaitCursor` and reports path + size in a `QMessageBox` so the operator can grab the file for offsite copy.
 
 Filename convention `laideal_yyyy-MM-dd_HHmmss.sqlite` sorts lexicographically by time, which keeps the pruner trivial. Full module reference at `docs/modules/backup.md`.

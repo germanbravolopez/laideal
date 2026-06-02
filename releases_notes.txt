@@ -1,5 +1,15 @@
 Releases:
 
+9.1
+- Bug fix: reprinted invoices for partial or late payments now show a QR with the correct date
+  - The reprinted factura's QR used the reception date instead of the payment date, so for a payment made on a different day than the garment was received the QR did not match the invoice registered at the AEAT. It now uses the payment date, matching what was sent.
+- Bug fix: a payment is no longer marked as failed when the AEAT is slow to reply
+  - If the AEAT did not answer within a few seconds while charging through "Cobrar", the invoice was recorded as an error. It is now kept as pending (the submission may still have arrived), so it is not wrongly shown as failed and can be reconciled later.
+- Bug fix: closing a quarter's accounting reliably locks it
+  - When a quarter had income only in its first months and nothing in the last month, "Contabilidad" treated the quarter as empty and did not lock it. It now checks the whole quarter.
+- Improvement: the app no longer freezes briefly during the automatic backup at startup
+  - The daily backup now runs in the background, so the window stays responsive while it is created.
+
 9.0
 - New: partial payment of a ticket ("Cobrar" in Recogida de prendas)
   - "Pagar todo" now opens a Cobrar dialog listing every unpaid garment of the ticket, each pre-selected. Untick the garments the client is not paying this time and press Cobrar: only those are charged and a Verifactu invoice is issued for that payment. The rest stay unpaid and can be charged later as a separate payment, each with its own invoice number (e.g. 3245-1, 3245-2). The printed factura covers exactly the garments paid in that event.

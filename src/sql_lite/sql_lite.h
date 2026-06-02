@@ -27,6 +27,9 @@ QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, cons
                                 const QString &columnToSearch, const QString &itemToSearch,
                                 bool exactMatch, bool printMsg);
 QString     searchItemFromClient(QSqlDatabase &db, const QString &item, const QString &client, bool printMsg);
+// {tel_fijo, movil} for an exact client name, fetched in one query (both empty
+// if the client is not found). Avoids two separate single-column lookups.
+QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
@@ -35,6 +38,12 @@ float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate
 // "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
 int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
+// Quarter-wide edit_lock state (quarter 1-4). Returns 1 if any row of the quarter
+// is accounting-locked, 0 if the quarter has data but is open, 2 if it has no rows.
+// Reads all three months of the quarter, so a quarter is not mistaken for empty
+// when only its last month lacks data (which readLockForMonthAndYear, reading a
+// single month, would do).
+int         readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year);
 // Set edit_lock = value on both ingresos and gastos rows whose date falls in the
 // given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
 void        updateLockForMonth(QSqlDatabase &db, int value, int month, int year);

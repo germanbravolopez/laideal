@@ -93,12 +93,21 @@ bool PendingSubmitsDialog::loadPending()
     // legacy empty strings and the canonical "PENDIENTE". The fecha_recepcion
     // column stores dd-MM-yyyy; substr-rebuild into yyyy-MM-dd lets SQLite
     // compare lexicographically against floorIso.
+    //
+    // verifactu_invoice_seq = 0 restricts recovery to save-time / full-ticket
+    // submissions (InvoiceID = bare n_recibo), which is all this dialog can
+    // re-submit: retryRequested re-sends the whole ticket as n_recibo. A
+    // partial-payment event (seq > 0, InvoiceID "<n_recibo>-<seq>") left
+    // PENDIENTE by a PayDialog timeout must NOT be auto-retried here - it would
+    // resubmit the wrong amount under the wrong InvoiceID. Those reconcile per
+    // event (manual, for now).
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, MIN(fecha_recepcion), MIN(cliente), SUM(importe) "
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
         "       OR verifactu_estado = 'PENDIENTE') "
+        "  AND verifactu_invoice_seq = 0 "
         "  AND substr(fecha_recepcion, 7, 4) || '-' "
         "      || substr(fecha_recepcion, 4, 2) || '-' "
         "      || substr(fecha_recepcion, 1, 2) >= :floor "

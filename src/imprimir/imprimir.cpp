@@ -147,8 +147,20 @@ QPixmap Imprimir::resolveQrCode()
     // exactly what AEAT has on record (legacy 8.0-8.4 rows have it empty and we
     // fall back to bare n_recibo - same string they were submitted under).
     QString invoiceNumber = displayInvoiceId();
-    QString dateStr = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString();
-    QDate invoiceDate = QDate::fromString(dateStr, "dd-MM-yyyy");
+    // The QR's FechaExpedicion must equal the date submitted to AEAT, which is
+    // the payment date (fecha_pago) of the printed rows: PayDialog submits with
+    // fecha_pago and late-pickup retries with the payment date, while save-time
+    // submissions store fecha_pago = fecha_recepcion, so fecha_pago is correct
+    // for every path. (The old code read fecha_recepcion, which diverged from
+    // AEAT whenever payment day != reception day, e.g. a partial payment.)
+    // Scan for the first paid row's fecha_pago - row 0 may be unpaid in the
+    // unfiltered legacy reprint path.
+    QDate invoiceDate;
+    for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        invoiceDate = QDate::fromString(
+            sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString(), "dd-MM-yyyy");
+        if (invoiceDate.isValid()) break;
+    }
     if (!invoiceDate.isValid())
         return QPixmap();
 
