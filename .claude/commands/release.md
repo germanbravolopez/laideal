@@ -41,9 +41,9 @@ release X.Y - <one-line summary of what this release ships>
 
 The summary should mention the headline customer-facing change(s). Example from history: `release 8.1 - quick-turn bugfix / UX release on top of 8.0: ...`.
 
-### 3. Sanity build (catch compile errors before opening the PR)
+### 3. Sanity build + tests (hard gate before opening the PR)
 
-A plain Release build into the normal `build\` directory - same incantation the README documents. Cheap, fast, and catches the obvious "merged a branch that doesn't compile" foot-gun before bothering reviewers or the release-artifact pipeline.
+A plain Release build into the normal `build\` directory - same incantation the README documents - followed by the CTest suite. Cheap, fast, and catches both the "merged a branch that doesn't compile" foot-gun and any regression the tests cover before bothering reviewers or the release-artifact pipeline.
 
 ```powershell
 # Add Qt + MinGW + CMake + Ninja to PATH for this shell session.
@@ -51,11 +51,12 @@ $env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64
 
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-Expected output: `build\src\app\laideal.exe` exists and the build ends with no errors. Warnings are tolerated; errors are not. The user may run this via Qt Creator instead - that's equivalent.
+Expected output: `build\src\app\laideal.exe` exists, the build ends with no errors, and `ctest` reports `100% tests passed`. Warnings are tolerated; errors and test failures are not. The user may run this via Qt Creator instead - that's equivalent.
 
-If the build fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code.
+If the build **or any test** fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code or a failing test. (CI enforces the same gate: `release.yml` runs `ctest` between Build and Stage, so a failing test aborts the publish even if this local step is skipped.)
 
 This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
 

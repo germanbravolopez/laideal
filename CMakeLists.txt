@@ -13,7 +13,7 @@ set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport Network Test)
 #find_package(QXlsxQt6 REQUIRED)
 
 add_subdirectory(QXlsx)
@@ -32,3 +32,8 @@ add_subdirectory(src/add_garment)
 add_subdirectory(src/verifactu)
 add_subdirectory(src/updater)
 add_subdirectory(src/backup)
+
+# Unit / integration tests (Qt Test + CTest). Run with `ctest` from build/ or
+# `cmake --build build --target test`. CI and the release gate run them too.
+enable_testing()
+add_subdirectory(tests)

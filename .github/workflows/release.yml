@@ -52,6 +52,11 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # Hard gate: a failing test aborts the release before any artifact is
+      # built or published.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
       - name: Stage release files
         shell: pwsh
         run: |

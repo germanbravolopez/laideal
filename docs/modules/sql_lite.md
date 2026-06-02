@@ -37,7 +37,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `updateItemToClient(db, column, item, client)` | `bool` | Update a field for a client in `clientes` |
 | `addNewClient(db, name, telFijo, direccion, movil)` | `bool` | Insert a row into `clientes` |
 | `totalPriceBetweenDates(db, table, start, end, iva)` | `float` | Sum of `importe` for a date range and IVA rate. For `ingresos`: excludes `verifactu_estado = 'ANULADA'` rows. Both tables use `[start, end)` half-open interval |
-| `readLockForMonthAndYear(db, table, month, year)` | `int` | `1` if the month's rows are accounting-locked, `0` if open, `2` if the month has no rows |
+| `readLockForMonthAndYear(db, table, month, year)` | `int` | `1` if the month's rows are accounting-locked, `0` if open **or the month has no rows** (a valid empty SELECT returns 0 here — it does not distinguish "no data"); `2` only on a query error. Use `readLockForQuarter` when "no data" must be distinguished |
 | `readLockForQuarter(db, table, quarter, year)` | `int` | Quarter-wide lock (reads all three months in one query): `1` if any row of the quarter is locked, `0` if it has data but is open, `2` if no rows. Avoids the last-month-only blind spot of `readLockForMonthAndYear` |
 | `updateLockForMonth(db, value, month, year)` | `void` | Lock (`1`) or unlock (`0`) a month+year in both `ingresos` and `gastos` |
 | `updateComasInDecimalData(db, table, item)` | `int` | Replace comma decimal separators with dots |

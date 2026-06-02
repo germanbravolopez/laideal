@@ -303,3 +303,15 @@ AEAT QR validation:
 | Qt Sql | System | SQLite driver |
 | Qt PrintSupport | System | Print support |
 | Qt Network | System | HTTP for Verifactu REST API |
+| Qt Test | System | Unit / integration tests (`tests/`) |
+
+---
+
+## Testing
+
+`tests/` holds Qt Test suites registered with CTest (`enable_testing()` + `add_subdirectory(tests)` in the root `CMakeLists.txt`; `Test` added to the root `find_package`). They build as part of the normal build and run with `ctest --test-dir build --output-on-failure`. Both use `QTEST_GUILESS_MAIN` (QCoreApplication) so they run headless on CI without a display.
+
+- **`test_sql_lite`** — links the `sql_lite` static lib and exercises its free functions against a throwaway SQLite DB created in a `QTemporaryDir` (schema created in `initTestCase`, tables cleared in `init()` before each test). Covers accounting totals + Verifactu estado filters (`totalPriceBetweenDates`, `countOperationsBetweenDates`), the accounting locks (`readLockForMonthAndYear`, `readLockForQuarter`), `nextVerifactuInvoiceSeq`, `readClientPhones`, and `genHash16`. Fixtures stay on success paths + dot-decimal importes so the functions' modal-`QMessageBox` error paths never fire under the guiless main.
+- **`test_mysortfilterproxymodel`** — links `tableview` and covers `removeDiacritics` and accent-insensitive `filterAcceptsRow`.
+
+CI (`ci.yml`) runs `ctest` on every push/PR; `release.yml` runs it as a **hard gate** between Build and Stage, so a failing test aborts the publish. New coverage should follow the same shape: link the production static lib, drive it through real inputs, assert observable results.
