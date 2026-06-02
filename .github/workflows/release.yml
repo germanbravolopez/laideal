@@ -57,26 +57,35 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit ctest-junit.xml
+          ctest --test-dir build --output-on-failure --no-tests=error
           $code = $LASTEXITCODE
-          $xml = "build/ctest-junit.xml"
-          if (Test-Path $xml) {
-            [xml]$r = Get-Content $xml
-            $s = $r.testsuite
-            $emoji = if ([int]$s.failures -eq 0) { ':white_check_mark:' } else { ':x:' }
-            $md = @()
-            $md += "## $emoji Test results (release ${{ github.ref_name }})"
-            $md += ""
-            $md += "**$($s.tests) tests, $($s.failures) failed, $($s.skipped) skipped** in $($s.time)s"
-            $md += ""
-            $md += "| Result | Test | Time (s) |"
-            $md += "| :----: | ---- | -------: |"
-            foreach ($c in $s.testcase) {
-              $status = if ($c.status -eq 'fail') { ':x: fail' } else { ':white_check_mark: pass' }
-              $md += "| $status | $($c.name) | $($c.time) |"
+          # Render a foldable per-suite summary from the Qt JUnit files (one
+          # <testcase> per test method). Emojis via [char] so the YAML stays ASCII.
+          $files = Get-ChildItem build -Filter 'test-results-*.xml' -ErrorAction SilentlyContinue | Sort-Object Name
+          $lifecycle = @('initTestCase','cleanupTestCase','initTestCase_data')
+          $grandTotal = 0; $grandFail = 0
+          $blocks = @()
+          foreach ($f in $files) {
+            [xml]$r = Get-Content $f.FullName
+            $su = $r.testsuite
+            $methods = @($su.testcase | Where-Object { $lifecycle -notcontains $_.name })
+            $t = $methods.Count
+            $fl = @($methods | Where-Object { $_.failure -or $_.error }).Count
+            $grandTotal += $t; $grandFail += $fl
+            $icon = if ($fl -eq 0) { [char]0x2705 } else { [char]0x274C }
+            $blocks += "<details><summary>$icon <b>$($su.name)</b> - $t tests, $fl failed ($($su.time)s)</summary>"
+            $blocks += ""
+            $blocks += "| Result | Test | Time (s) |"
+            $blocks += "| :----: | ---- | -------: |"
+            foreach ($m in $methods) {
+              $mi = if ($m.failure -or $m.error) { [char]0x274C } else { [char]0x2705 }
+              $blocks += "| $mi | $($m.name) | $($m.time) |"
             }
-            ($md -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            $blocks += ""; $blocks += "</details>"; $blocks += ""
           }
+          $top = if ($grandFail -eq 0) { [char]0x2705 } else { [char]0x274C }
+          $md = @("## $top Test results (release ${{ github.ref_name }})", "", "**$grandTotal tests, $grandFail failed** across $($files.Count) suite(s)", "") + $blocks
+          ($md -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           exit $code
 
       - name: Stage release files

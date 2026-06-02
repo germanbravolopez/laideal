@@ -7,6 +7,10 @@
 
 # sql_lite: integration tests against a throwaway SQLite DB (totals + Verifactu
 # estado filters, accounting locks, invoice-seq, client lookup, hashing).
+# Each test runs with two -o sinks: a per-suite Qt JUnit XML in the build dir
+# (one <testcase> per test method - consumed by the CI step that renders the
+# foldable per-method summary) and the plain-text report on stdout (so ctest
+# --output-on-failure still shows readable output on failure).
 add_executable(test_sql_lite test_sql_lite.cpp)
 target_link_libraries(test_sql_lite PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
@@ -14,7 +18,8 @@ target_link_libraries(test_sql_lite PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets   # sql_lite references QMessageBox on error paths
     sql_lite
 )
-add_test(NAME sql_lite COMMAND test_sql_lite)
+add_test(NAME sql_lite
+    COMMAND test_sql_lite -o ${CMAKE_BINARY_DIR}/test-results-sql_lite.xml,junitxml -o -,txt)
 
 # tableview: diacritic-insensitive proxy-model filtering.
 add_executable(test_mysortfilterproxymodel test_mysortfilterproxymodel.cpp)
@@ -23,4 +28,5 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     tableview
 )
-add_test(NAME mysortfilterproxymodel COMMAND test_mysortfilterproxymodel)
+add_test(NAME mysortfilterproxymodel
+    COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
