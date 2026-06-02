@@ -483,6 +483,16 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
     return phones;
 }
 
+double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
+{
+    const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
+    double price = quantity * unitPrice;
+    if (price < 0.0)
+        return 0.0;
+    const double size = sizeText.trimmed().replace(',', '.').toDouble();
+    return (size != 0.0) ? size * price : price;
+}
+
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;

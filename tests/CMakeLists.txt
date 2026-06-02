@@ -30,3 +30,17 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 )
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
+
+# verifactu: the pure JSON response parser (parseVerifactuResponse). Uses
+# QTEST_MAIN (QApplication for QPixmap) under the offscreen platform so the QR
+# decode path runs headless.
+add_executable(test_verifactu_response test_verifactu_response.cpp)
+target_link_libraries(test_verifactu_response PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Network
+    verifactu
+)
+add_test(NAME verifactu_response
+    COMMAND test_verifactu_response -o ${CMAKE_BINARY_DIR}/test-results-verifactu_response.xml,junitxml -o -,txt)
+set_tests_properties(verifactu_response PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

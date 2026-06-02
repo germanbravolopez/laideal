@@ -14,6 +14,7 @@ For the full AEAT REST API field reference see [`rest_api.md`](./rest_api.md).
 |------|---------|
 | `verifactuintegration.h/cpp` | Public facade — the only class `MainWindow` and friends call directly |
 | `verifactumanager.h/cpp` | HTTP REST layer over `QNetworkAccessManager`. Also defines `VerifactuEstado` enum + string helpers |
+| `verifacturesponse.h/cpp` | Pure `parseVerifactuResponse()` (JSON reply -> `VerifactuResult`) + `decodeVerifactuImageBase64()`, extracted from `VerifactuManager` so the parsing is unit-testable without a network |
 | `verifactuconfig.h/cpp` | Internal config holder (NIF, name, ServiceKey, environment, endpoint URLs) |
 | `verifactuinvoice.h/cpp` | JSON-serialisable `VerifactuInvoice` and `VerifactuTaxItem` models |
 
@@ -181,7 +182,7 @@ Endpoints used:
 
 ## Response capture (what AEAT returns on `/Create` success)
 
-`VerifactuManager::processResponse()` extracts the following from `Return`:
+`parseVerifactuResponse()` (the pure parser in `verifacturesponse.{h,cpp}`, called by `VerifactuManager` and unit-tested in `tests/test_verifactu_response.cpp`) extracts the following from `Return`:
 
 | Field | Captured as | Persisted to DB |
 |-------|-------------|-----------------|

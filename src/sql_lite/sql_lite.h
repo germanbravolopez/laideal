@@ -23,6 +23,12 @@ int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &colum
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);
 QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, const QString &orderByColumn);
 float       readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &service);
+// Importe for one garment line, shared by MainWindow/AddGarment setGarmentPrice.
+// Pure (no DB): quantity * unitPrice, multiplied by a non-zero size factor (m2
+// garments), clamped to >= 0. Quantity and size are parsed with comma->dot
+// normalisation (Spanish input), matching how both are stored at save time - so
+// a size like "2,6" is not silently read as 0 (the 9.0 comma-decimal bug).
+double      garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice);
 QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
                                 const QString &columnToSearch, const QString &itemToSearch,
                                 bool exactMatch, bool printMsg);

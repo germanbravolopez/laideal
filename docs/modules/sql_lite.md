@@ -31,6 +31,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `readMaxNMinYearInColumnFromTable(db, maxNMin, column, table)` | `int` | Max (`true`) or min (`false`) year from a date-string column |
 | `readColumnFromTable(db, column, table, orderByColumn)` | `QStringList` | All values in a column |
 | `readGarmentPrice(db, garment, service)` | `float` | Unit price for a garment + service combination |
+| `garmentImporte(quantityText, sizeText, unitPrice)` | `double` | Pure price math (no DB): comma-normalised `quantity * unitPrice`, times a non-zero size factor, clamped to `>= 0`. Shared by `MainWindow`/`AddGarment` `setGarmentPrice` |
 | `selectFromWhereLike(db, item, table, col, search, exact, print)` | `QString` | Generic single-value lookup |
 | `searchItemFromClient(db, item, client, print)` | `QString` | Lookup a field by client name in `ingresos` |
 | `readClientPhones(db, client)` | `QStringList` | `{tel_fijo, movil}` for an exact client name in one query (both empty if not found) |

@@ -196,6 +196,23 @@ private slots:
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
     }
 
+    // Pure price math (no DB): comma-decimal normalisation + size factor.
+    void test_garmentImporte()
+    {
+        // quantity * unitPrice, no size
+        QVERIFY(qAbs(garmentImporte("2", "", 5.0) - 10.0) < 0.001);
+        // comma decimal in quantity (the 9.0 bug: must not parse as 0)
+        QVERIFY(qAbs(garmentImporte("2,6", "", 5.0) - 13.0) < 0.001);
+        // non-zero size factor (m2 garment), comma decimal in size
+        QVERIFY(qAbs(garmentImporte("3", "2,5", 4.0) - 30.0) < 0.001);
+        // size "0" -> no factor applied
+        QVERIFY(qAbs(garmentImporte("3", "0", 4.0) - 12.0) < 0.001);
+        // negative result clamps to 0
+        QVERIFY(qAbs(garmentImporte("-1", "", 5.0)) < 0.001);
+        // empty quantity -> 0
+        QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "
