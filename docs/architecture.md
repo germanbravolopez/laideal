@@ -318,6 +318,7 @@ AEAT QR validation:
 - **`test_backup_manager`** — links `backup` and covers `BackupManager::backupsToPrune()` (the pure retention decision split out of `pruneOldBackups()`): recent-kept, one-per-month, beyond-4-years dropped, non-schema names ignored.
 - **`test_contabilidad`** — links `contabilidad` and covers `Contabilidad::periodRangeFor()` (the pure period-range date math split out of the `periodRange()` member): half-open quarter/month ranges incl. the year-boundary roll-over.
 - **`test_facturas`** — links `facturas`, covers the pure IVA split `taxBaseFromGross` / `taxAmountFromGross`.
+- **`test_genlistado`** — links `listado`, covers `GenListado::filenameSuffix` and `shouldPrintGastoRow` (the pure bits of the gastos-listado slots).
 - **`test_appsettings`** — links `appsettings`, covers the DPAPI secret-at-rest helpers (`dpapiEncrypt`/`dpapiDecrypt`/`dpapiIsEncrypted`): marker, encrypt↔decrypt round-trip, legacy-plaintext passthrough.
 - **`test_reporthtml`** — links `reporthtml`, covers `ReportHtml::formatEuro` / `tableOpen` / `documentClose`.
 - **`test_versioncompare`** (suite `TestUpdater`) — links `updater`, covers `Updater::compareVersions` / `currentVersion`. NB the executable must not be named `*update*`/`*setup*`/`*install*`: Windows' UAC installer-detection heuristic flags such names as requiring elevation and CTest then fails with `BAD_COMMAND`.

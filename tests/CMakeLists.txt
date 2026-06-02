@@ -31,6 +31,17 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
 
+# listado: GenListado pure helpers (filename suffix + row filter).
+add_executable(test_genlistado test_genlistado.cpp)
+target_link_libraries(test_genlistado PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets   # genlistado.h includes <QDialog>
+    Qt${QT_VERSION_MAJOR}::Sql       # genlistado.h includes <QSqlDatabase>
+    listado
+)
+add_test(NAME genlistado
+    COMMAND test_genlistado -o ${CMAKE_BINARY_DIR}/test-results-genlistado.xml,junitxml -o -,txt)
+
 # facturas: pure IVA split (base + cuota from a gross amount).
 add_executable(test_facturas test_facturas.cpp)
 target_link_libraries(test_facturas PRIVATE

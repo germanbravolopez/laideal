@@ -218,44 +218,39 @@ QString GenListado::generate_html_gastos_table()
         return html_table;
 }
 
+bool GenListado::shouldPrintGastoRow(bool allYears, const QString &selectedYear,
+                                     const QString &rowYear, bool onlyClosed, bool rowClosed)
+{
+    const bool dateOk   = allYears || (selectedYear == rowYear);
+    const bool contabOk = !onlyClosed || rowClosed;
+    return dateOk && contabOk;
+}
+
 bool GenListado::check_years_invoice_type_for_row(int row)
 {
-    // check years
-    bool print_current_row_date = false;
-    if (!ui->checkb_allys->isChecked()) {
-        // print only selected years
-        if (ui->cb_fechas->currentText() == model->index(row, GASTOS_IDX_FECHA).data().toString().mid(6, 4))
-            print_current_row_date = true;
-    }
-    else // print all years
-        print_current_row_date = true;
-    // check type of invoice
-    bool print_current_row_cont = false;
-    if (ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR) {
-        // print only closed accountings
-        if (model->index(row, GASTOS_IDX_CONTAB).data().toBool())
-            print_current_row_cont = true;
-    }
-    else // print all types of invoices
-        print_current_row_cont = true;
-    // return both
-    return print_current_row_date && print_current_row_cont;
+    // rowYear = the yyyy in the dd-MM-yyyy date string (chars 6..9).
+    return shouldPrintGastoRow(
+        ui->checkb_allys->isChecked(),
+        ui->cb_fechas->currentText(),
+        model->index(row, GASTOS_IDX_FECHA).data().toString().mid(6, 4),
+        ui->cb_tipo_gastos->currentText() == C_CONTAB_CERR,
+        model->index(row, GASTOS_IDX_CONTAB).data().toBool());
+}
+
+QString GenListado::filenameSuffix(const QString &agrupar, const QString &tipoGastos,
+                                   bool allYears, const QString &selectedYear)
+{
+    QString suffix;
+    suffix += "agrupado_" + agrupar.toLower().replace(" ", "_") + "_";
+    suffix += tipoGastos.toLower().replace(" ", "_") + "_";
+    suffix += allYears ? QStringLiteral("todos_los_años") : selectedYear;
+    return suffix;
 }
 
 QString GenListado::add_suffix_to_filename()
 {
-    QString filename_suffix = "";
-    // add group of rows
-    filename_suffix += "agrupado_" + ui->cb_agrupar->currentText().toLower().replace(" ", "_") + "_";
-    // add accountings
-    filename_suffix += ui->cb_tipo_gastos->currentText().toLower().replace(" ", "_") + "_";
-    // add date info
-    if (ui->checkb_allys->isChecked())
-        filename_suffix += "todos_los_años";
-    else
-        filename_suffix += ui->cb_fechas->currentText();
-
-    return filename_suffix;
+    return filenameSuffix(ui->cb_agrupar->currentText(), ui->cb_tipo_gastos->currentText(),
+                          ui->checkb_allys->isChecked(), ui->cb_fechas->currentText());
 }
 
 void GenListado::on_bb_ok_cancel_accepted()
