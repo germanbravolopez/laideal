@@ -64,4 +64,4 @@ The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= 
 
 ## Date range
 
-Both `ingresos` and `gastos` queries use a half-open interval `[startDate, endDate)` — `>= startDate AND < endDate`. `endDate` is always the first day of the next quarter, so this correctly excludes that boundary day from the current quarter.
+Both `ingresos` and `gastos` queries use a half-open interval `[startDate, endDate)` — `>= startDate AND < endDate`. `endDate` is always the first day of the next quarter, so this correctly excludes that boundary day from the current quarter. The range itself is computed by the pure static `Contabilidad::periodRangeFor(mode, unit, year, &start, &endExclusive)` (the `periodRange()` member just reads the widgets and delegates), unit-tested in `tests/test_contabilidad.cpp`.

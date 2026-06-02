@@ -44,3 +44,24 @@ target_link_libraries(test_verifactu_response PRIVATE
 add_test(NAME verifactu_response
     COMMAND test_verifactu_response -o ${CMAKE_BINARY_DIR}/test-results-verifactu_response.xml,junitxml -o -,txt)
 set_tests_properties(verifactu_response PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# backup: pure retention/pruning decision.
+add_executable(test_backup_manager test_backup_manager.cpp)
+target_link_libraries(test_backup_manager PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Sql
+    backup
+)
+add_test(NAME backup_manager
+    COMMAND test_backup_manager -o ${CMAKE_BINARY_DIR}/test-results-backup_manager.xml,junitxml -o -,txt)
+
+# contabilidad: pure period-range date math (Contabilidad::periodRangeFor).
+add_executable(test_contabilidad test_contabilidad.cpp)
+target_link_libraries(test_contabilidad PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql      # contabilidad.h includes <QSqlQueryModel>
+    contabilidad
+)
+add_test(NAME contabilidad
+    COMMAND test_contabilidad -o ${CMAKE_BINARY_DIR}/test-results-contabilidad.xml,junitxml -o -,txt)

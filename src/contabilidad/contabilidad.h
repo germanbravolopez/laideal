@@ -29,6 +29,12 @@ public:
     bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
     void resetAllContents();
 
+    // Pure period-range math (no UI state), exposed for unit testing. For
+    // Mensual, 'unit' is the month (1-12); for Trimestral/Anual it is the
+    // quarter (1-4). endExclusive is the first day AFTER the period, i.e. the
+    // range is the half-open [start, endExclusive).
+    static void periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive);
+
 private slots:
     void initialSettings();
 

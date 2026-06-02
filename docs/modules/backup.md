@@ -29,7 +29,7 @@ public:
 1. **Snapshot**: a dedicated `QSQLITE` connection named `laideal_backup_snapshot` opens the live DB and runs `VACUUM INTO '<target>'`. SQLite emits a transactionally-consistent point-in-time copy without taking an exclusive lock — the operator's current session is not interrupted.
 2. **Verify**: the target file is re-opened on a second dedicated connection (`laideal_backup_verify`) with `QSQLITE_OPEN_READONLY`. `PRAGMA integrity_check` must return `ok`; any other verdict deletes the file and reports failure.
 3. **Persist**: on success, `AppSettings::backupLastTime` is set to the current ISO timestamp and the settings JSON is saved atomically.
-4. **Prune**: `pruneOldBackups()` walks the backup directory matching the timestamped filename pattern, keeps every file from the last 30 days, then one file per calendar month for the next 4 years, then deletes the rest.
+4. **Prune**: `pruneOldBackups()` walks the backup directory matching the timestamped filename pattern, keeps every file from the last 30 days, then one file per calendar month for the next 4 years, then deletes the rest. The retention *decision* lives in the pure static `BackupManager::backupsToPrune(fileNames, now)` (no filesystem); `pruneOldBackups()` just lists the directory, calls it, and removes the returned names. `backupsToPrune` is unit-tested in `tests/test_backup_manager.cpp`.
 
 ## Filename convention
 

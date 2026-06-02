@@ -1,8 +1,10 @@
 #ifndef BACKUP_MANAGER_H
 #define BACKUP_MANAGER_H
 
+#include <QDateTime>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 // Verifactu Req. 4 (RD 1007/2023 Art. 8.2.c): durable archive of the live
 // SQLite DB during the 4-year tax prescription window. See
@@ -34,6 +36,14 @@ public:
     // then one per calendar month for up to 4 years. Returns the number of
     // files deleted (negative count = scan error).
     int pruneOldBackups();
+
+    // Pure retention decision (no file I/O): given backup file NAMES (schema
+    // laideal_yyyy-MM-dd_HHmmss.db) and the reference time, return the subset to
+    // delete - keep every copy from the last 30 days, then one per calendar
+    // month for up to 4 years, drop the rest. Names that do not match the schema
+    // are ignored (kept). Exposed for unit testing; pruneOldBackups() wraps it
+    // with the directory listing + removal.
+    static QStringList backupsToPrune(const QStringList &fileNames, const QDateTime &now);
 
     // Resolved absolute path of the backups/ subdirectory next to dbPath()
     // (creates it if missing).

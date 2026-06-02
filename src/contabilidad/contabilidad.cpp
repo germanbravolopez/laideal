@@ -203,11 +203,10 @@ void Contabilidad::generateContabilidad()
     writeHtml(path + filename, contabilidadHtml);
 }
 
-void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive)
+void Contabilidad::periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive)
 {
-    const int year = ui->sb_year->value();
-    if (currentMode() == Mensual) {
-        const int month = ui->sb_trim->value();
+    if (mode == Mensual) {
+        const int month = unit;
         start.setDate(year, month, 1);
         if (month == 12)
             endExclusive.setDate(year + 1, 1, 1);
@@ -216,14 +215,22 @@ void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endEx
         return;
     }
 
-    const int trim = (currentMode() == Trimestral) ? ui->sb_trim->value() : trimForYearConfig;
-    switch (trim) {
+    switch (unit) { // quarter 1-4
     case 1: start.setDate(year, 1, 1);  endExclusive.setDate(year, 4, 1);      break;
     case 2: start.setDate(year, 4, 1);  endExclusive.setDate(year, 7, 1);      break;
     case 3: start.setDate(year, 7, 1);  endExclusive.setDate(year, 10, 1);     break;
     case 4: start.setDate(year, 10, 1); endExclusive.setDate(year + 1, 1, 1);  break;
     default: break;
     }
+}
+
+void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive)
+{
+    const ConfigMode mode = currentMode();
+    // Mensual reads the month from sb_trim; Trimestral the quarter from sb_trim;
+    // Anual iterates quarters, so the caller passes the quarter in trimForYearConfig.
+    const int unit = (mode == Anual) ? trimForYearConfig : ui->sb_trim->value();
+    periodRangeFor(mode, unit, ui->sb_year->value(), start, endExclusive);
 }
 
 float Contabilidad::getTotalIncome(QString table,
