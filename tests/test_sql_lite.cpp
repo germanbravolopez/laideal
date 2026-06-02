@@ -222,6 +222,17 @@ private slots:
         QCOMPARE(verifactuInvoiceId("3245", 12), QStringLiteral("3245-12"));
     }
 
+    // Accent/special-char stripper used for client-name matching (extracted from
+    // MainWindow::removeSpecialChar). Case is preserved; literal '?' is dropped.
+    void test_removeSpecialChars()
+    {
+        QCOMPARE(removeSpecialChars(QStringLiteral("José")),  QStringLiteral("Jose"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("Begoña")), QStringLiteral("Begona"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("Ángel")),  QStringLiteral("Angel"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("sin-acentos")), QStringLiteral("sin-acentos"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("a?b")), QStringLiteral("ab"));
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "

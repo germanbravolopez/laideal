@@ -693,3 +693,13 @@ QString genHash16()
     // cross-ticket hash collisions surfaced by "Crear hash en ingresos".
     return QUuid::createUuid().toString(QUuid::Id128).left(16);
 }
+
+QString removeSpecialChars(const QString &str)
+{
+    // NFD then narrow to Latin-1: accented letters decompose to base + combining
+    // mark, and the marks (not representable in Latin-1) become '?'. Dropping
+    // every '?' leaves the unaccented base letters; case is preserved.
+    QString out = str.normalized(QString::NormalizationForm_D).toLatin1();
+    out.remove(QChar('?'));
+    return out;
+}

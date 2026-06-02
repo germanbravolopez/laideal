@@ -57,6 +57,11 @@ int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, con
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
+// Strip diacritics / non-Latin1 marks for accent-insensitive name matching:
+// NFD-normalise, narrow to Latin-1 (combining marks become '?'), drop every '?'.
+// Pure; used by MainWindow client-name matching. Does not change case.
+QString     removeSpecialChars(const QString &str);
+
 // Patch the rows of (n_recibo, verifactu_invoice_seq) with the AEAT reply
 // (CSV, timestamp, estado, error, QR URL, signed XML, hash, invoice_id).
 // seq=0 binds invoice_id=ticketNum (save-time submit format); seq>0 binds

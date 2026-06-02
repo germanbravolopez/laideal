@@ -387,13 +387,9 @@ bool MainWindow::validateTicket()
 
 QString MainWindow::removeSpecialChar(QString str)
 {
-    str = str.normalized(QString::NormalizationForm_D).toLatin1();
-    int index = str.indexOf("?");
-    while (index != -1) {
-        str = str.remove(index, 1);
-        index = str.indexOf("?");
-    }
-    return str;
+    // Logic lives in sql_lite::removeSpecialChars (unit-tested); kept as a thin
+    // member so the existing call sites stay unchanged.
+    return removeSpecialChars(str);
 }
 
 void MainWindow::checkClientData()

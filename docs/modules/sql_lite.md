@@ -33,6 +33,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `readGarmentPrice(db, garment, service)` | `float` | Unit price for a garment + service combination |
 | `garmentImporte(quantityText, sizeText, unitPrice)` | `double` | Pure price math (no DB): comma-normalised `quantity * unitPrice`, times a non-zero size factor, clamped to `>= 0`. Shared by `MainWindow`/`AddGarment` `setGarmentPrice` |
 | `verifactuInvoiceId(nRecibo, seq)` | `QString` | Pure: AEAT InvoiceID for a payment event — bare `n_recibo` for seq 0, `<n_recibo>-<seq>` otherwise. Single source of truth used at submit / persist / cancel / reprint |
+| `removeSpecialChars(str)` | `QString` | Pure: strip diacritics/non-Latin1 marks (NFD → Latin-1 → drop `?`) for accent-insensitive name matching; case preserved. Used by `MainWindow::removeSpecialChar` |
 | `selectFromWhereLike(db, item, table, col, search, exact, print)` | `QString` | Generic single-value lookup |
 | `searchItemFromClient(db, item, client, print)` | `QString` | Lookup a field by client name in `ingresos` |
 | `readClientPhones(db, client)` | `QStringList` | `{tel_fijo, movil}` for an exact client name in one query (both empty if not found) |
