@@ -302,7 +302,8 @@ void PayDialog::onCobrarClicked()
     m_lblStatus->setText(tr("Enviando %1 a AEAT...").arg(invoiceId));
 
     // Bounded 5s wait for the AEAT reply. onVerifactuRequestFinished will
-    // accept() us once it lands; if it doesn't, fall back to ERROR locally.
+    // accept() us once it lands; if it doesn't, persist the rows as PENDIENTE
+    // locally (the submission may still have reached AEAT - see persistPayment).
     QTimer::singleShot(5000, this, [this]() {
         if (m_pendingReqId.isEmpty()) return; // already handled
         qWarning() << "PayDialog: AEAT timeout (5s) for" << m_pendingReqId;
@@ -350,9 +351,43 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
         qDebug() << "PayDialog::persistPayment: Verifactu disabled, leaving verifactu_* empty";
         return;
     }
+    // A timeout or transport-level failure (NETWORK_ERROR / PENDING) is an
+    // *unknown* outcome - AEAT may still have registered the invoice - so record
+    // the rows as PENDIENTE rather than Error. This keeps the sale from being
+    // wrongly marked failed and a slow-but-successful reply from being lost. A
+    // definitive AEAT rejection (status ERROR) falls through to
+    // updateTicketVerifactuFields below, which writes estado=Error.
+    if (result.status == VerifactuResult::NETWORK_ERROR
+        || result.status == VerifactuResult::PENDING) {
+        markPendingVerifactu(seq);
+        return;
+    }
     // updateTicketVerifactuFields scopes WHERE n_recibo=? AND verifactu_invoice_seq=?
     // which is exactly the rows we just stamped above.
     updateTicketVerifactuFields(db, m_ticketNum, result, seq);
+}
+
+void PayDialog::markPendingVerifactu(int seq)
+{
+    // Keep the InvoiceID identity (<n_recibo>-<seq>, or bare n_recibo for seq 0)
+    // and set estado=PENDIENTE so the row reads as "awaiting AEAT confirmation"
+    // instead of a failed Error. Scoped by seq, exactly the rows just stamped.
+    const QString invoiceId = (seq == 0)
+        ? m_ticketNum
+        : QString("%1-%2").arg(m_ticketNum).arg(seq);
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_invoice_id = :id, "
+              "verifactu_error = '' "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    q.bindValue(":id",     invoiceId);
+    q.bindValue(":n",      m_ticketNum);
+    q.bindValue(":seq",    seq);
+    if (!q.exec())
+        qWarning() << "PayDialog::markPendingVerifactu: UPDATE failed for" << invoiceId
+                   << "-" << q.lastError().text();
+    db.close();
 }
 
 void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)

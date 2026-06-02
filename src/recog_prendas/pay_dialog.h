@@ -45,6 +45,9 @@ private:
     void setFormEnabled(bool enabled);
     void recomputeTotal();
     void persistPayment(int seq, const VerifactuResult &result);
+    // Stamp the just-paid rows of this seq as PENDIENTE (used when AEAT did not
+    // confirm in time - the submission outcome is unknown, not a failure).
+    void markPendingVerifactu(int seq);
     void printPartialFactura(int seq, const QPixmap &qrCode);
 
     QString m_ticketNum;
