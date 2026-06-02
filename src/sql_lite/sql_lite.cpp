@@ -607,6 +607,11 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     db.close();
 }
 
+QString verifactuInvoiceId(const QString &nRecibo, int seq)
+{
+    return seq == 0 ? nRecibo : QStringLiteral("%1-%2").arg(nRecibo).arg(seq);
+}
+
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)
 {
@@ -615,12 +620,10 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const QString estado    = verifactuEstadoToString(
         result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
-    // seq=0 = save-time / retry submit (bare n_recibo as InvoiceID).
-    // seq>0 = PayDialog event (<n_recibo>-<seq>). The WHERE clause always
-    // scopes by seq so a retry of save-time never clobbers PayDialog rows.
-    const QString invoiceId = seq == 0
-        ? ticketNum
-        : QString("%1-%2").arg(ticketNum).arg(seq);
+    // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
+    // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
+    // save-time never clobbers PayDialog rows.
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
              << "estado=" << estado
              << "csv=" << (result.isSuccess() ? result.csv : QString())

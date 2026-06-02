@@ -213,6 +213,15 @@ private slots:
         QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
     }
 
+    // The single source of truth for the AEAT InvoiceID format (used at submit,
+    // persist, cancel and reprint). seq 0 -> bare n_recibo; seq>0 -> "<n>-<seq>".
+    void test_verifactuInvoiceId()
+    {
+        QCOMPARE(verifactuInvoiceId("3245", 0), QStringLiteral("3245"));
+        QCOMPARE(verifactuInvoiceId("3245", 1), QStringLiteral("3245-1"));
+        QCOMPARE(verifactuInvoiceId("3245", 12), QStringLiteral("3245-12"));
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "

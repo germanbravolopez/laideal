@@ -70,4 +70,10 @@ void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketN
 // increments the seq for the next event.
 int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
 
+// AEAT InvoiceID for a ticket payment event: bare n_recibo for seq 0 (save-time
+// / first event), "<n_recibo>-<seq>" for a later partial-pay event. Single source
+// of truth for the format used at submit / persist / cancel / reprint, so they
+// can never disagree (a seq-0 event submitted as "<n>-0" but stored as "<n>").
+QString     verifactuInvoiceId(const QString &nRecibo, int seq);
+
 #endif // SQL_LITE_H

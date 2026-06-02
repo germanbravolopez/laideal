@@ -615,12 +615,9 @@ void Imprimir::on_bb_ok_cancel_accepted()
     auto labelFor = [this](const QPair<int, QString> &ev) {
         // Authoritative when set: literal column matches what AEAT received.
         if (!ev.second.isEmpty()) return ev.second;
-        // Empty column + seq=0: legacy 8.0-8.4 bare-n_recibo submit.
-        if (ev.first == 0) return le_n_ticket->text();
-        // Empty column + seq>0: PayDialog event whose AEAT submit failed (or
-        // landed on a build before Phase G wrote invoice_id). Best effort -
-        // the format AEAT would have if the submit had succeeded.
-        return QString("%1-%2").arg(le_n_ticket->text()).arg(ev.first);
+        // Empty column: reconstruct the AEAT InvoiceID from n_recibo + seq
+        // (bare for seq 0 legacy/save-time, <n>-<seq> for a PayDialog event).
+        return verifactuInvoiceId(le_n_ticket->text(), ev.first);
     };
 
     if (events.size() > 1) {
