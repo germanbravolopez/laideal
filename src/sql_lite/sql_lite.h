@@ -27,6 +27,9 @@ QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, cons
                                 const QString &columnToSearch, const QString &itemToSearch,
                                 bool exactMatch, bool printMsg);
 QString     searchItemFromClient(QSqlDatabase &db, const QString &item, const QString &client, bool printMsg);
+// {tel_fijo, movil} for an exact client name, fetched in one query (both empty
+// if the client is not found). Avoids two separate single-column lookups.
+QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

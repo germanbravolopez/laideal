@@ -33,6 +33,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `readGarmentPrice(db, garment, service)` | `float` | Unit price for a garment + service combination |
 | `selectFromWhereLike(db, item, table, col, search, exact, print)` | `QString` | Generic single-value lookup |
 | `searchItemFromClient(db, item, client, print)` | `QString` | Lookup a field by client name in `ingresos` |
+| `readClientPhones(db, client)` | `QStringList` | `{tel_fijo, movil}` for an exact client name in one query (both empty if not found) |
 | `updateItemToClient(db, column, item, client)` | `bool` | Update a field for a client in `clientes` |
 | `addNewClient(db, name, telFijo, direccion, movil)` | `bool` | Insert a row into `clientes` |
 | `totalPriceBetweenDates(db, table, start, end, iva)` | `float` | Sum of `importe` for a date range and IVA rate. For `ingresos`: excludes `verifactu_estado = 'ANULADA'` rows. Both tables use `[start, end)` half-open interval |

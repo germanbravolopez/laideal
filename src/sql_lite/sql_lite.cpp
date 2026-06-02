@@ -464,6 +464,25 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     return editLock;
 }
 
+QStringList readClientPhones(QSqlDatabase &db, const QString &client)
+{
+    QStringList phones = { QString(), QString() }; // {tel_fijo, movil}
+    if (dbNotConfigured(db, __func__)) return phones;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT tel_fijo, movil FROM clientes WHERE nombre = :n");
+    q.bindValue(":n", client);
+    if (q.exec() && q.first()) {
+        phones[0] = q.value(0).toString();
+        phones[1] = q.value(1).toString();
+    } else if (q.lastError().isValid()) {
+        qWarning() << "readClientPhones: query error for client" << client << "-" << q.lastError().text();
+    }
+    db.close();
+    return phones;
+}
+
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;

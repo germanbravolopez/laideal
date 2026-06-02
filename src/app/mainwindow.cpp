@@ -21,6 +21,7 @@
 #include "pendingsubmitsdialog.h"
 #include "version.h"
 #include <QTimer>
+#include <QThread>
 #include <QEventLoop>
 #include <QTextEdit>
 #include <QFontDatabase>
@@ -87,15 +88,25 @@ MainWindow::MainWindow(QWidget *parent)
     m_backupManager = new BackupManager(this);
     if (m_backupManager->needsBackup()) {
         QTimer::singleShot(3000, this, [this]() {
-            const auto res = m_backupManager->performBackup();
-            if (!res.success) {
-                QMessageBox::warning(this, tr("Copia de seguridad"),
-                                     tr("No se pudo crear la copia automática:\n%1")
-                                         .arg(res.errorMessage));
-            } else {
-                statusBar()->showMessage(
-                    tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
-            }
+            // performBackup() does VACUUM INTO + integrity_check (seconds on a
+            // large DB) and uses its own dedicated DB connections, so run it on
+            // a worker thread to keep the UI responsive; marshal the Result back
+            // to the GUI thread (Qt::QueuedConnection on `this`) for the message.
+            QThread *worker = QThread::create([this]() {
+                const BackupManager::Result res = m_backupManager->performBackup();
+                QMetaObject::invokeMethod(this, [this, res]() {
+                    if (!res.success) {
+                        QMessageBox::warning(this, tr("Copia de seguridad"),
+                                             tr("No se pudo crear la copia automática:\n%1")
+                                                 .arg(res.errorMessage));
+                    } else {
+                        statusBar()->showMessage(
+                            tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
+                    }
+                }, Qt::QueuedConnection);
+            });
+            connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+            worker->start();
         });
     }
 }
