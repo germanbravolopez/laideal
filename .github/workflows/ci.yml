@@ -31,7 +31,29 @@ jobs:
         run: cmake --build build
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit ctest-junit.xml
+          $code = $LASTEXITCODE
+          $xml = "build/ctest-junit.xml"
+          if (Test-Path $xml) {
+            [xml]$r = Get-Content $xml
+            $s = $r.testsuite
+            $emoji = if ([int]$s.failures -eq 0) { ':white_check_mark:' } else { ':x:' }
+            $md = @()
+            $md += "## $emoji Test results"
+            $md += ""
+            $md += "**$($s.tests) tests, $($s.failures) failed, $($s.skipped) skipped** in $($s.time)s"
+            $md += ""
+            $md += "| Result | Test | Time (s) |"
+            $md += "| :----: | ---- | -------: |"
+            foreach ($c in $s.testcase) {
+              $status = if ($c.status -eq 'fail') { ':x: fail' } else { ':white_check_mark: pass' }
+              $md += "| $status | $($c.name) | $($c.time) |"
+            }
+            ($md -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          exit $code
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
