@@ -65,6 +65,15 @@ add_test(NAME verifactu_response
     COMMAND test_verifactu_response -o ${CMAKE_BINARY_DIR}/test-results-verifactu_response.xml,junitxml -o -,txt)
 set_tests_properties(verifactu_response PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# verifactu model classes (config / tax item / invoice / estado), all pure.
+add_executable(test_verifactu_models test_verifactu_models.cpp)
+target_link_libraries(test_verifactu_models PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME verifactu_models
+    COMMAND test_verifactu_models -o ${CMAKE_BINARY_DIR}/test-results-verifactu_models.xml,junitxml -o -,txt)
+
 # backup: pure retention/pruning decision.
 add_executable(test_backup_manager test_backup_manager.cpp)
 target_link_libraries(test_backup_manager PRIVATE
