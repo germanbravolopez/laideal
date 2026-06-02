@@ -99,7 +99,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets |
 | `QXlsx/CMakeLists.txt` | QXlsx library build |
-| `tests/` (`test_sql_lite`, `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_backup_manager`, `test_contabilidad`, `test_reporthtml`, `test_versioncompare`) | Qt Test + CTest suites: sql_lite + `garmentImporte`, proxy diacritic filter, `parseVerifactuResponse`, Verifactu config/invoice models, `BackupManager::backupsToPrune`, `Contabilidad::periodRangeFor`, `ReportHtml::formatEuro`, `Updater::compareVersions`. Run `ctest --test-dir build` |
+| `tests/` (8 Qt Test + CTest suites) | `test_sql_lite` (+`garmentImporte`), `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI), `test_backup_manager`, `test_contabilidad`, `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
 | `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary (called by both workflows; also runnable locally) |
 | `.github/workflows/ci.yml` | CI — builds on every push/PR (Qt 6.4.3 MinGW + CMake + Ninja), runs `ctest`, uploads `laideal.exe` artifact |
 | `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `ctest` (hard gate) + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |

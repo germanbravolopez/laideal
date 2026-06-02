@@ -31,6 +31,15 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
 
+# appsettings: DPAPI secret-at-rest helpers (encrypt/decrypt round-trip + marker).
+add_executable(test_appsettings test_appsettings.cpp)
+target_link_libraries(test_appsettings PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    appsettings
+)
+add_test(NAME appsettings
+    COMMAND test_appsettings -o ${CMAKE_BINARY_DIR}/test-results-appsettings.xml,junitxml -o -,txt)
+
 # reporthtml: pure currency / scaffolding helpers.
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE
