@@ -31,6 +31,26 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
 
+# reporthtml: pure currency / scaffolding helpers.
+add_executable(test_reporthtml test_reporthtml.cpp)
+target_link_libraries(test_reporthtml PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    reporthtml
+)
+add_test(NAME reporthtml
+    COMMAND test_reporthtml -o ${CMAKE_BINARY_DIR}/test-results-reporthtml.xml,junitxml -o -,txt)
+
+# updater: pure version-compare helpers. NB the executable must NOT be named
+# *update*/*setup*/*install* - Windows' UAC installer-detection heuristic would
+# flag such a name as requiring elevation and refuse to launch it under CTest.
+add_executable(test_versioncompare test_updater.cpp)
+target_link_libraries(test_versioncompare PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    updater
+)
+add_test(NAME version_compare
+    COMMAND test_versioncompare -o ${CMAKE_BINARY_DIR}/test-results-versioncompare.xml,junitxml -o -,txt)
+
 # verifactu: the pure JSON response parser (parseVerifactuResponse). Uses
 # QTEST_MAIN (QApplication for QPixmap) under the offscreen platform so the QR
 # decode path runs headless.
