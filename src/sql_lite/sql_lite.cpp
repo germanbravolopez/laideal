@@ -424,6 +424,46 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     return editLock;
 }
 
+int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+
+    const QString m1   = monthStr((quarter - 1) * 3 + 1);
+    const QString m2   = monthStr((quarter - 1) * 3 + 2);
+    const QString m3   = monthStr((quarter - 1) * 3 + 3);
+    const QString yStr = QString::number(year);
+
+    QString dateCol;
+    if (table == "ingresos")    dateCol = "fecha_pago";
+    else if (table == "gastos") dateCol = "fecha";
+    else {
+        qCritical() << "readLockForQuarter: unsupported table:" << table;
+        return 2;
+    }
+
+    // One pass over the quarter's three months (date stored as dd-MM-yyyy, so
+    // substr(col,4,2) is MM and substr(col,7,4) is yyyy). COUNT separates the
+    // no-data case (2) from data-present; MAX(edit_lock) reports the quarter as
+    // locked (1) if any row is locked, else open (0).
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(*), COALESCE(MAX(edit_lock), 0) FROM " + table + " WHERE "
+              "substr(" + dateCol + ", 4, 2) IN (:m1, :m2, :m3) AND substr(" + dateCol + ", 7, 4) = :y");
+    q.bindValue(":m1", m1);
+    q.bindValue(":m2", m2);
+    q.bindValue(":m3", m3);
+    q.bindValue(":y",  yStr);
+
+    int editLock = 2; // 2 = no data found for the quarter
+    if (q.exec() && q.first())
+        editLock = (q.value(0).toInt() == 0) ? 2 : q.value(1).toInt();
+    else
+        qWarning() << "readLockForQuarter: query error for table" << table
+                   << "quarter" << quarter << "year" << yStr << "-" << q.lastError().text();
+    db.close();
+    return editLock;
+}
+
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;
