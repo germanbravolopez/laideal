@@ -134,13 +134,25 @@ void Facturas::on_buttonBox_clicked(QAbstractButton *button)
     }
 }
 
+double Facturas::taxBaseFromGross(double gross, double ivaRate)
+{
+    return gross / (1.0 + ivaRate / 100.0);
+}
+
+double Facturas::taxAmountFromGross(double gross, double ivaRate)
+{
+    return gross * (1.0 - 1.0 / (1.0 + ivaRate / 100.0));
+}
+
 void Facturas::on_le_importe_textEdited(const QString &arg1)
 {
     if (arg1.left(1) == "0"  || arg1.left(1) == "1" || arg1.left(1) == "2" || arg1.left(1) == "3"
              || arg1.left(1) == "4" || arg1.left(1) == "5" || arg1.left(1) == "6"
              || arg1.left(1) == "7" || arg1.left(1) == "8" || arg1.left(1) == "9") {
-        ui->le_base->setText(QString::number(arg1.toFloat() / (1 + (ui->cb_iva->currentText().toFloat() / 100)), 'f', 2));
-        ui->le_iva->setText(QString::number(arg1.toFloat() * (1 - 1 / (1 + (ui->cb_iva->currentText().toFloat() / 100))), 'f', 2));
+        const double gross = arg1.toDouble();
+        const double iva   = ui->cb_iva->currentText().toDouble();
+        ui->le_base->setText(QString::number(taxBaseFromGross(gross, iva), 'f', 2));
+        ui->le_iva->setText(QString::number(taxAmountFromGross(gross, iva), 'f', 2));
     }
 }
 

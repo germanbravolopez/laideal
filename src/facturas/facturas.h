@@ -20,6 +20,12 @@ public:
     void populateEmpresas();
     void populateServicios();
 
+    // Pure IVA split of a gross amount (importe IVA incluido) at the given rate
+    // (percentage, e.g. 21): base imponible = gross / (1 + rate/100); cuota de
+    // IVA = gross - base. Exposed as statics for unit testing.
+    static double taxBaseFromGross(double gross, double ivaRate);
+    static double taxAmountFromGross(double gross, double ivaRate);
+
 private slots:
     void initialSettings();
     void resetAllContents();

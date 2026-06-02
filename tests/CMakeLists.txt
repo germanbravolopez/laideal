@@ -31,6 +31,17 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
 
+# facturas: pure IVA split (base + cuota from a gross amount).
+add_executable(test_facturas test_facturas.cpp)
+target_link_libraries(test_facturas PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets   # facturas.h includes <QMainWindow>
+    Qt${QT_VERSION_MAJOR}::Sql       # facturas.h includes <QSqlQueryModel>
+    facturas
+)
+add_test(NAME facturas
+    COMMAND test_facturas -o ${CMAKE_BINARY_DIR}/test-results-facturas.xml,junitxml -o -,txt)
+
 # appsettings: DPAPI secret-at-rest helpers (encrypt/decrypt round-trip + marker).
 add_executable(test_appsettings test_appsettings.cpp)
 target_link_libraries(test_appsettings PRIVATE
