@@ -25,6 +25,7 @@
 | `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
 | `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
 | `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
+| `docs/printer/README.md` | **Printer research dossier**: replacing Excel printing with direct ESC/POS to the Epson TM-T20III — model/specs, control methods, ESC/POS command subset, current-flow analysis, and the implementation plan (5 files + index) |
 
 ## Skills (Custom Slash Commands)
 
