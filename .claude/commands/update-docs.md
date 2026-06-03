@@ -7,6 +7,7 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 ### 1. `docs/progress_tracker.md` — always update this
 - Add an entry at the **top** of "In Progress" or "Completed Milestones"
 - Format: `- [x] What you did — which file/module — date`
+- **Milestone section header must track the latest *released* version.** Completed Milestones is grouped into `### Post-<X.Y> development — <Month Year>` sections, where `X.Y` is the release that had **already shipped** when that batch of work was done (the work becomes the *next* release). Before adding your entry, read the "Latest release" version in **Current Status**: if it is newer than the version in the top milestone section's header, **create a new `### Post-<latest-release> development — <Month Year>` section** at the top of Completed Milestones and add your entry there — do **not** append to the now-stale section. Only append to the existing top section when no release has shipped since it was created (i.e. its `X.Y` already equals the latest release). This prevents post-9.2 and post-9.3 work from piling up under a stale "Post-9.1 development" heading.
 - If a blocking issue was fixed, move it out of "Blocking Issues"
 - If a task is newly discovered, add it to the appropriate section
 - Entries older than ~6 months with no further action: move to Archive
