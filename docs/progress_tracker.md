@@ -2,7 +2,8 @@
 
 **Rule**: Track only what is actionable now. The active sections are:
 - **Blocking Issues** — must-fix items before merging the current branch and cutting a release. Items move out of here once resolved (into Completed Milestones below).
-- **Open Non-Blocking Issues** — known backlog that does not gate the release.
+- **Open Non-Blocking Issues** — known backlog that does not gate the release but is still worth doing.
+- **Backlog (deferred — low value / not currently planned)** — items consciously parked because the effort outweighs the value (or they depend on an external trigger). Not "open work": revisit only if the trade-off changes. Keeps the Open list a real to-do list.
 - **Completed Milestones** — finished work, newest at the top. Provides history for the changelog.
 - **Archive** — entries older than ~6 months and no longer actionable.
 
@@ -32,11 +33,20 @@ _(No blocking issues for the next release. The pay-all-on-name-search blast (fil
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Grow test coverage: Imprimir invoice-id / seq selection | `tests/`, `src/imprimir/` | Covered so far: sql_lite (+`garmentImporte`), `MySortFilterProxyModel`, Verifactu response parser, `BackupManager` retention, `Contabilidad` period math. Remaining high-value target: `Imprimir::displayInvoiceId` (first non-empty `verifactu_invoice_id`, else bare `n_recibo`) and the `invoiceSeq` `getTicketInfo` filter — extract the selection into a pure helper to test it. Deferred because the `imprimir` lib pulls `QXlsx` + `verifactu` (heaviest to link); add when imprimir is next touched. |
-| Test coverage: MainWindow async-AEAT signal/dialog wiring | `src/app/` | The DB write and the pure math are now covered: `MainWindow::saveTicket`'s `ingresos` INSERT was lifted onto the existing `sql_lite::insertGarmentRow` seam (which gained a `verifactuEstado` field for the PENDIENTE stamp) and unit-tested, and `verifactuSubmitInvoice`'s tax-base split now routes through the already-tested `Facturas::taxBaseFromGross` (its InvoiceID through `verifactuInvoiceId`, also tested). What remains is purely the async/UI residual: `verifactuSubmitInvoice`'s `submitSimplifiedInvoiceAsync` call + the `m_pendingSubmits` reqId→ticket correlation, `onVerifactuRequestFinished` (which itself only calls the already-tested `updateTicketVerifactuFields` + sets status-bar text), and the `QEventLoop`/`QTimer` print-after-submit wiring in `on_bb_save_reset_clicked`. These are exe-bound and need a QTest-GUI harness + `QSignalSpy` (+ likely an `app`-logic lib split) — low marginal value now that the DB/math cores are covered. |
 | Switch Verifactu to PRODUCTION environment | `~/.laideal_settings.json`, `SettingsDialog` | v8.0 ships with TESTING environment. After meeting with IreneSolutions and obtaining production ServiceKey: update `verifactu.environment` and credentials in settings. No code change required — all handled via `SettingsDialog`. |
+| Grow test coverage: Imprimir invoice-id / seq selection | `tests/`, `src/imprimir/` | Covered so far: sql_lite (+`garmentImporte`), `MySortFilterProxyModel`, Verifactu response parser, `BackupManager` retention, `Contabilidad` period math. Remaining high-value target: `Imprimir::displayInvoiceId` (first non-empty `verifactu_invoice_id`, else bare `n_recibo`) and the `invoiceSeq` `getTicketInfo` filter — extract the selection into a pure helper to test it. Deferred because the `imprimir` lib pulls `QXlsx` + `verifactu` (heaviest to link); add when imprimir is next touched. |
 | Replace Excel-based printing with EPSON ticket printer API | `src/imprimir/imprimir.cpp` | Current receipt/invoice printing generates an Excel file and drives Excel COM via a generated VBScript (`cscript //nologo //B`) to send it to the default printer. Should be replaced with direct EPSON ESC/POS (or equivalent) API calls to the ticket printer, removing the Excel + cscript dependency entirely. |
 | Improve thermal ticket / invoice layout | `src/imprimir/` | The A4 PDF reports (contabilidad + listados) were restyled and given extra figures — see the milestone "Report visualisation: shared professional A4 style + IVA settlement / net result". The remaining surface is the thermal receipt/invoice in `imprimir.cpp` (Excel + cscript path, 58 mm width) which still uses the old layout. Improve its readability within the printer's column constraints. |
+---
+
+## Backlog (deferred — low value / not currently planned)
+
+Parked items where the effort outweighs the value as the code stands. Not on the active to-do list — revisit only if the trade-off changes (e.g. the surrounding code gets refactored for another reason, making the seam cheap).
+
+| Issue | File | Why parked |
+|-------|------|------------|
+| Test coverage: MainWindow async-AEAT signal/dialog wiring | `src/app/` | The valuable cores are already covered: `MainWindow::saveTicket`'s INSERT runs through the tested `sql_lite::insertGarmentRow` seam, `verifactuSubmitInvoice`'s tax base through `Facturas::taxBaseFromGross` and its InvoiceID through `verifactuInvoiceId`, and `onVerifactuRequestFinished` only calls the already-tested `updateTicketVerifactuFields`. What is left is exe-bound async/UI glue: the `m_pendingSubmits` reqId→ticket correlation, status-bar text, and the `QEventLoop`/`QTimer` print-after-submit wiring in `on_bb_save_reset_clicked`. Covering it needs either an `app`-logic lib split (to extract the correlation map into a linkable seam) or a full QTest-GUI harness with a fake `VerifactuIntegration` + `QSignalSpy` — real work for mostly low-risk glue. If revisited, the only piece with genuine logic worth a test is the correlation/seq routing; extract just that into a `PendingSubmits` seam (Option A) rather than building the whole harness. |
+
 ---
 
 ## Completed Milestones
