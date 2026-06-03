@@ -398,10 +398,9 @@ void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
     ui_impr->invoiceSeq          = seq;
     ui_impr->le_n_ticket->setText(m_ticketNum);
     ui_impr->getTicketInfo();
+    // Auto-print a single factura (the customer copy) after Cobrar - no second
+    // (business) copy. Reprint from RecogPrendas if another copy is needed.
     ui_impr->createTicketExcel(/*copyForClient=*/true, /*addPayedInfo=*/false);
-    if (AppSettings::instance()->enablePrinting()) {
+    if (AppSettings::instance()->enablePrinting())
         ui_impr->printTicket();
-        ui_impr->createTicketExcel(/*copyForClient=*/false, /*addPayedInfo=*/false);
-        ui_impr->printTicket();
-    }
 }
