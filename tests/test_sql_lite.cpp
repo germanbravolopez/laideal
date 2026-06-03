@@ -263,7 +263,28 @@ private slots:
         QCOMPARE(ev[2].nRecibo, QStringLiteral("T100"));
         QCOMPARE(ev[2].seq, 1);
         QVERIFY(qAbs(ev[2].importe - 20.0) < 0.01);
-        QCOMPARE(ev[2].fecha, QStringLiteral("12-03-2026"));
+        QCOMPARE(ev[2].fechaPago, QStringLiteral("12-03-2026"));
+    }
+
+    // A retry must re-submit under the original AEAT date (fecha_pago), not the
+    // reception date: a partial pay made on a different day than reception would
+    // otherwise register a second invoice at AEAT (date is part of the invoice
+    // identity). The recovery FLOOR still gates on fecha_recepcion.
+    void test_pendingVerifactuEvents_returnsPaymentDate()
+    {
+        // reception 10-03-2026 (after floor), paid later on 25-06-2026.
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('T9', '', '10-03-2026', '25-06-2026', '60.00', 'SI', '', 0, 'PENDIENTE', 2)");
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 1);
+        QCOMPARE(ev[0].fechaPago, QStringLiteral("25-06-2026")); // payment date, not 10-03-2026
+
+        // And the floor gates on reception: a reception before the floor is excluded
+        // even though its payment date is after it.
+        QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
     }
 
     // The annual report's grouped per-quarter aggregation must equal, quarter by

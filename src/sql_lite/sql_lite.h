@@ -83,23 +83,27 @@ int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
 QString     verifactuInvoiceId(const QString &nRecibo, int seq);
 
 // One still-PENDIENTE Verifactu submission event, as surfaced by the startup
-// recovery dialog. fecha is the stored dd-MM-yyyy fecha_recepcion (caller parses
-// to QDate); importe is this event's total (SUM over its rows).
+// recovery dialog. fechaPago is the stored dd-MM-yyyy payment date the invoice
+// was/should be submitted under (caller parses to QDate; empty/invalid for an
+// unpaid row, which must not be re-submitted); importe is this event's total
+// (SUM over its rows).
 struct PendingVerifactuEvent {
     QString nRecibo;
     int     seq = 0;
-    QString fecha;    // dd-MM-yyyy as stored
+    QString fechaPago;    // dd-MM-yyyy as stored
     QString cliente;
     double  importe = 0.0;
 };
 
 // Pending Verifactu events for startup recovery: one entry per
-// (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty,
-// with fecha_recepcion (rebuilt to ISO) on or after floorIso. Grouping by seq
-// (not just n_recibo) surfaces partial-pay events (seq>0) alongside save-time
-// ones (seq=0); SUM(importe) is therefore that event's own total, the amount to
-// re-submit under InvoiceID verifactuInvoiceId(n_recibo, seq). Ordered newest
-// ticket first, then by seq.
+// (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty and
+// whose fecha_recepcion (rebuilt to ISO) is on or after floorIso. Grouping by
+// seq (not just n_recibo) surfaces partial-pay events (seq>0) alongside save-
+// time ones (seq=0); SUM(importe) is that event's own total, the amount to
+// re-submit under InvoiceID verifactuInvoiceId(n_recibo, seq). fechaPago is the
+// original submission date AEAT keys the invoice on - a retry must reuse it (not
+// the reception date) or AEAT registers a new invoice and the duplicate guard
+// never fires. Ordered newest ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
 // Raw accounting totals for one year, bucketed by quarter (index 0 = Q1 .. 3 = Q4).

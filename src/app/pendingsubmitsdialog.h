@@ -30,7 +30,7 @@ public:
     struct Entry {
         QString ticketNum;
         int     seq = 0;            // verifactu_invoice_seq of this event
-        QDate   fechaRecepcion;
+        QDate   fechaPago;          // original AEAT submission date (re-submit under this)
         QString client;
         double  importe = 0.0;
     };

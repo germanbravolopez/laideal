@@ -92,11 +92,11 @@ bool PendingSubmitsDialog::loadPending()
     const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(db, floorIso);
     for (const PendingVerifactuEvent &ev : events) {
         Entry e;
-        e.ticketNum      = ev.nRecibo;
-        e.seq            = ev.seq;
-        e.fechaRecepcion = QDate::fromString(ev.fecha, "dd-MM-yyyy");
-        e.client         = ev.cliente;
-        e.importe        = ev.importe;
+        e.ticketNum  = ev.nRecibo;
+        e.seq        = ev.seq;
+        e.fechaPago  = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+        e.client     = ev.cliente;
+        e.importe    = ev.importe;
         m_entries.append(e);
     }
 
@@ -117,7 +117,7 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
     m_table->setItem(row, COL_N_RECIBO,
         new QTableWidgetItem(verifactuInvoiceId(e.ticketNum, e.seq)));
     m_table->setItem(row, COL_FECHA,
-        new QTableWidgetItem(e.fechaRecepcion.toString("dd-MM-yyyy")));
+        new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
         new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
@@ -144,16 +144,17 @@ void PendingSubmitsDialog::onRetryClicked(int row)
 {
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
-    if (!e.fechaRecepcion.isValid()) {
+    if (!e.fechaPago.isValid()) {
         QMessageBox::warning(this, tr("Fecha inválida"),
-            tr("No se pudo leer la fecha de recepción del ticket %1.").arg(e.ticketNum));
+            tr("El ticket %1 no tiene fecha de pago, así que no se puede reenviar a AEAT "
+               "(un ticket sin cobrar no tiene factura que recuperar).").arg(e.ticketNum));
         return;
     }
     qDebug() << "PendingSubmitsDialog: retry requested for ticket" << e.ticketNum
              << "seq=" << e.seq
-             << "date=" << e.fechaRecepcion.toString(Qt::ISODate)
+             << "date=" << e.fechaPago.toString(Qt::ISODate)
              << "total=" << e.importe;
-    emit retryRequested(e.ticketNum, e.seq, e.fechaRecepcion, e.importe);
+    emit retryRequested(e.ticketNum, e.seq, e.fechaPago, e.importe);
     // Drop the row from the table; the async reply will patch the DB. If it
     // fails the row reverts to ERROR and the operator can revisit via the
     // normal RecogPrendas retry button.

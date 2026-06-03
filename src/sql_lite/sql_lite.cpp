@@ -622,8 +622,8 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     }
 
     // One entry per (n_recibo, verifactu_invoice_seq) whose ANY row is still
-    // PENDIENTE. Aggregate uses MIN over fecha/client (constants across the rows
-    // of one event) and SUM(importe) for that event's own total. The estado
+    // PENDIENTE. Aggregate uses MIN over fecha_pago/client (constants across the
+    // rows of one event) and SUM(importe) for that event's own total. The estado
     // filter covers legacy empty strings and the canonical "PENDIENTE".
     //
     // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
@@ -632,11 +632,21 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // its own SUM(importe) under the right InvoiceID, instead of being excluded
     // (the old query filtered verifactu_invoice_seq = 0).
     //
-    // fecha_recepcion stores dd-MM-yyyy; the substr-rebuild into yyyy-MM-dd lets
-    // SQLite compare it lexicographically against floorIso (the recovery floor).
+    // fechaPago = the date the invoice was/should be submitted under. AEAT keys
+    // an invoice on (emisor, InvoiceID, FechaExpedicionFactura), so a retry MUST
+    // reuse the original submission date or AEAT treats it as a new invoice and
+    // the duplicate-InvoiceID guard never fires. That date is fecha_pago: a
+    // PayDialog event (seq>0) submitted with its payment date, a save-time event
+    // (seq>0=0) submitted with the reception date which equals fecha_pago for a
+    // paid-at-save row. A row with no fecha_pago (unpaid) yields an invalid date
+    // the dialog refuses to retry - correct, it has no AEAT invoice to recover.
+    //
+    // The recovery FLOOR, however, gates on fecha_recepcion (when the ticket
+    // entered the system) to exclude pre-Verifactu legacy tickets; both columns
+    // store dd-MM-yyyy, substr-rebuilt to yyyy-MM-dd for lexicographic compares.
     QSqlQuery q(db);
     q.prepare(
-        "SELECT n_recibo, verifactu_invoice_seq, MIN(fecha_recepcion), "
+        "SELECT n_recibo, verifactu_invoice_seq, MIN(fecha_pago), "
         "       MIN(cliente), SUM(importe) "
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
@@ -654,11 +664,11 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     }
     while (q.next()) {
         PendingVerifactuEvent e;
-        e.nRecibo = q.value(0).toString();
-        e.seq     = q.value(1).toInt();
-        e.fecha   = q.value(2).toString();
-        e.cliente = q.value(3).toString();
-        e.importe = q.value(4).toDouble();
+        e.nRecibo   = q.value(0).toString();
+        e.seq       = q.value(1).toInt();
+        e.fechaPago = q.value(2).toString();
+        e.cliente   = q.value(3).toString();
+        e.importe   = q.value(4).toDouble();
         events.append(e);
     }
     db.close();
