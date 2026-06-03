@@ -58,6 +58,57 @@ int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, con
 void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
+// RecogPrendas DB-write seams. Each performs one parameterised UPDATE/INSERT on
+// `ingresos` keyed by (n_recibo, hash) - the same shape RecogPrendas::updateDb
+// used inline. Pure of any widget: the dialog reads the new values off its fields
+// and hands them here, so the writes are unit-testable against a temp DB. The
+// edit_lock / blocked-quarter / Verifactu-submit business rules stay in the slot.
+
+// PAY_YES / PAY_NO: set fecha_pago + pagado. PAY_NO passes an empty fechaPago.
+bool        updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                const QString &fechaPago, const QString &pagado);
+// PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
+bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                               const QString &fechaRecogida, const QString &estado);
+// OBSV: set observaciones.
+bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                     const QString &observaciones);
+// SIZE_AND_PRICE: set size + importe.
+bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                     const QString &size, const QString &importe);
+// SEPARATE_GARM (1/2): set cantidad + importe on the row being reduced.
+bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                       const QString &cantidad, const QString &importe);
+
+// One garment line to insert (SEPARATE_GARM 2/2 / generic split-off). verifactu_*
+// columns are intentionally left at their table defaults (empty): the AEAT
+// submission for the ticket covered the full importe and the chained Huella stays
+// on the original rows, so a split row must read as legacy/NotSubmitted -
+// re-submitting it would create a duplicate-InvoiceID error at AEAT.
+struct IngresoGarmentRow {
+    QString nRecibo;
+    QString cliente;
+    QString fechaRecepcion;
+    QString fechaPago;      // empty if unpaid
+    QString fechaRecogida;  // empty if not picked up
+    QString importe;
+    QString pagado;
+    QString estado;
+    QString cantidad;
+    QString prenda;
+    QString size;
+    QString servicio;
+    QString observaciones;
+    QString editLock = "0";
+    QString hash;
+};
+// SEPARATE_GARM (2/2): insert the split-off garment row.
+bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
+
+// verifactu_estado of the first row of a ticket ("" if the ticket has no rows).
+// Read after a payment write so the pay-all loop dedup sees the persisted estado.
+QString     ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo);
+
 // Strip diacritics / non-Latin1 marks for accent-insensitive name matching:
 // NFD-normalise, narrow to Latin-1 (combining marks become '?'), drop every '?'.
 // Pure; used by MainWindow client-name matching. Does not change case.
