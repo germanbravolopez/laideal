@@ -50,13 +50,15 @@ Per period the report renders three blocks, all from one `PeriodFigures` struct 
 
 The page header (business name / address / city / NIF / phone + issue date), the stylesheet and the euro formatting come from the shared `src/reporthtml/` lib (`ReportHtml::documentOpen/documentClose/formatEuro`), shared with the listados PDFs. The annual report renders one section per quarter plus a **Resumen anual consolidado** summing the four (`PeriodFigures::accumulate`). The period date range and the four-way quarter/month switch both flow through `periodRange()`. Everything stays table-based because `QTextDocument` only renders a subset of HTML/CSS.
 
+The annual path does **not** call `computeFigures(trim)` per quarter (that would run 24 full-table `substr()` scans). Instead it fetches all four quarters' raw totals in one grouped query per table via `sql_lite::annualAccountingByQuarter(db, year)` (→ a `QuarterlyAccountingTotals`) and builds each quarter's `PeriodFigures` from it through the shared pure static `Contabilidad::figuresFromTotals(...)`. `computeFigures` (trimestral/mensual) now also derives its figures through `figuresFromTotals` after the per-period DB calls, so both paths apply identical IVA base/cuota math. The grouped aggregation is asserted equal to the per-quarter `totalPriceBetweenDates`/`countOperationsBetweenDates` in `test_sql_lite::test_annualAccountingByQuarter`. One caveat: the grouped query sums `importe` in SQL, so the annual report does not raise the comma-decimal corruption dialog the per-row helpers do — the trimestral/mensual paths retain it.
+
 ## Output
 
 The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= `<reports.root>/Contabilidad`) and opened automatically via `QDesktopServices::openUrl()`. Trimestral reports land directly in that folder; mensual reports under `Contabilidad/Mensual`, anual reports under `Contabilidad/Anual` (appended in `contabilidad.cpp`). `QDir::mkpath()` is called on demand.
 
 ## IVA breakdown
 
-`getTotalIncome(table, iva, trimForYearConfig)` sums `importe` for a specific IVA rate and period. Called separately for 21%, 10%, and 0% rates when generating the report.
+`getTotalIncome(table, iva, trimForYearConfig)` sums `importe` for a specific IVA rate and period. Called separately for 21%, 10%, and 0% rates when generating a trimestral/mensual report (the annual report sources the same per-quarter sums in one pass from `annualAccountingByQuarter`).
 
 ## Verifactu interaction
 

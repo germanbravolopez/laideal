@@ -102,4 +102,28 @@ struct PendingVerifactuEvent {
 // ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
+// Raw accounting totals for one year, bucketed by quarter (index 0 = Q1 .. 3 = Q4).
+// Produced by annualAccountingByQuarter with one grouped query per table, the
+// IVA base/cuota math is left to the caller (Contabilidad::figuresFromTotals).
+// The per-quarter filters mirror totalPriceBetweenDates / countOperationsBetweenDates
+// exactly. importe is SUM()'d in SQL, so - unlike the per-row helpers - this path
+// does not raise the comma-decimal corruption dialog; the trimestral/mensual
+// reports (which still call the per-row helpers) keep that guard.
+struct QuarterlyAccountingTotals {
+    double ingImporte[4]   = {0, 0, 0, 0};  // paid ingresos total (IVA incl.), ANULADA/RECTIFICADA excluded
+    int    ingTickets[4]   = {0, 0, 0, 0};  // distinct paid n_recibo
+    double gas10Importe[4] = {0, 0, 0, 0};  // gastos iva = 10
+    double gas21Importe[4] = {0, 0, 0, 0};  // gastos iva = 21
+    double gasNiImporte[4] = {0, 0, 0, 0};  // gastos iva = 0 (sin IVA)
+    int    gasFacturas[4]  = {0, 0, 0, 0};  // gastos rows, every iva rate (matches countOperations)
+};
+
+// One grouped query per table over the whole year, bucketed by quarter, for the
+// annual Contabilidad report - replaces the 24 per-quarter full-table substr()
+// scans (computeFigures x 4 quarters) with 2 scans. ingresos: SUM(importe) +
+// COUNT(DISTINCT n_recibo) under the exact pagado='SI' + ANULADA/RECTIFICADA +
+// date filters; gastos: SUM(importe) bucketed by quarter x iva (10/21/0) plus a
+// per-quarter row count over every rate. Quarter = (month + 2) / 3.
+QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year);
+
 #endif // SQL_LITE_H

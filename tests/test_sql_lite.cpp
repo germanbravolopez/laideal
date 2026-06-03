@@ -266,6 +266,54 @@ private slots:
         QCOMPARE(ev[2].fecha, QStringLiteral("12-03-2026"));
     }
 
+    // The annual report's grouped per-quarter aggregation must equal, quarter by
+    // quarter, the per-quarter totalPriceBetweenDates / countOperationsBetweenDates
+    // it replaces - so the tax math is provably unchanged. Dot-decimal fixtures
+    // (the comma path is an error dialog the grouped SUM does not reproduce).
+    void test_annualAccountingByQuarter()
+    {
+        // ingresos spread across quarters; ANULADA / unpaid excluded, a two-row
+        // ticket counts once (distinct n_recibo), a legacy empty-estado row counts.
+        insertIngreso("I1", "15-02-2026", "100.00", "SI", "ENVIADA");      // Q1
+        insertIngreso("I1", "20-02-2026", "50.00",  "SI", "ENVIADA");      // Q1, same ticket
+        insertIngreso("I2", "10-05-2026", "200.00", "SI", "");             // Q2, legacy
+        insertIngreso("I3", "11-05-2026", "30.00",  "SI", "ANULADA");      // excluded
+        insertIngreso("I4", "01-08-2026", "70.00",  "NO", "ENVIADA");      // unpaid, excluded
+        insertIngreso("I5", "20-11-2026", "400.00", "SI", "ENVIADA");      // Q4
+
+        // gastos across quarters and iva rates.
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('10-02-2026', '121.00', 21)"); // Q1
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('11-03-2026', '110.00', 10)"); // Q1
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('05-05-2026', '50.00',  0)");  // Q2 sin IVA
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('20-12-2026', '242.00', 21)"); // Q4
+
+        const QuarterlyAccountingTotals t = annualAccountingByQuarter(m_db, 2026);
+
+        const QDate starts[4] = { QDate(2026,1,1), QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1) };
+        const QDate ends[4]   = { QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1), QDate(2027,1,1) };
+        for (int i = 0; i < 4; ++i) {
+            const float ing = totalPriceBetweenDates(m_db, "ingresos", starts[i], ends[i], 0);
+            const int   ingC = countOperationsBetweenDates(m_db, "ingresos", starts[i], ends[i]);
+            const float g10 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 10);
+            const float g21 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 21);
+            const float gNi = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 0);
+            const int   gC  = countOperationsBetweenDates(m_db, "gastos", starts[i], ends[i]);
+            QVERIFY2(qAbs(t.ingImporte[i]   - ing) < 0.01, qPrintable(QString("Q%1 ing").arg(i + 1)));
+            QCOMPARE(t.ingTickets[i], ingC);
+            QVERIFY2(qAbs(t.gas10Importe[i] - g10) < 0.01, qPrintable(QString("Q%1 g10").arg(i + 1)));
+            QVERIFY2(qAbs(t.gas21Importe[i] - g21) < 0.01, qPrintable(QString("Q%1 g21").arg(i + 1)));
+            QVERIFY2(qAbs(t.gasNiImporte[i] - gNi) < 0.01, qPrintable(QString("Q%1 gNi").arg(i + 1)));
+            QCOMPARE(t.gasFacturas[i], gC);
+        }
+        // Spot-check the absolute Q1 numbers so a coincidental both-wrong match
+        // can't pass: 100+50 income, 1 ticket, 121 @21% + 110 @10%, 2 facturas.
+        QVERIFY(qAbs(t.ingImporte[0] - 150.0) < 0.01);
+        QCOMPARE(t.ingTickets[0], 1);
+        QVERIFY(qAbs(t.gas21Importe[0] - 121.0) < 0.01);
+        QVERIFY(qAbs(t.gas10Importe[0] - 110.0) < 0.01);
+        QCOMPARE(t.gasFacturas[0], 2);
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "

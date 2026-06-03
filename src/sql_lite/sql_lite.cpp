@@ -665,6 +665,84 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     return events;
 }
 
+QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
+{
+    QuarterlyAccountingTotals t;
+    if (dbNotConfigured(db, __func__)) return t;
+
+    // Half-open [start, end) over the whole year, same shape as the per-quarter
+    // helpers but for all 12 months at once; quarter bucketing happens in SQL.
+    const QString start = QStringLiteral("%1-01-01").arg(year);
+    const QString end   = QStringLiteral("%1-01-01").arg(year + 1);
+
+    db.open();
+
+    // Ingresos in one scan, GROUP BY quarter. Filters mirror
+    // totalPriceBetweenDates (pagado/estado/date) and the COUNT(DISTINCT n_recibo)
+    // mirrors countOperationsBetweenDates. Quarter = (month + 2) / 3 with month =
+    // substr(fecha_pago,4,2): months 1-3 -> 1, 4-6 -> 2, 7-9 -> 3, 10-12 -> 4
+    // (integer division). Rows with an invalid/empty date are dropped by the
+    // date() comparison (NULL), exactly as the per-quarter query drops them.
+    {
+        QSqlQuery q(db);
+        q.prepare(
+            "SELECT (CAST(substr(fecha_pago,4,2) AS INTEGER) + 2) / 3 AS q, "
+            "       SUM(importe), COUNT(DISTINCT n_recibo) "
+            "FROM ingresos WHERE (pagado = 'SI') AND "
+            "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+            " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
+            "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
+            "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end)) "
+            "GROUP BY q");
+        q.bindValue(":start", start);
+        q.bindValue(":end",   end);
+        if (q.exec()) {
+            while (q.next()) {
+                const int quarter = q.value(0).toInt();
+                if (quarter < 1 || quarter > 4) continue;
+                t.ingImporte[quarter - 1] = q.value(1).toDouble();
+                t.ingTickets[quarter - 1] = q.value(2).toInt();
+            }
+        } else {
+            qWarning() << "annualAccountingByQuarter: ingresos query failed -" << q.lastError().text();
+        }
+    }
+
+    // Gastos in one scan, GROUP BY (quarter, iva). importe goes to the 10/21/0
+    // bucket by rate (other rates contribute to no importe bucket, matching the
+    // existing computeFigures which only queries 10/21/0); facturas counts every
+    // row regardless of rate (matches countOperationsBetweenDates for gastos).
+    {
+        QSqlQuery q(db);
+        q.prepare(
+            "SELECT (CAST(substr(fecha,4,2) AS INTEGER) + 2) / 3 AS q, iva, "
+            "       SUM(importe), COUNT(*) "
+            "FROM gastos WHERE "
+            "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
+            "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end)) "
+            "GROUP BY q, iva");
+        q.bindValue(":start", start);
+        q.bindValue(":end",   end);
+        if (q.exec()) {
+            while (q.next()) {
+                const int quarter = q.value(0).toInt();
+                if (quarter < 1 || quarter > 4) continue;
+                const int    iva = q.value(1).toInt();
+                const double imp = q.value(2).toDouble();
+                if (iva == 10)      t.gas10Importe[quarter - 1] = imp;
+                else if (iva == 21) t.gas21Importe[quarter - 1] = imp;
+                else if (iva == 0)  t.gasNiImporte[quarter - 1] = imp;
+                t.gasFacturas[quarter - 1] += q.value(3).toInt();
+            }
+        } else {
+            qWarning() << "annualAccountingByQuarter: gastos query failed -" << q.lastError().text();
+        }
+    }
+
+    db.close();
+    return t;
+}
+
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)
 {
