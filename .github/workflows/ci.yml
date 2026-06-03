@@ -39,14 +39,17 @@ jobs:
           & .github/scripts/Render-TestSummary.ps1 -Title "Test results"
           exit $code
 
-      # The ticket_preview test renders a sample recibo + factura to PNG; keep
-      # them downloadable even if the run-summary sanitizes the inline data: URIs.
+      # The ticket_preview test renders a sample recibo + factura. GitHub strips
+      # inline images from the run summary (it shows the ASCII receipt instead),
+      # so upload the graphical PNG + SVG renders as a downloadable artifact.
       - name: Upload ticket previews
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ticket-previews
-          path: build/tests/preview_*.png
+          path: |
+            build/tests/preview_*.png
+            build/tests/preview_*.svg
           if-no-files-found: ignore
 
       # The release job reuses this exe instead of rebuilding, so upload it on

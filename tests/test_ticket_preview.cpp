@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QVector>
 #include <QCoreApplication>
+#include <QBuffer>
 
 #include "escposbuilder.h"
 #include "ticketrenderer.h"
@@ -205,6 +206,79 @@ QString toAscii(const QVector<PreviewBlock> &blocks, int paperDots)
     return lines.join('\n');
 }
 
+QString xmlEscape(const QString &s)
+{
+    QString r = s;
+    r.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    return r;
+}
+
+// Render the blocks to a self-contained SVG. Unlike the PNG, this renders as
+// crisp vector text and embeds inside Markdown when committed to the repo and
+// referenced by path/URL (GitHub serves repo SVGs via its image proxy) - the
+// reliable way to show a graphical ticket preview on github.com. The font size
+// is chosen so a full 48-char line fits the paper width in a generic monospace.
+QString toSvg(const QVector<PreviewBlock> &blocks, int paperDots)
+{
+    const int margin = 12;
+    const int width  = paperDots + 2 * margin;
+    auto pxFor = [](const PreviewBlock &b) {
+        int px = (b.font == EscPosBuilder::Font::B) ? 14 : 18;
+        if (b.dbl) px *= 2;
+        return px;
+    };
+    auto lineH = [](int px) { return qRound(px * 1.35); };
+
+    int totalH = margin * 2;
+    for (const auto &b : blocks) {
+        if (b.kind == PreviewBlock::Raster)   totalH += b.raster.height() + 10;
+        else if (b.kind == PreviewBlock::Cut) totalH += 18;
+        else                                  totalH += lineH(pxFor(b));
+    }
+
+    QStringList s;
+    s << QString("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+                 "width=\"%1\" height=\"%2\" viewBox=\"0 0 %1 %2\" font-family=\"monospace\">")
+             .arg(width).arg(totalH);
+    s << QString("<rect width=\"%1\" height=\"%2\" fill=\"white\"/>").arg(width).arg(totalH);
+
+    int y = margin;
+    for (const auto &b : blocks) {
+        if (b.kind == PreviewBlock::Raster) {
+            QByteArray png;
+            QBuffer buf(&png);
+            buf.open(QIODevice::WriteOnly);
+            b.raster.save(&buf, "PNG");
+            buf.close();
+            s << QString("<image x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" "
+                         "xlink:href=\"data:image/png;base64,%5\"/>")
+                     .arg((width - b.raster.width()) / 2).arg(y)
+                     .arg(b.raster.width()).arg(b.raster.height())
+                     .arg(QString::fromLatin1(png.toBase64()));
+            y += b.raster.height() + 10;
+        } else if (b.kind == PreviewBlock::Cut) {
+            s << QString("<line x1=\"%1\" y1=\"%2\" x2=\"%3\" y2=\"%2\" stroke=\"#999\" stroke-dasharray=\"4 4\"/>")
+                     .arg(margin).arg(y + 9).arg(width - margin);
+            y += 18;
+        } else {
+            const int px = pxFor(b);
+            if (!b.text.isEmpty()) {
+                QString anchor = "start";
+                int x = margin;
+                if (b.align == EscPosBuilder::Align::Center) { anchor = "middle"; x = width / 2; }
+                else if (b.align == EscPosBuilder::Align::Right) { anchor = "end"; x = width - margin; }
+                const QString weight = b.bold ? QStringLiteral(" font-weight=\"bold\"") : QString();
+                s << QString("<text x=\"%1\" y=\"%2\" font-size=\"%3\" text-anchor=\"%4\"%5 "
+                             "xml:space=\"preserve\">%6</text>")
+                         .arg(x).arg(y + px).arg(px).arg(anchor).arg(weight).arg(xmlEscape(b.text));
+            }
+            y += lineH(px);
+        }
+    }
+    s << "</svg>";
+    return s.join('\n');
+}
+
 // A QR-like placeholder image (three finder squares + a checker field), scaled
 // up - stands in for the real AEAT pixmap in the sample factura.
 QImage fakeQr()
@@ -292,20 +366,23 @@ private:
 
         const QImage img = toImage(blocks, 576);
         const QString ascii = toAscii(blocks, 576);
+        const QString svg = toSvg(blocks, 576);
 
         const QString png = m_outDir + "/preview_" + name + ".png";
         const QString txt = m_outDir + "/preview_" + name + ".txt";
+        const QString svgPath = m_outDir + "/preview_" + name + ".svg";
         if (!img.save(png, "PNG"))
             qWarning().noquote() << "could not write" << png;
-        QFile f(txt);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            f.write(ascii.toUtf8());
-            f.close();
-        } else {
-            qWarning().noquote() << "could not write" << txt;
-        }
+        const auto writeText = [](const QString &path, const QString &content) {
+            QFile f(path);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Text)) { f.write(content.toUtf8()); f.close(); }
+            else qWarning().noquote() << "could not write" << path;
+        };
+        writeText(txt, ascii);
+        writeText(svgPath, svg);
 
-        qInfo().noquote() << "\n----- preview:" << name << "----- ->" << png << "\n" << ascii << "\n";
+        qInfo().noquote() << "\n----- preview:" << name << "----- ->" << png << "/" << svgPath
+                          << "\n" << ascii << "\n";
         return blocks;
     }
 
@@ -326,6 +403,7 @@ private slots:
         for (const auto &b : blocks) if (b.kind == PreviewBlock::Raster) hasRaster = true;
         QVERIFY(!hasRaster);
         QVERIFY(QFile(m_outDir + "/preview_recibo.png").size() > 0);
+        QVERIFY(QFile(m_outDir + "/preview_recibo.svg").size() > 0);
     }
 
     void test_factura()
@@ -341,6 +419,7 @@ private slots:
         for (const auto &b : blocks) if (b.kind == PreviewBlock::Raster) hasRaster = true;
         QVERIFY(hasRaster);
         QVERIFY(QFile(m_outDir + "/preview_factura.png").size() > 0);
+        QVERIFY(QFile(m_outDir + "/preview_factura.svg").size() > 0);
     }
 };
 

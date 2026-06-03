@@ -24,10 +24,11 @@
     Directory holding the test-results-*.xml files (default: build).
 
 .PARAMETER PreviewDir
-    Directory holding the ticket preview_*.png images produced by the
-    test_ticket_preview suite (default: <BuildDir>/tests). When running under
-    GitHub Actions they are embedded inline (base64 data URIs) so the rendered
-    recibo/factura show in the run summary; locally only their paths are listed.
+    Directory holding the ticket preview_*.txt ASCII mocks produced by the
+    test_ticket_preview suite (default: <BuildDir>/tests). They are shown in a
+    fenced code block in the summary - GitHub strips inline images from job
+    summaries, so the graphical SVG renders live committed in
+    docs/modules/printer/ and in the 'ticket-previews' artifact instead.
 #>
 [CmdletBinding()]
 param(
@@ -74,24 +75,34 @@ if ($files.Count -eq 0) {
     $blocks += "_No JUnit results found in ``$BuildDir`` (expected ``test-results-*.xml``)._"
 }
 
-# Ticket previews (PNG from test_ticket_preview): embed inline as base64 data
-# URIs in the GitHub run summary so the rendered recibo/factura are visible;
-# locally just list the paths (avoids dumping huge base64 to the console). The
-# images are also uploaded as the 'ticket-previews' artifact by the workflow, in
-# case the summary sanitizes data: URIs.
-$previews = Get-ChildItem -Path $PreviewDir -Filter 'preview_*.png' -ErrorAction SilentlyContinue | Sort-Object Name
+# Ticket previews (from test_ticket_preview): GitHub strips inline images
+# (PNG/SVG, whether data: URIs or inline <svg>) from job summaries, so the
+# graphic can't be embedded here. Render the monospace ASCII receipt (always
+# shows) in a fenced block; the crisp graphical SVGs live committed in
+# docs/modules/printer/ and in the 'ticket-previews' artifact (PNG + SVG).
+$previews = Get-ChildItem -Path $PreviewDir -Filter 'preview_*.txt' -ErrorAction SilentlyContinue | Sort-Object Name
 if ($previews) {
-    $blocks += "<details open><summary><b>Ticket previews</b></summary>"
+    $blocks += "<details open><summary><b>Ticket previews</b> (rendered recibo / factura)</summary>"
     $blocks += ""
-    foreach ($p in $previews) {
-        if ($env:GITHUB_STEP_SUMMARY) {
-            $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($p.FullName))
-            $blocks += "<img alt=""$($p.BaseName)"" title=""$($p.BaseName)"" src=""data:image/png;base64,$b64"" width=""320"" />"
-        } else {
-            $blocks += "- $($p.FullName)"
-        }
+    if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) {
+        $ref    = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { 'HEAD' }
+        $docUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$ref/docs/modules/printer/README.md#sample-rendered-output"
+        $blocks += "_Graphical SVG renders: [docs/modules/printer]($docUrl) - or download the **ticket-previews** artifact (PNG + SVG)._"
+    } else {
+        $blocks += "_Graphical SVG renders: ``docs/modules/printer/preview_*.svg`` (and the PNGs in ``$PreviewDir``)._"
     }
     $blocks += ""
+    foreach ($p in $previews) {
+        $name = $p.BaseName -replace '^preview_', ''
+        $blocks += "**$name**"
+        $blocks += ""
+        $blocks += '```text'
+        # -Encoding utf8: the .txt is UTF-8 (no BOM); without this Windows
+        # PowerShell 5.1 reads it as ANSI and the Spanish accents become mojibake.
+        $blocks += (Get-Content $p.FullName -Raw -Encoding utf8).TrimEnd()
+        $blocks += '```'
+        $blocks += ""
+    }
     $blocks += "</details>"
     $blocks += ""
 }

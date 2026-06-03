@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="600" height="1245" viewBox="0 0 600 1245" font-family="monospace">
+<rect width="600" height="1245" fill="white"/>
+<text x="300" y="48" font-size="36" text-anchor="middle" font-weight="bold" xml:space="preserve">La Ideal</text>
+<text x="300" y="79" font-size="18" text-anchor="middle" font-weight="bold" xml:space="preserve">Tintorería La Ideal SL</text>
+<text x="300" y="103" font-size="18" text-anchor="middle" font-weight="bold" xml:space="preserve">NIF: B12345678</text>
+<text x="300" y="127" font-size="18" text-anchor="middle" font-weight="bold" xml:space="preserve">Plaza San Pantaleón 1, bajo 2</text>
+<text x="300" y="151" font-size="18" text-anchor="middle" font-weight="bold" xml:space="preserve">18012 Granada</text>
+<text x="300" y="175" font-size="18" text-anchor="middle" font-weight="bold" xml:space="preserve">Tlf: 958123456</text>
+<text x="300" y="199" font-size="18" text-anchor="middle" xml:space="preserve">================================================</text>
+<text x="12" y="223" font-size="18" text-anchor="start" xml:space="preserve">FACTURA SIMPLIFICADA</text>
+<text x="588" y="247" font-size="18" text-anchor="end" font-weight="bold" xml:space="preserve">Nº: 1234-1</text>
+<text x="12" y="271" font-size="18" text-anchor="start" xml:space="preserve">Cliente: María García</text>
+<text x="12" y="295" font-size="18" text-anchor="start" xml:space="preserve">Recepción: 01/06/2026</text>
+<text x="12" y="319" font-size="18" text-anchor="start" xml:space="preserve">================================================</text>
+<text x="12" y="343" font-size="18" text-anchor="start" xml:space="preserve">Uds.Prendas                              Importe</text>
+<text x="12" y="367" font-size="18" text-anchor="start" xml:space="preserve">------------------------------------------------</text>
+<text x="12" y="391" font-size="18" text-anchor="start" xml:space="preserve">1   Abrigo                                121.00</text>
+<text x="12" y="415" font-size="18" text-anchor="start" xml:space="preserve">------------------------------------------------</text>
+<text x="12" y="439" font-size="18" text-anchor="start" font-weight="bold" xml:space="preserve">Base Imponible:                           100.00</text>
+<text x="12" y="463" font-size="18" text-anchor="start" font-weight="bold" xml:space="preserve">IVA (21%):                                 21.00</text>
+<text x="12" y="487" font-size="18" text-anchor="start" font-weight="bold" xml:space="preserve">TOTAL:                                    121.00</text>
+<text x="12" y="511" font-size="18" text-anchor="start" xml:space="preserve">================================================</text>
+<text x="588" y="535" font-size="18" text-anchor="end" xml:space="preserve">IMPORTE PAGADO</text>
+<image x="204" y="565" width="192" height="192" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAACXBIWXMAAA7EAAAOxAGVKw4bAAACyUlEQVR4nO3dUU7CQBRAUWrc/5ZxA4w6uQNMyzmfhjyJ3ryEplOO2/bu9/v/X3wcxycM2cfXu98A5yYgEgGRCIhEQCQCIhEQyfAyw9TliiWmrnnMvr2Hw5cMmZ0zNWTJb1xi9E5sIBIBkQiIREAkAiIREMn31KuX3F0w+xF0yUfWiw0Zef0/yAYiERCJgEgERCIgEgGRCIhk7jrQ/vY/kfP6OzGeygYiERCJgEgERCIgEgGRCIjkBNeBpk7kjH7+vCGj1y8Zsj8biERAJAIiERCJgEgERHKCp3Oc9PPtEvv8TTydg6cQEImASAREIiASAZEIiGT3L4O5nfZEjm/rgb8JiERAJAIiERCJgEgERHIsOQcznP4BQ2bnXGyIDUQiIBIBkQiIREAkAiIZfoyH/7CBSAREIiASAZEIiERAJAIiWfN4l33uLjDkxUNsIBIBkQiIREAkAiIREImASBzrqUNm51xsiA1EIiASAZEIiERAJAIicayHxAYiERCJgEgERCIgEgGRCIjEsR5D0hAbiERAJAIiERCJgEgERCIgEsd66pDZORcbYgORCIhEQCQCIhEQiYBIBETiXBiJDUQiIBIBkQiIREAkAiJxrMeQNMQGIhEQiYBIBEQiIBIBkQiIxLGeOmR2zsWG2EAkAiIREImASAREIiASAZE41kNiA5EIiERAJAIiERCJgEiGx3r2cdL7HD5kiA1EIiASAZEIiERAJAIiERDJmse7LDG60vCQYz2bDLGBSAREIiASAZEIiERAJAIimbsONHWpZmryL8MdPNqZDUQiIBIBkQiIREAkAiL5fvcbWGyf+xw+ZIgNRCIgEgGRCIhEQCQCIhEQyQlu55gaMuJYz5OG2EAkAiIREImASAREIiASAZGc4PEujvXszAYiERCJgEgERCIgEgGR+LYeQ9IQG4hEQCQCIhEQiYBIBEQiIJIfN2qTTdaVDOYAAAAASUVORK5CYII="/>
+<text x="300" y="805" font-size="14" text-anchor="middle" xml:space="preserve">Factura verificable en la sede electrónica de la AEAT</text>
+<text x="12" y="848" font-size="14" text-anchor="start" xml:space="preserve">CONDICIONES GENERALES (RD 1453/1987)</text>
+<text x="12" y="867" font-size="14" text-anchor="start" xml:space="preserve">- El recibo deberá presentarse al retirar la prenda. Su pérdida</text>
+<text x="12" y="886" font-size="14" text-anchor="start" xml:space="preserve">no impide la recogida, pero el cliente acreditará su identidad.</text>
+<text x="12" y="905" font-size="14" text-anchor="start" xml:space="preserve">- Las prendas no recogidas en 3 MESES desde la entrega podrán</text>
+<text x="12" y="924" font-size="14" text-anchor="start" xml:space="preserve">devengar gastos de custodia. Transcurridos 6 MESES el</text>
+<text x="12" y="943" font-size="14" text-anchor="start" xml:space="preserve">establecimiento queda liberado de la obligación de custodia.</text>
+<text x="12" y="962" font-size="14" text-anchor="start" xml:space="preserve">- No se responde de botones, adornos, ni accesorios salvo</text>
+<text x="12" y="981" font-size="14" text-anchor="start" xml:space="preserve">anotación en este recibo. Se recomienda retirarlos antes de</text>
+<text x="12" y="1000" font-size="14" text-anchor="start" xml:space="preserve">entregar.</text>
+<text x="12" y="1019" font-size="14" text-anchor="start" xml:space="preserve">- Si el estado de la prenda implica riesgo de daño o resultado</text>
+<text x="12" y="1038" font-size="14" text-anchor="start" xml:space="preserve">incierto, se informará al cliente antes de proceder al</text>
+<text x="12" y="1057" font-size="14" text-anchor="start" xml:space="preserve">tratamiento.</text>
+<text x="12" y="1076" font-size="14" text-anchor="start" xml:space="preserve">- Sus datos son tratados por La Ideal para gestionar el</text>
+<text x="12" y="1095" font-size="14" text-anchor="start" xml:space="preserve">servicio. RGPD - Derechos arts.15-22: 958123456.</text>
+<text x="12" y="1118" font-size="18" text-anchor="start" xml:space="preserve">------------------------------------------------</text>
+<text x="12" y="1138" font-size="14" text-anchor="start" xml:space="preserve">01/06/2026 - 10:30:00</text>
+<line x1="12" y1="1224" x2="588" y2="1224" stroke="#999" stroke-dasharray="4 4"/>
+</svg>

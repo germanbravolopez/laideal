@@ -32,6 +32,19 @@ the existing installed printer queue. The Epson **Status API** (`BiDirectIOEx`/`
 is an optional later enhancement for paper-out/cover-open detection. See
 [`05_implementation_plan.md`](05_implementation_plan.md) for the full design.
 
+## Sample rendered output
+
+These are generated from the **real `TicketRenderer` ESC/POS output** by the
+`test_ticket_preview` suite (it interprets the byte stream back into SVG), at the
+80 mm / 576-dot width. They are a layout/content preview — the physical TM-T20III
+uses its own built-in font, so on-paper spacing differs slightly. Regenerate with
+`ctest -R ticket_preview` (writes `preview_*.svg`/`.png`/`.txt` to `build/tests/`)
+and copy the SVGs here if the layout changes.
+
+| Recibo (claim ticket) | Factura simplificada (with Verifactu QR) |
+|:---:|:---:|
+| <img src="preview_recibo.svg" alt="recibo preview" width="320"> | <img src="preview_factura.svg" alt="factura preview" width="320"> |
+
 ## Read in this order
 
 | File | What it covers |
