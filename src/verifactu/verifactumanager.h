@@ -50,9 +50,7 @@ private:
     QString nextRequestId();
     QNetworkRequest createNetworkRequest(const QString &endpoint) const;
     void logResponse(const QByteArray &response) const;
-    VerifactuResult processResponse(const QByteArray &response, bool isQrRequest = false);
     bool validateConfiguration();
-    QPixmap decodeImageFromBase64(const QString &data) const;
 
     // Queues an error so callers see it via requestFinished, same as a real reply.
     void emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description);

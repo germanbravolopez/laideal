@@ -31,7 +31,12 @@ jobs:
         run: cmake --build build
 
       - name: Test
-        run: echo "No tests configured yet. Add Qt Test or Catch2 tests and enable CTest."
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure --no-tests=error
+          $code = $LASTEXITCODE
+          & .github/scripts/Render-TestSummary.ps1 -Title "Test results"
+          exit $code
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -303,3 +303,24 @@ AEAT QR validation:
 | Qt Sql | System | SQLite driver |
 | Qt PrintSupport | System | Print support |
 | Qt Network | System | HTTP for Verifactu REST API |
+| Qt Test | System | Unit / integration tests (`tests/`) |
+
+---
+
+## Testing
+
+`tests/` holds Qt Test suites registered with CTest (`enable_testing()` + `add_subdirectory(tests)` in the root `CMakeLists.txt`; `Test` added to the root `find_package`). They build as part of the normal build and run with `ctest --test-dir build --output-on-failure`. Both use `QTEST_GUILESS_MAIN` (QCoreApplication) so they run headless on CI without a display.
+
+- **`test_sql_lite`** — links the `sql_lite` static lib and exercises its free functions against a throwaway SQLite DB created in a `QTemporaryDir` (schema created in `initTestCase`, tables cleared in `init()` before each test). Covers accounting totals + Verifactu estado filters (`totalPriceBetweenDates`, `countOperationsBetweenDates`), the accounting locks (`readLockForMonthAndYear`, `readLockForQuarter`), `nextVerifactuInvoiceSeq`, `verifactuInvoiceId`, `garmentImporte`, `readClientPhones`, `removeSpecialChars`, and `genHash16`. Fixtures stay on success paths + dot-decimal importes so the functions' modal-`QMessageBox` error paths never fire under the guiless main.
+- **`test_mysortfilterproxymodel`** — links `tableview`, covers `removeDiacritics`, accent-insensitive `filterAcceptsRow`, and the `lessThan` sort comparators (chronological dates, numeric importe, locale-string fallback).
+- **`test_verifactu_models`** — links `verifactu`, covers the pure model classes: `VerifactuConfig` validation + environment URLs, `VerifactuTaxItem` JSON/operation-type, `VerifactuInvoice` JSON/totals/validation/rectificativa, and the `verifactu_estado` string round-trip.
+- **`test_verifactu_response`** — links `verifactu` and covers `parseVerifactuResponse()` (the pure AEAT/Irene-Solutions JSON parser extracted from `VerifactuManager` into `verifacturesponse.{h,cpp}` so it is testable without a network): error/success shapes, `Huella` hash extraction, and the base64->QPixmap QR decode. Uses `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen` (set via the CTest `ENVIRONMENT` property) because QPixmap needs a QGuiApplication.
+- **`test_backup_manager`** — links `backup` and covers `BackupManager::backupsToPrune()` (the pure retention decision split out of `pruneOldBackups()`): recent-kept, one-per-month, beyond-4-years dropped, non-schema names ignored.
+- **`test_contabilidad`** — links `contabilidad` and covers `Contabilidad::periodRangeFor()` (the pure period-range date math split out of the `periodRange()` member): half-open quarter/month ranges incl. the year-boundary roll-over.
+- **`test_facturas`** — links `facturas`, covers the pure IVA split `taxBaseFromGross` / `taxAmountFromGross`.
+- **`test_genlistado`** — links `listado`, covers `GenListado::filenameSuffix` and `shouldPrintGastoRow` (the pure bits of the gastos-listado slots).
+- **`test_appsettings`** — links `appsettings`, covers the DPAPI secret-at-rest helpers (`dpapiEncrypt`/`dpapiDecrypt`/`dpapiIsEncrypted`): marker, encrypt↔decrypt round-trip, legacy-plaintext passthrough.
+- **`test_reporthtml`** — links `reporthtml`, covers `ReportHtml::formatEuro` / `tableOpen` / `documentClose`.
+- **`test_versioncompare`** (suite `TestUpdater`) — links `updater`, covers `Updater::compareVersions` / `currentVersion`. NB the executable must not be named `*update*`/`*setup*`/`*install*`: Windows' UAC installer-detection heuristic flags such names as requiring elevation and CTest then fails with `BAD_COMMAND`.
+
+CI (`ci.yml`) runs `ctest` on every push/PR; `release.yml` runs it as a **hard gate** between Build and Stage, so a failing test aborts the publish. Each suite runs with `-o build/test-results-<suite>.xml,junitxml`; both workflows then call `.github/scripts/Render-TestSummary.ps1` to render a foldable per-suite, per-method pass/fail table into the run's step summary (the script reads stdout-vs-`GITHUB_STEP_SUMMARY` so it also runs locally). New coverage should follow the same shape: link the production static lib, drive it through real inputs, assert observable results.

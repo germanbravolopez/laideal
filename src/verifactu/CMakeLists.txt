@@ -20,6 +20,8 @@ set(PROJECT_SOURCES
     verifactuinvoice.h
     verifactuinvoice.cpp
     verifactutypes.h
+    verifacturesponse.h
+    verifacturesponse.cpp
     verifactumanager.h
     verifactumanager.cpp
     verifactuintegration.h

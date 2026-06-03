@@ -28,6 +28,15 @@ public:
     QString table_name;
     void print_table();
 
+    // Pure helpers extracted from the ui-reading slots, exposed for unit testing.
+    // Filename suffix for the gastos listado PDF: "agrupado_<agrupar>_<tipo>_<year>",
+    // lower-cased with spaces as underscores; "todos_los_años" when allYears.
+    static QString filenameSuffix(const QString &agrupar, const QString &tipoGastos,
+                                  bool allYears, const QString &selectedYear);
+    // Whether a gastos row passes the year + accounting-type filter.
+    static bool shouldPrintGastoRow(bool allYears, const QString &selectedYear,
+                                    const QString &rowYear, bool onlyClosed, bool rowClosed);
+
 private slots:
     void initial_settings();
     void set_cb_fechas();

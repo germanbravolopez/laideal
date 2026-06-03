@@ -49,9 +49,14 @@ $env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64
 
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+ctest --test-dir build --output-on-failure   # run the test suite
 ```
 
 The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
+
+### Tests
+
+`tests/` holds Qt Test suites registered with CTest (built automatically as part of the normal build). Run them with `ctest --test-dir build --output-on-failure`. They cover the `sql_lite` free functions (accounting totals + Verifactu estado filters, accounting locks, invoice-seq, client lookup, hashing) against a throwaway SQLite DB, and `MySortFilterProxyModel`'s diacritic-insensitive filter. CI runs them on every push/PR and the release workflow runs them as a **hard gate** between build and publish, so a failing test aborts the release.
 
 > The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
 
@@ -165,7 +170,7 @@ This section covers the **build, installer, and publish step**. The end-to-end f
 
 1. Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
 2. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, which auto-installs the matching MinGW 11.2.0 toolchain), Ninja, and Inno Setup 6.
-3. Configure -> build (Release) -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
+3. Configure -> build (Release) -> **`ctest` (hard gate: a failing test aborts the release before any artifact is built)** -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
 4. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
 
 So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.

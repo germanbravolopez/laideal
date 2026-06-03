@@ -28,7 +28,8 @@ QString tableOpen(bool grid = false);
 // Closes the document: a footer with the generation timestamp + </body></html>.
 QString documentClose();
 
-// Currency in Spanish format with thousands grouping, e.g. "1.234,56 €".
+// Currency in Spanish format with '.' thousands grouping, ',' decimal and a
+// trailing euro sign, e.g. "1.234,56 €".
 QString formatEuro(double value);
 
 } // namespace ReportHtml

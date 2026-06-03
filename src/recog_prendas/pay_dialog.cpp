@@ -257,7 +257,7 @@ void PayDialog::onCobrarClicked()
     }
 
     const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum);
-    const QString invoiceId = QString("%1-%2").arg(m_ticketNum).arg(seq);
+    const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum
              << "seq=" << seq << "invoiceId=" << invoiceId
@@ -369,12 +369,10 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
 
 void PayDialog::markPendingVerifactu(int seq)
 {
-    // Keep the InvoiceID identity (<n_recibo>-<seq>, or bare n_recibo for seq 0)
+    // Keep the InvoiceID identity (bare n_recibo for seq 0, else <n_recibo>-<seq>)
     // and set estado=PENDIENTE so the row reads as "awaiting AEAT confirmation"
     // instead of a failed Error. Scoped by seq, exactly the rows just stamped.
-    const QString invoiceId = (seq == 0)
-        ? m_ticketNum
-        : QString("%1-%2").arg(m_ticketNum).arg(seq);
+    const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_invoice_id = :id, "
@@ -400,10 +398,9 @@ void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
     ui_impr->invoiceSeq          = seq;
     ui_impr->le_n_ticket->setText(m_ticketNum);
     ui_impr->getTicketInfo();
+    // Auto-print a single factura (the customer copy) after Cobrar - no second
+    // (business) copy. Reprint from RecogPrendas if another copy is needed.
     ui_impr->createTicketExcel(/*copyForClient=*/true, /*addPayedInfo=*/false);
-    if (AppSettings::instance()->enablePrinting()) {
+    if (AppSettings::instance()->enablePrinting())
         ui_impr->printTicket();
-        ui_impr->createTicketExcel(/*copyForClient=*/false, /*addPayedInfo=*/false);
-        ui_impr->printTicket();
-    }
 }

@@ -1,4 +1,5 @@
 #include "cancelinvoicedialog.h"
+#include "sql_lite.h"
 
 #include <QDebug>
 #include <QFrame>
@@ -137,11 +138,8 @@ void CancelInvoiceDialog::onSearchClicked()
             // Reconstruct the literal AEAT InvoiceID when the column is empty:
             // legacy 8.0-8.4 rows submitted as bare n_recibo (seq=0), and
             // pre-Phase-G PayDialog rows that did not populate the column.
-            if (e.invoiceId.isEmpty()) {
-                e.invoiceId = (e.seq == 0)
-                    ? ticketNum
-                    : QString("%1-%2").arg(ticketNum).arg(e.seq);
-            }
+            if (e.invoiceId.isEmpty())
+                e.invoiceId = verifactuInvoiceId(ticketNum, e.seq);
             m_events.append(e);
         }
     }

@@ -67,6 +67,15 @@ public:
     void setVerifactuName(const QString &v);
     QString verifactuServiceKey() const;
     void setVerifactuServiceKey(const QString &v);
+
+    // Secret-at-rest helpers (Windows DPAPI, per-user). The service-key getter/
+    // setter use these internally; exposed as statics so the encrypt->decrypt
+    // round-trip, the `dpapi:v1:` marker and the legacy-plaintext passthrough are
+    // unit-testable without the settings file. On non-Windows builds they are a
+    // passthrough. `dpapiEncrypt("")` returns "".
+    static QString dpapiEncrypt(const QString &plain);
+    static QString dpapiDecrypt(const QString &stored);
+    static bool    dpapiIsEncrypted(const QString &stored);
     bool verifactuProduction() const;
     void setVerifactuProduction(bool v);
     // Startup recovery for verifactu_estado=PENDIENTE rows. Disabled-by-default

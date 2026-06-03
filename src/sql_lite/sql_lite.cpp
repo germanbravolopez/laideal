@@ -483,6 +483,16 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
     return phones;
 }
 
+double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
+{
+    const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
+    double price = quantity * unitPrice;
+    if (price < 0.0)
+        return 0.0;
+    const double size = sizeText.trimmed().replace(',', '.').toDouble();
+    return (size != 0.0) ? size * price : price;
+}
+
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
 {
     if (dbNotConfigured(db, __func__)) return;
@@ -597,6 +607,11 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     db.close();
 }
 
+QString verifactuInvoiceId(const QString &nRecibo, int seq)
+{
+    return seq == 0 ? nRecibo : QStringLiteral("%1-%2").arg(nRecibo).arg(seq);
+}
+
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)
 {
@@ -605,12 +620,10 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const QString estado    = verifactuEstadoToString(
         result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
-    // seq=0 = save-time / retry submit (bare n_recibo as InvoiceID).
-    // seq>0 = PayDialog event (<n_recibo>-<seq>). The WHERE clause always
-    // scopes by seq so a retry of save-time never clobbers PayDialog rows.
-    const QString invoiceId = seq == 0
-        ? ticketNum
-        : QString("%1-%2").arg(ticketNum).arg(seq);
+    // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
+    // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
+    // save-time never clobbers PayDialog rows.
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
              << "estado=" << estado
              << "csv=" << (result.isSuccess() ? result.csv : QString())
@@ -679,4 +692,14 @@ QString genHash16()
     // that had a legacy rand()-era predecessor responsible for the
     // cross-ticket hash collisions surfaced by "Crear hash en ingresos".
     return QUuid::createUuid().toString(QUuid::Id128).left(16);
+}
+
+QString removeSpecialChars(const QString &str)
+{
+    // NFD then narrow to Latin-1: accented letters decompose to base + combining
+    // mark, and the marks (not representable in Latin-1) become '?'. Dropping
+    // every '?' leaves the unaccented base letters; case is preserved.
+    QString out = str.normalized(QString::NormalizationForm_D).toLatin1();
+    out.remove(QChar('?'));
+    return out;
 }

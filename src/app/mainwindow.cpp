@@ -274,24 +274,13 @@ void MainWindow::setGarmentPrice(int garmentRow,
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setText("");
     if (qntyItem) {
-        // Quantity and size may be typed with a comma decimal (Spanish keyboards);
-        // normalise to a dot before parsing, matching how both are stored at save
-        // time (replace(",",".")). Without this a size like "2,6" parses as 0.0 and
-        // the size factor (m2 garments, e.g. cortinas) is silently dropped, so the
-        // importe shown and stored is lower than the printed receipt expects.
-        float price = qntyItem->text().trimmed().replace(",", ".").toFloat()
-                      * readGarmentPrice(db, garmentText, serviceText);
-        if (price < 0) {
-            price = 0.0;
-        } else {
-            // Check if any size is filled
-            QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
-            float sizeValue = sizeItem ? sizeItem->text().trimmed().replace(",", ".").toFloat() : 0.0f;
-            if (sizeValue != 0.0f)
-                item->setText(QString::number(sizeValue * price, 'f', 2));
-            else
-                item->setText(QString::number(price, 'f', 2));
-        }
+        // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
+        // (unit-tested); see its comment for why the comma matters (m2 garments).
+        QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
+        const double importe = garmentImporte(qntyItem->text(),
+                                              sizeItem ? sizeItem->text() : QString(),
+                                              readGarmentPrice(db, garmentText, serviceText));
+        item->setText(QString::number(importe, 'f', 2));
     }
     else {
         qWarning() << "setGarmentPrice: quantity field is empty for row" << garmentRow;
@@ -398,13 +387,9 @@ bool MainWindow::validateTicket()
 
 QString MainWindow::removeSpecialChar(QString str)
 {
-    str = str.normalized(QString::NormalizationForm_D).toLatin1();
-    int index = str.indexOf("?");
-    while (index != -1) {
-        str = str.remove(index, 1);
-        index = str.indexOf("?");
-    }
-    return str;
+    // Logic lives in sql_lite::removeSpecialChars (unit-tested); kept as a thin
+    // member so the existing call sites stay unchanged.
+    return removeSpecialChars(str);
 }
 
 void MainWindow::checkClientData()

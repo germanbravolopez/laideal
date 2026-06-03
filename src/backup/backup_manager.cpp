@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -162,25 +163,22 @@ BackupManager::Result BackupManager::performBackup()
     return res;
 }
 
-int BackupManager::pruneOldBackups()
+QStringList BackupManager::backupsToPrune(const QStringList &fileNames, const QDateTime &now)
 {
-    QDir dir(backupDirectory());
-    if (!dir.exists()) return 0;
-
     // Filename schema: laideal_yyyy-MM-dd_HHmmss.db (timestampedFileName()).
     static const QRegularExpression namePattern(
         R"(^laideal_(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})\.db$)");
 
-    const QFileInfoList entries = dir.entryInfoList(
-        {"laideal_*.db"}, QDir::Files, QDir::Name);
-    const QDateTime now = QDateTime::currentDateTime();
+    // Sort ascending so the timestamp prefix orders chronologically; the
+    // monthly window then keeps the earliest survivor of each month.
+    QStringList sorted = fileNames;
+    sorted.sort();
 
-    // Group monthly-window survivors by "yyyy-MM" so we can keep one per month.
-    QHash<QString, QString> monthlyKept;
-    int deleted = 0;
-    for (const QFileInfo &fi : entries) {
-        const auto m = namePattern.match(fi.fileName());
-        if (!m.hasMatch()) continue;
+    QSet<QString> monthlyKept; // "yyyy-MM" already has a survivor
+    QStringList toDelete;
+    for (const QString &name : sorted) {
+        const auto m = namePattern.match(name);
+        if (!m.hasMatch()) continue; // not one of ours: ignore (keep)
         const QDateTime ts(QDate(m.captured(1).toInt(), m.captured(2).toInt(), m.captured(3).toInt()),
                            QTime(m.captured(4).toInt(), m.captured(5).toInt(), m.captured(6).toInt()));
         if (!ts.isValid()) continue;
@@ -190,16 +188,30 @@ int BackupManager::pruneOldBackups()
             continue; // recent: keep every copy
         }
         if (ageDays > kKeepMonthlyYears * 365) {
-            if (QFile::remove(fi.absoluteFilePath())) ++deleted;
+            toDelete << name; // beyond the retention window
             continue;
         }
         // Monthly window: keep the first survivor per (year, month), delete the rest.
         const QString monthKey = ts.toString("yyyy-MM");
-        if (!monthlyKept.contains(monthKey)) {
-            monthlyKept.insert(monthKey, fi.absoluteFilePath());
-        } else {
-            if (QFile::remove(fi.absoluteFilePath())) ++deleted;
-        }
+        if (!monthlyKept.contains(monthKey))
+            monthlyKept.insert(monthKey);
+        else
+            toDelete << name;
+    }
+    return toDelete;
+}
+
+int BackupManager::pruneOldBackups()
+{
+    QDir dir(backupDirectory());
+    if (!dir.exists()) return 0;
+
+    const QStringList names = dir.entryList({"laideal_*.db"}, QDir::Files, QDir::Name);
+    const QStringList toDelete = backupsToPrune(names, QDateTime::currentDateTime());
+
+    int deleted = 0;
+    for (const QString &name : toDelete) {
+        if (QFile::remove(dir.filePath(name))) ++deleted;
     }
     return deleted;
 }

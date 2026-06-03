@@ -1,0 +1,251 @@
+// Integration tests for the sql_lite free functions. Each test runs against a
+// throwaway SQLite database created in a QTemporaryDir, with the tables and
+// fixture rows the function under test reads. The functions open/close the
+// passed QSqlDatabase themselves, so we just hand them a configured connection.
+//
+// Fixtures deliberately use only success paths and dot-decimal importes: several
+// sql_lite functions pop a modal QMessageBox on error (bad table, comma decimal),
+// which would hang a headless run.
+
+#include <QtTest>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QTemporaryDir>
+#include <QRegularExpression>
+#include <QVariantMap>
+
+#include "sql_lite.h"
+
+namespace {
+constexpr const char *kConn = "test_sql_lite_conn";
+}
+
+class TestSqlLite : public QObject
+{
+    Q_OBJECT
+
+private:
+    QTemporaryDir m_dir;
+    QSqlDatabase  m_db;
+
+    // Open the connection, run one statement, close. Fails the test on SQL error.
+    void exec(const QString &sql, const QVariantMap &binds = {})
+    {
+        QVERIFY2(m_db.open(), qPrintable(m_db.lastError().text()));
+        QSqlQuery q(m_db);
+        QVERIFY2(q.prepare(sql), qPrintable(q.lastError().text()));
+        for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+            q.bindValue(it.key(), it.value());
+        QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+        m_db.close();
+    }
+
+    // Insert one ingresos row. Only the columns the tests care about are
+    // parameterised; the rest default to empty / 0.
+    void insertIngreso(const QString &nRecibo, const QString &fechaPago,
+                       const QString &importe, const QString &pagado,
+                       const QString &verifactuEstado, int editLock = 0,
+                       int invoiceSeq = 0)
+    {
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES (:n, '', :frec, :fp, :imp, :pag, '', :lock, :est, :seq)",
+             { {":n", nRecibo}, {":frec", fechaPago}, {":fp", fechaPago},
+               {":imp", importe}, {":pag", pagado}, {":lock", editLock},
+               {":est", verifactuEstado}, {":seq", invoiceSeq} });
+    }
+
+private slots:
+    void initTestCase()
+    {
+        QVERIFY(m_dir.isValid());
+        m_db = QSqlDatabase::addDatabase("QSQLITE", kConn);
+        m_db.setDatabaseName(m_dir.filePath("test.db"));
+        QVERIFY2(m_db.open(), qPrintable(m_db.lastError().text()));
+        QSqlQuery q(m_db);
+        // Column names (not order) are what the sql_lite functions key on.
+        QVERIFY2(q.exec(
+            "CREATE TABLE ingresos ("
+            " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
+            " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
+            " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
+            " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT,"
+            " verifactu_csv TEXT, verifactu_timestamp TEXT, verifactu_estado TEXT,"
+            " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
+            " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
+            " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
+            " verifactu_invoice_id TEXT)"), qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(
+            "CREATE TABLE gastos ("
+            " id INTEGER PRIMARY KEY, fecha TEXT, importe TEXT, iva INTEGER,"
+            " edit_lock INTEGER DEFAULT 0)"), qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(
+            "CREATE TABLE clientes ("
+            " nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)"),
+            qPrintable(q.lastError().text()));
+        m_db.close();
+    }
+
+    void cleanupTestCase()
+    {
+        m_db.close();
+        m_db = QSqlDatabase();
+        QSqlDatabase::removeDatabase(kConn);
+    }
+
+    // Fresh tables before every test so cases don't bleed into each other.
+    void init()
+    {
+        exec("DELETE FROM ingresos");
+        exec("DELETE FROM gastos");
+        exec("DELETE FROM clientes");
+    }
+
+    void test_genHash16_shapeAndUniqueness()
+    {
+        const QString h = genHash16();
+        QCOMPARE(h.size(), 16);
+        QVERIFY2(QRegularExpression("^[0-9a-f]{16}$").match(h).hasMatch(),
+                 qPrintable(h));
+        QVERIFY(genHash16() != genHash16()); // overwhelmingly likely to differ
+    }
+
+    void test_readMaxValueInColumnFromTable()
+    {
+        exec("INSERT INTO gastos (id, fecha, importe, iva) VALUES (1, '', '0', 21)");
+        exec("INSERT INTO gastos (id, fecha, importe, iva) VALUES (5, '', '0', 21)");
+        exec("INSERT INTO gastos (id, fecha, importe, iva) VALUES (3, '', '0', 21)");
+        QCOMPARE(readMaxValueInColumnFromTable(m_db, "id", "gastos"), 5);
+    }
+
+    // totalPriceBetweenDates(ingresos): only pagado='SI', excludes ANULADA and
+    // RECTIFICADA, includes ENVIADA / legacy-empty, half-open [start, end).
+    void test_totalPriceBetweenDates_ingresosFilters()
+    {
+        insertIngreso("T1", "10-03-2026", "100.00", "SI", "ENVIADA");
+        insertIngreso("T2", "12-03-2026", "50.00",  "SI", "");          // legacy, included
+        insertIngreso("T3", "13-03-2026", "30.00",  "SI", "ANULADA");   // excluded
+        insertIngreso("T4", "14-03-2026", "20.00",  "SI", "RECTIFICADA"); // excluded
+        insertIngreso("T5", "15-03-2026", "70.00",  "NO", "ENVIADA");   // unpaid, excluded
+        insertIngreso("T6", "01-04-2026", "999.00", "SI", "ENVIADA");   // == end, half-open excludes
+
+        const float total = totalPriceBetweenDates(
+            m_db, "ingresos", QDate(2026, 3, 1), QDate(2026, 4, 1), 0);
+        QVERIFY2(qAbs(total - 150.0f) < 0.01f, qPrintable(QString::number(total)));
+    }
+
+    // totalPriceBetweenDates(gastos): filters by iva rate.
+    void test_totalPriceBetweenDates_gastosByIva()
+    {
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('10-03-2026', '121.00', 21)");
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('11-03-2026', '110.00', 10)");
+        const float v21 = totalPriceBetweenDates(
+            m_db, "gastos", QDate(2026, 3, 1), QDate(2026, 4, 1), 21);
+        QVERIFY2(qAbs(v21 - 121.0f) < 0.01f, qPrintable(QString::number(v21)));
+    }
+
+    void test_countOperationsBetweenDates_distinctTickets()
+    {
+        insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA"); // same ticket, 2 rows
+        insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("T2", "11-03-2026", "10.00", "SI", "ENVIADA");
+        const int n = countOperationsBetweenDates(
+            m_db, "ingresos", QDate(2026, 3, 1), QDate(2026, 4, 1));
+        QCOMPARE(n, 2);
+    }
+
+    void test_readLockForMonthAndYear()
+    {
+        // Note: unlike readLockForQuarter, this function returns 0 (not 2) for an
+        // empty month - a valid-but-empty SELECT falls to `q.first() ? ... : 0`,
+        // so "no data" and "open" are conflated here. Its only caller checks ==1,
+        // so this is harmless; the contract is asserted as-is.
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // no data -> 0
+        insertIngreso("T1", "15-06-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // open
+        exec("UPDATE ingresos SET edit_lock = 1 WHERE n_recibo = 'T1'");
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 1); // locked
+    }
+
+    // The 9.1 regression guard: a quarter with income only in its first month
+    // (nothing in the last month) must still report its real lock state, not 2.
+    void test_readLockForQuarter_firstMonthOnly()
+    {
+        insertIngreso("T1", "15-01-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        QCOMPARE(readLockForQuarter(m_db, "ingresos", 1, 2026), 1); // Q1 locked
+        QCOMPARE(readLockForQuarter(m_db, "ingresos", 2, 2026), 2); // Q2 no data
+    }
+
+    void test_readLockForQuarter_open()
+    {
+        insertIngreso("T1", "20-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
+        QCOMPARE(readLockForQuarter(m_db, "ingresos", 1, 2026), 0); // has data, open
+    }
+
+    // nextVerifactuInvoiceSeq = MAX(seq over paid rows) + 1, 0 when none paid.
+    void test_nextVerifactuInvoiceSeq()
+    {
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 0); // no paid rows
+        insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 1);
+        insertIngreso("T1", "11-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/1);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
+        insertIngreso("T1", "", "10.00", "NO", "", 0, /*seq=*/9); // unpaid: ignored
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
+    }
+
+    // Pure price math (no DB): comma-decimal normalisation + size factor.
+    void test_garmentImporte()
+    {
+        // quantity * unitPrice, no size
+        QVERIFY(qAbs(garmentImporte("2", "", 5.0) - 10.0) < 0.001);
+        // comma decimal in quantity (the 9.0 bug: must not parse as 0)
+        QVERIFY(qAbs(garmentImporte("2,6", "", 5.0) - 13.0) < 0.001);
+        // non-zero size factor (m2 garment), comma decimal in size
+        QVERIFY(qAbs(garmentImporte("3", "2,5", 4.0) - 30.0) < 0.001);
+        // size "0" -> no factor applied
+        QVERIFY(qAbs(garmentImporte("3", "0", 4.0) - 12.0) < 0.001);
+        // negative result clamps to 0
+        QVERIFY(qAbs(garmentImporte("-1", "", 5.0)) < 0.001);
+        // empty quantity -> 0
+        QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
+    }
+
+    // The single source of truth for the AEAT InvoiceID format (used at submit,
+    // persist, cancel and reprint). seq 0 -> bare n_recibo; seq>0 -> "<n>-<seq>".
+    void test_verifactuInvoiceId()
+    {
+        QCOMPARE(verifactuInvoiceId("3245", 0), QStringLiteral("3245"));
+        QCOMPARE(verifactuInvoiceId("3245", 1), QStringLiteral("3245-1"));
+        QCOMPARE(verifactuInvoiceId("3245", 12), QStringLiteral("3245-12"));
+    }
+
+    // Accent/special-char stripper used for client-name matching (extracted from
+    // MainWindow::removeSpecialChar). Case is preserved; literal '?' is dropped.
+    void test_removeSpecialChars()
+    {
+        QCOMPARE(removeSpecialChars(QStringLiteral("José")),  QStringLiteral("Jose"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("Begoña")), QStringLiteral("Begona"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("Ángel")),  QStringLiteral("Angel"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("sin-acentos")), QStringLiteral("sin-acentos"));
+        QCOMPARE(removeSpecialChars(QStringLiteral("a?b")), QStringLiteral("ab"));
+    }
+
+    void test_readClientPhones()
+    {
+        exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "
+             "VALUES ('Jose', '911111111', '600000000', 'Calle Falsa 123')");
+        const QStringList p = readClientPhones(m_db, "Jose");
+        QCOMPARE(p.value(0), QStringLiteral("911111111"));
+        QCOMPARE(p.value(1), QStringLiteral("600000000"));
+
+        const QStringList none = readClientPhones(m_db, "Nadie");
+        QVERIFY(none.value(0).isEmpty());
+        QVERIFY(none.value(1).isEmpty());
+    }
+};
+
+QTEST_GUILESS_MAIN(TestSqlLite)
+#include "test_sql_lite.moc"

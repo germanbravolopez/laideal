@@ -52,6 +52,16 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # Hard gate: a failing test aborts the release before any artifact is
+      # built or published. Results are rendered to the run summary.
+      - name: Test
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure --no-tests=error
+          $code = $LASTEXITCODE
+          & .github/scripts/Render-TestSummary.ps1 -Title "Test results (release ${{ github.ref_name }})"
+          exit $code
+
       - name: Stage release files
         shell: pwsh
         run: |

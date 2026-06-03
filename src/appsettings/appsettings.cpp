@@ -70,6 +70,13 @@ QString decryptSecret(const QString &stored) { return isEncrypted(stored) ? stor
 #endif
 } // namespace
 
+// Thin public delegators over the file-local secret helpers above, so the
+// encryption logic is unit-testable (the internal getters/setters keep calling
+// the unqualified helpers directly).
+QString AppSettings::dpapiEncrypt(const QString &plain)   { return encryptSecret(plain); }
+QString AppSettings::dpapiDecrypt(const QString &stored)  { return decryptSecret(stored); }
+bool    AppSettings::dpapiIsEncrypted(const QString &stored) { return isEncrypted(stored); }
+
 AppSettings *AppSettings::s_instance = nullptr;
 
 AppSettings *AppSettings::instance()
