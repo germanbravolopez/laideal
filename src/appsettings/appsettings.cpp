@@ -162,6 +162,13 @@ bool AppSettings::load()
     return true;
 }
 
+bool AppSettings::loadFrom(const QString &path)
+{
+    m_filePath = path;
+    m_data = QJsonObject();   // drop constructor defaults so the file is the sole source
+    return load();
+}
+
 bool AppSettings::save() const
 {
     // Atomic write: serialize to a sibling .tmp file, fsync-equivalent flush, then
