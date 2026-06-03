@@ -27,7 +27,7 @@
     Directory holding the ticket preview_*.txt ASCII mocks produced by the
     test_ticket_preview suite (default: <BuildDir>/tests). They are shown in a
     fenced code block in the summary - GitHub strips inline images from job
-    summaries, so the graphical SVG renders live committed in
+    summaries, so the graphical PNG renders live committed in
     docs/modules/printer/ and in the 'ticket-previews' artifact instead.
 #>
 [CmdletBinding()]
@@ -76,10 +76,10 @@ if ($files.Count -eq 0) {
 }
 
 # Ticket previews (from test_ticket_preview): GitHub strips inline images
-# (PNG/SVG, whether data: URIs or inline <svg>) from job summaries, so the
-# graphic can't be embedded here. Render the monospace ASCII receipt (always
-# shows) in a fenced block; the crisp graphical SVGs live committed in
-# docs/modules/printer/ and in the 'ticket-previews' artifact (PNG + SVG).
+# (data: URIs or inline) from job summaries, so the graphic can't be embedded
+# here. Render the monospace ASCII receipt (always shows) in a fenced block; the
+# graphical PNGs live committed in docs/modules/printer/ and in the
+# 'ticket-previews' artifact.
 $previews = Get-ChildItem -Path $PreviewDir -Filter 'preview_*.txt' -ErrorAction SilentlyContinue | Sort-Object Name
 if ($previews) {
     $blocks += "<details open><summary><b>Ticket previews</b> (rendered recibo / factura)</summary>"
@@ -87,9 +87,9 @@ if ($previews) {
     if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) {
         $ref    = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { 'HEAD' }
         $docUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$ref/docs/modules/printer/README.md#sample-rendered-output"
-        $blocks += "_Graphical SVG renders: [docs/modules/printer]($docUrl) - or download the **ticket-previews** artifact (PNG + SVG)._"
+        $blocks += "_Graphical PNG renders: [docs/modules/printer]($docUrl) - or download the **ticket-previews** artifact._"
     } else {
-        $blocks += "_Graphical SVG renders: ``docs/modules/printer/preview_*.svg`` (and the PNGs in ``$PreviewDir``)._"
+        $blocks += "_Graphical PNG renders: ``docs/modules/printer/preview_*.png`` (and in ``$PreviewDir``)._"
     }
     $blocks += ""
     foreach ($p in $previews) {

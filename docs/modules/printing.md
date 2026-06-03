@@ -5,7 +5,7 @@ printer). This library replaced the old Excel/QXlsx/`cscript` path: it builds th
 receipt as a byte stream and sends it **RAW** through the Windows print spooler —
 no Excel, no QXlsx, no COM, no `.vbs`, no Epson SDK (only `winspool`, which ships
 with Windows). Background and design: [`printer/`](printer/README.md); a rendered
-[sample recibo + factura](printer/README.md#sample-rendered-output) (SVG, from the
+[sample recibo + factura](printer/README.md#sample-rendered-output) (PNG, from the
 `test_ticket_preview` output) shows what the layout looks like.
 
 ## Source files
