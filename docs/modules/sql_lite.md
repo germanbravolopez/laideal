@@ -53,7 +53,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `updateTicketObservations(db, nRecibo, hash, observaciones)` | `bool` | RecogPrendas seam: set `observaciones` (OBSV) |
 | `updateTicketSizeAndPrice(db, nRecibo, hash, size, importe)` | `bool` | RecogPrendas seam: set `size` + `importe` (SIZE_AND_PRICE) |
 | `updateGarmentQtyAndImporte(db, nRecibo, hash, cantidad, importe)` | `bool` | RecogPrendas seam: set `cantidad` + `importe` on the reduced row (SEPARATE_GARM 1/2) |
-| `insertGarmentRow(db, IngresoGarmentRow)` | `bool` | RecogPrendas seam: insert the split-off garment row (SEPARATE_GARM 2/2). Leaves `verifactu_*` at empty defaults so the split row reads as legacy/NotSubmitted (re-submitting it would duplicate the ticket's AEAT InvoiceID) |
+| `insertGarmentRow(db, IngresoGarmentRow)` | `bool` | Insert one `ingresos` garment row. Shared by RecogPrendas SEPARATE_GARM (split-off row, `verifactuEstado=""` → legacy/NotSubmitted; re-submitting it would duplicate the ticket's AEAT InvoiceID) and MainWindow `saveTicket` (fresh ticket row, `verifactuEstado="PENDIENTE"` so the async submit can patch it). `verifactuEstado` is the only verifactu_* column written |
 | `ticketVerifactuEstado(db, nRecibo)` | `QString` | `verifactu_estado` of the ticket's first row (empty if none). Read by the PAY_YES pay-all dedup after a payment write |
 
 ## Usage pattern

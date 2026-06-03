@@ -479,8 +479,38 @@ private slots:
         QCOMPARE(scalar("SELECT prenda FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Pantalon"));
         QCOMPARE(scalar("SELECT servicio FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Tinte"));
         QCOMPARE(scalar("SELECT observaciones FROM ingresos WHERE hash='splitHash'"), QStringLiteral("urgente"));
-        // Verifactu columns intentionally untouched (default empty).
+        // A split-off row leaves verifactuEstado empty -> reads as legacy/NotSubmitted.
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='splitHash'").isEmpty());
+    }
+
+    // MainWindow::saveTicket inserts via the same seam but stamps verifactu_estado
+    // PENDIENTE (NotSubmitted) so the async AEAT submit can later patch the row.
+    void test_insertGarmentRow_saveTicketShapePending()
+    {
+        IngresoGarmentRow row;
+        row.nRecibo         = "T8";
+        row.cliente         = "Luis";
+        row.fechaRecepcion  = "03-03-2026";
+        row.fechaPago       = "03-03-2026"; // paid at save -> booked on reception date
+        row.fechaRecogida   = "";           // new ticket, not picked up
+        row.importe         = "21.00";
+        row.pagado          = "SI";
+        row.estado          = "En tienda";
+        row.cantidad        = "1";
+        row.prenda          = "Abrigo";
+        row.size            = "";
+        row.servicio        = "Limpieza";
+        row.observaciones   = "";
+        row.hash            = "saveHash";
+        row.verifactuEstado = "PENDIENTE";
+
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='saveHash'"),
+                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='saveHash'"),
+                 QStringLiteral("03-03-2026"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='saveHash'"), QStringLiteral("En tienda"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='saveHash'").isEmpty());
     }
 
     // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first

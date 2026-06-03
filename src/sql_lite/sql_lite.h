@@ -80,17 +80,21 @@ bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, c
 bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                        const QString &cantidad, const QString &importe);
 
-// One garment line to insert (SEPARATE_GARM 2/2 / generic split-off). verifactu_*
-// columns are intentionally left at their table defaults (empty): the AEAT
-// submission for the ticket covered the full importe and the chained Huella stays
-// on the original rows, so a split row must read as legacy/NotSubmitted -
-// re-submitting it would create a duplicate-InvoiceID error at AEAT.
+// One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
+// (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).
+// `verifactuEstado` is the only verifactu_* column written; the rest start empty:
+//  - split-off row: leave it "" so the row reads as legacy/NotSubmitted - the AEAT
+//    submission for the ticket covered the full importe and the chained Huella
+//    stays on the original rows, so re-submitting a split row would create a
+//    duplicate-InvoiceID error at AEAT.
+//  - saveTicket row: pass "PENDIENTE" (verifactuEstadoToString(NotSubmitted)); the
+//    async AEAT submit patches the row once a reply arrives.
 struct IngresoGarmentRow {
     QString nRecibo;
     QString cliente;
     QString fechaRecepcion;
-    QString fechaPago;      // empty if unpaid
-    QString fechaRecogida;  // empty if not picked up
+    QString fechaPago;        // empty if unpaid
+    QString fechaRecogida;    // empty if not picked up
     QString importe;
     QString pagado;
     QString estado;
@@ -101,8 +105,8 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString editLock = "0";
     QString hash;
+    QString verifactuEstado;  // "" (legacy/split) or "PENDIENTE" (saveTicket)
 };
-// SEPARATE_GARM (2/2): insert the split-off garment row.
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 
 // verifactu_estado of the first row of a ticket ("" if the ticket has no rows).

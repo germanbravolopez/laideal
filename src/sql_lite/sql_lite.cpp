@@ -387,25 +387,26 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     QSqlQuery q(db);
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
               "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
-              "observaciones, edit_lock, hash) "
+              "observaciones, edit_lock, hash, verifactu_estado) "
               "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
               ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
-              ":observaciones, :edit_lock, :hash)");
-    q.bindValue(":n_recibo",        row.nRecibo);
-    q.bindValue(":cliente",         row.cliente);
-    q.bindValue(":fecha_recepcion", row.fechaRecepcion);
-    q.bindValue(":fecha_pago",      row.fechaPago);
-    q.bindValue(":fecha_recogida",  row.fechaRecogida);
-    q.bindValue(":importe",         row.importe);
-    q.bindValue(":pagado",          row.pagado);
-    q.bindValue(":estado",          row.estado);
-    q.bindValue(":cantidad",        row.cantidad);
-    q.bindValue(":prenda",          row.prenda);
-    q.bindValue(":size",            row.size);
-    q.bindValue(":servicio",        row.servicio);
-    q.bindValue(":observaciones",   row.observaciones);
-    q.bindValue(":edit_lock",       row.editLock);
-    q.bindValue(":hash",            row.hash);
+              ":observaciones, :edit_lock, :hash, :verifactu_estado)");
+    q.bindValue(":n_recibo",         row.nRecibo);
+    q.bindValue(":cliente",          row.cliente);
+    q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
+    q.bindValue(":fecha_pago",       row.fechaPago);
+    q.bindValue(":fecha_recogida",   row.fechaRecogida);
+    q.bindValue(":importe",          row.importe);
+    q.bindValue(":pagado",           row.pagado);
+    q.bindValue(":estado",           row.estado);
+    q.bindValue(":cantidad",         row.cantidad);
+    q.bindValue(":prenda",           row.prenda);
+    q.bindValue(":size",             row.size);
+    q.bindValue(":servicio",         row.servicio);
+    q.bindValue(":observaciones",    row.observaciones);
+    q.bindValue(":edit_lock",        row.editLock);
+    q.bindValue(":hash",             row.hash);
+    q.bindValue(":verifactu_estado", row.verifactuEstado);
     bool ok = q.exec();
     if (!ok)
         qWarning() << "insertGarmentRow: INSERT failed -" << q.lastError().text();
