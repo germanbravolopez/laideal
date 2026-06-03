@@ -7,7 +7,7 @@ target_link_libraries(imprimir PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     appsettings
-    QXlsx::QXlsx
+    printing
 )
 target_link_libraries(imprimir PUBLIC
     verifactu

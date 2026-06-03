@@ -36,15 +36,17 @@ public:
     QString listadosPrendasPath() const;     // <root>/Listados/Prendas
     QString listadosGastosPath() const;      // <root>/Listados/Gastos
 
-    // --- Print ---
+    // --- Print (direct ESC/POS to the thermal printer) ---
     bool enablePrinting() const;
     void setEnablePrinting(bool v);
-    // Fixed file paths under the user's home directory (consistent with
-    // ~/.laideal_settings.json and ~/.laideal.log). The Excel file is recreated
-    // on every print; the VBScript is regenerated next to it. Both are app-internal
-    // and not user-configurable any more.
-    static QString ticketExcelPath();        // ~/.laideal_ticket.xlsx
-    static QString ticketPrintScriptPath();  // ~/.laideal_print.vbs
+    // Windows printer-queue name the ESC/POS bytes are sent to (RAW). Empty =
+    // use the system default printer.
+    QString printerName() const;
+    void    setPrinterName(const QString &v);
+    // Roll width in mm (58 or 80). Drives the receipt's column layout: 80 -> 576
+    // printable dots, 58 -> 420. Defaults to 80.
+    int  paperWidthMm() const;
+    void setPaperWidthMm(int v);
 
     // --- Business identity ---
     QString businessName() const;

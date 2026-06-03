@@ -670,7 +670,7 @@ void RecogPrendas::printFactura(const QString &ticketNum, bool askSecondCopy, in
     ui_impr->invoiceSeq = invoiceSeq;
     ui_impr->le_n_ticket->setText(ticketNum);
     ui_impr->getTicketInfo();
-    ui_impr->createTicketExcel(false, false);
+    ui_impr->buildTicket(false, false);
     if (!AppSettings::instance()->enablePrinting())
         return;
     ui_impr->printTicket();

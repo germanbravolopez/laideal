@@ -119,6 +119,9 @@ void AppSettings::applyDefaults()
     // the directory). Default opt-in.
     if (!m_data.value("backup").toObject().contains("enabled"))
         setBln({"backup", "enabled"}, true);
+    // Thermal printer roll width (mm). Default 80; persisted so an upgrade keeps it.
+    if (!m_data.value("print").toObject().contains("paper_width_mm"))
+        setDbl({"print", "paper_width_mm"}, 80);
 }
 
 bool AppSettings::load()
@@ -300,8 +303,11 @@ QString AppSettings::listadosGastosPath() const   { return QDir(reportsRoot()).f
 bool AppSettings::enablePrinting() const { return str({"print", "enable"}) == "Yes"; }
 void AppSettings::setEnablePrinting(bool v) { setStr({"print", "enable"}, v ? "Yes" : "No"); }
 
-QString AppSettings::ticketExcelPath()       { return QDir::homePath() + "/.laideal_ticket.xlsx"; }
-QString AppSettings::ticketPrintScriptPath() { return QDir::homePath() + "/.laideal_print.vbs"; }
+QString AppSettings::printerName() const          { return str({"print", "printer_name"}); }
+void    AppSettings::setPrinterName(const QString &v) { setStr({"print", "printer_name"}, v); }
+
+int  AppSettings::paperWidthMm() const  { return static_cast<int>(dbl({"print", "paper_width_mm"}, 80)); }
+void AppSettings::setPaperWidthMm(int v) { setDbl({"print", "paper_width_mm"}, v); }
 
 // ---------------------------------------------------------------------------
 // Business

@@ -7,6 +7,7 @@ add_library(appsettings STATIC
 target_link_libraries(appsettings
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::PrintSupport   # QPrinterInfo: list installed printers in SettingsDialog
 )
 # Windows DPAPI (CryptProtectData/CryptUnprotectData) for encrypting the Verifactu
 # service key at rest in ~/.laideal_settings.json.

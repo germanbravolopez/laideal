@@ -552,10 +552,10 @@ void MainWindow::printRecibo()
     ui_impr->verifactuIntegration = nullptr;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
-    ui_impr->createTicketExcel(true, ui->pb_payment->isChecked());
+    ui_impr->buildTicket(true, ui->pb_payment->isChecked());
     if (AppSettings::instance()->enablePrinting()) {
         ui_impr->printTicket();
-        ui_impr->createTicketExcel(false, ui->pb_payment->isChecked());
+        ui_impr->buildTicket(false, ui->pb_payment->isChecked());
         ui_impr->printTicket();
     }
 }
@@ -570,10 +570,10 @@ void MainWindow::printFra(const QPixmap &qrCode)
     ui_impr->qrCode = qrCode;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
-    ui_impr->createTicketExcel(true, false);
+    ui_impr->buildTicket(true, false);
     if (AppSettings::instance()->enablePrinting()) {
         ui_impr->printTicket();
-        ui_impr->createTicketExcel(false, false);
+        ui_impr->buildTicket(false, false);
         ui_impr->printTicket();
     }
 }

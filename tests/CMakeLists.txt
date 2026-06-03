@@ -115,6 +115,18 @@ target_link_libraries(test_backup_manager PRIVATE
 add_test(NAME backup_manager
     COMMAND test_backup_manager -o ${CMAKE_BINARY_DIR}/test-results-backup_manager.xml,junitxml -o -,txt)
 
+# printing: pure ESC/POS builder (exact bytes + PC858 transcode + column math)
+# and the TicketRenderer receipt/invoice layout. QTEST_GUILESS_MAIN - QImage
+# works under QCoreApplication, no platform plugin needed.
+add_executable(test_escpos test_escpos.cpp)
+target_link_libraries(test_escpos PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Gui       # QImage (raster path + TicketData::qr)
+    printing
+)
+add_test(NAME escpos
+    COMMAND test_escpos -o ${CMAKE_BINARY_DIR}/test-results-escpos.xml,junitxml -o -,txt)
+
 # contabilidad: pure period-range date math (Contabilidad::periodRangeFor).
 add_executable(test_contabilidad test_contabilidad.cpp)
 target_link_libraries(test_contabilidad PRIVATE

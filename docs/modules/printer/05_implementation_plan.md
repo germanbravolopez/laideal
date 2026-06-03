@@ -1,9 +1,17 @@
 # 05 — Implementation Plan
 
 Proposed design for replacing the Excel/QXlsx/cscript path with direct ESC/POS over the RAW
-Windows spooler. This is a plan, not shipped code. It is written to fit the project's
-conventions: Qt 5/6 + C++17, CMake module libraries under `src/`, free-function/pure-helper
-seams for unit tests (see the Qt Test suites in [`../../../tests`](../../../tests)), English-only docs.
+Windows spooler. It is written to fit the project's conventions: Qt 5/6 + C++17, CMake module
+libraries under `src/`, free-function/pure-helper seams for unit tests (see the Qt Test suites
+in [`../../../tests`](../../../tests)), English-only docs.
+
+> **Status: implemented.** Phases 1-3 shipped as `src/printing/` (the three classes below,
+> matching this design closely — `buildTicket()`/`printTicket()` on `Imprimir`, the two
+> settings, `tests/test_escpos.cpp` for the pure builder + renderer) and the Excel path was
+> deleted. **Phase 0** (hardware spike) was not run in this environment — confirm the queue
+> name, code page (PC858) and paper width on the physical unit. **Phase 4** (Status API) and
+> **Phase 5** (remove the vendored `QXlsx/`) remain open follow-ups. Runtime reference:
+> [`../printing.md`](../printing.md).
 
 ## Goals and non-goals
 

@@ -12,6 +12,8 @@
 #include <QDoubleValidator>
 #include <QDate>
 #include <QDateEdit>
+#include <QComboBox>
+#include <QPrinterInfo>
 
 // Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
@@ -78,6 +80,24 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_enablePrinting = new QCheckBox(tr("Habilitar impresión de tickets y facturas"));
     m_enablePrinting->setChecked(s->enablePrinting());
     fl->addRow(m_enablePrinting);
+
+    // Printer queue: editable combo prefilled with the installed printers. A
+    // blank value means "use the system default printer".
+    m_printerName = new QComboBox;
+    m_printerName->setEditable(true);
+    m_printerName->addItem(QString());   // blank = default printer
+    m_printerName->addItems(QPrinterInfo::availablePrinterNames());
+    m_printerName->setCurrentText(s->printerName());
+    m_printerName->setToolTip(tr(
+        "Cola de impresión a la que se envían los tickets (ESC/POS RAW). "
+        "Vacío = impresora predeterminada de Windows."));
+    fl->addRow(tr("Impresora de tickets:"), m_printerName);
+
+    m_paperWidth = new QComboBox;
+    m_paperWidth->addItem(tr("58 mm"), 58);
+    m_paperWidth->addItem(tr("80 mm"), 80);
+    m_paperWidth->setCurrentIndex(s->paperWidthMm() == 58 ? 0 : 1);
+    fl->addRow(tr("Ancho de papel:"), m_paperWidth);
 
     m_checkUpdatesOnStartup = new QCheckBox(tr("Buscar actualizaciones al iniciar la aplicación"));
     m_checkUpdatesOnStartup->setChecked(s->checkUpdatesOnStartup());
@@ -195,6 +215,8 @@ void SettingsDialog::accept()
     s->setDbPath(m_dbPath->text().trimmed());
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
+    s->setPrinterName(m_printerName->currentText().trimmed());
+    s->setPaperWidthMm(m_paperWidth->currentData().toInt());
     s->setCheckUpdatesOnStartup(m_checkUpdatesOnStartup->isChecked());
 
     s->setReportsRoot(m_reportsRoot->text().trimmed());

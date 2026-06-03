@@ -37,7 +37,8 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Table view utilities (TableView, FilterWidget, MySortFilterProxyModel, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Formal invoices form | `src/facturas/facturas.h` / `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` / `.cpp` |
-| Print + Excel generation | `src/imprimir/imprimir.h` / `.cpp` |
+| Receipt/invoice print orchestration | `src/imprimir/imprimir.h` / `.cpp` |
+| ESC/POS printing core (builder, renderer, RAW spooler) | `src/printing/` — `escposbuilder`, `ticketrenderer`, `thermalprinter` |
 | Add garments to ticket | `src/add_garment/add_garment.h` / `.cpp` |
 | Verifactu facade | `src/verifactu/verifactuintegration.h` / `.cpp` |
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` / `.cpp` |

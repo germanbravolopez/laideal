@@ -1,13 +1,18 @@
 # Printer Research — Direct ESC/POS Ticket Printing
 
-This folder is the research dossier and implementation plan for replacing the current
+This folder is the research dossier and implementation plan that backed replacing the
 Excel-based ticket/invoice printing with direct communication to the shop's thermal
-receipt printer. It backs the Open Non-Blocking issue **"Replace Excel-based printing
-with EPSON ticket printer API"** in [`../../progress_tracker.md`](../../progress_tracker.md).
+receipt printer. It originally backed the Open Non-Blocking issue **"Replace Excel-based
+printing with EPSON ticket printer API"** in [`../../progress_tracker.md`](../../progress_tracker.md).
 
-Status: **research + design complete, no production code written yet.** Everything here is
-preparation for the future `src/imprimir` rewrite. The current Excel + cscript path is still
-the shipping behaviour.
+Status: **implemented.** The recommended path below shipped as the `src/printing/` library
+(`EscPosBuilder` + `TicketRenderer` + `ThermalPrinter`), wired into `src/imprimir`; the
+Excel/QXlsx/`.vbs`/`cscript` path is gone. The runtime reference for the shipped code is
+[`../printing.md`](../printing.md); this dossier remains the design background (model,
+control-method rationale, the exact ESC/POS command subset, and the original phased plan).
+The optional Status-API layer (Phase 4) and removing the now-unused vendored `QXlsx/`
+(Phase 5) are still open follow-ups, and the code page / queue name / paper width must be
+confirmed on the physical unit (Phase 0 was not run in CI).
 
 ## The printer, in one line
 

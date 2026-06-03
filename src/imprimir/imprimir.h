@@ -8,12 +8,12 @@
 #include <QDateTime>
 #include <QInputDialog>
 #include <QFile>
-#include <QProcess>
 #include <QApplication>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
 #include <QPixmap>
+#include <QByteArray>
 
 #include "sql_lite.h"
 #include "verifactuintegration.h"
@@ -37,7 +37,9 @@ public:
 
     // Public functions
     void getTicketInfo();
-    void createTicketExcel(bool copyForClient, bool addPayedInfo);
+    // Build the ESC/POS byte stream for one ticket copy into m_ticketBytes
+    // (replaces the old Excel generation). printTicket() then sends it RAW.
+    void buildTicket(bool copyForClient, bool addPayedInfo);
     void printTicket();
     QPixmap resolveQrCode();
     // Literal AEAT InvoiceID for the loaded rows: first non-empty
@@ -59,7 +61,13 @@ private slots:
     void on_bb_ok_cancel_rejected();
 
 private:
+    // Printable width in dots derived from AppSettings::paperWidthMm()
+    // (576 @80mm, 420 @58mm). Drives the renderer's column layout.
+    int paperDots() const;
+
     QSqlDatabase db;
+    // ESC/POS bytes for the most recently built copy; printTicket() sends these.
+    QByteArray m_ticketBytes;
 };
 
 #endif // IMPRIMIR_H
