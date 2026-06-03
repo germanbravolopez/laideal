@@ -38,7 +38,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
-| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which triggers `release.yml` CI to build + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
+| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which runs `ci.yml`'s `build` job then its tag-gated `release` job to package + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
 | `/review` | Built-in | Review a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
@@ -105,10 +105,9 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
 | `QXlsx/CMakeLists.txt` | QXlsx library build (vendored; unused since the ESC/POS migration) |
 | `tests/` (13 Qt Test + CTest suites) | `test_sql_lite` (+`garmentImporte`), `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
-| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and embeds the `test_ticket_preview` PNGs inline (base64) so the rendered recibo/factura show in the summary (called by both workflows; also runnable locally — lists preview paths instead of embedding) |
-| `.github/workflows/ci.yml` | CI — builds on push/PR to `develop`/`master`/`feature/**` (Qt 6.4.3 MinGW + CMake + Ninja), runs `ctest`, uploads `laideal.exe` (on push) + the `ticket-previews` PNGs (always) |
-| `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `ctest` (hard gate) + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |
-| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for `release.yml` |
+| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and embeds the `test_ticket_preview` PNGs inline (base64) so the rendered recibo/factura show in the summary (called by the `ci.yml` build job; also runnable locally — lists preview paths instead of embedding) |
+| `.github/workflows/ci.yml` | CI + Release in one workflow. **`build` job** (push/PR to `develop`/`master`/`feature/**`, and `X.Y` tags): Qt 6.4.3 MinGW + CMake + Ninja, `ctest`, uploads `laideal.exe` (on push) + `ticket-previews` PNGs (always). **`release` job** (`needs: build`, only on `X.Y` tags): reuses the build exe -> `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release. |
+| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for the `ci.yml` release job |
 | `releases/laideal.iss` | Inno Setup installer recipe (paths relative to `releases/`; `/DMyAppVersion=X.Y`) |
 
 ## Key Concepts / Glossary

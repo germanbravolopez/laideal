@@ -1,7 +1,6 @@
 # La Ideal
 
 [![CI](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/ci.yml)
-[![Release](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml/badge.svg)](https://github.com/germanbravolopez/laideal/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/germanbravolopez/laideal)](https://github.com/germanbravolopez/laideal/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/germanbravolopez/laideal/total)](https://github.com/germanbravolopez/laideal/releases)
 ![Top language](https://img.shields.io/github/languages/top/germanbravolopez/laideal)
@@ -154,7 +153,7 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    git tag -a X.Y -m "Release X.Y"
    git push origin X.Y
    ```
-6. **Pushing the tag in step 5 is the publish trigger** - `.github/workflows/release.yml` runs on any `X.Y` tag and builds, packages, and publishes the GitHub Release automatically (artifacts + notes). Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
+6. **Pushing the tag in step 5 is the publish trigger** - the `release` job in `.github/workflows/ci.yml` runs on any `X.Y` tag, after the `build` job (incl. the `ctest` gate) passes, and packages + publishes the GitHub Release automatically (artifacts + notes) reusing the exe the build job produced. Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
 
 After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
 
@@ -166,12 +165,13 @@ This section covers the **build, installer, and publish step**. The end-to-end f
 
 ### Automated (default): push the tag, CI does the rest
 
-`.github/workflows/release.yml` runs on every `X.Y` tag push and reproduces the full pipeline on a `windows-latest` runner, then publishes the GitHub Release itself:
+The release is the second stage of the CI workflow: `.github/workflows/ci.yml` has a `release` job that `needs: build` and runs only on an `X.Y` tag push (`if: startsWith(github.ref, 'refs/tags/')`). So a tag push runs the normal `build` job (configure -> build -> **`ctest` hard gate**), and only if that passes does the `release` job package + publish on a `windows-latest` runner - **reusing the exe the build job already produced instead of recompiling**:
 
-1. Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
-2. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, which auto-installs the matching MinGW 11.2.0 toolchain), Ninja, and Inno Setup 6.
-3. Configure -> build (Release) -> **`ctest` (hard gate: a failing test aborts the release before any artifact is built)** -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
-4. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+1. (build job) Configure -> build (Release) -> **`ctest` (hard gate: a failing test aborts before the release job runs)** -> uploads `laideal.exe` as the `laideal` artifact.
+2. (release job) Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
+3. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, for `windeployqt` + the runtime DLLs) and Inno Setup 6 - no rebuild.
+4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
+5. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
 
 So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
 
@@ -205,7 +205,7 @@ Artifacts:
 - `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
 - `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
 
-When using this local fallback, attach these manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what `release.yml` runs:
+When using this local fallback, attach these manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what the `ci.yml` release job runs:
 
 ```powershell
 $ver = 'X.Y'

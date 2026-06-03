@@ -1,6 +1,6 @@
 # /release — Ship a Release X.Y End-to-End
 
-Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers `.github/workflows/release.yml` to build the artifacts and publish the GitHub Release automatically. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
+Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
@@ -13,7 +13,7 @@ The root `README.md` is the source of truth. If a step here ever drifts from the
 1. **Current branch is not `master`.** Releases are cut from a working branch (`develop` or `feature/...`) and merged into `master` — never committed straight to it. If on `master`, stop and ask the user which branch to release from.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
 3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
-4. **`releases_notes.txt` has an `X.Y` section.** `release.yml` now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (Local-artifact files `releases\old_releases\X.Y.zip` / `setup_outputs\laideal_setup_X.Y.exe` only matter for the local fallback in step 8b — CI builds fresh on a runner.)
+4. **`releases_notes.txt` has an `X.Y` section.** The `ci.yml` release job now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (Local-artifact files `releases\old_releases\X.Y.zip` / `setup_outputs\laideal_setup_X.Y.exe` only matter for the local fallback in step 8b — CI builds fresh on a runner.)
 5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404. (The workflow can replace an existing release, but for a clean cut both should be absent.)
 
 If any precondition fails, stop and surface the problem — don't try to "fix it up" without asking.
@@ -56,7 +56,7 @@ ctest --test-dir build --output-on-failure
 
 Expected output: `build\src\app\laideal.exe` exists, the build ends with no errors, and `ctest` reports `100% tests passed`. Warnings are tolerated; errors and test failures are not. The user may run this via Qt Creator instead - that's equivalent.
 
-If the build **or any test** fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code or a failing test. (CI enforces the same gate: `release.yml` runs `ctest` between Build and Stage, so a failing test aborts the publish even if this local step is skipped.)
+If the build **or any test** fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code or a failing test. (CI enforces the same gate: the `build` job in `ci.yml` runs `ctest`, and the `release` job `needs: build`, so a failing test aborts the publish even if this local step is skipped.)
 
 This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
 
@@ -129,17 +129,17 @@ git tag -a X.Y -m "Release X.Y"
 git push origin X.Y
 ```
 
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here. **Pushing the tag is the publish trigger** — `.github/workflows/release.yml` starts on the `X.Y` tag and builds + packages + publishes the GitHub Release on its own. Steps 3 and 5 already validated the tagged code, so this is normally hands-off.
+The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here. **Pushing the tag is the publish trigger** — the `X.Y` tag runs `ci.yml`'s `build` job and then its `release` job, which packages + publishes the GitHub Release (reusing the build job's exe). Steps 3 and 5 already validated the tagged code, so this is normally hands-off.
 
-### 8. Watch the release workflow (it builds the artifacts and publishes)
+### 8. Watch the release workflow (it packages the artifacts and publishes)
 
-The tag push in step 7 kicked off `release.yml`. Watch it to completion instead of building/publishing by hand:
+The tag push in step 7 kicked off `ci.yml` (the `build` job, then the gated `release` job). Watch it to completion instead of building/publishing by hand:
 
 ```powershell
-gh run watch (gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
+gh run watch (gh run list --workflow=ci.yml --branch X.Y --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-On success it has built (CMake + Ninja, Release) -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and the `releases_notes.txt` `X.Y` section as the body. Confirm with `gh release view X.Y` that both assets are present and the body renders as a clean bulleted list.
+On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and the `releases_notes.txt` `X.Y` section as the body. Confirm with `gh release view X.Y` that both assets are present and the body renders as a clean bulleted list.
 
 **If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
 

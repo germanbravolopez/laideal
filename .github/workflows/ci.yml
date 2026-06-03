@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ develop, master, 'feature/**' ]
+    tags: [ '[0-9]+.[0-9]+' ]
   pull_request:
     branches: [ develop, master, 'feature/**' ]
 
@@ -48,9 +49,154 @@ jobs:
           path: build/tests/preview_*.png
           if-no-files-found: ignore
 
+      # The release job reuses this exe instead of rebuilding, so upload it on
+      # every push (covers the X.Y tag push that drives a release).
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         if: github.event_name == 'push'
         with:
           name: laideal
           path: build/src/app/laideal.exe
+
+  # Release stage: runs only for an X.Y tag push, and only after `build` (incl.
+  # the ctest gate) succeeds. It reuses the exe the build job already produced -
+  # no second compile/test - then deploys, packages and publishes the GitHub
+  # Release. Replaces the old standalone release.yml.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-latest
+    permissions:
+      contents: write   # gh release create
+      actions: read      # download-artifact from the build job
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tag matches CMakeLists.txt version
+        shell: pwsh
+        run: |
+          $cmake = Get-Content CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
+            throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
+          }
+          if ($matches[1] -ne '${{ github.ref_name }}') {
+            throw "Tag '${{ github.ref_name }}' doesn't match CMakeLists.txt version '$($matches[1])'. Update CMakeLists.txt first."
+          }
+          Write-Host "Version validated: $($matches[1])"
+
+      - name: Install Qt + MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.4.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          # Needed for windeployqt and the MinGW runtime DLLs it copies
+          # (libgcc/libstdc++/libwinpthread). The build itself already ran in the
+          # `build` job - this job only repackages its exe, so no Ninja / cmake.
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Download built exe from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: laideal
+          path: dist
+
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          # Locate the exe in the downloaded artifact (recurse so this is robust
+          # to whatever path layout upload-artifact preserved).
+          $exe = Get-ChildItem -Path dist -Filter laideal.exe -Recurse -File | Select-Object -First 1
+          if (-not $exe) { throw "laideal.exe not found in the 'laideal' artifact from the build job." }
+          New-Item -ItemType Directory -Path "releases\${{ github.ref_name }}" -Force
+          Copy-Item $exe.FullName -Destination "releases\${{ github.ref_name }}\"
+
+      - name: Run windeployqt
+        shell: pwsh
+        run: |
+          $stage = "releases\${{ github.ref_name }}"
+          windeployqt --no-translations --no-system-d3d-compiler "$stage\laideal.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+          # Fail loudly if the MinGW compiler runtime or Qt core were not deployed -
+          # the installed app would otherwise crash on launch on a clean machine with
+          # a missing-DLL error. The build job never runs windeployqt, so this is the
+          # only place that guards the packaging step.
+          $required = @(
+            'libgcc_s_seh-1.dll',
+            'libstdc++-6.dll',
+            'libwinpthread-1.dll',
+            'Qt6Core.dll',
+            'platforms\qwindows.dll'
+          )
+          foreach ($d in $required) {
+            if (-not (Test-Path (Join-Path $stage $d))) {
+              throw "windeployqt did not deploy '$d' - the installed app would fail to launch."
+            }
+          }
+          Write-Host "windeployqt deployment verified."
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "releases\old_releases" -Force
+          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::CreateFromDirectory("releases\${{ github.ref_name }}", "releases\old_releases\${{ github.ref_name }}.zip")
+
+      - name: Compile Inno Setup installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "releases\setup_outputs" -Force
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ github.ref_name }}" releases\laideal.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
+          $installer = "releases\setup_outputs\laideal_setup_${{ github.ref_name }}.exe"
+          if (-not (Test-Path $installer)) { throw "Installer not produced at $installer" }
+
+      - name: Extract release notes for this version
+        id: release_notes
+        shell: pwsh
+        run: |
+          $ver = '${{ github.ref_name }}'
+          $raw = Get-Content releases_notes.txt -Raw
+          $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
+          # Fail rather than publish a release (and surface to the in-app updater) with
+          # an empty "what's new". The notes block is a required pre-step, like the
+          # CMakeLists version bump validated above.
+          if (-not $m.Success) {
+            throw "No release notes section for version $ver in releases_notes.txt. Add a '$ver' block first."
+          }
+          $body = $m.Groups[1].Value.TrimEnd()
+          if ([string]::IsNullOrWhiteSpace($body)) {
+            throw "Release notes section for version $ver is empty in releases_notes.txt."
+          }
+          $tmp = Join-Path $env:TEMP "laideal_release_$ver.md"
+          Set-Content -Path $tmp -Value $body -Encoding utf8
+          echo "NOTES_PATH=$tmp" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = '${{ github.ref_name }}'
+          $zip = "releases\old_releases\$ver.zip"
+          $installer = "releases\setup_outputs\laideal_setup_$ver.exe"
+          $notes = '${{ steps.release_notes.outputs.NOTES_PATH }}'
+          # Idempotent: if a release for this tag already exists (e.g. a re-run after a
+          # transient failure, or a moved tag), delete it first so create succeeds.
+          # The git tag itself is kept - it's what triggered this run.
+          gh release view $ver 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $ver already exists - deleting before recreating."
+            gh release delete $ver --yes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to delete existing release $ver" }
+          }
+          gh release create $ver $zip $installer --title "Release $ver" --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+
+      - name: Clean up staging
+        shell: pwsh
+        run: Remove-Item -Recurse -Force "releases\${{ github.ref_name }}"
