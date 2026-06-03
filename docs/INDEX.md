@@ -105,8 +105,8 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
 | `QXlsx/CMakeLists.txt` | QXlsx library build (vendored; unused since the ESC/POS migration) |
 | `tests/` (13 Qt Test + CTest suites) | `test_sql_lite` (+`garmentImporte`), `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
-| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary (called by both workflows; also runnable locally) |
-| `.github/workflows/ci.yml` | CI — builds on every push/PR (Qt 6.4.3 MinGW + CMake + Ninja), runs `ctest`, uploads `laideal.exe` artifact |
+| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and embeds the `test_ticket_preview` PNGs inline (base64) so the rendered recibo/factura show in the summary (called by both workflows; also runnable locally — lists preview paths instead of embedding) |
+| `.github/workflows/ci.yml` | CI — builds on push/PR to `develop`/`master`/`feature/**` (Qt 6.4.3 MinGW + CMake + Ninja), runs `ctest`, uploads `laideal.exe` (on push) + the `ticket-previews` PNGs (always) |
 | `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `ctest` (hard gate) + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |
 | `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for `release.yml` |
 | `releases/laideal.iss` | Inno Setup installer recipe (paths relative to `releases/`; `/DMyAppVersion=X.Y`) |
