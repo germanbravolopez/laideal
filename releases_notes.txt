@@ -1,5 +1,11 @@
 Releases:
 
+9.3
+- Improvement: a partial payment ("Cobrar") left unconfirmed because the AEAT was slow or unreachable is now recovered at startup like any other invoice
+  - Previously the startup recovery list only offered invoices submitted when saving the ticket; a timed-out partial payment had to be reconciled by hand at the AEAT site. The app now lists each pending payment event with its own invoice number (e.g. 3245-1) so you can retry, mark as error, or postpone it.
+- Improvement: the annual accounting (Contabilidad) report is generated faster
+  - The yearly report now reads each table in a single grouped pass instead of scanning it once per quarter. The totals, IVA and counts are exactly the same.
+
 9.2
 - Bug fix: charging a partial payment ("Cobrar") that is the first payment of a ticket now sends the AEAT the same invoice number it stores, so reprinting that invoice's QR or cancelling it works correctly
 - Change: "Cobrar" now prints a single invoice (the customer copy) instead of two - use the print button in Recogida de prendas if you need another copy

@@ -82,6 +82,14 @@ private:
     void periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive);
     QString periodSubtitle(int trimForYearConfig);
     PeriodFigures computeFigures(int trimForYearConfig);
+    // Pure IVA base/cuota derivation from the raw per-period totals. Shared by
+    // computeFigures (trimestral/mensual, per-period DB scans) and the annual
+    // path (one prefetched QuarterlyAccountingTotals), so both derive identical
+    // figures from the same inputs.
+    static PeriodFigures figuresFromTotals(double ingImporte, int ingTickets,
+                                           double gas10Importe, double gas21Importe,
+                                           double gasNiImporte, int gasFacturas,
+                                           double ivaRate);
     QString renderSection(const PeriodFigures &f, const QString &summaryHeading);
     QString createHtmlTableIngresos(const PeriodFigures &f);
     QString createHtmlTableGastos(const PeriodFigures &f);

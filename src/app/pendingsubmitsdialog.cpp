@@ -1,6 +1,7 @@
 #include "pendingsubmitsdialog.h"
 
 #include "appsettings.h"
+#include "sql_lite.h"
 
 #include <QDebug>
 #include <QHBoxLayout>
@@ -82,52 +83,22 @@ bool PendingSubmitsDialog::loadPending()
         return false;
     const QString floorIso = s->verifactuPendingRecoveryFloorDate();
 
-    if (!db.open()) {
-        qWarning() << "PendingSubmitsDialog: db.open() failed -" << db.lastError().text();
-        return false;
-    }
-
-    // One entry per distinct n_recibo whose ANY row is PENDIENTE. Aggregate
-    // uses MIN over fecha/client (constants across rows of the same ticket)
-    // and SUM(importe) for the customer-facing total. The estado filter covers
-    // legacy empty strings and the canonical "PENDIENTE". The fecha_recepcion
-    // column stores dd-MM-yyyy; substr-rebuild into yyyy-MM-dd lets SQLite
-    // compare lexicographically against floorIso.
-    //
-    // verifactu_invoice_seq = 0 restricts recovery to save-time / full-ticket
-    // submissions (InvoiceID = bare n_recibo), which is all this dialog can
-    // re-submit: retryRequested re-sends the whole ticket as n_recibo. A
-    // partial-payment event (seq > 0, InvoiceID "<n_recibo>-<seq>") left
-    // PENDIENTE by a PayDialog timeout must NOT be auto-retried here - it would
-    // resubmit the wrong amount under the wrong InvoiceID. Those reconcile per
-    // event (manual, for now).
-    QSqlQuery q(db);
-    q.prepare(
-        "SELECT n_recibo, MIN(fecha_recepcion), MIN(cliente), SUM(importe) "
-        "FROM ingresos "
-        "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
-        "       OR verifactu_estado = 'PENDIENTE') "
-        "  AND verifactu_invoice_seq = 0 "
-        "  AND substr(fecha_recepcion, 7, 4) || '-' "
-        "      || substr(fecha_recepcion, 4, 2) || '-' "
-        "      || substr(fecha_recepcion, 1, 2) >= :floor "
-        "GROUP BY n_recibo "
-        "ORDER BY n_recibo DESC");
-    q.bindValue(":floor", floorIso);
-    if (!q.exec()) {
-        qWarning() << "PendingSubmitsDialog: SELECT failed -" << q.lastError().text();
-        db.close();
-        return false;
-    }
-    while (q.next()) {
+    // One entry per (n_recibo, verifactu_invoice_seq) whose any row is still
+    // PENDIENTE on/after the recovery floor. Grouping by seq surfaces partial-
+    // pay events (seq>0, InvoiceID "<n_recibo>-<seq>") as well as save-time ones
+    // (seq=0), each with its own SUM(importe) - so a retry re-submits the right
+    // amount under the right InvoiceID. The duplicate-InvoiceID warning still
+    // covers a slow-but-already-registered AEAT submission.
+    const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(db, floorIso);
+    for (const PendingVerifactuEvent &ev : events) {
         Entry e;
-        e.ticketNum      = q.value(0).toString();
-        e.fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
-        e.client         = q.value(2).toString();
-        e.importe        = q.value(3).toDouble();
+        e.ticketNum  = ev.nRecibo;
+        e.seq        = ev.seq;
+        e.fechaPago  = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+        e.client     = ev.cliente;
+        e.importe    = ev.importe;
         m_entries.append(e);
     }
-    db.close();
 
     if (m_entries.isEmpty())
         return false;
@@ -140,9 +111,13 @@ bool PendingSubmitsDialog::loadPending()
 
 void PendingSubmitsDialog::populateRow(int row, const Entry &e)
 {
-    m_table->setItem(row, COL_N_RECIBO, new QTableWidgetItem(e.ticketNum));
+    // Show the AEAT InvoiceID (bare n_recibo for seq 0, "<n>-<seq>" for a
+    // partial-pay event) so the operator can tell apart multiple events of the
+    // same ticket.
+    m_table->setItem(row, COL_N_RECIBO,
+        new QTableWidgetItem(verifactuInvoiceId(e.ticketNum, e.seq)));
     m_table->setItem(row, COL_FECHA,
-        new QTableWidgetItem(e.fechaRecepcion.toString("dd-MM-yyyy")));
+        new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
         new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
@@ -169,15 +144,17 @@ void PendingSubmitsDialog::onRetryClicked(int row)
 {
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
-    if (!e.fechaRecepcion.isValid()) {
+    if (!e.fechaPago.isValid()) {
         QMessageBox::warning(this, tr("Fecha inválida"),
-            tr("No se pudo leer la fecha de recepción del ticket %1.").arg(e.ticketNum));
+            tr("El ticket %1 no tiene fecha de pago, así que no se puede reenviar a AEAT "
+               "(un ticket sin cobrar no tiene factura que recuperar).").arg(e.ticketNum));
         return;
     }
     qDebug() << "PendingSubmitsDialog: retry requested for ticket" << e.ticketNum
-             << "date=" << e.fechaRecepcion.toString(Qt::ISODate)
+             << "seq=" << e.seq
+             << "date=" << e.fechaPago.toString(Qt::ISODate)
              << "total=" << e.importe;
-    emit retryRequested(e.ticketNum, e.fechaRecepcion, e.importe);
+    emit retryRequested(e.ticketNum, e.seq, e.fechaPago, e.importe);
     // Drop the row from the table; the async reply will patch the DB. If it
     // fails the row reverts to ERROR and the operator can revisit via the
     // normal RecogPrendas retry button.
@@ -191,13 +168,16 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
 
     db.open();
     QSqlQuery q(db);
+    // Scope by seq so marking one event as Error never clobbers a sibling event
+    // (a different seq) of the same ticket that is still PENDIENTE.
     q.prepare(
         "UPDATE ingresos SET verifactu_estado = 'Error', "
         "verifactu_error = 'Pendiente sin reconciliar tras cierre - revisar en sede AEAT' "
-        "WHERE n_recibo = :n "
+        "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
         "  AND (verifactu_estado IS NULL OR verifactu_estado = '' "
         "       OR verifactu_estado = 'PENDIENTE')");
     q.bindValue(":n", e.ticketNum);
+    q.bindValue(":seq", e.seq);
     if (!q.exec()) {
         qWarning() << "PendingSubmitsDialog: UPDATE estado=Error failed for ticket"
                    << e.ticketNum << "-" << q.lastError().text();

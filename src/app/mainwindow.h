@@ -55,8 +55,11 @@ private slots:
     QString removeSpecialChar(QString str);
     void checkClientData();
     // Returns the in-flight reqId, or empty if Verifactu is not configured /
-    // submit was rejected.
-    QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount);
+    // submit was rejected. seq selects the submission event: 0 = save-time /
+    // full-ticket (InvoiceID = bare n_recibo), >0 = a partial-pay event being
+    // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
+    QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
+                                   double totalAmount, int seq = 0);
     void saveTicket();
     void printRecibo();
     void printFra(const QPixmap &qrCode = QPixmap());
@@ -109,9 +112,12 @@ private slots:
 private:
     Ui::MainWindow *ui;
     VerifactuIntegration *m_verifactuIntegration;
-    // Async submit tracking: reqId -> ticket number, so the requestFinished handler
-    // can look up which DB rows to update for each Verifactu response.
-    QHash<QString, QString> m_pendingSubmits;
+    // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
+    // the requestFinished handler can patch exactly the rows of that submission
+    // event (a save-time submit and a recovered partial-pay event of the same
+    // ticket differ only by seq).
+    struct PendingSubmit { QString ticketNum; int seq = 0; };
+    QHash<QString, PendingSubmit> m_pendingSubmits;
     Updater *m_updater;
     BackupManager *m_backupManager;
 };

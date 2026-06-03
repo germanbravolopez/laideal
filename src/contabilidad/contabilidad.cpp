@@ -182,10 +182,21 @@ void Contabilidad::generateContabilidad()
     }
     else {
         contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year));
+        // One grouped query per table for the whole year (bucketed by quarter)
+        // instead of computeFigures' 6 full-table scans per quarter (24 total).
+        // The IVA base/cuota math is identical (figuresFromTotals) - the grouped
+        // aggregation is asserted equal to the per-quarter helpers in
+        // test_sql_lite::test_annualAccountingByQuarter.
+        const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
+        const QuarterlyAccountingTotals totals = annualAccountingByQuarter(db, year);
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
+            const int i = trim - 1;
             bool cerrada = readLockForQuarter(db, "ingresos", trim, year) == 1;
-            PeriodFigures f = computeFigures(trim);
+            PeriodFigures f = figuresFromTotals(
+                totals.ingImporte[i], totals.ingTickets[i],
+                totals.gas10Importe[i], totals.gas21Importe[i], totals.gasNiImporte[i],
+                totals.gasFacturas[i], ivaRate);
             annual.accumulate(f);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
                     + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
@@ -249,28 +260,41 @@ QString Contabilidad::periodSubtitle(int trimForYearConfig)
     return "Periodo: " + start.toString("dd-MM-yyyy") + " a " + endExclusive.addDays(-1).toString("dd-MM-yyyy");
 }
 
-Contabilidad::PeriodFigures Contabilidad::computeFigures(int trimForYearConfig)
+Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
+    double ingImporte, int ingTickets, double gas10Importe, double gas21Importe,
+    double gasNiImporte, int gasFacturas, double ivaRate)
 {
     PeriodFigures f;
-    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
-
-    f.ingImporte = getTotalIncome("ingresos", 0, trimForYearConfig);
+    f.ingImporte = ingImporte;
     f.ingBase    = f.ingImporte / (1.0 + ivaRate / 100.0);
     f.ingIva     = f.ingImporte - f.ingBase;
 
-    f.gas10Importe = getTotalIncome("gastos", 10, trimForYearConfig);
+    f.gas10Importe = gas10Importe;
     f.gas10Base    = f.gas10Importe / 1.10;
     f.gas10Iva     = f.gas10Importe - f.gas10Base;
-    f.gas21Importe = getTotalIncome("gastos", 21, trimForYearConfig);
+    f.gas21Importe = gas21Importe;
     f.gas21Base    = f.gas21Importe / 1.21;
     f.gas21Iva     = f.gas21Importe - f.gas21Base;
-    f.gasNiImporte = getTotalIncome("gastos", 0, trimForYearConfig);
+    f.gasNiImporte = gasNiImporte;     // sin IVA: base == importe
 
+    f.ingTickets  = ingTickets;
+    f.gasFacturas = gasFacturas;
+    return f;
+}
+
+Contabilidad::PeriodFigures Contabilidad::computeFigures(int trimForYearConfig)
+{
+    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
     QDate start, endExclusive;
     periodRange(trimForYearConfig, start, endExclusive);
-    f.ingTickets  = countOperationsBetweenDates(db, "ingresos", start, endExclusive);
-    f.gasFacturas = countOperationsBetweenDates(db, "gastos", start, endExclusive);
-    return f;
+    return figuresFromTotals(
+        getTotalIncome("ingresos", 0, trimForYearConfig),
+        countOperationsBetweenDates(db, "ingresos", start, endExclusive),
+        getTotalIncome("gastos", 10, trimForYearConfig),
+        getTotalIncome("gastos", 21, trimForYearConfig),
+        getTotalIncome("gastos", 0, trimForYearConfig),
+        countOperationsBetweenDates(db, "gastos", start, endExclusive),
+        ivaRate);
 }
 
 void Contabilidad::updateLock()

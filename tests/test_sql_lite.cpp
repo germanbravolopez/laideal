@@ -233,6 +233,108 @@ private slots:
         QCOMPARE(removeSpecialChars(QStringLiteral("a?b")), QStringLiteral("ab"));
     }
 
+    // Startup recovery feed: one entry per (n_recibo, seq) still PENDIENTE on or
+    // after the floor, each with its own SUM(importe). seq>0 partial-pay events
+    // surface separately from the seq=0 save-time event (the seq filter is gone);
+    // ENVIADA rows and rows before the floor are excluded.
+    void test_pendingVerifactuEvents()
+    {
+        // T100 save-time event (seq 0): two PENDIENTE rows -> summed to 80.
+        insertIngreso("T100", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T100", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        // T100 partial-pay event (seq 1): its own PENDIENTE row -> own total 20.
+        insertIngreso("T100", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        // T100 seq 2 already confirmed by AEAT: excluded.
+        insertIngreso("T100", "13-03-2026", "15.00", "SI", "ENVIADA",   0, /*seq=*/2);
+        // T50 legacy empty estado: included.
+        insertIngreso("T50",  "05-02-2026", "40.00", "SI", "",          0, /*seq=*/0);
+        // T10 before the floor: excluded.
+        insertIngreso("T10",  "20-12-2025", "99.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 3);
+        // Ordered n_recibo DESC, then seq: "T50" > "T100" lexicographically.
+        QCOMPARE(ev[0].nRecibo, QStringLiteral("T50"));
+        QCOMPARE(ev[0].seq, 0);
+        QVERIFY(qAbs(ev[0].importe - 40.0) < 0.01);
+        QCOMPARE(ev[1].nRecibo, QStringLiteral("T100"));
+        QCOMPARE(ev[1].seq, 0);
+        QVERIFY2(qAbs(ev[1].importe - 80.0) < 0.01, qPrintable(QString::number(ev[1].importe)));
+        QCOMPARE(ev[2].nRecibo, QStringLiteral("T100"));
+        QCOMPARE(ev[2].seq, 1);
+        QVERIFY(qAbs(ev[2].importe - 20.0) < 0.01);
+        QCOMPARE(ev[2].fechaPago, QStringLiteral("12-03-2026"));
+    }
+
+    // A retry must re-submit under the original AEAT date (fecha_pago), not the
+    // reception date: a partial pay made on a different day than reception would
+    // otherwise register a second invoice at AEAT (date is part of the invoice
+    // identity). The recovery FLOOR still gates on fecha_recepcion.
+    void test_pendingVerifactuEvents_returnsPaymentDate()
+    {
+        // reception 10-03-2026 (after floor), paid later on 25-06-2026.
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('T9', '', '10-03-2026', '25-06-2026', '60.00', 'SI', '', 0, 'PENDIENTE', 2)");
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 1);
+        QCOMPARE(ev[0].fechaPago, QStringLiteral("25-06-2026")); // payment date, not 10-03-2026
+
+        // And the floor gates on reception: a reception before the floor is excluded
+        // even though its payment date is after it.
+        QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
+    }
+
+    // The annual report's grouped per-quarter aggregation must equal, quarter by
+    // quarter, the per-quarter totalPriceBetweenDates / countOperationsBetweenDates
+    // it replaces - so the tax math is provably unchanged. Dot-decimal fixtures
+    // (the comma path is an error dialog the grouped SUM does not reproduce).
+    void test_annualAccountingByQuarter()
+    {
+        // ingresos spread across quarters; ANULADA / unpaid excluded, a two-row
+        // ticket counts once (distinct n_recibo), a legacy empty-estado row counts.
+        insertIngreso("I1", "15-02-2026", "100.00", "SI", "ENVIADA");      // Q1
+        insertIngreso("I1", "20-02-2026", "50.00",  "SI", "ENVIADA");      // Q1, same ticket
+        insertIngreso("I2", "10-05-2026", "200.00", "SI", "");             // Q2, legacy
+        insertIngreso("I3", "11-05-2026", "30.00",  "SI", "ANULADA");      // excluded
+        insertIngreso("I4", "01-08-2026", "70.00",  "NO", "ENVIADA");      // unpaid, excluded
+        insertIngreso("I5", "20-11-2026", "400.00", "SI", "ENVIADA");      // Q4
+
+        // gastos across quarters and iva rates.
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('10-02-2026', '121.00', 21)"); // Q1
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('11-03-2026', '110.00', 10)"); // Q1
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('05-05-2026', '50.00',  0)");  // Q2 sin IVA
+        exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('20-12-2026', '242.00', 21)"); // Q4
+
+        const QuarterlyAccountingTotals t = annualAccountingByQuarter(m_db, 2026);
+
+        const QDate starts[4] = { QDate(2026,1,1), QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1) };
+        const QDate ends[4]   = { QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1), QDate(2027,1,1) };
+        for (int i = 0; i < 4; ++i) {
+            const float ing = totalPriceBetweenDates(m_db, "ingresos", starts[i], ends[i], 0);
+            const int   ingC = countOperationsBetweenDates(m_db, "ingresos", starts[i], ends[i]);
+            const float g10 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 10);
+            const float g21 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 21);
+            const float gNi = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 0);
+            const int   gC  = countOperationsBetweenDates(m_db, "gastos", starts[i], ends[i]);
+            QVERIFY2(qAbs(t.ingImporte[i]   - ing) < 0.01, qPrintable(QString("Q%1 ing").arg(i + 1)));
+            QCOMPARE(t.ingTickets[i], ingC);
+            QVERIFY2(qAbs(t.gas10Importe[i] - g10) < 0.01, qPrintable(QString("Q%1 g10").arg(i + 1)));
+            QVERIFY2(qAbs(t.gas21Importe[i] - g21) < 0.01, qPrintable(QString("Q%1 g21").arg(i + 1)));
+            QVERIFY2(qAbs(t.gasNiImporte[i] - gNi) < 0.01, qPrintable(QString("Q%1 gNi").arg(i + 1)));
+            QCOMPARE(t.gasFacturas[i], gC);
+        }
+        // Spot-check the absolute Q1 numbers so a coincidental both-wrong match
+        // can't pass: 100+50 income, 1 ticket, 121 @21% + 110 @10%, 2 facturas.
+        QVERIFY(qAbs(t.ingImporte[0] - 150.0) < 0.01);
+        QCOMPARE(t.ingTickets[0], 1);
+        QVERIFY(qAbs(t.gas21Importe[0] - 121.0) < 0.01);
+        QVERIFY(qAbs(t.gas10Importe[0] - 110.0) < 0.01);
+        QCOMPARE(t.gasFacturas[0], 2);
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "

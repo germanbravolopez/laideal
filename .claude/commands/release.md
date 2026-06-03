@@ -96,6 +96,16 @@ Only proceed to step 6 once the user has confirmed the review is clean (or that 
 
 ### 6. Merge the PR
 
+**First, wait for GitHub Actions CI to pass on the pushed commit — always, without being asked.** The local sanity build in step 3 is not a substitute: CI builds on a clean `windows-latest` runner and runs the same `ctest` gate, and is the last automated check before the release becomes a tagged, public installer. Do not merge a red or still-running CI. Watch the `ci.yml` run for the working-branch tip and block on it:
+
+```powershell
+# Wait for the CI run on the just-pushed commit to finish green.
+$rid = gh run list --workflow=ci.yml --branch <working-branch> --limit 1 --json databaseId -q '.[0].databaseId'
+gh run watch $rid --exit-status   # non-zero exit = CI failed -> do NOT merge
+```
+
+`--exit-status` makes the command fail if CI failed. If CI is red, **stop**: read the failure, fix on the working branch, push, and re-wait — never merge around a failing build. Only once CI is green proceed to the merge:
+
 ```powershell
 # Merge with --merge (the merge-commit option, not --squash and not --rebase) +
 # --admin so the merge proceeds even if required-reviews / required-checks
