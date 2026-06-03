@@ -2,8 +2,8 @@
 
 This is the baseline: how `src/imprimir/` prints today, the exact layout the new ESC/POS code
 must reproduce, and every place that calls the printing API (the integration surface a rewrite
-must keep working). Source: [`../../src/imprimir/imprimir.cpp`](../../src/imprimir/imprimir.cpp)
-and [`../../src/imprimir/imprimir.h`](../../src/imprimir/imprimir.h).
+must keep working). Source: [`../../../src/imprimir/imprimir.cpp`](../../../src/imprimir/imprimir.cpp)
+and [`../../../src/imprimir/imprimir.h`](../../../src/imprimir/imprimir.h).
 
 ## The pipeline today
 
@@ -89,12 +89,12 @@ sites keep working. Today they all follow the pattern
 
 | Caller | Location | Flow |
 |--------|----------|------|
-| Save ticket | [`mainwindow.cpp:548`](../../src/app/mainwindow.cpp#L548) | recibo: client copy then establishment copy. |
-| Save invoice | [`mainwindow.cpp:565`](../../src/app/mainwindow.cpp#L565) | factura: two copies. |
-| Print menu actions | [`mainwindow.cpp:803`](../../src/app/mainwindow.cpp#L803) | "Imprimir recibo / factura / factura completa" set `isRecibo`/`isCompleteInvoice` then exec the dialog. |
-| Pay (Cobrar) | [`pay_dialog.cpp:393`](../../src/recog_prendas/pay_dialog.cpp#L393) | single customer factura after partial payment. |
-| Pickup (Pagar todo / reprint) | [`recog_prendas.cpp:666`](../../src/recog_prendas/recog_prendas.cpp#L666) | factura on pickup, with a "second copy?" prompt. |
-| Dialog OK (reprint) | [`imprimir.cpp:578`](../../src/imprimir/imprimir.cpp#L578) | `on_bb_ok_cancel_accepted()` — multi-seq factura chooser, recibo establishment-copy prompt. |
+| Save ticket | [`mainwindow.cpp:548`](../../../src/app/mainwindow.cpp#L548) | recibo: client copy then establishment copy. |
+| Save invoice | [`mainwindow.cpp:565`](../../../src/app/mainwindow.cpp#L565) | factura: two copies. |
+| Print menu actions | [`mainwindow.cpp:803`](../../../src/app/mainwindow.cpp#L803) | "Imprimir recibo / factura / factura completa" set `isRecibo`/`isCompleteInvoice` then exec the dialog. |
+| Pay (Cobrar) | [`pay_dialog.cpp:393`](../../../src/recog_prendas/pay_dialog.cpp#L393) | single customer factura after partial payment. |
+| Pickup (Pagar todo / reprint) | [`recog_prendas.cpp:666`](../../../src/recog_prendas/recog_prendas.cpp#L666) | factura on pickup, with a "second copy?" prompt. |
+| Dialog OK (reprint) | [`imprimir.cpp:578`](../../../src/imprimir/imprimir.cpp#L578) | `on_bb_ok_cancel_accepted()` — multi-seq factura chooser, recibo establishment-copy prompt. |
 
 Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 `createTicketExcel(bool, bool)`; `printTicket()`; flags `isRecibo`, `isCompleteInvoice`,
@@ -124,8 +124,8 @@ Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 
 ## References
 
-- [`../../src/imprimir/imprimir.cpp`](../../src/imprimir/imprimir.cpp),
-  [`../../src/imprimir/imprimir.h`](../../src/imprimir/imprimir.h).
-- [`../modules`](../modules) — per-module reference docs (MainWindow, recog_prendas).
+- [`../../../src/imprimir/imprimir.cpp`](../../../src/imprimir/imprimir.cpp),
+  [`../../../src/imprimir/imprimir.h`](../../../src/imprimir/imprimir.h).
+- [`docs/modules/`](..) — per-module reference docs (MainWindow, recog_prendas).
 - `progress_tracker.md` completed milestones on ticket column tuning and the QXlsx page-margin
   patch (the empirical 58 mm layout history).

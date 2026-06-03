@@ -3,7 +3,7 @@
 This folder is the research dossier and implementation plan for replacing the current
 Excel-based ticket/invoice printing with direct communication to the shop's thermal
 receipt printer. It backs the Open Non-Blocking issue **"Replace Excel-based printing
-with EPSON ticket printer API"** in [`../progress_tracker.md`](../progress_tracker.md).
+with EPSON ticket printer API"** in [`../../progress_tracker.md`](../../progress_tracker.md).
 
 Status: **research + design complete, no production code written yet.** Everything here is
 preparation for the future `src/imprimir` rewrite. The current Excel + cscript path is still

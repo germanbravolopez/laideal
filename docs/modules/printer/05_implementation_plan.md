@@ -3,7 +3,7 @@
 Proposed design for replacing the Excel/QXlsx/cscript path with direct ESC/POS over the RAW
 Windows spooler. This is a plan, not shipped code. It is written to fit the project's
 conventions: Qt 5/6 + C++17, CMake module libraries under `src/`, free-function/pure-helper
-seams for unit tests (see the Qt Test suites in [`../../tests`](../../tests)), English-only docs.
+seams for unit tests (see the Qt Test suites in [`../../../tests`](../../../tests)), English-only docs.
 
 ## Goals and non-goals
 
@@ -176,5 +176,5 @@ exactly what AEAT issued. Keep native `GS ( k` as a documented fallback only.
 - [`02_control_methods.md`](02_control_methods.md) — transport choice and Win32 RAW sequence.
 - [`03_escpos_command_reference.md`](03_escpos_command_reference.md) — the exact bytes for each builder method.
 - [`04_current_printing_flow.md`](04_current_printing_flow.md) — layout + integration surface to preserve.
-- [`../../tests`](../../tests) — the Qt Test + CTest pattern the new unit tests follow.
+- [`../../../tests`](../../../tests) — the Qt Test + CTest pattern the new unit tests follow.
 - `/coding-guidelines` skill — language/Qt/DB conventions for the new code.
