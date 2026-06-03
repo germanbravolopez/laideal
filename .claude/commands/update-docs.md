@@ -10,6 +10,7 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 - If a blocking issue was fixed, move it out of "Blocking Issues"
 - If a task is newly discovered, add it to the appropriate section
 - Entries older than ~6 months with no further action: move to Archive
+- **Current Status → "Latest release" paragraph**: describe **only the latest release** — what it ships, its headline changes, and its tag link. Do **not** summarise or link prior releases in this paragraph (no "Previous: X.Y — …" trailer). The full release history already lives in `releases_notes.txt` (and the Completed Milestones below); the reader can consult it for anything before the current version. Keep this paragraph a single-release snapshot so it does not grow every cycle.
 
 ### 2. `docs/AI_agent_instructions.md` — update when big-picture changed
 - Update File Map if you added, renamed, or removed files
