@@ -75,8 +75,8 @@ MainWindow::MainWindow(QWidget *parent)
             return;
         }
         connect(dlg, &PendingSubmitsDialog::retryRequested,
-                this, [this](const QString &ticketNum, const QDate &invoiceDate, double totalAmount) {
-            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
+                this, [this](const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount) {
+            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
         });
         dlg->open();
     });
@@ -425,26 +425,30 @@ void MainWindow::checkClientData()
 
 }
 
-QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate, double totalAmount)
+QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
+                                           double totalAmount, int seq)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qDebug() << "Verifactu not configured - skipping invoice submission for ticket" << ticketNum;
         return QString();
     }
     double ivaRate = AppSettings::instance()->ivaRate();
+    // The InvoiceID carries the seq (bare n_recibo for seq 0, "<n>-<seq>" else)
+    // so a recovered partial-pay event re-submits under the same ID it stored.
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
-        ticketNum,
+        invoiceId,
         invoiceDate,
         totalAmount / (1.0 + ivaRate / 100.0),
         ivaRate,
         "Servicios de lavanderia"
     );
     if (reqId.isEmpty()) {
-        qWarning() << "Verifactu submit rejected for ticket" << ticketNum;
+        qWarning() << "Verifactu submit rejected for ticket" << invoiceId;
         return QString();
     }
-    m_pendingSubmits.insert(reqId, ticketNum);
-    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+    m_pendingSubmits.insert(reqId, { ticketNum, seq });
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(invoiceId));
     return reqId;
 }
 
@@ -452,10 +456,11 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
 {
     auto it = m_pendingSubmits.find(requestId);
     if (it == m_pendingSubmits.end()) return; // not one of ours (cancel/QR/etc. or other consumer)
-    const QString ticketNum = it.value();
+    const QString ticketNum = it.value().ticketNum;
+    const int     seq       = it.value().seq;
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(db, ticketNum, result);
+    updateTicketVerifactuFields(db, ticketNum, result, seq);
 
     if (result.isSuccess()) {
         statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);

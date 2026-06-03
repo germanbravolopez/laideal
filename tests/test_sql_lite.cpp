@@ -233,6 +233,39 @@ private slots:
         QCOMPARE(removeSpecialChars(QStringLiteral("a?b")), QStringLiteral("ab"));
     }
 
+    // Startup recovery feed: one entry per (n_recibo, seq) still PENDIENTE on or
+    // after the floor, each with its own SUM(importe). seq>0 partial-pay events
+    // surface separately from the seq=0 save-time event (the seq filter is gone);
+    // ENVIADA rows and rows before the floor are excluded.
+    void test_pendingVerifactuEvents()
+    {
+        // T100 save-time event (seq 0): two PENDIENTE rows -> summed to 80.
+        insertIngreso("T100", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T100", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        // T100 partial-pay event (seq 1): its own PENDIENTE row -> own total 20.
+        insertIngreso("T100", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        // T100 seq 2 already confirmed by AEAT: excluded.
+        insertIngreso("T100", "13-03-2026", "15.00", "SI", "ENVIADA",   0, /*seq=*/2);
+        // T50 legacy empty estado: included.
+        insertIngreso("T50",  "05-02-2026", "40.00", "SI", "",          0, /*seq=*/0);
+        // T10 before the floor: excluded.
+        insertIngreso("T10",  "20-12-2025", "99.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 3);
+        // Ordered n_recibo DESC, then seq: "T50" > "T100" lexicographically.
+        QCOMPARE(ev[0].nRecibo, QStringLiteral("T50"));
+        QCOMPARE(ev[0].seq, 0);
+        QVERIFY(qAbs(ev[0].importe - 40.0) < 0.01);
+        QCOMPARE(ev[1].nRecibo, QStringLiteral("T100"));
+        QCOMPARE(ev[1].seq, 0);
+        QVERIFY2(qAbs(ev[1].importe - 80.0) < 0.01, qPrintable(QString::number(ev[1].importe)));
+        QCOMPARE(ev[2].nRecibo, QStringLiteral("T100"));
+        QCOMPARE(ev[2].seq, 1);
+        QVERIFY(qAbs(ev[2].importe - 20.0) < 0.01);
+        QCOMPARE(ev[2].fecha, QStringLiteral("12-03-2026"));
+    }
+
     void test_readClientPhones()
     {
         exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) "

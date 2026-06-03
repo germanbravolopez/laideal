@@ -612,6 +612,59 @@ QString verifactuInvoiceId(const QString &nRecibo, int seq)
     return seq == 0 ? nRecibo : QStringLiteral("%1-%2").arg(nRecibo).arg(seq);
 }
 
+QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso)
+{
+    QVector<PendingVerifactuEvent> events;
+    if (dbNotConfigured(db, __func__)) return events;
+    if (!db.open()) {
+        qWarning() << "pendingVerifactuEvents: db.open() failed -" << db.lastError().text();
+        return events;
+    }
+
+    // One entry per (n_recibo, verifactu_invoice_seq) whose ANY row is still
+    // PENDIENTE. Aggregate uses MIN over fecha/client (constants across the rows
+    // of one event) and SUM(importe) for that event's own total. The estado
+    // filter covers legacy empty strings and the canonical "PENDIENTE".
+    //
+    // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
+    // possible: a PayDialog event (seq>0, InvoiceID "<n_recibo>-<seq>") left
+    // PENDIENTE by a timeout surfaces as its own row and is re-submitted with
+    // its own SUM(importe) under the right InvoiceID, instead of being excluded
+    // (the old query filtered verifactu_invoice_seq = 0).
+    //
+    // fecha_recepcion stores dd-MM-yyyy; the substr-rebuild into yyyy-MM-dd lets
+    // SQLite compare it lexicographically against floorIso (the recovery floor).
+    QSqlQuery q(db);
+    q.prepare(
+        "SELECT n_recibo, verifactu_invoice_seq, MIN(fecha_recepcion), "
+        "       MIN(cliente), SUM(importe) "
+        "FROM ingresos "
+        "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
+        "       OR verifactu_estado = 'PENDIENTE') "
+        "  AND substr(fecha_recepcion, 7, 4) || '-' "
+        "      || substr(fecha_recepcion, 4, 2) || '-' "
+        "      || substr(fecha_recepcion, 1, 2) >= :floor "
+        "GROUP BY n_recibo, verifactu_invoice_seq "
+        "ORDER BY n_recibo DESC, verifactu_invoice_seq");
+    q.bindValue(":floor", floorIso);
+    if (!q.exec()) {
+        qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
+        db.close();
+        return events;
+    }
+    while (q.next()) {
+        PendingVerifactuEvent e;
+        e.nRecibo = q.value(0).toString();
+        e.seq     = q.value(1).toInt();
+        e.fecha   = q.value(2).toString();
+        e.cliente = q.value(3).toString();
+        e.importe = q.value(4).toDouble();
+        events.append(e);
+    }
+    db.close();
+    return events;
+}
+
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)
 {

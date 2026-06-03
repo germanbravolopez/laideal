@@ -6,6 +6,7 @@
 #include <QSqlQuery>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 #include "ingresos_schema.h"
 
@@ -80,5 +81,25 @@ int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
 // of truth for the format used at submit / persist / cancel / reprint, so they
 // can never disagree (a seq-0 event submitted as "<n>-0" but stored as "<n>").
 QString     verifactuInvoiceId(const QString &nRecibo, int seq);
+
+// One still-PENDIENTE Verifactu submission event, as surfaced by the startup
+// recovery dialog. fecha is the stored dd-MM-yyyy fecha_recepcion (caller parses
+// to QDate); importe is this event's total (SUM over its rows).
+struct PendingVerifactuEvent {
+    QString nRecibo;
+    int     seq = 0;
+    QString fecha;    // dd-MM-yyyy as stored
+    QString cliente;
+    double  importe = 0.0;
+};
+
+// Pending Verifactu events for startup recovery: one entry per
+// (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty,
+// with fecha_recepcion (rebuilt to ISO) on or after floorIso. Grouping by seq
+// (not just n_recibo) surfaces partial-pay events (seq>0) alongside save-time
+// ones (seq=0); SUM(importe) is therefore that event's own total, the amount to
+// re-submit under InvoiceID verifactuInvoiceId(n_recibo, seq). Ordered newest
+// ticket first, then by seq.
+QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
 #endif // SQL_LITE_H
