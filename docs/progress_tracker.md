@@ -14,9 +14,9 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `master`
 
-**Latest release**: [9.1](https://github.com/germanbravolopez/laideal/releases/tag/9.1) — quick-turn bug-fix release on top of 9.0, closing the four findings from the 9.0 release review. Reprinted partial/late-payment facturas now build the QR from the submitted payment date (`fecha_pago`) instead of `fecha_recepcion` so it validates against AEAT; a slow AEAT reply during `PayDialog` "Cobrar" now leaves the rows `PENDIENTE` instead of a false `Error` (and startup recovery is scoped to `seq=0` so a partial-pay event is never auto-resubmitted with the wrong amount/InvoiceID); the Trimestral accounting lock reads the whole quarter via `sql_lite::readLockForQuarter` so a quarter with income only in its early months still locks; and the startup `BackupManager` snapshot runs on a worker thread (plus a one-query client-phone lookup) so the UI no longer freezes.
+**Latest release**: [9.2](https://github.com/germanbravolopez/laideal/releases/tag/9.2) — test-infrastructure release: a Qt Test + CTest suite (11 executables, a hard gate in CI and the release pipeline) covering the pure logic across sql_lite, the Verifactu models + response parser, AppSettings DPAPI, Facturas IVA, the proxy filter/sort, BackupManager retention, Contabilidad period math, GenListado, reporthtml and the updater. Ships three user-facing changes surfaced/enabled along the way: the `<n>-0` vs `<n>` partial-pay InvoiceID mismatch is fixed (first-payment Cobrar now submits the same ID it stores, so reprint-QR/cancel align), "Cobrar" auto-prints a single customer factura instead of two, and `ReportHtml::formatEuro` now groups thousands consistently in the PDFs.
 
-**Next**: post-9.1 maintenance — confirm the partial-pay flow in the in-shop trial, switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, and work the 9.x backlog (see Open Non-Blocking Issues).
+**Next**: post-9.2 maintenance — confirm the partial-pay flow in the in-shop trial, switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, and work the 9.x backlog (see Open Non-Blocking Issues).
 
 ---
 

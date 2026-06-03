@@ -1,5 +1,10 @@
 Releases:
 
+9.2
+- Bug fix: charging a partial payment ("Cobrar") that is the first payment of a ticket now sends the AEAT the same invoice number it stores, so reprinting that invoice's QR or cancelling it works correctly
+- Change: "Cobrar" now prints a single invoice (the customer copy) instead of two - use the print button in Recogida de prendas if you need another copy
+- Improvement: euro amounts in the accounting and listado PDFs now show the thousands separator (e.g. 1.234,56 €)
+
 9.1
 - Bug fix: reprinted invoices for partial or late payments now show a QR with the correct date
   - The reprinted factura's QR used the reception date instead of the payment date, so for a payment made on a different day than the garment was received the QR did not match the invoice registered at the AEAT. It now uses the payment date, matching what was sent.
