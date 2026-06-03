@@ -3,7 +3,6 @@
 
 #include <QDate>
 #include <QDateTime>
-#include <QLocale>
 
 namespace ReportHtml {
 
@@ -82,8 +81,28 @@ QString documentClose()
 
 QString formatEuro(double value)
 {
-    static const QLocale spanish(QLocale::Spanish, QLocale::Spain);
-    return spanish.toString(value, 'f', 2) + " €";
+    // Spanish format: '.' thousands grouping, ',' decimal, two decimals, e.g.
+    // "1.234,56 €". Grouped manually because QLocale::toString(value,'f',2)
+    // grouped inconsistently (no separator for 1234, a single misplaced one for
+    // 1000000).
+    const bool negative = value < 0.0;
+    const qlonglong cents = qRound64(qAbs(value) * 100.0);
+    const qlonglong intPart = cents / 100;
+    const int frac = static_cast<int>(cents % 100);
+
+    const QString digits = QString::number(intPart);
+    QString grouped;
+    int n = 0;
+    for (int i = digits.size() - 1; i >= 0; --i) {
+        grouped.prepend(digits.at(i));
+        if (++n % 3 == 0 && i > 0)
+            grouped.prepend('.');
+    }
+
+    QString out = grouped + "," + QStringLiteral("%1").arg(frac, 2, 10, QChar('0'));
+    if (negative)
+        out.prepend('-');
+    return out + " €";
 }
 
 } // namespace ReportHtml

@@ -14,15 +14,12 @@ class TestReportHtml : public QObject
 private slots:
     void test_formatEuro()
     {
-        // Spanish decimal comma, exactly two decimals, trailing euro sign.
-        QCOMPARE(ReportHtml::formatEuro(1234.56), QStringLiteral("1234,56 €"));
-        QCOMPARE(ReportHtml::formatEuro(0.0),     QStringLiteral("0,00 €"));
-        QCOMPARE(ReportHtml::formatEuro(-5.5),    QStringLiteral("-5,50 €"));
-        // Structure for any value: ", <2 decimals> €" suffix.
-        const QString big = ReportHtml::formatEuro(1000000.0);
-        QVERIFY2(big.endsWith(",00 €"), qPrintable(big));
-        // (Thousands grouping for large values is locale-quirky - see the
-        // "formatEuro thousands grouping" tracker note - so it is not asserted.)
+        // '.' thousands grouping, ',' decimal, exactly two decimals, euro sign.
+        QCOMPARE(ReportHtml::formatEuro(1234.56),    QStringLiteral("1.234,56 €"));
+        QCOMPARE(ReportHtml::formatEuro(999.99),     QStringLiteral("999,99 €"));   // no group below 1000
+        QCOMPARE(ReportHtml::formatEuro(1000000.0),  QStringLiteral("1.000.000,00 €"));
+        QCOMPARE(ReportHtml::formatEuro(0.0),        QStringLiteral("0,00 €"));
+        QCOMPARE(ReportHtml::formatEuro(-1234.5),    QStringLiteral("-1.234,50 €"));
     }
 
     void test_tableOpen()
