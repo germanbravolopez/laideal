@@ -57,6 +57,27 @@ private:
                {":est", verifactuEstado}, {":seq", invoiceSeq} });
     }
 
+    // Read one scalar string off the test DB (first row, first column). Empty on
+    // miss / error (logged) - the asserting test compares against the expected value.
+    QString scalar(const QString &sql, const QVariantMap &binds = {})
+    {
+        if (!m_db.open()) {
+            qWarning() << "scalar open:" << m_db.lastError().text();
+            return QString();
+        }
+        QSqlQuery q(m_db);
+        q.prepare(sql);
+        for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+            q.bindValue(it.key(), it.value());
+        QString out;
+        if (!q.exec())
+            qWarning() << "scalar exec:" << q.lastError().text();
+        else if (q.next())
+            out = q.value(0).toString();
+        m_db.close();
+        return out;
+    }
+
 private slots:
     void initTestCase()
     {
@@ -346,6 +367,159 @@ private slots:
         const QStringList none = readClientPhones(m_db, "Nadie");
         QVERIFY(none.value(0).isEmpty());
         QVERIFY(none.value(1).isEmpty());
+    }
+
+    // --- RecogPrendas::updateDb DB-write seams ---------------------------------
+    // Each helper writes one parameterised UPDATE/INSERT keyed by (n_recibo, hash).
+    // The tests assert the write lands and - critically - that the hash key scopes
+    // it to a single row, so the other garments of a multi-row ticket are untouched.
+
+    // Insert a minimal garment row with an explicit hash for the (n_recibo, hash)
+    // keyed seam tests.
+    void insertRow(const QString &nRecibo, const QString &hash,
+                   const QString &importe = "10.00", const QString &pagado = "NO",
+                   const QString &verifactuEstado = "")
+    {
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, "
+             " pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, "
+             " hash, verifactu_estado) "
+             "VALUES (:n, 'Cli', '01-03-2026', '', '', :imp, :pag, 'NO', '1', 'Camisa', "
+             " '0', 'Lavar', '', 0, :h, :est)",
+             { {":n", nRecibo}, {":imp", importe}, {":pag", pagado},
+               {":h", hash}, {":est", verifactuEstado} });
+    }
+
+    void test_updateTicketPayment_setAndClear()
+    {
+        insertRow("T1", "hashA");
+        insertRow("T1", "hashB"); // same ticket, different garment - must stay untouched
+
+        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "15-03-2026", "SI"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"),
+                 QStringLiteral("15-03-2026"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("SI"));
+        // The sibling row is keyed out by hash.
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
+        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashB'").isEmpty());
+
+        // PAY_NO path: empty fecha_pago, pagado back to NO.
+        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "", "NO"));
+        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'").isEmpty());
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+    }
+
+    void test_updateTicketPickup_setAndClear()
+    {
+        insertRow("T1", "hashA");
+        QVERIFY(updateTicketPickup(m_db, "T1", "hashA", "20-03-2026", "SI"));
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'"),
+                 QStringLiteral("20-03-2026"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("SI"));
+
+        QVERIFY(updateTicketPickup(m_db, "T1", "hashA", "", "NO"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'").isEmpty());
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+    }
+
+    void test_updateTicketObservations()
+    {
+        insertRow("T1", "hashA");
+        insertRow("T1", "hashB");
+        QVERIFY(updateTicketObservations(m_db, "T1", "hashA", "manchas de cafe"));
+        QCOMPARE(scalar("SELECT observaciones FROM ingresos WHERE hash='hashA'"),
+                 QStringLiteral("manchas de cafe"));
+        QVERIFY(scalar("SELECT observaciones FROM ingresos WHERE hash='hashB'").isEmpty());
+    }
+
+    void test_updateTicketSizeAndPrice()
+    {
+        insertRow("T1", "hashA");
+        QVERIFY(updateTicketSizeAndPrice(m_db, "T1", "hashA", "2.5", "18.00"));
+        QCOMPARE(scalar("SELECT size FROM ingresos WHERE hash='hashA'"), QStringLiteral("2.5"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("18.00"));
+    }
+
+    void test_updateGarmentQtyAndImporte()
+    {
+        insertRow("T1", "hashA");
+        QVERIFY(updateGarmentQtyAndImporte(m_db, "T1", "hashA", "3", "30.00"));
+        QCOMPARE(scalar("SELECT cantidad FROM ingresos WHERE hash='hashA'"), QStringLiteral("3"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("30.00"));
+    }
+
+    // The split-off row must persist all garment fields and leave verifactu_estado
+    // empty (legacy/NotSubmitted) so accounting/print treat it as un-submitted - a
+    // re-submission would duplicate the ticket's AEAT InvoiceID.
+    void test_insertGarmentRow_fieldsAndVerifactuLeftEmpty()
+    {
+        IngresoGarmentRow row;
+        row.nRecibo        = "T7";
+        row.cliente        = "Ana";
+        row.fechaRecepcion = "01-03-2026";
+        row.fechaPago      = "05-03-2026";
+        row.fechaRecogida  = "";
+        row.importe        = "12.50";
+        row.pagado         = "SI";
+        row.estado         = "NO";
+        row.cantidad       = "2";
+        row.prenda         = "Pantalon";
+        row.size           = "1.5";
+        row.servicio       = "Tinte";
+        row.observaciones  = "urgente";
+        row.editLock       = "0";
+        row.hash           = "splitHash";
+
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT n_recibo FROM ingresos WHERE hash='splitHash'"), QStringLiteral("T7"));
+        QCOMPARE(scalar("SELECT cliente FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Ana"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='splitHash'"), QStringLiteral("05-03-2026"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='splitHash'"), QStringLiteral("12.50"));
+        QCOMPARE(scalar("SELECT cantidad FROM ingresos WHERE hash='splitHash'"), QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT prenda FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Pantalon"));
+        QCOMPARE(scalar("SELECT servicio FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Tinte"));
+        QCOMPARE(scalar("SELECT observaciones FROM ingresos WHERE hash='splitHash'"), QStringLiteral("urgente"));
+        // A split-off row leaves verifactuEstado empty -> reads as legacy/NotSubmitted.
+        QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='splitHash'").isEmpty());
+    }
+
+    // MainWindow::saveTicket inserts via the same seam but stamps verifactu_estado
+    // PENDIENTE (NotSubmitted) so the async AEAT submit can later patch the row.
+    void test_insertGarmentRow_saveTicketShapePending()
+    {
+        IngresoGarmentRow row;
+        row.nRecibo         = "T8";
+        row.cliente         = "Luis";
+        row.fechaRecepcion  = "03-03-2026";
+        row.fechaPago       = "03-03-2026"; // paid at save -> booked on reception date
+        row.fechaRecogida   = "";           // new ticket, not picked up
+        row.importe         = "21.00";
+        row.pagado          = "SI";
+        row.estado          = "En tienda";
+        row.cantidad        = "1";
+        row.prenda          = "Abrigo";
+        row.size            = "";
+        row.servicio        = "Limpieza";
+        row.observaciones   = "";
+        row.hash            = "saveHash";
+        row.verifactuEstado = "PENDIENTE";
+
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='saveHash'"),
+                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='saveHash'"),
+                 QStringLiteral("03-03-2026"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='saveHash'"), QStringLiteral("En tienda"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='saveHash'").isEmpty());
+    }
+
+    // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
+    // row, empty when the ticket has no rows.
+    void test_ticketVerifactuEstado()
+    {
+        QVERIFY(ticketVerifactuEstado(m_db, "T1").isEmpty()); // no rows
+        insertRow("T1", "hashA", "10.00", "SI", "ENVIADA");
+        QCOMPARE(ticketVerifactuEstado(m_db, "T1"), QStringLiteral("ENVIADA"));
     }
 };
 

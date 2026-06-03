@@ -31,13 +31,13 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 - **Build for testability.** The change must be covered by a test in step 6. If the logic you are adding/changing is UI- or DB-coupled, extract its pure core into a library function (free function or static) as you implement — the dialog/slot keeps a thin wrapper — so it can be unit-tested instead of being trapped in the app exe. The codebase already does this (`sql_lite::garmentImporte`, `Contabilidad::periodRangeFor`, `Facturas::taxBaseFromGross`, `parseVerifactuResponse`, …).
 - Be precise about syntax — step 5 will compile the change, but a clean build is much faster to reach if the code is right the first time.
 
-### 4. Update docs (`/update-docs` checklist)
+### 4. Update docs (run `/update-docs` command)
 
 Always update these, in order:
 
 - **`docs/progress_tracker.md`** —
   - Remove the entry from Blocking / Open Non-Blocking.
-  - Add a milestone entry under **Pre-release bug fixes — <Month Year>** (or the current section) at the top. Format: `- [x] **Title**: what was done, why, key files. Include rationale that wasn't obvious from the diff.`
+  - Add a milestone entry at the top of Completed Milestones. **Pick the section by the latest *released* version**, per the `/update-docs` §1 rule: if a release has shipped since the top `### Post-<X.Y> development` section was created (compare against "Latest release" in Current Status), start a new `### Post-<latest-release> development — <Month Year>` section rather than appending to the stale one. Format: `- [x] **Title**: what was done, why, key files. Include rationale that wasn't obvious from the diff.`
   - Don't paste the original issue text — write fresh prose that reflects the actual fix.
 - **`docs/architecture.md`** if the structure or data model changed (new module, removed module, signal/slot wiring, DB schema).
 - **`docs/modules/<name>.md`** or `docs/modules/<name>/README.md` if the module's public API or behavior changed.

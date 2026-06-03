@@ -439,7 +439,8 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
         invoiceId,
         invoiceDate,
-        totalAmount / (1.0 + ivaRate / 100.0),
+        // Tax base from the IVA-inclusive ticket total (same split as the Facturas dialog).
+        Facturas::taxBaseFromGross(totalAmount, ivaRate),
         ivaRate,
         "Servicios de lavanderia"
     );
@@ -482,60 +483,34 @@ void MainWindow::saveTicket()
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
-            QString hash = genHash16();
-            qDebug() << "saveTicket: INSERT row" << row << "ticket=" << ui->le_nr_ticket->text()
-                     << "importe=" << ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text()
-                     << "hash=" << hash;
-            db.open();
-            QSqlQuery q;
-            q.prepare("INSERT INTO ingresos "
-                      "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
-                      "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
-                      "verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr, "
-                      "verifactu_xml, verifactu_hash) "
-                      "VALUES "
-                      "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
-                      ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
-                      ":verifactu_csv, :verifactu_timestamp, :verifactu_estado, :verifactu_error, :verifactu_url_qr, "
-                      ":verifactu_xml, :verifactu_hash);");
-            q.bindValue(":n_recibo", ui->le_nr_ticket->text());
-            q.bindValue(":cliente", ui->cb_client->currentText());
-            q.bindValue(":fecha_recepcion", ui->de_date_recep->date().toString("dd-MM-yyyy"));
-            if (ui->pb_payment->text() == "SI")
-                q.bindValue(":fecha_pago", ui->de_date_recep->date().toString("dd-MM-yyyy"));
-            else
-                q.bindValue(":fecha_pago", "");
-            q.bindValue(":fecha_recogida", "");
-            q.bindValue(":importe", ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(",","."));
-            q.bindValue(":pagado", ui->pb_payment->text());
-            q.bindValue(":estado", "En tienda");
-            q.bindValue(":cantidad", ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text());
             QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-            q.bindValue(":prenda", cbGarment->currentText());
-            if (ui->table_ticket->item(row, TABLE_TICKET_SIZE))
-                q.bindValue(":size", ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().replace(",","."));
-            else
-                q.bindValue(":size", "");
-            if (ui->table_ticket->item(row, TABLE_TICKET_OBSE))
-                q.bindValue(":observaciones", ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text());
-            else
-                q.bindValue(":observaciones", "");
             QComboBox *cbService = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
-            q.bindValue(":servicio", cbService->currentText());
-            q.bindValue(":edit_lock", "0");
-            q.bindValue(":hash", hash);
-            q.bindValue(":verifactu_csv",       "");
-            q.bindValue(":verifactu_timestamp", "");
-            q.bindValue(":verifactu_estado",    verifactuEstadoToString(VerifactuEstado::NotSubmitted));
-            q.bindValue(":verifactu_error",     "");
-            q.bindValue(":verifactu_url_qr",    "");
-            q.bindValue(":verifactu_xml",       "");
-            q.bindValue(":verifactu_hash",      "");
-            if (!q.exec())
-                qWarning() << "saveTicket INSERT failed for ticket" << ui->le_nr_ticket->text()
-                           << "row" << row << "-" << q.lastError().text();
-            q.clear();
-            db.close();
+
+            IngresoGarmentRow r;
+            r.nRecibo        = ui->le_nr_ticket->text();
+            r.cliente        = ui->cb_client->currentText();
+            r.fechaRecepcion = ui->de_date_recep->date().toString("dd-MM-yyyy");
+            // A paid-at-save ticket books the payment on the reception date.
+            r.fechaPago      = ui->pb_payment->text() == "SI" ? r.fechaRecepcion : QString("");
+            r.fechaRecogida  = "";
+            r.importe        = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(",",".");
+            r.pagado         = ui->pb_payment->text();
+            r.estado         = "En tienda";
+            r.cantidad       = ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text();
+            r.prenda         = cbGarment->currentText();
+            r.size           = ui->table_ticket->item(row, TABLE_TICKET_SIZE)
+                                   ? ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().replace(",",".") : QString("");
+            r.servicio       = cbService->currentText();
+            r.observaciones  = ui->table_ticket->item(row, TABLE_TICKET_OBSE)
+                                   ? ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text() : QString("");
+            r.editLock       = "0";
+            r.hash           = genHash16();
+            // Rows start PENDIENTE; the async AEAT submit patches estado on reply.
+            r.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+
+            qDebug() << "saveTicket: INSERT row" << row << "ticket=" << r.nRecibo
+                     << "importe=" << r.importe << "hash=" << r.hash;
+            insertGarmentRow(db, r);
         }
     }
 }

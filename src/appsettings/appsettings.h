@@ -20,6 +20,14 @@ public:
     // Persist current state back to the JSON file.
     bool save() const;
 
+    // Injection seam: load from an explicit file path instead of the fixed
+    // ~/.laideal_settings.json, resetting in-memory state first so repeated calls
+    // don't accumulate. Runs the full parse + legacy-key migration + encrypt-at-rest
+    // + defaults pipeline against that file (and rewrites it if a plaintext secret
+    // was encrypted), so those getters are testable without touching the real
+    // settings file. Returns what load() returns. Not used in production.
+    bool loadFrom(const QString &path);
+
     QString filePath() const { return m_filePath; }
 
     // --- Database ---
