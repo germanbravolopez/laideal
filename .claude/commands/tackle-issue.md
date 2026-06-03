@@ -27,6 +27,7 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 - Read existing call sites before changing signatures — `Grep` first, edit second.
 - Track multi-step work with `TodoWrite`. Mark steps complete as you finish them.
 - Don't bundle unrelated cleanup into the fix unless the user asked. Dead code touched by the refactor is fair game; dead code in untouched modules is a separate task.
+- **Build for testability.** The change must be covered by a test in step 6. If the logic you are adding/changing is UI- or DB-coupled, extract its pure core into a library function (free function or static) as you implement — the dialog/slot keeps a thin wrapper — so it can be unit-tested instead of being trapped in the app exe. The codebase already does this (`sql_lite::garmentImporte`, `Contabilidad::periodRangeFor`, `Facturas::taxBaseFromGross`, `parseVerifactuResponse`, …).
 - Be precise about syntax — step 5 will compile the change, but a clean build is much faster to reach if the code is right the first time.
 
 ### 4. Update docs (`/update-docs` checklist)
@@ -58,13 +59,29 @@ cmake --build build
 This is the incremental build — the `build/` directory is already configured from a prior `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` run (see README §Build for the full first-time setup). Pipe to `tail -40` or `Select-Object -Last 40` to keep the output from flooding context; the only line that must be present at the end is `Linking CXX executable src\app\laideal.exe` (or the static-lib equivalent for the modules you touched).
 
 If the build fails:
-- Compiler errors → fix them and re-run; don't proceed to step 6.
+- Compiler errors → fix them and re-run; don't proceed to the next steps.
 - `Permission denied` linking `laideal.exe` → the running app is holding the file. Tell the user to close it, then re-run.
 - PATH errors (cmake/ninja/qt not found) → the shell doesn't have the toolchain on PATH. Prepend the line from README §Build that sets `$env:PATH`, then re-run.
 
-A clean build is a hard prerequisite for step 6 — never commit a fix that didn't link.
+A clean build is necessary but not sufficient — it is a hard prerequisite for step 6, never commit a fix that didn't link.
 
-### 6. Commit
+### 6. Verify the change with tests
+
+A compile proves the code links; the test suite (`tests/`, run with `ctest`) is what proves the fix actually does what it claims and that nothing it touched regressed. **Covering the change is part of the fix, not optional** — this is the crucial gate the project relies on now that a Qt Test + CTest framework exists (it is also enforced in CI and the release pipeline).
+
+- **Add or update a test for every behaviour you changed or added.** Update an existing suite when the module already has one; create a new suite otherwise. Don't ship a fix the suite would have caught.
+- **Make it testable** (you should have done this in step 3): unit-test the pure core. If the logic is UI/DB/async-coupled, the seam belongs in a library so a test can link it — see `docs/architecture.md` §Testing for the suites and the seam pattern, plus worked examples in the test-coverage milestones. Patterns: pure helper → link the owning lib and assert inputs→outputs; DB logic → throwaway SQLite DB in a `QTemporaryDir` (`tests/test_sql_lite.cpp`); async/AEAT → a captured response fixture (`tests/test_verifactu_response.cpp`); a QPixmap/GUI path → `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen`.
+- A **new** suite is one `.cpp` + an `add_executable`/`add_test` entry in `tests/CMakeLists.txt` (with the `-o ${CMAKE_BINARY_DIR}/test-results-<name>.xml,junitxml -o -,txt` args like the others, and any `Qt::Widgets`/`Qt::Sql` the linked header needs); then reconfigure (`cmake -B build ...`) so CTest picks it up.
+
+Run the whole suite and require it green before committing:
+
+```powershell
+ctest --test-dir build --output-on-failure
+```
+
+`100% tests passed` is a hard prerequisite for step 7. If a test fails, fix the code (or the test, if its expectation was genuinely wrong — and say which in the commit) and re-run; never commit with a red or skipped test. If a change truly cannot be unit-tested (pure UI wiring / integration-only), state that explicitly in the commit + milestone and note what a future harness would need — do not silently skip coverage.
+
+### 7. Commit
 
 - **Single-line subject, hard cap 300 characters** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body); the 200-char cap is the *length* rule. If you cannot fit the explanation in 300 characters, the long-form belongs in the `docs/progress_tracker.md` milestone you wrote in step 4, not in the commit message — the message points at the change, the tracker carries the rationale. Examples:
   - Typical (fits in 200): `Verifactu Req. 4: new src/backup/BackupManager (VACUUM INTO + PRAGMA integrity_check + 30-day daily/4-year monthly retention) auto on startup + Herramientas->Hacer copia de seguridad ahora`
