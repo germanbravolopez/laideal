@@ -32,8 +32,6 @@ Shared infrastructure:
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate
-  QXlsx/                          — third-party Excel r/w library (vendored; no longer used after the
-                                      ESC/POS printing migration — pending removal, see Open Non-Blocking)
 ```
 
 ---
@@ -313,7 +311,6 @@ AEAT QR validation:
 
 | Library | Location | Purpose |
 |---------|----------|---------|
-| QXlsx | `QXlsx/` | (vendored) formerly Excel ticket generation — **unused** since the ESC/POS migration; pending removal |
 | winspool | System (Windows) | RAW print-spooler API (`OpenPrinter`/`StartDocPrinter`/`WritePrinter`) for ESC/POS — linked by `printing` |
 | Qt Widgets | System | GUI framework |
 | Qt Gui | System | `QImage` (ESC/POS raster path in `printing`) |

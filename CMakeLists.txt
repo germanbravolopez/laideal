@@ -14,9 +14,7 @@ set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport Network Test)
-#find_package(QXlsxQt6 REQUIRED)
 
-add_subdirectory(QXlsx)
 add_subdirectory(src/logging)
 add_subdirectory(src/appsettings)
 add_subdirectory(src/reporthtml)

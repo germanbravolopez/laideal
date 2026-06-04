@@ -10,9 +10,8 @@ Status: **implemented.** The recommended path below shipped as the `src/printing
 Excel/QXlsx/`.vbs`/`cscript` path is gone. The runtime reference for the shipped code is
 [`../printing.md`](../printing.md); this dossier remains the design background (model,
 control-method rationale, the exact ESC/POS command subset, and the original phased plan).
-The optional Status-API layer (Phase 4) and removing the now-unused vendored `QXlsx/`
-(Phase 5) are still open follow-ups, and the code page / queue name / paper width must be
-confirmed on the physical unit (Phase 0 was not run in CI).
+Phase 0 (hardware validation on the shop's TM-T20III) and Phase 5 (removing the vendored
+`QXlsx/`) are done; the optional Status-API layer (Phase 4) is the only remaining follow-up.
 
 ## The printer, in one line
 

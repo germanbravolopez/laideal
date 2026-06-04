@@ -8,10 +8,11 @@ in [`../../../tests`](../../../tests)), English-only docs.
 > **Status: implemented.** Phases 1-3 shipped as `src/printing/` (the three classes below,
 > matching this design closely — `buildTicket()`/`printTicket()` on `Imprimir`, the two
 > settings, `tests/test_escpos.cpp` for the pure builder + renderer) and the Excel path was
-> deleted. **Phase 0** (hardware spike) was not run in this environment — confirm the queue
-> name, code page (PC858) and paper width on the physical unit. **Phase 4** (Status API) and
-> **Phase 5** (remove the vendored `QXlsx/`) remain open follow-ups. Runtime reference:
-> [`../printing.md`](../printing.md).
+> deleted. **Phase 0** (hardware spike) was validated on the shop's physical Epson TM-T20III
+> (queue name, PC858 code page for accents, 80 mm paper width all confirmed). **Phase 5**
+> (remove the vendored `QXlsx/`) is done — the tree and its CMake wiring were deleted once the
+> printer was validated on hardware. **Phase 4** (Status API) is the only remaining open
+> follow-up. Runtime reference: [`../printing.md`](../printing.md).
 
 ## Goals and non-goals
 
