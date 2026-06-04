@@ -154,6 +154,22 @@ EscPosBuilder &EscPosBuilder::feed(int n)
     return *this;
 }
 
+EscPosBuilder &EscPosBuilder::lineSpacing(int dots)
+{
+    if (dots < 0)   dots = 0;
+    if (dots > 255) dots = 255;
+    const char seq[] = { ESC, '3', static_cast<char>(dots) };
+    m_buf.append(seq, sizeof(seq));
+    return *this;
+}
+
+EscPosBuilder &EscPosBuilder::defaultLineSpacing()
+{
+    static const char seq[] = { ESC, '2' };
+    m_buf.append(seq, sizeof(seq));
+    return *this;
+}
+
 EscPosBuilder &EscPosBuilder::rule(char c)
 {
     return line(QString(m_cols, QChar(c)));
