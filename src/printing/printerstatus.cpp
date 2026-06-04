@@ -34,8 +34,12 @@ PrinterStatus PrinterStatus::fromAsb(quint32 asb)
 
 bool PrinterStatus::hasError() const
 {
+    // offline is deliberately excluded: the printer reports OFF_LINE transiently
+    // while executing a cut/feed or at power-up, so a status read right after a
+    // successful send would otherwise raise a spurious alert on a ticket that
+    // printed fine. A genuine power-off surfaces earlier as a send failure.
     return paperEnd || coverOpen || cutterError || mechanicalError
-        || unrecoverableError || offline;
+        || unrecoverableError;
 }
 
 bool PrinterStatus::hasWarning() const
