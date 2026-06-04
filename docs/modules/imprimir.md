@@ -1,6 +1,14 @@
 # Imprimir (`src/imprimir/`)
 
-Creates Excel files for printing receipts and formal invoices, then launches an external process to print them.
+Orchestrates printing of receipts (recibos) and simplified invoices (facturas
+simplificadas). Reads the ticket rows from `ingresos`, assembles a `TicketData`,
+and renders it to an **ESC/POS** byte stream via the [`printing`](printing.md)
+library, then sends those bytes **RAW** to the thermal printer queue.
+
+> Since 9.x this no longer generates an Excel file or drives Excel COM. The old
+> QXlsx + `.xlsx` + VBScript + `cscript` path was replaced by direct ESC/POS to
+> the Epson TM-T20III — see the research dossier in
+> [`printer/`](printer/README.md) and the runtime lib in [`printing.md`](printing.md).
 
 ## Source files
 
@@ -11,59 +19,71 @@ Creates Excel files for printing receipts and formal invoices, then launches an 
 ```cpp
 Imprimir *ui = new Imprimir(db, this);  // db injected via constructor
 ui->isRecibo = true;            // receipt layout
-ui->isCompleteInvoice = false;  // true adds extra fields (policy, stamp, etc.)
+ui->isCompleteInvoice = false;  // true adds billing address + DNI prompts
 ui->verifactuIntegration = m_verifactuIntegration; // enables /GetQrCode fallback
 ui->qrCode = result.qrCode;     // optional: pixmap from a fresh /Create response
-ui->getTicketInfo();            // shows dialog for ticket number; fetches rows from DB
-ui->createTicketExcel(copyForClient, addPayedInfo);
-ui->printTicket();
+ui->le_n_ticket->setText(ticketNumber);
+ui->getTicketInfo();            // fetches matching rows from ingresos
+ui->buildTicket(copyForClient, addPayedInfo);  // builds ESC/POS bytes (m_ticketBytes)
+ui->printTicket();              // sends m_ticketBytes RAW to the printer queue
 ```
+
+`buildTicket()` / `printTicket()` keep the historical two-step shape: callers
+build a copy, optionally print it, then build + print the next copy. A second
+`printTicket()` without an intervening `buildTicket()` re-sends the same bytes
+(used by the RecogPrendas "second copy?" prompt).
 
 ## Layout modes
 
 | `isRecibo` | `isCompleteInvoice` | Layout |
 |------------|---------------------|--------|
-| `true` | `false` | Standard customer receipt |
-| `false` | `false` | Simple invoice |
-| `false` | `true` | Full invoice with extra info dialog prompts |
+| `true` | `false` | Standard customer receipt (recibo) |
+| `false` | `false` | Simplified invoice (factura simplificada) |
+| `false` | `true` | Full invoice with billing-address + DNI prompts |
 
 ## Process
 
-1. User enters a ticket number in the dialog shown by `getTicketInfo()`.
-2. All matching rows from `ingresos` are loaded into `sqlQueryModel`.
-3. `createTicketExcel()` builds an `.xlsx` file via `QXlsx` with appropriate column widths, page margins, styles, and row content. The file path is the hardcoded `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated every print; not user-configurable).
-4. `printTicket()` regenerates a small VBScript at `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` with the current xlsx path templated in (six lines: open Excel COM, `PrintOut`, close), then invokes `cscript //nologo //B` on it via `QProcess` with a 60 s timeout. No separate `.bat` is shipped or required — the file `resources/print_ticket.bat` is left as reference only.
+1. Caller sets the flags and the ticket number, then `getTicketInfo()` loads all
+   matching `ingresos` rows into `sqlQueryModel` (optionally scoped to a paid
+   `verifactu_invoice_seq` for partial-payment events).
+2. `buildTicket(copyForClient, addPayedInfo)` reads the model + `AppSettings` +
+   the resolved QR into a `TicketData` and calls `TicketRenderer::render(data,
+   paperDots())`. The result is cached in `m_ticketBytes`. `paperDots()` derives
+   the printable width from `AppSettings::paperWidthMm()` (80 mm → 576 dots,
+   58 mm → 420).
+3. `printTicket()` hands `m_ticketBytes` to `ThermalPrinter::send(bytes,
+   AppSettings::printerName())`. An empty printer name uses the Windows default
+   printer. On failure it shows a `QMessageBox` (the old path had no such
+   feedback). Callers still gate the call on `AppSettings::enablePrinting()`.
 
-Column widths and page margins are set at the top of `createTicketExcel()` to keep the ticket within the thermal printer's printable area: `setColumnWidth(1, 4)`, `setColumnWidth(2, 20)`, `setColumnWidth(3, 7.5)` (31.5 units total), and `setPageMargins(0.6, 0.6, 0.4, 0.4)` (inches; left/right/top/bottom — header/footer default to 0.3″ inside QXlsx because the upstream serializer only emits `<pageMargins>` when all six values are set). `setPageMargins` is a small local patch on the vendored QXlsx — see [Completed Milestones in progress_tracker.md](../progress_tracker.md).
+The column layout is computed from the real paper width (dots / char width per
+font) instead of empirically-tuned spreadsheet cell widths.
 
-## Excel ticket layout
+## Ticket layout
 
-Rows are written sequentially using the local `row` counter:
+The renderer reproduces the historical content and ordering (see
+[`printer/04_current_printing_flow.md`](printer/04_current_printing_flow.md)),
+top to bottom:
 
-| Rows | Content | Format |
-|------|---------|--------|
-| 1 | `business.name` | font 22 |
-| 2 | `"     " + verifactu.company_name` | font 11, bold |
-| 3 | `"     NIF: " + verifactu.nif` | font 11, bold |
-| 4 | `"     " + business.address` | font 11, bold |
-| 5 | `"     " + business.city` | font 11, bold |
-| 6 | `"Tlf: " + business.phone` | font 11, bold, row height 14 |
-| next | "Recibo" or "FACTURA SIMPLIFICADA" | — |
-| … | ticket number, client, dates, optional address/DNI | — |
-| … | double-line separator, garments table | — |
-| … | totals block (receipt: TOTAL only; invoice: base + IVA + TOTAL) | bold |
-| … | Verifactu QR image (140×140, if available) | — |
-| … | payment info / copy label | — |
-| … | general conditions (client copy only — see below) | font 9–10 |
-| last | timestamp | font 9, top border |
+| Block | Content |
+|-------|---------|
+| Header (centered) | `business.name` double-size; then `verifactu.company_name`, `NIF`, `business.address`, `business.city`, `Tlf:` (bold), closed by a `=` rule |
+| Document type | `Recibo` or `FACTURA SIMPLIFICADA` |
+| Identity | `Nº:` (bold, right), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice) |
+| Garment table | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura); long names word-wrap |
+| Totals (bold) | recibo: `TOTAL (IVA incl.)`; factura: `Base Imponible` + `IVA (rate%)` + `TOTAL` |
+| Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker (`Copia para el cliente` / `... establecimiento`) |
+| Verifactu QR | facturas only — rastered AEAT pixmap + the verification legend when estado = ENVIADA |
+| Legal policy | client copy only — RD 1453/1987 clauses + RGPD notice (Font B) |
+| Timestamp + cut | `dd/MM/yyyy - hh:mm:ss`, then feed + partial cut |
 
-All header fields are read from `AppSettings::instance()` at render time.
+Header/identity fields are read from `AppSettings::instance()` at build time.
 
 ## General conditions block
 
-The conditions block is rendered only when `copyForClient == true` (establishment copy omits it entirely).
-
-All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against Consumo Responde (Junta de Andalucía):
+Rendered only when `copyForClient == true` (the establishment copy omits it).
+All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against
+Consumo Responde (Junta de Andalucía):
 
 | # | Topic | Key text | Legal basis |
 |---|-------|----------|-------------|
@@ -75,24 +95,44 @@ All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against
 
 ## `ingresos` column indices
 
-Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` (`INGRESOS_COL_N_RECIBO=0` ... `INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE=23`). Used here for every `sqlQueryModel->index(row, col)` lookup in `imprimir.cpp`. The same constants are shared by `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and `add_garment` — previously each module carried its own near-duplicate set with diverging names.
+Defined once in `sql_lite/ingresos_schema.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>`
+(`INGRESOS_COL_N_RECIBO=0` … `INGRESOS_COL_VERIFACTU_INVOICE_ID=25`). Used here
+for every `sqlQueryModel->index(row, col)` lookup in `imprimir.cpp`, and shared
+with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
+`add_garment`.
 
 ## Verifactu QR
 
-The receipt embeds the Verifactu QR (140×140) at the bottom via `QXlsx::Document::insertImage()`. Order of fallback inside `resolveQrCode()`:
+A QR is printed on **facturas only** (recibos are claim tickets, not tax
+documents). `resolveQrCode()` is unchanged by the ESC/POS migration — order of
+fallback:
 
-1. If the caller pre-populated `qrCode` (e.g., the pixmap from a fresh `/Create` response in the save flow), use it.
-2. Otherwise, aggregate `verifactu_estado` across all rows of the ticket: emit a QR only when at least one row has a non-empty `verifactu_csv` AND no row is in `ANULADA` / `RECTIFICADA` / `ERROR`. This handles split-garment rows (legacy/empty estado on the split-off row, ENVIADA on the original) and prevents a misleading QR on tickets superseded by an anulación or rectificativa.
-3. When the conditions in (2) are met and `verifactuIntegration` is configured, call `VerifactuIntegration::generateQR(invoiceNumber, invoiceDate, taxBase, ivaRate)` → REST `/GetQrCode` and use the returned pixmap.
-4. If none of the above yields a pixmap (no Verifactu, network error, ticket not eligible) the receipt is printed without a QR.
+1. If the caller pre-populated `qrCode` (the pixmap from a fresh `/Create`
+   response in the save flow), use it.
+2. Otherwise aggregate `verifactu_estado` across all rows: emit a QR only when at
+   least one row has a non-empty `verifactu_csv` AND no row is `ANULADA` /
+   `RECTIFICADA` / `ERROR`. The InvoiceID is `displayInvoiceId()` and the
+   `FechaExpedicion` is the first paid row's `fecha_pago` (the date submitted to
+   AEAT).
+3. When eligible and `verifactuIntegration` is configured, fetch the QR
+   asynchronously via REST `/GetQrCode` with a 5 s bounded wait; on timeout the
+   ticket prints without a QR.
 
-QR image bytes are **not** persisted in the DB; they are always reconstructed from the response or the REST endpoint.
-
-When a QR is rendered AND the row's `verifactu_estado` equals `"ENVIADA"`, the centred legend `Factura verificable en la sede electrónica de la AEAT` is written immediately below the QR (font 7, merged A:C) — required by Disposición Final Primera RD 1007/2023. The estado check uses the canonical `verifactuEstadoToString(VerifactuEstado::Enviada)` helper from `verifactumanager.h` (transitively included via `verifactuintegration.h`), so PENDIENTE / ERROR / ANULADA rows never carry the verifiability claim even if a QR somehow becomes available.
+`buildTicket()` rasters the resolved `QPixmap` into the ESC/POS stream
+(`qr.scaled(192,192).toImage()` → `EscPosBuilder::rasterImage()`, `GS v 0`), so
+the printed QR is byte-exact with what AEAT issued (no local re-encoding). The
+verification legend `Factura verificable en la sede electrónica de la AEAT` is
+emitted below the QR only when row 0's `verifactu_estado` equals
+`verifactuEstadoToString(VerifactuEstado::Enviada)` — required by Disposición
+Final Primera RD 1007/2023. QR image bytes are never persisted in the DB.
 
 ## Dependencies
 
-- `QXlsx` — third-party Excel r/w library in `QXlsx/` (vendored). Minimal local patch: `Worksheet::setPageMargins` + `Document::setPageMargins`. Avoid further modifications.
-- `cscript` (Windows Script Host) — invoked at print time to run the inline-generated VBScript that drives Excel COM.
-- `verifactu` — `VerifactuIntegration::generateQR()` for the `/GetQrCode` fallback
-- External `.bat` printing script — path set at deploy time
+- [`printing`](printing.md) — `EscPosBuilder`, `TicketRenderer`, `ThermalPrinter`
+  (the ESC/POS byte builder + RAW Windows-spooler transport). No QXlsx, no Excel,
+  no `cscript`.
+- `verifactu` — `VerifactuIntegration::generateQRAsync()` for the `/GetQrCode` path.
+- `appsettings` — business identity, IVA rate, `printerName()`, `paperWidthMm()`,
+  `enablePrinting()`.
+- `sql_lite` — `searchItemFromClient()`, the `verifactuInvoiceId()`/estado helpers,
+  and the `INGRESOS_COL_*` indices.

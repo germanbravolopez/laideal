@@ -17,7 +17,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 - **Requirements**: CMake 3.5+, Qt 5.15+/6.x, C++17
 - **Qt modules needed**: `Widgets`, `Sql`, `PrintSupport`, `Network`
 - Open `CMakeLists.txt` in Qt Creator, or: `cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`
-- Release is automated: pushing an `X.Y` tag triggers `.github/workflows/release.yml`, which builds + windeployqt + zips + compiles the Inno Setup installer and publishes the GitHub Release. `releases\release.ps1 <version>` runs the same pipeline locally (offline fallback, no publish). See root `README.md` "Release procedure"
+- Release is automated as the second stage of CI: pushing an `X.Y` tag runs `.github/workflows/ci.yml`'s `build` job (configure + build + `ctest`) and then its tag-gated `release` job (`needs: build`), which reuses the built exe + windeployqt + zips + compiles the Inno Setup installer and publishes the GitHub Release. `releases\release.ps1 <version>` runs the same pipeline locally (offline fallback, no publish). See root `README.md` "Release procedure"
 
 ## File Map — Where to Find What
 
@@ -37,14 +37,14 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Table view utilities (TableView, FilterWidget, MySortFilterProxyModel, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Formal invoices form | `src/facturas/facturas.h` / `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` / `.cpp` |
-| Print + Excel generation | `src/imprimir/imprimir.h` / `.cpp` |
+| Receipt/invoice print orchestration | `src/imprimir/imprimir.h` / `.cpp` |
+| ESC/POS printing core (builder, renderer, RAW spooler) | `src/printing/` — `escposbuilder`, `ticketrenderer`, `thermalprinter` |
 | Add garments to ticket | `src/add_garment/add_garment.h` / `.cpp` |
 | Verifactu facade | `src/verifactu/verifactuintegration.h` / `.cpp` |
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` / `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` / `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` / `.cpp` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` / `.cpp` + `src/updater/updaterdialog.h` / `.cpp` |
-| Excel library (3rd-party) | `QXlsx/` — vendored; only a tiny local patch added (`setPageMargins` on `Worksheet`/`Document`). Avoid further modifications. |
 | Build config (root) | `CMakeLists.txt` |
 
 ## Documentation Map

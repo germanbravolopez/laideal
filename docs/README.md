@@ -21,8 +21,12 @@ docs/
     ├── recog_prendas.md               (garment pickup panel)
     ├── facturas.md                    (formal supplier invoice form)
     ├── contabilidad.md                (accounting reports and period locking)
-    ├── imprimir.md                    (Excel + print generation)
+    ├── imprimir.md                    (receipt/invoice print orchestration — ESC/POS)
+    ├── printing.md                    (ESC/POS core: builder, renderer, RAW spooler)
     ├── add_garment.md                 (add garments to existing ticket)
+    ├── printer/                       (printer research dossier — ESC/POS design background)
+    │   ├── README.md                  (start here — 5 files + index)
+    │   └── 01..05 + command reference (model/specs, control methods, command subset, plan)
     └── verifactu/                     (AEAT digital invoicing module)
         ├── README.md                  (module reference — start here)
         ├── rest_api.md                (AEAT REST API field reference)
@@ -51,7 +55,8 @@ docs/
 | [modules/recog_prendas.md](./modules/recog_prendas.md) | Garment pickup operations and table indices |
 | [modules/facturas.md](./modules/facturas.md) | Supplier invoice form fields and validation |
 | [modules/contabilidad.md](./modules/contabilidad.md) | Accounting report modes and period locking |
-| [modules/imprimir.md](./modules/imprimir.md) | Excel/print flow and layout modes |
+| [modules/imprimir.md](./modules/imprimir.md) | Receipt/invoice print orchestration (ESC/POS) and layout modes |
+| [modules/printing.md](./modules/printing.md) | ESC/POS core: EscPosBuilder, TicketRenderer, ThermalPrinter (RAW spooler) |
 | [modules/add_garment.md](./modules/add_garment.md) | Add-garment workflow and validation |
 | [modules/backup.md](./modules/backup.md) | Automated DB snapshots (Verifactu Req. 4): VACUUM INTO + integrity check + retention contract |
 

@@ -22,12 +22,21 @@
 
 .PARAMETER BuildDir
     Directory holding the test-results-*.xml files (default: build).
+
+.PARAMETER PreviewDir
+    Directory holding the ticket preview_*.txt ASCII mocks produced by the
+    test_ticket_preview suite (default: <BuildDir>/tests). They are shown in a
+    fenced code block in the summary - GitHub strips inline images from job
+    summaries, so the graphical PNG renders live committed in
+    docs/modules/printer/ and in the 'ticket-previews' artifact instead.
 #>
 [CmdletBinding()]
 param(
-    [string]$Title    = "Test results",
-    [string]$BuildDir = "build"
+    [string]$Title      = "Test results",
+    [string]$BuildDir   = "build",
+    [string]$PreviewDir = ""
 )
+if (-not $PreviewDir) { $PreviewDir = Join-Path $BuildDir 'tests' }
 
 $pass = [char]0x2705  # white check mark
 $fail = [char]0x274C  # cross mark
@@ -64,6 +73,38 @@ foreach ($f in $files) {
 
 if ($files.Count -eq 0) {
     $blocks += "_No JUnit results found in ``$BuildDir`` (expected ``test-results-*.xml``)._"
+}
+
+# Ticket previews (from test_ticket_preview): GitHub strips inline images
+# (data: URIs or inline) from job summaries, so the graphic can't be embedded
+# here. Render the monospace ASCII receipt (always shows) in a fenced block; the
+# graphical PNGs live committed in docs/modules/printer/ and in the
+# 'ticket-previews' artifact.
+$previews = Get-ChildItem -Path $PreviewDir -Filter 'preview_*.txt' -ErrorAction SilentlyContinue | Sort-Object Name
+if ($previews) {
+    $blocks += "<details open><summary><b>Ticket previews</b> (rendered recibo / factura)</summary>"
+    $blocks += ""
+    if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) {
+        $ref    = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { 'HEAD' }
+        $docUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$ref/docs/modules/printer/README.md#sample-rendered-output"
+        $blocks += "_Graphical PNG renders: [docs/modules/printer]($docUrl) - or download the **ticket-previews** artifact._"
+    } else {
+        $blocks += "_Graphical PNG renders: ``docs/modules/printer/preview_*.png`` (and in ``$PreviewDir``)._"
+    }
+    $blocks += ""
+    foreach ($p in $previews) {
+        $name = $p.BaseName -replace '^preview_', ''
+        $blocks += "**$name**"
+        $blocks += ""
+        $blocks += '```text'
+        # -Encoding utf8: the .txt is UTF-8 (no BOM); without this Windows
+        # PowerShell 5.1 reads it as ANSI and the Spanish accents become mojibake.
+        $blocks += (Get-Content $p.FullName -Raw -Encoding utf8).TrimEnd()
+        $blocks += '```'
+        $blocks += ""
+    }
+    $blocks += "</details>"
+    $blocks += ""
 }
 
 $top = if ($grandFail -eq 0 -and $files.Count -gt 0) { $pass } else { $fail }

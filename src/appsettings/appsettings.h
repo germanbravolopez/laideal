@@ -20,6 +20,14 @@ public:
     // Persist current state back to the JSON file.
     bool save() const;
 
+    // Injection seam: load from an explicit file path instead of the fixed
+    // ~/.laideal_settings.json, resetting in-memory state first so repeated calls
+    // don't accumulate. Runs the full parse + legacy-key migration + encrypt-at-rest
+    // + defaults pipeline against that file (and rewrites it if a plaintext secret
+    // was encrypted), so those getters are testable without touching the real
+    // settings file. Returns what load() returns. Not used in production.
+    bool loadFrom(const QString &path);
+
     QString filePath() const { return m_filePath; }
 
     // --- Database ---
@@ -36,15 +44,22 @@ public:
     QString listadosPrendasPath() const;     // <root>/Listados/Prendas
     QString listadosGastosPath() const;      // <root>/Listados/Gastos
 
-    // --- Print ---
+    // --- Print (direct ESC/POS to the thermal printer) ---
     bool enablePrinting() const;
     void setEnablePrinting(bool v);
-    // Fixed file paths under the user's home directory (consistent with
-    // ~/.laideal_settings.json and ~/.laideal.log). The Excel file is recreated
-    // on every print; the VBScript is regenerated next to it. Both are app-internal
-    // and not user-configurable any more.
-    static QString ticketExcelPath();        // ~/.laideal_ticket.xlsx
-    static QString ticketPrintScriptPath();  // ~/.laideal_print.vbs
+    // Windows printer-queue name the ESC/POS bytes are sent to (RAW). Empty =
+    // use the system default printer.
+    QString printerName() const;
+    void    setPrinterName(const QString &v);
+    // Roll width in mm (58 or 80). Drives the receipt's column layout: 80 -> 576
+    // printable dots, 58 -> 420. Defaults to 80.
+    int  paperWidthMm() const;
+    void setPaperWidthMm(int v);
+    // When on, route the ESC/POS bytes through Epson's Status API (EPSStmApi.dll)
+    // instead of the RAW spooler, to read back paper-out / cover-open / cutter
+    // status after printing. Off by default; falls back to RAW if unavailable.
+    bool useStatusApi() const;
+    void setUseStatusApi(bool v);
 
     // --- Business identity ---
     QString businessName() const;

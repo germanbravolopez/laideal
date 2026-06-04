@@ -23,6 +23,8 @@ ui->show();
 | Edit size + price | `SIZE_AND_PRICE` | `size`, `importe` |
 | Split garment row | `SEPARATE_GARM` | Inserts a new row with `genHash16()`; decrements quantity on original |
 
+`updateDb()` keeps the business rules (edit_lock guard, blocked-quarter check, the post-PAY_YES Verifactu-submit decision) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPayment` / `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` + `insertGarmentRow(IngresoGarmentRow)` for the split, and `ticketVerifactuEstado` for the pay-all dedup read-back — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
+
 ## Search
 
 Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Input is classified by content:

@@ -11,7 +11,8 @@ MainWindow (src/app/)
   │     └── PayDialog   (src/recog_prendas/)     — partial-payment dialog (8.5+)
   ├── Facturas          (src/facturas/)          — formal supplier invoice form
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
-  ├── Imprimir          (src/imprimir/)          — print / Excel generation
+  ├── Imprimir          (src/imprimir/)          — receipt/invoice printing (orchestration)
+  │     └── printing    (src/printing/)          — ESC/POS byte builder + RAW spooler transport
   ├── AddGarment        (src/add_garment/)       — add garments to existing ticket
   ├── BackupManager     (src/backup/)            — auto + manual SQLite snapshots (Verifactu Req. 4)
   ├── PendingSubmitsDialog (src/app/)            — startup recovery for verifactu_estado=PENDIENTE rows
@@ -31,7 +32,6 @@ Shared infrastructure:
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate
-  QXlsx/                          — third-party Excel r/w library (vendored; minimal local patch: setPageMargins)
 ```
 
 ---
@@ -52,7 +52,7 @@ Key methods:
 | `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
-| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `createTicketExcel()` always runs (Excel file is generated even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
+| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 | `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
 | `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |
@@ -85,10 +85,25 @@ Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
 Income totals call `totalPriceBetweenDates()` which excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
 
 ### Imprimir (`src/imprimir/`)
-Creates Excel via `QXlsx`, then launches an external process to print.
-`isRecibo = true` → receipt layout; `false` → invoice layout; `isCompleteInvoice` flag adds extra fields.
-Dialog accepts ticket number, fetches data from `ingresos` via `getTicketInfo()`.
-General conditions block (4 clauses + RGPD notice) is printed only when `copyForClient == true`; the establishment copy omits it. Clauses are grounded in RD 1453/1987. See `docs/modules/imprimir.md` for the full layout table.
+Orchestrates receipt/invoice printing. Fetches the ticket rows from `ingresos`
+via `getTicketInfo()`, assembles a `TicketData`, and renders it to an ESC/POS
+byte stream via the `printing` lib (`buildTicket()` → `m_ticketBytes`), then sends
+those bytes RAW to the printer queue (`printTicket()` → `ThermalPrinter::send`).
+`isRecibo = true` → receipt layout; `false` → invoice layout; `isCompleteInvoice`
+adds billing-address + DNI prompts. Since 9.x there is **no Excel/QXlsx/cscript** —
+the QR (facturas only) is rastered from the AEAT pixmap. General conditions block
+(4 clauses + RGPD notice) prints only on the client copy. See
+`docs/modules/imprimir.md` for the full layout table.
+
+### printing (`src/printing/`)
+The ESC/POS printing core, split into three seams: `EscPosBuilder` (pure: a
+chainable ESC/POS byte builder + PC858 transcode + column-width math, fully unit
+tested), `TicketRenderer` (pure: `TicketData` → the receipt/invoice layout), and
+`ThermalPrinter` (the only host-specific piece: writes the bytes to a Windows
+printer queue as RAW spool data via `winspool`; a failing stub off Windows). Built
+as the `printing` static lib, used only by `imprimir`. Replaces the old Excel
+pipeline; design dossier in `docs/modules/printer/`, reference in
+`docs/modules/printing.md`.
 
 ### AddGarment (`src/add_garment/`)
 Adds new garment rows to an existing ticket number already in the database.
@@ -150,9 +165,7 @@ The Verifactu **service key is encrypted at rest** with Windows DPAPI (per-user 
 
 `SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept.
 
-Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production, `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
-
-App-internal fixed paths (not user-configurable): `AppSettings::ticketExcelPath()` → `~/.laideal_ticket.xlsx` (regenerated each print), `AppSettings::ticketPrintScriptPath()` → `~/.laideal_print.vbs` (rewritten each print, templated with the xlsx path, executed via `cscript //nologo //B`).
+Settings groups: `db.path`, `taxes.iva_rate`, `print.enable` (bool — guards the actual `printTicket()` call), `print.printer_name` (RAW target queue; empty = Windows default printer), `print.paper_width_mm` (58/80, default 80; drives the ESC/POS column layout), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), business name/address/city/phone, Verifactu NIF/name/serviceKey/production, `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The printer name + paper width are edited in `SettingsDialog` → General (printer combo populated from `QPrinterInfo::availablePrinterNames()`). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
 
 Migration: `migrateLegacyKeys()` strips `Contabilidad` / `Listados/Prendas` / `Listados/Gastos` suffixes from any of the three legacy report-path values to derive `reports.root`; obsolete keys (`reports.contabilidad_path`, `reports.listados_prendas_path`, `reports.listados_gastos_path`, `print.template_path`, `print.script_path`) are removed via the `removeNested()` helper.
 
@@ -245,7 +258,7 @@ on_bb_save_reset_clicked(Save)
   │         else (timeout, or success w/o QR, or error):
   │             printRecibo()                   — paid recibo: "Importe pagado" stamp on customer copy
   ├── else (not paid):
-  │     └── printRecibo()                    — Excel + printTicket (claim receipt, two copies)
+  │     └── printRecibo()                    — buildTicket + printTicket (claim receipt, two copies)
   └── resetAllContents()                     — clears form for next ticket
 
 Async tail (when AEAT replies later than 3 s, or for not-paid tickets that get paid later via RecogPrendas):
@@ -298,10 +311,11 @@ AEAT QR validation:
 
 | Library | Location | Purpose |
 |---------|----------|---------|
-| QXlsx | `QXlsx/` | Excel file generation for printing |
+| winspool | System (Windows) | RAW print-spooler API (`OpenPrinter`/`StartDocPrinter`/`WritePrinter`) for ESC/POS — linked by `printing` |
 | Qt Widgets | System | GUI framework |
+| Qt Gui | System | `QImage` (ESC/POS raster path in `printing`) |
 | Qt Sql | System | SQLite driver |
-| Qt PrintSupport | System | Print support |
+| Qt PrintSupport | System | `QPrinterInfo` (printer list in SettingsDialog) |
 | Qt Network | System | HTTP for Verifactu REST API |
 | Qt Test | System | Unit / integration tests (`tests/`) |
 
@@ -309,18 +323,20 @@ AEAT QR validation:
 
 ## Testing
 
-`tests/` holds Qt Test suites registered with CTest (`enable_testing()` + `add_subdirectory(tests)` in the root `CMakeLists.txt`; `Test` added to the root `find_package`). They build as part of the normal build and run with `ctest --test-dir build --output-on-failure`. Both use `QTEST_GUILESS_MAIN` (QCoreApplication) so they run headless on CI without a display.
+`tests/` holds Qt Test suites registered with CTest (`enable_testing()` + `add_subdirectory(tests)` in the root `CMakeLists.txt`; `Test` added to the root `find_package`). They build as part of the normal build and run with `ctest --test-dir build --output-on-failure`. Most use `QTEST_GUILESS_MAIN` (QCoreApplication) so they run headless on CI without a display; `test_verifactu_response` uses `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen` because QPixmap needs a QGuiApplication.
 
-- **`test_sql_lite`** — links the `sql_lite` static lib and exercises its free functions against a throwaway SQLite DB created in a `QTemporaryDir` (schema created in `initTestCase`, tables cleared in `init()` before each test). Covers accounting totals + Verifactu estado filters (`totalPriceBetweenDates`, `countOperationsBetweenDates`), the accounting locks (`readLockForMonthAndYear`, `readLockForQuarter`), `nextVerifactuInvoiceSeq`, `verifactuInvoiceId`, `garmentImporte`, `readClientPhones`, `removeSpecialChars`, and `genHash16`. Fixtures stay on success paths + dot-decimal importes so the functions' modal-`QMessageBox` error paths never fire under the guiless main.
+- **`test_sql_lite`** — links the `sql_lite` static lib and exercises its free functions against a throwaway SQLite DB created in a `QTemporaryDir` (schema created in `initTestCase`, tables cleared in `init()` before each test). Covers accounting totals + Verifactu estado filters (`totalPriceBetweenDates`, `countOperationsBetweenDates`), the accounting locks (`readLockForMonthAndYear`, `readLockForQuarter`), `nextVerifactuInvoiceSeq`, `verifactuInvoiceId`, `garmentImporte`, `readClientPhones`, `removeSpecialChars`, `genHash16`, and the `RecogPrendas::updateDb` DB-write seams (`updateTicketPayment`/`Pickup`/`Observations`/`SizeAndPrice`, `updateGarmentQtyAndImporte`, `insertGarmentRow`, `ticketVerifactuEstado` — asserted to be scoped by `(n_recibo, hash)` so a multi-row ticket's siblings stay untouched; `insertGarmentRow` is also the seam `MainWindow::saveTicket` writes through, covered in both the split-off `verifactuEstado=""` and the saveTicket `"PENDIENTE"` shapes). Fixtures stay on success paths + dot-decimal importes so the functions' modal-`QMessageBox` error paths never fire under the guiless main.
 - **`test_mysortfilterproxymodel`** — links `tableview`, covers `removeDiacritics`, accent-insensitive `filterAcceptsRow`, and the `lessThan` sort comparators (chronological dates, numeric importe, locale-string fallback).
 - **`test_verifactu_models`** — links `verifactu`, covers the pure model classes: `VerifactuConfig` validation + environment URLs, `VerifactuTaxItem` JSON/operation-type, `VerifactuInvoice` JSON/totals/validation/rectificativa, and the `verifactu_estado` string round-trip.
 - **`test_verifactu_response`** — links `verifactu` and covers `parseVerifactuResponse()` (the pure AEAT/Irene-Solutions JSON parser extracted from `VerifactuManager` into `verifacturesponse.{h,cpp}` so it is testable without a network): error/success shapes, `Huella` hash extraction, and the base64->QPixmap QR decode. Uses `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen` (set via the CTest `ENVIRONMENT` property) because QPixmap needs a QGuiApplication.
 - **`test_backup_manager`** — links `backup` and covers `BackupManager::backupsToPrune()` (the pure retention decision split out of `pruneOldBackups()`): recent-kept, one-per-month, beyond-4-years dropped, non-schema names ignored.
 - **`test_contabilidad`** — links `contabilidad` and covers `Contabilidad::periodRangeFor()` (the pure period-range date math split out of the `periodRange()` member): half-open quarter/month ranges incl. the year-boundary roll-over.
+- **`test_escpos`** — links `printing`, covers `EscPosBuilder` (exact control bytes for init/align/bold/font/size/cut, the PC858 transcode incl. unmapped→`?`, and the dots/char-width column math) and `TicketRenderer` (recibo + factura fragments, the IVA split, and that a QR is rastered). `QTEST_GUILESS_MAIN` — `QImage` works under a `QCoreApplication`, no platform plugin needed.
+- **`test_ticket_preview`** — links `printing`, renders a sample recibo + factura through the real `TicketRenderer`, then interprets the ESC/POS bytes back into a **PNG** simulation of the thermal paper + an **ASCII** mock (written next to the test exe as `preview_recibo`/`preview_factura` `.png`/`.txt`), asserting the expected blocks (totals, copy marker, QR raster present on the factura but not the recibo). Doubles as a layout regression check + a visual artifact for eyeballing the receipt; a committed PNG pair lives in `docs/modules/printer/`. `QTEST_MAIN` (QGuiApplication) — on Windows it uses the native platform so system fonts render real glyphs; off Windows it forces offscreen.
 - **`test_facturas`** — links `facturas`, covers the pure IVA split `taxBaseFromGross` / `taxAmountFromGross`.
 - **`test_genlistado`** — links `listado`, covers `GenListado::filenameSuffix` and `shouldPrintGastoRow` (the pure bits of the gastos-listado slots).
-- **`test_appsettings`** — links `appsettings`, covers the DPAPI secret-at-rest helpers (`dpapiEncrypt`/`dpapiDecrypt`/`dpapiIsEncrypted`): marker, encrypt↔decrypt round-trip, legacy-plaintext passthrough.
+- **`test_appsettings`** — links `appsettings`, covers the DPAPI secret-at-rest helpers (`dpapiEncrypt`/`dpapiDecrypt`/`dpapiIsEncrypted`): marker, encrypt↔decrypt round-trip, legacy-plaintext passthrough. Also drives the JSON-reading getters through the `loadFrom(path)` injection seam against a throwaway file in a `QTemporaryDir`: the derived report paths (`contabilidadPath`/`listados*Path` = `reportsRoot` + subdir), `ivaRate` (+ its 21.0 default), and the `encryptSecretsAtRest()` on-load migration of a plaintext `service_key` (and that an already-encrypted key is left untouched).
 - **`test_reporthtml`** — links `reporthtml`, covers `ReportHtml::formatEuro` / `tableOpen` / `documentClose`.
 - **`test_versioncompare`** (suite `TestUpdater`) — links `updater`, covers `Updater::compareVersions` / `currentVersion`. NB the executable must not be named `*update*`/`*setup*`/`*install*`: Windows' UAC installer-detection heuristic flags such names as requiring elevation and CTest then fails with `BAD_COMMAND`.
 
-CI (`ci.yml`) runs `ctest` on every push/PR; `release.yml` runs it as a **hard gate** between Build and Stage, so a failing test aborts the publish. Each suite runs with `-o build/test-results-<suite>.xml,junitxml`; both workflows then call `.github/scripts/Render-TestSummary.ps1` to render a foldable per-suite, per-method pass/fail table into the run's step summary (the script reads stdout-vs-`GITHUB_STEP_SUMMARY` so it also runs locally). New coverage should follow the same shape: link the production static lib, drive it through real inputs, assert observable results.
+The single `ci.yml` workflow does both CI and release. Its **`build` job** runs `ctest` on every push/PR to `develop`, `master`, `feature/**` (and on `X.Y` tags); the **`release` job** `needs: build` and runs only on an `X.Y` tag, so a failing test aborts the publish (the release is gated on the build job, **reusing its exe** rather than rebuilding). Each suite runs with `-o build/test-results-<suite>.xml,junitxml`; the build job then calls `.github/scripts/Render-TestSummary.ps1` to render a foldable per-suite, per-method pass/fail table into the run's step summary (the script reads stdout-vs-`GITHUB_STEP_SUMMARY` so it also runs locally). The script also appends the `test_ticket_preview` ASCII receipt in a fenced code block (GitHub strips inline images from job summaries, so the graphical render can't be embedded there); the **PNG** renders live committed in `docs/modules/printer/preview_*.png` (embedded in that README) and CI uploads them as the `ticket-previews` artifact. New coverage should follow the same shape: link the production static lib, drive it through real inputs, assert observable results.

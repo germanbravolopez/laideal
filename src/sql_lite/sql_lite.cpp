@@ -280,6 +280,155 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     return ok;
 }
 
+bool updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                         const QString &fechaPago, const QString &pagado)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_pago = :fp, pagado = :pag "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":fp",  fechaPago);
+    q.bindValue(":pag", pagado);
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":h",   hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateTicketPayment: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                        const QString &fechaRecogida, const QString &estado)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = :est "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":fr",  fechaRecogida);
+    q.bindValue(":est", estado);
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":h",   hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateTicketPickup: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                              const QString &observaciones)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET observaciones = :obs "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":obs", observaciones);
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":h",   hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateTicketObservations: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                              const QString &size, const QString &importe)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET size = :sz, importe = :imp "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":sz",  size);
+    q.bindValue(":imp", importe);
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":h",   hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateTicketSizeAndPrice: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                const QString &cantidad, const QString &importe)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":cant", cantidad);
+    q.bindValue(":imp",  importe);
+    q.bindValue(":n",    nRecibo);
+    q.bindValue(":h",    hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateGarmentQtyAndImporte: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
+              "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
+              "observaciones, edit_lock, hash, verifactu_estado) "
+              "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
+              ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
+              ":observaciones, :edit_lock, :hash, :verifactu_estado)");
+    q.bindValue(":n_recibo",         row.nRecibo);
+    q.bindValue(":cliente",          row.cliente);
+    q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
+    q.bindValue(":fecha_pago",       row.fechaPago);
+    q.bindValue(":fecha_recogida",   row.fechaRecogida);
+    q.bindValue(":importe",          row.importe);
+    q.bindValue(":pagado",           row.pagado);
+    q.bindValue(":estado",           row.estado);
+    q.bindValue(":cantidad",         row.cantidad);
+    q.bindValue(":prenda",           row.prenda);
+    q.bindValue(":size",             row.size);
+    q.bindValue(":servicio",         row.servicio);
+    q.bindValue(":observaciones",    row.observaciones);
+    q.bindValue(":edit_lock",        row.editLock);
+    q.bindValue(":hash",             row.hash);
+    q.bindValue(":verifactu_estado", row.verifactuEstado);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "insertGarmentRow: INSERT failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+QString ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return QString();
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n LIMIT 1");
+    q.bindValue(":n", nRecibo);
+    QString estado;
+    if (q.exec() && q.next())
+        estado = q.value(0).toString();
+    db.close();
+    return estado;
+}
+
 float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
                              QDate startDate, QDate endDate, int iva)
 {

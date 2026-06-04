@@ -505,7 +505,7 @@ processResponse() — captures CSV, QrCode, ValidationUrl from Return
     ↓
 saveTicket(VerifactuResult) — writes verifactu_* columns to ingresos
     ↓
-Imprimir::createTicketExcel() — embeds QR pixmap at the bottom of the receipt
+Imprimir::buildTicket() — rasters the QR pixmap into the ESC/POS receipt (GS v 0)
 ```
 
 For the F1 (full invoice with buyer NIF) flow substitute `createAndSubmitInvoice()`. For the reprint path the QR is fetched via `generateQR()` → `/GetQrCode` because the pixmap is not persisted.

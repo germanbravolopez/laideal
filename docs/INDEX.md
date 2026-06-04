@@ -20,11 +20,13 @@
 | `docs/modules/recog_prendas.md` | Garment pickup operations, UpdateDBop enum, search, partial-payment PayDialog (8.5+) |
 | `docs/modules/facturas.md` | Supplier invoice form, validation, auto-calculation |
 | `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
-| `docs/modules/imprimir.md` | Excel/print flow, layout modes, QXlsx dependency |
+| `docs/modules/imprimir.md` | Receipt/invoice print orchestration (ESC/POS), layout modes, QR |
+| `docs/modules/printing.md` | ESC/POS printing core: EscPosBuilder, TicketRenderer, ThermalPrinter (RAW spooler) |
 | `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
 | `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
 | `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
 | `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
+| `docs/modules/printer/README.md` | **Printer research dossier** (background for the shipped ESC/POS code): Epson TM-T20III model/specs, control methods, ESC/POS command subset, current-flow analysis, and the implementation plan (5 files + index). Runtime reference: `docs/modules/printing.md` |
 
 ## Skills (Custom Slash Commands)
 
@@ -36,7 +38,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
 | `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
 | `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
-| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which triggers `release.yml` CI to build + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
+| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which runs `ci.yml`'s `build` job then its tag-gated `release` job to package + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
 | `/review` | Built-in | Review a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
@@ -70,7 +72,12 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Partial-payment dialog | `src/recog_prendas/pay_dialog.h` | `.cpp` |
 | Formal invoice form | `src/facturas/facturas.h` | `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` | `.cpp` |
-| Print + Excel | `src/imprimir/imprimir.h` | `.cpp` |
+| Receipt/invoice print orchestration | `src/imprimir/imprimir.h` | `.cpp` |
+| ESC/POS byte builder (pure) | `src/printing/escposbuilder.h` | `.cpp` |
+| Ticket layout renderer (pure) | `src/printing/ticketrenderer.h` | `.cpp` |
+| Thermal printer RAW transport | `src/printing/thermalprinter.h` | `.cpp` |
+| Printer ASB status decoder (pure) | `src/printing/printerstatus.h` | `.cpp` |
+| Epson Status API transport (optional) | `src/printing/statusapiprinter.h` | `.cpp` |
 | Add garments to ticket | `src/add_garment/add_garment.h` | `.cpp` |
 | Verifactu facade | `src/verifactu/verifactuintegration.h` | `.cpp` |
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
@@ -87,7 +94,6 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
 | Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
 | Link (URL) delegate | `src/tableview/linkdelegate.h` | `.cpp` |
-| Excel library | `QXlsx/` (entire directory) | third-party (vendored) — only a tiny local patch added: `Worksheet::setPageMargins` + `Document::setPageMargins` |
 
 ## Build Files
 
@@ -97,13 +103,11 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/app/CMakeLists.txt` | Main executable target (`laideal`) |
 | `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate, LinkDelegate) |
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
-| `src/<module>/CMakeLists.txt` | Per-module static library targets |
-| `QXlsx/CMakeLists.txt` | QXlsx library build |
-| `tests/` (11 Qt Test + CTest suites) | `test_sql_lite` (+`garmentImporte`), `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
-| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary (called by both workflows; also runnable locally) |
-| `.github/workflows/ci.yml` | CI — builds on every push/PR (Qt 6.4.3 MinGW + CMake + Ninja), runs `ctest`, uploads `laideal.exe` artifact |
-| `.github/workflows/release.yml` | Release CI — on `X.Y` tag push, builds + `ctest` (hard gate) + `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release (reproduces `releases\release.ps1`) |
-| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for `release.yml` |
+| `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
+| `tests/` (13 Qt Test + CTest suites) | `test_sql_lite` (+`garmentImporte`, DB write seams), `test_mysortfilterproxymodel`, `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI + `loadFrom` getters), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
+| `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and appends the `test_ticket_preview` ASCII receipt in a fenced block (GitHub strips inline images from summaries; the graphical PNG renders live in `docs/modules/printer/` + the `ticket-previews` artifact). Called by the `ci.yml` build job; also runnable locally. |
+| `.github/workflows/ci.yml` | CI + Release in one workflow. **`build` job** (push/PR to `develop`/`master`/`feature/**`, and `X.Y` tags): Qt 6.4.3 MinGW + CMake + Ninja, `ctest`, uploads `laideal.exe` (on push) + `ticket-previews` PNG renders (always). **`release` job** (`needs: build`, only on `X.Y` tags): reuses the build exe -> `windeployqt` + zip + Inno Setup installer + publishes the GitHub Release. |
+| `releases/release.ps1` | Local release pipeline (build + `windeployqt` + zip + installer); offline fallback for the `ci.yml` release job |
 | `releases/laideal.iss` | Inno Setup installer recipe (paths relative to `releases/`; `/DMyAppVersion=X.Y`) |
 
 ## Key Concepts / Glossary
@@ -131,14 +135,15 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
 | All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
 | Reports root and hardcoded subdirs (Contabilidad / Listados/Prendas / Listados/Gastos) | `src/appsettings/appsettings.h` (`reportsRoot`, `contabilidadPath`, `listadosPrendasPath`, `listadosGastosPath`) |
-| Fixed ticket file paths (~/.laideal_ticket.xlsx, ~/.laideal_print.vbs) | `src/appsettings/appsettings.h` (`ticketExcelPath`, `ticketPrintScriptPath`) — regenerated each print |
+| Printer queue + paper width settings | `src/appsettings/appsettings.h` (`printerName`, `paperWidthMm`) — edited in SettingsDialog → General |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
-| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `createTicketExcel`) — pixmap from save flow or REST `/GetQrCode`; the legal verification leyenda is written below the QR when `verifactu_estado == ENVIADA` |
+| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`) — pixmap from save flow or REST `/GetQrCode`, rastered into the ESC/POS stream (`EscPosBuilder::rasterImage`); the legal verification leyenda prints below the QR when `verifactu_estado == ENVIADA` |
 | Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
-| Print / Excel flow | `docs/modules/imprimir.md` + `src/imprimir/imprimir.h` |
-| Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/imprimir/imprimir.cpp` (`createTicketExcel` — `copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
+| Print flow (ESC/POS) | `docs/modules/imprimir.md` (orchestration) + `docs/modules/printing.md` (ESC/POS core) + `src/imprimir/imprimir.h` |
+| ESC/POS command subset / code page (PC858) | `docs/modules/printer/03_escpos_command_reference.md` + `src/printing/escposbuilder.cpp` (`toCp858`) |
+| Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/printing/ticketrenderer.cpp` (`copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
 | How to read customer bug logs | `~/.laideal.log` on customer machine; Archivo → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |

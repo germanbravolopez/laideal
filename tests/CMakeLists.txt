@@ -115,6 +115,38 @@ target_link_libraries(test_backup_manager PRIVATE
 add_test(NAME backup_manager
     COMMAND test_backup_manager -o ${CMAKE_BINARY_DIR}/test-results-backup_manager.xml,junitxml -o -,txt)
 
+# printing: pure ESC/POS builder (exact bytes + PC858 transcode + column math)
+# and the TicketRenderer receipt/invoice layout. QTEST_GUILESS_MAIN - QImage
+# works under QCoreApplication, no platform plugin needed.
+add_executable(test_escpos test_escpos.cpp)
+target_link_libraries(test_escpos PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Gui       # QImage (raster path + TicketData::qr)
+    printing
+)
+add_test(NAME escpos
+    COMMAND test_escpos -o ${CMAKE_BINARY_DIR}/test-results-escpos.xml,junitxml -o -,txt)
+
+# ticket_preview: renders a sample recibo + factura from the real TicketRenderer
+# output back into a PNG simulation of the thermal paper + an ASCII mock (written
+# next to the test exe). QTEST_MAIN (QGuiApplication - links Gui, not Widgets)
+# under offscreen so QPainter text rasterizes headless.
+add_executable(test_ticket_preview test_ticket_preview.cpp)
+target_link_libraries(test_ticket_preview PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Gui
+    printing
+)
+add_test(NAME ticket_preview
+    COMMAND test_ticket_preview -o ${CMAKE_BINARY_DIR}/test-results-ticket_preview.xml,junitxml -o -,txt)
+# On Windows use the native QPA platform so system fonts render real glyphs in
+# the preview PNG (the offscreen plugin draws tofu boxes there); painting to a
+# QImage needs no visible window. Off Windows (Linux CI) force offscreen so the
+# GUI test runs headless - the asserts are ASCII-content based, not pixels.
+if(NOT WIN32)
+    set_tests_properties(ticket_preview PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
 # contabilidad: pure period-range date math (Contabilidad::periodRangeFor).
 add_executable(test_contabilidad test_contabilidad.cpp)
 target_link_libraries(test_contabilidad PRIVATE
