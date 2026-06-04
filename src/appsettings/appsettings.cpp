@@ -316,6 +316,9 @@ void    AppSettings::setPrinterName(const QString &v) { setStr({"print", "printe
 int  AppSettings::paperWidthMm() const  { return static_cast<int>(dbl({"print", "paper_width_mm"}, 80)); }
 void AppSettings::setPaperWidthMm(int v) { setDbl({"print", "paper_width_mm"}, v); }
 
+bool AppSettings::useStatusApi() const { return str({"print", "use_status_api"}) == "Yes"; }
+void AppSettings::setUseStatusApi(bool v) { setStr({"print", "use_status_api"}, v ? "Yes" : "No"); }
+
 // ---------------------------------------------------------------------------
 // Business
 // ---------------------------------------------------------------------------

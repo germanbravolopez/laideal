@@ -11,8 +11,11 @@ in [`../../../tests`](../../../tests)), English-only docs.
 > deleted. **Phase 0** (hardware spike) was validated on the shop's physical Epson TM-T20III
 > (queue name, PC858 code page for accents, 80 mm paper width all confirmed). **Phase 5**
 > (remove the vendored `QXlsx/`) is done — the tree and its CMake wiring were deleted once the
-> printer was validated on hardware. **Phase 4** (Status API) is the only remaining open
-> follow-up. Runtime reference: [`../printing.md`](../printing.md).
+> printer was validated on hardware. **Phase 4** (optional Status API layer) shipped behind the
+> `print.use_status_api` flag as `src/printing/printerstatus.*` (pure ASB decoder, unit-tested)
+> + `statusapiprinter.*` (dynamically-loaded `EPSStmApi.dll` transport); the ASB bit values and
+> the DLL path still need confirming on the physical unit. Runtime reference:
+> [`../printing.md`](../printing.md).
 
 ## Goals and non-goals
 

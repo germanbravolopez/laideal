@@ -42,6 +42,7 @@ private:
     QCheckBox *m_enablePrinting;
     class QComboBox *m_printerName;   // editable: queue name, blank = default printer
     class QComboBox *m_paperWidth;    // 58 / 80 mm
+    QCheckBox *m_useStatusApi;        // route via Epson Status API + read device status
     QCheckBox *m_checkUpdatesOnStartup;
 
     QLineEdit *m_reportsRoot;

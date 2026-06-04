@@ -4,6 +4,7 @@
 
 #include "ticketrenderer.h"
 #include "thermalprinter.h"
+#include "statusapiprinter.h"
 
 #include <QDate>
 #include <QImage>
@@ -300,10 +301,31 @@ void Imprimir::printTicket()
         qWarning() << "Imprimir::printTicket: no ticket built";
         return;
     }
+    const QString printer = AppSettings::instance()->printerName();
     QString err;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const bool ok = ThermalPrinter::send(m_ticketBytes,
-                                         AppSettings::instance()->printerName(), &err);
+
+    // Optional Status API path: send the same bytes through Epson's EPSStmApi.dll
+    // and read back the device status. If it isn't available (DLL/APD not
+    // installed) it sends nothing and we fall through to the RAW spooler, so
+    // enabling the flag never stops printing.
+    if (AppSettings::instance()->useStatusApi()) {
+        PrinterStatus status;
+        QString statusErr;
+        if (StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr)) {
+            QApplication::restoreOverrideCursor();
+            if (status.valid && (status.hasError() || status.hasWarning())) {
+                qWarning() << "Imprimir::printTicket status:" << status.summary()
+                           << Qt::hex << status.raw;
+                QMessageBox::warning(this, "Impresora", status.summary(),
+                                     QMessageBox::Ok, QMessageBox::Ok);
+            }
+            return;
+        }
+        qWarning() << "Imprimir::printTicket: Status API no disponible, usando RAW:" << statusErr;
+    }
+
+    const bool ok = ThermalPrinter::send(m_ticketBytes, printer, &err);
     QApplication::restoreOverrideCursor();
     if (!ok) {
         qCritical() << "Imprimir::printTicket:" << err;

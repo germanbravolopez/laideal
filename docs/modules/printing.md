@@ -13,6 +13,9 @@ with Windows). Background and design: [`printer/`](printer/README.md); a rendere
 - `escposbuilder.h/cpp` — pure ESC/POS byte builder + PC858 transcode
 - `ticketrenderer.h/cpp` — `TicketData` → receipt/invoice layout
 - `thermalprinter.h/cpp` — Win32 RAW spooler transport (stub off Windows)
+- `printerstatus.h/cpp` — pure ASB status-word decoder (`PrinterStatus`)
+- `statusapiprinter.h/cpp` — optional Epson Status API transport (dynamically
+  loaded `EPSStmApi.dll`; stub off Windows)
 
 Built as the static lib `printing` (links `Qt::Gui` for `QImage`, and `winspool`
 on Windows). `imprimir` links it; nothing else depends on it.
@@ -28,9 +31,11 @@ ThermalPrinter  transport: writes a QByteArray to a Windows printer queue as RAW
                 spool data. The only host-specific, non-portable piece.
 ```
 
-`EscPosBuilder` and `TicketRenderer` are covered by `tests/test_escpos.cpp`
-(exact control bytes, the PC858 transcode, the column-width math, and the
-rendered receipt/invoice fragments). `ThermalPrinter` is integration-only.
+`EscPosBuilder`, `TicketRenderer` and `PrinterStatus` are covered by
+`tests/test_escpos.cpp` (exact control bytes, the PC858 transcode, the
+column-width math, the rendered receipt/invoice fragments, and the ASB status
+decode). `ThermalPrinter` and `StatusApiPrinter` are integration-only (Win32 /
+Epson DLL).
 
 ## EscPosBuilder
 
@@ -86,6 +91,31 @@ with a human-readable `*err` (from `FormatMessage`) instead of throwing. Off
 Windows it compiles to a stub that returns `false`, so the builder/renderer (and
 their tests) stay cross-platform.
 
+## PrinterStatus + StatusApiPrinter (optional Status API path)
+
+An opt-in layer (setting `print.use_status_api`) that reads device status after
+printing — paper out / near end, cover open, cutter / mechanical / unrecoverable
+error. The ESC/POS payload is identical to the RAW path; only the transport
+differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_methods.md)).
+
+- **`PrinterStatus`** — pure. `PrinterStatus::fromAsb(quint32)` decodes the
+  Epson **ASB** (Automatic Status Back) 32-bit word into named flags
+  (`paperEnd`, `paperNearEnd`, `coverOpen`, `cutterError`, …) plus
+  `hasError()` / `hasWarning()` and a Spanish `summary()` ("Sin papel", "Tapa
+  abierta", "Papel casi agotado", "Impresora lista", …). Unit-tested.
+- **`StatusApiPrinter::sendAndReadStatus(bytes, queue, *status, *err)`** —
+  Win32. Loads `EPSStmApi.dll` **dynamically** (`LoadLibrary`/`GetProcAddress`,
+  so there is no build-time SDK dependency), then
+  `BiOpenMonPrinter(2, queue)` → `BiDirectIOEx` (send) → `BiGetStatus` (read) →
+  `BiCloseMonPrinter`. Returns `false` *without sending* if the DLL/API is
+  unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
+  back to the RAW path (enabling the flag never stops printing). The status read
+  is best-effort: a send can succeed with `status.valid == false`.
+
+> Not hardware-validated: the exact `ASB_*` bit values and the `EPSStmApi.dll`
+> calling path must be confirmed on the shop's TM-T20III with the APD/Status API
+> installed (the same Phase 0-style hardware step the RAW path went through).
+
 ## Settings consumed (by `imprimir`)
 
 | Setting | Getter | Use |
@@ -93,6 +123,8 @@ their tests) stay cross-platform.
 | `print.printer_name` | `printerName()` | RAW target queue; empty = default printer |
 | `print.paper_width_mm` | `paperWidthMm()` | 80 → 576 dots, 58 → 420 (default 80) |
 | `print.enable` | `enablePrinting()` | gates the actual send |
+| `print.use_status_api` | `useStatusApi()` | route via Epson Status API + read status (default off) |
 
-Both new keys are editable in `SettingsDialog` → General (printer combo populated
-from `QPrinterInfo::availablePrinterNames()`, paper-width combo).
+All keys are editable in `SettingsDialog` → General (printer combo populated
+from `QPrinterInfo::availablePrinterNames()`, paper-width combo, and the Status
+API checkbox).

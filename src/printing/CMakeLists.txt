@@ -10,6 +10,10 @@ add_library(printing STATIC
     thermalprinter.cpp
     ticketrenderer.h
     ticketrenderer.cpp
+    printerstatus.h
+    printerstatus.cpp
+    statusapiprinter.h
+    statusapiprinter.cpp
 )
 # Qt::Gui (QImage) is exposed by the public headers (TicketData::qr / rasterImage).
 target_link_libraries(printing PUBLIC

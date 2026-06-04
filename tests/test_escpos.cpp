@@ -9,6 +9,7 @@
 
 #include "escposbuilder.h"
 #include "ticketrenderer.h"
+#include "printerstatus.h"
 
 // ESC/POS marker fragments reused across assertions.
 static const QByteArray INIT_BYTES   = QByteArray("\x1B\x40\x1B\x74\x13", 5); // ESC @ + ESC t 19
@@ -185,6 +186,59 @@ private slots:
 
         const QByteArray out = TicketRenderer::render(d, 576);
         QVERIFY(out.contains(RASTER_HDR));      // GS v 0 raster image emitted
+    }
+
+    // --- PrinterStatus: ASB status-word decode (Status API, optional path) ---
+    void test_printerStatus_okWhenZero()
+    {
+        const PrinterStatus s = PrinterStatus::fromAsb(0);
+        QVERIFY(s.valid);
+        QVERIFY(!s.hasError());
+        QVERIFY(!s.hasWarning());
+        QCOMPARE(s.summary(), QStringLiteral("Impresora lista"));
+    }
+
+    void test_printerStatus_paperNearEndIsWarning()
+    {
+        const PrinterStatus s = PrinterStatus::fromAsb(0x00020000u);
+        QVERIFY(s.paperNearEnd);
+        QVERIFY(!s.paperEnd);
+        QVERIFY(s.hasWarning());
+        QVERIFY(!s.hasError());
+        QCOMPARE(s.summary(), QStringLiteral("Papel casi agotado"));
+    }
+
+    void test_printerStatus_paperEndIsError()
+    {
+        const PrinterStatus s = PrinterStatus::fromAsb(0x00080000u);
+        QVERIFY(s.paperEnd);
+        QVERIFY(s.hasError());
+        QCOMPARE(s.summary(), QStringLiteral("Sin papel"));
+    }
+
+    void test_printerStatus_coverOpenAndCutter()
+    {
+        QVERIFY(PrinterStatus::fromAsb(0x00000020u).coverOpen);
+        QCOMPARE(PrinterStatus::fromAsb(0x00000020u).summary(), QStringLiteral("Tapa abierta"));
+        QVERIFY(PrinterStatus::fromAsb(0x00000800u).cutterError);
+        QCOMPARE(PrinterStatus::fromAsb(0x00000800u).summary(), QStringLiteral("Error en el cortador"));
+        QVERIFY(PrinterStatus::fromAsb(0x00000008u).offline);
+    }
+
+    void test_printerStatus_errorsRankBeforeWarning()
+    {
+        // Paper end + near end set together: the hard error must win the summary.
+        const PrinterStatus s = PrinterStatus::fromAsb(0x00080000u | 0x00020000u);
+        QVERIFY(s.paperEnd);
+        QVERIFY(s.paperNearEnd);
+        QCOMPARE(s.summary(), QStringLiteral("Sin papel"));
+    }
+
+    void test_printerStatus_defaultIsInvalid()
+    {
+        const PrinterStatus s;   // not decoded from any word yet
+        QVERIFY(!s.valid);
+        QCOMPARE(s.summary(), QStringLiteral("Estado de la impresora desconocido"));
     }
 };
 

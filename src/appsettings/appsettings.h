@@ -55,6 +55,11 @@ public:
     // printable dots, 58 -> 420. Defaults to 80.
     int  paperWidthMm() const;
     void setPaperWidthMm(int v);
+    // When on, route the ESC/POS bytes through Epson's Status API (EPSStmApi.dll)
+    // instead of the RAW spooler, to read back paper-out / cover-open / cutter
+    // status after printing. Off by default; falls back to RAW if unavailable.
+    bool useStatusApi() const;
+    void setUseStatusApi(bool v);
 
     // --- Business identity ---
     QString businessName() const;

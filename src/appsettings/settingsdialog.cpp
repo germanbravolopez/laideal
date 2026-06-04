@@ -99,6 +99,14 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_paperWidth->setCurrentIndex(s->paperWidthMm() == 58 ? 0 : 1);
     fl->addRow(tr("Ancho de papel:"), m_paperWidth);
 
+    m_useStatusApi = new QCheckBox(tr("Usar la Status API de Epson (estado de la impresora)"));
+    m_useStatusApi->setChecked(s->useStatusApi());
+    m_useStatusApi->setToolTip(tr(
+        "Envía los tickets a través de EPSStmApi.dll para detectar falta de papel, "
+        "tapa abierta o error del cortador. Si no está disponible, se usa la "
+        "impresión RAW normal."));
+    fl->addRow(m_useStatusApi);
+
     m_checkUpdatesOnStartup = new QCheckBox(tr("Buscar actualizaciones al iniciar la aplicación"));
     m_checkUpdatesOnStartup->setChecked(s->checkUpdatesOnStartup());
     m_checkUpdatesOnStartup->setToolTip(tr(
@@ -217,6 +225,7 @@ void SettingsDialog::accept()
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
     s->setPaperWidthMm(m_paperWidth->currentData().toInt());
+    s->setUseStatusApi(m_useStatusApi->isChecked());
     s->setCheckUpdatesOnStartup(m_checkUpdatesOnStartup->isChecked());
 
     s->setReportsRoot(m_reportsRoot->text().trimmed());
