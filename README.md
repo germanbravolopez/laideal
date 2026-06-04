@@ -16,7 +16,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Client management** — directory with name, phone, and address
 - **Garment receipts** — multi-garment tickets per client visit; quantity, size, service, and price per line
 - **Garment pickup** — mark items as paid and collected; edit sizes, prices, and observations; split garment rows
-- **Printing** — receipt and full invoice layouts built as Excel files and printed via an external script
+- **Printing** — receipts and invoices printed as direct ESC/POS over the Windows RAW spooler (10.0+, no Excel/Office dependency); configurable printer queue and 58/80 mm paper width, with an optional Epson Status API layer for paper-out / cover-open detection
 - **Supplier invoices** — invoice entry form with automatic IVA/base calculation
 - **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export

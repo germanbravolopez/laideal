@@ -38,7 +38,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Formal invoices form | `src/facturas/facturas.h` / `.cpp` |
 | Accounting reports | `src/contabilidad/contabilidad.h` / `.cpp` |
 | Receipt/invoice print orchestration | `src/imprimir/imprimir.h` / `.cpp` |
-| ESC/POS printing core (builder, renderer, RAW spooler) | `src/printing/` — `escposbuilder`, `ticketrenderer`, `thermalprinter` |
+| ESC/POS printing core (builder, renderer, RAW spooler, optional status API) | `src/printing/` — `escposbuilder`, `ticketrenderer`, `thermalprinter`, `printerstatus`, `statusapiprinter` |
 | Add garments to ticket | `src/add_garment/add_garment.h` / `.cpp` |
 | Verifactu facade | `src/verifactu/verifactuintegration.h` / `.cpp` |
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` / `.cpp` |

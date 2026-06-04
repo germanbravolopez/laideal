@@ -52,6 +52,7 @@ the padding helpers space-pad to that width.
 | `doubleSize(on)` | `GS ! 0x11` / `0x00` | double width+height |
 | `text(s)` / `line(s)` | PC858 bytes (+ LF) | transcodes the QString |
 | `feed(n)` | `ESC d n` | |
+| `lineSpacing(dots)` / `defaultLineSpacing()` | `ESC 3 n` / `ESC 2` | tighten the vertical pitch (e.g. the dense legal block) / restore the ~1/6" default |
 | `rule(c)` | full-width row of `c` | `=` (double-ish) / `-` (thin) |
 | `paragraph(s)` | word-wrap to `columns()` | |
 | `leftRight(l, r)` | label + right-justified value | one full line |

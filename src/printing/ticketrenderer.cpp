@@ -75,7 +75,10 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
 
     // --- Verifactu QR (facturas only; raster the AEAT-issued pixmap verbatim) ---
     if (!d.qr.isNull()) {
-        b.feed(1).align(EscPosBuilder::Align::Center);
+        // No extra feed here: the payment marker above already separates the QR,
+        // and the AEAT pixmap carries its own quiet-zone margin - an added blank
+        // line left too much empty space before the code.
+        b.align(EscPosBuilder::Align::Center);
         b.rasterImage(d.qr);
         b.feed(1);
         if (d.verifactuVerifiable) {
@@ -90,7 +93,9 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
 
     // --- Legal policy (client copy only) - RD 1453/1987 + RGPD first layer ---
     if (d.copyForClient) {
-        b.feed(1).font(EscPosBuilder::Font::B);
+        // Font B is already the smallest built-in font; tighten the line pitch
+        // too so the legal block reads as compact fine print, not body text.
+        b.feed(1).font(EscPosBuilder::Font::B).lineSpacing(24);
         // Plain literals (implicit QString::fromUtf8) for the accented legal text.
         b.line("CONDICIONES GENERALES (RD 1453/1987)");
         b.paragraph(QString::fromUtf8(
@@ -111,7 +116,7 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
         b.paragraph("- Sus datos son tratados por " + d.businessName +
                     " para gestionar el servicio. RGPD - Derechos arts.15-22: " +
                     rgpdContact + ".");
-        b.font(EscPosBuilder::Font::A);
+        b.defaultLineSpacing().font(EscPosBuilder::Font::A);
     }
 
     // --- Timestamp + cut ---

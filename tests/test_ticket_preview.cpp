@@ -99,6 +99,8 @@ QVector<PreviewBlock> interpret(const QByteArray &d)
             case 'a': align = static_cast<EscPosBuilder::Align>(at(d, i + 2)); i += 3; break;
             case 'E': bold = at(d, i + 2) != 0; i += 3; break;
             case 'M': font = static_cast<EscPosBuilder::Font>(at(d, i + 2)); i += 3; break;
+            case '2': i += 2; break;                       // ESC 2 (default line spacing)
+            case '3': i += 3; break;                       // ESC 3 n (line spacing)
             case 'd': { const int k = at(d, i + 2); i += 3; flush(false);
                         for (int j = 0; j < k; ++j) { PreviewBlock b; b.align = align; b.font = font; out.append(b); }
                         break; }

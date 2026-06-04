@@ -88,6 +88,13 @@ private slots:
         QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("→")), QByteArray("?"));
     }
 
+    void test_lineSpacingBytes()
+    {
+        EscPosBuilder b;
+        b.lineSpacing(24).defaultLineSpacing();
+        QCOMPARE(b.bytes(), QByteArray("\x1B\x33\x18\x1B\x32", 5));  // ESC 3 24 / ESC 2
+    }
+
     // --- Layout helpers ---
     void test_leftRightFillsLineWidth()
     {
@@ -101,11 +108,11 @@ private slots:
 
     void test_garmentRowColumns()
     {
-        EscPosBuilder b(576);                    // 48 cols -> name col 35
+        EscPosBuilder b(576);                    // 48 cols -> name col 33
         b.garmentRow("2", "Camisa", "3.50");
         const QByteArray content = b.bytes().left(b.bytes().size() - 1);
         QCOMPARE(content.size(), 48);
-        QVERIFY(content.startsWith("2   Camisa"));   // qty padded to 4, then name
+        QVERIFY(content.startsWith("2     Camisa"));   // qty padded to 6, then name
         QVERIFY(content.endsWith("3.50"));
     }
 

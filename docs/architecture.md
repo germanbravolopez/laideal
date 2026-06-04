@@ -90,7 +90,7 @@ via `getTicketInfo()`, assembles a `TicketData`, and renders it to an ESC/POS
 byte stream via the `printing` lib (`buildTicket()` → `m_ticketBytes`), then sends
 those bytes RAW to the printer queue (`printTicket()` → `ThermalPrinter::send`).
 `isRecibo = true` → receipt layout; `false` → invoice layout; `isCompleteInvoice`
-adds billing-address + DNI prompts. Since 9.x there is **no Excel/QXlsx/cscript** —
+adds billing-address + DNI prompts. Since 10.0 there is **no Excel/QXlsx/cscript** —
 the QR (facturas only) is rastered from the AEAT pixmap. General conditions block
 (4 clauses + RGPD notice) prints only on the client copy. See
 `docs/modules/imprimir.md` for the full layout table.
@@ -100,7 +100,11 @@ The ESC/POS printing core, split into three seams: `EscPosBuilder` (pure: a
 chainable ESC/POS byte builder + PC858 transcode + column-width math, fully unit
 tested), `TicketRenderer` (pure: `TicketData` → the receipt/invoice layout), and
 `ThermalPrinter` (the only host-specific piece: writes the bytes to a Windows
-printer queue as RAW spool data via `winspool`; a failing stub off Windows). Built
+printer queue as RAW spool data via `winspool`; a failing stub off Windows). An
+optional fourth path (setting `print.use_status_api`, off by default) adds
+`PrinterStatus` (pure: decodes the Epson ASB status word) + `StatusApiPrinter`
+(sends the same bytes through a dynamically-loaded `EPSStmApi.dll` and reads
+paper-out / cover-open / cutter status, falling back to RAW if unavailable). Built
 as the `printing` static lib, used only by `imprimir`. Replaces the old Excel
 pipeline; design dossier in `docs/modules/printer/`, reference in
 `docs/modules/printing.md`.

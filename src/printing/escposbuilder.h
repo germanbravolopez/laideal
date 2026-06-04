@@ -34,6 +34,8 @@ public:
     EscPosBuilder &text(const QString &s);  // transcode to PC858, no line feed
     EscPosBuilder &line(const QString &s = QString());   // text + LF
     EscPosBuilder &feed(int n = 1);         // ESC d n  (n blank lines)
+    EscPosBuilder &lineSpacing(int dots);   // ESC 3 n  (tighten the vertical pitch)
+    EscPosBuilder &defaultLineSpacing();    // ESC 2    (restore the default ~1/6")
     EscPosBuilder &rule(char c = '-');      // a full-width row of c + LF
 
     // Word-wrap s to the current column width, one printed line per wrapped row.
@@ -45,7 +47,7 @@ public:
     // amount (amountWidth, right). Continuation lines (a wrapped name) carry
     // blank qty/amount columns.
     EscPosBuilder &garmentRow(const QString &qty, const QString &name,
-                              const QString &amount, int qtyWidth = 4, int amountWidth = 9);
+                              const QString &amount, int qtyWidth = 6, int amountWidth = 9);
 
     EscPosBuilder &rasterImage(const QImage &img);   // GS v 0 (1bpp, MSB-first)
     EscPosBuilder &cut(int feedBefore = 3);          // ESC d n + GS V 66 0
