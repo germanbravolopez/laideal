@@ -15,9 +15,9 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `master`
 
-**Latest release**: [9.3](https://github.com/germanbravolopez/laideal/releases/tag/9.3) — backlog maintenance release on top of 9.2: (1) the startup Verifactu recovery dialog is now seq-aware — a partial-payment (`Cobrar`) event left `PENDIENTE` by an AEAT timeout is surfaced per `(n_recibo, seq)` and retried under its own `<n>-<seq>` InvoiceID with that event's own amount (new `sql_lite::pendingVerifactuEvents`), instead of being excluded; (2) the annual Contabilidad report runs 2 grouped queries per year instead of 24 per-quarter full-table scans (new `sql_lite::annualAccountingByQuarter` + the extracted pure `Contabilidad::figuresFromTotals`), the tax math proven unchanged by a per-quarter equality test.
+**Latest release**: [9.4](https://github.com/germanbravolopez/laideal/releases/tag/9.4) — printing-subsystem release: receipts and facturas now print via **direct ESC/POS over the Windows RAW spooler** (`src/printing/`: `EscPosBuilder` + `TicketRenderer` + `ThermalPrinter`), replacing the Excel/QXlsx/`.vbs`/`cscript` pipeline entirely — Microsoft Excel is no longer required on the shop PC, printing is faster, gives error feedback, and is laid out for the real paper width (58/80 mm settings). Validated on the shop's Epson TM-T20III. Ships with an optional Epson **Status API** layer (`print.use_status_api`) that reads paper-out / cover-open / cutter status, the vendored `QXlsx/` tree removed, a `test_ticket_preview` render test, CI/release consolidated into one `ci.yml`, and several test-coverage seams (RecogPrendas/saveTicket DB writes, AppSettings `loadFrom`, ESC/POS builder + `PrinterStatus`).
 
-**Next**: post-9.3 maintenance — confirm the partial-pay flow in the in-shop trial, switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, and work the remaining 9.x backlog (see Open Non-Blocking Issues).
+**Next**: switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, confirm the Status API ASB bits + DLL path on the shop's TM-T20III, and optionally polish the thermal ticket layout (see Open Non-Blocking Issues).
 
 ---
 
