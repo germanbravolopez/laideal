@@ -34,7 +34,7 @@ _(No blocking issues for the next release. The pay-all-on-name-search blast (fil
 | Issue | File | Notes |
 |-------|------|-------|
 | Switch Verifactu to PRODUCTION environment | `~/.laideal_settings.json`, `SettingsDialog` | v8.0 ships with TESTING environment. After meeting with IreneSolutions and obtaining production ServiceKey: update `verifactu.environment` and credentials in settings. No code change required — all handled via `SettingsDialog`. |
-| Improve thermal ticket / invoice layout | `src/printing/ticketrenderer.cpp` | The A4 PDF reports (contabilidad + listados) were restyled and given extra figures — see the milestone "Report visualisation: shared professional A4 style + IVA settlement / net result". The receipt/invoice now renders via ESC/POS (`TicketRenderer`) reproducing the historical content/ordering; readability within the printer's column constraints (column widths, emphasis, spacing, Spanish comma decimals instead of the inherited dot format) can still be polished now that layout is host-side code, not spreadsheet cells. |
+| Validate the ESC/POS Status API on hardware | `src/printing/statusapiprinter.cpp`, `printerstatus.cpp` | The optional `print.use_status_api` layer (off by default) is unit-tested for the ASB decode but **not validated on a physical unit**: confirm the `ASB_*` bit values and that `EPSStmApi.dll` (`BiOpenMonPrinter`/`BiDirectIOEx`/`BiGetStatus`) is callable on the shop's TM-T20III with the Epson APD/Status API installed. Until then the feature stays off; the RAW path is unaffected. |
 ---
 
 ## Backlog (deferred — low value / not currently planned)

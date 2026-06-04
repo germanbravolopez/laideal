@@ -55,6 +55,10 @@ build a copy, optionally print it, then build + print the next copy. A second
    AppSettings::printerName())`. An empty printer name uses the Windows default
    printer. On failure it shows a `QMessageBox` (the old path had no such
    feedback). Callers still gate the call on `AppSettings::enablePrinting()`.
+   When `AppSettings::useStatusApi()` is on, the bytes go through
+   `StatusApiPrinter::sendAndReadStatus()` first (Epson Status API) and a device
+   problem (paper out / cover open / cutter) is surfaced in a `QMessageBox`; if
+   the Status API is unavailable it falls back to the RAW `send()` above.
 
 The column layout is computed from the real paper width (dots / char width per
 font) instead of empirically-tuned spreadsheet cell widths.
