@@ -1,6 +1,6 @@
 Releases:
 
-9.4
+10.0
 - New: tickets and invoices now print directly to the thermal printer, without Excel
   - The receipt and invoice are sent straight to the printer instead of being generated through an Excel spreadsheet and a script. Microsoft Excel is no longer required on the shop PC, printing is faster and more reliable, and you are told if a print fails. You can choose the printer and the paper width (58 or 80 mm) in Configuracion. The Verifactu QR and the Spanish accents print as before.
 - New: optional printer status detection (paper out, cover open, cutter error)
