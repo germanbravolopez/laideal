@@ -8,7 +8,7 @@
 
 | File | What's in it |
 |------|-------------|
-| `docs/AI_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
+| `docs/ai_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
 | `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](.claude/agents/dead-code-finder.md) agent) |

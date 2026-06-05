@@ -6,7 +6,7 @@
   "command": {
     "update-docs": {
       "description": "Update project documentation (progress tracker, architecture, INDEX, etc.) after any change",
-      "prompt": "Run the /update-docs checklist from .claude/commands/update-docs.md: update progress_tracker.md, AI_agent_instructions.md, architecture.md, INDEX.md, module docs, README.md, and releases_notes.txt as applicable."
+      "prompt": "Run the /update-docs checklist from .claude/commands/update-docs.md: update progress_tracker.md, ai_agent_instructions.md, architecture.md, INDEX.md, module docs, README.md, and releases_notes.txt as applicable."
     },
     "update-skills": {
       "description": "Create or update agent skill files in .claude/commands/",

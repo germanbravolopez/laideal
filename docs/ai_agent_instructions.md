@@ -55,7 +55,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | `docs/INDEX.md` | **Quick-find**: every doc, source file, concept |
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
 | `docs/progress_tracker.md` | What's done, in progress, open issues |
-| `docs/AI_agent_instructions.md` | This file |
+| `docs/ai_agent_instructions.md` | This file |
 | `docs/modules/verifactu/` | Full Verifactu implementation docs (4 files) |
 | `docs/modules/*.md` | Per-module reference docs (MainWindow, sql_lite, listado, recog_prendas, etc.) |
 

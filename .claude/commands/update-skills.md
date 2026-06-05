@@ -40,7 +40,7 @@ Anything non-obvious, common failure modes, or follow-up actions.
 3. Keep the skill focused on one workflow — no omnibus skills
 4. Register it in two places:
    - `docs/INDEX.md` — Skills table
-   - `docs/AI_agent_instructions.md` — Skills section
+   - `docs/ai_agent_instructions.md` — Skills section
 5. Log the creation in `docs/progress_tracker.md`
 
 ## Updating an existing skill

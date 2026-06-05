@@ -1,6 +1,6 @@
 # Architecture — La Ideal
 
-> Agent quick-start: `docs/AI_agent_instructions.md` | Find anything: `docs/INDEX.md`
+> Agent quick-start: `docs/ai_agent_instructions.md` | Find anything: `docs/INDEX.md`
 
 ## Module Overview
 

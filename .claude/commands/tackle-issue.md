@@ -45,7 +45,7 @@ Always update these, in order:
 - **`docs/README.md`** if new doc files were added.
 - **`README.md`** if it requires any update.
 
-Do NOT update `docs/AI_agent_instructions.md` unless the fix changes the agent's onboarding picture (critical-issues table, file map, agent rules).
+Do NOT update `docs/ai_agent_instructions.md` unless the fix changes the agent's onboarding picture (critical-issues table, file map, agent rules).
 
 Skip updates that have nothing to do with the fix. Don't pad the diff.
 
