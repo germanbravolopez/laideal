@@ -198,14 +198,13 @@ From any PowerShell prompt in the repo root (after `CMakeLists.txt` has been bum
 .\releases\release.ps1 X.Y
 ```
 
-(or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a zip/installer for that version already exists.
+(or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a staging dir for that version already exists.
 
-Artifacts:
+Artifact:
 
-- `releases\old_releases\X.Y.zip` - portable build (exe + Qt runtime)
-- `releases\setup_outputs\laideal_setup_X.Y.exe` - Inno Setup installer
+- `build-release\laideal_setup_X.Y.exe` - Inno Setup installer (the only artifact; `build-release\` is gitignored and wiped on each run, so nothing accumulates in `releases\`)
 
-When using this local fallback, attach these manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what the `ci.yml` release job runs:
+When using this local fallback, attach it manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what the `ci.yml` release job runs:
 
 ```powershell
 $ver = 'X.Y'
@@ -220,8 +219,7 @@ $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\
 Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
 
 gh release create $ver `
-    releases/old_releases/$ver.zip `
-    releases/setup_outputs/laideal_setup_$ver.exe `
+    build-release/laideal_setup_$ver.exe `
     --title "Release $ver" `
     --notes-file $tmpNotes
 

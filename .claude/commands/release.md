@@ -13,7 +13,7 @@ The root `README.md` is the source of truth. If a step here ever drifts from the
 1. **Current branch is not `master`.** Releases are cut from a working branch (`develop` or `feature/...`) and merged into `master` — never committed straight to it. If on `master`, stop and ask the user which branch to release from.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
 3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
-4. **`releases_notes.txt` has an `X.Y` section.** The `ci.yml` release job now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (Local-artifact files `releases\old_releases\X.Y.zip` / `setup_outputs\laideal_setup_X.Y.exe` only matter for the local fallback in step 8b — CI builds fresh on a runner.)
+4. **`releases_notes.txt` has an `X.Y` section.** The `ci.yml` release job now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (The local-artifact file `build-release\laideal_setup_X.Y.exe` only matters for the local fallback in step 8b — CI builds fresh on a runner.)
 5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404. (The workflow can replace an existing release, but for a clean cut both should be absent.)
 
 If any precondition fails, stop and surface the problem — don't try to "fix it up" without asking.
@@ -148,7 +148,7 @@ On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, t
 If GitHub Actions can't run, build and publish locally from the tagged `master` commit. This is exactly what the workflow automates:
 
 ```powershell
-.\releases\release.ps1 X.Y   # configure -> build -> windeployqt -> zip -> Inno Setup, into build-release\
+.\releases\release.ps1 X.Y   # configure -> build -> windeployqt -> Inno Setup installer, into build-release\
 
 $ver = 'X.Y'
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
@@ -158,8 +158,7 @@ if (-not $m.Success) { throw "No section for $ver found in releases_notes.txt" }
 Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
 
 gh release create $ver `
-    releases/old_releases/$ver.zip `
-    releases/setup_outputs/laideal_setup_$ver.exe `
+    build-release/laideal_setup_$ver.exe `
     --title "Release $ver" `
     --notes-file $tmpNotes
 

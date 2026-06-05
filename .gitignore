@@ -1,10 +1,9 @@
 # This file is used to ignore files which are generated
 # ----------------------------------------------------------------------------
-# release files
-releases/old_releases
-releases/setup_outputs
+# release staging dirs (releases/<version>/, deleted by release.ps1 anyway)
+releases/[0-9]*/
 
-# build files
+# build files (installer is emitted into build-release/ by release.ps1)
 build*
 
 # temporary or log files

@@ -32,6 +32,8 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 LicenseFile=..\License.txt
 InfoBeforeFile=..\releases_notes.txt
+; Default output dir; the manual release.ps1 overrides this with ISCC /O so its
+; installer lands in build-release\ (gitignored) instead of inside releases\.
 OutputDir=setup_outputs
 OutputBaseFilename=laideal_setup_{#MyAppVersion}
 SetupIconFile=..\icon\lavadora.ico

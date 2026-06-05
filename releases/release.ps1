@@ -10,9 +10,12 @@
 #   4. Configures CMake (Release, MinGW Makefiles) into build-release/.
 #   5. Builds with all available cores.
 #   6. Stages laideal.exe into releases/<version>/ and runs windeployqt.
-#   7. Zips the staging dir into releases/old_releases/<version>.zip.
-#   8. Runs Inno Setup ISCC.exe -> releases/setup_outputs/laideal_setup_<version>.exe.
-#   9. Deletes the staging dir; leaves the zip and installer in place.
+#   7. Runs Inno Setup ISCC.exe -> build-release/laideal_setup_<version>.exe.
+#   8. Deletes the staging dir; leaves the installer in build-release/.
+#
+# The installer is written into build-release/ (gitignored, wiped on each run)
+# rather than into a tracked releases/ subfolder, so the manual release flow
+# never accumulates artifacts inside the repo's releases/ directory.
 
 [CmdletBinding()]
 param(
@@ -26,10 +29,7 @@ $ReleasesDir       = $PSScriptRoot
 $RepoRoot          = Split-Path -Parent $ReleasesDir
 $BuildDir          = Join-Path $RepoRoot 'build-release'
 $StagingDir        = Join-Path $ReleasesDir $Version
-$OldReleasesDir    = Join-Path $ReleasesDir 'old_releases'
-$SetupOutputsDir   = Join-Path $ReleasesDir 'setup_outputs'
-$ZipPath           = Join-Path $OldReleasesDir "$Version.zip"
-$InstallerPath     = Join-Path $SetupOutputsDir "laideal_setup_$Version.exe"
+$InstallerPath     = Join-Path $BuildDir "laideal_setup_$Version.exe"
 $IssFile           = Join-Path $ReleasesDir 'laideal.iss'
 
 $QtBinDir          = 'C:\Qt\6.4.3\mingw_64\bin'
@@ -76,9 +76,7 @@ if ($cmakeVersion -ne $Version) {
     Fail "Version mismatch: CMakeLists.txt has '$cmakeVersion', you passed '$Version'. Update CMakeLists.txt first."
 }
 
-foreach ($p in @($StagingDir, $ZipPath, $InstallerPath)) {
-    if (Test-Path $p) { Fail "Already exists - delete first: $p" }
-}
+if (Test-Path $StagingDir) { Fail "Already exists - delete first: $StagingDir" }
 
 if (Test-Path $BuildDir) {
     Step "Cleaning build dir $BuildDir"
@@ -110,14 +108,10 @@ $stagedExe = Join-Path $StagingDir 'laideal.exe'
 & windeployqt --no-translations --no-system-d3d-compiler $stagedExe
 if ($LASTEXITCODE -ne 0) { Fail "windeployqt failed" }
 
-Step "Creating zip $ZipPath"
-New-Item -ItemType Directory -Path $OldReleasesDir -Force | Out-Null
-Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-[IO.Compression.ZipFile]::CreateFromDirectory($StagingDir, $ZipPath)
-
 Step "Compiling installer (Inno Setup)"
-New-Item -ItemType Directory -Path $SetupOutputsDir -Force | Out-Null
-& $InnoSetupCompiler "/DMyAppVersion=$Version" $IssFile
+# /O overrides the .iss OutputDir so the installer lands in build-release\ (wiped
+# each run, gitignored) instead of accumulating inside releases\.
+& $InnoSetupCompiler "/DMyAppVersion=$Version" "/O$BuildDir" $IssFile
 if ($LASTEXITCODE -ne 0) { Fail "Inno Setup compile failed" }
 if (-not (Test-Path $InstallerPath)) { Fail "Installer not produced at $InstallerPath" }
 
@@ -126,5 +120,4 @@ Remove-Item -Recurse -Force $StagingDir
 
 Write-Host ""
 Write-Host "Release v$Version ready:" -ForegroundColor Green
-Write-Host "  Zip:       $ZipPath"
 Write-Host "  Installer: $InstallerPath"
