@@ -1,0 +1,104 @@
+site_name: La Ideal — Documentation
+site_description: Developer and agent documentation for the La Ideal tintorería application.
+site_url: https://germanbravolopez.github.io/laideal/
+
+repo_name: germanbravolopez/laideal
+repo_url: https://github.com/germanbravolopez/laideal
+edit_uri: edit/master/docs/
+
+# The docs/ tree is the source. Build output goes to site/ (gitignored); the CI
+# workflow overrides this with --site-dir _site for upload-pages-artifact.
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  palette:
+    # Light / dark toggle
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+
+# Many docs link out to the C++ sources under src/ and to root-level files
+# (releases_notes.txt, .claude/...). Those live outside docs_dir, so MkDocs
+# cannot resolve them. Classify such links as warnings, not errors, so a plain
+# `mkdocs build` (non-strict) stays green while still surfacing real mistakes.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: README.md
+  - Agent instructions: ai_agent_instructions.md
+  - Architecture: architecture.md
+  - Progress tracker: progress_tracker.md
+  - Index: INDEX.md
+  - Coding guidelines audit: coding_guidelines_audit.md
+  - Dead code report: dead_code_report.md
+  - Modules:
+      - MainWindow: modules/mainwindow.md
+      - SQLite API: modules/sql_lite.md
+      - Listado: modules/listado.md
+      - Recoger prendas: modules/recog_prendas.md
+      - Facturas: modules/facturas.md
+      - Contabilidad: modules/contabilidad.md
+      - Imprimir: modules/imprimir.md
+      - Printing (ESC/POS core): modules/printing.md
+      - Add garment: modules/add_garment.md
+      - Backup: modules/backup.md
+      - Printer dossier:
+          - Overview: modules/printer/README.md
+          - Model & specs: modules/printer/01_printer_model_and_specs.md
+          - Control methods: modules/printer/02_control_methods.md
+          - ESC/POS command reference: modules/printer/03_escpos_command_reference.md
+          - Current printing flow: modules/printer/04_current_printing_flow.md
+          - Implementation plan: modules/printer/05_implementation_plan.md
+      - Verifactu:
+          - Overview: modules/verifactu/README.md
+          - REST API reference: modules/verifactu/rest_api.md
+          - Legal requirements: modules/verifactu/verifactu-requirements.md

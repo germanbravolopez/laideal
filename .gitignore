@@ -22,3 +22,7 @@ build*
 
 # local settings
 .claude/settings.local.json
+
+# MkDocs documentation site build output (see mkdocs.yml / .github/workflows/docs.yml)
+site/
+_site/
