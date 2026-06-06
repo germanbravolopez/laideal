@@ -1,0 +1,26 @@
+# This project is C++ (Qt + MinGW + CMake). This file exists only to declare the
+# Python tooling needed to build the documentation site (MkDocs Material). The
+# "docs" optional-dependency group is what CI and contributors install:
+#
+#     pip install ".[docs]"
+#     mkdocs serve     # local preview at http://127.0.0.1:8000
+#     mkdocs build     # render the static site into ./site
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "laideal-docs"
+version = "0"
+description = "Documentation site tooling for the La Ideal application."
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+docs = [
+  "mkdocs-material",
+]
+
+# No Python package is shipped — this declares tooling only, so tell setuptools
+# there are no modules to discover (otherwise it errors on a flat layout).
+[tool.setuptools]
+py-modules = []

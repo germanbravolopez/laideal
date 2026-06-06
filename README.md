@@ -92,7 +92,16 @@ The application icon is embedded in the executable (Windows resource + Qt resour
 
 ## Documentation
 
-Full technical documentation lives in [`docs/`](./docs/README.md).
+Full technical documentation lives in [`docs/`](./docs/README.md), and is also published as a
+searchable site at <https://germanbravolopez.github.io/laideal/> (MkDocs Material → GitHub Pages,
+deployed by [`.github/workflows/docs.yml`](./.github/workflows/docs.yml) on push to `master`).
+
+To preview the site locally:
+
+```powershell
+pip install ".[docs]"
+mkdocs serve   # http://127.0.0.1:8000
+```
 
 | Document | Description |
 |----------|-------------|
