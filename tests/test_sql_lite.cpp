@@ -513,6 +513,31 @@ private slots:
         QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='saveHash'").isEmpty());
     }
 
+    // Issue #41: a garment added to an existing ticket via AddGarment must also be
+    // booked PENDIENTE (never blank) so the estado column is consistent and the
+    // pending-submit recovery can see it. AddGarment now routes through the same
+    // insertGarmentRow seam with verifactuEstado=PENDIENTE.
+    void test_insertGarmentRow_addGarmentShapePending()
+    {
+        IngresoGarmentRow row;
+        row.nRecibo         = "30877";      // existing ticket the garment is added to
+        row.cliente         = "Salvador";
+        row.fechaRecepcion  = "01-07-2026";
+        row.fechaPago       = "";           // added unpaid
+        row.fechaRecogida   = "";
+        row.importe         = "11.00";
+        row.pagado          = "NO";
+        row.estado          = "En tienda";
+        row.cantidad        = "1";
+        row.prenda          = "Manta";
+        row.hash            = "addGarmentHash";
+        row.verifactuEstado = "PENDIENTE";
+
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='addGarmentHash'"),
+                 QStringLiteral("PENDIENTE"));
+    }
+
     // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
     // row, empty when the ticket has no rows.
     void test_ticketVerifactuEstado()

@@ -18,7 +18,7 @@ ui->show();
 1. User enters a receipt number and presses **Search** (`on_pb_search_pressed`).
 2. If the ticket exists, `fillContentFromDb()` populates client and reception date; `populateGarments()` fills the garment combobox from `prendas`.
 3. User selects garment, quantity, service, optional size, and optional payment info.
-4. On **Save**: `validateForm()` runs checks, then `saveFactura()` inserts a new row into `ingresos` with a fresh `genHash16()` hash.
+4. On **Save**: `validateForm()` runs checks, then `saveFactura()` inserts a new row into `ingresos` with a fresh `genHash16()` hash. The insert goes through the shared `sql_lite::insertGarmentRow` seam with `verifactu_estado = "PENDIENTE"` (like `MainWindow::saveTicket`) — a garment added to an existing ticket is un-submitted and consistent with the rest of the ticket (issue #41; the previous inline INSERT omitted `verifactu_estado`, leaving added garments blank).
 
 ## Validation
 
