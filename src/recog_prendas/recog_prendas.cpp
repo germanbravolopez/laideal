@@ -81,6 +81,14 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
     qDebug() << "RecogPrendas::updateDb:" << opNames[op]
              << "ticket=" << ticketNum << "hash=" << rowHash
              << "editLock=" << editLock << "nGarm=" << nGarm;
+    // A locally voided garment is immutable: block every write here too, not just
+    // via the disabled buttons, so no edit path can revive or charge it.
+    if (sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString()
+            == QLatin1String(INGRESOS_ESTADO_ANULADO)) {
+        qWarning() << "RecogPrendas::updateDb: blocked" << opNames[op]
+                   << "on anulado row, ticket" << ticketNum << "hash" << rowHash;
+        return;
+    }
     switch (op) {
     case PAY_YES:
         // If editLock payment info cannot be changed
@@ -209,18 +217,25 @@ void RecogPrendas::updateRowClickedToFields()
     ui->le_size->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString());
     ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString());
     ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_OBSERVACIONES)).toString());
+    const QString rowEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString();
+    // A locally voided garment (estado "Anulado") is read-only everywhere: it can
+    // never be paid, picked up, split or have its fields edited again.
+    const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
     ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI");
-    ui->pb_state->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString() == "Recogido");
+    ui->pb_state->setChecked(rowEstado == "Recogido");
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString(),"dd-MM-yyyy"));
     ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString(),"dd-MM-yyyy"));
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString(),"dd-MM-yyyy"));
     // pb_payment kept disabled - per-garment payment would submit a Verifactu invoice
     // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
-    ui->pb_state->setEnabled(true);
-    ui->pb_pay_all->setEnabled(true);
-    ui->pb_pku_all->setEnabled(true);
-    ui->pb_separ_garm->setEnabled(true);
+    ui->pb_state->setEnabled(!isAnulado);
+    ui->pb_pay_all->setEnabled(!isAnulado);
+    ui->pb_pku_all->setEnabled(!isAnulado);
+    ui->pb_separ_garm->setEnabled(!isAnulado);
     ui->pb_print->setEnabled(true);
+    ui->le_obsv->setReadOnly(isAnulado);
+    ui->le_size->setReadOnly(isAnulado);
+    ui->le_price->setReadOnly(isAnulado);
     QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
@@ -453,12 +468,9 @@ void RecogPrendas::selectSourceRow(int sourceRow, int sourceCol)
         isCellClicked = false;
     rowClickedCell = sourceRow;
     columnClickedCell = sourceCol;
+    // updateRowClickedToFields() sets the per-row button enables (respecting the
+    // Anulado read-only lock), so it is the single source of truth here.
     updateRowClickedToFields();
-    ui->pb_state->setEnabled(true);
-    ui->pb_pay_all->setEnabled(true);
-    ui->pb_pku_all->setEnabled(true);
-    ui->pb_separ_garm->setEnabled(true);
-    ui->pb_print->setEnabled(true);
     isCellClicked = true;
 }
 
@@ -510,22 +522,14 @@ void RecogPrendas::on_pb_pku_all_clicked()
     // model holding the entire table - so the loop marked every ticket in the
     // DB picked up. Same blast-radius pattern that was fixed for pay_all in +8.4;
     // close it here with the same scope: read the clicked row's n_recibo and
-    // run ONE UPDATE bounded to that ticket.
+    // run ONE UPDATE bounded to that ticket (markTicketPickedUp, which also
+    // excludes Anulado rows so a voided garment is never revived to Recogido).
     if (!isCellClicked) return;
     const QString ticketNum = sqlQueryModel->data(
         sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
     if (ticketNum.isEmpty()) return;
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
-              "WHERE n_recibo = :n");
-    q.bindValue(":fr", ui->de_date_pickup->date().toString("dd-MM-yyyy"));
-    q.bindValue(":n",  ticketNum);
-    if (!q.exec())
-        qWarning() << "on_pb_pku_all_clicked: UPDATE failed for ticket"
-                   << ticketNum << "-" << q.lastError().text();
-    db.close();
+    markTicketPickedUp(db, ticketNum, ui->de_date_pickup->date().toString("dd-MM-yyyy"));
 
     on_pb_search_clicked();
 }

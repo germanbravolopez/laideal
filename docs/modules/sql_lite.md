@@ -50,6 +50,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `genHash16()` | `QString` | Generate a 16-char alphanumeric deduplication hash |
 | `updateTicketPayment(db, nRecibo, hash, fechaPago, pagado)` | `bool` | RecogPrendas seam: set `fecha_pago` + `pagado` on the `(n_recibo, hash)` row (PAY_YES; PAY_NO passes empty `fechaPago`) |
 | `updateTicketPickup(db, nRecibo, hash, fechaRecogida, estado)` | `bool` | RecogPrendas seam: set `fecha_recogida` + `estado` (PKU_YES; PKU_NO passes empty `fechaRecogida`) |
+| `markTicketPickedUp(db, nRecibo, fechaRecogida)` | `bool` | "Recoger todo" seam: one `UPDATE ... SET estado='Recogido'` over the whole ticket, with `AND estado != 'Anulado'` so a voided garment is never revived to Recogido |
 | `updateTicketObservations(db, nRecibo, hash, observaciones)` | `bool` | RecogPrendas seam: set `observaciones` (OBSV) |
 | `updateTicketSizeAndPrice(db, nRecibo, hash, size, importe)` | `bool` | RecogPrendas seam: set `size` + `importe` (SIZE_AND_PRICE) |
 | `updateGarmentQtyAndImporte(db, nRecibo, hash, cantidad, importe)` | `bool` | RecogPrendas seam: set `cantidad` + `importe` on the reduced row (SEPARATE_GARM 1/2) |

@@ -550,6 +550,22 @@ private slots:
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
     }
+
+    // "Recoger todo" marks the whole ticket Recogido but must leave a voided
+    // (Anulado) garment untouched - a cancelled row is never revived.
+    void test_markTicketPickedUp_excludesAnulado()
+    {
+        insertRow("TP", "hA");                 // normal row (estado 'NO')
+        insertRow("TP", "hB");                 // will be voided below
+        QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
+
+        QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hA'"), QStringLiteral("10-04-2026"));
+        // The voided garment stays Anulado and gets no pickup date.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'").isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSqlLite)

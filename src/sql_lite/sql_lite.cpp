@@ -320,6 +320,25 @@ bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString 
     return ok;
 }
 
+bool markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString &fechaRecogida)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    // Anulado rows stay Anulado - a voided garment is never revived to Recogido.
+    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
+              "WHERE n_recibo = :n AND estado != :anulado");
+    q.bindValue(":fr",      fechaRecogida);
+    q.bindValue(":n",       nRecibo);
+    q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "markTicketPickedUp: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
 bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                               const QString &observaciones)
 {

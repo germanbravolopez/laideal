@@ -25,6 +25,8 @@ ui->show();
 
 `updateDb()` keeps the business rules (edit_lock guard, blocked-quarter check, the post-PAY_YES Verifactu-submit decision) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPayment` / `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` + `insertGarmentRow(IngresoGarmentRow)` for the split, and `ticketVerifactuEstado` for the pay-all dedup read-back — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
 
+A locally voided garment (`estado == "Anulado"`, set by `VoidGarmentsDialog`) is treated as **read-only** here: `updateRowClickedToFields()` disables `pb_state` / `pb_pay_all` / `pb_pku_all` / `pb_separ_garm` and read-onlys `le_obsv` / `le_size` / `le_price` for such a row, and `updateDb()` early-returns on an Anulado row as defense-in-depth so no write path can revive or charge it.
+
 ## Search
 
 Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Input is classified by content:
@@ -100,11 +102,12 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 | Button | Enabled when |
 |--------|-------------|
-| `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm`, `pb_print` | Any row is selected |
+| `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm` | A row is selected AND it is **not** `Anulado` (a voided garment is read-only) |
+| `pb_print` | A row is selected |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and re-enables the row-selection group (excluding `pb_payment`); `updateRowClickedToFields()` conditionally enables `pb_verifactu`.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and calls `updateRowClickedToFields()` — the single source of truth for the per-row button enables: it enables the row-selection group (excluding `pb_payment`, and excluding all edit buttons for an `Anulado` row) and conditionally enables `pb_verifactu`.
 
 ## Partial-payment dialog (8.5+)
 
@@ -125,5 +128,5 @@ Remaining unpaid rows of the same ticket stay unpaid; a later payment event pick
 
 - All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
 - Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
-- `pb_pay_all` opens `PayDialog` for the clicked ticket (single-ticket scope). `pb_pku_all` is likewise single-ticket scoped: it reads the clicked row's `n_recibo` and runs one `UPDATE ... WHERE n_recibo = :n` (no per-row loop over the model), so a name search no longer marks every ticket in the DB as Recogido.
+- `pb_pay_all` opens `PayDialog` for the clicked ticket (single-ticket scope); `PayDialog::loadTicket` skips `Anulado` rows so a voided garment can never be charged/submitted. `pb_pku_all` is likewise single-ticket scoped: it calls `sql_lite::markTicketPickedUp` which runs one `UPDATE ... WHERE n_recibo = :n AND estado != 'Anulado'` (no per-row loop over the model), so a name search no longer marks every ticket in the DB as Recogido and a voided garment is never revived.
 - Total price display (`le_total_price`) sums from the proxy model rows, not the raw SQL result, so it always reflects the filtered set.

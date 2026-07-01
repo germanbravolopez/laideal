@@ -45,7 +45,9 @@ build a copy, optionally print it, then build + print the next copy. A second
 
 1. Caller sets the flags and the ticket number, then `getTicketInfo()` loads all
    matching `ingresos` rows into `sqlQueryModel` (optionally scoped to a paid
-   `verifactu_invoice_seq` for partial-payment events).
+   `verifactu_invoice_seq` for partial-payment events). Both queries carry
+   `AND estado != 'Anulado'` so a locally voided garment never prints on a recibo
+   or factura.
 2. `buildTicket(copyForClient, addPayedInfo)` reads the model + `AppSettings` +
    the resolved QR into a `TicketData` and calls `TicketRenderer::render(data,
    paperDots())`. The result is cached in `m_ticketBytes`. `paperDots()` derives

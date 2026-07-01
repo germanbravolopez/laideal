@@ -70,6 +70,9 @@ bool        updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const 
 // PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
 bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                const QString &fechaRecogida, const QString &estado);
+// "Recoger todo": mark every garment of a ticket as Recogido in one UPDATE.
+// Anulado rows are excluded so a voided garment is never revived to Recogido.
+bool        markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString &fechaRecogida);
 // OBSV: set observaciones.
 bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &observaciones);
