@@ -10,6 +10,7 @@
 #include <QHash>
 #include "verifactuintegration.h"
 #include "cancelinvoicedialog.h"
+#include "voidgarmentsdialog.h"
 #include "rectifyinvoicedialog.h"
 #include "updater.h"
 #include "backup_manager.h"
@@ -94,6 +95,7 @@ private slots:
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
     void on_actionAnular_factura_verifactu_triggered();
+    void on_actionAnular_prendas_triggered();
     void on_actionRectificar_factura_verifactu_triggered();
     void on_actionExportar_registros_aeat_triggered();
     void on_actionMostrar_log_triggered();

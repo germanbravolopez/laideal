@@ -988,6 +988,15 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     dlg.exec();
 }
 
+// Local void of unpaid, not-delivered garments (erroneous receipt / change of
+// mind). No AEAT call - these rows were never submitted - so unlike the anular-
+// factura action it does not require Verifactu to be configured.
+void MainWindow::on_actionAnular_prendas_triggered()
+{
+    VoidGarmentsDialog dlg(db, this);
+    dlg.exec();
+}
+
 // Art. 8.2.a RD 1007/2023 - rectificativa (R1-R5) is one of the two legal
 // correction paths for an already-registered factura (the other is anulacion).
 void MainWindow::on_actionRectificar_factura_verifactu_triggered()

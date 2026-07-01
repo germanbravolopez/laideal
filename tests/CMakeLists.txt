@@ -31,6 +31,17 @@ target_link_libraries(test_mysortfilterproxymodel PRIVATE
 add_test(NAME mysortfilterproxymodel
     COMMAND test_mysortfilterproxymodel -o ${CMAKE_BINARY_DIR}/test-results-mysortfilterproxymodel.xml,junitxml -o -,txt)
 
+# tableview: TextColorDelegate::classify pure colour decision (incl. the issue
+# #40 rule that a voided "Anulado" row renders green).
+add_executable(test_textcolordelegate test_textcolordelegate.cpp)
+target_link_libraries(test_textcolordelegate PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    tableview
+)
+add_test(NAME textcolordelegate
+    COMMAND test_textcolordelegate -o ${CMAKE_BINARY_DIR}/test-results-textcolordelegate.xml,junitxml -o -,txt)
+
 # listado: GenListado pure helpers (filename suffix + row filter).
 add_executable(test_genlistado test_genlistado.cpp)
 target_link_libraries(test_genlistado PRIVATE

@@ -379,6 +379,32 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
     return ok;
 }
 
+bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado)
+{
+    if (pagado == QLatin1String("SI"))
+        return false;
+    return verifactuEstadoFromString(verifactuEstado) == VerifactuEstado::NotSubmitted;
+}
+
+bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":est",  QStringLiteral(INGRESOS_ESTADO_ANULADO));
+    q.bindValue(":vest", verifactuEstadoToString(VerifactuEstado::Anulada));
+    q.bindValue(":n",    nRecibo);
+    q.bindValue(":h",    hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "voidGarmentRow: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
 bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
     if (dbNotConfigured(db, __func__)) return false;

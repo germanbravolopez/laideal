@@ -521,6 +521,35 @@ private slots:
         insertRow("T1", "hashA", "10.00", "SI", "ENVIADA");
         QCOMPARE(ticketVerifactuEstado(m_db, "T1"), QStringLiteral("ENVIADA"));
     }
+
+    // --- VoidGarmentsDialog seams (issue #40) ----------------------------------
+    // A garment is voidable in place only when it was never sent to AEAT: unpaid
+    // and verifactu_estado PENDIENTE/empty. Paid or already-submitted rows must go
+    // through the AEAT anulacion (CancelInvoiceDialog) instead.
+    void test_garmentIsLocallyVoidable()
+    {
+        QVERIFY(garmentIsLocallyVoidable("NO", ""));           // legacy empty = NotSubmitted
+        QVERIFY(garmentIsLocallyVoidable("NO", "PENDIENTE"));
+        QVERIFY(!garmentIsLocallyVoidable("SI", "PENDIENTE")); // paid -> not local
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ENVIADA"));   // sent to AEAT
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ANULADA"));
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ERROR"));
+    }
+
+    void test_voidGarmentRow_setsAnuladoAndScopesByHash()
+    {
+        insertRow("T9", "hashA");            // pagado NO, verifactu_estado empty
+        insertRow("T9", "hashB");            // sibling, must stay untouched
+
+        QVERIFY(voidGarmentRow(m_db, "T9", "hashA"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("Anulado"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("ANULADA"));
+        // pagado is deliberately left as-is (the row is closed, not collected).
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+        // The sibling garment of the same ticket is keyed out by hash.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
+        QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSqlLite)

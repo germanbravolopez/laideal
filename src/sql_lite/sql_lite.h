@@ -80,6 +80,16 @@ bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, c
 bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                        const QString &cantidad, const QString &importe);
 
+// True when a garment row can be voided locally (VoidGarmentsDialog) instead of
+// via an AEAT anulacion: it must be unpaid (pagado != "SI") and never sent to
+// AEAT (verifactu_estado PENDIENTE/empty). A paid/ENVIADA row was registered at
+// AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
+bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
+// Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA".
+// pagado is left untouched (stays "NO"); the caller is expected to have gated the
+// row through garmentIsLocallyVoidable first.
+bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);
+
 // One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
 // (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).
 // `verifactuEstado` is the only verifactu_* column written; the rest start empty:

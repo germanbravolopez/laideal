@@ -1,28 +1,35 @@
 #include "textcolordelegate.h"
+#include "ingresos_schema.h"
 #include <QApplication>
 #include <QPainter>
 #include <QTableView>
 
 TextColorDelegate::TextColorDelegate(QTableView* tableView, QObject* parent) : QStyledItemDelegate(parent), m_tableView(tableView) {}
 
+TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText, const QString &rowEstado)
+{
+    if (rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO))
+        return TextColor::Green;
+    if (cellText == "SI" || cellText == "Recogido")
+        return TextColor::Green;
+    if (cellText == "NO" || cellText == "En tienda")
+        return TextColor::Red;
+    return TextColor::Default;
+}
+
 void TextColorDelegate::initStyleOption(QStyleOptionViewItem* option, const QModelIndex& index) const {
     QStyledItemDelegate::initStyleOption(option, index);
 
-    // Get the text of the cell
-    QString text = index.data().toString();
+    const QString text      = index.data().toString();
+    const QString rowEstado = index.sibling(index.row(), INGRESOS_COL_ESTADO).data().toString();
 
-    // Set the color based on the text
     QColor textColor;
-    if (text == "SI" || text == "Recogido") {
-        textColor = QColor(0, 180, 0); // Darker green
-    } else if (text == "NO" || text == "En tienda") {
-        textColor = QColor(210, 0, 0); // Darker red
-    } else {
-        // Use the default text color for other values
-        textColor = option->palette.text().color();
+    switch (classify(text, rowEstado)) {
+    case TextColor::Green:   textColor = QColor(0, 180, 0);  break; // Darker green
+    case TextColor::Red:     textColor = QColor(210, 0, 0);  break; // Darker red
+    case TextColor::Default: textColor = option->palette.text().color(); break;
     }
 
-    // Set the text color
     option->palette.setColor(QPalette::Text, textColor);
 }
 
