@@ -86,6 +86,10 @@ BackupManager::Result BackupManager::performBackup()
 
     // Step 1: VACUUM INTO produces a transactionally-consistent point-in-time
     // copy without requiring exclusive access on the live DB.
+    // Do the work in an inner block so the QSqlDatabase + QSqlQuery are out of
+    // scope before removeDatabase() below - otherwise Qt warns the connection is
+    // still in use (same reason as the Step 2 verify block).
+    bool snapshotOk = false;
     {
         QSqlDatabase snap = QSqlDatabase::addDatabase("QSQLITE", kSnapshotConnectionName);
         snap.setDatabaseName(sourcePath);
@@ -93,29 +97,35 @@ BackupManager::Result BackupManager::performBackup()
             res.errorMessage = tr("No se pudo abrir la base de datos para copia: %1")
                                    .arg(snap.lastError().text());
             qWarning() << "BackupManager: open(snapshot) failed -" << snap.lastError().text();
-            QSqlDatabase::removeDatabase(kSnapshotConnectionName);
-            return res;
-        }
-        QSqlQuery q(snap);
-        // VACUUM INTO path is a string literal in SQLite syntax (cannot bind);
-        // escape single quotes by doubling them.
-        QString escaped = target;
-        escaped.replace("'", "''");
-        if (!q.exec(QString("VACUUM INTO '%1'").arg(escaped))) {
-            res.errorMessage = tr("No se pudo crear la copia: %1").arg(q.lastError().text());
-            qWarning() << "BackupManager: VACUUM INTO failed -" << q.lastError().text();
+        } else {
+            QSqlQuery q(snap);
+            // VACUUM INTO path is a string literal in SQLite syntax (cannot bind);
+            // escape single quotes by doubling them.
+            QString escaped = target;
+            escaped.replace("'", "''");
+            if (!q.exec(QString("VACUUM INTO '%1'").arg(escaped))) {
+                res.errorMessage = tr("No se pudo crear la copia: %1").arg(q.lastError().text());
+                qWarning() << "BackupManager: VACUUM INTO failed -" << q.lastError().text();
+            } else {
+                snapshotOk = true;
+            }
             snap.close();
-            QSqlDatabase::removeDatabase(kSnapshotConnectionName);
-            QFile::remove(target);
-            return res;
         }
-        snap.close();
     }
     QSqlDatabase::removeDatabase(kSnapshotConnectionName);
+    if (!snapshotOk) {
+        QFile::remove(target);
+        return res;
+    }
 
     // Step 2: open the copy read-only and run PRAGMA integrity_check. SQLite's
     // own check is the canonical way to certify a backup file before counting
     // it toward the retention window.
+    // The QSqlDatabase and its QSqlQuery must both be out of scope before
+    // removeDatabase(), or Qt warns "connection is still in use" on every backup.
+    // So do all the work in this inner block, capture the outcome, and remove the
+    // connection afterwards (mirrors the Step 1 snapshot pattern above).
+    bool verifyOk = false;
     {
         QSqlDatabase ver = QSqlDatabase::addDatabase("QSQLITE", kVerifyConnectionName);
         ver.setDatabaseName(target);
@@ -123,30 +133,29 @@ BackupManager::Result BackupManager::performBackup()
         if (!ver.open()) {
             res.errorMessage = tr("No se pudo verificar la copia: %1").arg(ver.lastError().text());
             qWarning() << "BackupManager: open(verify) failed -" << ver.lastError().text();
-            QSqlDatabase::removeDatabase(kVerifyConnectionName);
-            QFile::remove(target);
-            return res;
-        }
-        QSqlQuery q(ver);
-        if (!q.exec("PRAGMA integrity_check") || !q.next()) {
-            res.errorMessage = tr("Fallo al verificar la copia: %1")
-                                   .arg(errorIfNotOk(q, "integrity_check"));
-            qWarning() << "BackupManager: integrity_check exec failed -" << q.lastError().text();
+        } else {
+            QSqlQuery q(ver);
+            if (!q.exec("PRAGMA integrity_check") || !q.next()) {
+                res.errorMessage = tr("Fallo al verificar la copia: %1")
+                                       .arg(errorIfNotOk(q, "integrity_check"));
+                qWarning() << "BackupManager: integrity_check exec failed -" << q.lastError().text();
+            } else {
+                const QString verdict = q.value(0).toString();
+                if (verdict == "ok") {
+                    verifyOk = true;
+                } else {
+                    res.errorMessage = tr("La copia parece estar corrupta (PRAGMA integrity_check: %1).")
+                                           .arg(verdict);
+                    qWarning() << "BackupManager: integrity_check verdict =" << verdict;
+                }
+            }
             ver.close();
-            QSqlDatabase::removeDatabase(kVerifyConnectionName);
-            QFile::remove(target);
-            return res;
         }
-        const QString verdict = q.value(0).toString();
-        ver.close();
-        QSqlDatabase::removeDatabase(kVerifyConnectionName);
-        if (verdict != "ok") {
-            res.errorMessage = tr("La copia parece estar corrupta (PRAGMA integrity_check: %1).")
-                                   .arg(verdict);
-            qWarning() << "BackupManager: integrity_check verdict =" << verdict;
-            QFile::remove(target);
-            return res;
-        }
+    }
+    QSqlDatabase::removeDatabase(kVerifyConnectionName);
+    if (!verifyOk) {
+        QFile::remove(target);
+        return res;
     }
 
     res.success      = true;
