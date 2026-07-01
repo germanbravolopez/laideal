@@ -178,12 +178,17 @@ void VoidGarmentsDialog::onVoidSelectedClicked()
         return;
     }
 
-    const auto resp = QMessageBox::question(
-        this, tr("Anular prendas"),
+    // Build the box manually so the buttons read "Sí"/"No" - the standard
+    // QMessageBox::Yes/No render Qt's built-in English text.
+    QMessageBox box(QMessageBox::Question, tr("Anular prendas"),
         tr("¿Anular %1 prenda(s) del ticket %2? Esta acción no se puede deshacer.")
             .arg(rowsToVoid.size()).arg(m_loadedTicket),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (resp != QMessageBox::Yes) return;
+        QMessageBox::NoButton, this);
+    QPushButton *btnYes = box.addButton(tr("Sí"), QMessageBox::YesRole);
+    QPushButton *btnNo  = box.addButton(tr("No"), QMessageBox::NoRole);
+    box.setDefaultButton(btnNo);
+    box.exec();
+    if (box.clickedButton() != btnYes) return;
 
     int voided = 0;
     for (int row : rowsToVoid) {
