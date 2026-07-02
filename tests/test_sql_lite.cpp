@@ -598,6 +598,11 @@ private slots:
         insertRow("TP", "hA");                 // normal row (estado 'NO')
         insertRow("TP", "hB");                 // will be voided below
         QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
+        // Legacy row with a NULL estado must still be picked up (the != 'Anulado'
+        // filter is NULL-guarded; SQLite treats NULL != x as NULL, i.e. excluded).
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, importe, pagado, "
+             "estado, cantidad, prenda, hash) "
+             "VALUES ('TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
 
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
@@ -605,6 +610,9 @@ private slots:
         // The voided garment stays Anulado and gets no pickup date.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
         QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'").isEmpty());
+        // The NULL-estado legacy row is picked up like any normal row.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
     }
 };
 

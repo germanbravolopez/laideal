@@ -62,7 +62,9 @@ void Imprimir::getTicketInfo()
     QSqlQuery q(db);
     // Anulado rows (locally voided garments) never appear on a printed recibo or
     // factura. The factura branch already filters pagado='SI' (Anulado is unpaid),
-    // but exclude it explicitly on both paths so the rule is unambiguous.
+    // but exclude it explicitly on both paths so the rule is unambiguous. The
+    // (estado IS NULL OR ...) guard keeps legacy NULL-estado rows on the ticket -
+    // SQLite treats `NULL != 'Anulado'` as NULL (excluded), not true.
     if (invoiceSeq >= 0) {
         // verifactu_invoice_seq DEFAULTs to 0 on every row, so a seq filter
         // alone would also match unpaid rows of the same ticket. Restrict
@@ -70,13 +72,13 @@ void Imprimir::getTicketInfo()
         // garments (e.g. PayDialog event 0 under disabled Verifactu).
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
                   "AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
-                  "AND estado != :anulado");
+                  "AND (estado IS NULL OR estado != :anulado)");
         q.bindValue(":n_recibo", le_n_ticket->text());
         q.bindValue(":seq", invoiceSeq);
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     } else {
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
-                  "AND estado != :anulado");
+                  "AND (estado IS NULL OR estado != :anulado)");
         q.bindValue(":n_recibo", le_n_ticket->text());
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     }

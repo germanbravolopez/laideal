@@ -327,8 +327,10 @@ bool markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString 
     db.open();
     QSqlQuery q(db);
     // Anulado rows stay Anulado - a voided garment is never revived to Recogido.
+    // (estado IS NULL OR ...) so legacy rows with a NULL estado are still picked
+    // up - SQLite treats `NULL != 'Anulado'` as NULL (excluded), not true.
     q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
-              "WHERE n_recibo = :n AND estado != :anulado");
+              "WHERE n_recibo = :n AND (estado IS NULL OR estado != :anulado)");
     q.bindValue(":fr",      fechaRecogida);
     q.bindValue(":n",       nRecibo);
     q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
