@@ -348,6 +348,9 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
 
     db.open();
     QSqlQuery q(db);
+    // Deliberately a custom INSERT, not sql_lite::insertGarmentRow: a rectificativa
+    // row writes the full verifactu_* set (csv/timestamp/error/url_qr/xml/hash +
+    // rectifies_n_recibo/rectification_type) that IngresoGarmentRow does not carry.
     q.prepare(
         "INSERT INTO ingresos "
         "(n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
