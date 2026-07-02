@@ -648,10 +648,10 @@ prenda</string>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionAnadir_nuevas_prendas"/>
+    <addaction name="actionAnular_prendas"/>
     <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="actionAnular_factura_verifactu"/>
-    <addaction name="actionAnular_prendas"/>
     <addaction name="actionRectificar_factura_verifactu"/>
     <addaction name="actionExportar_registros_aeat"/>
     <addaction name="separator"/>
