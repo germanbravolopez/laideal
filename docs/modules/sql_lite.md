@@ -58,6 +58,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `ticketVerifactuEstado(db, nRecibo)` | `QString` | `verifactu_estado` of the ticket's first row (empty if none). Read by the PAY_YES pay-all dedup after a payment write |
 | `garmentIsLocallyVoidable(pagado, verifactuEstado)` | `bool` | Pure guard for VoidGarmentsDialog: true only when a row is unpaid (`pagado != "SI"`) AND never sent to AEAT (`verifactu_estado` PENDIENTE/empty). A paid/ENVIADA row was registered at AEAT and must be cancelled via CancelInvoiceDialog instead |
 | `voidGarmentRow(db, nRecibo, hash)` | `bool` | VoidGarmentsDialog seam: void one garment in place — `UPDATE ingresos SET estado='Anulado', verifactu_estado='ANULADA'` keyed by `(n_recibo, hash)`. `pagado` is left untouched. Caller gates the row through `garmentIsLocallyVoidable` first |
+| `ticketHasPaidGarment(db, nRecibo)` | `bool` | True if the ticket has any `pagado='SI'` row. AddGarment uses it to refuse appending garments to a paid (already AEAT-submitted) ticket |
 
 ## Usage pattern
 

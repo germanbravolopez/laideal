@@ -15,7 +15,7 @@ ui->show();
 
 ## Workflow
 
-1. User enters a receipt number and presses **Search** (`on_pb_search_pressed`).
+1. User enters a receipt number and presses **Search** (`on_pb_search_pressed`). If the ticket already has a **paid** garment (`sql_lite::ticketHasPaidGarment`), the search is refused with a message: a paid ticket has been submitted to AEAT, so only unpaid (not-yet-submitted) receipts may have garments appended locally.
 2. If the ticket exists, `fillContentFromDb()` populates client and reception date; `populateGarments()` fills the garment combobox from `prendas`.
 3. User selects garment, quantity, service, optional size, and optional payment info.
 4. On **Save**: `validateForm()` runs checks, then `saveFactura()` inserts a new row into `ingresos` with a fresh `genHash16()` hash. The insert goes through the shared `sql_lite::insertGarmentRow` seam with `verifactu_estado = "PENDIENTE"` (like `MainWindow::saveTicket`) — a garment added to an existing ticket is un-submitted and consistent with the rest of the ticket (issue #41; the previous inline INSERT omitted `verifactu_estado`, leaving added garments blank).

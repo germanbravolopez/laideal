@@ -92,6 +92,10 @@ bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verif
 // pagado is left untouched (stays "NO"); the caller is expected to have gated the
 // row through garmentIsLocallyVoidable first.
 bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);
+// True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
+// has been submitted to AEAT, so AddGarment refuses to append new garments to it
+// (only unpaid, not-yet-submitted receipts may be altered locally).
+bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
 
 // One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
 // (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).

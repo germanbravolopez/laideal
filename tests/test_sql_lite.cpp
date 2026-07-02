@@ -538,6 +538,21 @@ private slots:
                  QStringLiteral("PENDIENTE"));
     }
 
+    // AddGarment gate: garments may only be appended to an unpaid ticket (a paid
+    // one has already been submitted to AEAT).
+    void test_ticketHasPaidGarment()
+    {
+        insertRow("UNP", "u1");                       // pagado NO
+        insertRow("UNP", "u2");                       // pagado NO
+        QVERIFY(!ticketHasPaidGarment(m_db, "UNP"));  // fully unpaid -> addable
+
+        insertRow("PAR", "p1");                       // pagado NO
+        insertRow("PAR", "p2", "10.00", "SI");        // one paid row
+        QVERIFY(ticketHasPaidGarment(m_db, "PAR"));   // any paid row -> blocked
+
+        QVERIFY(!ticketHasPaidGarment(m_db, "NOPE")); // unknown ticket
+    }
+
     // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
     // row, empty when the ticket has no rows.
     void test_ticketVerifactuEstado()

@@ -56,6 +56,17 @@ void AddGarment::on_pb_search_pressed()
     db.close();
     // check if not empty
     if (sqlQueryModel->rowCount() > 0) {
+        // A paid ticket has already been submitted to AEAT; only unpaid receipts
+        // (not yet submitted) may be altered locally by adding garments.
+        if (ticketHasPaidGarment(db, ui->le_n_recibo->text())) {
+            ticketFound = false;
+            QMessageBox::warning(this, "Añadir prenda",
+                                 "El recibo Nº " + ui->le_n_recibo->text() + " ya tiene prendas "
+                                 "pagadas (enviado a la AEAT).\nNo se pueden añadir prendas a un "
+                                 "recibo pagado; utiliza un recibo nuevo.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+            return;
+        }
         ticketFound = true;
         fillContentFromDb();
         populateGarments();

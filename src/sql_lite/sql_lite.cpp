@@ -424,6 +424,19 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
     return ok;
 }
 
+bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
+    q.bindValue(":n", nRecibo);
+    const bool paid = q.exec() && q.first() && q.value(0).toInt() > 0;
+    db.close();
+    return paid;
+}
+
 bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
     if (dbNotConfigured(db, __func__)) return false;
