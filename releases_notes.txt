@@ -1,5 +1,15 @@
 Releases:
 
+10.2
+- New: cancel garments from a wrong receipt or a change of mind ("Anular prendas")
+  - A new option in Herramientas -> "Anular prendas (recibo erróneo)" lets you void unpaid garments that were entered by mistake or that the customer no longer wants. These garments were never sent to the AEAT, so nothing is submitted. A voided garment is marked "Anulado", shows in green, and can no longer be paid, picked up, printed or counted in the accounting.
+- New: choose the language of the standard dialogs (Spanish or English)
+  - Configuración now has an "Idioma" option that sets the language of the built-in dialog buttons (Sí/No, Aceptar/Cancelar, etc.). The change applies the next time you open the app. The default is Spanish.
+- Bug fix: garments added to an existing receipt now show the correct Verifactu status
+  - Garments added through "Añadir nuevas prendas" were left with an empty Verifactu status instead of "PENDIENTE"; they are now marked pending like the rest of the ticket.
+- Change: garments can only be added to unpaid receipts
+  - "Añadir nuevas prendas" now refuses a receipt that already has a paid garment, because a paid receipt has already been sent to the AEAT and must not be altered afterwards. Use a new receipt instead.
+
 10.1
 - Improvement: clearer printed receipts and invoices
   - More space between the "Uds." (quantity) and "Prendas" (item) columns, the "Condiciones generales" text is now more compact, and the Verifactu QR is printed closer to the text above it instead of leaving a large gap.

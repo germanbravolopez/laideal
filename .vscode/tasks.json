@@ -39,7 +39,8 @@
             "problemMatcher": [
                 "$gcc"
             ],
-            "//": "If the Debug build dir does not exist yet, configure first."
+            "//": "Configure first so a fresh clone / wiped build-debug self-heals. CMake no-ops an already-valid cache, so this is free on repeat runs.",
+            "dependsOn": "CMake: configure (Debug)"
         }
     ]
 }

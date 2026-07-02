@@ -70,6 +70,9 @@ bool        updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const 
 // PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
 bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                const QString &fechaRecogida, const QString &estado);
+// "Recoger todo": mark every garment of a ticket as Recogido in one UPDATE.
+// Anulado rows are excluded so a voided garment is never revived to Recogido.
+bool        markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString &fechaRecogida);
 // OBSV: set observaciones.
 bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &observaciones);
@@ -79,6 +82,20 @@ bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, c
 // SEPARATE_GARM (1/2): set cantidad + importe on the row being reduced.
 bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                        const QString &cantidad, const QString &importe);
+
+// True when a garment row can be voided locally (VoidGarmentsDialog) instead of
+// via an AEAT anulacion: it must be unpaid (pagado != "SI") and never sent to
+// AEAT (verifactu_estado PENDIENTE/empty). A paid/ENVIADA row was registered at
+// AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
+bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
+// Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA".
+// pagado is left untouched (stays "NO"); the caller is expected to have gated the
+// row through garmentIsLocallyVoidable first.
+bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);
+// True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
+// has been submitted to AEAT, so AddGarment refuses to append new garments to it
+// (only unpaid, not-yet-submitted receipts may be altered locally).
+bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
 
 // One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
 // (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).

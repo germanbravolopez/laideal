@@ -106,7 +106,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
-              "importe, observaciones, pagado, hash, edit_lock "
+              "importe, observaciones, pagado, hash, edit_lock, estado "
               "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
     q.bindValue(":n", ticketNum);
     if (!q.exec()) {
@@ -125,7 +125,11 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         }
         const QString pagado   = q.value(8).toString();
         const bool    editLock = q.value(10).toBool();
+        const QString estado   = q.value(11).toString();
         if (pagado == "SI") continue;
+        // A locally voided garment (estado "Anulado") is never chargeable - it
+        // must not enter the payable set or it could be submitted to AEAT.
+        if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
         // edit_lock=1 means the row's quarter has been closed by contabilidad
         // (`updateLockForMonth`). RecogPrendas::updateDb blocks PAY_YES under
         // the same condition; skip here so the locked row never enters the

@@ -63,7 +63,7 @@ Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OB
 Generic list-view window. Set `tableName` property at runtime to display any table.
 Used for: `ingresos`, `gastos`, `prendas`, `clientes`, `proveedores`, `servicios`.
 Features: add row, delete row, text filter (`FilterWidget`), PDF export.
-Inline cell editing is disabled for `ingresos` (Verifactu Req. 1, Art. 8.1 RD 1007/2023): row deletion is blocked AND `setEditTriggers(NoEditTriggers)` so no column can be edited from the list view. All `ingresos` changes flow through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog so AEAT, the chained Huella and the accounting lock stay in sync.
+Inline cell editing is disabled for `ingresos` (Verifactu Req. 1, Art. 8.1 RD 1007/2023): row deletion is blocked AND `setEditTriggers(NoEditTriggers)` so no column can be edited from the list view. All `ingresos` changes flow through RecogPrendas / CancelInvoiceDialog / VoidGarmentsDialog / RectifyInvoiceDialog so AEAT, the chained Huella and the accounting lock stay in sync. (VoidGarmentsDialog only touches unpaid, never-submitted rows — a purely local void with no AEAT call.)
 Search is diacritic-insensitive: typing "garcia" matches "García" via `MySortFilterProxyModel::setNormalizedFilter`.
 Signals `populateClientes()` / `populatePrendas()` back to `MainWindow` after edits.
 
@@ -121,7 +121,7 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | `MySortFilterProxyModel` | `mysortfilterproxymodel.h/.cpp` | `QSortFilterProxyModel` subclass; checks all columns against filter regex; also supports diacritic-insensitive plain-text filter via `setNormalizedFilter(text, column)` and `removeDiacritics(text)` static helper |
 | `FilterWidget` | `filterwidget.h/.cpp` | `QLineEdit` with case-sensitivity toggle and pattern-syntax menu (Regex / Wildcard / Fixed) |
 | `NumberFormatDelegate` | `numberformatdelegate.h/.cpp` | `QStyledItemDelegate` that formats numeric cells to 2 decimal places |
-| `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red |
+| `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red. A voided row (its `estado` == "Anulado", read from the sibling `INGRESOS_COL_ESTADO`) renders green everywhere so a cancelled receipt's "NO" pagado no longer reads as a debt. The pure decision is the static `TextColorDelegate::classify(cellText, rowEstado)` |
 | `LinkDelegate` | `linkdelegate.h/.cpp` | `QStyledItemDelegate` that renders non-empty cells as blue underlined text; used for the `verifactu_url_qr` column in the Ingresos Listado |
 
 ### Updater (`src/updater/`)

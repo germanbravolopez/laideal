@@ -648,6 +648,7 @@ prenda</string>
     <addaction name="menuImprimir_ticket"/>
     <addaction name="actionRecogida_de_prendas"/>
     <addaction name="actionAnadir_nuevas_prendas"/>
+    <addaction name="actionAnular_prendas"/>
     <addaction name="separator"/>
     <addaction name="actionFormulario_facturas"/>
     <addaction name="actionAnular_factura_verifactu"/>
@@ -863,6 +864,14 @@ prenda</string>
    </property>
    <property name="toolTip">
     <string>Anular una factura previamente enviada a la AEAT a través de Verifactu</string>
+   </property>
+  </action>
+  <action name="actionAnular_prendas">
+   <property name="text">
+    <string>Anular prendas (recibo erróneo)...</string>
+   </property>
+   <property name="toolTip">
+    <string>Anular prendas no pagadas ni entregadas de un recibo erróneo o por cambio de opinión (sin envío a la AEAT)</string>
    </property>
   </action>
   <action name="actionRectificar_factura_verifactu">

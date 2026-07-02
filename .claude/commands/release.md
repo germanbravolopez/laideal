@@ -30,6 +30,7 @@ The working branch must be release-ready before the version-bump commit. Verify 
 - [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file to end users at install time; same file is reused for the GitHub release body in step 6). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
 - [ ] **`docs/progress_tracker.md`** — Current Status points at the new release; the milestone entry covers what shipped. Add a "previous release" pointer to the prior version.
 - [ ] **`docs/` and `README.md`** — run the `/update-docs` checklist mentally; if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
+- [ ] **Bundled Qt translation (only if Qt was upgraded since the last release)** — `resources/i18n/qtbase_es.qm` is copied from `C:\Qt\<version>\mingw_64\translations\qtbase_es.qm` and embedded in the exe (the release runs windeployqt `--no-translations`). If the Qt version bumped, refresh this file from the new Qt so the Spanish standard-dialog strings match the shipped Qt. If Qt is unchanged, no-op.
 
 ### 2. Commit the version bump
 
@@ -77,15 +78,17 @@ gh pr create --base master --head <working-branch> `
 
 Capture the PR number from `gh pr create`'s output (or `gh pr view --json number -q .number`) — step 5 needs it.
 
-### 5. Review the PR at high effort before merging (NEW)
+### 5. Review the PR before merging
 
-A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a high-effort review on the PR diff — not the default level. The diff of a release is usually wider than a single feature PR (the working branch may have accumulated weeks of changes), so the broader-coverage tiers are appropriate even though they may surface lower-confidence findings.
+A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a **medium**-effort review on the PR diff by default:
 
 ```
-/code-review high <PR#>
+/code-review medium <PR#>
 ```
 
-`high` widens coverage relative to the default `medium` while keeping the false-positive rate manageable — the right tradeoff for the release gate on a small solo project. `max` was tried for the 8.4 gate and produced too much volume for the gain over `high`; `max` / `ultra` (the cloud multi-agent variant) remain available if a particular release ever warrants a deeper sweep. Runs locally, not billed.
+`medium` is the default tradeoff for the release gate on this small solo project — high-confidence findings without the false-positive volume the broader tiers add. Escalate deliberately when a release warrants it: `high` widens coverage (weeks of accumulated changes on the working branch), and `max` / `ultra` (the cloud multi-agent variant) go deeper still. `max` was tried for the 8.4 gate and produced too much volume for the gain, so reserve it. Runs locally, not billed.
+
+**If the PR diff is too big to review as one unit** (a working branch that accumulated many commits across several features), review **commit by commit** instead of the whole diff — walk `git log master..<working-branch>` and run the review per logical commit (or per group of related commits). Smaller diffs keep the review focused and the findings attributable, and avoid overwhelming a single pass.
 
 **What to do with the findings**:
 - **Genuine bugs / regressions / release-blockers**: fix on the working branch, push, and the PR updates automatically. Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.

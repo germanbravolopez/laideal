@@ -72,6 +72,15 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     dbContainer->setLayout(dbLayout);
     fl->addRow(tr("Base de datos (.db):"), dbContainer);
 
+    m_language = new QComboBox;
+    m_language->addItem(tr("Español"), "es");
+    m_language->addItem(tr("English"), "en");
+    m_language->setCurrentIndex(s->language() == "en" ? 1 : 0);
+    m_language->setToolTip(tr(
+        "Idioma de los diálogos estándar de Qt (botones Sí/No, Aceptar/Cancelar, etc.). "
+        "Requiere reiniciar la aplicación para aplicar."));
+    fl->addRow(tr("Idioma:"), m_language);
+
     m_ivaRate = new QLineEdit(QString::number(s->ivaRate(), 'f', 1));
     m_ivaRate->setValidator(new QDoubleValidator(0.0, 100.0, 2, m_ivaRate));
     m_ivaRate->setFixedWidth(80);
@@ -220,6 +229,7 @@ void SettingsDialog::accept()
 {
     AppSettings *s = AppSettings::instance();
 
+    s->setLanguage(m_language->currentData().toString());
     s->setDbPath(m_dbPath->text().trimmed());
     s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());

@@ -16,6 +16,8 @@ add_executable(laideal
     mainwindow.cpp
     cancelinvoicedialog.h
     cancelinvoicedialog.cpp
+    voidgarmentsdialog.h
+    voidgarmentsdialog.cpp
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
     pendingsubmitsdialog.h

@@ -1,6 +1,7 @@
 #include "add_garment.h"
 #include "ui_add_garment.h"
 #include "sql_lite.h"
+#include "../verifactu/verifactutypes.h"
 #include <QSqlError>
 #include "imprimir.h"
 
@@ -55,6 +56,17 @@ void AddGarment::on_pb_search_pressed()
     db.close();
     // check if not empty
     if (sqlQueryModel->rowCount() > 0) {
+        // A paid ticket has already been submitted to AEAT; only unpaid receipts
+        // (not yet submitted) may be altered locally by adding garments.
+        if (ticketHasPaidGarment(db, ui->le_n_recibo->text())) {
+            ticketFound = false;
+            QMessageBox::warning(this, "Añadir prenda",
+                                 "El recibo Nº " + ui->le_n_recibo->text() + " ya tiene prendas "
+                                 "pagadas (enviado a la AEAT).\nNo se pueden añadir prendas a un "
+                                 "recibo pagado; utiliza un recibo nuevo.",
+                                 QMessageBox::Ok, QMessageBox::Ok);
+            return;
+        }
         ticketFound = true;
         fillContentFromDb();
         populateGarments();
@@ -210,33 +222,25 @@ void AddGarment::saveFactura()
              << "cantidad=" << ui->le_cantidad->text()
              << "importe=" << ui->le_importe->text()
              << "hash=" << hash;
-    db.open();
-    QSqlQuery q;
-    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash) "
-              "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash);");
-    q.bindValue(":n_recibo", ui->le_n_recibo->text());
-    q.bindValue(":cliente", ui->le_cliente->text());
-    q.bindValue(":fecha_recepcion", ui->de_fecha_rcp->date().toString("dd-MM-yyyy"));
-    q.bindValue(":pagado", ui->pb_pagado->text());
-    if (ui->pb_pagado->isChecked())
-        q.bindValue(":fecha_pago", ui->de_fecha_pago->date().toString("dd-MM-yyyy"));
-    else
-        q.bindValue(":fecha_pago", "");
-    q.bindValue(":estado", ui->pb_estado->text());
-    if (ui->pb_estado->isChecked())
-        q.bindValue(":fecha_recogida", ui->de_fecha_recog->date().toString("dd-MM-yyyy"));
-    else
-        q.bindValue(":fecha_recogida", "");
-    q.bindValue(":importe", ui->le_importe->text().replace(",","."));
-    q.bindValue(":cantidad", ui->le_cantidad->text());
-    q.bindValue(":prenda", ui->cb_prenda->currentText());
-    q.bindValue(":size", ui->le_size->text().replace(",","."));
-    q.bindValue(":observaciones", ui->le_observaciones->text());
-    q.bindValue(":servicio", ui->cb_servicio->currentText());
-    q.bindValue(":edit_lock", "0");
-    q.bindValue(":hash", hash);
-    if (!q.exec())
-        qWarning() << "AddGarment INSERT failed for ticket" << ui->le_n_recibo->text() << "-" << q.lastError().text();
-    q.clear();
-    db.close();
+    IngresoGarmentRow row;
+    row.nRecibo        = ui->le_n_recibo->text();
+    row.cliente        = ui->le_cliente->text();
+    row.fechaRecepcion = ui->de_fecha_rcp->date().toString("dd-MM-yyyy");
+    row.fechaPago      = ui->pb_pagado->isChecked() ? ui->de_fecha_pago->date().toString("dd-MM-yyyy") : QString("");
+    row.fechaRecogida  = ui->pb_estado->isChecked() ? ui->de_fecha_recog->date().toString("dd-MM-yyyy") : QString("");
+    row.importe        = ui->le_importe->text().replace(",",".");
+    row.pagado         = ui->pb_pagado->text();
+    row.estado         = ui->pb_estado->text();
+    row.cantidad       = ui->le_cantidad->text();
+    row.prenda         = ui->cb_prenda->currentText();
+    row.size           = ui->le_size->text().replace(",",".");
+    row.servicio       = ui->cb_servicio->currentText();
+    row.observaciones  = ui->le_observaciones->text();
+    row.editLock       = "0";
+    row.hash           = hash;
+    // Issue #41: a garment added to an existing ticket is un-submitted like a
+    // freshly saved row. The old inline INSERT omitted verifactu_estado, leaving
+    // added garments blank instead of PENDIENTE; route through insertGarmentRow.
+    row.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+    insertGarmentRow(db, row);
 }

@@ -95,6 +95,8 @@ AppSettings::AppSettings()
 void AppSettings::applyDefaults()
 {
     // Sensible defaults so reports work even before the user configures anything.
+    if (str({"app", "language"}).isEmpty())
+        setStr({"app", "language"}, "es");
     if (businessName().isEmpty())
         setStr({"business", "name"}, "Tintorería La Ideal");
     if (businessAddress().isEmpty())
@@ -291,6 +293,9 @@ bool AppSettings::encryptSecretsAtRest()
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------
+QString AppSettings::language() const { const QString v = str({"app", "language"}); return v.isEmpty() ? QStringLiteral("es") : v; }
+void    AppSettings::setLanguage(const QString &v) { setStr({"app", "language"}, v); }
+
 QString AppSettings::dbPath() const { return str({"database", "path"}); }
 void    AppSettings::setDbPath(const QString &v) { setStr({"database", "path"}, v); }
 

@@ -474,12 +474,11 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
 
 void MainWindow::saveTicket()
 {
-    // Rows are always written with verifactu_estado = PENDIENTE (or empty if Verifactu is
-    // not configured for this ticket). The async submit handler patches the rows with
-    // CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
-    qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
-             << "rows:" << ui->table_ticket->rowCount();
-
+    // Every saved garment starts verifactu_estado = PENDIENTE; the async submit handler
+    // patches CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
+    // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
+    // so log the count of garments actually inserted, not the slot count.
+    int savedGarments = 0;
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
@@ -508,11 +507,14 @@ void MainWindow::saveTicket()
             // Rows start PENDIENTE; the async AEAT submit patches estado on reply.
             r.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
 
-            qDebug() << "saveTicket: INSERT row" << row << "ticket=" << r.nRecibo
-                     << "importe=" << r.importe << "hash=" << r.hash;
             insertGarmentRow(db, r);
+            ++savedGarments;
+            qDebug() << "saveTicket: saved garment" << savedGarments << "ticket=" << r.nRecibo
+                     << "importe=" << r.importe << "hash=" << r.hash;
         }
     }
+    qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
+             << "-" << savedGarments << "garment(s) saved";
 }
 
 void MainWindow::printRecibo()
@@ -985,6 +987,15 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     }
     CancelInvoiceDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
+    dlg.exec();
+}
+
+// Local void of unpaid, not-delivered garments (erroneous receipt / change of
+// mind). No AEAT call - these rows were never submitted - so unlike the anular-
+// factura action it does not require Verifactu to be configured.
+void MainWindow::on_actionAnular_prendas_triggered()
+{
+    VoidGarmentsDialog dlg(db, this);
     dlg.exec();
 }
 

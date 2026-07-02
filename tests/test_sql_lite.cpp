@@ -513,6 +513,46 @@ private slots:
         QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='saveHash'").isEmpty());
     }
 
+    // Issue #41: a garment added to an existing ticket via AddGarment must also be
+    // booked PENDIENTE (never blank) so the estado column is consistent and the
+    // pending-submit recovery can see it. AddGarment now routes through the same
+    // insertGarmentRow seam with verifactuEstado=PENDIENTE.
+    void test_insertGarmentRow_addGarmentShapePending()
+    {
+        IngresoGarmentRow row;
+        row.nRecibo         = "30877";      // existing ticket the garment is added to
+        row.cliente         = "Salvador";
+        row.fechaRecepcion  = "01-07-2026";
+        row.fechaPago       = "";           // added unpaid
+        row.fechaRecogida   = "";
+        row.importe         = "11.00";
+        row.pagado          = "NO";
+        row.estado          = "En tienda";
+        row.cantidad        = "1";
+        row.prenda          = "Manta";
+        row.hash            = "addGarmentHash";
+        row.verifactuEstado = "PENDIENTE";
+
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='addGarmentHash'"),
+                 QStringLiteral("PENDIENTE"));
+    }
+
+    // AddGarment gate: garments may only be appended to an unpaid ticket (a paid
+    // one has already been submitted to AEAT).
+    void test_ticketHasPaidGarment()
+    {
+        insertRow("UNP", "u1");                       // pagado NO
+        insertRow("UNP", "u2");                       // pagado NO
+        QVERIFY(!ticketHasPaidGarment(m_db, "UNP"));  // fully unpaid -> addable
+
+        insertRow("PAR", "p1");                       // pagado NO
+        insertRow("PAR", "p2", "10.00", "SI");        // one paid row
+        QVERIFY(ticketHasPaidGarment(m_db, "PAR"));   // any paid row -> blocked
+
+        QVERIFY(!ticketHasPaidGarment(m_db, "NOPE")); // unknown ticket
+    }
+
     // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
     // row, empty when the ticket has no rows.
     void test_ticketVerifactuEstado()
@@ -520,6 +560,59 @@ private slots:
         QVERIFY(ticketVerifactuEstado(m_db, "T1").isEmpty()); // no rows
         insertRow("T1", "hashA", "10.00", "SI", "ENVIADA");
         QCOMPARE(ticketVerifactuEstado(m_db, "T1"), QStringLiteral("ENVIADA"));
+    }
+
+    // --- VoidGarmentsDialog seams (issue #40) ----------------------------------
+    // A garment is voidable in place only when it was never sent to AEAT: unpaid
+    // and verifactu_estado PENDIENTE/empty. Paid or already-submitted rows must go
+    // through the AEAT anulacion (CancelInvoiceDialog) instead.
+    void test_garmentIsLocallyVoidable()
+    {
+        QVERIFY(garmentIsLocallyVoidable("NO", ""));           // legacy empty = NotSubmitted
+        QVERIFY(garmentIsLocallyVoidable("NO", "PENDIENTE"));
+        QVERIFY(!garmentIsLocallyVoidable("SI", "PENDIENTE")); // paid -> not local
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ENVIADA"));   // sent to AEAT
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ANULADA"));
+        QVERIFY(!garmentIsLocallyVoidable("NO", "ERROR"));
+    }
+
+    void test_voidGarmentRow_setsAnuladoAndScopesByHash()
+    {
+        insertRow("T9", "hashA");            // pagado NO, verifactu_estado empty
+        insertRow("T9", "hashB");            // sibling, must stay untouched
+
+        QVERIFY(voidGarmentRow(m_db, "T9", "hashA"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("Anulado"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("ANULADA"));
+        // pagado is deliberately left as-is (the row is closed, not collected).
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+        // The sibling garment of the same ticket is keyed out by hash.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
+        QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
+    }
+
+    // "Recoger todo" marks the whole ticket Recogido but must leave a voided
+    // (Anulado) garment untouched - a cancelled row is never revived.
+    void test_markTicketPickedUp_excludesAnulado()
+    {
+        insertRow("TP", "hA");                 // normal row (estado 'NO')
+        insertRow("TP", "hB");                 // will be voided below
+        QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
+        // Legacy row with a NULL estado must still be picked up (the != 'Anulado'
+        // filter is NULL-guarded; SQLite treats NULL != x as NULL, i.e. excluded).
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, importe, pagado, "
+             "estado, cantidad, prenda, hash) "
+             "VALUES ('TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
+
+        QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hA'"), QStringLiteral("10-04-2026"));
+        // The voided garment stays Anulado and gets no pickup date.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'").isEmpty());
+        // The NULL-estado legacy row is picked up like any normal row.
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
     }
 };
 

@@ -50,11 +50,15 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `genHash16()` | `QString` | Generate a 16-char alphanumeric deduplication hash |
 | `updateTicketPayment(db, nRecibo, hash, fechaPago, pagado)` | `bool` | RecogPrendas seam: set `fecha_pago` + `pagado` on the `(n_recibo, hash)` row (PAY_YES; PAY_NO passes empty `fechaPago`) |
 | `updateTicketPickup(db, nRecibo, hash, fechaRecogida, estado)` | `bool` | RecogPrendas seam: set `fecha_recogida` + `estado` (PKU_YES; PKU_NO passes empty `fechaRecogida`) |
+| `markTicketPickedUp(db, nRecibo, fechaRecogida)` | `bool` | "Recoger todo" seam: one `UPDATE ... SET estado='Recogido'` over the whole ticket, with `AND estado != 'Anulado'` so a voided garment is never revived to Recogido |
 | `updateTicketObservations(db, nRecibo, hash, observaciones)` | `bool` | RecogPrendas seam: set `observaciones` (OBSV) |
 | `updateTicketSizeAndPrice(db, nRecibo, hash, size, importe)` | `bool` | RecogPrendas seam: set `size` + `importe` (SIZE_AND_PRICE) |
 | `updateGarmentQtyAndImporte(db, nRecibo, hash, cantidad, importe)` | `bool` | RecogPrendas seam: set `cantidad` + `importe` on the reduced row (SEPARATE_GARM 1/2) |
 | `insertGarmentRow(db, IngresoGarmentRow)` | `bool` | Insert one `ingresos` garment row. Shared by RecogPrendas SEPARATE_GARM (split-off row, `verifactuEstado=""` → legacy/NotSubmitted; re-submitting it would duplicate the ticket's AEAT InvoiceID) and MainWindow `saveTicket` (fresh ticket row, `verifactuEstado="PENDIENTE"` so the async submit can patch it). `verifactuEstado` is the only verifactu_* column written |
 | `ticketVerifactuEstado(db, nRecibo)` | `QString` | `verifactu_estado` of the ticket's first row (empty if none). Read by the PAY_YES pay-all dedup after a payment write |
+| `garmentIsLocallyVoidable(pagado, verifactuEstado)` | `bool` | Pure guard for VoidGarmentsDialog: true only when a row is unpaid (`pagado != "SI"`) AND never sent to AEAT (`verifactu_estado` PENDIENTE/empty). A paid/ENVIADA row was registered at AEAT and must be cancelled via CancelInvoiceDialog instead |
+| `voidGarmentRow(db, nRecibo, hash)` | `bool` | VoidGarmentsDialog seam: void one garment in place — `UPDATE ingresos SET estado='Anulado', verifactu_estado='ANULADA'` keyed by `(n_recibo, hash)`. `pagado` is left untouched. Caller gates the row through `garmentIsLocallyVoidable` first |
+| `ticketHasPaidGarment(db, nRecibo)` | `bool` | True if the ticket has any `pagado='SI'` row. AddGarment uses it to refuse appending garments to a paid (already AEAT-submitted) ticket |
 
 ## Usage pattern
 

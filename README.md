@@ -61,9 +61,21 @@ The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also o
 
 ### Debug in VSCode
 
-The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions. Open the workspace and press **F5**: the build task compiles `laideal` in `build-debug/` (CMAKE_BUILD_TYPE=Debug, separate from the Release `build/` so the two coexist), then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. Default launch config is **Debug laideal (MinGW gdb)**; the alternative **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
+The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions.
+
+**Press F5** (launch config **Debug laideal (MinGW gdb)**): the build task configures `build-debug/` if needed (its `dependsOn` runs "CMake: configure (Debug)" first — CMake no-ops an already-valid cache, so it's free on repeat runs) and compiles `laideal`, then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. The Debug tree is separate from the Release `build/` so the two coexist. The alternative config **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
+
+The terminal equivalent (mirrors §Build but into `build-debug/` with the Debug type):
+
+```powershell
+$env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.4.3/mingw_64
+cmake --build build-debug --target laideal
+```
 
 If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
+
+**Troubleshooting — F5 fails / no `laideal.exe` gets built:** a stale half-configured `build-debug/` (holds `CMakeCache.txt` + `CMakeFiles/` but **no `build.ninja`**, cache shows `CMAKE_MAKE_PROGRAM-NOTFOUND`) from a `cmake` configure that ran without `C:\Qt\Tools\Ninja` on PATH. Fix: `Remove-Item -Recurse -Force build-debug`, then F5 again (the configure step re-runs with the correct PATH). A healthy Debug tree always contains `build.ninja`.
 
 ---
 
@@ -77,6 +89,7 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 
 | Setting | Key in JSON | Notes |
 |---------|-------------|-------|
+| Language | `app.language` | `es` (default) or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.). Applied on next launch |
 | Database path | `db.path` | Full path to the SQLite `.db` file |
 | IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
 | Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |

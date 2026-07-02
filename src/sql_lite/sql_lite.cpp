@@ -320,6 +320,27 @@ bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString 
     return ok;
 }
 
+bool markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString &fechaRecogida)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    // Anulado rows stay Anulado - a voided garment is never revived to Recogido.
+    // (estado IS NULL OR ...) so legacy rows with a NULL estado are still picked
+    // up - SQLite treats `NULL != 'Anulado'` as NULL (excluded), not true.
+    q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = 'Recogido' "
+              "WHERE n_recibo = :n AND (estado IS NULL OR estado != :anulado)");
+    q.bindValue(":fr",      fechaRecogida);
+    q.bindValue(":n",       nRecibo);
+    q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "markTicketPickedUp: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
 bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                               const QString &observaciones)
 {
@@ -377,6 +398,45 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
         qWarning() << "updateGarmentQtyAndImporte: UPDATE failed -" << q.lastError().text();
     db.close();
     return ok;
+}
+
+bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado)
+{
+    if (pagado == QLatin1String("SI"))
+        return false;
+    return verifactuEstadoFromString(verifactuEstado) == VerifactuEstado::NotSubmitted;
+}
+
+bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":est",  QStringLiteral(INGRESOS_ESTADO_ANULADO));
+    q.bindValue(":vest", verifactuEstadoToString(VerifactuEstado::Anulada));
+    q.bindValue(":n",    nRecibo);
+    q.bindValue(":h",    hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "voidGarmentRow: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
+    q.bindValue(":n", nRecibo);
+    const bool paid = q.exec() && q.first() && q.value(0).toInt() > 0;
+    db.close();
+    return paid;
 }
 
 bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
