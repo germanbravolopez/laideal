@@ -22,11 +22,6 @@ target_link_libraries(updater
     Qt${QT_VERSION_MAJOR}::Network
 )
 
-# ShellExecuteW (elevated installer launch on update) lives in shell32.
-if(WIN32)
-    target_link_libraries(updater PRIVATE shell32)
-endif()
-
 # Inherits PROJECT_VERSION from the top-level project() call.
 target_compile_definitions(updater PRIVATE
     PROJECT_VERSION="${PROJECT_VERSION}"

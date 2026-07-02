@@ -27,6 +27,13 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
+; Per-user install (no elevation). Two reasons: (1) the in-app updater can then run
+; the installer without UAC - and UAC elevation resets the environment, which would
+; discard the TMP/TEMP redirect the updater sets to work around a hardened %TEMP%
+; that denies execute (Inno's "Unable to execute file in the temporary directory.
+; Error 5"); (2) no admin rights are needed to update on a locked-down shop PC.
+; With lowest, {autopf} resolves to %LOCALAPPDATA%\Programs and HKA maps to HKCU.
+PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#MyAppName}
 ChangesAssociations=yes
 DisableProgramGroupPage=yes

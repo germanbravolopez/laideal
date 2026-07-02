@@ -12,13 +12,7 @@
 #include <QProcess>
 #include <QCoreApplication>
 #include <QDebug>
-
-#ifdef Q_OS_WIN
-#  define WIN32_LEAN_AND_MEAN
-#  define NOMINMAX
-#  include <windows.h>
-#  include <shellapi.h>
-#endif
+#include <QFileInfo>
 
 UpdaterDialog::UpdaterDialog(Updater *updater,
                              const QString &latestVersion,
@@ -102,23 +96,18 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
 {
     qDebug() << "UpdaterDialog: launching installer" << localPath;
 
-    // The installer installs under Program Files and is manifested
-    // requireAdministrator. QProcess::startDetached uses CreateProcess, which
-    // cannot elevate: launching an admin installer from a non-elevated app fails
-    // with ERROR_ELEVATION_REQUIRED, so the update only worked when the whole app
-    // was started as administrator. ShellExecute with the "runas" verb raises the
-    // UAC prompt, so the update works from a normally-launched app.
+    // The installer is per-user (laideal.iss: PrivilegesRequired=lowest), so it
+    // runs non-elevated and needs no UAC. Inno Setup extracts its bootstrap to
+    // %TEMP% and executes it there; on a hardened %TEMP% that denies execute this
+    // fails ("Unable to execute file in the temporary directory. Error 5"). Point
+    // TMP/TEMP at the execute-allowed per-user folder the installer already lives
+    // in - inherited by the child because the launch is NOT elevated (elevation
+    // would reset the environment back to the hardened default %TEMP%).
     // CloseApplications=yes in laideal.iss handles files still open under {app}.
-    bool started = false;
-#ifdef Q_OS_WIN
-    const HINSTANCE result = ShellExecuteW(
-        nullptr, L"runas",
-        reinterpret_cast<const wchar_t *>(localPath.utf16()),
-        nullptr, nullptr, SW_SHOWNORMAL);
-    started = (reinterpret_cast<INT_PTR>(result) > 32); // >32 == success per WinAPI
-#else
-    started = QProcess::startDetached(localPath, {});
-#endif
+    const QByteArray launchDir = QFileInfo(localPath).absolutePath().toLocal8Bit();
+    qputenv("TMP", launchDir);
+    qputenv("TEMP", launchDir);
+    const bool started = QProcess::startDetached(localPath, {});
     if (!started) {
         QMessageBox::critical(this, tr("Error"),
             tr("No se pudo iniciar el instalador descargado:\n%1\n\n"
