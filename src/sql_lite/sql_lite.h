@@ -79,9 +79,12 @@ bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, c
 // SIZE_AND_PRICE: set size + importe.
 bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &size, const QString &importe);
-// SEPARATE_GARM (1/2): set cantidad + importe on the row being reduced.
+// SEPARATE_GARM (1/2) / QTY: set cantidad + importe on the row being reduced.
 bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                        const QString &cantidad, const QString &importe);
+// SERVICE: set servicio + importe (a service change re-prices the row).
+bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                           const QString &servicio, const QString &importe);
 
 // True when a garment row can be voided locally (VoidGarmentsDialog) instead of
 // via an AEAT anulacion: it must be unpaid (pagado != "SI") and never sent to

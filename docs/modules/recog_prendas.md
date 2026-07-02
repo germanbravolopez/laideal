@@ -1,6 +1,6 @@
 # RecogPrendas (`src/recog_prendas/`)
 
-"Garment pickup" panel. Loads `ingresos` rows into a filterable table. Handles payment marking, pickup marking, observation editing, size/price editing, and garment row splitting.
+"Garment pickup" panel. Loads `ingresos` rows into a filterable table. Handles payment marking, pickup marking, observation editing, quantity/service/size/price editing, and garment row splitting.
 
 ## Source files
 
@@ -21,9 +21,16 @@ ui->show();
 | Mark picked up | `PKU_YES` / `PKU_NO` | `estado`, `fecha_recogida` |
 | Edit observation | `OBSV` | `observaciones` |
 | Edit size + price | `SIZE_AND_PRICE` | `size`, `importe` |
+| Edit quantity | `QTY` | `cantidad`, `importe` (re-priced via `garmentImporte`) |
+| Change service | `SERVICE` | `servicio`, `importe` (re-priced against the new service's unit price) |
+| Edit importe (manual) | `PRICE` | `importe` (comma-normalised manual override; `size` left as-is) |
 | Split garment row | `SEPARATE_GARM` | Inserts a new row with `genHash16()`; decrements quantity on original |
 
-`updateDb()` keeps the business rules (edit_lock guard, blocked-quarter check, the post-PAY_YES Verifactu-submit decision) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPayment` / `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` + `insertGarmentRow(IngresoGarmentRow)` for the split, and `ticketVerifactuEstado` for the pay-all dedup read-back — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
+`updateDb()` keeps the business rules (edit_lock guard, blocked-quarter check, the post-PAY_YES Verifactu-submit decision) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPayment` / `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split, and `ticketVerifactuEstado` for the pay-all dedup read-back — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
+
+## Pre-payment editing of quantity / service / importe
+
+Quantity (`le_qty`), importe (`le_price`), size (`le_size`) and the service picker (`cb_servic`, a `QComboBox` offering `Limp.` / `Plan.` - it replaced the old read-only `le_servic` line edit) are editable **only before payment**: `updateRowClickedToFields()` computes `priceEditable = !isAnulado && !isPaid && !editLock` and read-onlys / disables all four accordingly, and each `updateDb()` case re-checks `!editLock && pagado == "NO"` as defense-in-depth. Editing quantity or changing the service re-prices the row automatically (`importe = qty * unitPrice * size` via `garmentImporte`), while `le_price` remains a manual override applied last. The service combo writes on the `activated(int)` signal (user interaction only) so `setCurrentIndex()` during row-load never fires a spurious write; a legacy `servicio` value not in the list maps to `findText() == -1` and shows blank rather than a wrong service.
 
 A locally voided garment (`estado == "Anulado"`, set by `VoidGarmentsDialog`) is treated as **read-only** here: `updateRowClickedToFields()` disables `pb_state` / `pb_pay_all` / `pb_pku_all` / `pb_separ_garm` and read-onlys `le_obsv` / `le_size` / `le_price` for such a row, and `updateDb()` early-returns on an Anulado row as defense-in-depth so no write path can revive or charge it.
 

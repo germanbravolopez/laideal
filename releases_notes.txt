@@ -1,5 +1,9 @@
 Releases:
 
+10.5
+- New: correct the quantity, service or amount of a garment before it is paid
+  - In "Recogida de Prendas" you can now change an unpaid garment's quantity and its service (a drop-down offering "Limp." / "Plan."), and the amount is recalculated automatically. The amount can also be edited by hand to set a custom price. These fields stay locked once the garment is paid, because a paid garment has already been sent to the AEAT.
+
 10.4
 - Bug fix: automatic updates now work without administrator rights
   - On some PCs the automatic update could not complete: the downloaded installer would not start, or Windows blocked it from running in the temporary folder. The app now installs for the current user only, so it can update itself directly - no "run as administrator" and no Windows permission prompt.

@@ -400,6 +400,26 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
     return ok;
 }
 
+bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
+                                    const QString &servicio, const QString &importe)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET servicio = :serv, importe = :imp "
+              "WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":serv", servicio);
+    q.bindValue(":imp",  importe);
+    q.bindValue(":n",    nRecibo);
+    q.bindValue(":h",    hash);
+    bool ok = q.exec();
+    if (!ok)
+        qWarning() << "updateGarmentServiceAndImporte: UPDATE failed -" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
 bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado)
 {
     if (pagado == QLatin1String("SI"))
