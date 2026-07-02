@@ -124,6 +124,9 @@ factura</string>
           <pointsize>12</pointsize>
          </font>
         </property>
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Editar la cantidad de la prenda si aún no está pagada. El importe se recalcula automáticamente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
         </property>
@@ -131,7 +134,7 @@ factura</string>
          <string/>
         </property>
         <property name="readOnly">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -171,22 +174,29 @@ factura</string>
        </widget>
       </item>
       <item row="4" column="1">
-       <widget class="QLineEdit" name="le_servic">
+       <widget class="QComboBox" name="cb_servic">
         <property name="font">
          <font>
           <family>Arial</family>
           <pointsize>12</pointsize>
          </font>
         </property>
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cambiar el servicio de la prenda si aún no está pagada. El importe se recalcula automáticamente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
         </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
+        <item>
+         <property name="text">
+          <string>Limp.</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Plan.</string>
+         </property>
+        </item>
        </widget>
       </item>
       <item row="1" column="1">
@@ -290,7 +300,7 @@ factura</string>
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Introduce un número fijo del teléfono del cliente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Editar manualmente el importe de la prenda si aún no está pagada.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="locale">
          <locale language="Spanish" country="Spain"/>
@@ -299,7 +309,7 @@ factura</string>
          <string/>
         </property>
         <property name="readOnly">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -886,7 +896,7 @@ factura</string>
   <tabstop>le_client</tabstop>
   <tabstop>le_garm</tabstop>
   <tabstop>le_qty</tabstop>
-  <tabstop>le_servic</tabstop>
+  <tabstop>cb_servic</tabstop>
   <tabstop>le_size</tabstop>
   <tabstop>le_price</tabstop>
   <tabstop>le_obsv</tabstop>

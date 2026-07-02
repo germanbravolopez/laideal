@@ -48,7 +48,7 @@ void RecogPrendas::resetAllContents()
     ui->le_client->clear();
     ui->le_garm->clear();
     ui->le_qty->clear();
-    ui->le_servic->clear();
+    ui->cb_servic->setCurrentIndex(-1);
     ui->le_size->clear();
     ui->le_price->clear();
     ui->le_obsv->clear();
@@ -74,7 +74,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
     static const char *const opNames[] = {
-        "PAY_YES", "PAY_NO", "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE", "SEPARATE_GARM"
+        "PAY_YES", "PAY_NO", "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
+        "QTY", "SERVICE", "PRICE", "SEPARATE_GARM"
     };
     const QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
     const QString rowHash   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_HASH)).toString();
@@ -149,12 +150,45 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                                      ui->le_size->text(), ui->le_price->text());
         }
         break;
+    case QTY:
+        // Editing quantity re-prices the row: importe = qty * unitPrice * size.
+        if (!editLock && ui->pb_payment->text() == "NO") {
+            const int newQty = ui->le_qty->text().toInt();
+            if (newQty < 1)
+                break;
+            const double importe = garmentImporte(
+                ui->le_qty->text(), ui->le_size->text(),
+                readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
+            updateGarmentQtyAndImporte(db, ticketNum, rowHash,
+                                       QString::number(newQty),
+                                       QString::number(importe, 'f', 2));
+        }
+        break;
+    case SERVICE:
+        // A service change re-prices the row against the new service's unit price.
+        if (!editLock && ui->pb_payment->text() == "NO") {
+            const double importe = garmentImporte(
+                ui->le_qty->text(), ui->le_size->text(),
+                readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
+            updateGarmentServiceAndImporte(db, ticketNum, rowHash,
+                                           ui->cb_servic->currentText(),
+                                           QString::number(importe, 'f', 2));
+        }
+        break;
+    case PRICE:
+        // Manual importe override (comma-normalised); size is left as-is.
+        if (!editLock && ui->pb_payment->text() == "NO") {
+            updateTicketSizeAndPrice(db, ticketNum, rowHash,
+                                     ui->le_size->text().replace(",", "."),
+                                     ui->le_price->text().replace(",", "."));
+        }
+        break;
     case SEPARATE_GARM:
         // If editLock payment info cannot be changed
         if (!editLock) {
             // Update current garments
             int newQtyUpd = ui->le_qty->text().toInt() - nGarm;
-            float newImpUpd = QString::number(newQtyUpd).toFloat() * readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
+            float newImpUpd = QString::number(newQtyUpd).toFloat() * readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
             if (newImpUpd < 0) {
                 break;
             }
@@ -168,7 +202,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             // re-submitting the split-off row would create a duplicate-InvoiceID error
             // at AEAT. Helpers treat empty verifactu_estado as legacy (NotSubmitted),
             // which is the desired accounting/print behaviour for split rows.
-            float newImpIns = nGarm * readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
+            float newImpIns = nGarm * readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
             IngresoGarmentRow row;
             row.nRecibo        = ui->le_nr_ticket->text();
             row.cliente        = ui->le_client->text();
@@ -181,7 +215,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             row.cantidad       = QString::number(nGarm);
             row.prenda         = ui->le_garm->text();
             row.size           = ui->le_size->text().replace(",",".");
-            row.servicio       = ui->le_servic->text();
+            row.servicio       = ui->cb_servic->currentText();
             row.observaciones  = ui->le_obsv->text();
             row.editLock       = "0";
             row.hash           = genHash16();
@@ -213,7 +247,9 @@ void RecogPrendas::updateRowClickedToFields()
     ui->le_mobile->setText(phones.value(1));
     ui->le_garm->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PRENDA)).toString());
     ui->le_qty->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_CANTIDAD)).toString());
-    ui->le_servic->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString());
+    // findText returns -1 for a legacy service not in the list -> blank rather than a wrong value.
+    ui->cb_servic->setCurrentIndex(ui->cb_servic->findText(
+        sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString()));
     ui->le_size->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString());
     ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString());
     ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_OBSERVACIONES)).toString());
@@ -221,6 +257,11 @@ void RecogPrendas::updateRowClickedToFields()
     // A locally voided garment (estado "Anulado") is read-only everywhere: it can
     // never be paid, picked up, split or have its fields edited again.
     const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
+    const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI";
+    const bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
+    // Quantity / service / importe / size are editable only before payment (and while
+    // not accounting-locked or voided): a paid row was already submitted to AEAT.
+    const bool priceEditable = !isAnulado && !isPaid && !editLock;
     ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI");
     ui->pb_state->setChecked(rowEstado == "Recogido");
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString(),"dd-MM-yyyy"));
@@ -234,15 +275,17 @@ void RecogPrendas::updateRowClickedToFields()
     ui->pb_separ_garm->setEnabled(!isAnulado);
     ui->pb_print->setEnabled(true);
     ui->le_obsv->setReadOnly(isAnulado);
-    ui->le_size->setReadOnly(isAnulado);
-    ui->le_price->setReadOnly(isAnulado);
+    ui->le_size->setReadOnly(!priceEditable);
+    ui->le_price->setReadOnly(!priceEditable);
+    ui->le_qty->setReadOnly(!priceEditable);
+    ui->cb_servic->setEnabled(priceEditable);
     QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
 
 float RecogPrendas::calculatePrice()
 {
-    float itemPrice = readGarmentPrice(db, ui->le_garm->text(), ui->le_servic->text());
+    float itemPrice = readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
     if (ui->le_size->text().contains(",")) {
         QStringList sizeSplitted = ui->le_size->text().split(",");
         ui->le_size->setText(sizeSplitted.first() + "." + sizeSplitted.last());
@@ -489,6 +532,25 @@ void RecogPrendas::on_le_size_editingFinished()
             updateDb(SIZE_AND_PRICE);
         }
     }
+}
+
+void RecogPrendas::on_le_qty_editingFinished()
+{
+    if (isCellClicked && !ui->le_qty->isReadOnly())
+        updateDb(QTY);
+}
+
+void RecogPrendas::on_le_price_editingFinished()
+{
+    if (isCellClicked && !ui->le_price->isReadOnly())
+        updateDb(PRICE);
+}
+
+void RecogPrendas::on_cb_servic_activated(int index)
+{
+    Q_UNUSED(index);
+    if (isCellClicked && ui->cb_servic->isEnabled())
+        updateDb(SERVICE);
 }
 
 void RecogPrendas::on_pb_pay_all_clicked()

@@ -40,6 +40,9 @@ public:
         PKU_NO,
         OBSV,
         SIZE_AND_PRICE,
+        QTY,
+        SERVICE,
+        PRICE,
         SEPARATE_GARM
     };
 
@@ -59,6 +62,9 @@ private slots:
     void on_tableView_clicked(const QModelIndex &index);
     void on_le_obsv_editingFinished();
     void on_le_size_editingFinished();
+    void on_le_qty_editingFinished();
+    void on_le_price_editingFinished();
+    void on_cb_servic_activated(int index);
     void on_pb_pay_all_clicked();
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();

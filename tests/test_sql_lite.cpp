@@ -448,6 +448,14 @@ private slots:
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("30.00"));
     }
 
+    void test_updateGarmentServiceAndImporte()
+    {
+        insertRow("T1", "hashA");
+        QVERIFY(updateGarmentServiceAndImporte(m_db, "T1", "hashA", "Plan.", "8.50"));
+        QCOMPARE(scalar("SELECT servicio FROM ingresos WHERE hash='hashA'"), QStringLiteral("Plan."));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("8.50"));
+    }
+
     // The split-off row must persist all garment fields and leave verifactu_estado
     // empty (legacy/NotSubmitted) so accounting/print treat it as un-submitted - a
     // re-submission would duplicate the ticket's AEAT InvoiceID.
