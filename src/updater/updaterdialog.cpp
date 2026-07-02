@@ -13,6 +13,13 @@
 #include <QCoreApplication>
 #include <QDebug>
 
+#ifdef Q_OS_WIN
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#  include <windows.h>
+#  include <shellapi.h>
+#endif
+
 UpdaterDialog::UpdaterDialog(Updater *updater,
                              const QString &latestVersion,
                              const QString &releaseNotes,
@@ -95,12 +102,23 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
 {
     qDebug() << "UpdaterDialog: launching installer" << localPath;
 
-    // Launch the installer detached so it survives the app shutdown.
-    // Inno Setup picks defaults for everything; the user sees the normal
-    // upgrade wizard. CloseApplications=yes in laideal.iss handles the case
-    // where the app has not fully exited by the time the installer starts
-    // touching files under {app}.
-    const bool started = QProcess::startDetached(localPath, {});
+    // The installer installs under Program Files and is manifested
+    // requireAdministrator. QProcess::startDetached uses CreateProcess, which
+    // cannot elevate: launching an admin installer from a non-elevated app fails
+    // with ERROR_ELEVATION_REQUIRED, so the update only worked when the whole app
+    // was started as administrator. ShellExecute with the "runas" verb raises the
+    // UAC prompt, so the update works from a normally-launched app.
+    // CloseApplications=yes in laideal.iss handles files still open under {app}.
+    bool started = false;
+#ifdef Q_OS_WIN
+    const HINSTANCE result = ShellExecuteW(
+        nullptr, L"runas",
+        reinterpret_cast<const wchar_t *>(localPath.utf16()),
+        nullptr, nullptr, SW_SHOWNORMAL);
+    started = (reinterpret_cast<INT_PTR>(result) > 32); // >32 == success per WinAPI
+#else
+    started = QProcess::startDetached(localPath, {});
+#endif
     if (!started) {
         QMessageBox::critical(this, tr("Error"),
             tr("No se pudo iniciar el instalador descargado:\n%1\n\n"
