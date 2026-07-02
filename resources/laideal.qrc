@@ -5,4 +5,7 @@
     <qresource prefix="/docs">
         <file alias="releases_notes.txt">../releases_notes.txt</file>
     </qresource>
+    <qresource prefix="/i18n">
+        <file alias="qtbase_es.qm">i18n/qtbase_es.qm</file>
+    </qresource>
 </RCC>

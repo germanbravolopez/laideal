@@ -30,6 +30,12 @@ public:
 
     QString filePath() const { return m_filePath; }
 
+    // --- Language ("es" / "en") ---
+    // Selects the Qt translation loaded at startup (standard dialogs, Yes/No, etc.).
+    // Default "es"; a change takes effect on the next launch.
+    QString language() const;
+    void setLanguage(const QString &v);
+
     // --- Database ---
     QString dbPath() const;
     void setDbPath(const QString &v);

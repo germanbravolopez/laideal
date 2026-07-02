@@ -37,6 +37,7 @@ private:
     void buildBusinessTab(class QTabWidget *tabs);
     void buildVerifactuTab(class QTabWidget *tabs);
 
+    class QComboBox *m_language;      // "es" / "en" (Qt standard-dialog language)
     QLineEdit *m_dbPath;
     QLineEdit *m_ivaRate;
     QCheckBox *m_enablePrinting;
