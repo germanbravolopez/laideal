@@ -1,8 +1,9 @@
 Releases:
 
-10.3
-- Bug fix: the app can now update itself without having to be started as administrator
-  - When a new version was available, the update only worked if the app had been launched "as administrator"; otherwise the installer would not start. The app now asks for the permission it needs at that moment (the standard Windows prompt), so you can update directly from the normal shortcut.
+10.4
+- Bug fix: automatic updates now work without administrator rights
+  - On some PCs the automatic update could not complete: the downloaded installer would not start, or Windows blocked it from running in the temporary folder. The app now installs for the current user only, so it can update itself directly - no "run as administrator" and no Windows permission prompt.
+  - One-time step: because the app now installs in your user profile instead of "Archivos de programa", please install this version (10.4) manually once. After that, updates are automatic. You can then uninstall the old "La Ideal" from "Archivos de programa" - your data and settings are kept.
 
 10.2
 - New: cancel garments from a wrong receipt or a change of mind ("Anular prendas")
