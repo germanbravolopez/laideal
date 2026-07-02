@@ -125,15 +125,26 @@ void Updater::handleReleaseReply(QNetworkReply *reply)
 
 void Updater::downloadInstaller(const QUrl &installerUrl)
 {
-    const QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    if (!QDir().mkpath(tempDir)) {
-        emit downloadFailed(QStringLiteral("No se pudo acceder al directorio temporal: %1").arg(tempDir));
+    // Deliberately NOT the temp dir: on hardened machines %TEMP% is ACL'd to deny
+    // execute to the normal (non-elevated) user, so the downloaded installer can't
+    // be launched from there (Windows "no se puede acceder ... permisos"). A
+    // per-user app data dir grants the user full control (execute), so the
+    // installer runs (and ShellExecute "runas" can then elevate it).
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                        + QStringLiteral("/updates");
+    if (!QDir().mkpath(dir)) {
+        emit downloadFailed(QStringLiteral("No se pudo acceder al directorio de actualizaciones: %1").arg(dir));
         return;
     }
+    // Remove any installer left by a previous update so they do not accumulate.
+    const QDir updatesDir(dir);
+    for (const QString &stale : updatesDir.entryList({ QStringLiteral("*.exe") }, QDir::Files))
+        QFile::remove(updatesDir.filePath(stale));
+
     const QString fileName = installerUrl.fileName();
-    const QString localPath = QDir(tempDir).filePath(fileName.isEmpty()
-                                                     ? QStringLiteral("laideal_setup.exe")
-                                                     : fileName);
+    const QString localPath = QDir(dir).filePath(fileName.isEmpty()
+                                                 ? QStringLiteral("laideal_setup.exe")
+                                                 : fileName);
 
     qDebug() << "Updater: downloading" << installerUrl << "to" << localPath;
 
