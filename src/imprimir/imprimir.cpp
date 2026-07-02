@@ -90,15 +90,14 @@ void Imprimir::getTicketInfo()
 QString Imprimir::displayInvoiceId() const
 {
     if (!sqlQueryModel) return le_n_ticket->text();
-    // Scan for the first non-empty literal: row 0 may be an unpaid row of a
-    // multi-event ticket and have invoice_id empty, while a later paid row
-    // carries the real "<n>-<seq>" string AEAT has on record.
+    // Selection rule (first non-empty literal, else bare n_recibo) is the pure
+    // sql_lite::verifactuDisplayInvoiceId seam; here we just gather the column.
+    QStringList invoiceIds;
     for (int r = 0; r < sqlQueryModel->rowCount(); ++r) {
-        const QString id = sqlQueryModel->data(
+        invoiceIds << sqlQueryModel->data(
             sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
-        if (!id.isEmpty()) return id;
     }
-    return le_n_ticket->text();
+    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text());
 }
 
 bool Imprimir::checkTicketPaid(int row)

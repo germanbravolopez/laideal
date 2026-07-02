@@ -157,6 +157,12 @@ int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
 // can never disagree (a seq-0 event submitted as "<n>-0" but stored as "<n>").
 QString     verifactuInvoiceId(const QString &nRecibo, int seq);
 
+// The InvoiceID to print for a ticket: the first non-empty literal AEAT id among
+// the ticket's rows, else the bare fallback (n_recibo). Scans rather than reading
+// row 0 because row 0 may be an unpaid row of a multi-event ticket with an empty
+// invoice_id while a later paid row carries the real "<n>-<seq>" AEAT has on record.
+QString     verifactuDisplayInvoiceId(const QStringList &invoiceIds, const QString &fallback);
+
 // One still-PENDIENTE Verifactu submission event, as surfaced by the startup
 // recovery dialog. fechaPago is the stored dd-MM-yyyy payment date the invoice
 // was/should be submitted under (caller parses to QDate; empty/invalid for an

@@ -119,7 +119,9 @@ fallback:
    least one row has a non-empty `verifactu_csv` AND no row is `ANULADA` /
    `RECTIFICADA` / `ERROR`. The InvoiceID is `displayInvoiceId()` and the
    `FechaExpedicion` is the first paid row's `fecha_pago` (the date submitted to
-   AEAT).
+   AEAT). `displayInvoiceId()` gathers the `verifactu_invoice_id` column and
+   delegates the selection (first non-empty literal, else bare `n_recibo`) to the
+   pure, unit-tested `sql_lite::verifactuDisplayInvoiceId` seam.
 3. When eligible and `verifactuIntegration` is configured, fetch the QR
    asynchronously via REST `/GetQrCode` with a 5 s bounded wait; on timeout the
    ticket prints without a QR.

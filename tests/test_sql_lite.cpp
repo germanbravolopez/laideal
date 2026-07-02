@@ -243,6 +243,21 @@ private slots:
         QCOMPARE(verifactuInvoiceId("3245", 12), QStringLiteral("3245-12"));
     }
 
+    // The printed InvoiceID must be the first NON-EMPTY literal across the ticket
+    // rows, not row 0: a multi-event ticket can have an unpaid row 0 (empty id)
+    // before the paid row that carries the real "<n>-<seq>" AEAT recorded.
+    void test_verifactuDisplayInvoiceId()
+    {
+        // Row 0 empty, a later row carries the literal -> pick the literal, not the fallback.
+        QCOMPARE(verifactuDisplayInvoiceId({"", "3245-1"}, "3245"), QStringLiteral("3245-1"));
+        // First non-empty wins even when several are populated.
+        QCOMPARE(verifactuDisplayInvoiceId({"3245-1", "3245-2"}, "3245"), QStringLiteral("3245-1"));
+        // All empty (legacy 8.0-8.4 rows) -> bare n_recibo fallback.
+        QCOMPARE(verifactuDisplayInvoiceId({"", ""}, "3245"), QStringLiteral("3245"));
+        // No rows -> fallback.
+        QCOMPARE(verifactuDisplayInvoiceId({}, "3245"), QStringLiteral("3245"));
+    }
+
     // Accent/special-char stripper used for client-name matching (extracted from
     // MainWindow::removeSpecialChar). Case is preserved; literal '?' is dropped.
     void test_removeSpecialChars()

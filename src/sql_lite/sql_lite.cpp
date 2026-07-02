@@ -841,6 +841,15 @@ QString verifactuInvoiceId(const QString &nRecibo, int seq)
     return seq == 0 ? nRecibo : QStringLiteral("%1-%2").arg(nRecibo).arg(seq);
 }
 
+QString verifactuDisplayInvoiceId(const QStringList &invoiceIds, const QString &fallback)
+{
+    for (const QString &id : invoiceIds) {
+        if (!id.isEmpty())
+            return id;
+    }
+    return fallback;
+}
+
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso)
 {
     QVector<PendingVerifactuEvent> events;
