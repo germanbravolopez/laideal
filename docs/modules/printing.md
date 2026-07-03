@@ -94,7 +94,7 @@ their tests) stay cross-platform.
 
 ## PrinterStatus + StatusApiPrinter (optional Status API path)
 
-An opt-in layer (setting `print.use_status_api`) that reads device status after
+An opt-in layer (setting `print.use_status_api`) that reads device status around
 printing — paper out / near end, cover open, cutter / mechanical / unrecoverable
 error. The ESC/POS payload is identical to the RAW path; only the transport
 differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_methods.md)).
@@ -102,20 +102,73 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
 - **`PrinterStatus`** — pure. `PrinterStatus::fromAsb(quint32)` decodes the
   Epson **ASB** (Automatic Status Back) 32-bit word into named flags
   (`paperEnd`, `paperNearEnd`, `coverOpen`, `cutterError`, …) plus
-  `hasError()` / `hasWarning()` and a Spanish `summary()` ("Sin papel", "Tapa
-  abierta", "Papel casi agotado", "Impresora lista", …). Unit-tested.
+  `hasError()` / `hasWarning()` / `isFatal()` and a Spanish `summary()` ("Sin
+  papel", "Tapa abierta", "Papel casi agotado", "Impresora lista", …).
+  `isFatal()` is the **fatal vs recoverable** split: fatal = cutter / mechanical
+  / unrecoverable (block printing); cover-open and paper-end are recoverable
+  (warn but let the spooler hold the job). Unit-tested.
 - **`StatusApiPrinter::sendAndReadStatus(bytes, queue, *status, *err)`** —
   Win32. Loads `EPSStmApi.dll` **dynamically** (`LoadLibrary`/`GetProcAddress`,
   so there is no build-time SDK dependency), then
-  `BiOpenMonPrinter(2, queue)` → `BiDirectIOEx` (send) → `BiGetStatus` (read) →
-  `BiCloseMonPrinter`. Returns `false` *without sending* if the DLL/API is
-  unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
+  `BiOpenMonPrinter(2, queue)` → **`BiGetStatus` (read status first)** →
+  `BiDirectIOEx` (send) → `BiCloseMonPrinter`. Status is read **before** the
+  send because `BiGetStatus` returns the cached ASB (cover-open / paper-out) and
+  succeeds even offline, whereas the `BiDirectIOEx` send returns `ERR_ACCESS`
+  (-80) when the cover is open — a send-first design would only ever see a bare
+  send failure, never the reason (APD6 Status API manual: "confirm the printer
+  can print before printing"). On a **fatal** status the send is skipped and the
+  function returns `false`. Returns `false` *without a real send* if the DLL/API
+  is unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
   back to the RAW path (enabling the flag never stops printing). The status read
   is best-effort: a send can succeed with `status.valid == false`.
+- **`StatusApiPrinter::sendAndReadStatusBounded(..., timeoutMs)`** — a watchdog
+  wrapper `Imprimir::printTicket` calls instead of the raw `sendAndReadStatus`.
+  It runs the (potentially blocking) Epson DLL calls on a **detached worker
+  thread** and waits at most `timeoutMs` (**10 s**). If the DLL doesn't return - a
+  printer **firmware/driver quirk can hang `BiOpenMonPrinter` indefinitely** (seen
+  on the shop TM-T20III until the APD6 was reinstalled) - the UI thread stops
+  waiting, returns `false` with an invalid status, and the caller falls back to
+  RAW, so the POS never freezes. After the first timeout the API is **latched off
+  for the process** (a static flag) so every later print goes straight to RAW. A
+  stuck worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
+  **Calibration matters**: the watchdog must stay *well above* the real worst case
+  or it false-trips on a normal offline print (which suppresses the warning). That
+  worst case is the `BiDirectIOEx` send failing on an open cover / no paper - it
+  returns `ERR_ACCESS` after the **DLL's own internal ~5 s** (it does *not* honour
+  our 2500 ms `BiDirectIOEx` timeout on the `-80` path), ~5.5 s total with
+  open+close. So the watchdog is **10 s** (a genuine hang is indefinite; the wide
+  margin distinguishes the two). Two earlier miscalibrations, for the record: a
+  4 s watchdog under a 5 s send timeout, then a 6 s watchdog only ~0.3 s above the
+  real ~5.5 s offline send - both risked false-tripping and hiding the warning.
+- **`StatusApiPrinter::runDiagnosticsBounded(queue, timeoutMs)`** — a diagnostic
+  (behind the same watchdog) that opens the printer and calls each Status API
+  function in turn - `BiOpenMonPrinter` -> `BiGetStatus` -> `BiGetType` ->
+  `BiDirectIOEx` (a real-time `DLE EOT 1` status request, no printing) ->
+  `BiCloseMonPrinter` - logging (`[diag]`) a line **before and after** each call
+  with elapsed ms, and returns a report. A hang shows as the last `->` line with
+  no result after it; the report ends with a "BLOQUEO" note naming the culprit
+  call. Wired to the **"Probar Status API (diagnóstico)"** button in
+  `SettingsDialog` (General tab, next to the checkbox) to pinpoint a
+  firmware-induced hang without freezing the UI. `appsettings` links `printing`
+  for this.
+- **`Imprimir::printTicket` decision**: fatal (status valid) → warn + **return**
+  (no RAW, operator fixes and reprints); a decoded recoverable error / near-end →
+  warn + **fall through to RAW** (spooler queues the ticket, prints once the cover
+  is closed / paper replaced); **send refused but status did not decode to a known
+  fault** (`status.valid && !sent`) → generic "no se pudo enviar, comprueba tapa /
+  papel / conexión" warning + RAW; clean send → done. A missing DLL leaves
+  `status.valid == false`, so those machines stay silent and just use RAW.
 
-> Not hardware-validated: the exact `ASB_*` bit values and the `EPSStmApi.dll`
-> calling path must be confirmed on the shop's TM-T20III with the APD/Status API
-> installed (the same Phase 0-style hardware step the RAW path went through).
+> Hardware finding (shop TM-T20III, APD6 Status API installed): an **open cover
+> is reported as `ASB_NO_RESPONSE` (raw ASB `0x1`), NOT `ASB_COVER_OPEN` (0x20)** -
+> the printer goes offline, `BiGetStatus` succeeds but says "no response", and the
+> `BiDirectIOEx` send fails with `ERR_ACCESS` (-80). So we cannot get a specific
+> "Tapa abierta" from this unit; the warning is instead keyed off the **send
+> failure** (ground truth for "can't print now") whenever we reached a valid
+> status. `StatusApiPrinter` logs the raw ASB word (`qDebug`) so the ready /
+> paper-out values can still be mapped to specific messages if they turn out to
+> decode cleanly. Specific-bit decode (`fromAsb`) is kept for units/states that do
+> report it.
 
 ## Settings consumed (by `imprimir`)
 

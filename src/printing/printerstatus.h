@@ -29,11 +29,18 @@ struct PrinterStatus
     // Decode an ASB status word into the flags above (valid = true).
     static PrinterStatus fromAsb(quint32 asb);
 
-    // A hard problem that prevents/aborts printing (paper out, cover open,
-    // cutter/mechanical/unrecoverable error, or offline). Worth a modal alert.
+    // A problem worth a modal alert before/around printing (paper out, cover
+    // open, cutter/mechanical/unrecoverable error). Split by isFatal() into
+    // recoverable (queue the job anyway) vs fatal (do not print).
     bool hasError() const;
     // A soft condition worth surfacing but not blocking (paper near end).
     bool hasWarning() const;
+    // A hard fault the operator must clear before the printer can print at all
+    // (cutter / mechanical / unrecoverable). The job must NOT be queued - fix
+    // and reprint. Cover-open and paper-end are deliberately excluded: they are
+    // recoverable, so the caller warns but still lets the RAW spooler hold the
+    // job until paper/cover is restored.
+    bool isFatal() const;
 
     // Spanish operator message describing the most relevant condition, e.g.
     // "Sin papel", "Tapa abierta", "Papel casi agotado" or "Impresora lista".

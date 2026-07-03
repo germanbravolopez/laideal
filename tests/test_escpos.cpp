@@ -232,6 +232,23 @@ private slots:
         QVERIFY(PrinterStatus::fromAsb(0x00000008u).offline);
     }
 
+    void test_printerStatus_fatalVsRecoverable()
+    {
+        // Fatal faults (cutter / mechanical / unrecoverable): block printing.
+        QVERIFY(PrinterStatus::fromAsb(0x00000800u).isFatal());   // auto-cutter
+        QVERIFY(PrinterStatus::fromAsb(0x00000400u).isFatal());   // mechanical
+        QVERIFY(PrinterStatus::fromAsb(0x00002000u).isFatal());   // unrecoverable
+        // Recoverable conditions: an error/warning worth surfacing, but the job
+        // may still be queued - so NOT fatal.
+        QVERIFY(PrinterStatus::fromAsb(0x00000020u).hasError());  // cover open
+        QVERIFY(!PrinterStatus::fromAsb(0x00000020u).isFatal());
+        QVERIFY(PrinterStatus::fromAsb(0x00080000u).hasError());  // paper end
+        QVERIFY(!PrinterStatus::fromAsb(0x00080000u).isFatal());
+        QVERIFY(PrinterStatus::fromAsb(0x00020000u).hasWarning());// paper near end
+        QVERIFY(!PrinterStatus::fromAsb(0x00020000u).isFatal());
+        QVERIFY(!PrinterStatus::fromAsb(0).isFatal());
+    }
+
     void test_printerStatus_errorsRankBeforeWarning()
     {
         // Paper end + near end set together: the hard error must win the summary.

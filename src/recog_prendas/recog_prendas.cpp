@@ -15,6 +15,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStatusBar>
+#include <QIntValidator>
 
 RecogPrendas::RecogPrendas(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
@@ -35,6 +36,8 @@ void RecogPrendas::initialSettings()
     resetAllContents();
     ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
     ui->pb_state->setStyleSheet("background-color: red; font-size: 18px");
+    // Quantity is an integer count: reject any non-integer keystroke in le_qty.
+    ui->le_qty->setValidator(new QIntValidator(1, 9999, this));
     ui->le_search->setFocus();
     ui->tableView->verticalHeader()->setVisible(false);
 }

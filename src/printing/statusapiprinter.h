@@ -29,6 +29,26 @@ public:
     // double-printing. An empty queueName uses the Windows default printer.
     static bool sendAndReadStatus(const QByteArray &escpos, const QString &queueName,
                                   PrinterStatus *status, QString *err = nullptr);
+
+    // Same as sendAndReadStatus() but runs the (potentially blocking) Epson DLL
+    // calls on a detached worker thread and waits at most timeoutMs. If the DLL
+    // does not return in time - e.g. a printer firmware/driver quirk hangs
+    // BiOpenMonPrinter/BiDirectIOEx - it abandons the worker and returns false
+    // with an invalid *status, so the UI thread never freezes and the caller
+    // falls back to RAW. After one timeout the Status API is disabled for the
+    // rest of the process (subsequent calls return immediately) so every later
+    // print is not delayed by the same hang. Call this from the UI thread.
+    static bool sendAndReadStatusBounded(const QByteArray &escpos, const QString &queueName,
+                                         PrinterStatus *status, QString *err, int timeoutMs);
+
+    // Diagnostic: opens the printer and calls each Status API function in turn
+    // (BiOpenMonPrinter / BiGetStatus / BiGetType / BiDirectIOEx real-time status
+    // / BiCloseMonPrinter), timing and logging each one ([diag] in the log), and
+    // returns a human-readable report. Runs behind the same watchdog, so a call
+    // that hangs shows as the last line with no result after it and the report
+    // ends with a "BLOQUEO" note naming it as the culprit. Used by the "Probar
+    // Status API" button in SettingsDialog to pinpoint a firmware-induced hang.
+    static QString runDiagnosticsBounded(const QString &queueName, int timeoutMs);
 };
 
 #endif // STATUSAPIPRINTER_H

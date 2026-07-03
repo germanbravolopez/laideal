@@ -90,15 +90,14 @@ void Imprimir::getTicketInfo()
 QString Imprimir::displayInvoiceId() const
 {
     if (!sqlQueryModel) return le_n_ticket->text();
-    // Scan for the first non-empty literal: row 0 may be an unpaid row of a
-    // multi-event ticket and have invoice_id empty, while a later paid row
-    // carries the real "<n>-<seq>" string AEAT has on record.
+    // Selection rule (first non-empty literal, else bare n_recibo) is the pure
+    // sql_lite::verifactuDisplayInvoiceId seam; here we just gather the column.
+    QStringList invoiceIds;
     for (int r = 0; r < sqlQueryModel->rowCount(); ++r) {
-        const QString id = sqlQueryModel->data(
+        invoiceIds << sqlQueryModel->data(
             sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
-        if (!id.isEmpty()) return id;
     }
-    return le_n_ticket->text();
+    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text());
 }
 
 bool Imprimir::checkTicketPaid(int row)
@@ -314,24 +313,56 @@ void Imprimir::printTicket()
     QString err;
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Optional Status API path: send the same bytes through Epson's EPSStmApi.dll
-    // and read back the device status. If it isn't available (DLL/APD not
-    // installed) it sends nothing and we fall through to the RAW spooler, so
-    // enabling the flag never stops printing.
+    // Optional Status API path: read the device status (Epson EPSStmApi.dll) and
+    // send the same bytes through it. sendAndReadStatus() reads status BEFORE the
+    // send, so a cover-open / paper-out is surfaced here even though it makes the
+    // send itself fail. If the DLL/APD isn't installed it reports failure with an
+    // empty status and we fall through to the RAW spooler, so enabling the flag
+    // never stops printing.
     if (AppSettings::instance()->useStatusApi()) {
         PrinterStatus status;
         QString statusErr;
-        if (StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr)) {
-            QApplication::restoreOverrideCursor();
-            if (status.valid && (status.hasError() || status.hasWarning())) {
-                qWarning() << "Imprimir::printTicket status:" << status.summary()
-                           << Qt::hex << status.raw;
-                QMessageBox::warning(this, "Impresora", status.summary(),
-                                     QMessageBox::Ok, QMessageBox::Ok);
-            }
-            return;
+        // Bounded call: the Epson DLL runs on a worker with a 10 s watchdog so a
+        // printer firmware/driver quirk that hangs a Bi* call can never freeze the
+        // POS UI - on timeout it falls back to RAW and disables the API for the
+        // session. 10 s sits well above the real worst case: a cover-open/no-paper
+        // send returns ERR_ACCESS after the DLL's own internal ~5 s (it does NOT
+        // honour our BiDirectIOEx timeout on that path), ~5.5 s total. A genuine
+        // hang is indefinite, so the wide margin distinguishes the two and a normal
+        // offline print is never mistaken for a hang. See docs/modules/printing.md.
+        const bool sent = StatusApiPrinter::sendAndReadStatusBounded(
+            m_ticketBytes, printer, &status, &statusErr, 10000);
+        QApplication::restoreOverrideCursor();
+        bool warned = false;
+        if (status.valid && (status.hasError() || status.hasWarning())) {
+            qWarning() << "Imprimir::printTicket status:" << status.summary()
+                       << Qt::hex << status.raw;
+            QMessageBox::warning(this, "Impresora", status.summary(),
+                                 QMessageBox::Ok, QMessageBox::Ok);
+            warned = true;
         }
-        qWarning() << "Imprimir::printTicket: Status API no disponible, usando RAW:" << statusErr;
+        // Fatal fault (cutter/mechanical/unrecoverable): do not queue the ticket -
+        // the operator must fix the printer and reprint.
+        if (status.valid && status.isFatal())
+            return;
+        if (sent)
+            return;
+        // The send was refused but the ASB did not decode to a known fault: the
+        // TM-T20III reports an open cover / offline as ASB_NO_RESPONSE (0x1), not
+        // ASB_COVER_OPEN. When we did reach the printer's status (status.valid),
+        // warn generically so the operator gets feedback; a missing DLL/API leaves
+        // status invalid and stays silent (RAW alone works there).
+        if (status.valid && !warned) {
+            QMessageBox::warning(this, "Impresora",
+                "No se pudo enviar a la impresora.\n"
+                "Comprueba que la tapa está cerrada, que hay papel y la conexión.",
+                QMessageBox::Ok, QMessageBox::Ok);
+        }
+        // Recoverable state (cover open / paper out) or a non-status send failure:
+        // fall through to the RAW spooler, which queues the job so it prints once
+        // the cover is closed / paper is replaced.
+        qWarning() << "Imprimir::printTicket: Status API did not send, using RAW:" << statusErr;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
     }
 
     const bool ok = ThermalPrinter::send(m_ticketBytes, printer, &err);
