@@ -1,5 +1,11 @@
 Releases:
 
+10.6
+- New: printer status warnings and a printer test (optional Epson Status API)
+  - When the Epson Status API is enabled, the app now warns you if a ticket cannot be printed - cover open, out of paper, or the printer is off - and still queues the ticket so it prints as soon as you fix the problem. A new "Probar Status API (diagnóstico)" button in Configuración runs and times each printer function and reports the result, to help diagnose printer or driver issues. And the app can no longer freeze if the printer driver stops responding: it waits briefly and then falls back to normal printing. The Status API remains off by default (enable it in Configuración).
+- Improvement: the garment quantity in "Recogida de Prendas" only accepts whole numbers
+  - The Cantidad field now rejects anything that is not a whole number, so the quantity and the amount can no longer get out of step.
+
 10.5
 - New: correct the quantity, service or amount of a garment before it is paid
   - In "Recogida de Prendas" you can now change an unpaid garment's quantity and its service (a drop-down offering "Limp." / "Plan."), and the amount is recalculated automatically. The amount can also be edited by hand to set a custom price. These fields stay locked once the garment is paid, because a paid garment has already been sent to the AEAT.
