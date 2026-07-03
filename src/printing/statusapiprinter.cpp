@@ -15,6 +15,13 @@
 #include <QtGlobal>
 #include <QDebug>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <thread>
+
 #ifdef Q_OS_WIN
 namespace {
 // Epson Status API entry points (EPSStmApi.dll), __stdcall. Resolved at runtime
@@ -144,4 +151,60 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     Q_UNUSED(status);
     return fail(QStringLiteral("La Status API solo está disponible en Windows."));
 #endif
+}
+
+bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const QString &queueName,
+                                                PrinterStatus *status, QString *err, int timeoutMs)
+{
+    // Latches on the first timeout so a firmware/driver hang delays only one
+    // print, not every one after it. Never reset (a stuck DLL stays stuck until
+    // the process restarts); the operator can also just disable the setting.
+    static std::atomic<bool> s_unresponsive{false};
+    if (s_unresponsive.load()) {
+        if (status) *status = PrinterStatus();
+        if (err) *err = QStringLiteral("Status API deshabilitada tras un bloqueo previo (usando RAW).");
+        return false;
+    }
+
+    struct Shared {
+        std::mutex m;
+        std::condition_variable cv;
+        bool done = false;
+        bool ret = false;
+        PrinterStatus status;
+        QString err;
+    };
+    auto sh = std::make_shared<Shared>();
+    // Copy the inputs so the detached worker owns them even if we return first.
+    const QByteArray bytes = escpos;
+    const QString queue = queueName;
+    std::thread([sh, bytes, queue]() {
+        PrinterStatus st;
+        QString e;
+        const bool r = StatusApiPrinter::sendAndReadStatus(bytes, queue, &st, &e);
+        {
+            std::lock_guard<std::mutex> lk(sh->m);
+            sh->ret = r;
+            sh->status = st;
+            sh->err = e;
+            sh->done = true;
+        }
+        sh->cv.notify_one();
+    }).detach();
+
+    std::unique_lock<std::mutex> lk(sh->m);
+    if (sh->cv.wait_for(lk, std::chrono::milliseconds(timeoutMs), [&sh] { return sh->done; })) {
+        if (status) *status = sh->status;
+        if (err) *err = sh->err;
+        return sh->ret;
+    }
+
+    // The worker is stuck inside the Epson DLL. Leave it detached (its shared
+    // state keeps its result slot alive harmlessly) and fall back to RAW.
+    s_unresponsive.store(true);
+    qWarning() << "StatusApiPrinter: bloqueo de la Status API (>" << timeoutMs
+               << "ms); deshabilitada para esta sesion, usando RAW.";
+    if (status) *status = PrinterStatus();
+    if (err) *err = QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs);
+    return false;
 }

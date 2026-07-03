@@ -322,7 +322,13 @@ void Imprimir::printTicket()
     if (AppSettings::instance()->useStatusApi()) {
         PrinterStatus status;
         QString statusErr;
-        const bool sent = StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr);
+        // Bounded call: the Epson DLL runs on a worker with a 4 s watchdog so a
+        // printer firmware/driver quirk that hangs a Bi* call can never freeze the
+        // POS UI - on timeout it falls back to RAW and disables the API for the
+        // session. (A firmware update on the shop TM-T20III made a synchronous
+        // call block indefinitely; see docs/modules/printing.md.)
+        const bool sent = StatusApiPrinter::sendAndReadStatusBounded(
+            m_ticketBytes, printer, &status, &statusErr, 4000);
         QApplication::restoreOverrideCursor();
         bool warned = false;
         if (status.valid && (status.hasError() || status.hasWarning())) {

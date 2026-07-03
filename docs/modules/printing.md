@@ -121,6 +121,16 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
   is unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
   back to the RAW path (enabling the flag never stops printing). The status read
   is best-effort: a send can succeed with `status.valid == false`.
+- **`StatusApiPrinter::sendAndReadStatusBounded(..., timeoutMs)`** — a watchdog
+  wrapper `Imprimir::printTicket` calls instead of the raw `sendAndReadStatus`.
+  It runs the (potentially blocking) Epson DLL calls on a **detached worker
+  thread** and waits at most `timeoutMs` (4 s). If the DLL doesn't return - a
+  printer **firmware/driver quirk can hang `BiOpenMonPrinter`/`BiDirectIOEx`
+  indefinitely** - the UI thread stops waiting, returns `false` with an invalid
+  status, and the caller falls back to RAW, so the POS never freezes. After the
+  first timeout the API is **latched off for the process** (a static flag) so
+  every later print goes straight to RAW instead of each paying the 4 s. A stuck
+  worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
 - **`Imprimir::printTicket` decision**: fatal (status valid) → warn + **return**
   (no RAW, operator fixes and reprints); a decoded recoverable error / near-end →
   warn + **fall through to RAW** (spooler queues the ticket, prints once the cover
