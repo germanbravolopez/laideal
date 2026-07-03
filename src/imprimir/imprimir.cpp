@@ -322,15 +322,16 @@ void Imprimir::printTicket()
     if (AppSettings::instance()->useStatusApi()) {
         PrinterStatus status;
         QString statusErr;
-        // Bounded call: the Epson DLL runs on a worker with a 6 s watchdog so a
+        // Bounded call: the Epson DLL runs on a worker with a 10 s watchdog so a
         // printer firmware/driver quirk that hangs a Bi* call can never freeze the
         // POS UI - on timeout it falls back to RAW and disables the API for the
-        // session. 6 s sits above the real worst case (a cover-open/no-paper send
-        // fails via the 2500 ms BiDirectIOEx timeout, ~3 s total) so a normal
-        // offline print is NOT mistaken for a hang; only an indefinite block (the
-        // old firmware bug) trips it. See docs/modules/printing.md.
+        // session. 10 s sits well above the real worst case: a cover-open/no-paper
+        // send returns ERR_ACCESS after the DLL's own internal ~5 s (it does NOT
+        // honour our BiDirectIOEx timeout on that path), ~5.5 s total. A genuine
+        // hang is indefinite, so the wide margin distinguishes the two and a normal
+        // offline print is never mistaken for a hang. See docs/modules/printing.md.
         const bool sent = StatusApiPrinter::sendAndReadStatusBounded(
-            m_ticketBytes, printer, &status, &statusErr, 6000);
+            m_ticketBytes, printer, &status, &statusErr, 10000);
         QApplication::restoreOverrideCursor();
         bool warned = false;
         if (status.valid && (status.hasError() || status.hasWarning())) {
