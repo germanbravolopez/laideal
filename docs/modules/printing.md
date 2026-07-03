@@ -121,16 +121,24 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
   is unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
   back to the RAW path (enabling the flag never stops printing). The status read
   is best-effort: a send can succeed with `status.valid == false`.
-- **`Imprimir::printTicket` decision** (status valid): fatal → warn +
-  **return** (no RAW, operator fixes and reprints); recoverable error / near-end
-  → warn + **fall through to RAW** so the spooler queues the ticket (prints once
-  the cover is closed / paper replaced); clean send → done.
+- **`Imprimir::printTicket` decision**: fatal (status valid) → warn + **return**
+  (no RAW, operator fixes and reprints); a decoded recoverable error / near-end →
+  warn + **fall through to RAW** (spooler queues the ticket, prints once the cover
+  is closed / paper replaced); **send refused but status did not decode to a known
+  fault** (`status.valid && !sent`) → generic "no se pudo enviar, comprueba tapa /
+  papel / conexión" warning + RAW; clean send → done. A missing DLL leaves
+  `status.valid == false`, so those machines stay silent and just use RAW.
 
-> Hardware note: on the shop's TM-T20III (APD6 Status API installed), a clean
-> print goes through and a cover-open send returns `ERR_ACCESS` (-80) — the
-> read-before-send ordering above is the fix that turns that -80 into a "Tapa
-> abierta" dialog instead of a silent RAW fallback. **Pending re-test on the
-> hardware** to confirm `BiGetStatus` reports the cover-open bit as expected.
+> Hardware finding (shop TM-T20III, APD6 Status API installed): an **open cover
+> is reported as `ASB_NO_RESPONSE` (raw ASB `0x1`), NOT `ASB_COVER_OPEN` (0x20)** -
+> the printer goes offline, `BiGetStatus` succeeds but says "no response", and the
+> `BiDirectIOEx` send fails with `ERR_ACCESS` (-80). So we cannot get a specific
+> "Tapa abierta" from this unit; the warning is instead keyed off the **send
+> failure** (ground truth for "can't print now") whenever we reached a valid
+> status. `StatusApiPrinter` logs the raw ASB word (`qDebug`) so the ready /
+> paper-out values can still be mapped to specific messages if they turn out to
+> decode cleanly. Specific-bit decode (`fromAsb`) is kept for units/states that do
+> report it.
 
 ## Settings consumed (by `imprimir`)
 

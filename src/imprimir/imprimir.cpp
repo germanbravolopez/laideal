@@ -324,11 +324,13 @@ void Imprimir::printTicket()
         QString statusErr;
         const bool sent = StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr);
         QApplication::restoreOverrideCursor();
+        bool warned = false;
         if (status.valid && (status.hasError() || status.hasWarning())) {
             qWarning() << "Imprimir::printTicket status:" << status.summary()
                        << Qt::hex << status.raw;
             QMessageBox::warning(this, "Impresora", status.summary(),
                                  QMessageBox::Ok, QMessageBox::Ok);
+            warned = true;
         }
         // Fatal fault (cutter/mechanical/unrecoverable): do not queue the ticket -
         // the operator must fix the printer and reprint.
@@ -336,6 +338,17 @@ void Imprimir::printTicket()
             return;
         if (sent)
             return;
+        // The send was refused but the ASB did not decode to a known fault: the
+        // TM-T20III reports an open cover / offline as ASB_NO_RESPONSE (0x1), not
+        // ASB_COVER_OPEN. When we did reach the printer's status (status.valid),
+        // warn generically so the operator gets feedback; a missing DLL/API leaves
+        // status invalid and stays silent (RAW alone works there).
+        if (status.valid && !warned) {
+            QMessageBox::warning(this, "Impresora",
+                "No se pudo enviar a la impresora.\n"
+                "Comprueba que la tapa está cerrada, que hay papel y la conexión.",
+                QMessageBox::Ok, QMessageBox::Ok);
+        }
         // Recoverable state (cover open / paper out) or a non-status send failure:
         // fall through to the RAW spooler, which queues the job so it prints once
         // the cover is closed / paper is replaced.
