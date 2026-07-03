@@ -97,9 +97,13 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     auto readStatus = [&](const char *when) {
         DWORD asb = 0;
         const int rc = stat(handle, &asb);
-        qDebug().nospace() << "StatusApiPrinter: BiGetStatus(" << when << ") rc=" << rc
-                           << " asb=0x" << QString::number(asb, 16)
-                           << " summary=" << (rc == 0 ? PrinterStatus::fromAsb(asb).summary() : QString("-"));
+        // Only log when something is off (nonzero ASB or a read error): a normal
+        // ready print stays quiet, and the raw word still identifies the offline
+        // cause in the field (this unit reports off=0x1, lid-open/no-paper=0x4).
+        if (rc != 0 || asb != 0)
+            qDebug().nospace() << "StatusApiPrinter: BiGetStatus(" << when << ") rc=" << rc
+                               << " asb=0x" << QString::number(asb, 16)
+                               << " summary=" << (rc == 0 ? PrinterStatus::fromAsb(asb).summary() : QString("-"));
         if (rc == 0 && status)
             *status = PrinterStatus::fromAsb(asb);
     };
