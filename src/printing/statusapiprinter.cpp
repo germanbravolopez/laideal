@@ -127,12 +127,16 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
         return fail(QStringLiteral("Impresora en error, no se envia: %1").arg(status->summary()));
     }
 
-    // Send the ESC/POS bytes. We only write, so the read buffer is empty.
+    // Send the ESC/POS bytes. We only write, so the read buffer is empty. The
+    // 2500 ms timeout bounds how long an offline send (cover open / no paper)
+    // blocks before returning ERR_ACCESS - short enough that the warning appears
+    // quickly and the caller's watchdog (which must sit above this) does not trip
+    // on a normal offline print. An online send returns in tens of ms.
     int readLen = 0;
     const int rc = io(handle,
                       escpos.size(),
                       reinterpret_cast<LPBYTE>(const_cast<char *>(escpos.constData())),
-                      &readLen, nullptr, 5000, 0, 0);
+                      &readLen, nullptr, 2500, 0, 0);
     bool sent = (rc == 0);
 
     // The cover-open / paper-out ASB often lands only after the send attempt, so

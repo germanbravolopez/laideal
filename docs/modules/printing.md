@@ -124,13 +124,20 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
 - **`StatusApiPrinter::sendAndReadStatusBounded(..., timeoutMs)`** — a watchdog
   wrapper `Imprimir::printTicket` calls instead of the raw `sendAndReadStatus`.
   It runs the (potentially blocking) Epson DLL calls on a **detached worker
-  thread** and waits at most `timeoutMs` (4 s). If the DLL doesn't return - a
-  printer **firmware/driver quirk can hang `BiOpenMonPrinter`/`BiDirectIOEx`
-  indefinitely** - the UI thread stops waiting, returns `false` with an invalid
-  status, and the caller falls back to RAW, so the POS never freezes. After the
-  first timeout the API is **latched off for the process** (a static flag) so
-  every later print goes straight to RAW instead of each paying the 4 s. A stuck
-  worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
+  thread** and waits at most `timeoutMs` (**6 s**). If the DLL doesn't return - a
+  printer **firmware/driver quirk can hang `BiOpenMonPrinter` indefinitely** (seen
+  on the shop TM-T20III until the APD6 was reinstalled) - the UI thread stops
+  waiting, returns `false` with an invalid status, and the caller falls back to
+  RAW, so the POS never freezes. After the first timeout the API is **latched off
+  for the process** (a static flag) so every later print goes straight to RAW. A
+  stuck worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
+  **Calibration matters**: the 6 s watchdog must stay *above* the real worst case
+  or it false-trips on a normal offline print. That worst case is the
+  `BiDirectIOEx` send failing on an open cover / no paper, bounded by its own
+  **2500 ms** timeout (~3 s total with open+close), so 6 s leaves ample margin;
+  only an indefinite block trips it. (The first cut used a 4 s watchdog over a
+  5 s send timeout, so every lid-open print tripped the watchdog and suppressed
+  the warning - fixed by lowering the send timeout and raising the watchdog.)
 - **`StatusApiPrinter::runDiagnosticsBounded(queue, timeoutMs)`** — a diagnostic
   (behind the same watchdog) that opens the printer and calls each Status API
   function in turn - `BiOpenMonPrinter` -> `BiGetStatus` -> `BiGetType` ->
