@@ -361,7 +361,7 @@ void Imprimir::printTicket()
         // Recoverable state (cover open / paper out) or a non-status send failure:
         // fall through to the RAW spooler, which queues the job so it prints once
         // the cover is closed / paper is replaced.
-        qWarning() << "Imprimir::printTicket: Status API no envio, usando RAW:" << statusErr;
+        qWarning() << "Imprimir::printTicket: Status API did not send, using RAW:" << statusErr;
         QApplication::setOverrideCursor(Qt::WaitCursor);
     }
 

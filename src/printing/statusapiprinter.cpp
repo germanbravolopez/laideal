@@ -209,8 +209,8 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
     // The worker is stuck inside the Epson DLL. Leave it detached (its shared
     // state keeps its result slot alive harmlessly) and fall back to RAW.
     s_unresponsive.store(true);
-    qWarning() << "StatusApiPrinter: bloqueo de la Status API (>" << timeoutMs
-               << "ms); deshabilitada para esta sesion, usando RAW.";
+    qWarning() << "StatusApiPrinter: Status API blocked (>" << timeoutMs
+               << "ms); disabled for this session, using RAW.";
     if (status) *status = PrinterStatus();
     if (err) *err = QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs);
     return false;
