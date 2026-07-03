@@ -14,10 +14,12 @@
 
 #include <QtGlobal>
 #include <QDebug>
+#include <QElapsedTimer>
 
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -37,6 +39,7 @@ typedef int(WINAPI *BiOpenMonPrinter_t)(int, LPSTR);
 typedef int(WINAPI *BiDirectIOEx_t)(int, int, LPBYTE, LPINT, LPBYTE, int, int, int);
 typedef int(WINAPI *BiGetStatus_t)(int, LPDWORD);
 typedef int(WINAPI *BiCloseMonPrinter_t)(int);
+typedef int(WINAPI *BiGetType_t)(int, LPBYTE, LPBYTE, LPBYTE, LPBYTE);
 
 // The Windows default printer name, or empty if none is set. Mirrors the helper
 // in thermalprinter.cpp so the Status API path resolves a blank queue name to
@@ -207,4 +210,120 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
     if (status) *status = PrinterStatus();
     if (err) *err = QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs);
     return false;
+}
+
+#ifdef Q_OS_WIN
+namespace {
+// Runs the Status API call sequence, invoking log() with a line before AND after
+// each Bi* call (with elapsed ms) so a hang is pinpointed: the culprit is the
+// last "->" line with no matching result line. Sends only a real-time status
+// request (DLE EOT 1), which reads status without printing.
+void diagSequence(const QString &queueName, const std::function<void(const QString &)> &log)
+{
+    log(QStringLiteral("Cargando EPSStmApi.dll..."));
+    HMODULE dll = LoadLibraryW(L"EPSStmApi.dll");
+    if (!dll) { log(QStringLiteral("ERROR: no se pudo cargar EPSStmApi.dll.")); return; }
+
+    auto open  = reinterpret_cast<BiOpenMonPrinter_t>(GetProcAddress(dll, "BiOpenMonPrinter"));
+    auto close = reinterpret_cast<BiCloseMonPrinter_t>(GetProcAddress(dll, "BiCloseMonPrinter"));
+    auto stat  = reinterpret_cast<BiGetStatus_t>(GetProcAddress(dll, "BiGetStatus"));
+    auto io    = reinterpret_cast<BiDirectIOEx_t>(GetProcAddress(dll, "BiDirectIOEx"));
+    auto type  = reinterpret_cast<BiGetType_t>(GetProcAddress(dll, "BiGetType"));
+    log(QStringLiteral("Funciones resueltas: open=%1 close=%2 status=%3 io=%4 type=%5")
+            .arg(open ? 1 : 0).arg(close ? 1 : 0).arg(stat ? 1 : 0).arg(io ? 1 : 0).arg(type ? 1 : 0));
+    if (!open || !close || !stat || !io) {
+        log(QStringLiteral("ERROR: faltan funciones en EPSStmApi.dll."));
+        FreeLibrary(dll);
+        return;
+    }
+
+    QString queue = queueName.trimmed();
+    if (queue.isEmpty()) queue = defaultPrinterName();
+    QByteArray name = queue.toLocal8Bit();
+    if (name.isEmpty()) {
+        log(QStringLiteral("ERROR: no hay impresora configurada ni predeterminada."));
+        FreeLibrary(dll);
+        return;
+    }
+    log(QStringLiteral("Impresora: '%1'").arg(queue));
+
+    QElapsedTimer t;
+    log(QStringLiteral("-> BiOpenMonPrinter..."));
+    t.start();
+    const int handle = open(2, const_cast<LPSTR>(name.constData()));
+    log(QStringLiteral("   BiOpenMonPrinter rc/handle=%1 (%2 ms)").arg(handle).arg(t.elapsed()));
+    if (handle <= 0) { FreeLibrary(dll); return; }
+
+    log(QStringLiteral("-> BiGetStatus..."));
+    t.restart();
+    DWORD asb = 0;
+    const int rcs = stat(handle, &asb);
+    log(QStringLiteral("   BiGetStatus rc=%1 asb=0x%2 (%3 ms)")
+            .arg(rcs).arg(asb, 0, 16).arg(t.elapsed()));
+
+    if (type) {
+        log(QStringLiteral("-> BiGetType..."));
+        t.restart();
+        BYTE tid = 0, font = 0, ex = 0, sp = 0;
+        const int rct = type(handle, &tid, &font, &ex, &sp);
+        log(QStringLiteral("   BiGetType rc=%1 typeID=%2 (%3 ms)")
+                .arg(rct).arg(tid).arg(t.elapsed()));
+    }
+
+    log(QStringLiteral("-> BiDirectIOEx (DLE EOT 1, estado en tiempo real, no imprime)..."));
+    t.restart();
+    BYTE cmd[3] = { 0x10, 0x04, 0x01 };
+    BYTE rbuf[8] = { 0 };
+    int rlen = 1;
+    const int rcd = io(handle, 3, cmd, &rlen, rbuf, 3000, 0, 0);
+    log(QStringLiteral("   BiDirectIOEx rc=%1 readLen=%2 byte0=0x%3 (%4 ms)")
+            .arg(rcd).arg(rlen).arg(rbuf[0], 0, 16).arg(t.elapsed()));
+
+    log(QStringLiteral("-> BiCloseMonPrinter..."));
+    t.restart();
+    const int rcc = close(handle);
+    log(QStringLiteral("   BiCloseMonPrinter rc=%1 (%2 ms)").arg(rcc).arg(t.elapsed()));
+
+    FreeLibrary(dll);
+}
+} // namespace
+#endif
+
+QString StatusApiPrinter::runDiagnosticsBounded(const QString &queueName, int timeoutMs)
+{
+#ifdef Q_OS_WIN
+    struct Shared {
+        std::mutex m;
+        std::condition_variable cv;
+        bool done = false;
+        QString report;
+    };
+    auto sh = std::make_shared<Shared>();
+    const QString queue = queueName;
+    std::thread([sh, queue]() {
+        auto log = [&sh](const QString &line) {
+            qDebug().noquote() << "[diag]" << line;
+            std::lock_guard<std::mutex> lk(sh->m);
+            sh->report += line + QLatin1Char('\n');
+        };
+        diagSequence(queue, log);
+        {
+            std::lock_guard<std::mutex> lk(sh->m);
+            sh->done = true;
+        }
+        sh->cv.notify_one();
+    }).detach();
+
+    std::unique_lock<std::mutex> lk(sh->m);
+    if (sh->cv.wait_for(lk, std::chrono::milliseconds(timeoutMs), [&sh] { return sh->done; }))
+        return sh->report + QStringLiteral("\nDiagnostico completado.");
+    return sh->report + QStringLiteral(
+        "\n*** BLOQUEO: la ultima llamada mostrada arriba no respondio en %1 s.\n"
+        "Esa es la funcion de la Status API que se cuelga con este firmware. ***")
+        .arg(timeoutMs / 1000);
+#else
+    Q_UNUSED(queueName);
+    Q_UNUSED(timeoutMs);
+    return QStringLiteral("La Status API solo esta disponible en Windows.");
+#endif
 }

@@ -131,6 +131,17 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
   first timeout the API is **latched off for the process** (a static flag) so
   every later print goes straight to RAW instead of each paying the 4 s. A stuck
   worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
+- **`StatusApiPrinter::runDiagnosticsBounded(queue, timeoutMs)`** — a diagnostic
+  (behind the same watchdog) that opens the printer and calls each Status API
+  function in turn - `BiOpenMonPrinter` -> `BiGetStatus` -> `BiGetType` ->
+  `BiDirectIOEx` (a real-time `DLE EOT 1` status request, no printing) ->
+  `BiCloseMonPrinter` - logging (`[diag]`) a line **before and after** each call
+  with elapsed ms, and returns a report. A hang shows as the last `->` line with
+  no result after it; the report ends with a "BLOQUEO" note naming the culprit
+  call. Wired to the **"Probar Status API (diagnóstico)"** button in
+  `SettingsDialog` (General tab, next to the checkbox) to pinpoint a
+  firmware-induced hang without freezing the UI. `appsettings` links `printing`
+  for this.
 - **`Imprimir::printTicket` decision**: fatal (status valid) → warn + **return**
   (no RAW, operator fixes and reprints); a decoded recoverable error / near-end →
   warn + **fall through to RAW** (spooler queues the ticket, prints once the cover

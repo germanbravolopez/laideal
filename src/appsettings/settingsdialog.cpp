@@ -1,5 +1,7 @@
 #include "settingsdialog.h"
 #include "appsettings.h"
+#include "statusapiprinter.h"
+#include <QApplication>
 #include <QTabWidget>
 #include <QFormLayout>
 #include <QVBoxLayout>
@@ -115,6 +117,24 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
         "tapa abierta o error del cortador. Si no está disponible, se usa la "
         "impresión RAW normal."));
     fl->addRow(m_useStatusApi);
+
+    auto *btnTestStatusApi = new QPushButton(tr("Probar Status API (diagnóstico)..."));
+    btnTestStatusApi->setToolTip(tr(
+        "Ejecuta y cronometra cada llamada de la Status API (abrir, estado, tipo, "
+        "envío) para localizar cuál se bloquea. El resultado se muestra y se guarda "
+        "en el log. No imprime nada."));
+    connect(btnTestStatusApi, &QPushButton::clicked, this, [this]() {
+        const QString queue = m_printerName->currentText().trimmed();
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        const QString report = StatusApiPrinter::runDiagnosticsBounded(queue, 12000);
+        QApplication::restoreOverrideCursor();
+        QMessageBox box(QMessageBox::Information, tr("Diagnóstico Status API"),
+                        tr("Resultado del diagnóstico (también guardado en el log):"),
+                        QMessageBox::Ok, this);
+        box.setDetailedText(report);
+        box.exec();
+    });
+    fl->addRow(btnTestStatusApi);
 
     m_checkUpdatesOnStartup = new QCheckBox(tr("Buscar actualizaciones al iniciar la aplicación"));
     m_checkUpdatesOnStartup->setChecked(s->checkUpdatesOnStartup());
