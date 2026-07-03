@@ -94,7 +94,7 @@ their tests) stay cross-platform.
 
 ## PrinterStatus + StatusApiPrinter (optional Status API path)
 
-An opt-in layer (setting `print.use_status_api`) that reads device status after
+An opt-in layer (setting `print.use_status_api`) that reads device status around
 printing — paper out / near end, cover open, cutter / mechanical / unrecoverable
 error. The ESC/POS payload is identical to the RAW path; only the transport
 differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_methods.md)).
@@ -102,20 +102,35 @@ differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_
 - **`PrinterStatus`** — pure. `PrinterStatus::fromAsb(quint32)` decodes the
   Epson **ASB** (Automatic Status Back) 32-bit word into named flags
   (`paperEnd`, `paperNearEnd`, `coverOpen`, `cutterError`, …) plus
-  `hasError()` / `hasWarning()` and a Spanish `summary()` ("Sin papel", "Tapa
-  abierta", "Papel casi agotado", "Impresora lista", …). Unit-tested.
+  `hasError()` / `hasWarning()` / `isFatal()` and a Spanish `summary()` ("Sin
+  papel", "Tapa abierta", "Papel casi agotado", "Impresora lista", …).
+  `isFatal()` is the **fatal vs recoverable** split: fatal = cutter / mechanical
+  / unrecoverable (block printing); cover-open and paper-end are recoverable
+  (warn but let the spooler hold the job). Unit-tested.
 - **`StatusApiPrinter::sendAndReadStatus(bytes, queue, *status, *err)`** —
   Win32. Loads `EPSStmApi.dll` **dynamically** (`LoadLibrary`/`GetProcAddress`,
   so there is no build-time SDK dependency), then
-  `BiOpenMonPrinter(2, queue)` → `BiDirectIOEx` (send) → `BiGetStatus` (read) →
-  `BiCloseMonPrinter`. Returns `false` *without sending* if the DLL/API is
-  unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
+  `BiOpenMonPrinter(2, queue)` → **`BiGetStatus` (read status first)** →
+  `BiDirectIOEx` (send) → `BiCloseMonPrinter`. Status is read **before** the
+  send because `BiGetStatus` returns the cached ASB (cover-open / paper-out) and
+  succeeds even offline, whereas the `BiDirectIOEx` send returns `ERR_ACCESS`
+  (-80) when the cover is open — a send-first design would only ever see a bare
+  send failure, never the reason (APD6 Status API manual: "confirm the printer
+  can print before printing"). On a **fatal** status the send is skipped and the
+  function returns `false`. Returns `false` *without a real send* if the DLL/API
+  is unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
   back to the RAW path (enabling the flag never stops printing). The status read
   is best-effort: a send can succeed with `status.valid == false`.
+- **`Imprimir::printTicket` decision** (status valid): fatal → warn +
+  **return** (no RAW, operator fixes and reprints); recoverable error / near-end
+  → warn + **fall through to RAW** so the spooler queues the ticket (prints once
+  the cover is closed / paper replaced); clean send → done.
 
-> Not hardware-validated: the exact `ASB_*` bit values and the `EPSStmApi.dll`
-> calling path must be confirmed on the shop's TM-T20III with the APD/Status API
-> installed (the same Phase 0-style hardware step the RAW path went through).
+> Hardware note: on the shop's TM-T20III (APD6 Status API installed), a clean
+> print goes through and a cover-open send returns `ERR_ACCESS` (-80) — the
+> read-before-send ordering above is the fix that turns that -80 into a "Tapa
+> abierta" dialog instead of a silent RAW fallback. **Pending re-test on the
+> hardware** to confirm `BiGetStatus` reports the cover-open bit as expected.
 
 ## Settings consumed (by `imprimir`)
 

@@ -47,6 +47,13 @@ bool PrinterStatus::hasWarning() const
     return paperNearEnd;
 }
 
+bool PrinterStatus::isFatal() const
+{
+    // Cover-open and paper-end are recoverable (spooler holds the job); only a
+    // cutter/mechanical/unrecoverable fault must block printing entirely.
+    return cutterError || mechanicalError || unrecoverableError;
+}
+
 QString PrinterStatus::summary() const
 {
     if (!valid)

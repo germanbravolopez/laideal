@@ -84,6 +84,26 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                         .arg(queue, QString::number(handle)));
     }
 
+    // Read the device status BEFORE sending. BiGetStatus returns the cached ASB
+    // the printer auto-sends on cover-open / paper-out and succeeds even while
+    // the printer is offline - unlike the BiDirectIOEx write, which returns
+    // ERR_ACCESS (-80) when the cover is open, so a send-first design would only
+    // ever see a bare send failure and never the real reason. (APD6 Status API
+    // manual: "confirm the printer can print before printing".)
+    if (status) {
+        DWORD asb = 0;
+        if (stat(handle, &asb) == 0)
+            *status = PrinterStatus::fromAsb(asb);
+    }
+
+    // A fatal fault (cutter / mechanical / unrecoverable) must not print: skip
+    // the send and report false so the caller does not queue it via RAW either.
+    if (status && status->isFatal()) {
+        close(handle);
+        FreeLibrary(dll);
+        return fail(QStringLiteral("Impresora en error, no se envia: %1").arg(status->summary()));
+    }
+
     // Send the ESC/POS bytes. We only write, so the read buffer is empty.
     int readLen = 0;
     const int rc = io(handle,
@@ -91,12 +111,6 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                       reinterpret_cast<LPBYTE>(const_cast<char *>(escpos.constData())),
                       &readLen, nullptr, 5000, 0, 0);
     bool sent = (rc == 0);
-
-    if (sent && status) {
-        DWORD asb = 0;
-        if (stat(handle, &asb) == 0)
-            *status = PrinterStatus::fromAsb(asb);
-    }
 
     close(handle);
     FreeLibrary(dll);

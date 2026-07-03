@@ -313,24 +313,34 @@ void Imprimir::printTicket()
     QString err;
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Optional Status API path: send the same bytes through Epson's EPSStmApi.dll
-    // and read back the device status. If it isn't available (DLL/APD not
-    // installed) it sends nothing and we fall through to the RAW spooler, so
-    // enabling the flag never stops printing.
+    // Optional Status API path: read the device status (Epson EPSStmApi.dll) and
+    // send the same bytes through it. sendAndReadStatus() reads status BEFORE the
+    // send, so a cover-open / paper-out is surfaced here even though it makes the
+    // send itself fail. If the DLL/APD isn't installed it reports failure with an
+    // empty status and we fall through to the RAW spooler, so enabling the flag
+    // never stops printing.
     if (AppSettings::instance()->useStatusApi()) {
         PrinterStatus status;
         QString statusErr;
-        if (StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr)) {
-            QApplication::restoreOverrideCursor();
-            if (status.valid && (status.hasError() || status.hasWarning())) {
-                qWarning() << "Imprimir::printTicket status:" << status.summary()
-                           << Qt::hex << status.raw;
-                QMessageBox::warning(this, "Impresora", status.summary(),
-                                     QMessageBox::Ok, QMessageBox::Ok);
-            }
-            return;
+        const bool sent = StatusApiPrinter::sendAndReadStatus(m_ticketBytes, printer, &status, &statusErr);
+        QApplication::restoreOverrideCursor();
+        if (status.valid && (status.hasError() || status.hasWarning())) {
+            qWarning() << "Imprimir::printTicket status:" << status.summary()
+                       << Qt::hex << status.raw;
+            QMessageBox::warning(this, "Impresora", status.summary(),
+                                 QMessageBox::Ok, QMessageBox::Ok);
         }
-        qWarning() << "Imprimir::printTicket: Status API no disponible, usando RAW:" << statusErr;
+        // Fatal fault (cutter/mechanical/unrecoverable): do not queue the ticket -
+        // the operator must fix the printer and reprint.
+        if (status.valid && status.isFatal())
+            return;
+        if (sent)
+            return;
+        // Recoverable state (cover open / paper out) or a non-status send failure:
+        // fall through to the RAW spooler, which queues the job so it prints once
+        // the cover is closed / paper is replaced.
+        qWarning() << "Imprimir::printTicket: Status API no envio, usando RAW:" << statusErr;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
     }
 
     const bool ok = ThermalPrinter::send(m_ticketBytes, printer, &err);
