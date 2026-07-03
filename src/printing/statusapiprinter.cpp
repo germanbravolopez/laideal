@@ -13,6 +13,7 @@
 #endif
 
 #include <QtGlobal>
+#include <QDebug>
 
 #ifdef Q_OS_WIN
 namespace {
@@ -90,11 +91,19 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     // ERR_ACCESS (-80) when the cover is open, so a send-first design would only
     // ever see a bare send failure and never the real reason. (APD6 Status API
     // manual: "confirm the printer can print before printing".)
-    if (status) {
+    // Read the ASB and (best-effort) decode it into *status. Logs the raw word so
+    // the TM-T20III's actual ASB layout can be confirmed against our ASB_* bit
+    // constants on the shop hardware.
+    auto readStatus = [&](const char *when) {
         DWORD asb = 0;
-        if (stat(handle, &asb) == 0)
+        const int rc = stat(handle, &asb);
+        qDebug().nospace() << "StatusApiPrinter: BiGetStatus(" << when << ") rc=" << rc
+                           << " asb=0x" << QString::number(asb, 16)
+                           << " summary=" << (rc == 0 ? PrinterStatus::fromAsb(asb).summary() : QString("-"));
+        if (rc == 0 && status)
             *status = PrinterStatus::fromAsb(asb);
-    }
+    };
+    readStatus("pre-send");
 
     // A fatal fault (cutter / mechanical / unrecoverable) must not print: skip
     // the send and report false so the caller does not queue it via RAW either.
@@ -111,6 +120,12 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                       reinterpret_cast<LPBYTE>(const_cast<char *>(escpos.constData())),
                       &readLen, nullptr, 5000, 0, 0);
     bool sent = (rc == 0);
+
+    // The cover-open / paper-out ASB often lands only after the send attempt, so
+    // a pre-send read can still show "ready". Re-read on failure so the caller
+    // gets the real reason (and the log captures the raw word either way).
+    if (!sent)
+        readStatus("post-send");
 
     close(handle);
     FreeLibrary(dll);
