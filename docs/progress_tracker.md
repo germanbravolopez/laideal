@@ -15,7 +15,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `develop`
 
-**Latest release**: [10.6](https://github.com/germanbravolopez/laideal/releases/tag/10.6) — hardens the optional Epson **Status API**: staff get a warning when a ticket can't be printed (cover open, no paper, printer off) and it still queues via RAW; a **watchdog thread** means a hung printer driver can never freeze the POS (it falls back to RAW and disables the API for the session); and a **"Probar Status API"** diagnostic button in Configuración times each printer call to pinpoint issues. Validated end-to-end on the shop TM-T20III (incl. an ASB `0x1`/`0x4` firmware quirk and a `BiOpenMonPrinter` firmware hang fixed by reinstalling APD6). Also: the **Cantidad** field in "Recogida de Prendas" is now integer-only, and internal test-coverage/refactor of the printed-InvoiceID selection (`sql_lite::verifactuDisplayInvoiceId`).
+**Latest release**: [10.7](https://github.com/germanbravolopez/laideal/releases/tag/10.7) — a small follow-up release polishing the **"Anular prendas"** tool: voiding a garment now stamps its payment and pickup dates with the cancellation date, so there is a record of *when* it was anulada (accounting is unaffected — the row stays unpaid and excluded from every total), and the **Observaciones** field is no longer blocked on an `Anulado` row in "Recogida de Prendas", so staff can note why it was cancelled. Everything else on a voided garment stays locked.
 
 <!-- Keep only the latest release here. Earlier releases are recorded in Completed Milestones below; do not accumulate a "Previous release" list under Current Status. -->
 
@@ -52,7 +52,7 @@ Parked items where the effort outweighs the value as the code stands. Not on the
 
 ## Completed Milestones
 
-### Post-10.6 development — July 2026 (unreleased)
+### Post-10.6 development — July 2026 (shipped in 10.7)
 - [x] **Anular prendas: stamp the cancellation date, and keep observations editable on a voided row**: two in-shop follow-ups to the "Anular prendas" tool. (1) `sql_lite::voidGarmentRow` now also writes `fecha_pago` **and** `fecha_recogida` with the current date (`dd-MM-yyyy`), so the DB records *when* a garment was anulada — previously both stayed empty and the cancellation had no timestamp anywhere. Accounting is unaffected: the row keeps `pagado='NO'` and gets `verifactu_estado='ANULADA'`, and every accounting query filters on `pagado='SI'` plus a not-`ANULADA` estado, so a stamped `fecha_pago` can never leak into a quarter total. (2) In **Recogida de Prendas**, the `observaciones` field is no longer read-only for an Anulado row: `updateRowClickedToFields()` leaves `le_obsv` writable and `updateDb()`'s Anulado early-return now exempts the `OBSV` op, so staff can record why the garment was voided or add later notes. All other edit paths (pay / pickup / split / re-price) stay locked. Tests updated: `test_voidGarmentRow_setsAnuladoAndScopesByHash` asserts both dates equal today, and `test_markTicketPickedUp_excludesAnulado` now asserts a "Recoger todo" does not overwrite the voided row's cancellation date. 14 suites green. Files: `src/sql_lite/{sql_lite.h,sql_lite.cpp}`, `src/recog_prendas/recog_prendas.cpp`, `tests/test_sql_lite.cpp`, docs.
 
 ### Post-10.5 development — July 2026 (shipped in 10.6)

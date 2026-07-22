@@ -1,5 +1,11 @@
 Releases:
 
+10.7
+- Improvement: a cancelled garment now records when it was cancelled
+  - When you void a garment with "Anular prendas", the payment and pickup dates are now filled in with the date of the cancellation, so there is a record of when it happened. This does not affect the accounting: a voided garment is still unpaid and is still left out of every total.
+- Improvement: notes can be edited on a cancelled garment
+  - In "Recogida de Prendas" the Observaciones field is no longer blocked for a garment marked "Anulado", so you can write down why it was cancelled or add any later remark. Everything else on a voided garment stays locked as before.
+
 10.6
 - New: printer status warnings and a printer test (optional Epson Status API)
   - When the Epson Status API is enabled, the app now warns you if a ticket cannot be printed - cover open, out of paper, or the printer is off - and still queues the ticket so it prints as soon as you fix the problem. A new "Probar Status API (diagnóstico)" button in Configuración runs and times each printer function and reports the result, to help diagnose printer or driver issues. And the app can no longer freeze if the printer driver stops responding: it waits briefly and then falls back to normal printing. The Status API remains off by default (enable it in Configuración).
