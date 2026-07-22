@@ -86,8 +86,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
              << "ticket=" << ticketNum << "hash=" << rowHash
              << "editLock=" << editLock << "nGarm=" << nGarm;
     // A locally voided garment is immutable: block every write here too, not just
-    // via the disabled buttons, so no edit path can revive or charge it.
-    if (sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString()
+    // via the disabled buttons, so no edit path can revive or charge it. OBSV is the
+    // one exception - notes must stay writable so the reason for the anulacion (or
+    // any later remark) can be recorded on the voided row.
+    if (op != OBSV
+            && sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString()
             == QLatin1String(INGRESOS_ESTADO_ANULADO)) {
         qWarning() << "RecogPrendas::updateDb: blocked" << opNames[op]
                    << "on anulado row, ticket" << ticketNum << "hash" << rowHash;
@@ -257,8 +260,8 @@ void RecogPrendas::updateRowClickedToFields()
     ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString());
     ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_OBSERVACIONES)).toString());
     const QString rowEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString();
-    // A locally voided garment (estado "Anulado") is read-only everywhere: it can
-    // never be paid, picked up, split or have its fields edited again.
+    // A locally voided garment (estado "Anulado") is read-only everywhere except
+    // observations: it can never be paid, picked up, split or re-priced again.
     const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
     const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI";
     const bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
@@ -277,7 +280,9 @@ void RecogPrendas::updateRowClickedToFields()
     ui->pb_pku_all->setEnabled(!isAnulado);
     ui->pb_separ_garm->setEnabled(!isAnulado);
     ui->pb_print->setEnabled(true);
-    ui->le_obsv->setReadOnly(isAnulado);
+    // Observations stay editable on a voided row: the user documents why it was
+    // anulada / adds later notes. Everything else remains locked.
+    ui->le_obsv->setReadOnly(false);
     ui->le_size->setReadOnly(!priceEditable);
     ui->le_price->setReadOnly(!priceEditable);
     ui->le_qty->setReadOnly(!priceEditable);

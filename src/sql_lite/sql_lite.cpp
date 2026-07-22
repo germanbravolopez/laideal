@@ -433,12 +433,18 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
 
     db.open();
     QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest "
+    // fecha_pago / fecha_recogida are stamped with the cancellation date so the
+    // moment the garment was voided is recorded. Neither date is taxable here:
+    // the row keeps pagado = "NO" and gets verifactu_estado ANULADA, and every
+    // accounting query filters on pagado = 'SI' plus a not-ANULADA estado.
+    q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest, "
+              "fecha_pago = :fecha, fecha_recogida = :fecha "
               "WHERE n_recibo = :n AND hash = :h");
-    q.bindValue(":est",  QStringLiteral(INGRESOS_ESTADO_ANULADO));
-    q.bindValue(":vest", verifactuEstadoToString(VerifactuEstado::Anulada));
-    q.bindValue(":n",    nRecibo);
-    q.bindValue(":h",    hash);
+    q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
+    q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
+    q.bindValue(":fecha", QDate::currentDate().toString("dd-MM-yyyy"));
+    q.bindValue(":n",     nRecibo);
+    q.bindValue(":h",     hash);
     bool ok = q.exec();
     if (!ok)
         qWarning() << "voidGarmentRow: UPDATE failed -" << q.lastError().text();

@@ -609,6 +609,10 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("ANULADA"));
         // pagado is deliberately left as-is (the row is closed, not collected).
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+        // Both dates record when the garment was voided.
+        const QString today = QDate::currentDate().toString("dd-MM-yyyy");
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"), today);
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'"), today);
         // The sibling garment of the same ticket is keyed out by hash.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
@@ -630,9 +634,11 @@ private slots:
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hA'"), QStringLiteral("10-04-2026"));
-        // The voided garment stays Anulado and gets no pickup date.
+        // The voided garment stays Anulado and keeps its cancellation date - the
+        // "Recoger todo" pickup date is never written over it.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
-        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'").isEmpty());
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"),
+                 QDate::currentDate().toString("dd-MM-yyyy"));
         // The NULL-estado legacy row is picked up like any normal row.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
