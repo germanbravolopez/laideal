@@ -198,6 +198,17 @@ private slots:
         insertIngreso("V1", "02-07-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
         insertIngreso("V2", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 7, 2026), 1); // locked despite order
+
+        // The mirror corner case: the locked row sorts FIRST, an unlocked sibling
+        // after it. Also must read locked - MAX is order-independent both ways, so
+        // a single locked row is enough to report the month as locked (the safe
+        // direction: a false-lock only blocks an edit, a false-open would let a
+        // closed accounting period be modified). Not reachable through the app
+        // (updateLockForMonth locks a whole month uniformly), but pinned so the
+        // conservative contract can't silently regress.
+        insertIngreso("W1", "05-08-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        insertIngreso("W2", "12-08-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 8, 2026), 1); // locked despite order
     }
 
     // The 9.1 regression guard: a quarter with income only in its first month
