@@ -188,6 +188,16 @@ private slots:
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // open
         exec("UPDATE ingresos SET edit_lock = 1 WHERE n_recibo = 'T1'");
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 1); // locked
+
+        // A locked month must read as locked even when an unlocked row sorts first.
+        // Rows come back in rowid (insertion) order, so insert the unlocked row -
+        // e.g. a garment voided into the month with edit_lock 0, see voidGarmentRow
+        // stamping fecha_pago with the cancellation date - BEFORE the locked one:
+        // a "first row wins" read would return 0 and let the locked month be edited.
+        // COALESCE(MAX(edit_lock),0) is order-independent and reports the lock.
+        insertIngreso("V1", "02-07-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
+        insertIngreso("V2", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 7, 2026), 1); // locked despite order
     }
 
     // The 9.1 regression guard: a quarter with income only in its first month

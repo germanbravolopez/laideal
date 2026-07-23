@@ -632,12 +632,18 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     db.open();
     QSqlQuery q(db);
     int editLock = 2; // 2 = no data found for period
+    // COALESCE(MAX(edit_lock), 0): the month reads locked (1) if ANY row in it is
+    // locked, regardless of row order, and 0 when it is open or has no rows. MAX
+    // (not "first row wins") matters now that a voided garment carries edit_lock 0
+    // and a cancellation-stamped fecha_pago - it must not mask a locked sibling and
+    // report an already-locked month as open. Callers only branch on == 1 / == 0,
+    // so keeping the empty-month result at 0 preserves existing behaviour.
     if (table == "ingresos") {
-        q.prepare("SELECT edit_lock FROM ingresos WHERE fecha_pago LIKE :pat");
+        q.prepare("SELECT COALESCE(MAX(edit_lock), 0) FROM ingresos WHERE fecha_pago LIKE :pat");
         q.bindValue(":pat", pattern);
         q.exec();
     } else if (table == "gastos") {
-        q.prepare("SELECT edit_lock FROM gastos WHERE fecha LIKE :pat");
+        q.prepare("SELECT COALESCE(MAX(edit_lock), 0) FROM gastos WHERE fecha LIKE :pat");
         q.bindValue(":pat", pattern);
         q.exec();
     } else {
