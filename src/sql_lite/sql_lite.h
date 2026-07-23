@@ -91,7 +91,8 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 // AEAT (verifactu_estado PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
-// Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA".
+// Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
+// fecha_pago and fecha_recogida -> today (records when the garment was voided).
 // pagado is left untouched (stays "NO"); the caller is expected to have gated the
 // row through garmentIsLocallyVoidable first.
 bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);

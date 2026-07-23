@@ -188,6 +188,16 @@ private slots:
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // open
         exec("UPDATE ingresos SET edit_lock = 1 WHERE n_recibo = 'T1'");
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 1); // locked
+
+        // A locked month must read as locked even when an unlocked row sorts first.
+        // Rows come back in rowid (insertion) order, so insert the unlocked row -
+        // e.g. a garment voided into the month with edit_lock 0, see voidGarmentRow
+        // stamping fecha_pago with the cancellation date - BEFORE the locked one:
+        // a "first row wins" read would return 0 and let the locked month be edited.
+        // COALESCE(MAX(edit_lock),0) is order-independent and reports the lock.
+        insertIngreso("V1", "02-07-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
+        insertIngreso("V2", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 7, 2026), 1); // locked despite order
     }
 
     // The 9.1 regression guard: a quarter with income only in its first month
@@ -609,6 +619,10 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("ANULADA"));
         // pagado is deliberately left as-is (the row is closed, not collected).
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
+        // Both dates record when the garment was voided.
+        const QString today = QDate::currentDate().toString("dd-MM-yyyy");
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"), today);
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'"), today);
         // The sibling garment of the same ticket is keyed out by hash.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
@@ -630,9 +644,11 @@ private slots:
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hA'"), QStringLiteral("10-04-2026"));
-        // The voided garment stays Anulado and gets no pickup date.
+        // The voided garment stays Anulado and keeps its cancellation date - the
+        // "Recoger todo" pickup date is never written over it.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
-        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'").isEmpty());
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"),
+                 QDate::currentDate().toString("dd-MM-yyyy"));
         // The NULL-estado legacy row is picked up like any normal row.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
