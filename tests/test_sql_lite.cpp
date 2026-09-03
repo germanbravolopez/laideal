@@ -323,6 +323,32 @@ private slots:
         QCOMPARE(ev[2].fechaPago, QStringLiteral("12-03-2026"));
     }
 
+    // Issue #43: MainWindow::saveTicket stamps every garment PENDIENTE, paid or
+    // not, but only submits the paid ones - so an unpaid ticket sitting in the
+    // shop is NOT an unreconciled AEAT submission and must never reach the
+    // startup recovery dialog. Mirrors the corner case both ways: same ticket
+    // number, one unpaid save-time event and one paid partial-pay event.
+    void test_pendingVerifactuEvents_excludesUnpaid()
+    {
+        // Unpaid save-time rows: PENDIENTE, but no invoice was ever sent.
+        insertIngreso("T200", "10-03-2026", "50.00", "NO", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T200", "10-03-2026", "30.00", "NO", "PENDIENTE", 0, /*seq=*/0);
+        // Paid partial-pay event on the same ticket: a genuine pending submission.
+        insertIngreso("T200", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        // pagado='SI' but never stamped with a payment date: no AEAT date to
+        // retry under, so it is not recoverable either.
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('T201', '', '10-03-2026', '', '40.00', 'SI', '', 0, 'PENDIENTE', 0)");
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 1);
+        QCOMPARE(ev[0].nRecibo, QStringLiteral("T200"));
+        QCOMPARE(ev[0].seq, 1);
+        QVERIFY(qAbs(ev[0].importe - 20.0) < 0.01);
+    }
+
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
     // reception date: a partial pay made on a different day than reception would
     // otherwise register a second invoice at AEAT (date is part of the invoice
