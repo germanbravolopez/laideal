@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Ninja
         run: choco install ninja -y --no-progress
@@ -43,7 +43,7 @@ jobs:
       # strips inline images from the run summary (it shows the ASCII receipt
       # instead), so upload the graphical PNG renders as a downloadable artifact.
       - name: Upload ticket previews
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: ticket-previews
@@ -53,7 +53,7 @@ jobs:
       # The release job reuses this exe instead of rebuilding, so upload it on
       # every push (covers the X.Y tag push that drives a release).
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: github.event_name == 'push'
         with:
           name: laideal
@@ -72,7 +72,7 @@ jobs:
       actions: read      # download-artifact from the build job
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate tag matches CMakeLists.txt version
         shell: pwsh
@@ -101,7 +101,7 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Download built exe from the build job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: laideal
           path: dist
