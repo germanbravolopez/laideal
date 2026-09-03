@@ -11,11 +11,11 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ---
 
-## Current Status — July 2026
+## Current Status — September 2026
 
 **Active branch**: `develop`
 
-**Latest release**: [10.7](https://github.com/germanbravolopez/laideal/releases/tag/10.7) — a small follow-up release polishing the **"Anular prendas"** tool: voiding a garment now stamps its payment and pickup dates with the cancellation date, so there is a record of *when* it was anulada (accounting is unaffected — the row stays unpaid and excluded from every total), and the **Observaciones** field is no longer blocked on an `Anulado` row in "Recogida de Prendas", so staff can note why it was cancelled. Everything else on a voided garment stays locked.
+**Latest release**: [10.8](https://github.com/germanbravolopez/laideal/releases/tag/10.8) — a one-fix release reported from the shop: the startup **"Envíos Verifactu pendientes"** dialog listed every un-collected receipt as an unreconciled AEAT submission. `MainWindow::saveTicket` stamps every garment `PENDIENTE` regardless of payment, but only submits paid ones, and the recovery query had no payment gate — so the shop's normal steady state read as pending submissions. Nothing was ever sent to AEAT incorrectly and no data migration is needed; `sql_lite::pendingVerifactuEvents` now also requires `pagado='SI'` with a non-empty `fecha_pago`.
 
 <!-- Keep only the latest release here. Earlier releases are recorded in Completed Milestones below; do not accumulate a "Previous release" list under Current Status. -->
 
@@ -53,7 +53,7 @@ Parked items where the effort outweighs the value as the code stands. Not on the
 
 ## Completed Milestones
 
-### Post-10.7 development — September 2026 (unreleased)
+### Post-10.7 development — September 2026 (shipped in 10.8)
 - [x] **"Envíos Verifactu pendientes" no longer lists unpaid tickets (issue #43)**: reported from the shop — on startup the recovery dialog showed *every* ticket at `verifactu_estado='PENDIENTE'`, none of them paid, so none of them ever due for AEAT submission. Traced the save path: `MainWindow::saveTicket` stamps **every** garment row `PENDIENTE` (`VerifactuEstado::NotSubmitted`) regardless of `pagado`, while the actual submission is gated on `if (isPaid)` in `on_bb_save_reset_clicked` — an unpaid ticket is correctly never sent, but its rows sit at `PENDIENTE` until collection and payment in `PayDialog`. The dialog's feed, `sql_lite::pendingVerifactuEvents`, filtered only on estado + the reception-date floor, with **no payment gate**, so the normal steady state of the shop (garments in store awaiting collection) read as unreconciled in-flight AEAT submissions. The string `"PENDIENTE"` conflates "not due to be sent" with "sent, reply lost"; only `onRetryClicked` distinguished them, one step too late (it refuses a row with no `fecha_pago`). **Why now**: the default recovery floor is `2026-09-01`, so from 1 September every newly-entered ticket cleared the floor and the dialog began filling up. Fixed by adding `AND pagado = 'SI' AND fecha_pago IS NOT NULL AND fecha_pago != ''` to the query — `fecha_pago` is the real gate (it is what a retry must re-submit under), `pagado` is the weaker literal-string check kept alongside it. Verified no recoverable event is lost: every writer that leaves a genuinely pending row sets both columns — save-time paid ticket (`fecha_pago = fecha_recepcion`), `PayDialog` partial pay (`seq>0`), and the `RectifyInvoiceDialog` placeholder (`pagado='SI'`). New `test_sql_lite::test_pendingVerifactuEvents_excludesUnpaid` mirrors the corner case both ways (same `n_recibo`: unpaid save-time event excluded, paid partial-pay event still surfaced) plus a `pagado='SI'` row with no `fecha_pago`; confirmed it fails without the gate. 14 suites green. Files: `src/sql_lite/sql_lite.cpp`, `tests/test_sql_lite.cpp`, docs.
 
 ### Post-10.6 development — July 2026 (shipped in 10.7)

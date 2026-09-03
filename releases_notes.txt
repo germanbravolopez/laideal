@@ -1,5 +1,9 @@
 Releases:
 
+10.8
+- Bug fix: the "Envíos Verifactu pendientes" window no longer lists receipts that have not been paid
+  - When you opened the app, this window listed every receipt still waiting in the shop, as if all of them were submissions waiting for a reply from the AEAT. They were not. A receipt is only sent to the AEAT once it is paid, so nothing was ever submitted that should not have been, and no data was affected. The window now lists only paid submissions that really did not get an answer from the AEAT, which is what it is there for.
+
 10.7
 - Improvement: a cancelled garment now records when it was cancelled
   - When you void a garment with "Anular prendas", the payment and pickup dates are now filled in with the date of the cancellation, so there is a record of when it happened. This does not affect the accounting: a voided garment is still unpaid and is still left out of every total.
