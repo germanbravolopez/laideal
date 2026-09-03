@@ -876,6 +876,11 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // rows of one event) and SUM(importe) for that event's own total. The estado
     // filter covers legacy empty strings and the canonical "PENDIENTE".
     //
+    // The payment gate is what makes "PENDIENTE" mean "sent, reply lost" rather
+    // than "not due to be sent": saveTicket stamps EVERY row PENDIENTE, paid or
+    // not, but only submits paid ones - so without it every un-collected garment
+    // in the shop surfaces as an unreconciled AEAT submission (issue #43).
+    //
     // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
     // possible: a PayDialog event (seq>0, InvoiceID "<n_recibo>-<seq>") left
     // PENDIENTE by a timeout surfaces as its own row and is re-submitted with
@@ -901,6 +906,8 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
         "       OR verifactu_estado = 'PENDIENTE') "
+        "  AND pagado = 'SI' "
+        "  AND fecha_pago IS NOT NULL AND fecha_pago != '' "
         "  AND substr(fecha_recepcion, 7, 4) || '-' "
         "      || substr(fecha_recepcion, 4, 2) || '-' "
         "      || substr(fecha_recepcion, 1, 2) >= :floor "

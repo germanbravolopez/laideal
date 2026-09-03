@@ -198,6 +198,17 @@ private slots:
         insertIngreso("V1", "02-07-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
         insertIngreso("V2", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
         QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 7, 2026), 1); // locked despite order
+
+        // The mirror corner case: the locked row sorts FIRST, an unlocked sibling
+        // after it. Also must read locked - MAX is order-independent both ways, so
+        // a single locked row is enough to report the month as locked (the safe
+        // direction: a false-lock only blocks an edit, a false-open would let a
+        // closed accounting period be modified). Not reachable through the app
+        // (updateLockForMonth locks a whole month uniformly), but pinned so the
+        // conservative contract can't silently regress.
+        insertIngreso("W1", "05-08-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        insertIngreso("W2", "12-08-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
+        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 8, 2026), 1); // locked despite order
     }
 
     // The 9.1 regression guard: a quarter with income only in its first month
@@ -310,6 +321,32 @@ private slots:
         QCOMPARE(ev[2].seq, 1);
         QVERIFY(qAbs(ev[2].importe - 20.0) < 0.01);
         QCOMPARE(ev[2].fechaPago, QStringLiteral("12-03-2026"));
+    }
+
+    // Issue #43: MainWindow::saveTicket stamps every garment PENDIENTE, paid or
+    // not, but only submits the paid ones - so an unpaid ticket sitting in the
+    // shop is NOT an unreconciled AEAT submission and must never reach the
+    // startup recovery dialog. Mirrors the corner case both ways: same ticket
+    // number, one unpaid save-time event and one paid partial-pay event.
+    void test_pendingVerifactuEvents_excludesUnpaid()
+    {
+        // Unpaid save-time rows: PENDIENTE, but no invoice was ever sent.
+        insertIngreso("T200", "10-03-2026", "50.00", "NO", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T200", "10-03-2026", "30.00", "NO", "PENDIENTE", 0, /*seq=*/0);
+        // Paid partial-pay event on the same ticket: a genuine pending submission.
+        insertIngreso("T200", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        // pagado='SI' but never stamped with a payment date: no AEAT date to
+        // retry under, so it is not recoverable either.
+        exec("INSERT INTO ingresos "
+             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('T201', '', '10-03-2026', '', '40.00', 'SI', '', 0, 'PENDIENTE', 0)");
+
+        const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
+        QCOMPARE(ev.size(), 1);
+        QCOMPARE(ev[0].nRecibo, QStringLiteral("T200"));
+        QCOMPARE(ev[0].seq, 1);
+        QVERIFY(qAbs(ev[0].importe - 20.0) < 0.01);
     }
 
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
