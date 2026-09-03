@@ -174,17 +174,35 @@ private slots:
     void test_estadoRoundTrip()
     {
         const VerifactuEstado all[] = {
-            VerifactuEstado::NotSubmitted, VerifactuEstado::Enviada,
+            VerifactuEstado::Unpaid, VerifactuEstado::NotSubmitted, VerifactuEstado::Enviada,
             VerifactuEstado::Anulada, VerifactuEstado::Rectificada, VerifactuEstado::Error
         };
         for (VerifactuEstado e : all)
             QVERIFY(verifactuEstadoFromString(verifactuEstadoToString(e)) == e);
 
         QCOMPARE(verifactuEstadoToString(VerifactuEstado::Enviada), QStringLiteral("ENVIADA"));
+        QCOMPARE(verifactuEstadoToString(VerifactuEstado::Unpaid), QStringLiteral("SIN COBRAR"));
         // PENDIENTE / empty / unknown all map to NotSubmitted.
         QVERIFY(verifactuEstadoFromString("PENDIENTE") == VerifactuEstado::NotSubmitted);
         QVERIFY(verifactuEstadoFromString("") == VerifactuEstado::NotSubmitted);
         QVERIFY(verifactuEstadoFromString("garbage") == VerifactuEstado::NotSubmitted);
+    }
+
+    // The Unpaid/NotSubmitted split exists so the recovery dialog can tell "no
+    // invoice to send" from "sent, reply lost". Every OTHER gate must keep
+    // treating the two alike - paying a garment does not rewrite verifactu_estado,
+    // so the row is still SIN COBRAR when RecogPrendas decides whether to submit
+    // it. A gate that tested NotSubmitted alone would stop paid garments from
+    // reaching AEAT, which is why this contract is pinned.
+    void test_estadoIsUnsubmitted()
+    {
+        QVERIFY(verifactuEstadoIsUnsubmitted(VerifactuEstado::Unpaid));
+        QVERIFY(verifactuEstadoIsUnsubmitted(VerifactuEstado::NotSubmitted));
+        QVERIFY(verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(""))); // legacy blank
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Enviada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Anulada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Rectificada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Error));
     }
 };
 

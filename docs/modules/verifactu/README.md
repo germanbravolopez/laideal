@@ -101,13 +101,18 @@ Defined in `verifactumanager.h` alongside `verifactuEstadoToString()` / `verifac
 
 | Enum | DB string | Meaning |
 |------|-----------|---------|
-| `NotSubmitted` | `"PENDIENTE"` | Verifactu not configured at save time, or unpaid ticket awaiting submission at pickup. `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) here |
+| `Unpaid` | `"SIN COBRAR"` | Unpaid row: there is no invoice to submit yet. Written by `saveTicket` / `AddGarment` when `pagado != "SI"`; becomes `PENDIENTE` only once the garment is paid and a submit is actually due |
+| `NotSubmitted` | `"PENDIENTE"` | Paid and due at AEAT: submitted and awaiting a reply, or not sent yet (Verifactu not configured). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) here |
 | `Enviada` | `"ENVIADA"` | Submitted successfully to AEAT |
 | `Anulada` | `"ANULADA"` | Cancelled via `CancelInvoiceDialog` |
 | `Rectificada` | `"RECTIFICADA"` | Superseded by a substitution (`S`) rectificativa from `RectifyInvoiceDialog`. Excluded from `totalPriceBetweenDates()` so the new rectificativa row carries the corrected total without double-counting |
 | `Error` | `"ERROR"` | Submission or cancellation failed |
 
 Never hardcode the string values — always go through the helpers.
+
+`Unpaid` and `NotSubmitted` are distinguished **only** by the startup recovery dialog, which needs to tell "nothing to send" from "sent, reply lost". Every other gate must treat them alike via `verifactuEstadoIsUnsubmitted()` (true for `Unpaid`, `NotSubmitted` and legacy blank): paying a garment does not rewrite `verifactu_estado`, so a row is still `SIN COBRAR` at the moment `RecogPrendas` decides whether to submit it — testing `== NotSubmitted` there would silently stop paid garments from reaching AEAT. The two callers are `sql_lite::garmentIsLocallyVoidable` and the `RecogPrendas` `PAY_YES` submit trigger.
+
+`migrateDatabase()` carries a one-time idempotent backfill re-labelling unpaid `'PENDIENTE'` rows as `'SIN COBRAR'`. It is scoped to the literal `'PENDIENTE'` and leaves NULL/`''` alone on purpose: those are legacy split-off rows that `Imprimir`'s event-list query and `CancelInvoiceDialog` detect via `verifactu_estado != ''`, so making them non-empty would add a spurious event group to printed invoices.
 
 ---
 
@@ -150,7 +155,7 @@ Nine columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 
 | Location | Behaviour |
 |----------|-----------|
-| `MainWindow::on_bb_save_reset_clicked()` | Saves rows with `estado = PENDIENTE`, prints receipts (without QR — AEAT is in flight), fires `verifactuSubmitInvoice()` (paid only), resets form. Status bar shows progress. Async handler `onVerifactuRequestFinished()` UPDATEs the row(s) with CSV when AEAT replies. |
+| `MainWindow::on_bb_save_reset_clicked()` | Saves rows with `estado = PENDIENTE` when paid / `SIN COBRAR` when not, prints receipts (without QR — AEAT is in flight), fires `verifactuSubmitInvoice()` (paid only), resets form. Status bar shows progress. Async handler `onVerifactuRequestFinished()` UPDATEs the row(s) with CSV when AEAT replies. |
 | `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB AND checks `hasPendingSubmit(ticketNum)` (in-memory dedup — async submit hasn't updated DB yet, so DB-only check would double-fire from the pay-all loop). If both clear, calls `retryVerifactuSubmit()`. |
 | `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` (async, status bar). |
 | `PayDialog::onCobrarClicked()` (partial payment) | Submits the selected garments as `InvoiceID = "<n_recibo>-<seq>"` (`nextVerifactuInvoiceSeq`) with a 5 s bounded wait. On reply: `SUCCESS` → `ENVIADA` + CSV/QR; AEAT `ERROR` → `Error`. On **timeout / transport failure** (`NETWORK_ERROR`/`PENDING`) the outcome is unknown, so `markPendingVerifactu(seq)` records the rows `PENDIENTE` (not `Error`), keeping the `<n_recibo>-<seq>` InvoiceID. Verifactu-disabled → rows paid, `verifactu_*` left empty. |

@@ -88,7 +88,7 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 
 // True when a garment row can be voided locally (VoidGarmentsDialog) instead of
 // via an AEAT anulacion: it must be unpaid (pagado != "SI") and never sent to
-// AEAT (verifactu_estado PENDIENTE/empty). A paid/ENVIADA row was registered at
+// AEAT (verifactu_estado SIN COBRAR/PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
@@ -108,8 +108,9 @@ bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
 //    submission for the ticket covered the full importe and the chained Huella
 //    stays on the original rows, so re-submitting a split row would create a
 //    duplicate-InvoiceID error at AEAT.
-//  - saveTicket row: pass "PENDIENTE" (verifactuEstadoToString(NotSubmitted)); the
-//    async AEAT submit patches the row once a reply arrives.
+//  - saveTicket / AddGarment row: "PENDIENTE" (NotSubmitted) when the row is paid
+//    and an AEAT submit is due - the async reply patches it - else "SIN COBRAR"
+//    (Unpaid), which means there is no invoice to send yet.
 struct IngresoGarmentRow {
     QString nRecibo;
     QString cliente;
@@ -126,7 +127,7 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString editLock = "0";
     QString hash;
-    QString verifactuEstado;  // "" (legacy/split) or "PENDIENTE" (saveTicket)
+    QString verifactuEstado;  // "" (legacy/split), "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 

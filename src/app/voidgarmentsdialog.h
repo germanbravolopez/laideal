@@ -13,7 +13,7 @@ class QPushButton;
 
 // Void unpaid, not-yet-delivered garments of a ticket (an erroneous receipt or a
 // customer change of mind). This is the local counterpart to CancelInvoiceDialog:
-// the rows here were never sent to AEAT (pagado=NO, verifactu_estado PENDIENTE),
+// the rows here were never sent to AEAT (pagado=NO, verifactu_estado SIN COBRAR),
 // so voiding is a pure DB update - estado -> "Anulado", verifactu_estado ->
 // "ANULADA" - with no AEAT anulacion. Paid/ENVIADA rows are shown but not
 // selectable; those must be cancelled via "Anular Factura Verifactu".

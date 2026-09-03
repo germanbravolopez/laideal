@@ -6,7 +6,8 @@
 
 // Persisted value of the verifactu_estado column in the ingresos table.
 enum class VerifactuEstado {
-    NotSubmitted,  // "PENDIENTE"   - Verifactu not configured, not yet submitted, or AEAT reply pending
+    Unpaid,        // "SIN COBRAR"  - unpaid, so there is no invoice to submit yet
+    NotSubmitted,  // "PENDIENTE"   - paid and due at AEAT: submitted and awaiting a reply, or not yet sent
     Enviada,       // "ENVIADA"     - successfully submitted to AEAT
     Anulada,       // "ANULADA"     - cancelled via AEAT
     Rectificada,   // "RECTIFICADA" - superseded by a substitution rectificativa (R1-R5 with S)
@@ -16,6 +17,7 @@ enum class VerifactuEstado {
 inline QString verifactuEstadoToString(VerifactuEstado e)
 {
     switch (e) {
+    case VerifactuEstado::Unpaid:       return QStringLiteral("SIN COBRAR");
     case VerifactuEstado::NotSubmitted: return QStringLiteral("PENDIENTE");
     case VerifactuEstado::Enviada:      return QStringLiteral("ENVIADA");
     case VerifactuEstado::Anulada:      return QStringLiteral("ANULADA");
@@ -27,11 +29,22 @@ inline QString verifactuEstadoToString(VerifactuEstado e)
 
 inline VerifactuEstado verifactuEstadoFromString(const QString &s)
 {
+    if (s == QLatin1String("SIN COBRAR"))  return VerifactuEstado::Unpaid;
     if (s == QLatin1String("ENVIADA"))     return VerifactuEstado::Enviada;
     if (s == QLatin1String("ANULADA"))     return VerifactuEstado::Anulada;
     if (s == QLatin1String("RECTIFICADA")) return VerifactuEstado::Rectificada;
     if (s == QLatin1String("ERROR"))       return VerifactuEstado::Error;
     return VerifactuEstado::NotSubmitted; // covers "PENDIENTE" and legacy empty/NULL
+}
+
+// True for the two states that mean "AEAT has not accepted this row (yet)".
+// Every gate that used to test `== NotSubmitted` must use this instead: paying a
+// garment does not rewrite verifactu_estado, so a row is still Unpaid at the
+// moment RecogPrendas decides whether to submit it - testing NotSubmitted alone
+// would silently stop paid garments from reaching AEAT.
+inline bool verifactuEstadoIsUnsubmitted(VerifactuEstado e)
+{
+    return e == VerifactuEstado::Unpaid || e == VerifactuEstado::NotSubmitted;
 }
 
 struct VerifactuResult

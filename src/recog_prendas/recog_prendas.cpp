@@ -115,7 +115,10 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 // Dedup pay-all loop: if a submit is already in flight for this ticket,
                 // a per-row check of estadoDb is not enough because the async DB write
                 // hasn't happened yet. hasPendingSubmit() consults the in-memory map.
-                if (verifactuEstadoFromString(estadoDb) == VerifactuEstado::NotSubmitted
+                // Unsubmitted covers SIN COBRAR too: the row is still marked unpaid
+                // here (updateTicketPayment does not touch verifactu_estado), so
+                // testing PENDIENTE alone would skip the AEAT submit entirely.
+                if (verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(estadoDb))
                         && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
                         && !hasPendingSubmit(ticketNum)) {
                     retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());

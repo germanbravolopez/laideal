@@ -474,8 +474,9 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
 
 void MainWindow::saveTicket()
 {
-    // Every saved garment starts verifactu_estado = PENDIENTE; the async submit handler
-    // patches CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
+    // A paid garment starts PENDIENTE and the async submit handler patches
+    // CSV/timestamp/estado once AEAT replies (see onVerifactuRequestFinished());
+    // an unpaid one starts SIN COBRAR - there is no invoice to send yet.
     // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
     // so log the count of garments actually inserted, not the slot count.
     int savedGarments = 0;
@@ -504,8 +505,11 @@ void MainWindow::saveTicket()
                                    ? ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text() : QString("");
             r.editLock       = "0";
             r.hash           = genHash16();
-            // Rows start PENDIENTE; the async AEAT submit patches estado on reply.
-            r.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+            // An unpaid row has no invoice to send, so it is SIN COBRAR, not PENDIENTE;
+            // a paid one starts PENDIENTE and the async AEAT submit patches it on reply.
+            r.verifactuEstado = verifactuEstadoToString(
+                r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
+                                                : VerifactuEstado::Unpaid);
 
             insertGarmentRow(db, r);
             ++savedGarments;

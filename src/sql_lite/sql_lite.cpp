@@ -71,6 +71,21 @@ void migrateDatabase(QSqlDatabase &db)
     // authoritatively for reprint / QR regen so we never have to guess from
     // seq=0 whether the original AEAT format was bare or "-0".
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
+
+    // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
+    // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
+    // an AEAT reply. Re-label those as SIN COBRAR. Idempotent (the filter excludes
+    // rows it already rewrote) and scoped to the literal 'PENDIENTE' on purpose:
+    // NULL/'' rows are legacy split-off garments that several queries detect via
+    // `verifactu_estado != ''`, so making them non-empty would change print/cancel
+    // behaviour. See docs/modules/verifactu/README.md.
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
+                "WHERE verifactu_estado = 'PENDIENTE' "
+                "  AND (pagado != 'SI' OR fecha_pago IS NULL OR fecha_pago = '')"))
+        qWarning() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
+                 << "unpaid PENDIENTE rows as SIN COBRAR";
     db.close();
 }
 
@@ -424,7 +439,7 @@ bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEst
 {
     if (pagado == QLatin1String("SI"))
         return false;
-    return verifactuEstadoFromString(verifactuEstado) == VerifactuEstado::NotSubmitted;
+    return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
 
 bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash)
@@ -876,10 +891,10 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // rows of one event) and SUM(importe) for that event's own total. The estado
     // filter covers legacy empty strings and the canonical "PENDIENTE".
     //
-    // The payment gate is what makes "PENDIENTE" mean "sent, reply lost" rather
-    // than "not due to be sent": saveTicket stamps EVERY row PENDIENTE, paid or
-    // not, but only submits paid ones - so without it every un-collected garment
-    // in the shop surfaces as an unreconciled AEAT submission (issue #43).
+    // The payment gate is belt-and-braces since the SIN COBRAR split (10.9): an
+    // unpaid row now carries its own estado and the filter above already drops it.
+    // Kept because it also covers legacy NULL/'' rows, which the backfill leaves
+    // alone on purpose (issue #43).
     //
     // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
     // possible: a PayDialog event (seq>0, InvoiceID "<n_recibo>-<seq>") left

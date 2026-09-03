@@ -349,6 +349,53 @@ private slots:
         QVERIFY(qAbs(ev[0].importe - 20.0) < 0.01);
     }
 
+    // The 10.9 Unpaid/NotSubmitted split ships a one-time backfill: rows that the
+    // old saveTicket stamped PENDIENTE while unpaid are re-labelled SIN COBRAR.
+    // Two boundaries are load-bearing and pinned here: a genuinely-pending paid row
+    // must survive untouched (re-labelling it would hide a real unreconciled AEAT
+    // submission from the recovery dialog), and a legacy blank row must stay blank
+    // (several print/cancel queries detect split-off rows via `verifactu_estado
+    // != ''`, so making it non-empty would change what gets printed).
+    void test_migrateDatabase_backfillsUnpaidAsSinCobrar()
+    {
+        const QString estadoSql =
+            "SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n";
+
+        insertIngreso("M1", "10-03-2026", "50.00", "NO", "PENDIENTE"); // unpaid -> re-labelled
+        insertIngreso("M2", "10-03-2026", "50.00", "SI", "PENDIENTE"); // paid, really pending
+        insertIngreso("M3", "10-03-2026", "50.00", "SI", "ENVIADA");   // confirmed
+        // Legacy split-off row (blank estado) and a paid row that never got a
+        // payment date (so it was never actually submitted).
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('M4', '', '10-03-2026', '', '50.00', 'NO', '', 0, '', 0)");
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('M5', '', '10-03-2026', '', '50.00', 'SI', '', 0, 'PENDIENTE', 0)");
+
+        migrateDatabase(m_db);
+
+        QCOMPARE(scalar(estadoSql, {{":n", "M1"}}), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M2"}}), QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M3"}}), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M4"}}), QString());
+        QCOMPARE(scalar(estadoSql, {{":n", "M5"}}), QStringLiteral("SIN COBRAR"));
+
+        // Idempotent: re-running on an already-migrated DB is a no-op.
+        migrateDatabase(m_db);
+        QCOMPARE(scalar(estadoSql, {{":n", "M1"}}), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M2"}}), QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M4"}}), QString());
+    }
+
+    // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
+    // estado filter excludes it on its own, independently of the pagado gate.
+    void test_pendingVerifactuEvents_excludesSinCobrar()
+    {
+        insertIngreso("T300", "10-03-2026", "50.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        QVERIFY(pendingVerifactuEvents(m_db, "2026-01-01").isEmpty());
+    }
+
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
     // reception date: a partial pay made on a different day than reception would
     // otherwise register a second invoice at AEAT (date is part of the invoice
@@ -640,6 +687,7 @@ private slots:
     {
         QVERIFY(garmentIsLocallyVoidable("NO", ""));           // legacy empty = NotSubmitted
         QVERIFY(garmentIsLocallyVoidable("NO", "PENDIENTE"));
+        QVERIFY(garmentIsLocallyVoidable("NO", "SIN COBRAR")); // the normal unpaid state
         QVERIFY(!garmentIsLocallyVoidable("SI", "PENDIENTE")); // paid -> not local
         QVERIFY(!garmentIsLocallyVoidable("NO", "ENVIADA"));   // sent to AEAT
         QVERIFY(!garmentIsLocallyVoidable("NO", "ANULADA"));

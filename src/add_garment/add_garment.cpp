@@ -239,8 +239,10 @@ void AddGarment::saveFactura()
     row.editLock       = "0";
     row.hash           = hash;
     // Issue #41: a garment added to an existing ticket is un-submitted like a
-    // freshly saved row. The old inline INSERT omitted verifactu_estado, leaving
-    // added garments blank instead of PENDIENTE; route through insertGarmentRow.
-    row.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+    // freshly saved row, so it follows the same rule - SIN COBRAR while unpaid,
+    // PENDIENTE once it is paid and an AEAT submit is due.
+    row.verifactuEstado = verifactuEstadoToString(
+        row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
+                                          : VerifactuEstado::Unpaid);
     insertGarmentRow(db, row);
 }
