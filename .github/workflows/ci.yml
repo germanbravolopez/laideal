@@ -43,7 +43,7 @@ jobs:
       # strips inline images from the run summary (it shows the ASCII receipt
       # instead), so upload the graphical PNG renders as a downloadable artifact.
       - name: Upload ticket previews
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ticket-previews
@@ -53,7 +53,7 @@ jobs:
       # The release job reuses this exe instead of rebuilding, so upload it on
       # every push (covers the X.Y tag push that drives a release).
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'push'
         with:
           name: laideal
@@ -101,7 +101,7 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Download built exe from the build job
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: laideal
           path: dist
