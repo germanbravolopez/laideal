@@ -406,7 +406,11 @@ void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
     ui_impr->getTicketInfo();
     // Auto-print a single factura (the customer copy) after Cobrar - no second
     // (business) copy. Reprint from RecogPrendas if another copy is needed.
-    ui_impr->buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
+    // The rows are already pagado=SI here, so the recibo fallback (AEAT did not
+    // reply) must show IMPORTE PAGADO - otherwise the customer walks out with a
+    // ticket that shows neither the payment nor a QR. A factura implies payment
+    // and omits the line, as every other print path does.
+    ui_impr->buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/ui_impr->isRecibo);
     if (AppSettings::instance()->enablePrinting())
         ui_impr->printTicket();
 }
