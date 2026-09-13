@@ -578,6 +578,15 @@ void RecogPrendas::on_pb_pay_all_clicked()
 
     PayDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
+    // Adopt a submission the dialog gave up waiting on, so a late reply still
+    // patches the row instead of dying with the dialog.
+    connect(&dlg, &PayDialog::submitAdopted, this,
+            [this](const QString &reqId, const QString &ticketNum, int seq) {
+        ensureVerifactuConnected();
+        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/true });
+        qDebug() << "RecogPrendas: adopted in-flight submit" << reqId
+                 << "for" << verifactuInvoiceId(ticketNum, seq);
+    });
     if (!dlg.loadTicket(ticketNum)) {
         QMessageBox::information(this, tr("Sin prendas pendientes"),
                                  tr("El ticket %1 no tiene prendas pendientes de cobrar.")
@@ -763,6 +772,7 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
     if (it == m_pendingSubmits.end()) return; // not one of ours
     const QString ticketNum = it.value().ticketNum;
     const int     seq       = it.value().seq;
+    const bool    adopted   = it.value().adopted;
     m_pendingSubmits.erase(it);
 
     updateTicketVerifactuFields(db, ticketNum, result, seq);
@@ -776,7 +786,13 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
 
     if (result.isSuccess()) {
         qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
-        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
+        // An adopted reply landed after the customer already got a QR-less recibo,
+        // so say the factura can now be printed rather than just "enviado".
+        statusBar()->showMessage(
+            adopted ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR")
+                          .arg(verifactuInvoiceId(ticketNum, seq))
+                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv),
+            adopted ? 30000 : 10000);
     } else {
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
         statusBar()->showMessage(

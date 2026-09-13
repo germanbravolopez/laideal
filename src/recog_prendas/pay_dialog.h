@@ -34,6 +34,13 @@ public:
     // not show the dialog in that case).
     bool loadTicket(const QString &ticketNum);
 
+signals:
+    // Emitted when the bounded wait expires with the request still in flight.
+    // This dialog dies with exec(), so RecogPrendas adopts the reqId and applies
+    // the reply if it still arrives - otherwise a late SUCCESS (and its CSV) is
+    // lost and the row stays falsely PENDIENTE.
+    void submitAdopted(const QString &requestId, const QString &ticketNum, int seq);
+
 private slots:
     void onCobrarClicked();
     void onSelectionChanged();

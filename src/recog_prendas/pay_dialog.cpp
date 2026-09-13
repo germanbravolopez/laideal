@@ -311,6 +311,13 @@ void PayDialog::onCobrarClicked()
     QTimer::singleShot(5000, this, [this]() {
         if (m_pendingReqId.isEmpty()) return; // already handled
         qWarning() << "PayDialog: AEAT timeout (5s) for" << m_pendingReqId;
+        // Hand the still-in-flight request to a longer-lived owner BEFORE closing.
+        // This dialog is stack-allocated by RecogPrendas and dies with exec(), so
+        // without the handoff a reply arriving at, say, 7 s (the transport timeout
+        // is 10 s) was dropped on the floor - including a SUCCESS carrying the CSV,
+        // which left the row falsely PENDIENTE and its later retry answering
+        // "already exists".
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq);
         m_pendingReqId.clear();
         VerifactuResult res;
         res.status = VerifactuResult::NETWORK_ERROR;

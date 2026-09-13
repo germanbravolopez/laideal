@@ -84,6 +84,10 @@ private:
     struct PendingSubmit {
         QString ticketNum;
         int     seq = 0;
+        // Adopted from PayDialog after its bounded wait expired: the operator has
+        // already been handed a recibo without a QR, so a late success has to tell
+        // them the factura is now printable.
+        bool    adopted = false;
     };
     QHash<QString, PendingSubmit> m_pendingSubmits;
 
