@@ -331,7 +331,7 @@ Contains the same Invoice properties plus processing results.
 
 ## FilterSet Object (For Queries)
 
-Input parameter for the submitted-invoices query endpoint.
+Input parameter for the submitted-invoices query endpoint `<base>/GetFilteredList`, used by `VerifactuManager::queryInvoiceAsync()` to reconcile an "already exists" rejection. **Implemented since 10.9** (the "Not implemented" notes below are historical).
 
 ### Count
 - **Description**: Maximum number of records to return

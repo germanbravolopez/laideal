@@ -504,6 +504,48 @@ private slots:
         QVERIFY(verifactuEventFor(m_db, "NOPE", 0).nRecibo.isEmpty());
     }
 
+    // Adopting AEAT's own CSV is how an "already exists" rejection gets resolved:
+    // the invoice IS registered, we just lost the reply. Every row of the event is
+    // settled, and the error text cleared.
+    void test_reconcileVerifactuFromAeat_adoptsCsv()
+    {
+        insertIngreso("K1", "10-03-2026", "50.00", "SI", "ERROR", 0, /*seq=*/0);
+        insertIngreso("K1", "10-03-2026", "30.00", "SI", "ERROR", 0, /*seq=*/0);
+        insertIngreso("K1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K1", 0, "A-7F3K9Q",
+                                            "https://aeat.example/v"), 2);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND verifactu_estado = 'ENVIADA' AND verifactu_csv = 'A-7F3K9Q'"),
+                 QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT verifactu_error FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND pagado = 'SI' LIMIT 1"), QString());
+        // The unpaid sibling was never part of that invoice.
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
+    }
+
+    // The refusals. A settled row must never be re-stamped from a query: ENVIADA
+    // already carries its own CSV, and ANULADA / RECTIFICADA were deliberately
+    // superseded, so overwriting either would revive a cancelled invoice.
+    void test_reconcileVerifactuFromAeat_refusals()
+    {
+        insertIngreso("K2", "10-03-2026", "50.00", "SI", "ANULADA",     0, /*seq=*/0);
+        insertIngreso("K3", "10-03-2026", "50.00", "SI", "RECTIFICADA", 0, /*seq=*/0);
+        insertIngreso("K4", "10-03-2026", "50.00", "SI", "ENVIADA",     0, /*seq=*/0);
+        insertIngreso("K5", "10-03-2026", "50.00", "SI", "ERROR",       0, /*seq=*/0);
+
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K2", 0, "X", ""), 0);
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K3", 0, "X", ""), 0);
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K4", 0, "X", ""), 0);
+        // An empty CSV is refused outright - there is nothing to adopt.
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K5", 0, "", ""), 0);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K5'"),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K2'"),
+                 QStringLiteral("ANULADA"));
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()

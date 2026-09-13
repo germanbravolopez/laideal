@@ -29,6 +29,10 @@ public:
     QString submitInvoiceAsync(const VerifactuInvoice &invoice);
     QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate);
     QString generateQRAsync(const VerifactuInvoice &invoice);
+    // Asks AEAT/Irene Solutions what it holds for an InvoiceID (GetFilteredList).
+    // Result arrives via queryFinished, NOT requestFinished, so it can never be
+    // mistaken for a submission reply by the existing handlers.
+    QString queryInvoiceAsync(const QString &invoiceNumber);
 
     QString getValidationUrl(const VerifactuInvoice &invoice) const;
     QString getLastError() const { return m_lastError; }
@@ -40,6 +44,7 @@ public:
 
 signals:
     void requestFinished(const QString &requestId, const VerifactuResult &result);
+    void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
 
 private:
     VerifactuConfig *m_config;

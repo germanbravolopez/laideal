@@ -80,6 +80,31 @@ struct VerifactuResult
 // outcome UNKNOWN - AEAT may well have registered the invoice - so it becomes
 // PENDIENTE and is routed to the startup recovery dialog. Recording it as Error
 // instead offers a "Reintentar" that can only ever come back "already exists".
+// One invoice record as AEAT/Irene Solutions holds it, from a GetFilteredList
+// query. Used to reconcile a local row that says ERROR (typically "already
+// exists" after a retry) against what the AEAT side actually registered.
+//
+// The response schema of GetFilteredList is not published - the vendor's own
+// client parses it untyped - so the parser is deliberately tolerant about field
+// names and `raw` always keeps the payload for diagnosis. Nothing may be written
+// to the DB on the strength of this record alone: it must first pass
+// verifactuRemoteMatches() AND carry a non-empty csv.
+struct VerifactuRemoteRecord
+{
+    bool    found = false;      // the query returned a record for this InvoiceID
+    bool    parsed = false;     // the payload was understood (a record was decoded)
+    QString invoiceId;
+    QString invoiceDate;        // as returned, normalised to dd-MM-yyyy when possible
+    double  totalAmount = 0.0;
+    QString csv;
+    QString statusResponse;
+    QString validationUrl;
+    QString raw;                // the whole JSON payload, always kept
+
+    // Safe to reconcile from only when AEAT really has it with a CSV.
+    bool hasUsableCsv() const { return found && parsed && !csv.isEmpty(); }
+};
+
 inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)
 {
     switch (s) {

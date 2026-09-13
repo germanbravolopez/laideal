@@ -178,6 +178,15 @@ struct PendingVerifactuEvent {
     double  importe = 0.0;
 };
 
+// Adopt the CSV/QR that AEAT already holds for a payment event, turning a local
+// ERROR / PENDIENTE row into ENVIADA. Returns the number of rows updated (0 when
+// nothing was eligible). Refuses an empty csv, and never touches a row that is
+// already ENVIADA, ANULADA or RECTIFICADA - re-stamping those would revive a
+// deliberately superseded invoice. The CALLER must first have confirmed identity
+// with verifactuRemoteMatches(): this function trusts the csv it is handed.
+int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq,
+                               const QString &csv, const QString &validationUrl);
+
 // One payment event's own submission data, for re-submitting it to AEAT. Scoped
 // to the PAID rows of (nRecibo, seq) so a retry carries that event's total and
 // its original fecha_pago, not the whole ticket. Empty nRecibo when no such

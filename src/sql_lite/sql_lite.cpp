@@ -877,6 +877,47 @@ QString verifactuDisplayInvoiceId(const QStringList &invoiceIds, const QString &
     return fallback;
 }
 
+int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq,
+                               const QString &csv, const QString &validationUrl)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+    if (csv.isEmpty()) {
+        qWarning() << "reconcileVerifactuFromAeat: refusing to reconcile"
+                   << verifactuInvoiceId(nRecibo, seq) << "without a CSV";
+        return 0;
+    }
+
+    db.open();
+    QSqlQuery q(db);
+    // Only a row that is paid and NOT already settled may be reconciled. The
+    // estado guard is the important one: ENVIADA already has its own CSV, and
+    // ANULADA / RECTIFICADA were deliberately superseded - re-stamping either
+    // from a query would silently revive a cancelled invoice.
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_csv = :csv, "
+              "verifactu_url_qr = :url, verifactu_timestamp = :ts, "
+              "verifactu_error = '', verifactu_invoice_id = :id "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
+              "  AND verifactu_estado NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+    q.bindValue(":csv",    csv);
+    q.bindValue(":url",    validationUrl);
+    q.bindValue(":ts",     QDateTime::currentDateTime().toString(Qt::ISODate));
+    q.bindValue(":id",     verifactuInvoiceId(nRecibo, seq));
+    q.bindValue(":n",      nRecibo);
+    q.bindValue(":seq",    seq);
+    if (!q.exec()) {
+        qWarning() << "reconcileVerifactuFromAeat: UPDATE failed for"
+                   << verifactuInvoiceId(nRecibo, seq) << "-" << q.lastError().text();
+        db.close();
+        return 0;
+    }
+    const int rows = q.numRowsAffected();
+    qDebug() << "reconcileVerifactuFromAeat: reconciled" << rows << "row(s) of"
+             << verifactuInvoiceId(nRecibo, seq) << "from AEAT, CSV:" << csv;
+    db.close();
+    return rows;
+}
+
 PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq)
 {
     PendingVerifactuEvent e;

@@ -119,6 +119,26 @@ Never hardcode the string values — always go through the helpers, and map an A
 
 Do not "fix" this by raising the waits to 10 s without weighing the counter freeze — the adoption path already prevents data loss.
 
+### Reconciling with AEAT (`GetFilteredList`)
+
+When AEAT has registered an invoice whose reply we lost, every retry answers "ya existe" and the row is stuck at `ERROR`. `<base>/GetFilteredList` resolves it by asking AEAT what it actually holds.
+
+Request (per the vendor's `Net/Rest/List/FilterSet.cs`; `ServiceKey` goes in the body like every other call):
+
+```json
+{"ServiceKey":"…","Filters":[{"FieldName":"InvoiceID","Operator":"=","Value":"30877"}],"Count":10,"Offset":-1}
+```
+
+**The response schema is NOT published** — the vendor's own client parses it untyped. `parseVerifactuQueryResponse()` therefore probes several envelopes (`Return` / `Records` / `List` / `Items` / bare array) and field spellings, normalises dates to `dd-MM-yyyy`, and keeps the whole payload in `raw`. It always logs the payload: **the first real reply is what lets these candidates be narrowed to the truth**, so if you have one, pin the parser and delete the guesses.
+
+Three rules keep an unconfirmed schema from causing a false regulatory claim:
+
+1. **Ignorance is not absence.** A failed query or an unreadable body yields `parsed=false`, never "AEAT does not have it". Only a well-formed empty result means absent.
+2. **Identity must be positively proven.** `verifactuRemoteMatches()` requires InvoiceID + date + amount to agree to the cent; a missing date or a zero amount is missing evidence, not agreement.
+3. **The operator confirms.** Nothing is written automatically. The dialog shows AEAT's record beside the local one with the raw JSON one click away, and enables the write only when the match holds *and* a CSV came back.
+
+The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CSV and never touches a row already `ENVIADA` / `ANULADA` / `RECTIFICADA`. Entry points: a **Consultar en AEAT** button in the Verifactu detail dialog, and an automatic query when `verifactuErrorIsDuplicate()` recognises a duplicate rejection.
+
 `Unpaid` and `NotSubmitted` are distinguished **only** by the startup recovery dialog, which needs to tell "nothing to send" from "sent, reply lost". Every other gate must treat them alike via `verifactuEstadoIsUnsubmitted()` (true for `Unpaid`, `NotSubmitted` and legacy blank): paying a garment does not rewrite `verifactu_estado`, so a row is still `SIN COBRAR` at the moment `RecogPrendas` decides whether to submit it — testing `== NotSubmitted` there would silently stop paid garments from reaching AEAT. The two callers are `sql_lite::garmentIsLocallyVoidable` and the `RecogPrendas` `PAY_YES` submit trigger.
 
 `migrateDatabase()` carries a one-time idempotent backfill re-labelling unpaid `'PENDIENTE'` rows as `'SIN COBRAR'`. It is scoped to the literal `'PENDIENTE'` and leaves NULL/`''` alone on purpose: those are legacy split-off rows that `Imprimir`'s event-list query and `CancelInvoiceDialog` detect via `verifactu_estado != ''`, so making them non-empty would add a spurious event group to printed invoices.
