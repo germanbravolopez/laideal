@@ -1031,8 +1031,12 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     if (dbNotConfigured(db, __func__)) return;
 
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const QString estado    = verifactuEstadoToString(
-        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
+    const VerifactuEstado estadoEnum = verifactuEstadoForResult(result.status);
+    const QString estado    = verifactuEstadoToString(estadoEnum);
+    // Unknown outcome (timeout / transport failure): keep the InvoiceID so a
+    // retry reuses the identity AEAT may already hold, and keep the error text
+    // as a diagnostic. Only a definitive rejection clears the identity.
+    const bool outcomeUnknown = estadoEnum == VerifactuEstado::NotSubmitted;
     // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
     // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
     // save-time never clobbers PayDialog rows.
@@ -1072,7 +1076,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
-        q.bindValue(":id",     "");
+        q.bindValue(":id",     outcomeUnknown ? invoiceId : QString());
     }
     q.bindValue(":n_recibo", ticketNum);
     q.bindValue(":seq",      seq);

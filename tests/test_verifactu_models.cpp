@@ -188,6 +188,23 @@ private slots:
         QVERIFY(verifactuEstadoFromString("garbage") == VerifactuEstado::NotSubmitted);
     }
 
+    // Only a definitive AEAT rejection may be recorded as Error. A timeout or a
+    // dropped connection leaves the outcome unknown - AEAT may already hold the
+    // invoice - so it must land as PENDIENTE and go to the startup recovery
+    // dialog. Recording it as Error instead is what produced the field report of
+    // a "Reintentar" that always answers "already exists".
+    void test_estadoForResult()
+    {
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::SUCCESS)  == VerifactuEstado::Enviada);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::ERROR)    == VerifactuEstado::Error);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::NETWORK_ERROR)
+                    == VerifactuEstado::NotSubmitted);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::PENDING)
+                    == VerifactuEstado::NotSubmitted);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::INVALID_CONFIG)
+                    == VerifactuEstado::NotSubmitted);
+    }
+
     // The Unpaid/NotSubmitted split exists so the recovery dialog can tell "no
     // invoice to send" from "sent, reply lost". Every OTHER gate must keep
     // treating the two alike - paying a garment does not rewrite verifactu_estado,

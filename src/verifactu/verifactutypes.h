@@ -75,4 +75,19 @@ struct VerifactuResult
     bool isError() const { return status == ERROR || status == NETWORK_ERROR || status == INVALID_CONFIG; }
 };
 
+// Which estado an AEAT reply must be recorded as. Only a definitive AEAT
+// rejection (ERROR) may become Error. A timeout or transport failure leaves the
+// outcome UNKNOWN - AEAT may well have registered the invoice - so it becomes
+// PENDIENTE and is routed to the startup recovery dialog. Recording it as Error
+// instead offers a "Reintentar" that can only ever come back "already exists".
+inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)
+{
+    switch (s) {
+    case VerifactuResult::SUCCESS: return VerifactuEstado::Enviada;
+    case VerifactuResult::ERROR:   return VerifactuEstado::Error;
+    // NETWORK_ERROR / PENDING / INVALID_CONFIG: unknown or never sent.
+    default:                       return VerifactuEstado::NotSubmitted;
+    }
+}
+
 #endif // VERIFACTUTYPES_H

@@ -437,6 +437,46 @@ private slots:
                         "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
     }
 
+    // A dropped connection is not a rejection. The row must land PENDIENTE (so the
+    // startup recovery dialog owns it) and KEEP its InvoiceID, because AEAT may
+    // already hold the invoice under that identity and a retry has to reuse it.
+    void test_updateTicketVerifactuFields_transportFailureStaysPending()
+    {
+        insertIngreso("P3", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult dropped;
+        dropped.status           = VerifactuResult::NETWORK_ERROR;
+        dropped.errorDescription = "Tiempo de espera agotado";
+        updateTicketVerifactuFields(m_db, "P3", dropped, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT verifactu_invoice_id FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("P3"));
+        QCOMPARE(scalar("SELECT verifactu_error FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("Tiempo de espera agotado"));
+        // Still no CSV - nothing was confirmed.
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_csv, '') FROM ingresos "
+                        "WHERE n_recibo = 'P3'"), QString());
+    }
+
+    // A definitive AEAT rejection, by contrast, is final: Error, and the InvoiceID
+    // is cleared because nothing is registered under it.
+    void test_updateTicketVerifactuFields_aeatRejectionIsFinal()
+    {
+        insertIngreso("P4", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult rejected;
+        rejected.status           = VerifactuResult::ERROR;
+        rejected.errorDescription = "NIF invalido";
+        updateTicketVerifactuFields(m_db, "P4", rejected, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P4'"),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_invoice_id, '') FROM ingresos "
+                        "WHERE n_recibo = 'P4'"), QString());
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()
