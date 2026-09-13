@@ -178,6 +178,12 @@ struct PendingVerifactuEvent {
     double  importe = 0.0;
 };
 
+// One payment event's own submission data, for re-submitting it to AEAT. Scoped
+// to the PAID rows of (nRecibo, seq) so a retry carries that event's total and
+// its original fecha_pago, not the whole ticket. Empty nRecibo when no such
+// paid event exists.
+PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq);
+
 // Pending Verifactu events for startup recovery: one entry per
 // (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty and
 // whose fecha_recepcion (rebuilt to ISO) is on or after floorIso. Grouping by

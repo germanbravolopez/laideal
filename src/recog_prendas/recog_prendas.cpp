@@ -121,7 +121,8 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 if (verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(estadoDb))
                         && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
                         && !hasPendingSubmit(ticketNum)) {
-                    retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());
+                    retryVerifactuSubmit(ticketNum, sqlQueryModel->data(sqlQueryModel->index(
+                        rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
                 }
             }
         }
@@ -669,8 +670,10 @@ void RecogPrendas::on_pb_verifactu_clicked()
     QString timestamp   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_TIMESTAMP)).toString();
     QString error       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ERROR)).toString();
     QString url         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_URL_QR)).toString();
-    QString dateStr     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString();
-    QDate invoiceDate   = QDate::fromString(dateStr, "dd-MM-yyyy");
+    // The retry needs the row's payment event, not the reception date: AEAT keys
+    // an invoice on (emisor, InvoiceID, fecha), so retryVerifactuSubmit re-reads
+    // the event's own fecha_pago from the DB.
+    const int rowSeq    = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
 
     QDialog *dlg = new QDialog(this);
     dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
@@ -699,9 +702,9 @@ void RecogPrendas::on_pb_verifactu_clicked()
 
     if (verifactuEstadoFromString(state) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
-        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
+        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, rowSeq]() {
             dlg->accept();
-            retryVerifactuSubmit(ticketNum, invoiceDate);
+            retryVerifactuSubmit(ticketNum, rowSeq);
         });
         layout->addWidget(btnRetry);
     }
@@ -714,50 +717,55 @@ void RecogPrendas::on_pb_verifactu_clicked()
     dlg->exec();
 }
 
-void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate)
+void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "retryVerifactuSubmit: Verifactu not configured for ticket" << ticketNum;
         return;
     }
 
-    double total = 0.0;
-    db.open();
-    {
-        QSqlQuery q;
-        q.prepare("SELECT SUM(CAST(importe AS REAL)) FROM ingresos WHERE n_recibo = :n_recibo");
-        q.bindValue(":n_recibo", ticketNum);
-        q.exec();
-        if (q.next())
-            total = q.value(0).toDouble();
+    // Re-submit the ONE payment event, under its own InvoiceID, its own total and
+    // its original fecha_pago. The old version sent the bare n_recibo with the
+    // whole ticket's importe on the reception date, which for a partial-pay event
+    // meant a wrong amount under an ID belonging to a different event.
+    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+    const QDate invoiceDate = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+    if (ev.nRecibo.isEmpty() || !invoiceDate.isValid()) {
+        qWarning() << "retryVerifactuSubmit: no paid event" << invoiceId
+                   << "- nothing to re-submit";
+        QMessageBox::warning(this, tr("Verifactu"),
+                             tr("No se puede reenviar el ticket %1: no consta como cobrado.")
+                                 .arg(invoiceId));
+        return;
     }
-    db.close();
 
     double ivaRate = AppSettings::instance()->ivaRate();
     ensureVerifactuConnected();
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
-        ticketNum,
+        invoiceId,
         invoiceDate,
-        total / (1.0 + ivaRate / 100.0),
+        ev.importe / (1.0 + ivaRate / 100.0),
         ivaRate,
         "Servicios de lavanderia"
     );
     if (reqId.isEmpty()) {
-        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for ticket" << ticketNum;
+        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for" << invoiceId;
         return;
     }
-    m_pendingSubmits.insert(reqId, ticketNum);
-    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+    m_pendingSubmits.insert(reqId, { ticketNum, seq });
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(invoiceId));
 }
 
 void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
     if (it == m_pendingSubmits.end()) return; // not one of ours
-    const QString ticketNum = it.value();
+    const QString ticketNum = it.value().ticketNum;
+    const int     seq       = it.value().seq;
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(db, ticketNum, result);
+    updateTicketVerifactuFields(db, ticketNum, result, seq);
 
     // Refresh the table so the new estado is visible (only if user is still on this view)
     on_pb_search_clicked();
@@ -786,7 +794,7 @@ void RecogPrendas::ensureVerifactuConnected()
 bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
 {
     for (auto it = m_pendingSubmits.constBegin(); it != m_pendingSubmits.constEnd(); ++it) {
-        if (it.value() == ticketNum) return true;
+        if (it.value().ticketNum == ticketNum) return true;
     }
     return false;
 }

@@ -477,6 +477,33 @@ private slots:
                         "WHERE n_recibo = 'P4'"), QString());
     }
 
+    // A retry re-submits ONE payment event. Before this seam RecogPrendas summed
+    // every row of the ticket and sent it under the bare n_recibo on the RECEPTION
+    // date - so retrying a partial payment submitted the wrong amount under an
+    // InvoiceID belonging to a different event, on a date AEAT never keyed it on.
+    void test_verifactuEventFor()
+    {
+        // seq 0: paid 50, plus an unpaid 30 that is NOT part of the invoice.
+        insertIngreso("R1", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("R1", "",           "30.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        // seq 1: a later partial pay of 20 on a different date.
+        insertIngreso("R1", "25-06-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+
+        const PendingVerifactuEvent e0 = verifactuEventFor(m_db, "R1", 0);
+        QCOMPARE(e0.nRecibo, QStringLiteral("R1"));
+        QCOMPARE(e0.seq, 0);
+        QVERIFY2(qAbs(e0.importe - 50.0) < 0.01, qPrintable(QString::number(e0.importe)));
+        QCOMPARE(e0.fechaPago, QStringLiteral("10-03-2026"));
+
+        const PendingVerifactuEvent e1 = verifactuEventFor(m_db, "R1", 1);
+        QVERIFY(qAbs(e1.importe - 20.0) < 0.01);
+        QCOMPARE(e1.fechaPago, QStringLiteral("25-06-2026"));
+
+        // No paid rows for that seq -> empty, so the caller refuses to re-submit.
+        QVERIFY(verifactuEventFor(m_db, "R1", 7).nRecibo.isEmpty());
+        QVERIFY(verifactuEventFor(m_db, "NOPE", 0).nRecibo.isEmpty());
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()

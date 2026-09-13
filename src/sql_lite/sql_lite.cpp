@@ -877,6 +877,36 @@ QString verifactuDisplayInvoiceId(const QStringList &invoiceIds, const QString &
     return fallback;
 }
 
+PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq)
+{
+    PendingVerifactuEvent e;
+    if (dbNotConfigured(db, __func__)) return e;
+    if (!db.open()) {
+        qWarning() << "verifactuEventFor: db.open() failed -" << db.lastError().text();
+        return e;
+    }
+    // Restricted to pagado='SI': a retry re-submits ONE payment event, so it must
+    // carry that event's own total, not the whole ticket (the unpaid remainder was
+    // never part of the invoice). fecha_pago is the date AEAT keyed the original
+    // submission on - reusing it is what makes a duplicate register as a duplicate
+    // instead of silently creating a second invoice.
+    QSqlQuery q(db);
+    q.prepare("SELECT MIN(fecha_pago), MIN(cliente), SUM(importe), COUNT(*) "
+              "FROM ingresos "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":seq", seq);
+    if (q.exec() && q.next() && q.value(3).toInt() > 0) {
+        e.nRecibo   = nRecibo;
+        e.seq       = seq;
+        e.fechaPago = q.value(0).toString();
+        e.cliente   = q.value(1).toString();
+        e.importe   = q.value(2).toDouble();
+    }
+    db.close();
+    return e;
+}
+
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso)
 {
     QVector<PendingVerifactuEvent> events;

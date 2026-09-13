@@ -70,15 +70,22 @@ private slots:
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
     void on_pb_verifactu_clicked();
-    void retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate);
+    // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
+    // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
+    void retryVerifactuSubmit(const QString &ticketNum, int seq);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     Ui::RecogPrendas *ui;
     QSqlDatabase db;
-    // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
-    // loop so multiple garments of the same ticket only fire one AEAT submission.
-    QHash<QString, QString> m_pendingSubmits;
+    // Async submit tracking: reqId -> the payment event it belongs to. Also used
+    // to dedup the pay-all loop so multiple garments of the same ticket only fire
+    // one AEAT submission.
+    struct PendingSubmit {
+        QString ticketNum;
+        int     seq = 0;
+    };
+    QHash<QString, PendingSubmit> m_pendingSubmits;
 
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;
