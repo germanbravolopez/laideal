@@ -118,7 +118,10 @@ private:
     // the requestFinished handler can patch exactly the rows of that submission
     // event (a save-time submit and a recovered partial-pay event of the same
     // ticket differ only by seq).
-    struct PendingSubmit { QString ticketNum; int seq = 0; };
+    // printedWithoutQr: the bounded wait expired and a QR-less recibo was already
+    // handed to the customer, so a late success has to say the factura is now
+    // printable rather than just reporting the CSV.
+    struct PendingSubmit { QString ticketNum; int seq = 0; bool printedWithoutQr = false; };
     QHash<QString, PendingSubmit> m_pendingSubmits;
     Updater *m_updater;
     BackupManager *m_backupManager;
