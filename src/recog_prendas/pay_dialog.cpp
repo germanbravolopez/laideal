@@ -375,13 +375,15 @@ void PayDialog::markPendingVerifactu(int seq)
 {
     // Keep the InvoiceID identity (bare n_recibo for seq 0, else <n_recibo>-<seq>)
     // and set estado=PENDIENTE so the row reads as "awaiting AEAT confirmation"
-    // instead of a failed Error. Scoped by seq, exactly the rows just stamped.
+    // instead of a failed Error. Scoped by seq AND pagado - on a ticket's first
+    // partial payment seq is 0, which the still-unpaid siblings also carry.
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_invoice_id = :id, "
               "verifactu_error = '' "
-              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq");
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
+              "  AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.bindValue(":id",     invoiceId);
     q.bindValue(":n",      m_ticketNum);

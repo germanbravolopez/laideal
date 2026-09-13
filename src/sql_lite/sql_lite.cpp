@@ -1036,6 +1036,12 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
     // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
     // save-time never clobbers PayDialog rows.
+    //
+    // pagado='SI' is load-bearing, not defensive: the FIRST partial payment of an
+    // unpaid ticket gets seq 0 (nextVerifactuInvoiceSeq counts paid rows, of which
+    // there are none yet), and the still-unpaid siblings are also seq 0 - so
+    // scoping by seq alone would stamp them ENVIADA + CSV for an invoice that only
+    // covered the paid subset. An AEAT result can only ever belong to a paid row.
     const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
              << "estado=" << estado
@@ -1047,7 +1053,8 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
               "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
-              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq");
+              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq "
+              "  AND pagado = 'SI'");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);

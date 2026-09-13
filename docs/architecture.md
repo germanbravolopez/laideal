@@ -269,6 +269,7 @@ Async tail (when AEAT replies later than 3 s, or for not-paid tickets that get p
   VerifactuIntegration::requestFinished(reqId, result)
   └── MainWindow::onVerifactuRequestFinished
         ├── sql_lite::updateTicketVerifactuFields(db, ticketNum, result) — UPDATE ingresos with CSV/timestamp/estado
+        │      (scoped by seq AND pagado='SI' — a ticket's first partial pay is seq 0, which unpaid siblings share)
         └── statusBar message                — "Ticket NNNN enviado (CSV: ...)" or "Error: ..."
 ```
 

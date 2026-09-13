@@ -16,6 +16,7 @@
 #include <QVariantMap>
 
 #include "sql_lite.h"
+#include "verifactutypes.h"   // VerifactuResult, for the updateTicketVerifactuFields tests
 
 namespace {
 constexpr const char *kConn = "test_sql_lite_conn";
@@ -386,6 +387,54 @@ private slots:
         QCOMPARE(scalar(estadoSql, {{":n", "M1"}}), QStringLiteral("SIN COBRAR"));
         QCOMPARE(scalar(estadoSql, {{":n", "M2"}}), QStringLiteral("PENDIENTE"));
         QCOMPARE(scalar(estadoSql, {{":n", "M4"}}), QString());
+    }
+
+    // An AEAT reply belongs only to the rows that were actually paid. This is not
+    // hypothetical: nextVerifactuInvoiceSeq counts PAID rows, so a ticket's FIRST
+    // partial payment gets seq 0 - which the still-unpaid siblings also carry.
+    // Scoping the write-back by seq alone stamped those siblings ENVIADA + CSV for
+    // an invoice that never covered them, which then made them non-voidable in
+    // "Anular prendas" and fed a CSV into the print path. Pinned both ways: the
+    // paid rows must be patched, the unpaid sibling must be left completely alone.
+    void test_updateTicketVerifactuFields_leavesUnpaidSiblingsAlone()
+    {
+        insertIngreso("P1", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P1", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        VerifactuResult ok;
+        ok.status        = VerifactuResult::SUCCESS;
+        ok.csv           = "CSV-ABC123";
+        ok.validationUrl = "https://aeat.example/validate";
+        updateTicketVerifactuFields(m_db, "P1", ok, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'P1' "
+                        "AND verifactu_estado = 'ENVIADA'"), QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P1' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_csv, '') FROM ingresos "
+                        "WHERE n_recibo = 'P1' AND pagado = 'NO'"), QString());
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_invoice_id, '') FROM ingresos "
+                        "WHERE n_recibo = 'P1' AND pagado = 'NO'"), QString());
+    }
+
+    // The same scoping must hold for a failed submission: an AEAT error belongs to
+    // the paid rows, and must not push an unpaid sibling into ERROR (which would
+    // also surface a bogus "Reintentar envio" button on it in RecogPrendas).
+    void test_updateTicketVerifactuFields_errorAlsoSkipsUnpaid()
+    {
+        insertIngreso("P2", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P2", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        VerifactuResult bad;
+        bad.status           = VerifactuResult::ERROR;
+        bad.errorDescription = "AEAT rejected";
+        updateTicketVerifactuFields(m_db, "P2", bad, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P2' "
+                        "AND pagado = 'SI'"), QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P2' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
     }
 
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
