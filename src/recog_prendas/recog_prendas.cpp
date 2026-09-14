@@ -8,6 +8,7 @@
 #include "numberformatdelegate.h"
 #include "verifactuintegration.h"
 #include "verifacturesponse.h"
+#include <QAbstractSpinBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QHBoxLayout>
@@ -73,6 +74,16 @@ void RecogPrendas::resetAllContents()
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
+    // Payment date is display-only: it is written solely by PayDialog (Cobrar),
+    // never from here. Editing it would be worse than useless - fecha_pago is part
+    // of the AEAT invoice identity (emisor, InvoiceID, fecha), so changing it after
+    // submission makes a retry register a SECOND invoice instead of being rejected
+    // as duplicate, breaks reconciliation matching, and can move income into a
+    // locked quarter. Read-only + no spin buttons keeps it legible but inert.
+    ui->de_date_paym->setReadOnly(true);
+    ui->de_date_paym->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    ui->de_date_paym->setToolTip(tr("La fecha de pago se registra al cobrar y no se "
+                                    "puede modificar aquí."));
     // Clear the SQL query model and the view
     sqlQueryModel->clear();
     ui->tableView->setModel(sqlQueryModel);
