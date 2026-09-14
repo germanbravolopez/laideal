@@ -574,6 +574,31 @@ private slots:
         QCOMPARE(scalar(q, {{":n", "N4"}}), QString());
     }
 
+    // Drives the IMPORTE PAGADO marker on a reprinted recibo, which shows the whole
+    // ticket total - so a partially-paid ticket must NOT claim to be settled. The
+    // reprint path used to hardcode the marker off, so a fully-paid ticket reprinted
+    // from Recogida de Prendas showed no payment at all.
+    void test_ticketAllGarmentsPaid()
+    {
+        insertIngreso("A1", "10-03-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("A1", "10-03-2026", "20.00", "SI", "ENVIADA");
+        QVERIFY(ticketAllGarmentsPaid(m_db, "A1"));            // every row paid
+
+        insertIngreso("A2", "10-03-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("A2", "",           "20.00", "NO", "SIN COBRAR");
+        QVERIFY(!ticketAllGarmentsPaid(m_db, "A2"));           // partially paid
+
+        insertIngreso("A3", "", "10.00", "NO", "SIN COBRAR");
+        QVERIFY(!ticketAllGarmentsPaid(m_db, "A3"));           // none paid
+
+        // A blank pagado must not read as paid, and an unknown ticket is not "all paid".
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('A4', '', '10-03-2026', '', '10.00', '', '', 0, '', 0)");
+        QVERIFY(!ticketAllGarmentsPaid(m_db, "A4"));
+        QVERIFY(!ticketAllGarmentsPaid(m_db, "NOPE"));
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()

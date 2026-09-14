@@ -454,8 +454,13 @@ void Imprimir::on_bb_ok_cancel_accepted()
     if (!isRecibo && events.size() == 1)
         invoiceSeq = events.first().first;
     getTicketInfo();
+    // A reprinted recibo shows the WHOLE ticket, so it may only claim IMPORTE
+    // PAGADO when every garment is paid - "any paid" would mark a partially-paid
+    // ticket as settled in full. Facturas never carry the marker (payment is
+    // implied), same as every other factura path.
+    const bool paidMarker = isRecibo && ticketAllGarmentsPaid(db, le_n_ticket->text());
     if (isRecibo || (!isRecibo && checkAnyItemPaid())) {
-        buildTicket(true, false);
+        buildTicket(true, paidMarker);
         if (AppSettings::instance()->enablePrinting()) {
             printTicket();
         }
@@ -465,7 +470,7 @@ void Imprimir::on_bb_ok_cancel_accepted()
                                              QMessageBox::Yes | QMessageBox::No,
                                              QMessageBox::Yes);
             if (resp == QMessageBox::Yes) {
-                buildTicket(false, false);
+                buildTicket(false, paidMarker);
                 if (AppSettings::instance()->enablePrinting()) {
                     printTicket();
                 }

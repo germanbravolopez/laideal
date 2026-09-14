@@ -100,6 +100,10 @@ bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QStri
 // has been submitted to AEAT, so AddGarment refuses to append new garments to it
 // (only unpaid, not-yet-submitted receipts may be altered locally).
 bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
+// True when EVERY garment of the ticket is pagado='SI' (and there is at least one).
+// Drives the "IMPORTE PAGADO" marker on a reprinted recibo, which shows the whole
+// ticket total - "any paid" would claim a partially-paid ticket was settled in full.
+bool        ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo);
 
 // One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
 // (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).
