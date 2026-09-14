@@ -107,6 +107,11 @@ struct VerifactuRemoteRecord
     QString validationUrl;
     bool    isRejected = false; // AEAT's own IsRejected flag on the record
     QString errorCode;          // non-empty when AEAT recorded a rejection
+    // How many records the query returned for this InvoiceID. The service keeps
+    // every submission ATTEMPT, so a retried ticket comes back as several records
+    // (the duplicate-rejections plus the one acceptance) - the fields above are
+    // taken from the accepted one, not from whichever happens to be first.
+    int     recordCount = 0;
     QString raw;                // the whole JSON payload, always kept
 
     // Safe to reconcile from only when AEAT really has it, accepted, with a CSV.

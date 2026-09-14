@@ -131,6 +131,8 @@ Request (per the vendor's `Net/Rest/List/FilterSet.cs`; `ServiceKey` goes in the
 
 **The response schema is NOT published** — the vendor's own client parses it untyped. `parseVerifactuQueryResponse()` therefore probes several envelopes (`Return` / `Records` / `List` / `Items` / bare array) and field spellings, normalises dates to `dd-MM-yyyy`, and keeps the whole payload in `raw`. It always logs the payload: **the first real reply is what lets these candidates be narrowed to the truth**, so if you have one, pin the parser and delete the guesses.
 
+**The service stores every submission *attempt*, not one record per invoice.** A ticket submitted once and retried four times comes back as **five** records under the same `InvoiceID`: four duplicate-rejections (`ErrorCode 9999`, `CSV: null`) plus the original acceptance — and the accepted one is **not** necessarily first. `parseVerifactuQueryResponse()` therefore scans for the accepted record (a CSV, no `ErrorCode`, not `IsRejected`) rather than taking `Items[0]`, and reports `recordCount` so the dialog can say how many attempts were stored. Taking the first record read a failure and hid the CSV on an invoice AEAT demonstrably held (ticket 31121).
+
 Three rules keep an unconfirmed schema from causing a false regulatory claim:
 
 1. **Ignorance is not absence.** A failed query or an unreadable body yields `parsed=false`, never "AEAT does not have it". Only a well-formed empty result means absent.

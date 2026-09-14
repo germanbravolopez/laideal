@@ -54,25 +54,47 @@ QString normaliseDate(const QString &s)
 }
 
 // "Items" is CONFIRMED against a real GetFilteredList reply (see the captured
-// payload in test_verifactu_response::test_parseQuery_realEmptyReply); the rest
-// stay as fallbacks until a populated reply proves the record shape too.
-QJsonObject firstRecord(const QJsonObject &root, bool *found)
+// payloads in test_verifactu_response); the rest stay as fallbacks.
+QJsonArray recordsArray(const QJsonObject &root, bool *envelopeUnderstood)
 {
-    *found = false;
+    *envelopeUnderstood = false;
     for (const char *k : { "Items", "Return", "Records", "List", "Result", "Invoices" }) {
         const QJsonValue v = root.value(QLatin1String(k));
         if (v.isArray()) {
-            const QJsonArray a = v.toArray();
-            if (a.isEmpty()) return {};          // queried fine, simply not there
-            *found = true;
-            return a.first().toObject();
+            *envelopeUnderstood = true;
+            return v.toArray();
         }
         if (v.isObject()) {
-            *found = true;
-            return v.toObject();
+            *envelopeUnderstood = true;
+            return QJsonArray{ v };
         }
     }
     return {};
+}
+
+// A record AEAT accepted: it carries a CSV and is not flagged as failed.
+bool recordLooksAccepted(const QJsonObject &o)
+{
+    if (o.value(QLatin1String("IsRejected")).toBool(false))                  return false;
+    if (!firstString(o, { "ErrorCode" }).isEmpty())                          return false;
+    return !firstString(o, { "CSV", "Csv" }).isEmpty();
+}
+
+// The service keeps EVERY submission attempt for an InvoiceID, so a ticket that
+// was submitted once and retried four times comes back as five records - four of
+// them duplicate-rejections with a null CSV, and the original acceptance last.
+// Picking Items[0] therefore reads a failure and hides the CSV we are looking for
+// (observed on ticket 31121: Count=5, the accepted record was the last element).
+// Prefer the accepted one; fall back to the first so the dialog can still show
+// what came back.
+QJsonObject chooseRecord(const QJsonArray &items)
+{
+    for (const QJsonValue &v : items) {
+        const QJsonObject o = v.toObject();
+        if (recordLooksAccepted(o))
+            return o;
+    }
+    return items.isEmpty() ? QJsonObject{} : items.first().toObject();
 }
 
 } // namespace
@@ -162,11 +184,12 @@ VerifactuRemoteRecord parseVerifactuQueryResponse(const QByteArray &response)
     QJsonObject obj;
     if (doc.isArray()) {
         const QJsonArray a = doc.array();
+        rec.recordCount = a.size();
         if (a.isEmpty()) {
             rec.parsed = true;    // understood, and AEAT simply has no such invoice
             return rec;
         }
-        obj = a.first().toObject();
+        obj = chooseRecord(a);
         rec.found = true;
     } else if (doc.isObject()) {
         const QJsonObject root = doc.object();
@@ -176,15 +199,17 @@ VerifactuRemoteRecord parseVerifactuQueryResponse(const QByteArray &response)
         if (root.contains(QLatin1String("ResultCode"))
                 && root.value(QLatin1String("ResultCode")).toInt(-1) != 0)
             return rec;
-        bool found = false;
-        obj = firstRecord(root, &found);
-        rec.found = found;
-        if (!found) {
+        bool envelopeUnderstood = false;
+        const QJsonArray items = recordsArray(root, &envelopeUnderstood);
+        rec.recordCount = items.size();
+        rec.found = !items.isEmpty();
+        if (!rec.found) {
             // Envelope understood but empty -> genuinely not registered.
-            rec.parsed = root.contains(QLatin1String("ResultCode"))
-                         || root.contains(QLatin1String("Return"));
+            rec.parsed = envelopeUnderstood
+                         || root.contains(QLatin1String("ResultCode"));
             return rec;
         }
+        obj = chooseRecord(items);
     } else {
         return rec;               // not JSON at all
     }

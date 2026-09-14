@@ -203,6 +203,64 @@ private slots:
         QVERIFY(r.invoiceDate != QStringLiteral("14-09-2026 01:36:02"));
     }
 
+    // CAPTURED shape from ticket 31121 (identity fields redacted - public repo).
+    // The service stores every submission ATTEMPT, so one retried invoice came back
+    // as FIVE records: four duplicate-rejections with a null CSV, and the original
+    // acceptance LAST. Taking Items[0] read a failure and hid the CSV, which is why
+    // "Actualizar con los datos de AEAT" was greyed out on an invoice the AEAT
+    // demonstrably held. The accepted record must be chosen regardless of position.
+    void test_parseQuery_picksAcceptedRecordAmongRetryAttempts()
+    {
+        auto failed = [](const char *posted) {
+            return QStringLiteral(R"({"InvoiceID":"31121","InvoiceDate":"2026-09-08T00:00:00",)"
+                   R"("TotalAmount":24.50,"IsRejected":false,"StatusResponse":null,)"
+                   R"("ErrorCode":"9999","ErrorDescription":"Ya existe una entrada...",)"
+                   R"("CSV":null,"ValidationUrl":null,"PostingDate":"%1"})")
+                   .arg(QLatin1String(posted));
+        };
+        const QString accepted =
+            QStringLiteral(R"({"InvoiceID":"31121","InvoiceDate":"2026-09-08T00:00:00",)"
+            R"("TotalAmount":24.50,"IsRejected":false,"StatusResponse":"Correcto",)"
+            R"("ErrorCode":null,"ErrorDescription":null,"CSV":"A-TESTCSV31121AA",)"
+            R"("ValidationUrl":"https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=31121&fecha=08-09-2026&importe=24.50",)"
+            R"("PostingDate":"2026-09-08T13:44:37"})");
+
+        const QByteArray json = QStringLiteral(
+            R"({"Offset":0,"Count":5,"Items":[%1,%2,%3,%4,%5],"ResultCode":0,)"
+            R"("ResultMessage":"Retrieved element filtered list from domain 'Invoices'."})")
+            .arg(failed("2026-09-09T11:56:45"), failed("2026-09-09T10:30:14"),
+                 failed("2026-09-14T13:19:36"), failed("2026-09-14T20:27:51"),
+                 accepted).toUtf8();
+
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(json);
+        QVERIFY(r.found);
+        QVERIFY(r.parsed);
+        QCOMPARE(r.recordCount, 5);
+        // The accepted record's data, not the first record's.
+        QCOMPARE(r.csv, QStringLiteral("A-TESTCSV31121AA"));
+        QVERIFY(r.errorCode.isEmpty());
+        QCOMPARE(r.statusResponse, QStringLiteral("Correcto"));
+        QVERIFY(r.validationUrl.contains("ValidarQR"));
+        QVERIFY(r.hasUsableCsv());
+        QVERIFY(verifactuRemoteMatches(r, "31121", "08-09-2026", 24.50));
+    }
+
+    // If every returned record is a failure, nothing may be adopted - but the
+    // record is still reported so the dialog can show what came back.
+    void test_parseQuery_allAttemptsFailed()
+    {
+        const QByteArray json = R"({"Count":2,"ResultCode":0,"Items":[
+            {"InvoiceID":"9","InvoiceDate":"2026-09-08T00:00:00","TotalAmount":10.00,
+             "ErrorCode":"9999","CSV":null},
+            {"InvoiceID":"9","InvoiceDate":"2026-09-08T00:00:00","TotalAmount":10.00,
+             "ErrorCode":"9999","CSV":null}]})";
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(json);
+        QVERIFY(r.found);
+        QCOMPARE(r.recordCount, 2);
+        QCOMPARE(r.errorCode, QStringLiteral("9999"));
+        QVERIFY(!r.hasUsableCsv());
+    }
+
     // A record AEAT rejected can still come back from a query. Its CSV must never
     // be adopted - that would mark us ENVIADA for an invoice AEAT refused.
     void test_parseQuery_rejectedRecordIsNotUsable()

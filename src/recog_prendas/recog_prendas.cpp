@@ -882,11 +882,24 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
                             "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
                             "duplicado.").arg(invoiceId));
     } else {
-        summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>"
-                            "%1").arg(matches
-                                ? tr("Los datos coinciden con los del ticket.")
-                                : tr("<span style='color:#b00'>Los datos NO coinciden con los del "
-                                     "ticket - no se puede actualizar automáticamente.</span>")));
+        // Every submission ATTEMPT is stored, so a retried ticket returns several
+        // records; the fields shown come from the accepted one, not the newest.
+        const QString attempts = rec.recordCount > 1
+            ? tr("<br><i>AEAT ha devuelto %1 registros para este número (los reenvíos "
+                 "rechazados quedan guardados). Se muestran los datos del registro "
+                 "aceptado.</i>").arg(rec.recordCount)
+            : QString();
+        QString verdict;
+        if (!matches)
+            verdict = tr("<span style='color:#b00'>Los datos NO coinciden con los del "
+                         "ticket - no se puede actualizar automáticamente.</span>");
+        else if (!rec.hasUsableCsv())
+            verdict = tr("<span style='color:#b00'>Ninguno de los registros fue aceptado "
+                         "por AEAT (no hay CSV que recuperar).</span>");
+        else
+            verdict = tr("Los datos coinciden con los del ticket.");
+        summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>%1%2")
+                             .arg(verdict, attempts));
     }
     layout->addWidget(summary);
 
