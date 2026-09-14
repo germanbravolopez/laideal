@@ -1,5 +1,21 @@
 Releases:
 
+10.9
+- New: check an invoice against the AEAT and recover its data ("Consultar en AEAT")
+  - When a receipt was paid but the AEAT never answered - the internet dropped, or the connection was slow - the app used to be stuck: trying again only got "the invoice already exists", because the AEAT did have it and only the reply was lost. There is now a "Consultar en AEAT" button in the Verifactu window of a receipt. It asks the AEAT what it has on file, shows it next to your data, and if everything matches it lets you bring the invoice's CSV and QR back into the receipt with one click. Nothing is changed automatically: you always see the comparison first and decide.
+- Bug fix: receipts that were never charged no longer appear as pending with the AEAT
+  - On opening the app, the "Envíos Verifactu pendientes" window listed every garment still waiting in the shop, as if all of them were waiting for an answer from the AEAT. An uncollected garment has nothing to send. Unpaid garments now clearly read "SIN COBRAR" instead of "PENDIENTE", and only real pending submissions are listed. Existing receipts are relabelled automatically the first time you open this version. Nothing was ever sent to the AEAT incorrectly, and no amount changes.
+- Bug fix: charging part of a receipt no longer affects the garments left unpaid
+  - When a customer paid for only some garments, the rest were being marked as if they had also been sent to the AEAT. As a result they could no longer be cancelled with "Anular prendas". Only the garments actually charged are recorded now.
+- Bug fix: the ticket printed when the AEAT does not answer in time
+  - If the AEAT did not reply within a few seconds, the printed ticket showed neither "IMPORTE PAGADO" nor the QR code, even though the payment had been recorded. It now always shows the amount paid. And if the AEAT confirms a moment later, the app tells you the invoice with its QR code can now be printed from "Recogida de Prendas".
+- Bug fix: a connection problem is no longer recorded as a definitive error
+  - Losing the internet in the middle of a submission was recorded as a failed invoice, when in truth the AEAT may well have registered it. These cases are now left as pending so they can be reviewed and recovered, instead of leading to the "already exists" message.
+- Bug fix: a receipt marked as an error can be retried again
+  - Marking a pending receipt as an error left it without the "Reintentar envío a AEAT" button, so there was no way to try again. The button is back.
+- Improvement: the payment date can no longer be edited in "Recogida de Prendas"
+  - The field accepted changes that were never saved. It is now read-only: the payment date is recorded when the garment is charged, and it must match what the AEAT has on file.
+
 10.8
 - Bug fix: the "Envíos Verifactu pendientes" window no longer lists receipts that have not been paid
   - When you opened the app, this window listed every receipt still waiting in the shop, as if all of them were submissions waiting for a reply from the AEAT. They were not. A receipt is only sent to the AEAT once it is paid, so nothing was ever submitted that should not have been, and no data was affected. The window now lists only paid submissions that really did not get an answer from the AEAT, which is what it is there for.

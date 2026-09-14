@@ -1,8 +1,81 @@
 #include "verifacturesponse.h"
 
+#include <QDateTime>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+
+namespace {
+
+// First non-empty value among several candidate key spellings. The
+// GetFilteredList schema is unpublished, so we probe the names the rest of the
+// vendor's API uses rather than committing to one.
+QString firstString(const QJsonObject &o, std::initializer_list<const char *> keys)
+{
+    for (const char *k : keys) {
+        const QJsonValue v = o.value(QLatin1String(k));
+        if (v.isString() && !v.toString().isEmpty())
+            return v.toString();
+        if (v.isDouble())
+            return QString::number(v.toDouble(), 'f', 2);
+    }
+    return QString();
+}
+
+double firstDouble(const QJsonObject &o, std::initializer_list<const char *> keys)
+{
+    for (const char *k : keys) {
+        const QJsonValue v = o.value(QLatin1String(k));
+        if (v.isDouble()) return v.toDouble();
+        if (v.isString()) {
+            bool ok = false;
+            // The API is inconsistent about decimal separators across fields.
+            const double d = QString(v.toString()).replace(',', '.').toDouble(&ok);
+            if (ok) return d;
+        }
+    }
+    return 0.0;
+}
+
+// AEAT/vendor dates come back as dd-MM-yyyy, yyyy-MM-dd or ISO-8601. Normalise
+// to the dd-MM-yyyy the ingresos table stores so the match is a plain compare.
+QString normaliseDate(const QString &s)
+{
+    if (s.isEmpty()) return s;
+    static const char *formats[] = { "dd-MM-yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd" };
+    for (const char *f : formats) {
+        const QDate d = QDate::fromString(s, QLatin1String(f));
+        if (d.isValid()) return d.toString(QStringLiteral("dd-MM-yyyy"));
+    }
+    const QDateTime dt = QDateTime::fromString(s, Qt::ISODate);
+    if (dt.isValid()) return dt.date().toString(QStringLiteral("dd-MM-yyyy"));
+    return s;
+}
+
+// "Items" is CONFIRMED against a real GetFilteredList reply (see the captured
+// payload in test_verifactu_response::test_parseQuery_realEmptyReply); the rest
+// stay as fallbacks until a populated reply proves the record shape too.
+QJsonObject firstRecord(const QJsonObject &root, bool *found)
+{
+    *found = false;
+    for (const char *k : { "Items", "Return", "Records", "List", "Result", "Invoices" }) {
+        const QJsonValue v = root.value(QLatin1String(k));
+        if (v.isArray()) {
+            const QJsonArray a = v.toArray();
+            if (a.isEmpty()) return {};          // queried fine, simply not there
+            *found = true;
+            return a.first().toObject();
+        }
+        if (v.isObject()) {
+            *found = true;
+            return v.toObject();
+        }
+    }
+    return {};
+}
+
+} // namespace
 
 QPixmap decodeVerifactuImageBase64(const QString &base64)
 {
@@ -76,4 +149,96 @@ VerifactuResult parseVerifactuResponse(const QByteArray &response, bool isQrRequ
     }
 
     return result;
+}
+
+VerifactuRemoteRecord parseVerifactuQueryResponse(const QByteArray &response)
+{
+    VerifactuRemoteRecord rec;
+    rec.raw = QString::fromUtf8(response);
+
+    const QJsonDocument doc = QJsonDocument::fromJson(response);
+
+    // A bare array of records is as plausible as an enveloped one.
+    QJsonObject obj;
+    if (doc.isArray()) {
+        const QJsonArray a = doc.array();
+        if (a.isEmpty()) {
+            rec.parsed = true;    // understood, and AEAT simply has no such invoice
+            return rec;
+        }
+        obj = a.first().toObject();
+        rec.found = true;
+    } else if (doc.isObject()) {
+        const QJsonObject root = doc.object();
+        // A non-zero ResultCode is a failed query, not an absent invoice: leave
+        // parsed=false so the caller surfaces the payload instead of concluding
+        // "AEAT does not have it".
+        if (root.contains(QLatin1String("ResultCode"))
+                && root.value(QLatin1String("ResultCode")).toInt(-1) != 0)
+            return rec;
+        bool found = false;
+        obj = firstRecord(root, &found);
+        rec.found = found;
+        if (!found) {
+            // Envelope understood but empty -> genuinely not registered.
+            rec.parsed = root.contains(QLatin1String("ResultCode"))
+                         || root.contains(QLatin1String("Return"));
+            return rec;
+        }
+    } else {
+        return rec;               // not JSON at all
+    }
+
+    // Field names CONFIRMED against a real populated reply (see
+    // test_parseQuery_realPopulatedReply). Only trivial case variants are kept as
+    // aliases - the speculative fallbacks were removed once the shape was known,
+    // because a wrong-field match is worse than no match: the record also carries
+    // ExternKey and Created, which are NOT the InvoiceID and NOT the invoice date.
+    rec.invoiceId      = firstString(obj, { "InvoiceID", "InvoiceId" });
+    rec.invoiceDate    = normaliseDate(firstString(obj, { "InvoiceDate" }));
+    rec.totalAmount    = firstDouble(obj, { "TotalAmount" });
+    rec.csv            = firstString(obj, { "CSV", "Csv" });
+    rec.statusResponse = firstString(obj, { "StatusResponse" });
+    rec.validationUrl  = firstString(obj, { "ValidationUrl", "QrCodeUrl" });
+    rec.errorCode      = firstString(obj, { "ErrorCode" });
+    rec.isRejected     = obj.value(QLatin1String("IsRejected")).toBool(false);
+
+    // An InvoiceID is the minimum needed to say we understood a record at all.
+    rec.parsed = !rec.invoiceId.isEmpty();
+    return rec;
+}
+
+bool verifactuRemoteMatches(const VerifactuRemoteRecord &remote,
+                            const QString &localInvoiceId,
+                            const QString &localDateDdMmYyyy,
+                            double localTotalAmount)
+{
+    if (!remote.found || !remote.parsed)                 return false;
+    if (remote.invoiceId != localInvoiceId)              return false;
+    // Every field must be positively confirmed: an absent date or a zero amount
+    // is not agreement, it is missing evidence.
+    if (remote.invoiceDate.isEmpty())                    return false;
+    if (remote.invoiceDate != normaliseDate(localDateDdMmYyyy)) return false;
+    if (localTotalAmount <= 0.0 || remote.totalAmount <= 0.0)   return false;
+    return qAbs(remote.totalAmount - localTotalAmount) < 0.005;  // equal to the cent
+}
+
+bool verifactuErrorIsDuplicate(const QString &errorCode, const QString &errorDescription)
+{
+    const QString haystack = (errorCode + QLatin1Char(' ') + errorDescription).toLower();
+    // Spanish (AEAT / vendor) and English phrasings seen for a repeated
+    // registration. Accent-insensitive by matching the unaccented stems.
+    static const char *needles[] = {
+        "duplicad",        // "registro duplicado", "factura duplicada"
+        "duplicate",
+        "ya existe",       // "la factura ya existe"
+        "ya registrad",    // "ya registrada en el sistema"
+        "already exist",
+        "already registered"
+    };
+    for (const char *n : needles) {
+        if (haystack.contains(QLatin1String(n)))
+            return true;
+    }
+    return false;
 }

@@ -151,6 +151,27 @@ private slots:
         QVERIFY(out.endsWith(CUT_BYTES));
     }
 
+    // --- TicketRenderer: the paid marker is opt-in per print ---
+    // PayDialog's AEAT-timeout fallback prints a recibo for rows it has ALREADY
+    // marked pagado=SI, so that recibo must carry the marker - otherwise the
+    // customer gets a ticket showing neither the payment nor a Verifactu QR.
+    void test_renderPaidMarker()
+    {
+        TicketData d;
+        d.businessName  = "La Ideal";
+        d.isRecibo      = true;
+        d.invoiceId     = "123";
+        d.total         = 7.50;
+        d.ivaRate       = 21;
+        d.copyForClient = true;
+
+        d.addPayedInfo = false;
+        QVERIFY(!TicketRenderer::render(d, 576).contains("IMPORTE PAGADO"));
+
+        d.addPayedInfo = true;
+        QVERIFY(TicketRenderer::render(d, 576).contains("IMPORTE PAGADO"));
+    }
+
     // --- TicketRenderer: a factura with the IVA split ---
     void test_renderFacturaTaxSplit()
     {

@@ -174,17 +174,69 @@ private slots:
     void test_estadoRoundTrip()
     {
         const VerifactuEstado all[] = {
-            VerifactuEstado::NotSubmitted, VerifactuEstado::Enviada,
+            VerifactuEstado::Unpaid, VerifactuEstado::NotSubmitted, VerifactuEstado::Enviada,
             VerifactuEstado::Anulada, VerifactuEstado::Rectificada, VerifactuEstado::Error
         };
         for (VerifactuEstado e : all)
             QVERIFY(verifactuEstadoFromString(verifactuEstadoToString(e)) == e);
 
         QCOMPARE(verifactuEstadoToString(VerifactuEstado::Enviada), QStringLiteral("ENVIADA"));
+        QCOMPARE(verifactuEstadoToString(VerifactuEstado::Unpaid), QStringLiteral("SIN COBRAR"));
         // PENDIENTE / empty / unknown all map to NotSubmitted.
         QVERIFY(verifactuEstadoFromString("PENDIENTE") == VerifactuEstado::NotSubmitted);
         QVERIFY(verifactuEstadoFromString("") == VerifactuEstado::NotSubmitted);
         QVERIFY(verifactuEstadoFromString("garbage") == VerifactuEstado::NotSubmitted);
+    }
+
+    // Read-side safety net. PendingSubmitsDialog used to persist a literal "Error",
+    // which exact matching did not recognise: it fell through to the NotSubmitted
+    // default, so the row silently read as un-submitted and stopped offering
+    // "Reintentar envio a AEAT". Mis-cased values must decode to the right estado.
+    // (Writers still owe the canonical form - the SQL filters are case-sensitive.)
+    void test_estadoFromStringIsCaseInsensitive()
+    {
+        QVERIFY(verifactuEstadoFromString("Error")       == VerifactuEstado::Error);
+        QVERIFY(verifactuEstadoFromString("error")       == VerifactuEstado::Error);
+        QVERIFY(verifactuEstadoFromString("Enviada")     == VerifactuEstado::Enviada);
+        QVERIFY(verifactuEstadoFromString("Anulada")     == VerifactuEstado::Anulada);
+        QVERIFY(verifactuEstadoFromString("Rectificada") == VerifactuEstado::Rectificada);
+        QVERIFY(verifactuEstadoFromString("Sin Cobrar")  == VerifactuEstado::Unpaid);
+        // toString stays canonical: only the reader is lenient.
+        QCOMPARE(verifactuEstadoToString(VerifactuEstado::Error), QStringLiteral("ERROR"));
+    }
+
+    // Only a definitive AEAT rejection may be recorded as Error. A timeout or a
+    // dropped connection leaves the outcome unknown - AEAT may already hold the
+    // invoice - so it must land as PENDIENTE and go to the startup recovery
+    // dialog. Recording it as Error instead is what produced the field report of
+    // a "Reintentar" that always answers "already exists".
+    void test_estadoForResult()
+    {
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::SUCCESS)  == VerifactuEstado::Enviada);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::ERROR)    == VerifactuEstado::Error);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::NETWORK_ERROR)
+                    == VerifactuEstado::NotSubmitted);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::PENDING)
+                    == VerifactuEstado::NotSubmitted);
+        QVERIFY(verifactuEstadoForResult(VerifactuResult::INVALID_CONFIG)
+                    == VerifactuEstado::NotSubmitted);
+    }
+
+    // The Unpaid/NotSubmitted split exists so the recovery dialog can tell "no
+    // invoice to send" from "sent, reply lost". Every OTHER gate must keep
+    // treating the two alike - paying a garment does not rewrite verifactu_estado,
+    // so the row is still SIN COBRAR when RecogPrendas decides whether to submit
+    // it. A gate that tested NotSubmitted alone would stop paid garments from
+    // reaching AEAT, which is why this contract is pinned.
+    void test_estadoIsUnsubmitted()
+    {
+        QVERIFY(verifactuEstadoIsUnsubmitted(VerifactuEstado::Unpaid));
+        QVERIFY(verifactuEstadoIsUnsubmitted(VerifactuEstado::NotSubmitted));
+        QVERIFY(verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(""))); // legacy blank
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Enviada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Anulada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Rectificada));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(VerifactuEstado::Error));
     }
 };
 

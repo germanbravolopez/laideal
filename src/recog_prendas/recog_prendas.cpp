@@ -7,9 +7,15 @@
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
 #include "verifactuintegration.h"
+#include "verifacturesponse.h"
+#include <QAbstractSpinBox>
 #include <QDateTime>
 #include <QDialog>
+#include <QHBoxLayout>
+#include <QHeaderView>
 #include <QPushButton>
+#include <QTableWidget>
+#include <QTextEdit>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QSqlError>
@@ -68,6 +74,16 @@ void RecogPrendas::resetAllContents()
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->de_date_paym->setDate(QDate::currentDate());
     ui->de_date_pickup->setDate(QDate::currentDate());
+    // Payment date is display-only: it is written solely by PayDialog (Cobrar),
+    // never from here. Editing it would be worse than useless - fecha_pago is part
+    // of the AEAT invoice identity (emisor, InvoiceID, fecha), so changing it after
+    // submission makes a retry register a SECOND invoice instead of being rejected
+    // as duplicate, breaks reconciliation matching, and can move income into a
+    // locked quarter. Read-only + no spin buttons keeps it legible but inert.
+    ui->de_date_paym->setReadOnly(true);
+    ui->de_date_paym->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    ui->de_date_paym->setToolTip(tr("La fecha de pago se registra al cobrar y no se "
+                                    "puede modificar aquí."));
     // Clear the SQL query model and the view
     sqlQueryModel->clear();
     ui->tableView->setModel(sqlQueryModel);
@@ -115,10 +131,14 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
                 // Dedup pay-all loop: if a submit is already in flight for this ticket,
                 // a per-row check of estadoDb is not enough because the async DB write
                 // hasn't happened yet. hasPendingSubmit() consults the in-memory map.
-                if (verifactuEstadoFromString(estadoDb) == VerifactuEstado::NotSubmitted
+                // Unsubmitted covers SIN COBRAR too: the row is still marked unpaid
+                // here (updateTicketPayment does not touch verifactu_estado), so
+                // testing PENDIENTE alone would skip the AEAT submit entirely.
+                if (verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(estadoDb))
                         && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
                         && !hasPendingSubmit(ticketNum)) {
-                    retryVerifactuSubmit(ticketNum, ui->de_date_paym->date());
+                    retryVerifactuSubmit(ticketNum, sqlQueryModel->data(sqlQueryModel->index(
+                        rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
                 }
             }
         }
@@ -574,6 +594,15 @@ void RecogPrendas::on_pb_pay_all_clicked()
 
     PayDialog dlg(db, this);
     dlg.m_verifactu = m_verifactuIntegration;
+    // Adopt a submission the dialog gave up waiting on, so a late reply still
+    // patches the row instead of dying with the dialog.
+    connect(&dlg, &PayDialog::submitAdopted, this,
+            [this](const QString &reqId, const QString &ticketNum, int seq) {
+        ensureVerifactuConnected();
+        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/true });
+        qDebug() << "RecogPrendas: adopted in-flight submit" << reqId
+                 << "for" << verifactuInvoiceId(ticketNum, seq);
+    });
     if (!dlg.loadTicket(ticketNum)) {
         QMessageBox::information(this, tr("Sin prendas pendientes"),
                                  tr("El ticket %1 no tiene prendas pendientes de cobrar.")
@@ -666,8 +695,10 @@ void RecogPrendas::on_pb_verifactu_clicked()
     QString timestamp   = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_TIMESTAMP)).toString();
     QString error       = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ERROR)).toString();
     QString url         = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_URL_QR)).toString();
-    QString dateStr     = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString();
-    QDate invoiceDate   = QDate::fromString(dateStr, "dd-MM-yyyy");
+    // The retry needs the row's payment event, not the reception date: AEAT keys
+    // an invoice on (emisor, InvoiceID, fecha), so retryVerifactuSubmit re-reads
+    // the event's own fecha_pago from the DB.
+    const int rowSeq    = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
 
     QDialog *dlg = new QDialog(this);
     dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
@@ -694,13 +725,35 @@ void RecogPrendas::on_pb_verifactu_clicked()
         layout->addWidget(urlLabel);
     }
 
-    if (verifactuEstadoFromString(state) == VerifactuEstado::Error && m_verifactuIntegration && m_verifactuIntegration->isConfigured()) {
+    const VerifactuEstado stateEnum = verifactuEstadoFromString(state);
+    const bool verifactuUsable = m_verifactuIntegration && m_verifactuIntegration->isConfigured();
+    if (stateEnum == VerifactuEstado::Error && verifactuUsable) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
-        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, invoiceDate]() {
+        connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, rowSeq]() {
             dlg->accept();
-            retryVerifactuSubmit(ticketNum, invoiceDate);
+            retryVerifactuSubmit(ticketNum, rowSeq);
         });
         layout->addWidget(btnRetry);
+    }
+    // Offered on ANY paid row, not just unsettled ones: the query is read-only, so
+    // on an already-settled row it simply confirms what AEAT holds (the apply
+    // button stays disabled there). An unpaid row has no invoice to ask about.
+    const bool rowPaid = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == QLatin1String("SI");
+    const bool alreadySettled = stateEnum == VerifactuEstado::Enviada
+                             || stateEnum == VerifactuEstado::Anulada
+                             || stateEnum == VerifactuEstado::Rectificada;
+    if (verifactuUsable && rowPaid) {
+        QPushButton *btnQuery = new QPushButton("Consultar en AEAT", dlg);
+        btnQuery->setToolTip(alreadySettled
+            ? "Consulta a AEAT los datos registrados de esta factura (solo informativo)."
+            : "Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV.");
+        connect(btnQuery, &QPushButton::clicked, this,
+                [this, dlg, ticketNum, rowSeq, alreadySettled]() {
+            dlg->accept();
+            queryAeatAndOfferReconcile(ticketNum, rowSeq, alreadySettled);
+        });
+        layout->addWidget(btnQuery);
     }
 
     QPushButton *btnClose = new QPushButton("Cerrar", dlg);
@@ -711,50 +764,196 @@ void RecogPrendas::on_pb_verifactu_clicked()
     dlg->exec();
 }
 
-void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate)
+void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "retryVerifactuSubmit: Verifactu not configured for ticket" << ticketNum;
         return;
     }
 
-    double total = 0.0;
-    db.open();
-    {
-        QSqlQuery q;
-        q.prepare("SELECT SUM(CAST(importe AS REAL)) FROM ingresos WHERE n_recibo = :n_recibo");
-        q.bindValue(":n_recibo", ticketNum);
-        q.exec();
-        if (q.next())
-            total = q.value(0).toDouble();
+    // Re-submit the ONE payment event, under its own InvoiceID, its own total and
+    // its original fecha_pago. The old version sent the bare n_recibo with the
+    // whole ticket's importe on the reception date, which for a partial-pay event
+    // meant a wrong amount under an ID belonging to a different event.
+    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+    const QDate invoiceDate = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+    if (ev.nRecibo.isEmpty() || !invoiceDate.isValid()) {
+        qWarning() << "retryVerifactuSubmit: no paid event" << invoiceId
+                   << "- nothing to re-submit";
+        QMessageBox::warning(this, tr("Verifactu"),
+                             tr("No se puede reenviar el ticket %1: no consta como cobrado.")
+                                 .arg(invoiceId));
+        return;
     }
-    db.close();
 
     double ivaRate = AppSettings::instance()->ivaRate();
     ensureVerifactuConnected();
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
-        ticketNum,
+        invoiceId,
         invoiceDate,
-        total / (1.0 + ivaRate / 100.0),
+        ev.importe / (1.0 + ivaRate / 100.0),
         ivaRate,
         "Servicios de lavanderia"
     );
     if (reqId.isEmpty()) {
-        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for ticket" << ticketNum;
+        qWarning() << "retryVerifactuSubmit: Verifactu rejected request for" << invoiceId;
         return;
     }
-    m_pendingSubmits.insert(reqId, ticketNum);
-    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(ticketNum));
+    m_pendingSubmits.insert(reqId, { ticketNum, seq });
+    statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(invoiceId));
+}
+
+void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
+                                              bool localAlreadySettled)
+{
+    if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
+        QMessageBox::warning(this, tr("Verifactu no configurado"),
+                             tr("Verifactu no está configurado, no se puede consultar a AEAT."));
+        return;
+    }
+    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
+    const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+    if (ev.nRecibo.isEmpty()) {
+        QMessageBox::warning(this, tr("Verifactu"),
+                             tr("El ticket %1 no consta como cobrado, no hay factura que consultar.")
+                                 .arg(invoiceId));
+        return;
+    }
+
+    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId);
+    if (reqId.isEmpty()) return;
+
+    statusBar()->showMessage(tr("Consultando %1 en AEAT...").arg(invoiceId));
+    // One-shot: disconnect as soon as our own reqId answers.
+    auto *conn = new QMetaObject::Connection;
+    *conn = connect(m_verifactuIntegration, &VerifactuIntegration::queryFinished, this,
+        [this, conn, reqId, ticketNum, seq, ev, invoiceId, localAlreadySettled]
+        (const QString &id, const VerifactuRemoteRecord &rec) {
+            if (id != reqId) return;
+            disconnect(*conn);
+            delete conn;
+            showAeatReconcileDialog(ticketNum, seq, invoiceId, ev, rec, localAlreadySettled);
+        });
+}
+
+void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
+                                           const QString &invoiceId,
+                                           const PendingVerifactuEvent &ev,
+                                           const VerifactuRemoteRecord &rec,
+                                           bool localAlreadySettled)
+{
+    statusBar()->clearMessage();
+    const bool matches = verifactuRemoteMatches(rec, invoiceId, ev.fechaPago, ev.importe);
+    // A row that is already ENVIADA / ANULADA / RECTIFICADA has nothing to adopt -
+    // reconcileVerifactuFromAeat would refuse it anyway - so the query is purely
+    // informative there and the apply button stays disabled.
+    const bool canAdopt = matches && rec.hasUsableCsv() && !localAlreadySettled;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Consulta AEAT - %1").arg(invoiceId));
+    auto *layout = new QVBoxLayout(&dlg);
+
+    auto *summary = new QLabel(&dlg);
+    summary->setTextFormat(Qt::RichText);
+    summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    if (!rec.parsed) {
+        // Could not read the answer: this is NOT evidence the invoice is absent.
+        summary->setText(tr("<b>No se ha podido interpretar la respuesta de AEAT.</b><br>"
+                            "Esto <i>no</i> significa que la factura no esté registrada. "
+                            "Revisa el detalle de abajo y consulta la sede electrónica."));
+    } else if (!rec.found) {
+        // Deliberately not "se puede reenviar con seguridad": the query reply does
+        // not echo the filter we sent, so an empty result is not yet proof that the
+        // InvoiceID filter was applied. Claiming a false all-clear here would push
+        // the operator straight into a duplicate submission.
+        summary->setText(tr("<b>AEAT no ha devuelto ninguna factura con el número %1.</b><br>"
+                            "Lo más probable es que no llegara a registrarse. Aun así, "
+                            "antes de reenviar conviene confirmarlo en la sede electrónica "
+                            "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
+                            "duplicado.").arg(invoiceId));
+    } else {
+        summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>"
+                            "%1").arg(matches
+                                ? tr("Los datos coinciden con los del ticket.")
+                                : tr("<span style='color:#b00'>Los datos NO coinciden con los del "
+                                     "ticket - no se puede actualizar automáticamente.</span>")));
+    }
+    layout->addWidget(summary);
+
+    auto *table = new QTableWidget(4, 3, &dlg);
+    table->setHorizontalHeaderLabels({ tr("Campo"), tr("AEAT"), tr("Ticket") });
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    const QString localAmount = QString::number(ev.importe, 'f', 2);
+    const QString remoteAmount = rec.totalAmount > 0 ? QString::number(rec.totalAmount, 'f', 2)
+                                                     : QString("-");
+    const QStringList fields = { tr("Nº factura"), tr("Fecha"), tr("Importe"), tr("CSV") };
+    const QStringList remote = { rec.invoiceId, rec.invoiceDate, remoteAmount, rec.csv };
+    const QStringList local  = { invoiceId, ev.fechaPago, localAmount, QString("-") };
+    for (int r = 0; r < 4; ++r) {
+        table->setItem(r, 0, new QTableWidgetItem(fields[r]));
+        table->setItem(r, 1, new QTableWidgetItem(remote[r].isEmpty() ? "-" : remote[r]));
+        table->setItem(r, 2, new QTableWidgetItem(local[r]));
+    }
+    table->setMinimumHeight(150);
+    layout->addWidget(table);
+
+    // The raw payload is always available: the response schema is unpublished, so
+    // this is the only way to tell a real mismatch from a parser that guessed wrong.
+    auto *rawBox = new QTextEdit(&dlg);
+    rawBox->setReadOnly(true);
+    rawBox->setPlainText(rec.raw);
+    rawBox->setVisible(false);
+    auto *btnRaw = new QPushButton(tr("Ver respuesta completa"), &dlg);
+    btnRaw->setCheckable(true);
+    connect(btnRaw, &QPushButton::toggled, rawBox, &QWidget::setVisible);
+    layout->addWidget(btnRaw);
+    layout->addWidget(rawBox);
+
+    auto *btnRow = new QHBoxLayout();
+    auto *btnApply = new QPushButton(tr("Actualizar con los datos de AEAT"), &dlg);
+    btnApply->setEnabled(canAdopt);
+    if (!canAdopt && localAlreadySettled)
+        btnApply->setToolTip(tr("El ticket ya está registrado localmente; "
+                                "esta consulta es solo informativa."));
+    else if (!canAdopt && rec.found && matches)
+        btnApply->setToolTip(tr("AEAT no ha devuelto el CSV de la factura."));
+    auto *btnClose = new QPushButton(tr("Cerrar"), &dlg);
+    btnRow->addWidget(btnApply);
+    btnRow->addStretch();
+    btnRow->addWidget(btnClose);
+    layout->addLayout(btnRow);
+    connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::reject);
+    connect(btnApply, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.setMinimumWidth(560);
+    if (dlg.exec() != QDialog::Accepted || !canAdopt)
+        return;
+
+    const int rows = reconcileVerifactuFromAeat(db, ticketNum, seq, rec.csv, rec.validationUrl);
+    if (rows > 0) {
+        QMessageBox::information(this, tr("Verifactu"),
+            tr("El ticket %1 se ha actualizado con el CSV de AEAT (%2).")
+                .arg(invoiceId, rec.csv));
+        on_pb_search_clicked();
+    } else {
+        QMessageBox::warning(this, tr("Verifactu"),
+            tr("No se ha actualizado ninguna fila del ticket %1.").arg(invoiceId));
+    }
 }
 
 void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
     if (it == m_pendingSubmits.end()) return; // not one of ours
-    const QString ticketNum = it.value();
+    const QString ticketNum = it.value().ticketNum;
+    const int     seq       = it.value().seq;
+    const bool    adopted   = it.value().adopted;
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(db, ticketNum, result);
+    updateTicketVerifactuFields(db, ticketNum, result, seq);
 
     // Refresh the table so the new estado is visible (only if user is still on this view)
     on_pb_search_clicked();
@@ -765,11 +964,25 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
 
     if (result.isSuccess()) {
         qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
-        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
+        // An adopted reply landed after the customer already got a QR-less recibo,
+        // so say the factura can now be printed rather than just "enviado".
+        statusBar()->showMessage(
+            adopted ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR")
+                          .arg(verifactuInvoiceId(ticketNum, seq))
+                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv),
+            adopted ? 30000 : 10000);
     } else {
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        // "Already exists" means AEAT HAS the invoice and we lost the reply, so a
+        // further retry can only fail the same way. Close the loop here: ask AEAT
+        // what it holds and offer to adopt its CSV.
+        if (verifactuErrorIsDuplicate(result.errorCode, result.errorDescription)) {
+            qDebug() << "Verifactu: duplicate rejection for" << verifactuInvoiceId(ticketNum, seq)
+                     << "- querying AEAT to reconcile";
+            queryAeatAndOfferReconcile(ticketNum, seq);
+        }
     }
 }
 
@@ -783,7 +996,7 @@ void RecogPrendas::ensureVerifactuConnected()
 bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
 {
     for (auto it = m_pendingSubmits.constBegin(); it != m_pendingSubmits.constEnd(); ++it) {
-        if (it.value() == ticketNum) return true;
+        if (it.value().ticketNum == ticketNum) return true;
     }
     return false;
 }

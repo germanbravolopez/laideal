@@ -49,7 +49,7 @@ Key methods:
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows warning if not configured |
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
-| `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
+| `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado` = PENDIENTE when paid / SIN COBRAR when not; async submit patches the paid rows when AEAT replies |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
 | `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
@@ -178,7 +178,7 @@ Stateless free functions; all modules include this header.
 
 Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
-- `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type); idempotent (safe to call on every startup)
+- `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type), then backfills unpaid `'PENDIENTE'` rows to `'SIN COBRAR'` (10.9); idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
 - `readLockForMonthAndYear()` → returns 1 if quarter is locked
@@ -210,7 +210,7 @@ Notable items:
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
-| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, `RECTIFICADA` if superseded by a substitution rectificativa (R1-R5 with mode S), `PENDIENTE` if not yet submitted (Verifactu not configured, or unpaid ticket awaiting submission at pickup). Legacy rows from before Verifactu may have NULL/empty. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings |
+| verifactu_estado | TEXT | `ENVIADA` on success, `ERROR` on failure, `ANULADA` if cancelled via AEAT, `RECTIFICADA` if superseded by a substitution rectificativa (R1-R5 with mode S), `PENDIENTE` if paid and due at AEAT but not yet confirmed, `SIN COBRAR` if unpaid (no invoice to submit yet). Legacy rows from before Verifactu may have NULL/empty. Use `VerifactuEstado` enum + helpers (`verifactumanager.h`) — never hardcode these strings, and gate on `verifactuEstadoIsUnsubmitted()` rather than `== NotSubmitted` |
 | verifactu_error | TEXT | Error description if `verifactu_estado = ERROR`; empty otherwise |
 | verifactu_url_qr | TEXT | AEAT ValidationUrl for QR/verification; empty if not submitted |
 | verifactu_xml | TEXT | Raw AEAT-style XML returned by Irene Solutions (`Return.Xml`); empty if not submitted or pre-fix. Source for `Herramientas → Exportar registros AEAT (XML)...` (Art. 14.1 RD 1007/2023) |
@@ -251,7 +251,7 @@ User fills form in MainWindow
 on_bb_save_reset_clicked(Save)
   ├── validateTicket()                       — checks client, amounts, quarter lock
   ├── checkClientData()                      — adds/updates client in `clientes`
-  ├── saveTicket()                           — writes N rows to `ingresos` with verifactu_estado = PENDIENTE
+  ├── saveTicket()                           — writes N rows to `ingresos` (verifactu_estado = PENDIENTE when paid, SIN COBRAR when not)
   ├── if (isPaid):
   │     ├── reqId = verifactuSubmitInvoice(...)  — fires async submit; status bar "Enviando..."
   │     ├── QEventLoop, 3 s timeout              — waits for VerifactuIntegration::requestFinished(reqId, result)
@@ -269,6 +269,7 @@ Async tail (when AEAT replies later than 3 s, or for not-paid tickets that get p
   VerifactuIntegration::requestFinished(reqId, result)
   └── MainWindow::onVerifactuRequestFinished
         ├── sql_lite::updateTicketVerifactuFields(db, ticketNum, result) — UPDATE ingresos with CSV/timestamp/estado
+        │      (scoped by seq AND pagado='SI' — a ticket's first partial pay is seq 0, which unpaid siblings share)
         └── statusBar message                — "Ticket NNNN enviado (CSV: ...)" or "Error: ..."
 ```
 
@@ -297,7 +298,7 @@ AEAT QR validation:
 
 `VerifactuResult::Status` values (API call result): `SUCCESS`, `PENDING`, `ERROR`, `NETWORK_ERROR`, `INVALID_CONFIG`
 
-`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `NotSubmitted` ↔ `"PENDIENTE"`, `Enviada` ↔ `"ENVIADA"`, `Anulada` ↔ `"ANULADA"`, `Rectificada` ↔ `"RECTIFICADA"`, `Error` ↔ `"ERROR"`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) to `NotSubmitted`.
+`VerifactuEstado` enum class (DB-persisted state in `verifactu_estado` column): `Unpaid` ↔ `"SIN COBRAR"`, `NotSubmitted` ↔ `"PENDIENTE"`, `Enviada` ↔ `"ENVIADA"`, `Anulada` ↔ `"ANULADA"`, `Rectificada` ↔ `"RECTIFICADA"`, `Error` ↔ `"ERROR"`. Convert with `verifactuEstadoToString()` / `verifactuEstadoFromString()` (both inline in `verifactumanager.h`). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) to `NotSubmitted`. `Unpaid` vs `NotSubmitted` matters **only** to the startup recovery dialog; every other gate uses `verifactuEstadoIsUnsubmitted()`, which is true for both plus legacy blank — see `docs/modules/verifactu/README.md`.
 
 ---
 

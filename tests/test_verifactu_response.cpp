@@ -91,6 +91,210 @@ private slots:
         QCOMPARE(r.status, VerifactuResult::SUCCESS);
         QVERIFY(!r.qrCode.isNull());
     }
+
+    // ---- GetFilteredList (invoice query) --------------------------------
+    // The vendor does not publish this response schema, so the parser probes
+    // several plausible envelopes and field spellings. These fixtures are
+    // therefore HYPOTHETICAL shapes, not captured traffic - what they pin is the
+    // parser's behaviour, above all that it never half-decodes: anything it does
+    // not understand comes back parsed=false so the caller shows the raw payload
+    // instead of concluding something about AEAT.
+    void test_parseQuery_enveloppedRecord()
+    {
+        const QByteArray json = R"({"ResultCode":0,"Return":[{
+            "InvoiceID":"30877","InvoiceDate":"03-09-2026","TotalAmount":24.20,
+            "CSV":"A-7F3K9Q","StatusResponse":"Correcta",
+            "ValidationUrl":"https://aeat.example/v?x=1"}]})";
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(json);
+        QVERIFY(r.found);
+        QVERIFY(r.parsed);
+        QCOMPARE(r.invoiceId, QStringLiteral("30877"));
+        QCOMPARE(r.invoiceDate, QStringLiteral("03-09-2026"));
+        QVERIFY(qAbs(r.totalAmount - 24.20) < 0.001);
+        QCOMPARE(r.csv, QStringLiteral("A-7F3K9Q"));
+        QVERIFY(r.hasUsableCsv());
+        QVERIFY(!r.raw.isEmpty());
+    }
+
+    // Tolerances the parser keeps on top of the confirmed schema: a bare array
+    // instead of the Items envelope, trivial case variants of the field names, a
+    // plain dd-MM-yyyy date, and an amount arriving as a comma-decimal string.
+    // NOTE: these are robustness margins, not documented alternatives - the real
+    // reply uses Items / InvoiceID / InvoiceDate / TotalAmount / CSV (see
+    // test_parseQuery_realPopulatedReply, which is the authority on the schema).
+    void test_parseQuery_toleratedVariants()
+    {
+        const VerifactuRemoteRecord bare = parseVerifactuQueryResponse(
+            R"([{"InvoiceId":"30877","InvoiceDate":"03-09-2026","TotalAmount":"24,20","Csv":"A-7F3K9Q"}])");
+        QVERIFY(bare.parsed);
+        QCOMPARE(bare.invoiceId, QStringLiteral("30877"));
+        QCOMPARE(bare.invoiceDate, QStringLiteral("03-09-2026"));
+        QVERIFY(qAbs(bare.totalAmount - 24.20) < 0.001);   // comma decimal in a string
+        QCOMPARE(bare.csv, QStringLiteral("A-7F3K9Q"));
+        QVERIFY(bare.hasUsableCsv());
+    }
+
+    // CAPTURED from a real GetFilteredList call (14-09-2026, InvoiceID "2", test
+    // key) - unlike the fixtures above this is actual traffic, and it is what
+    // confirms the envelope is "Items". Note the reply echoes Offset/Count/
+    // TableNameSufix/FilterLower/FilterUpper but NOT the Filters we sent, so an
+    // empty Items does not by itself prove the InvoiceID filter was applied.
+    void test_parseQuery_realEmptyReply()
+    {
+        const QByteArray json = R"({"Offset":0,"Count":0,"TableNameSufix":null,)"
+                                R"("FilterLower":null,"FilterUpper":null,"Items":[],)"
+                                R"("ResultCode":0,)"
+                                R"("ResultMessage":"Retrieved element filtered list from domain 'Invoices'."})";
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(json);
+        QVERIFY(r.parsed);              // the answer was understood
+        QVERIFY(!r.found);              // and it contained no invoice
+        QVERIFY(!r.hasUsableCsv());     // so nothing may be adopted from it
+        QVERIFY(r.raw.contains("Retrieved element filtered list"));
+    }
+
+    // CAPTURED from a real populated GetFilteredList reply (14-09-2026, InvoiceID
+    // "4-1"). Identity fields (NIF, company name, user e-mail, CSV, the batch/
+    // instance ids) are REDACTED because this repository is public - the structure
+    // and every field the parser reads are verbatim. This is what confirms the
+    // record shape, the ISO-8601 InvoiceDate, and that the InvoiceID filter is
+    // actually applied server-side (Count comes back 1, not the whole table).
+    void test_parseQuery_realPopulatedReply()
+    {
+        const QByteArray json = R"({"Offset":0,"Count":1,"TableNameSufix":null,)"
+            R"("FilterLower":null,"FilterUpper":null,"Items":[{)"
+            R"("SellerID":"B00000000","CompanyName":"Tintoreria Ejemplo SL",)"
+            R"("IndustryClassificationID":null,"BusinessGroupID":null,)"
+            R"("BatchID":"00000000000000000000","InvoiceID":"4-1","Status":null,)"
+            R"("InvoiceType":"F2","RectificationType":null,"IsInvoiceFix":false,)"
+            R"("IsRejected":false,"ThirdPartyIssuer":null,)"
+            R"("InvoiceDate":"2026-09-14T00:00:00","OperationDate":null,)"
+            R"("PostingDate":"2026-09-14T01:36:02","PostingYear":"2026",)"
+            R"("ValueDate":"2026-09-14T01:36:02","TaxDate":"2026-09-14T01:36:02",)"
+            R"("RelatedPartyID":null,"RelatedPartyName":null,"CountryID":null,)"
+            R"("TotalAmount":25.00,"ExternKey":"00000000000000000000",)"
+            R"("Text":"Servicios de lavanderia","StatusResponse":"Correcto",)"
+            R"("ErrorCode":null,"ErrorDescription":null,"CSV":"A-TESTCSV00000001",)"
+            R"("TaxItems":null,"RectificationItems":null,"QrCode":null,"Xml":null,)"
+            R"("Response":null,"QrCodeUrl":null,)"
+            R"("ValidationUrl":"https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=4-1&fecha=14-09-2026&importe=25.00",)"
+            R"("InstanceID":"0000000000000000.0000000000000000","UserID":"usuario@example.com",)"
+            R"("Created":"2026-09-14T01:36:02"}],"ResultCode":0,)"
+            R"("ResultMessage":"Retrieved element filtered list from domain 'Invoices'."})";
+
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(json);
+        QVERIFY(r.found);
+        QVERIFY(r.parsed);
+        QCOMPARE(r.invoiceId, QStringLiteral("4-1"));
+        // ISO-8601 with a time component, normalised to the dd-MM-yyyy the DB stores.
+        QCOMPARE(r.invoiceDate, QStringLiteral("14-09-2026"));
+        QVERIFY(qAbs(r.totalAmount - 25.00) < 0.001);
+        QCOMPARE(r.csv, QStringLiteral("A-TESTCSV00000001"));
+        QCOMPARE(r.statusResponse, QStringLiteral("Correcto"));
+        QVERIFY(r.validationUrl.startsWith("https://"));
+        QVERIFY(!r.isRejected);
+        QVERIFY(r.errorCode.isEmpty());
+        QVERIFY(r.hasUsableCsv());
+
+        // And it matches the local row it was queried for.
+        QVERIFY(verifactuRemoteMatches(r, "4-1", "14-09-2026", 25.00));
+        // ExternKey / Created are decoys in the same record: the parser must not
+        // have picked them up as the InvoiceID or the invoice date.
+        QVERIFY(r.invoiceId != QStringLiteral("00000000000000000000"));
+        QVERIFY(r.invoiceDate != QStringLiteral("14-09-2026 01:36:02"));
+    }
+
+    // A record AEAT rejected can still come back from a query. Its CSV must never
+    // be adopted - that would mark us ENVIADA for an invoice AEAT refused.
+    void test_parseQuery_rejectedRecordIsNotUsable()
+    {
+        const QByteArray rejected = R"({"ResultCode":0,"Count":1,"Items":[{)"
+            R"("InvoiceID":"9","InvoiceDate":"2026-09-14T00:00:00","TotalAmount":10.00,)"
+            R"("CSV":"A-TESTCSV00000002","IsRejected":true,"StatusResponse":"Incorrecto"}]})";
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(rejected);
+        QVERIFY(r.found);
+        QVERIFY(r.parsed);
+        QVERIFY(!r.hasUsableCsv());          // rejected -> not adoptable
+        QVERIFY(!verifactuRemoteMatches(r, "9", "14-09-2026", 10.00) || !r.hasUsableCsv());
+
+        const QByteArray errored = R"({"ResultCode":0,"Count":1,"Items":[{)"
+            R"("InvoiceID":"9","InvoiceDate":"2026-09-14T00:00:00","TotalAmount":10.00,)"
+            R"("CSV":"A-TESTCSV00000003","IsRejected":false,"ErrorCode":"1102"}]})";
+        QVERIFY(!parseVerifactuQueryResponse(errored).hasUsableCsv());
+    }
+
+    // "AEAT does not have it" and "we could not read the answer" must never be
+    // conflated - the first is a fact, the second is ignorance.
+    void test_parseQuery_absentVsUnreadable()
+    {
+        const VerifactuRemoteRecord empty = parseVerifactuQueryResponse(
+            R"({"ResultCode":0,"Return":[]})");
+        QVERIFY(empty.parsed);      // understood
+        QVERIFY(!empty.found);      // genuinely not registered
+        QVERIFY(!empty.hasUsableCsv());
+
+        // Failed query: NOT evidence of absence.
+        const VerifactuRemoteRecord failed = parseVerifactuQueryResponse(
+            R"({"ResultCode":-1,"ResultMessage":"ServiceKey invalida"})");
+        QVERIFY(!failed.parsed);
+        QVERIFY(!failed.found);
+
+        for (const char *junk : { "", "not json at all", "{\"Unexpected\":{\"Shape\":1}}" }) {
+            const VerifactuRemoteRecord bad = parseVerifactuQueryResponse(junk);
+            QVERIFY2(!bad.hasUsableCsv(), junk);
+        }
+    }
+
+    // An "already exists" rejection is good news wearing an error's clothes: the
+    // invoice IS at AEAT and only the reply was lost, so it triggers a reconcile
+    // instead of another doomed retry. Matched on wording - no stable code exists.
+    void test_errorIsDuplicate()
+    {
+        QVERIFY(verifactuErrorIsDuplicate("", "Registro de facturacion duplicado"));
+        QVERIFY(verifactuErrorIsDuplicate("", "La factura ya existe en el sistema"));
+        QVERIFY(verifactuErrorIsDuplicate("", "Factura ya registrada"));
+        QVERIFY(verifactuErrorIsDuplicate("", "Duplicate invoice ID"));
+        QVERIFY(verifactuErrorIsDuplicate("", "Invoice already exists"));
+        QVERIFY(verifactuErrorIsDuplicate("DUPLICADO", ""));   // code carries it
+        QVERIFY(verifactuErrorIsDuplicate("", "DUPLICADA"));   // case-insensitive
+
+        // Real failures must NOT be mistaken for it - reconciling on those would
+        // adopt a CSV for an invoice AEAT never accepted.
+        QVERIFY(!verifactuErrorIsDuplicate("", "NIF del emisor invalido"));
+        QVERIFY(!verifactuErrorIsDuplicate("", "Tiempo de espera agotado"));
+        QVERIFY(!verifactuErrorIsDuplicate("", "Importe incorrecto"));
+        QVERIFY(!verifactuErrorIsDuplicate("", ""));
+    }
+
+    // The reconciliation gate. A record may only overwrite a local row when the
+    // InvoiceID, the date AND the amount all agree - reconciling on a partial
+    // match would stamp a CSV belonging to a different invoice onto our row.
+    void test_remoteMatches()
+    {
+        VerifactuRemoteRecord r;
+        r.found = r.parsed = true;
+        r.invoiceId   = "30877";
+        r.invoiceDate = "03-09-2026";
+        r.totalAmount = 24.20;
+        r.csv         = "A-7F3K9Q";
+
+        QVERIFY(verifactuRemoteMatches(r, "30877", "03-09-2026", 24.20));
+        QVERIFY(verifactuRemoteMatches(r, "30877", "2026-09-03", 24.204)); // ISO + cent tolerance
+
+        QVERIFY(!verifactuRemoteMatches(r, "30878", "03-09-2026", 24.20)); // other invoice
+        QVERIFY(!verifactuRemoteMatches(r, "30877", "04-09-2026", 24.20)); // other date
+        QVERIFY(!verifactuRemoteMatches(r, "30877", "03-09-2026", 24.30)); // other amount
+
+        // Missing evidence is not agreement.
+        QVERIFY(!verifactuRemoteMatches(r, "30877", "03-09-2026", 0.0));
+        VerifactuRemoteRecord noDate = r; noDate.invoiceDate.clear();
+        QVERIFY(!verifactuRemoteMatches(noDate, "30877", "03-09-2026", 24.20));
+        VerifactuRemoteRecord noAmount = r; noAmount.totalAmount = 0.0;
+        QVERIFY(!verifactuRemoteMatches(noAmount, "30877", "03-09-2026", 24.20));
+        VerifactuRemoteRecord unparsed = r; unparsed.parsed = false;
+        QVERIFY(!verifactuRemoteMatches(unparsed, "30877", "03-09-2026", 24.20));
+        VerifactuRemoteRecord absent = r; absent.found = false;
+        QVERIFY(!verifactuRemoteMatches(absent, "30877", "03-09-2026", 24.20));
+    }
 };
 
 QTEST_MAIN(TestVerifactuResponse)

@@ -71,6 +71,34 @@ void migrateDatabase(QSqlDatabase &db)
     // authoritatively for reprint / QR regen so we never have to guess from
     // seq=0 whether the original AEAT format was bare or "-0".
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
+
+    // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
+    // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
+    // an AEAT reply. Re-label those as SIN COBRAR. Idempotent (the filter excludes
+    // rows it already rewrote) and scoped to the literal 'PENDIENTE' on purpose:
+    // NULL/'' rows are legacy split-off garments that several queries detect via
+    // `verifactu_estado != ''`, so making them non-empty would change print/cancel
+    // behaviour. See docs/modules/verifactu/README.md.
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
+                "WHERE verifactu_estado = 'PENDIENTE' "
+                "  AND (pagado != 'SI' OR fecha_pago IS NULL OR fecha_pago = '')"))
+        qWarning() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
+                 << "unpaid PENDIENTE rows as SIN COBRAR";
+
+    // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
+    // which verifactuEstadoFromString() does not recognise (it fell through to
+    // NotSubmitted, so those rows stopped offering "Reintentar"). Every canonical
+    // estado is upper-case, and the SQL filters elsewhere compare case-sensitively,
+    // so the stored value - not just the C++ read - has to be normalised.
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = UPPER(verifactu_estado) "
+                "WHERE verifactu_estado IS NOT NULL AND verifactu_estado != '' "
+                "  AND verifactu_estado != UPPER(verifactu_estado)"))
+        qWarning() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
+                 << "verifactu_estado value(s)";
     db.close();
 }
 
@@ -424,7 +452,7 @@ bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEst
 {
     if (pagado == QLatin1String("SI"))
         return false;
-    return verifactuEstadoFromString(verifactuEstado) == VerifactuEstado::NotSubmitted;
+    return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
 
 bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash)
@@ -862,6 +890,77 @@ QString verifactuDisplayInvoiceId(const QStringList &invoiceIds, const QString &
     return fallback;
 }
 
+int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq,
+                               const QString &csv, const QString &validationUrl)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+    if (csv.isEmpty()) {
+        qWarning() << "reconcileVerifactuFromAeat: refusing to reconcile"
+                   << verifactuInvoiceId(nRecibo, seq) << "without a CSV";
+        return 0;
+    }
+
+    db.open();
+    QSqlQuery q(db);
+    // Only a row that is paid and NOT already settled may be reconciled. The
+    // estado guard is the important one: ENVIADA already has its own CSV, and
+    // ANULADA / RECTIFICADA were deliberately superseded - re-stamping either
+    // from a query would silently revive a cancelled invoice.
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_csv = :csv, "
+              "verifactu_url_qr = :url, verifactu_timestamp = :ts, "
+              "verifactu_error = '', verifactu_invoice_id = :id "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
+              "  AND verifactu_estado NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
+    q.bindValue(":csv",    csv);
+    q.bindValue(":url",    validationUrl);
+    q.bindValue(":ts",     QDateTime::currentDateTime().toString(Qt::ISODate));
+    q.bindValue(":id",     verifactuInvoiceId(nRecibo, seq));
+    q.bindValue(":n",      nRecibo);
+    q.bindValue(":seq",    seq);
+    if (!q.exec()) {
+        qWarning() << "reconcileVerifactuFromAeat: UPDATE failed for"
+                   << verifactuInvoiceId(nRecibo, seq) << "-" << q.lastError().text();
+        db.close();
+        return 0;
+    }
+    const int rows = q.numRowsAffected();
+    qDebug() << "reconcileVerifactuFromAeat: reconciled" << rows << "row(s) of"
+             << verifactuInvoiceId(nRecibo, seq) << "from AEAT, CSV:" << csv;
+    db.close();
+    return rows;
+}
+
+PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq)
+{
+    PendingVerifactuEvent e;
+    if (dbNotConfigured(db, __func__)) return e;
+    if (!db.open()) {
+        qWarning() << "verifactuEventFor: db.open() failed -" << db.lastError().text();
+        return e;
+    }
+    // Restricted to pagado='SI': a retry re-submits ONE payment event, so it must
+    // carry that event's own total, not the whole ticket (the unpaid remainder was
+    // never part of the invoice). fecha_pago is the date AEAT keyed the original
+    // submission on - reusing it is what makes a duplicate register as a duplicate
+    // instead of silently creating a second invoice.
+    QSqlQuery q(db);
+    q.prepare("SELECT MIN(fecha_pago), MIN(cliente), SUM(importe), COUNT(*) "
+              "FROM ingresos "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":seq", seq);
+    if (q.exec() && q.next() && q.value(3).toInt() > 0) {
+        e.nRecibo   = nRecibo;
+        e.seq       = seq;
+        e.fechaPago = q.value(0).toString();
+        e.cliente   = q.value(1).toString();
+        e.importe   = q.value(2).toDouble();
+    }
+    db.close();
+    return e;
+}
+
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso)
 {
     QVector<PendingVerifactuEvent> events;
@@ -876,10 +975,10 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // rows of one event) and SUM(importe) for that event's own total. The estado
     // filter covers legacy empty strings and the canonical "PENDIENTE".
     //
-    // The payment gate is what makes "PENDIENTE" mean "sent, reply lost" rather
-    // than "not due to be sent": saveTicket stamps EVERY row PENDIENTE, paid or
-    // not, but only submits paid ones - so without it every un-collected garment
-    // in the shop surfaces as an unreconciled AEAT submission (issue #43).
+    // The payment gate is belt-and-braces since the SIN COBRAR split (10.9): an
+    // unpaid row now carries its own estado and the filter above already drops it.
+    // Kept because it also covers legacy NULL/'' rows, which the backfill leaves
+    // alone on purpose (issue #43).
     //
     // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
     // possible: a PayDialog event (seq>0, InvoiceID "<n_recibo>-<seq>") left
@@ -1016,11 +1115,21 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     if (dbNotConfigured(db, __func__)) return;
 
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const QString estado    = verifactuEstadoToString(
-        result.isSuccess() ? VerifactuEstado::Enviada : VerifactuEstado::Error);
+    const VerifactuEstado estadoEnum = verifactuEstadoForResult(result.status);
+    const QString estado    = verifactuEstadoToString(estadoEnum);
+    // Unknown outcome (timeout / transport failure): keep the InvoiceID so a
+    // retry reuses the identity AEAT may already hold, and keep the error text
+    // as a diagnostic. Only a definitive rejection clears the identity.
+    const bool outcomeUnknown = estadoEnum == VerifactuEstado::NotSubmitted;
     // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
     // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
     // save-time never clobbers PayDialog rows.
+    //
+    // pagado='SI' is load-bearing, not defensive: the FIRST partial payment of an
+    // unpaid ticket gets seq 0 (nextVerifactuInvoiceSeq counts paid rows, of which
+    // there are none yet), and the still-unpaid siblings are also seq 0 - so
+    // scoping by seq alone would stamp them ENVIADA + CSV for an invoice that only
+    // covered the paid subset. An AEAT result can only ever belong to a paid row.
     const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
              << "estado=" << estado
@@ -1032,7 +1141,8 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
               "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
-              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq");
+              "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq "
+              "  AND pagado = 'SI'");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);
@@ -1050,7 +1160,7 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
         q.bindValue(":hash",   "");
-        q.bindValue(":id",     "");
+        q.bindValue(":id",     outcomeUnknown ? invoiceId : QString());
     }
     q.bindValue(":n_recibo", ticketNum);
     q.bindValue(":seq",      seq);

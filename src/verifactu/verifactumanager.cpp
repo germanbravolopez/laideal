@@ -94,6 +94,62 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     return reqId;
 }
 
+QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber)
+{
+    const QString reqId = nextRequestId();
+
+    if (!validateConfiguration() || invoiceNumber.isEmpty()) {
+        VerifactuRemoteRecord rec;   // parsed=false: we know nothing, not "absent"
+        rec.raw = validateConfiguration() ? QStringLiteral("InvoiceID vacio") : getLastError();
+        QMetaObject::invokeMethod(this, [this, reqId, rec]() {
+            emit queryFinished(reqId, rec);
+        }, Qt::QueuedConnection);
+        return reqId;
+    }
+
+    // FilterSet shape per the vendor's own REST client (Net/Rest/List/FilterSet.cs):
+    // Filters[] of {FieldName, Operator, Value}, plus paging. Count/Offset default
+    // to -1 there, which the service reads as "unset".
+    QJsonObject filter;
+    filter["FieldName"] = QStringLiteral("InvoiceID");
+    filter["Operator"]  = QStringLiteral("=");
+    filter["Value"]     = invoiceNumber;
+
+    QJsonObject filterSet;
+    filterSet["Filters"]    = QJsonArray{ filter };
+    filterSet["Count"]      = 10;
+    filterSet["Offset"]     = -1;
+    filterSet["ServiceKey"] = m_config->getServiceKey();
+
+    const QString url = m_config->getEndpointUrl() + "/GetFilteredList";
+    QNetworkRequest request = createNetworkRequest(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    qDebug() << "Querying AEAT for invoice" << invoiceNumber << "(" << reqId << ") at" << url;
+
+    QNetworkReply *reply = m_networkManager->post(
+        request, QJsonDocument(filterSet).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, invoiceNumber]() {
+        VerifactuRemoteRecord rec;
+        if (reply->error() != QNetworkReply::NoError) {
+            rec.raw = reply->errorString();   // parsed stays false - a failed query
+            qWarning() << "Verifactu query network error for" << invoiceNumber
+                       << "-" << reply->errorString();
+        } else {
+            const QByteArray body = reply->readAll();
+            rec = parseVerifactuQueryResponse(body);
+            // The schema is unpublished, so always log the payload: the first real
+            // reply is what lets the candidate field names be narrowed to the truth.
+            qDebug().noquote() << "Verifactu query reply for" << invoiceNumber
+                               << "- parsed=" << rec.parsed << "found=" << rec.found
+                               << "\n" << QString::fromUtf8(body);
+        }
+        reply->deleteLater();
+        emit queryFinished(reqId, rec);
+    });
+    return reqId;
+}
+
 QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
     const QString reqId = nextRequestId();

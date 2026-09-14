@@ -311,6 +311,13 @@ void PayDialog::onCobrarClicked()
     QTimer::singleShot(5000, this, [this]() {
         if (m_pendingReqId.isEmpty()) return; // already handled
         qWarning() << "PayDialog: AEAT timeout (5s) for" << m_pendingReqId;
+        // Hand the still-in-flight request to a longer-lived owner BEFORE closing.
+        // This dialog is stack-allocated by RecogPrendas and dies with exec(), so
+        // without the handoff a reply arriving at, say, 7 s (the transport timeout
+        // is 10 s) was dropped on the floor - including a SUCCESS carrying the CSV,
+        // which left the row falsely PENDIENTE and its later retry answering
+        // "already exists".
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq);
         m_pendingReqId.clear();
         VerifactuResult res;
         res.status = VerifactuResult::NETWORK_ERROR;
@@ -375,13 +382,15 @@ void PayDialog::markPendingVerifactu(int seq)
 {
     // Keep the InvoiceID identity (bare n_recibo for seq 0, else <n_recibo>-<seq>)
     // and set estado=PENDIENTE so the row reads as "awaiting AEAT confirmation"
-    // instead of a failed Error. Scoped by seq, exactly the rows just stamped.
+    // instead of a failed Error. Scoped by seq AND pagado - on a ticket's first
+    // partial payment seq is 0, which the still-unpaid siblings also carry.
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_invoice_id = :id, "
               "verifactu_error = '' "
-              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq");
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
+              "  AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.bindValue(":id",     invoiceId);
     q.bindValue(":n",      m_ticketNum);
@@ -404,7 +413,11 @@ void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
     ui_impr->getTicketInfo();
     // Auto-print a single factura (the customer copy) after Cobrar - no second
     // (business) copy. Reprint from RecogPrendas if another copy is needed.
-    ui_impr->buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
+    // The rows are already pagado=SI here, so the recibo fallback (AEAT did not
+    // reply) must show IMPORTE PAGADO - otherwise the customer walks out with a
+    // ticket that shows neither the payment nor a QR. A factura implies payment
+    // and omits the line, as every other print path does.
+    ui_impr->buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/ui_impr->isRecibo);
     if (AppSettings::instance()->enablePrinting())
         ui_impr->printTicket();
 }

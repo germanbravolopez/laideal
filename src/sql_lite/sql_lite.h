@@ -88,7 +88,7 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 
 // True when a garment row can be voided locally (VoidGarmentsDialog) instead of
 // via an AEAT anulacion: it must be unpaid (pagado != "SI") and never sent to
-// AEAT (verifactu_estado PENDIENTE/empty). A paid/ENVIADA row was registered at
+// AEAT (verifactu_estado SIN COBRAR/PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
@@ -108,8 +108,9 @@ bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
 //    submission for the ticket covered the full importe and the chained Huella
 //    stays on the original rows, so re-submitting a split row would create a
 //    duplicate-InvoiceID error at AEAT.
-//  - saveTicket row: pass "PENDIENTE" (verifactuEstadoToString(NotSubmitted)); the
-//    async AEAT submit patches the row once a reply arrives.
+//  - saveTicket / AddGarment row: "PENDIENTE" (NotSubmitted) when the row is paid
+//    and an AEAT submit is due - the async reply patches it - else "SIN COBRAR"
+//    (Unpaid), which means there is no invoice to send yet.
 struct IngresoGarmentRow {
     QString nRecibo;
     QString cliente;
@@ -126,7 +127,7 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString editLock = "0";
     QString hash;
-    QString verifactuEstado;  // "" (legacy/split) or "PENDIENTE" (saveTicket)
+    QString verifactuEstado;  // "" (legacy/split), "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 
@@ -176,6 +177,21 @@ struct PendingVerifactuEvent {
     QString cliente;
     double  importe = 0.0;
 };
+
+// Adopt the CSV/QR that AEAT already holds for a payment event, turning a local
+// ERROR / PENDIENTE row into ENVIADA. Returns the number of rows updated (0 when
+// nothing was eligible). Refuses an empty csv, and never touches a row that is
+// already ENVIADA, ANULADA or RECTIFICADA - re-stamping those would revive a
+// deliberately superseded invoice. The CALLER must first have confirmed identity
+// with verifactuRemoteMatches(): this function trusts the csv it is handed.
+int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq,
+                               const QString &csv, const QString &validationUrl);
+
+// One payment event's own submission data, for re-submitting it to AEAT. Scoped
+// to the PAID rows of (nRecibo, seq) so a retry carries that event's total and
+// its original fecha_pago, not the whole ticket. Empty nRecibo when no such
+// paid event exists.
+PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq);
 
 // Pending Verifactu events for startup recovery: one entry per
 // (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty and

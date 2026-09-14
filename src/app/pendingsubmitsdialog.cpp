@@ -2,6 +2,7 @@
 
 #include "appsettings.h"
 #include "sql_lite.h"
+#include "verifactutypes.h"
 
 #include <QDebug>
 #include <QHBoxLayout>
@@ -170,12 +171,16 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     QSqlQuery q(db);
     // Scope by seq so marking one event as Error never clobbers a sibling event
     // (a different seq) of the same ticket that is still PENDIENTE.
+    // The estado MUST come from the helper: a hardcoded 'Error' does not match the
+    // canonical "ERROR", so verifactuEstadoFromString() fell through to its
+    // NotSubmitted default and the row stopped offering "Reintentar envio a AEAT".
     q.prepare(
-        "UPDATE ingresos SET verifactu_estado = 'Error', "
+        "UPDATE ingresos SET verifactu_estado = :estado, "
         "verifactu_error = 'Pendiente sin reconciliar tras cierre - revisar en sede AEAT' "
         "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
         "  AND (verifactu_estado IS NULL OR verifactu_estado = '' "
         "       OR verifactu_estado = 'PENDIENTE')");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
     q.bindValue(":n", e.ticketNum);
     q.bindValue(":seq", e.seq);
     if (!q.exec()) {

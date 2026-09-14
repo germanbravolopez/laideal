@@ -459,12 +459,17 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
     if (it == m_pendingSubmits.end()) return; // not one of ours (cancel/QR/etc. or other consumer)
     const QString ticketNum = it.value().ticketNum;
     const int     seq       = it.value().seq;
+    const bool    lateReply = it.value().printedWithoutQr;
     m_pendingSubmits.erase(it);
 
     updateTicketVerifactuFields(db, ticketNum, result, seq);
 
     if (result.isSuccess()) {
-        statusBar()->showMessage(tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv), 10000);
+        statusBar()->showMessage(
+            lateReply ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR "
+                           "desde Recogida de Prendas").arg(verifactuInvoiceId(ticketNum, seq))
+                      : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv),
+            lateReply ? 30000 : 10000);
     } else {
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
@@ -474,8 +479,9 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
 
 void MainWindow::saveTicket()
 {
-    // Every saved garment starts verifactu_estado = PENDIENTE; the async submit handler
-    // patches CSV/timestamp/estado once AEAT replies. See onVerifactuRequestFinished().
+    // A paid garment starts PENDIENTE and the async submit handler patches
+    // CSV/timestamp/estado once AEAT replies (see onVerifactuRequestFinished());
+    // an unpaid one starts SIN COBRAR - there is no invoice to send yet.
     // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
     // so log the count of garments actually inserted, not the slot count.
     int savedGarments = 0;
@@ -504,8 +510,11 @@ void MainWindow::saveTicket()
                                    ? ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text() : QString("");
             r.editLock       = "0";
             r.hash           = genHash16();
-            // Rows start PENDIENTE; the async AEAT submit patches estado on reply.
-            r.verifactuEstado = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+            // An unpaid row has no invoice to send, so it is SIN COBRAR, not PENDIENTE;
+            // a paid one starts PENDIENTE and the async AEAT submit patches it on reply.
+            r.verifactuEstado = verifactuEstadoToString(
+                r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
+                                                : VerifactuEstado::Unpaid);
 
             insertGarmentRow(db, r);
             ++savedGarments;
@@ -612,10 +621,18 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
                 qDebug() << "saveTicket: ticket" << ticketNum
                          << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
                          << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
-                if (gotSuccessfulReply)
+                if (gotSuccessfulReply) {
                     printFra(qrCode);
-                else
+                } else {
+                    // AEAT has not confirmed within the bounded wait, but the request
+                    // may still be in flight (the transport timeout is longer). Print
+                    // the paid recibo now and flag the event so a late confirmation
+                    // tells the operator the factura with QR can be printed.
                     printRecibo();
+                    auto it = m_pendingSubmits.find(reqId);
+                    if (it != m_pendingSubmits.end())
+                        it.value().printedWithoutQr = true;
+                }
             } else {
                 printRecibo();
             }

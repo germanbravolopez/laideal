@@ -10,6 +10,11 @@
 #include "mysortfilterproxymodel.h"
 #include "sql_lite.h"
 
+// Defined in verifactutypes.h; only ever passed by const reference here, so the
+// forward declaration keeps QPixmap out of this header (same as VerifactuResult,
+// which sql_lite.h forward-declares).
+struct VerifactuRemoteRecord;
+
 class VerifactuIntegration;
 struct VerifactuResult;
 
@@ -70,15 +75,40 @@ private slots:
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
     void on_pb_verifactu_clicked();
-    void retryVerifactuSubmit(const QString &ticketNum, const QDate &invoiceDate);
+    // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
+    // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
+    void retryVerifactuSubmit(const QString &ticketNum, int seq);
+    // Asks AEAT what it holds for this payment event and, only if the returned
+    // record is provably the same invoice AND carries a CSV, offers to adopt it.
+    // Read-only against AEAT; the DB write needs an explicit operator confirmation.
+    // localAlreadySettled: the row is ENVIADA/ANULADA/RECTIFICADA, so the query is
+    // informative only and no adoption is offered.
+    void queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
+                                    bool localAlreadySettled = false);
+    // Shows AEAT's record beside the local one. Only offers the DB write when the
+    // two provably match and AEAT returned a CSV; always exposes the raw payload,
+    // since the query response schema is unpublished.
+    void showAeatReconcileDialog(const QString &ticketNum, int seq, const QString &invoiceId,
+                                 const PendingVerifactuEvent &ev,
+                                 const VerifactuRemoteRecord &rec,
+                                 bool localAlreadySettled);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
     Ui::RecogPrendas *ui;
     QSqlDatabase db;
-    // Async submit tracking: reqId -> ticket number. Also used to dedup the pay-all
-    // loop so multiple garments of the same ticket only fire one AEAT submission.
-    QHash<QString, QString> m_pendingSubmits;
+    // Async submit tracking: reqId -> the payment event it belongs to. Also used
+    // to dedup the pay-all loop so multiple garments of the same ticket only fire
+    // one AEAT submission.
+    struct PendingSubmit {
+        QString ticketNum;
+        int     seq = 0;
+        // Adopted from PayDialog after its bounded wait expired: the operator has
+        // already been handed a recibo without a QR, so a late success has to tell
+        // them the factura is now printable.
+        bool    adopted = false;
+    };
+    QHash<QString, PendingSubmit> m_pendingSubmits;
 
     void ensureVerifactuConnected();
     bool hasPendingSubmit(const QString &ticketNum) const;

@@ -23,6 +23,8 @@ bool VerifactuIntegration::initialize()
 
     connect(m_manager, &VerifactuManager::requestFinished,
             this, &VerifactuIntegration::requestFinished);
+    connect(m_manager, &VerifactuManager::queryFinished,
+            this, &VerifactuIntegration::queryFinished);
 
     qDebug().noquote() << m_manager->getConfigurationInfo();
     return true;
@@ -152,6 +154,16 @@ QString VerifactuIntegration::generateQRAsync(
     invoice.calculateTotals();
 
     return m_manager->generateQRAsync(invoice);
+}
+
+QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber)
+{
+    if (!isConfigured()) {
+        m_lastError = "Verifactu no está configurado correctamente";
+        qWarning() << m_lastError;
+        return QString();
+    }
+    return m_manager->queryInvoiceAsync(invoiceNumber);
 }
 
 bool VerifactuIntegration::isConfigured() const

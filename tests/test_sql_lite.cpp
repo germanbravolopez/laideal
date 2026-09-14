@@ -16,6 +16,7 @@
 #include <QVariantMap>
 
 #include "sql_lite.h"
+#include "verifactutypes.h"   // VerifactuResult, for the updateTicketVerifactuFields tests
 
 namespace {
 constexpr const char *kConn = "test_sql_lite_conn";
@@ -349,6 +350,238 @@ private slots:
         QVERIFY(qAbs(ev[0].importe - 20.0) < 0.01);
     }
 
+    // The 10.9 Unpaid/NotSubmitted split ships a one-time backfill: rows that the
+    // old saveTicket stamped PENDIENTE while unpaid are re-labelled SIN COBRAR.
+    // Two boundaries are load-bearing and pinned here: a genuinely-pending paid row
+    // must survive untouched (re-labelling it would hide a real unreconciled AEAT
+    // submission from the recovery dialog), and a legacy blank row must stay blank
+    // (several print/cancel queries detect split-off rows via `verifactu_estado
+    // != ''`, so making it non-empty would change what gets printed).
+    void test_migrateDatabase_backfillsUnpaidAsSinCobrar()
+    {
+        const QString estadoSql =
+            "SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n";
+
+        insertIngreso("M1", "10-03-2026", "50.00", "NO", "PENDIENTE"); // unpaid -> re-labelled
+        insertIngreso("M2", "10-03-2026", "50.00", "SI", "PENDIENTE"); // paid, really pending
+        insertIngreso("M3", "10-03-2026", "50.00", "SI", "ENVIADA");   // confirmed
+        // Legacy split-off row (blank estado) and a paid row that never got a
+        // payment date (so it was never actually submitted).
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('M4', '', '10-03-2026', '', '50.00', 'NO', '', 0, '', 0)");
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('M5', '', '10-03-2026', '', '50.00', 'SI', '', 0, 'PENDIENTE', 0)");
+
+        migrateDatabase(m_db);
+
+        QCOMPARE(scalar(estadoSql, {{":n", "M1"}}), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M2"}}), QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M3"}}), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M4"}}), QString());
+        QCOMPARE(scalar(estadoSql, {{":n", "M5"}}), QStringLiteral("SIN COBRAR"));
+
+        // Idempotent: re-running on an already-migrated DB is a no-op.
+        migrateDatabase(m_db);
+        QCOMPARE(scalar(estadoSql, {{":n", "M1"}}), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M2"}}), QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar(estadoSql, {{":n", "M4"}}), QString());
+    }
+
+    // An AEAT reply belongs only to the rows that were actually paid. This is not
+    // hypothetical: nextVerifactuInvoiceSeq counts PAID rows, so a ticket's FIRST
+    // partial payment gets seq 0 - which the still-unpaid siblings also carry.
+    // Scoping the write-back by seq alone stamped those siblings ENVIADA + CSV for
+    // an invoice that never covered them, which then made them non-voidable in
+    // "Anular prendas" and fed a CSV into the print path. Pinned both ways: the
+    // paid rows must be patched, the unpaid sibling must be left completely alone.
+    void test_updateTicketVerifactuFields_leavesUnpaidSiblingsAlone()
+    {
+        insertIngreso("P1", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P1", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        VerifactuResult ok;
+        ok.status        = VerifactuResult::SUCCESS;
+        ok.csv           = "CSV-ABC123";
+        ok.validationUrl = "https://aeat.example/validate";
+        updateTicketVerifactuFields(m_db, "P1", ok, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'P1' "
+                        "AND verifactu_estado = 'ENVIADA'"), QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P1' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_csv, '') FROM ingresos "
+                        "WHERE n_recibo = 'P1' AND pagado = 'NO'"), QString());
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_invoice_id, '') FROM ingresos "
+                        "WHERE n_recibo = 'P1' AND pagado = 'NO'"), QString());
+    }
+
+    // The same scoping must hold for a failed submission: an AEAT error belongs to
+    // the paid rows, and must not push an unpaid sibling into ERROR (which would
+    // also surface a bogus "Reintentar envio" button on it in RecogPrendas).
+    void test_updateTicketVerifactuFields_errorAlsoSkipsUnpaid()
+    {
+        insertIngreso("P2", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P2", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        VerifactuResult bad;
+        bad.status           = VerifactuResult::ERROR;
+        bad.errorDescription = "AEAT rejected";
+        updateTicketVerifactuFields(m_db, "P2", bad, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P2' "
+                        "AND pagado = 'SI'"), QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P2' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
+    }
+
+    // A dropped connection is not a rejection. The row must land PENDIENTE (so the
+    // startup recovery dialog owns it) and KEEP its InvoiceID, because AEAT may
+    // already hold the invoice under that identity and a retry has to reuse it.
+    void test_updateTicketVerifactuFields_transportFailureStaysPending()
+    {
+        insertIngreso("P3", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult dropped;
+        dropped.status           = VerifactuResult::NETWORK_ERROR;
+        dropped.errorDescription = "Tiempo de espera agotado";
+        updateTicketVerifactuFields(m_db, "P3", dropped, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT verifactu_invoice_id FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("P3"));
+        QCOMPARE(scalar("SELECT verifactu_error FROM ingresos WHERE n_recibo = 'P3'"),
+                 QStringLiteral("Tiempo de espera agotado"));
+        // Still no CSV - nothing was confirmed.
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_csv, '') FROM ingresos "
+                        "WHERE n_recibo = 'P3'"), QString());
+    }
+
+    // A definitive AEAT rejection, by contrast, is final: Error, and the InvoiceID
+    // is cleared because nothing is registered under it.
+    void test_updateTicketVerifactuFields_aeatRejectionIsFinal()
+    {
+        insertIngreso("P4", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult rejected;
+        rejected.status           = VerifactuResult::ERROR;
+        rejected.errorDescription = "NIF invalido";
+        updateTicketVerifactuFields(m_db, "P4", rejected, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P4'"),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_invoice_id, '') FROM ingresos "
+                        "WHERE n_recibo = 'P4'"), QString());
+    }
+
+    // A retry re-submits ONE payment event. Before this seam RecogPrendas summed
+    // every row of the ticket and sent it under the bare n_recibo on the RECEPTION
+    // date - so retrying a partial payment submitted the wrong amount under an
+    // InvoiceID belonging to a different event, on a date AEAT never keyed it on.
+    void test_verifactuEventFor()
+    {
+        // seq 0: paid 50, plus an unpaid 30 that is NOT part of the invoice.
+        insertIngreso("R1", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("R1", "",           "30.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        // seq 1: a later partial pay of 20 on a different date.
+        insertIngreso("R1", "25-06-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+
+        const PendingVerifactuEvent e0 = verifactuEventFor(m_db, "R1", 0);
+        QCOMPARE(e0.nRecibo, QStringLiteral("R1"));
+        QCOMPARE(e0.seq, 0);
+        QVERIFY2(qAbs(e0.importe - 50.0) < 0.01, qPrintable(QString::number(e0.importe)));
+        QCOMPARE(e0.fechaPago, QStringLiteral("10-03-2026"));
+
+        const PendingVerifactuEvent e1 = verifactuEventFor(m_db, "R1", 1);
+        QVERIFY(qAbs(e1.importe - 20.0) < 0.01);
+        QCOMPARE(e1.fechaPago, QStringLiteral("25-06-2026"));
+
+        // No paid rows for that seq -> empty, so the caller refuses to re-submit.
+        QVERIFY(verifactuEventFor(m_db, "R1", 7).nRecibo.isEmpty());
+        QVERIFY(verifactuEventFor(m_db, "NOPE", 0).nRecibo.isEmpty());
+    }
+
+    // Adopting AEAT's own CSV is how an "already exists" rejection gets resolved:
+    // the invoice IS registered, we just lost the reply. Every row of the event is
+    // settled, and the error text cleared.
+    void test_reconcileVerifactuFromAeat_adoptsCsv()
+    {
+        insertIngreso("K1", "10-03-2026", "50.00", "SI", "ERROR", 0, /*seq=*/0);
+        insertIngreso("K1", "10-03-2026", "30.00", "SI", "ERROR", 0, /*seq=*/0);
+        insertIngreso("K1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K1", 0, "A-7F3K9Q",
+                                            "https://aeat.example/v"), 2);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND verifactu_estado = 'ENVIADA' AND verifactu_csv = 'A-7F3K9Q'"),
+                 QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT verifactu_error FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND pagado = 'SI' LIMIT 1"), QString());
+        // The unpaid sibling was never part of that invoice.
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K1' "
+                        "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
+    }
+
+    // The refusals. A settled row must never be re-stamped from a query: ENVIADA
+    // already carries its own CSV, and ANULADA / RECTIFICADA were deliberately
+    // superseded, so overwriting either would revive a cancelled invoice.
+    void test_reconcileVerifactuFromAeat_refusals()
+    {
+        insertIngreso("K2", "10-03-2026", "50.00", "SI", "ANULADA",     0, /*seq=*/0);
+        insertIngreso("K3", "10-03-2026", "50.00", "SI", "RECTIFICADA", 0, /*seq=*/0);
+        insertIngreso("K4", "10-03-2026", "50.00", "SI", "ENVIADA",     0, /*seq=*/0);
+        insertIngreso("K5", "10-03-2026", "50.00", "SI", "ERROR",       0, /*seq=*/0);
+
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K2", 0, "X", ""), 0);
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K3", 0, "X", ""), 0);
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K4", 0, "X", ""), 0);
+        // An empty CSV is refused outright - there is nothing to adopt.
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K5", 0, "", ""), 0);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K5'"),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K2'"),
+                 QStringLiteral("ANULADA"));
+    }
+
+    // PendingSubmitsDialog persisted a literal 'Error' for years, which no SQL
+    // filter and (before the reader was made lenient) no C++ read recognised. The
+    // migration normalises casing so the stored value is canonical - the SQL
+    // filters compare case-sensitively, so fixing only the reader is not enough.
+    void test_migrateDatabase_normalisesEstadoCasing()
+    {
+        insertIngreso("N1", "10-03-2026", "50.00", "SI", "Error",   0, /*seq=*/0);
+        insertIngreso("N2", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("N3", "10-03-2026", "50.00", "SI", "Anulada", 0, /*seq=*/0);
+        // Blank stays blank - the split-off legacy shape must survive untouched.
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('N4', '', '10-03-2026', '', '50.00', 'NO', '', 0, '', 0)");
+
+        migrateDatabase(m_db);
+
+        const QString q = "SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n";
+        QCOMPARE(scalar(q, {{":n", "N1"}}), QStringLiteral("ERROR"));
+        QCOMPARE(scalar(q, {{":n", "N2"}}), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar(q, {{":n", "N3"}}), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar(q, {{":n", "N4"}}), QString());
+
+        // Idempotent.
+        migrateDatabase(m_db);
+        QCOMPARE(scalar(q, {{":n", "N1"}}), QStringLiteral("ERROR"));
+        QCOMPARE(scalar(q, {{":n", "N4"}}), QString());
+    }
+
+    // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
+    // estado filter excludes it on its own, independently of the pagado gate.
+    void test_pendingVerifactuEvents_excludesSinCobrar()
+    {
+        insertIngreso("T300", "10-03-2026", "50.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        QVERIFY(pendingVerifactuEvents(m_db, "2026-01-01").isEmpty());
+    }
+
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
     // reception date: a partial pay made on a different day than reception would
     // otherwise register a second invoice at AEAT (date is part of the invoice
@@ -640,6 +873,7 @@ private slots:
     {
         QVERIFY(garmentIsLocallyVoidable("NO", ""));           // legacy empty = NotSubmitted
         QVERIFY(garmentIsLocallyVoidable("NO", "PENDIENTE"));
+        QVERIFY(garmentIsLocallyVoidable("NO", "SIN COBRAR")); // the normal unpaid state
         QVERIFY(!garmentIsLocallyVoidable("SI", "PENDIENTE")); // paid -> not local
         QVERIFY(!garmentIsLocallyVoidable("NO", "ENVIADA"));   // sent to AEAT
         QVERIFY(!garmentIsLocallyVoidable("NO", "ANULADA"));
