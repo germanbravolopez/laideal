@@ -84,6 +84,15 @@ void RecogPrendas::resetAllContents()
     ui->de_date_paym->setButtonSymbols(QAbstractSpinBox::NoButtons);
     ui->de_date_paym->setToolTip(tr("La fecha de pago se registra al cobrar y no se "
                                     "puede modificar aquí."));
+    // Reception date is display-only for the same reason: nothing writes it back to
+    // the clicked row. Its one remaining reader is the split-off row in
+    // SEPARATE_GARM, which must inherit the original reception date anyway - a
+    // hand-typed value there would also shift the row in or out of the Verifactu
+    // startup-recovery window, which gates on fecha_recepcion.
+    ui->de_date_recep->setReadOnly(true);
+    ui->de_date_recep->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    ui->de_date_recep->setToolTip(tr("La fecha de recepción se fija al crear el "
+                                     "ticket y no se puede modificar aquí."));
     // Clear the SQL query model and the view
     sqlQueryModel->clear();
     ui->tableView->setModel(sqlQueryModel);
