@@ -126,9 +126,11 @@ None of the three `QDateEdit`s has a `dateChanged`/`editingFinished` handler —
 |--------|-----------|-----------|
 | `de_date_pickup` | `updateDb(PKU_YES)` (via `pb_state`) and `markTicketPickedUp()` (via `pb_pku_all`) | Yes — the only one that works |
 | `de_date_paym` | Only `updateDb(PAY_YES)` — **dead path** | **No** — forced `setReadOnly(true)` with no spin buttons since 10.9 |
-| `de_date_recep` | Never written back for the clicked row; only read to build the split-off row in `SEPARATE_GARM` | Editable, but edits affect only a subsequent split — a known wart |
+| `de_date_recep` | Never written back for the clicked row; only read to build the split-off row in `SEPARATE_GARM` | **No** — `setReadOnly(true)` with no spin buttons since 10.10 |
 
 `de_date_paym` is deliberately display-only: `fecha_pago` is part of the AEAT invoice identity `(emisor, InvoiceID, fecha)`, which `sql_lite::verifactuEventFor` (retry) and `verifactuRemoteMatches` (reconcile) both depend on. Editing it after submission would make a retry register a *second* invoice instead of being rejected as duplicate, and could move income into a locked quarter. The payment date is set by `PayDialog` alone.
+
+`de_date_recep` is display-only for the same "nothing writes it back" reason, plus one of its own: its only remaining reader is the split-off row, which must inherit the original reception date. A hand-typed value there would also shift that row in or out of the Verifactu startup-recovery window, which gates on `fecha_recepcion` (`sql_lite::pendingVerifactuEvents`).
 
 ## Partial-payment dialog (8.5+)
 

@@ -84,6 +84,15 @@ void RecogPrendas::resetAllContents()
     ui->de_date_paym->setButtonSymbols(QAbstractSpinBox::NoButtons);
     ui->de_date_paym->setToolTip(tr("La fecha de pago se registra al cobrar y no se "
                                     "puede modificar aquí."));
+    // Reception date is display-only for the same reason: nothing writes it back to
+    // the clicked row. Its one remaining reader is the split-off row in
+    // SEPARATE_GARM, which must inherit the original reception date anyway - a
+    // hand-typed value there would also shift the row in or out of the Verifactu
+    // startup-recovery window, which gates on fecha_recepcion.
+    ui->de_date_recep->setReadOnly(true);
+    ui->de_date_recep->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    ui->de_date_recep->setToolTip(tr("La fecha de recepción se fija al crear el "
+                                     "ticket y no se puede modificar aquí."));
     // Clear the SQL query model and the view
     sqlQueryModel->clear();
     ui->tableView->setModel(sqlQueryModel);
@@ -873,11 +882,24 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
                             "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
                             "duplicado.").arg(invoiceId));
     } else {
-        summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>"
-                            "%1").arg(matches
-                                ? tr("Los datos coinciden con los del ticket.")
-                                : tr("<span style='color:#b00'>Los datos NO coinciden con los del "
-                                     "ticket - no se puede actualizar automáticamente.</span>")));
+        // Every submission ATTEMPT is stored, so a retried ticket returns several
+        // records; the fields shown come from the accepted one, not the newest.
+        const QString attempts = rec.recordCount > 1
+            ? tr("<br><i>AEAT ha devuelto %1 registros para este número (los reenvíos "
+                 "rechazados quedan guardados). Se muestran los datos del registro "
+                 "aceptado.</i>").arg(rec.recordCount)
+            : QString();
+        QString verdict;
+        if (!matches)
+            verdict = tr("<span style='color:#b00'>Los datos NO coinciden con los del "
+                         "ticket - no se puede actualizar automáticamente.</span>");
+        else if (!rec.hasUsableCsv())
+            verdict = tr("<span style='color:#b00'>Ninguno de los registros fue aceptado "
+                         "por AEAT (no hay CSV que recuperar).</span>");
+        else
+            verdict = tr("Los datos coinciden con los del ticket.");
+        summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>%1%2")
+                             .arg(verdict, attempts));
     }
     layout->addWidget(summary);
 

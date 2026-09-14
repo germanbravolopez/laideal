@@ -62,6 +62,7 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `garmentIsLocallyVoidable(pagado, verifactuEstado)` | `bool` | Pure guard for VoidGarmentsDialog: true only when a row is unpaid (`pagado != "SI"`) AND never sent to AEAT — `verifactuEstadoIsUnsubmitted()`, i.e. SIN COBRAR / PENDIENTE / empty. A paid/ENVIADA row was registered at AEAT and must be cancelled via CancelInvoiceDialog instead |
 | `voidGarmentRow(db, nRecibo, hash)` | `bool` | VoidGarmentsDialog seam: void one garment in place — `UPDATE ingresos SET estado='Anulado', verifactu_estado='ANULADA', fecha_pago = fecha_recogida = today (`dd-MM-yyyy`)` keyed by `(n_recibo, hash)`. The two dates record **when** the garment was voided; they are not taxable (the row keeps `pagado='NO'` and `verifactu_estado='ANULADA'`, both of which exclude it from every accounting query). `pagado` is left untouched. Caller gates the row through `garmentIsLocallyVoidable` first |
 | `ticketHasPaidGarment(db, nRecibo)` | `bool` | True if the ticket has any `pagado='SI'` row. AddGarment uses it to refuse appending garments to a paid (already AEAT-submitted) ticket |
+| `ticketAllGarmentsPaid(db, nRecibo)` | `bool` | True when **every** garment is `pagado='SI'` and there is at least one. Drives the `IMPORTE PAGADO` marker on a reprinted recibo, which shows the whole ticket total — "any paid" would mark a partially-paid ticket as settled in full. Strict `= 'SI'` so a blank never reads as paid |
 
 ## Usage pattern
 

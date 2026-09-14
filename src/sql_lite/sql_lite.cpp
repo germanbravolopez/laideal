@@ -455,6 +455,27 @@ bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEst
     return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
 
+bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    // Strict pagado='SI' (not "!= NO"): a blank must not read as paid. A ticket
+    // with no rows is not "all paid" either, hence the total > 0 guard - otherwise
+    // an empty result would print IMPORTE PAGADO on nothing.
+    q.prepare("SELECT COUNT(*), SUM(CASE WHEN pagado = 'SI' THEN 1 ELSE 0 END) "
+              "FROM ingresos WHERE n_recibo = :n");
+    q.bindValue(":n", nRecibo);
+    bool allPaid = false;
+    if (q.exec() && q.first()) {
+        const int total = q.value(0).toInt();
+        allPaid = total > 0 && q.value(1).toInt() == total;
+    }
+    db.close();
+    return allPaid;
+}
+
 bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash)
 {
     if (dbNotConfigured(db, __func__)) return false;
