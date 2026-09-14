@@ -1,5 +1,13 @@
 Releases:
 
+10.10
+- Bug fix: a reprinted receipt now shows "IMPORTE PAGADO" when the ticket is paid
+  - Reprinting a receipt - from "Recogida de Prendas" or from Herramientas -> Imprimir -> Recibo - never showed the amount as paid, even for a fully paid ticket. It does now. If only part of the ticket has been charged the note is left off, because a receipt lists the whole ticket and it would be wrong to present it as settled in full. Invoices are unchanged: they do not carry the note, since an invoice already means the sale was paid.
+- Bug fix: recovering an invoice from the AEAT now works on tickets that were retried
+  - "Consultar en AEAT" could not recover the invoice data of a ticket that had been sent more than once: every attempt is stored at the AEAT service, and the app was reading one of the rejected attempts instead of the one that was accepted, so "Actualizar con los datos de AEAT" stayed greyed out even though the invoice was registered. The app now looks for the accepted submission among all the stored attempts, and tells you how many it found.
+- Improvement: the reception date can no longer be edited in "Recogida de Prendas"
+  - Like the payment date in the previous version, this field accepted changes that were never saved to the garment. Worse, the typed value was then applied to a garment separated from the ticket afterwards. It is now read-only: the reception date is set when the ticket is created.
+
 10.9
 - New: check an invoice against the AEAT and recover its data ("Consultar en AEAT")
   - When a receipt was paid but the AEAT never answered - the internet dropped, or the connection was slow - the app used to be stuck: trying again only got "the invoice already exists", because the AEAT did have it and only the reply was lost. There is now a "Consultar en AEAT" button in the Verifactu window of a receipt. It asks the AEAT what it has on file, shows it next to your data, and if everything matches it lets you bring the invoice's CSV and QR back into the receipt with one click. Nothing is changed automatically: you always see the comparison first and decide.
