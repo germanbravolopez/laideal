@@ -81,13 +81,17 @@ private slots:
     // Asks AEAT what it holds for this payment event and, only if the returned
     // record is provably the same invoice AND carries a CSV, offers to adopt it.
     // Read-only against AEAT; the DB write needs an explicit operator confirmation.
-    void queryAeatAndOfferReconcile(const QString &ticketNum, int seq);
+    // localAlreadySettled: the row is ENVIADA/ANULADA/RECTIFICADA, so the query is
+    // informative only and no adoption is offered.
+    void queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
+                                    bool localAlreadySettled = false);
     // Shows AEAT's record beside the local one. Only offers the DB write when the
     // two provably match and AEAT returned a CSV; always exposes the raw payload,
     // since the query response schema is unpublished.
     void showAeatReconcileDialog(const QString &ticketNum, int seq, const QString &invoiceId,
                                  const PendingVerifactuEvent &ev,
-                                 const VerifactuRemoteRecord &rec);
+                                 const VerifactuRemoteRecord &rec,
+                                 bool localAlreadySettled);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:

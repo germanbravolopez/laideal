@@ -53,12 +53,13 @@ QString normaliseDate(const QString &s)
     return s;
 }
 
-// The record list can plausibly arrive under any of these; also accept a bare
-// array or a single bare object.
+// "Items" is CONFIRMED against a real GetFilteredList reply (see the captured
+// payload in test_verifactu_response::test_parseQuery_realEmptyReply); the rest
+// stay as fallbacks until a populated reply proves the record shape too.
 QJsonObject firstRecord(const QJsonObject &root, bool *found)
 {
     *found = false;
-    for (const char *k : { "Return", "Records", "List", "Items", "Result", "Invoices" }) {
+    for (const char *k : { "Items", "Return", "Records", "List", "Result", "Invoices" }) {
         const QJsonValue v = root.value(QLatin1String(k));
         if (v.isArray()) {
             const QJsonArray a = v.toArray();
@@ -188,26 +189,19 @@ VerifactuRemoteRecord parseVerifactuQueryResponse(const QByteArray &response)
         return rec;               // not JSON at all
     }
 
-    rec.invoiceId      = firstString(obj, { "InvoiceID", "InvoiceId", "NumSerieFactura", "ExternKey" });
-    rec.invoiceDate    = normaliseDate(
-                         firstString(obj, { "InvoiceDate", "FechaExpedicionFactura", "Date", "Created" }));
-    rec.totalAmount    = firstDouble(obj, { "TotalAmount", "ImporteTotal", "Total", "Amount" });
-    rec.csv            = firstString(obj, { "CSV", "Csv", "csv" });
-    rec.statusResponse = firstString(obj, { "StatusResponse", "Status", "EstadoRegistro" });
-    rec.validationUrl  = firstString(obj, { "ValidationUrl", "QrCodeUrl", "Url" });
-
-    // Some shapes nest the AEAT detail one level down; look there before giving up.
-    if (rec.csv.isEmpty() || rec.invoiceId.isEmpty()) {
-        const QJsonObject inner = obj.value(QLatin1String("Return")).toObject();
-        if (!inner.isEmpty()) {
-            if (rec.csv.isEmpty())
-                rec.csv = firstString(inner, { "CSV", "Csv", "csv" });
-            if (rec.invoiceId.isEmpty())
-                rec.invoiceId = firstString(inner, { "InvoiceID", "InvoiceId", "ExternKey" });
-            if (rec.validationUrl.isEmpty())
-                rec.validationUrl = firstString(inner, { "ValidationUrl", "QrCodeUrl", "Url" });
-        }
-    }
+    // Field names CONFIRMED against a real populated reply (see
+    // test_parseQuery_realPopulatedReply). Only trivial case variants are kept as
+    // aliases - the speculative fallbacks were removed once the shape was known,
+    // because a wrong-field match is worse than no match: the record also carries
+    // ExternKey and Created, which are NOT the InvoiceID and NOT the invoice date.
+    rec.invoiceId      = firstString(obj, { "InvoiceID", "InvoiceId" });
+    rec.invoiceDate    = normaliseDate(firstString(obj, { "InvoiceDate" }));
+    rec.totalAmount    = firstDouble(obj, { "TotalAmount" });
+    rec.csv            = firstString(obj, { "CSV", "Csv" });
+    rec.statusResponse = firstString(obj, { "StatusResponse" });
+    rec.validationUrl  = firstString(obj, { "ValidationUrl", "QrCodeUrl" });
+    rec.errorCode      = firstString(obj, { "ErrorCode" });
+    rec.isRejected     = obj.value(QLatin1String("IsRejected")).toBool(false);
 
     // An InvoiceID is the minimum needed to say we understood a record at all.
     rec.parsed = !rec.invoiceId.isEmpty();

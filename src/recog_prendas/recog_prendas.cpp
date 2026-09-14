@@ -724,19 +724,25 @@ void RecogPrendas::on_pb_verifactu_clicked()
         });
         layout->addWidget(btnRetry);
     }
-    // An unsettled row may be registered at AEAT even though we never recorded the
-    // reply (a lost reply, or a retry rejected as duplicate). Let the operator ask.
-    if (verifactuEstadoIsUnsubmitted(stateEnum) || stateEnum == VerifactuEstado::Error) {
-        if (verifactuUsable) {
-            QPushButton *btnQuery = new QPushButton("Consultar en AEAT", dlg);
-            btnQuery->setToolTip("Comprueba si AEAT ya tiene esta factura y permite "
-                                 "recuperar su CSV.");
-            connect(btnQuery, &QPushButton::clicked, this, [this, dlg, ticketNum, rowSeq]() {
-                dlg->accept();
-                queryAeatAndOfferReconcile(ticketNum, rowSeq);
-            });
-            layout->addWidget(btnQuery);
-        }
+    // Offered on ANY paid row, not just unsettled ones: the query is read-only, so
+    // on an already-settled row it simply confirms what AEAT holds (the apply
+    // button stays disabled there). An unpaid row has no invoice to ask about.
+    const bool rowPaid = sqlQueryModel->data(
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == QLatin1String("SI");
+    const bool alreadySettled = stateEnum == VerifactuEstado::Enviada
+                             || stateEnum == VerifactuEstado::Anulada
+                             || stateEnum == VerifactuEstado::Rectificada;
+    if (verifactuUsable && rowPaid) {
+        QPushButton *btnQuery = new QPushButton("Consultar en AEAT", dlg);
+        btnQuery->setToolTip(alreadySettled
+            ? "Consulta a AEAT los datos registrados de esta factura (solo informativo)."
+            : "Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV.");
+        connect(btnQuery, &QPushButton::clicked, this,
+                [this, dlg, ticketNum, rowSeq, alreadySettled]() {
+            dlg->accept();
+            queryAeatAndOfferReconcile(ticketNum, rowSeq, alreadySettled);
+        });
+        layout->addWidget(btnQuery);
     }
 
     QPushButton *btnClose = new QPushButton("Cerrar", dlg);
@@ -787,7 +793,8 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
     statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(invoiceId));
 }
 
-void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq)
+void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
+                                              bool localAlreadySettled)
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         QMessageBox::warning(this, tr("Verifactu no configurado"),
@@ -810,23 +817,27 @@ void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq)
     // One-shot: disconnect as soon as our own reqId answers.
     auto *conn = new QMetaObject::Connection;
     *conn = connect(m_verifactuIntegration, &VerifactuIntegration::queryFinished, this,
-        [this, conn, reqId, ticketNum, seq, ev, invoiceId]
+        [this, conn, reqId, ticketNum, seq, ev, invoiceId, localAlreadySettled]
         (const QString &id, const VerifactuRemoteRecord &rec) {
             if (id != reqId) return;
             disconnect(*conn);
             delete conn;
-            showAeatReconcileDialog(ticketNum, seq, invoiceId, ev, rec);
+            showAeatReconcileDialog(ticketNum, seq, invoiceId, ev, rec, localAlreadySettled);
         });
 }
 
 void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
                                            const QString &invoiceId,
                                            const PendingVerifactuEvent &ev,
-                                           const VerifactuRemoteRecord &rec)
+                                           const VerifactuRemoteRecord &rec,
+                                           bool localAlreadySettled)
 {
     statusBar()->clearMessage();
     const bool matches = verifactuRemoteMatches(rec, invoiceId, ev.fechaPago, ev.importe);
-    const bool canAdopt = matches && rec.hasUsableCsv();
+    // A row that is already ENVIADA / ANULADA / RECTIFICADA has nothing to adopt -
+    // reconcileVerifactuFromAeat would refuse it anyway - so the query is purely
+    // informative there and the apply button stays disabled.
+    const bool canAdopt = matches && rec.hasUsableCsv() && !localAlreadySettled;
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Consulta AEAT - %1").arg(invoiceId));
@@ -841,8 +852,15 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
                             "Esto <i>no</i> significa que la factura no esté registrada. "
                             "Revisa el detalle de abajo y consulta la sede electrónica."));
     } else if (!rec.found) {
-        summary->setText(tr("<b>AEAT no tiene ninguna factura con el número %1.</b><br>"
-                            "Se puede reenviar con seguridad.").arg(invoiceId));
+        // Deliberately not "se puede reenviar con seguridad": the query reply does
+        // not echo the filter we sent, so an empty result is not yet proof that the
+        // InvoiceID filter was applied. Claiming a false all-clear here would push
+        // the operator straight into a duplicate submission.
+        summary->setText(tr("<b>AEAT no ha devuelto ninguna factura con el número %1.</b><br>"
+                            "Lo más probable es que no llegara a registrarse. Aun así, "
+                            "antes de reenviar conviene confirmarlo en la sede electrónica "
+                            "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
+                            "duplicado.").arg(invoiceId));
     } else {
         summary->setText(tr("<b>AEAT tiene registrada esta factura.</b><br>"
                             "%1").arg(matches
@@ -886,7 +904,10 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     auto *btnRow = new QHBoxLayout();
     auto *btnApply = new QPushButton(tr("Actualizar con los datos de AEAT"), &dlg);
     btnApply->setEnabled(canAdopt);
-    if (!canAdopt && rec.found && matches)
+    if (!canAdopt && localAlreadySettled)
+        btnApply->setToolTip(tr("El ticket ya está registrado localmente; "
+                                "esta consulta es solo informativa."));
+    else if (!canAdopt && rec.found && matches)
         btnApply->setToolTip(tr("AEAT no ha devuelto el CSV de la factura."));
     auto *btnClose = new QPushButton(tr("Cerrar"), &dlg);
     btnRow->addWidget(btnApply);
