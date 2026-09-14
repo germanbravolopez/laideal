@@ -18,6 +18,10 @@ private slots:
         QCOMPARE(Updater::compareVersions("9.0", "9.0"), 0);
         QVERIFY(Updater::compareVersions("10.0", "9.9") > 0); // major compared numerically, not lexicographically
         QVERIFY(Updater::compareVersions("9.10", "9.2") > 0); // minor compared numerically
+        // The first two-digit minor the project actually shipped. Lexicographically
+        // "10.10" < "10.9", which would have silently stopped every auto-update.
+        QVERIFY(Updater::compareVersions("10.10", "10.9") > 0);
+        QVERIFY(Updater::compareVersions("10.9", "10.10") < 0);
         QVERIFY(Updater::compareVersions("v8.2", "8.1") > 0); // leading 'v' normalised
         QCOMPARE(Updater::compareVersions("8.0", "v8.0"), 0);
     }
