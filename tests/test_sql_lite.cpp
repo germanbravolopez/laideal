@@ -546,6 +546,34 @@ private slots:
                  QStringLiteral("ANULADA"));
     }
 
+    // PendingSubmitsDialog persisted a literal 'Error' for years, which no SQL
+    // filter and (before the reader was made lenient) no C++ read recognised. The
+    // migration normalises casing so the stored value is canonical - the SQL
+    // filters compare case-sensitively, so fixing only the reader is not enough.
+    void test_migrateDatabase_normalisesEstadoCasing()
+    {
+        insertIngreso("N1", "10-03-2026", "50.00", "SI", "Error",   0, /*seq=*/0);
+        insertIngreso("N2", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("N3", "10-03-2026", "50.00", "SI", "Anulada", 0, /*seq=*/0);
+        // Blank stays blank - the split-off legacy shape must survive untouched.
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+             "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('N4', '', '10-03-2026', '', '50.00', 'NO', '', 0, '', 0)");
+
+        migrateDatabase(m_db);
+
+        const QString q = "SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n";
+        QCOMPARE(scalar(q, {{":n", "N1"}}), QStringLiteral("ERROR"));
+        QCOMPARE(scalar(q, {{":n", "N2"}}), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar(q, {{":n", "N3"}}), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar(q, {{":n", "N4"}}), QString());
+
+        // Idempotent.
+        migrateDatabase(m_db);
+        QCOMPARE(scalar(q, {{":n", "N1"}}), QStringLiteral("ERROR"));
+        QCOMPARE(scalar(q, {{":n", "N4"}}), QString());
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()

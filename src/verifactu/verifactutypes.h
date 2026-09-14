@@ -27,13 +27,19 @@ inline QString verifactuEstadoToString(VerifactuEstado e)
     return QStringLiteral("PENDIENTE");
 }
 
+// Case-insensitive on purpose: the column spans app versions, and a value that
+// is merely mis-cased ("Error") would otherwise fall through to the NotSubmitted
+// default and be silently misread as un-submitted. This is a read-side safety net
+// only - the SQL filters elsewhere compare case-sensitively, so writers must still
+// emit the canonical upper-case form via verifactuEstadoToString().
 inline VerifactuEstado verifactuEstadoFromString(const QString &s)
 {
-    if (s == QLatin1String("SIN COBRAR"))  return VerifactuEstado::Unpaid;
-    if (s == QLatin1String("ENVIADA"))     return VerifactuEstado::Enviada;
-    if (s == QLatin1String("ANULADA"))     return VerifactuEstado::Anulada;
-    if (s == QLatin1String("RECTIFICADA")) return VerifactuEstado::Rectificada;
-    if (s == QLatin1String("ERROR"))       return VerifactuEstado::Error;
+    const QString u = s.toUpper();
+    if (u == QLatin1String("SIN COBRAR"))  return VerifactuEstado::Unpaid;
+    if (u == QLatin1String("ENVIADA"))     return VerifactuEstado::Enviada;
+    if (u == QLatin1String("ANULADA"))     return VerifactuEstado::Anulada;
+    if (u == QLatin1String("RECTIFICADA")) return VerifactuEstado::Rectificada;
+    if (u == QLatin1String("ERROR"))       return VerifactuEstado::Error;
     return VerifactuEstado::NotSubmitted; // covers "PENDIENTE" and legacy empty/NULL
 }
 
@@ -99,10 +105,17 @@ struct VerifactuRemoteRecord
     QString csv;
     QString statusResponse;
     QString validationUrl;
+    bool    isRejected = false; // AEAT's own IsRejected flag on the record
+    QString errorCode;          // non-empty when AEAT recorded a rejection
     QString raw;                // the whole JSON payload, always kept
 
-    // Safe to reconcile from only when AEAT really has it with a CSV.
-    bool hasUsableCsv() const { return found && parsed && !csv.isEmpty(); }
+    // Safe to reconcile from only when AEAT really has it, accepted, with a CSV.
+    // A rejected record can still come back from the query; adopting its CSV would
+    // mark us ENVIADA for an invoice AEAT refused.
+    bool hasUsableCsv() const
+    {
+        return found && parsed && !csv.isEmpty() && !isRejected && errorCode.isEmpty();
+    }
 };
 
 inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)

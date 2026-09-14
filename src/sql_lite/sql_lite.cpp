@@ -86,6 +86,19 @@ void migrateDatabase(QSqlDatabase &db)
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
                  << "unpaid PENDIENTE rows as SIN COBRAR";
+
+    // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
+    // which verifactuEstadoFromString() does not recognise (it fell through to
+    // NotSubmitted, so those rows stopped offering "Reintentar"). Every canonical
+    // estado is upper-case, and the SQL filters elsewhere compare case-sensitively,
+    // so the stored value - not just the C++ read - has to be normalised.
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = UPPER(verifactu_estado) "
+                "WHERE verifactu_estado IS NOT NULL AND verifactu_estado != '' "
+                "  AND verifactu_estado != UPPER(verifactu_estado)"))
+        qWarning() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
+                 << "verifactu_estado value(s)";
     db.close();
 }
 
