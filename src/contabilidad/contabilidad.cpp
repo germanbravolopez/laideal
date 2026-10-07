@@ -206,8 +206,12 @@ void Contabilidad::generateContabilidad()
         }
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
+        // One scan per table for the whole year, bucketed by quarter.
+        const QuarterlyDetails details = annualDetailsByQuarter(db, year);
         for (int trim = 1; trim < 5; trim++)
-            contabilidadHtml += renderDetail(trim, "Detalle del trimestre " + QString::number(trim));
+            contabilidadHtml += "<h2>Detalle del trimestre " + QString::number(trim) + "</h2>"
+                    + createHtmlDetailIngresos(details.income[trim - 1], ivaRate)
+                    + createHtmlDetailGastos(details.expenses[trim - 1]);
         contabilidadHtml += ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" + QString::number(year) + ".pdf";
@@ -477,6 +481,11 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
     return html;
 }
 
+bool Contabilidad::expenseIvaIsSummarised(int iva)
+{
+    return iva == 0 || iva == 10 || iva == 21;
+}
+
 QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses)
 {
     QString html = "<h3>Detalle de gastos</h3>";
@@ -492,22 +501,38 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
                 "<th style='text-align:right;'>Importe</th>"
             "</tr></thead><tbody>";
     double totalImporte = 0.0, totalBase = 0.0;
+    int counted = 0;
     for (int i = 0; i < expenses.size(); i++) {
         const ExpenseDetail &e = expenses[i];
-        // Same base derivation as figuresFromTotals; iva 0 means sin IVA (base == importe).
-        const double base = e.iva > 0 ? e.importe / (1.0 + e.iva / 100.0) : e.importe;
-        totalImporte += e.importe;
-        totalBase += base;
         html += detailRowOpen(i)
                 + "<td>" + e.fecha.toHtmlEscaped() + "</td>"
                 + "<td>" + e.nFactura.toHtmlEscaped() + "</td>"
                 + "<td>" + e.empresa.toHtmlEscaped() + "</td>"
-                + "<td>" + e.servicio.toHtmlEscaped() + "</td>"
-                + "<td style='text-align:right;'>" + QString::number(e.iva) + "</td>"
+                + "<td>" + e.servicio.toHtmlEscaped() + "</td>";
+        // The summary only sums the 10 %, 21 % and sin-IVA columns; any other rate
+        // (or a NULL one) is listed but flagged and kept out of the total, so the
+        // total row still equals the summary.
+        if (!expenseIvaIsSummarised(e.iva)) {
+            html += "<td style='text-align:right;'>" + (e.iva < 0 ? QStringLiteral("?") : QString::number(e.iva)) + " *</td>"
+                    "<td style='text-align:right;'>-</td><td style='text-align:right;'>-</td>"
+                    + euroCell(e.importe) + "</tr>";
+            continue;
+        }
+        // Same base derivation as figuresFromTotals; iva 0 means sin IVA (base == importe).
+        const double base = e.iva > 0 ? e.importe / (1.0 + e.iva / 100.0) : e.importe;
+        totalImporte += e.importe;
+        totalBase += base;
+        counted++;
+        html += "<td style='text-align:right;'>" + QString::number(e.iva) + "</td>"
                 + euroCell(base) + euroCell(e.importe - base) + euroCell(e.importe) + "</tr>";
     }
-    html += "<tr style='font-weight:bold;'><td colspan='5'>Total (" + QString::number(expenses.size()) + " facturas)</td>"
+    html += "<tr style='font-weight:bold;'><td colspan='5'>Total (" + QString::number(counted) + " facturas)</td>"
             + euroCell(totalBase) + euroCell(totalImporte - totalBase) + euroCell(totalImporte) + "</tr>"
             "</tbody></table>";
+    const int flagged = expenses.size() - counted;
+    if (flagged > 0)
+        html += "<p>* " + QString::number(flagged) + " factura(s) con un tipo de IVA no reconocido "
+                "(solo se suman sin IVA, 10 % y 21 %): aparecen en el listado pero no entran en el "
+                "resumen de gastos ni en este total. Revise su IVA en la tabla de gastos.</p>";
     return html;
 }

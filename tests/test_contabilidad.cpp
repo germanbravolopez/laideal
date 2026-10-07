@@ -78,6 +78,24 @@ private slots:
         QVERIFY(html.contains(ReportHtml::formatEuro(150.0)));          // importe total
     }
 
+    void test_detailGastosFlagsUnsummarisedRates()
+    {
+        ExpenseDetail ok;   ok.nFactura  = "F-1"; ok.iva  = 21; ok.importe  = 121.0;
+        ExpenseDetail odd;  odd.nFactura = "F-2"; odd.iva = 4;  odd.importe = 104.0;
+        ExpenseDetail none; none.nFactura = "F-3"; none.iva = -1; none.importe = 50.0;
+        const QString html = Contabilidad::createHtmlDetailGastos({ok, odd, none});
+        QVERIFY(html.contains("4 *"));
+        QVERIFY(html.contains("? *"));                                  // NULL iva
+        QVERIFY(html.contains("Total (1 facturas)"));                   // only the 21 % row counts
+        QVERIFY(html.contains(ReportHtml::formatEuro(121.0)));
+        QVERIFY(!html.contains(ReportHtml::formatEuro(275.0)));         // the flagged rows stay out of the total
+        QVERIFY(html.contains("2 factura(s) con un tipo de IVA no reconocido"));
+        QVERIFY(Contabilidad::expenseIvaIsSummarised(0));
+        QVERIFY(Contabilidad::expenseIvaIsSummarised(10));
+        QVERIFY(!Contabilidad::expenseIvaIsSummarised(4));
+        QVERIFY(!Contabilidad::expenseIvaIsSummarised(-1));
+    }
+
     void test_detailEmptyPeriod()
     {
         QVERIFY(Contabilidad::createHtmlDetailIngresos({}, 21.0).contains("Sin tickets cobrados en el periodo."));

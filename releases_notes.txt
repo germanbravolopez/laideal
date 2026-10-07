@@ -1,8 +1,8 @@
 Releases:
 
 10.11
-- Bug fix: the total in "Recogida de Prendas" no longer counts garments that were not charged
-  - When searching by date, the "Importe total" box added up every garment in the list, including garments that were voided with "Anular prendas" or never paid. A voided garment takes the date it was voided as its payment date, so it showed up when searching by "Pago" and inflated the total. The list still shows those garments, but the total now only adds what was really charged - the same figure the accounting report uses.
+- Bug fix: the total in "Recogida de Prendas" no longer counts voided garments
+  - The "Importe total" box added up every garment in the list, including garments voided with "Anular prendas". A voided garment takes the date it was voided as its payment date, so it showed up when searching by "Pago" and inflated the total. The list still shows those garments, but voided (and cancelled or rectified) garments are no longer added. Unpaid garments still count, so searching a ticket by number still shows what the customer owes.
 - New: the accounting reports now list the tickets and expenses behind each figure
   - At the end of every report (monthly, quarterly and annual - per quarter) there are two new tables: the paid tickets (number, payment date, client, garments, base, VAT and amount) and the expense invoices (date, invoice number, company, service, VAT rate, base, VAT and amount), each with its total. The totals always match the summary above, so you can check exactly what every figure is made of.
 - Improvement: the Verifactu service key can be shown in Configuración

@@ -456,12 +456,14 @@ bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEst
     return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
 
-bool garmentCountsAsIncome(const QString &pagado, const QString &verifactuEstado)
+// verifactu_estado values left out of every total: ANULADA (voided in place or
+// cancelled at AEAT) and RECTIFICADA (superseded by a substitution rectificativa).
+// Single source for garmentExcludedFromTotals and the kIngresosIncomeWhere SQL.
+static const QStringList kTotalsExcludedEstados = { QStringLiteral("ANULADA"), QStringLiteral("RECTIFICADA") };
+
+bool garmentExcludedFromTotals(const QString &verifactuEstado)
 {
-    if (pagado != QLatin1String("SI"))
-        return false;
-    return verifactuEstado != QLatin1String("ANULADA")
-        && verifactuEstado != QLatin1String("RECTIFICADA");
+    return kTotalsExcludedEstados.contains(verifactuEstado);
 }
 
 bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
@@ -580,12 +582,12 @@ static const QString kFechaPagoIso =
     QStringLiteral("date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))");
 static const QString kFechaGastoIso =
     QStringLiteral("date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2))");
-// Paid ingresos, excluding ANULADA and RECTIFICADA (superseded by a substitution
-// rectificativa). Legacy rows without verifactu_estado count as normal.
+// Paid ingresos, excluding kTotalsExcludedEstados. Legacy rows without
+// verifactu_estado count as normal.
 static const QString kIngresosIncomeWhere =
     QStringLiteral("(pagado = 'SI') AND "
-                   "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-                   " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND ")
+                   "(verifactu_estado IS NULL OR verifactu_estado = '' OR verifactu_estado NOT IN ('")
+    + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')) AND "
     + "(" + kFechaPagoIso + " >= date(:start)) AND (" + kFechaPagoIso + " < date(:end))";
 static const QString kGastosPeriodWhere =
     "(" + kFechaGastoIso + " >= date(:start)) AND (" + kFechaGastoIso + " < date(:end))";
@@ -1238,31 +1240,40 @@ QString removeSpecialChars(const QString &str)
     return out;
 }
 
-QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
-{
-    QVector<IncomeTicketDetail> tickets;
-    if (dbNotConfigured(db, __func__)) return tickets;
+// Bucket selectors for the detail collectors: a single period listing, or the
+// four quarters of a year keyed on the dd-MM-yyyy month.
+static int singleBucket(const QString &) { return 0; }
+static int quarterBucket(const QString &ddMMyyyy) { return (ddMMyyyy.mid(3, 2).toInt() + 2) / 3 - 1; }
 
+// Runs the shared income predicate over [start, end) and aggregates the rows by
+// n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
+// COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
+// a bucket keeps its first payment date. A comma-decimal importe parses as 0,
+// the same as totalPriceBetweenDates skipping it.
+static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
+                                 QVector<IncomeTicketDetail> *buckets, int bucketCount,
+                                 int (*bucketOf)(const QString &))
+{
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, cliente, fecha_pago, importe FROM ingresos WHERE " + kIngresosIncomeWhere
               + " ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER)");
-    q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-    q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+    q.bindValue(":start", start.toString("yyyy-MM-dd"));
+    q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {
-        qWarning() << "incomeTicketsBetweenDates: query failed -" << q.lastError().text();
+        qWarning() << "collectIncomeTickets: query failed -" << q.lastError().text();
         db.close();
-        return tickets;
+        return;
     }
-    // One entry per n_recibo, matching COUNT(DISTINCT n_recibo). A ticket paid in
-    // several events within the period keeps its first payment date. A comma-decimal
-    // importe parses as 0, the same as totalPriceBetweenDates skipping it.
-    QHash<QString, int> indexByTicket;
+    QHash<QString, int> indexByTicket[4];
     while (q.next()) {
+        const int bucket = bucketOf(q.value(2).toString());
+        if (bucket < 0 || bucket >= bucketCount) continue;
+        QVector<IncomeTicketDetail> &tickets = buckets[bucket];
         const QString nRecibo = q.value(0).toString();
-        auto it = indexByTicket.find(nRecibo);
-        if (it == indexByTicket.end()) {
-            it = indexByTicket.insert(nRecibo, tickets.size());
+        auto it = indexByTicket[bucket].find(nRecibo);
+        if (it == indexByTicket[bucket].end()) {
+            it = indexByTicket[bucket].insert(nRecibo, tickets.size());
             IncomeTicketDetail t;
             t.nRecibo   = nRecibo;
             t.cliente   = q.value(1).toString();
@@ -1274,6 +1285,45 @@ QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate st
         t.garments++;
     }
     db.close();
+}
+
+// Every gastos row in [start, end) into buckets[bucketOf(fecha)]. A NULL iva is
+// kept as -1 so it is not mistaken for sin IVA (0).
+static void collectExpenses(QSqlDatabase &db, QDate start, QDate end,
+                            QVector<ExpenseDetail> *buckets, int bucketCount,
+                            int (*bucketOf)(const QString &))
+{
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_factura, empresa, servicio, fecha, iva, importe FROM gastos WHERE " + kGastosPeriodWhere
+              + " ORDER BY " + kFechaGastoIso + ", id");
+    q.bindValue(":start", start.toString("yyyy-MM-dd"));
+    q.bindValue(":end",   end.toString("yyyy-MM-dd"));
+    if (!q.exec()) {
+        qWarning() << "collectExpenses: query failed -" << q.lastError().text();
+        db.close();
+        return;
+    }
+    while (q.next()) {
+        const int bucket = bucketOf(q.value(3).toString());
+        if (bucket < 0 || bucket >= bucketCount) continue;
+        ExpenseDetail e;
+        e.nFactura = q.value(0).toString();
+        e.empresa  = q.value(1).toString();
+        e.servicio = q.value(2).toString();
+        e.fecha    = q.value(3).toString();
+        e.iva      = q.value(4).isNull() ? -1 : q.value(4).toInt();
+        e.importe  = q.value(5).toDouble();
+        buckets[bucket].append(e);
+    }
+    db.close();
+}
+
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+{
+    QVector<IncomeTicketDetail> tickets;
+    if (dbNotConfigured(db, __func__)) return tickets;
+    collectIncomeTickets(db, startDate, endDate, &tickets, 1, singleBucket);
     return tickets;
 }
 
@@ -1281,28 +1331,16 @@ QVector<ExpenseDetail> expensesBetweenDates(QSqlDatabase &db, QDate startDate, Q
 {
     QVector<ExpenseDetail> expenses;
     if (dbNotConfigured(db, __func__)) return expenses;
-
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT n_factura, empresa, servicio, fecha, iva, importe FROM gastos WHERE " + kGastosPeriodWhere
-              + " ORDER BY " + kFechaGastoIso + ", id");
-    q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-    q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
-    if (!q.exec()) {
-        qWarning() << "expensesBetweenDates: query failed -" << q.lastError().text();
-        db.close();
-        return expenses;
-    }
-    while (q.next()) {
-        ExpenseDetail e;
-        e.nFactura = q.value(0).toString();
-        e.empresa  = q.value(1).toString();
-        e.servicio = q.value(2).toString();
-        e.fecha    = q.value(3).toString();
-        e.iva      = q.value(4).toInt();
-        e.importe  = q.value(5).toDouble();
-        expenses.append(e);
-    }
-    db.close();
+    collectExpenses(db, startDate, endDate, &expenses, 1, singleBucket);
     return expenses;
+}
+
+QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year)
+{
+    QuarterlyDetails d;
+    if (dbNotConfigured(db, __func__)) return d;
+    const QDate start(year, 1, 1), end(year + 1, 1, 1);
+    collectIncomeTickets(db, start, end, d.income, 4, quarterBucket);
+    collectExpenses(db, start, end, d.expenses, 4, quarterBucket);
+    return d;
 }

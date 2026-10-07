@@ -91,10 +91,10 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 // AEAT (verifactu_estado SIN COBRAR/PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
-// True when a garment row counts as collected income: pagado = "SI" and not
-// ANULADA / RECTIFICADA. Row-level twin of the totalPriceBetweenDates ingresos
-// predicate, so on-screen totals reconcile with the Contabilidad report.
-bool        garmentCountsAsIncome(const QString &pagado, const QString &verifactuEstado);
+// True when a garment row is left out of every total: verifactu_estado ANULADA
+// (voided in place or cancelled at AEAT) or RECTIFICADA (superseded). Built from
+// the same excluded-estado list as the Contabilidad income predicate.
+bool        garmentExcludedFromTotals(const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
 // fecha_pago and fecha_recogida -> today (records when the garment was voided).
 // pagado is left untouched (stays "NO"); the caller is expected to have gated the
@@ -243,7 +243,8 @@ struct IncomeTicketDetail {
     double  importe  = 0.0;
     int     garments = 0;
 };
-// One gastos row behind the Contabilidad gastos summary.
+// One gastos row behind the Contabilidad gastos summary. iva is the stored rate
+// (0 = sin IVA), or -1 when the column is NULL.
 struct ExpenseDetail {
     QString nFactura, empresa, servicio, fecha;
     int     iva     = 0;
@@ -257,5 +258,14 @@ struct ExpenseDetail {
 // by date, then ticket number / id.
 QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+
+// The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),
+// from one scan per table instead of one per quarter. Each bucket equals the
+// period listing for that quarter's range.
+struct QuarterlyDetails {
+    QVector<IncomeTicketDetail> income[4];
+    QVector<ExpenseDetail>      expenses[4];
+};
+QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year);
 
 #endif // SQL_LITE_H
