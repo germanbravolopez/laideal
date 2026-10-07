@@ -76,6 +76,18 @@ target_link_libraries(test_appsettings PRIVATE
 add_test(NAME appsettings
     COMMAND test_appsettings -o ${CMAKE_BINARY_DIR}/test-results-appsettings.xml,junitxml -o -,txt)
 
+# settingsdialog: Verifactu service-key show/hide toggle, driven on the real
+# dialog. QTEST_MAIN needs a QApplication, so it runs under the offscreen QPA.
+add_executable(test_settingsdialog test_settingsdialog.cpp)
+target_link_libraries(test_settingsdialog PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    appsettings
+)
+add_test(NAME settingsdialog
+    COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
+set_tests_properties(settingsdialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # reporthtml: pure currency / scaffolding helpers.
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE

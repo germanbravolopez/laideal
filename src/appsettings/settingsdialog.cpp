@@ -16,6 +16,7 @@
 #include <QDateEdit>
 #include <QComboBox>
 #include <QPrinterInfo>
+#include <QToolButton>
 
 // Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
@@ -202,7 +203,22 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vName = new QLineEdit(s->verifactuName());
 
     m_vKey  = new QLineEdit(s->verifactuServiceKey());
+    m_vKey->setObjectName("serviceKeyEdit");
     m_vKey->setEchoMode(QLineEdit::Password);
+    // Masked on every open (the dialog is rebuilt each time); the toggle only
+    // changes how the key is displayed, never the stored value.
+    auto *revealKey = new QToolButton;
+    revealKey->setObjectName("serviceKeyRevealButton");
+    revealKey->setText(tr("Mostrar"));
+    revealKey->setToolTip(tr("Mostrar u ocultar la clave de servicio"));
+    revealKey->setCheckable(true);
+    connect(revealKey, &QToolButton::toggled, this, [this, revealKey](bool shown) {
+        m_vKey->setEchoMode(shown ? QLineEdit::Normal : QLineEdit::Password);
+        revealKey->setText(shown ? tr("Ocultar") : tr("Mostrar"));
+    });
+    auto *keyRow = new QHBoxLayout;
+    keyRow->addWidget(m_vKey);
+    keyRow->addWidget(revealKey);
 
     m_vProduction = new QCheckBox(tr("Entorno de PRODUCCIÓN (marcar solo para uso real con AEAT)"));
     m_vProduction->setChecked(s->verifactuProduction());
@@ -219,7 +235,7 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
 
     fl->addRow(tr("NIF del emisor:"),     m_vNif);
     fl->addRow(tr("Nombre empresa:"),     m_vName);
-    fl->addRow(tr("Clave de servicio:"),  m_vKey);
+    fl->addRow(tr("Clave de servicio:"),  keyRow);
     fl->addRow(m_vProduction);
     fl->addRow(m_vPendingRecoveryEnabled);
     fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
