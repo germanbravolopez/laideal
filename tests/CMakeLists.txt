@@ -76,6 +76,18 @@ target_link_libraries(test_appsettings PRIVATE
 add_test(NAME appsettings
     COMMAND test_appsettings -o ${CMAKE_BINARY_DIR}/test-results-appsettings.xml,junitxml -o -,txt)
 
+# settingsdialog: Verifactu service-key show/hide toggle, driven on the real
+# dialog. QTEST_MAIN needs a QApplication, so it runs under the offscreen QPA.
+add_executable(test_settingsdialog test_settingsdialog.cpp)
+target_link_libraries(test_settingsdialog PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    appsettings
+)
+add_test(NAME settingsdialog
+    COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
+set_tests_properties(settingsdialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # reporthtml: pure currency / scaffolding helpers.
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE
@@ -168,6 +180,13 @@ target_link_libraries(test_contabilidad PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql      # contabilidad.h includes <QSqlQueryModel>
     contabilidad
+    reporthtml                      # formatEuro, to assert the detail-table amounts
 )
 add_test(NAME contabilidad
     COMMAND test_contabilidad -o ${CMAKE_BINARY_DIR}/test-results-contabilidad.xml,junitxml -o -,txt)
+
+# Fail any suite that hangs (e.g. a blocking system call or an unanswered modal
+# dialog under the offscreen platform) instead of stalling CI until the job
+# limit; ctest then prints the suite's output up to the hang.
+get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)

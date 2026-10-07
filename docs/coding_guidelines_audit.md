@@ -1,6 +1,6 @@
 # Coding Guidelines Audit — La Ideal
 
-How to audit the codebase against [`/coding-guidelines`](../.claude/commands/coding-guidelines.md), plus the latest findings. Re-run periodically (before releases, or after large feature work) and update the **Current findings** section in place.
+How to audit the codebase against [`/coding-guidelines`](../.claude/skills/coding-guidelines/SKILL.md), plus the latest findings. Re-run periodically (before releases, or after large feature work) and update the **Current findings** section in place.
 
 **Last run**: 2026-05-26.
 
@@ -110,7 +110,7 @@ All six Tier-1 findings from the 2026-05-26 audit are now closed (see `docs/prog
 
 ## How to update this report
 
-1. Re-run the greps above (a fresh agent can run them in parallel — they are independent).
+1. Re-run the greps above — or delegate the whole run to the [`guidelines-auditor`](../.claude/agents/guidelines-auditor.md) subagent, which returns the findings already tiered (the greps are independent and can run in parallel).
 2. For each finding, decide which tier it belongs to using the **Severity grading** rules.
 3. Replace the **Current findings** section in this file; do not maintain a history (the goal is "what's open today", not "everything we ever found"). Past closures live in `progress_tracker.md` Completed Milestones if they warranted a fix.
 4. Bump the **Last run** date at the top.

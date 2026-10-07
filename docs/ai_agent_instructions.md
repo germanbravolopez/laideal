@@ -62,14 +62,18 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 
 ## Skills — Read Fully When Relevant
 
+Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one when its `description` matches the task; the user can also type `/name`.
+
 | Skill | Invoke | When to use |
 |-------|--------|-------------|
 | Tackle an open issue | `/tackle-issue` | When the user names an item from `progress_tracker.md` and wants it fixed end-to-end (plan + implement + docs + commit) |
+| Debug a reported bug | `/debugging` | When something is broken — reproduce, localize, reduce, fix root cause, guard with a test |
 | Update documentation | `/update-docs` | After any feature, fix, or new insight |
 | Create/update skills | `/update-skills` | When a new repeatable workflow is found |
 | Coding guidelines | `/coding-guidelines` | Before writing any new code — language, naming, Qt, DB rules |
+| Ship a release | `/release X.Y` | Manual only (`disable-model-invocation`) — merges to `master`, tags, publishes |
 | Security review | `/security-review` | Before release or when touching auth/data |
-| Code review | `/review` | Before merging significant changes |
+| Code review | `/code-review` | Before merging significant changes (built-in) |
 | Simplify code | `/simplify` | After implementation, to improve quality |
 
 **Rule**: When a skill is relevant to your current task, **read the full skill file before starting work**.
@@ -79,6 +83,9 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | Agent | File | When to use |
 |-------|------|-------------|
 | `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). Output goes into `docs/dead_code_report.md`. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
+| `test-engineer` | `.claude/agents/test-engineer.md` | Write/extend Qt Test coverage for a change or module, proving each test fails without the fix. |
+| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only legal review of any diff touching invoices, `verifactu_*` columns, estado, numbering or the printed QR — run before committing such changes. |
+| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Re-run the `docs/coding_guidelines_audit.md` audit (before a release / after large work). |
 
 ## Agent Obligations
 

@@ -39,7 +39,7 @@ In Trimestral mode the quarter's lock state is read first via `sql_lite::readLoc
 
 ## Report content
 
-Per period the report renders three blocks, all from one `PeriodFigures` struct computed once by `computeFigures(trim)`:
+Per period the report renders three summary blocks (plus the [detail tables](#detail-tables-audit-annex) at the end), all from one `PeriodFigures` struct computed once by `computeFigures(trim)`:
 
 - **Ingresos** — importe (IVA incl.), base imponible, IVA repercutido (single rate from `AppSettings::ivaRate()`).
 - **Gastos** — importe / base / IVA across the 10%, 21% and sin-IVA columns plus a Total column.
@@ -51,6 +51,15 @@ Per period the report renders three blocks, all from one `PeriodFigures` struct 
 The page header (business name / address / city / NIF / phone + issue date), the stylesheet and the euro formatting come from the shared `src/reporthtml/` lib (`ReportHtml::documentOpen/documentClose/formatEuro`), shared with the listados PDFs. The annual report renders one section per quarter plus a **Resumen anual consolidado** summing the four (`PeriodFigures::accumulate`). The period date range and the four-way quarter/month switch both flow through `periodRange()`. Everything stays table-based because `QTextDocument` only renders a subset of HTML/CSS.
 
 The annual path does **not** call `computeFigures(trim)` per quarter (that would run 24 full-table `substr()` scans). Instead it fetches all four quarters' raw totals in one grouped query per table via `sql_lite::annualAccountingByQuarter(db, year)` (→ a `QuarterlyAccountingTotals`) and builds each quarter's `PeriodFigures` from it through the shared pure static `Contabilidad::figuresFromTotals(...)`. `computeFigures` (trimestral/mensual) now also derives its figures through `figuresFromTotals` after the per-period DB calls, so both paths apply identical IVA base/cuota math. The grouped aggregation is asserted equal to the per-quarter `totalPriceBetweenDates`/`countOperationsBetweenDates` in `test_sql_lite::test_annualAccountingByQuarter`. One caveat: the grouped query sums `importe` in SQL, so the annual report does not raise the comma-decimal corruption dialog the per-row helpers do — the trimestral/mensual paths retain it.
+
+### Detail tables (audit annex)
+
+After the summary, each period gets a **Detalle** block listing the rows behind its figures, so every number can be audited:
+
+- **Detalle de ingresos**: one line per paid ticket (`n_recibo`, fecha de pago, cliente, number of garments, base, IVA, importe) and a total row. It comes from `sql_lite::incomeTicketsBetweenDates()`, which aggregates the ticket's garment rows by `n_recibo`.
+- **Detalle de gastos**: one line per `gastos` row (fecha, nº factura, empresa, servicio, IVA %, base, cuota, importe) and a total row. It comes from `sql_lite::expensesBetweenDates()`.
+
+The listings use the **same SQL predicate** as `totalPriceBetweenDates` / `countOperationsBetweenDates` (the shared `kIngresosIncomeWhere` / `kGastosPeriodWhere` constants in `sql_lite.cpp`, also used by the grouped `annualAccountingByQuarter`), not a copy. Totals and listings both accumulate in `double`. So the line count equals the operation count and the total row equals the summary importe. Trimestral and mensual reports append one Detalle block for the period. The annual report appends one per quarter after the consolidated summary, fetched in one scan per table via `sql_lite::annualDetailsByQuarter`. Gastos rows whose IVA is not one the summary sums (sin IVA, 10 %, 21 %, per `Contabilidad::expenseIvaIsSummarised`), including a NULL IVA, are listed but marked `*` and kept out of the total row, with a note under the table. This keeps the total equal to the summary while still showing the row so it can be corrected. The HTML comes from the pure statics `Contabilidad::createHtmlDetailIngresos` / `createHtmlDetailGastos`, which are unit-tested. They use the borderless, zebra-striped `ReportHtml::tableOpen()` style because these tables span pages.
 
 ## Output
 

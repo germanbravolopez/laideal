@@ -482,11 +482,17 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->resizeRowsToContents();
         qDebug() << "RecogPrendas::on_pb_search_clicked: result"
                  << proxyModel->rowCount() << "of" << sqlQueryModel->rowCount() << "rows match";
-        // Fill total_price from proxy rows (reflects the filtered set in all search modes)
+        // Fill total_price from proxy rows (reflects the filtered set in all search modes).
+        // Voided / superseded rows are skipped: a voided row gets the void date as
+        // fecha_pago, so a Pago-date search would otherwise add it. Unpaid rows still
+        // count, so a ticket searched by number shows the amount owed.
         if (totalPriceActive) {
             float totalPrice = 0.0;
-            for (int row = 0; row < proxyModel->rowCount(); row++)
-                totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toFloat();
+            for (int row = 0; row < proxyModel->rowCount(); row++) {
+                const QString vEstado = proxyModel->data(proxyModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
+                if (!garmentExcludedFromTotals(vEstado))
+                    totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toFloat();
+            }
             ui->le_total_price->setText(QString::number(totalPrice, 'f', 2));
         }
         else

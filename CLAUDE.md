@@ -7,7 +7,8 @@ Quick links:
 - `docs/INDEX.md` — find any file, concept, or topic
 - `docs/architecture.md` — module details, DB schema, data flow
 - `docs/progress_tracker.md` — what's in progress and what's blocked
-- `.claude/commands/` — available slash commands (`/update-docs`, `/update-skills`, `/coding-guidelines`, `/tackle-issue`)
+- `.claude/skills/<name>/SKILL.md` — project skills (`/tackle-issue`, `/debugging`, `/update-docs`, `/update-skills`, `/coding-guidelines`, `/release`); Claude auto-invokes them from their `description` frontmatter, except `/release` (manual only)
+- `.claude/agents/` — project subagents (`test-engineer`, `verifactu-compliance-auditor`, `guidelines-auditor`, `dead-code-finder`)
 
 After completing any task, build the code in PowerShell to verify the application is still created fine and run `/update-docs` or follow its checklist to keep the documentation current.
 

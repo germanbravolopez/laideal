@@ -101,7 +101,8 @@ private slots:
             " verifactu_invoice_id TEXT)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE gastos ("
-            " id INTEGER PRIMARY KEY, fecha TEXT, importe TEXT, iva INTEGER,"
+            " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
+            " empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER,"
             " edit_lock INTEGER DEFAULT 0)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE clientes ("
@@ -153,7 +154,7 @@ private slots:
         insertIngreso("T5", "15-03-2026", "70.00",  "NO", "ENVIADA");   // unpaid, excluded
         insertIngreso("T6", "01-04-2026", "999.00", "SI", "ENVIADA");   // == end, half-open excludes
 
-        const float total = totalPriceBetweenDates(
+        const double total = totalPriceBetweenDates(
             m_db, "ingresos", QDate(2026, 3, 1), QDate(2026, 4, 1), 0);
         QVERIFY2(qAbs(total - 150.0f) < 0.01f, qPrintable(QString::number(total)));
     }
@@ -163,9 +164,114 @@ private slots:
     {
         exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('10-03-2026', '121.00', 21)");
         exec("INSERT INTO gastos (fecha, importe, iva) VALUES ('11-03-2026', '110.00', 10)");
-        const float v21 = totalPriceBetweenDates(
+        const double v21 = totalPriceBetweenDates(
             m_db, "gastos", QDate(2026, 3, 1), QDate(2026, 4, 1), 21);
         QVERIFY2(qAbs(v21 - 121.0f) < 0.01f, qPrintable(QString::number(v21)));
+    }
+
+    // The Contabilidad detail listings must reconcile with the summary figures:
+    // same rows, same estado / pagado / half-open date filters.
+    void test_incomeTicketsBetweenDates_reconcilesWithTotals()
+    {
+        insertIngreso("12", "10-03-2026", "10.00", "SI", "ENVIADA");    // 2 garments, one ticket
+        insertIngreso("12", "10-03-2026", "15.50", "SI", "ENVIADA");
+        insertIngreso("9",  "05-03-2026", "50.00", "SI", "");           // legacy, earlier date
+        insertIngreso("13", "13-03-2026", "30.00", "SI", "ANULADA");    // excluded
+        insertIngreso("14", "14-03-2026", "20.00", "SI", "RECTIFICADA");// excluded
+        insertIngreso("15", "15-03-2026", "70.00", "NO", "ANULADA");    // voided in place, excluded
+        insertIngreso("16", "01-04-2026", "99.00", "SI", "ENVIADA");    // == end, excluded
+        exec("UPDATE ingresos SET cliente = 'García' WHERE n_recibo = '12'");
+
+        const QDate start(2026, 3, 1), end(2026, 4, 1);
+        const QVector<IncomeTicketDetail> tickets = incomeTicketsBetweenDates(m_db, start, end);
+        QCOMPARE(tickets.size(), countOperationsBetweenDates(m_db, "ingresos", start, end));
+        QCOMPARE(tickets.size(), 2);
+        QCOMPARE(tickets[0].nRecibo, QStringLiteral("9"));             // ordered by payment date
+        QCOMPARE(tickets[1].nRecibo, QStringLiteral("12"));
+        QCOMPARE(tickets[1].garments, 2);
+        QCOMPARE(tickets[1].cliente, QStringLiteral("García"));
+        QCOMPARE(tickets[1].fechaPago, QStringLiteral("10-03-2026"));
+        double sum = 0.0;
+        for (const IncomeTicketDetail &t : tickets)
+            sum += t.importe;
+        const double total = totalPriceBetweenDates(m_db, "ingresos", start, end, 0);
+        QVERIFY2(qAbs(sum - total) < 0.01, qPrintable(QString("%1 vs %2").arg(sum).arg(total)));
+        QVERIFY(qAbs(sum - 75.50) < 0.01);
+    }
+
+    void test_expensesBetweenDates_reconcilesWithTotals()
+    {
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (1, 'F-2', 'Iberdrola', 'Luz', '20-03-2026', '121.00', 21)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (2, 'F-1', 'Agua', 'Agua', '02-03-2026', '110.00', 10)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (3, 'F-3', 'Seguro', 'Seguro', '15-03-2026', '40.00', 0)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (4, 'F-4', 'Otro', 'Otro', '01-04-2026', '99.00', 21)");  // == end, excluded
+
+        const QDate start(2026, 3, 1), end(2026, 4, 1);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(m_db, start, end);
+        QCOMPARE(expenses.size(), countOperationsBetweenDates(m_db, "gastos", start, end));
+        QCOMPARE(expenses.size(), 3);
+        QCOMPARE(expenses[0].nFactura, QStringLiteral("F-1"));         // ordered by date
+        QCOMPARE(expenses[1].nFactura, QStringLiteral("F-3"));
+        QCOMPARE(expenses[2].empresa, QStringLiteral("Iberdrola"));
+        QCOMPARE(expenses[2].iva, 21);
+        for (int iva : {10, 21, 0}) {
+            double sum = 0.0;
+            for (const ExpenseDetail &e : expenses)
+                if (e.iva == iva) sum += e.importe;
+            const double total = totalPriceBetweenDates(m_db, "gastos", start, end, iva);
+            QVERIFY2(qAbs(sum - total) < 0.01, qPrintable(QString("iva %1: %2 vs %3").arg(iva).arg(sum).arg(total)));
+        }
+    }
+
+    void test_expensesBetweenDates_nullIvaIsNotSinIva()
+    {
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '10-03-2026', '50.00', NULL)");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (2, 'F-2', '11-03-2026', '40.00', 0)");
+        const QVector<ExpenseDetail> e = expensesBetweenDates(m_db, QDate(2026, 3, 1), QDate(2026, 4, 1));
+        QCOMPARE(e.size(), 2);
+        QCOMPARE(e[0].iva, -1);
+        QCOMPARE(e[1].iva, 0);
+    }
+
+    // The annual one-scan listing must bucket exactly like four per-quarter calls,
+    // including a ticket whose garments were paid in two different quarters.
+    void test_annualDetailsByQuarter_matchesPerQuarterListings()
+    {
+        insertIngreso("20", "15-02-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("21", "20-03-2026", "12.00", "SI", "");
+        insertIngreso("21", "05-04-2026", "8.00",  "SI", "ENVIADA");     // same ticket, Q2 payment
+        insertIngreso("22", "30-09-2026", "30.00", "SI", "ANULADA");     // excluded
+        insertIngreso("23", "31-12-2026", "40.00", "SI", "ENVIADA");
+        insertIngreso("24", "01-01-2027", "99.00", "SI", "ENVIADA");     // next year
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '03-01-2026', '121.00', 21)");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (2, 'F-2', '30-06-2026', '110.00', 10)");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (3, 'F-3', '01-10-2026', '20.00', 0)");
+
+        const QuarterlyDetails d = annualDetailsByQuarter(m_db, 2026);
+        for (int quarter = 1; quarter <= 4; quarter++) {
+            const QDate start(2026, 3 * quarter - 2, 1);
+            const QDate end = start.addMonths(3);
+            const QVector<IncomeTicketDetail> inc = incomeTicketsBetweenDates(m_db, start, end);
+            const QVector<ExpenseDetail> exp = expensesBetweenDates(m_db, start, end);
+            QCOMPARE(d.income[quarter - 1].size(), inc.size());
+            for (int k = 0; k < inc.size(); k++) {
+                QCOMPARE(d.income[quarter - 1][k].nRecibo, inc[k].nRecibo);
+                QCOMPARE(d.income[quarter - 1][k].importe, inc[k].importe);
+                QCOMPARE(d.income[quarter - 1][k].garments, inc[k].garments);
+            }
+            QCOMPARE(d.expenses[quarter - 1].size(), exp.size());
+            for (int k = 0; k < exp.size(); k++)
+                QCOMPARE(d.expenses[quarter - 1][k].nFactura, exp[k].nFactura);
+        }
+        QCOMPARE(d.income[0].size(), 2);                                 // 20 and the Q1 half of 21
+        QCOMPARE(d.income[1].size(), 1);                                 // the Q2 half of 21
+        QCOMPARE(d.income[2].size(), 0);                                 // 22 is ANULADA
+        QCOMPARE(d.income[3][0].nRecibo, QStringLiteral("23"));
+        QCOMPARE(d.expenses[3][0].nFactura, QStringLiteral("F-3"));
     }
 
     void test_countOperationsBetweenDates_distinctTickets()
@@ -654,11 +760,11 @@ private slots:
         const QDate starts[4] = { QDate(2026,1,1), QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1) };
         const QDate ends[4]   = { QDate(2026,4,1), QDate(2026,7,1), QDate(2026,10,1), QDate(2027,1,1) };
         for (int i = 0; i < 4; ++i) {
-            const float ing = totalPriceBetweenDates(m_db, "ingresos", starts[i], ends[i], 0);
+            const double ing = totalPriceBetweenDates(m_db, "ingresos", starts[i], ends[i], 0);
             const int   ingC = countOperationsBetweenDates(m_db, "ingresos", starts[i], ends[i]);
-            const float g10 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 10);
-            const float g21 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 21);
-            const float gNi = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 0);
+            const double g10 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 10);
+            const double g21 = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 21);
+            const double gNi = totalPriceBetweenDates(m_db, "gastos", starts[i], ends[i], 0);
             const int   gC  = countOperationsBetweenDates(m_db, "gastos", starts[i], ends[i]);
             QVERIFY2(qAbs(t.ingImporte[i]   - ing) < 0.01, qPrintable(QString("Q%1 ing").arg(i + 1)));
             QCOMPARE(t.ingTickets[i], ingC);
@@ -903,6 +1009,17 @@ private slots:
         QVERIFY(!garmentIsLocallyVoidable("NO", "ENVIADA"));   // sent to AEAT
         QVERIFY(!garmentIsLocallyVoidable("NO", "ANULADA"));
         QVERIFY(!garmentIsLocallyVoidable("NO", "ERROR"));
+    }
+
+    void test_garmentExcludedFromTotals()
+    {
+        QVERIFY(garmentExcludedFromTotals("ANULADA"));         // voided in place (ticket 31045) or cancelled at AEAT
+        QVERIFY(garmentExcludedFromTotals("RECTIFICADA"));     // superseded by a rectificativa
+        QVERIFY(!garmentExcludedFromTotals(""));               // legacy pre-Verifactu row
+        QVERIFY(!garmentExcludedFromTotals("SIN COBRAR"));     // unpaid ticket still shows what is owed
+        QVERIFY(!garmentExcludedFromTotals("PENDIENTE"));
+        QVERIFY(!garmentExcludedFromTotals("ENVIADA"));
+        QVERIFY(!garmentExcludedFromTotals("ERROR"));
     }
 
     void test_voidGarmentRow_setsAnuladoAndScopesByHash()

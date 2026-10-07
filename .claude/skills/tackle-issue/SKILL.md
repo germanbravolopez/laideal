@@ -1,3 +1,9 @@
+---
+name: tackle-issue
+description: End-to-end workflow to resolve an item from docs/progress_tracker.md (Blocking or Open Non-Blocking Issues) - read the issue, plan, implement, add/update tests, update docs, build, run ctest, commit on develop. Use when the user says "tackle X", "let's fix Y", "move on to Z" and X/Y/Z is a tracker item.
+argument-hint: "<issue title or description>"
+---
+
 # /tackle-issue — Resolve an Open Issue from the Progress Tracker
 
 End-to-end workflow for picking up an open item from `docs/progress_tracker.md` and shipping it. Encapsulates the loop we run for every fix: read → plan (if non-trivial) → implement → update docs → commit.
@@ -23,7 +29,8 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 
 ### 3. Implement
 
-- **Apply `/coding-guidelines` to every new identifier you introduce.** Read the skill file at the start of implementation if you haven't already this session, and at minimum check the language rule (English names + comments for all code; Spanish only for user-facing UI strings). When the legal or business term is Spanish (e.g. `Huella`, `Recibo`, `Factura`), still name code identifiers with the English equivalent (`rawHash`, `receipt`, `invoice`) and mention the Spanish term in a comment if it aids tracing back to the regulation.
+- **For a bug, diagnose with `/debugging` first** (reproduce → localize → reduce) so the fix targets the root cause; this step then implements that fix.
+- **Apply `/coding-guidelines` to every new identifier you introduce.** Read `.claude/skills/coding-guidelines/SKILL.md` at the start of implementation if you haven't already this session, and at minimum check the language rule (English names + comments for all code; Spanish only for user-facing UI strings). When the legal or business term is Spanish (e.g. `Huella`, `Recibo`, `Factura`), still name code identifiers with the English equivalent (`rawHash`, `receipt`, `invoice`) and mention the Spanish term in a comment if it aids tracing back to the regulation.
 - **Keep inline comments few and short.** Default to none; add a one-or-two-line comment only at a critical/non-obvious spot, and never restate the docs milestone you write in step 4 inside the code. Longer blocks are reserved for file headers and test files. See `/coding-guidelines` → "Code structure and comments".
 - Read existing call sites before changing signatures — `Grep` first, edit second.
 - Track multi-step work with `TodoWrite`. Mark steps complete as you finish them.
@@ -70,7 +77,8 @@ A clean build is necessary but not sufficient — it is a hard prerequisite for 
 
 A compile proves the code links; the test suite (`tests/`, run with `ctest`) is what proves the fix actually does what it claims and that nothing it touched regressed. **Covering the change is part of the fix, not optional** — this is the crucial gate the project relies on now that a Qt Test + CTest framework exists (it is also enforced in CI and the release pipeline).
 
-- **Add or update a test for every behaviour you changed or added.** Update an existing suite when the module already has one; create a new suite otherwise. Don't ship a fix the suite would have caught.
+- **Add or update a test for every behaviour you changed or added.** Update an existing suite when the module already has one; create a new suite otherwise. Don't ship a fix the suite would have caught. For non-trivial coverage you can delegate to the `test-engineer` subagent.
+- **If the change touches invoices, `verifactu_*` columns, estado transitions, `n_recibo` numbering, row edit/delete paths or the printed QR**, run the `verifactu-compliance-auditor` subagent on the diff before committing and resolve any blocking finding.
 - **Make it testable** (you should have done this in step 3): unit-test the pure core. If the logic is UI/DB/async-coupled, the seam belongs in a library so a test can link it — see `docs/architecture.md` §Testing for the suites and the seam pattern, plus worked examples in the test-coverage milestones. Patterns: pure helper → link the owning lib and assert inputs→outputs; DB logic → throwaway SQLite DB in a `QTemporaryDir` (`tests/test_sql_lite.cpp`); async/AEAT → a captured response fixture (`tests/test_verifactu_response.cpp`); a QPixmap/GUI path → `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen`.
 - A **new** suite is one `.cpp` + an `add_executable`/`add_test` entry in `tests/CMakeLists.txt` (with the `-o ${CMAKE_BINARY_DIR}/test-results-<name>.xml,junitxml -o -,txt` args like the others, and any `Qt::Widgets`/`Qt::Sql` the linked header needs); then reconfigure (`cmake -B build ...`) so CTest picks it up.
 
@@ -84,7 +92,7 @@ ctest --test-dir build --output-on-failure
 
 ### 7. Commit
 
-- **Single-line subject, hard cap 300 characters** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body); the 200-char cap is the *length* rule. If you cannot fit the explanation in 300 characters, the long-form belongs in the `docs/progress_tracker.md` milestone you wrote in step 4, not in the commit message — the message points at the change, the tracker carries the rationale. Examples:
+- **Single-line subject, hard cap 300 characters** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body); the 300-char cap is the *length* rule. If you cannot fit the explanation in 300 characters, the long-form belongs in the `docs/progress_tracker.md` milestone you wrote in step 4, not in the commit message — the message points at the change, the tracker carries the rationale. Examples:
   - Typical (fits in 200): `Verifactu Req. 4: new src/backup/BackupManager (VACUUM INTO + PRAGMA integrity_check + 30-day daily/4-year monthly retention) auto on startup + Herramientas->Hacer copia de seguridad ahora`
   - Mechanical: `replace em-dash with ASCII '-' across all source files`
 - **Branch**: commit on `develop` (or a feature branch). Never commit to `master` — `master` only fast-forwards at release time.

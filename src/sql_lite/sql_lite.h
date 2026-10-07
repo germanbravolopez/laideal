@@ -40,7 +40,7 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
+double      totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
 // Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
 // "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
 int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
@@ -91,6 +91,10 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 // AEAT (verifactu_estado SIN COBRAR/PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
+// True when a garment row is left out of every total: verifactu_estado ANULADA
+// (voided in place or cancelled at AEAT) or RECTIFICADA (superseded). Built from
+// the same excluded-estado list as the Contabilidad income predicate.
+bool        garmentExcludedFromTotals(const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
 // fecha_pago and fecha_recogida -> today (records when the garment was voided).
 // pagado is left untouched (stays "NO"); the caller is expected to have gated the
@@ -231,5 +235,37 @@ struct QuarterlyAccountingTotals {
 // date filters; gastos: SUM(importe) bucketed by quarter x iva (10/21/0) plus a
 // per-quarter row count over every rate. Quarter = (month + 2) / 3.
 QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year);
+
+// One paid ticket behind the Contabilidad ingresos summary: its garment rows in
+// the period aggregated by n_recibo (importe is IVA included).
+struct IncomeTicketDetail {
+    QString nRecibo, cliente, fechaPago;
+    double  importe  = 0.0;
+    int     garments = 0;
+};
+// One gastos row behind the Contabilidad gastos summary. iva is the stored rate
+// (0 = sin IVA), or -1 when the column is NULL.
+struct ExpenseDetail {
+    QString nFactura, empresa, servicio, fecha;
+    int     iva     = 0;
+    double  importe = 0.0;
+};
+
+// Detail listings for the Contabilidad report, filtered by the same predicate as
+// totalPriceBetweenDates / countOperationsBetweenDates over [startDate, endDate),
+// so they reconcile: incomeTickets has countOperations("ingresos") entries summing
+// to totalPrice("ingresos"); expenses has countOperations("gastos") rows. Ordered
+// by date, then ticket number / id.
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+
+// The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),
+// from one scan per table instead of one per quarter. Each bucket equals the
+// period listing for that quarter's range.
+struct QuarterlyDetails {
+    QVector<IncomeTicketDetail> income[4];
+    QVector<ExpenseDetail>      expenses[4];
+};
+QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year);
 
 #endif // SQL_LITE_H

@@ -1,5 +1,13 @@
 Releases:
 
+10.11
+- Bug fix: the total in "Recogida de Prendas" no longer counts voided garments
+  - The "Importe total" box added up every garment in the list, including garments voided with "Anular prendas". A voided garment takes the date it was voided as its payment date, so it showed up when searching by "Pago" and inflated the total. The list still shows those garments, but voided (and cancelled or rectified) garments are no longer added. Unpaid garments still count, so searching a ticket by number still shows what the customer owes.
+- New: the accounting reports now list the tickets and expenses behind each figure
+  - At the end of every report (monthly, quarterly and annual - per quarter) there are two new tables: the paid tickets (number, payment date, client, garments, base, VAT and amount) and the expense invoices (date, invoice number, company, service, VAT rate, base, VAT and amount), each with its total. The totals always match the summary above, so you can check exactly what every figure is made of.
+- Improvement: the Verifactu service key can be shown in Configuración
+  - The key is still hidden by default, but a new "Mostrar" button next to it lets you see what was typed or pasted, and "Ocultar" hides it again. It is only for viewing: the saved key does not change.
+
 10.10
 - Bug fix: a reprinted receipt now shows "IMPORTE PAGADO" when the ticket is paid
   - Reprinting a receipt - from "Recogida de Prendas" or from Herramientas -> Imprimir -> Recibo - never showed the amount as paid, even for a fully paid ticket. It does now. If only part of the ticket has been charged the note is left off, because a receipt lists the whole ticket and it would be wrong to present it as settled in full. Invoices are unchanged: they do not carry the note, since an invoice already means the sale was paid.
