@@ -12,7 +12,7 @@
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
 | `docs/smoke_test.md` | **Manual pre-release checklist** — what `ctest` structurally cannot cover: real network, real printer, the migration on a real DB, Qt wiring with no testable seam. Run at `/release` step 1 |
-| `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](.claude/agents/dead-code-finder.md) agent) |
+| `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](../.claude/agents/dead-code-finder.md) agent) |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
@@ -29,18 +29,18 @@
 | `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
 | `docs/modules/printer/README.md` | **Printer research dossier** (background for the shipped ESC/POS code): Epson TM-T20III model/specs, control methods, ESC/POS command subset, current-flow analysis, and the implementation plan (5 files + index). Runtime reference: `docs/modules/printing.md` |
 
-## Skills (Custom Slash Commands)
+## Skills (`.claude/skills/<name>/SKILL.md`)
 
 Read the full skill file when the skill is relevant to your task.
 
 | Skill | File | Purpose |
 |-------|------|---------|
-| `/tackle-issue` | `.claude/commands/tackle-issue.md` | End-to-end workflow to resolve an open issue from `docs/progress_tracker.md` (read → plan → implement → update docs → commit) |
-| `/update-docs` | `.claude/commands/update-docs.md` | Update docs after any change |
-| `/update-skills` | `.claude/commands/update-skills.md` | Create or update slash command skills |
-| `/coding-guidelines` | `.claude/commands/coding-guidelines.md` | Language, naming, Qt, DB, and safety rules for all new code |
-| `/release` | `.claude/commands/release.md` | Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which runs `ci.yml`'s `build` job then its tag-gated `release` job to package + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
-| `/review` | Built-in | Review a pull request |
+| `/tackle-issue` | `.claude/skills/tackle-issue/SKILL.md` | End-to-end workflow to resolve an open issue from `docs/progress_tracker.md` (read → plan → implement → update docs → commit) |
+| `/update-docs` | `.claude/skills/update-docs/SKILL.md` | Update docs after any change |
+| `/update-skills` | `.claude/skills/update-skills/SKILL.md` | Create or update skills (`.claude/skills/`) and subagents (`.claude/agents/`) |
+| `/coding-guidelines` | `.claude/skills/coding-guidelines/SKILL.md` | Language, naming, Qt, DB, and safety rules for all new code |
+| `/release` | `.claude/skills/release/SKILL.md` | Manual-only (`disable-model-invocation`). Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which runs `ci.yml`'s `build` job then its tag-gated `release` job to package + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
+| `/code-review` | Built-in | Review the current diff or a pull request |
 | `/security-review` | Built-in | Security review of pending branch changes |
 | `/simplify` | Built-in | Review changed code for quality and simplification |
 | `/init` | Built-in | Initialise a CLAUDE.md file |

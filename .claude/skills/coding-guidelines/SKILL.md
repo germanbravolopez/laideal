@@ -1,3 +1,9 @@
+---
+name: coding-guidelines
+description: Project coding rules for La Ideal (C++17/Qt/SQLite) - English identifiers and comments with Spanish only for user-facing UI strings, naming conventions, Qt patterns, DB safety (prepared statements, no SQL concatenation), comment density. Use before writing or modifying any C++ code, CMake file, or test in this repo.
+paths: "src/**, tests/**, **/CMakeLists.txt"
+---
+
 # /coding-guidelines — Code Development Guidelines
 
 Apply these guidelines to all new code written in this project. When modifying existing code, follow the guidelines for the new parts without renaming legacy identifiers (unnecessary renames break Qt auto-connect and add noise to diffs).

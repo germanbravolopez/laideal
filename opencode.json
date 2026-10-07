@@ -6,23 +6,23 @@
   "command": {
     "update-docs": {
       "description": "Update project documentation (progress tracker, architecture, INDEX, etc.) after any change",
-      "prompt": "Run the /update-docs checklist from .claude/commands/update-docs.md: update progress_tracker.md, ai_agent_instructions.md, architecture.md, INDEX.md, module docs, README.md, and releases_notes.txt as applicable."
+      "prompt": "Run the /update-docs checklist from .claude/skills/update-docs/SKILL.md: update progress_tracker.md, ai_agent_instructions.md, architecture.md, INDEX.md, module docs, README.md, and releases_notes.txt as applicable."
     },
     "update-skills": {
-      "description": "Create or update agent skill files in .claude/commands/",
-      "prompt": "Run the /update-skills workflow from .claude/commands/update-skills.md. Create or update a .md skill file in .claude/commands/ for a repeatable workflow."
+      "description": "Create or update agent skills in .claude/skills/",
+      "prompt": "Run the /update-skills workflow from .claude/skills/update-skills/SKILL.md. Create or update a skill at .claude/skills/<name>/SKILL.md for a repeatable workflow."
     },
     "coding-guidelines": {
       "description": "Apply project coding guidelines: language rules, naming conventions, Qt/DB rules",
-      "prompt": "Apply the coding guidelines from .claude/commands/coding-guidelines.md to all new code: English names/comments (Spanish only for UI strings), PascalCase classes, camelCase methods, m_ for members, Qt conventions, DB rules, no SQL concatenation, no hardcoded paths."
+      "prompt": "Apply the coding guidelines from .claude/skills/coding-guidelines/SKILL.md to all new code: English names/comments (Spanish only for UI strings), PascalCase classes, camelCase methods, m_ for members, Qt conventions, DB rules, no SQL concatenation, no hardcoded paths."
     },
     "tackle-issue": {
       "description": "Resolve an open issue from docs/progress_tracker.md end-to-end",
-      "prompt": "Run the /tackle-issue workflow from .claude/commands/tackle-issue.md: locate the issue in progress_tracker.md, decide approach, implement, update docs, build, commit."
+      "prompt": "Run the /tackle-issue workflow from .claude/skills/tackle-issue/SKILL.md: locate the issue in progress_tracker.md, decide approach, implement, update docs, build, commit."
     },
     "release": {
       "description": "Ship a release X.Y end-to-end: bump version, build, PR to master, tag, publish",
-      "prompt": "Run the /release workflow from .claude/commands/release.md. Check preconditions (branch, clean tree, version), bump CMakeLists.txt and releases_notes.txt, sanity build, open PR to master, review, merge with --merge, tag, build artifacts via release.ps1, publish on GitHub."
+      "prompt": "Run the /release workflow from .claude/skills/release/SKILL.md. Check preconditions (branch, clean tree, version), bump CMakeLists.txt and releases_notes.txt, sanity build, open PR to master, review, merge with --merge, tag, build artifacts via release.ps1, publish on GitHub."
     }
   },
 

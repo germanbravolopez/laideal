@@ -62,14 +62,17 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 
 ## Skills — Read Fully When Relevant
 
+Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one when its `description` matches the task; the user can also type `/name`.
+
 | Skill | Invoke | When to use |
 |-------|--------|-------------|
 | Tackle an open issue | `/tackle-issue` | When the user names an item from `progress_tracker.md` and wants it fixed end-to-end (plan + implement + docs + commit) |
 | Update documentation | `/update-docs` | After any feature, fix, or new insight |
 | Create/update skills | `/update-skills` | When a new repeatable workflow is found |
 | Coding guidelines | `/coding-guidelines` | Before writing any new code — language, naming, Qt, DB rules |
+| Ship a release | `/release X.Y` | Manual only (`disable-model-invocation`) — merges to `master`, tags, publishes |
 | Security review | `/security-review` | Before release or when touching auth/data |
-| Code review | `/review` | Before merging significant changes |
+| Code review | `/code-review` | Before merging significant changes (built-in) |
 | Simplify code | `/simplify` | After implementation, to improve quality |
 
 **Rule**: When a skill is relevant to your current task, **read the full skill file before starting work**.

@@ -1,3 +1,8 @@
+---
+name: update-docs
+description: Checklist to keep the La Ideal docs current - progress_tracker.md milestones and release sections, ai_agent_instructions.md, architecture.md, module docs, INDEX.md, README.md, size limits. Use after any feature, fix, refactor or new insight about the codebase, before committing.
+---
+
 # /update-docs — Update Project Documentation
 
 Run this after every feature implementation, bug fix, refactor, or whenever you gain a new insight about the project. Good documentation saves the next agent time.
@@ -74,5 +79,5 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 - **Never delete** progress tracker entries — move them to Archive
 - **Preserve insights** — if you discovered something non-obvious about the codebase, document it
 - When adding a new doc file, register it in `docs/INDEX.md` and `docs/README.md`
-- Skills live in `.claude/commands/` — register new skills in `docs/INDEX.md`
+- Skills live in `.claude/skills/<name>/SKILL.md` and subagents in `.claude/agents/` — register new ones in `docs/INDEX.md` (see `/update-skills`)
 - **Avoid emojis** — do not use emojis in titles or other places

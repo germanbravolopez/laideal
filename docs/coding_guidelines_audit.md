@@ -1,6 +1,6 @@
 # Coding Guidelines Audit — La Ideal
 
-How to audit the codebase against [`/coding-guidelines`](../.claude/commands/coding-guidelines.md), plus the latest findings. Re-run periodically (before releases, or after large feature work) and update the **Current findings** section in place.
+How to audit the codebase against [`/coding-guidelines`](../.claude/skills/coding-guidelines/SKILL.md), plus the latest findings. Re-run periodically (before releases, or after large feature work) and update the **Current findings** section in place.
 
 **Last run**: 2026-05-26.
 
