@@ -18,5 +18,6 @@
     "cmake.launchTargetName": "laideal",
     "cmake.debugConfig": {
         "console": "integratedTerminal"
-    }
+    },
+    "chat.mcp.autostart": "always"
 }

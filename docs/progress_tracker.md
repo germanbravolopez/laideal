@@ -20,7 +20,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 <!-- Keep only the latest release here. Earlier releases are recorded in Completed Milestones below; do not accumulate a "Previous release" list under Current Status. -->
 
-**Next**: switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, and optionally polish the thermal ticket layout (see Open Non-Blocking Issues).
+**Next**: for the next release, fix the Recogida de Prendas `Importe total` counting unpaid/anulada rows and add the Contabilidad ticket/gasto detail tables, adopt more agents/skills, and add a show/hide toggle for the Verifactu service key in Configuración (see Blocking Issues). Also: switch Verifactu to PRODUCTION once IreneSolutions provides the live ServiceKey, and optionally polish the thermal ticket layout (see Open Non-Blocking Issues).
 
 ---
 
@@ -28,7 +28,12 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 > Verifactu legal-compliance gaps below come from the audit in [`docs/modules/verifactu/verifactu-requirements.md`](modules/verifactu/verifactu-requirements.md) (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
 
-_(No blocking issues for the next release. The three items reported on 2026-07-01 - [#40](https://github.com/germanbravolopez/laideal/issues/40), [#41](https://github.com/germanbravolopez/laideal/issues/41), [#42](https://github.com/germanbravolopez/laideal/issues/42) - are all resolved; see Completed Milestones.)_
+| Issue | File | Notes |
+|-------|------|-------|
+| Recogida de Prendas: `Importe total` adds unpaid (`pagado = NO`, likely anulada) rows | `src/recog_prendas/recog_prendas.cpp` (`on_pb_search_clicked`, total loop ~line 486) | Reported 2026-10-07. When searching by date with the Recepción / Pago / Recogida filter, `le_total_price` sums `INGRESOS_COL_IMPORTE` over **every** proxy row regardless of `INGRESOS_COL_PAGADO`. Rows with `pagado = NO` are most likely anuladas and must not count toward the total. **Repro**: search 07-08-2026 filtered by Pago - ticket 31045 is added to the total but should not be. **Fix**: skip rows whose `pagado` is not `SI` in the sum (check whether the rule should also key on `estado`, e.g. anulada, rather than only `pagado`); consider extracting the sum into a tested `sql_lite`/pure seam so the rule is covered. |
+| Contabilidad reports: append a detail table of the tickets / gastos behind each summary | `src/contabilidad/contabilidad.cpp` (`renderSection`, `createHtmlTableIngresos`, `createHtmlTableGastos`, `getTotalIncome` → `totalPriceBetweenDates`) | Requested 2026-10-07 (feature). At the bottom of each report, list the individual ingresos tickets used to compute the Ingresos summary (n_recibo, fecha, cliente, IVA, importe, ...) and, likewise, the gastos rows used for the Gastos summary, so the user can audit/debug exactly what each figure is made of. The detail rows must come from the **same** period range and filters as the totals (`periodRange` + the per-IVA `totalPriceBetweenDates` / `countOperationsBetweenDates` predicates) so the table always reconciles with the summary - ideally share one query/predicate between the total and the listing rather than duplicating the `WHERE`. Applies to every config mode (trimestre / año with per-trimestre sections). |
+| Adopt more agents/skills adapted to this Qt/C++ project | `.claude/agents/`, `.claude/skills/` | Follow-up to the 2026-10-07 skills migration (see Completed Milestones). Review [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (agents: `code-reviewer`, `test-engineer`, `security-auditor`; skills such as `debugging-and-error-recovery`, `test-driven-development`) and adapt the ones that fit — rewritten for Qt/C++/CTest, not copied web-oriented. Register each per `/update-skills`. |
+| Configuración → Verifactu tab: no way to reveal the hidden service key/password | `src/appsettings/settingsdialog.cpp` (`m_vKey`, `setEchoMode(QLineEdit::Password)` ~line 205) | Requested 2026-10-07. The ServiceKey field is masked but there is no control to show it, so the user cannot verify what was typed/pasted. Add a show/hide toggle (e.g. a checkable eye `QAction` via `addAction(..., QLineEdit::TrailingPosition)` or a "Mostrar" checkbox) that switches between `QLineEdit::Password` and `QLineEdit::Normal`. Default stays hidden each time the dialog opens; the stored value and save path are unchanged. |
 
 ---
 
