@@ -18,13 +18,6 @@
 #include <QPrinterInfo>
 #include <QToolButton>
 
-static SettingsDialog::PrinterNamesSource s_printerNamesSource = nullptr;
-
-void SettingsDialog::setPrinterNamesSource(PrinterNamesSource source)
-{
-    s_printerNamesSource = source;
-}
-
 // Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
 {
@@ -105,8 +98,7 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_printerName = new QComboBox;
     m_printerName->setEditable(true);
     m_printerName->addItem(QString());   // blank = default printer
-    m_printerName->addItems(s_printerNamesSource ? s_printerNamesSource()
-                                                 : QPrinterInfo::availablePrinterNames());
+    m_printerName->addItems(QPrinterInfo::availablePrinterNames());
     m_printerName->setCurrentText(s->printerName());
     m_printerName->setToolTip(tr(
         "Cola de impresión a la que se envían los tickets (ESC/POS RAW). "

@@ -16,12 +16,6 @@ class SettingsDialog : public QDialog
 public:
     explicit SettingsDialog(QWidget *parent = nullptr);
 
-    // Test seam: replaces QPrinterInfo::availablePrinterNames() as the source of
-    // the printer combo. That call goes to the Windows print spooler and can block
-    // on a machine without one (CI runners). nullptr restores the default.
-    using PrinterNamesSource = QStringList (*)();
-    static void setPrinterNamesSource(PrinterNamesSource source);
-
 public:
     void browsePath(QLineEdit *target, bool directory);
 

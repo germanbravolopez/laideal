@@ -26,11 +26,39 @@ jobs:
           target: 'desktop'
           arch: 'win64_mingw'
 
+      # Qt 6.4.3 win64_mingw is built with MinGW 11.2 (MSVCRT). Build with that same
+      # GCC: the runner's preinstalled C:\mingw64 is a newer UCRT toolchain whose
+      # binaries fail to load against Qt's bundled libstdc++ (0xC0000139), and Qt's
+      # own tools_mingw1120 is no longer on the Qt online repo. Same GCC/libstdc++
+      # version as README §Build (C:\Qt\Tools\mingw1120_64).
+      - name: Install MinGW 11.2 (matches Qt 6.4.3)
+        shell: pwsh
+        run: |
+          choco install mingw --version=11.2.0.07112021 -y --no-progress
+          $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
+          & "$bin\g++.exe" --version | Select-Object -First 1
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Configure CMake
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
 
       - name: Build
         run: cmake --build build
+
+      # Guard against the toolchain mismatch coming back: every built exe must link
+      # the MSVCRT runtime that Qt's MinGW 11.2 DLLs use, never the UCRT one.
+      - name: Check runtime of built executables
+        shell: pwsh
+        run: |
+          $objdump = Get-ChildItem "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin\objdump.exe" -ErrorAction Stop
+          $bad = @()
+          foreach ($exe in Get-ChildItem build -Recurse -Filter *.exe -File | Where-Object { $_.FullName -notmatch 'CMakeFiles' }) {
+            $dlls = & $objdump.FullName -p $exe.FullName | Select-String 'DLL Name: (\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+            if ($dlls -match '^api-ms-win-crt-') { $bad += $exe.Name }
+          }
+          if ($bad) { throw "Built with a UCRT toolchain (mismatches Qt's MinGW 11.2 runtime): $($bad -join ', ')" }
+          Write-Host "All executables link msvcrt.dll."
 
       - name: Test
         shell: pwsh
@@ -97,6 +125,20 @@ jobs:
           # Needed for windeployqt and the MinGW runtime DLLs it copies
           # (libgcc/libstdc++/libwinpthread). The build itself already ran in the
           # `build` job - this job only repackages its exe, so no Ninja / cmake.
+
+      # Qt 6.4.3 win64_mingw is built with MinGW 11.2 (MSVCRT). Build with that same
+      # GCC: the runner's preinstalled C:\mingw64 is a newer UCRT toolchain whose
+      # binaries fail to load against Qt's bundled libstdc++ (0xC0000139), and Qt's
+      # own tools_mingw1120 is no longer on the Qt online repo. Same GCC/libstdc++
+      # version as README §Build (C:\Qt\Tools\mingw1120_64).
+      - name: Install MinGW 11.2 (matches Qt 6.4.3; windeployqt copies its runtime)
+        shell: pwsh
+        run: |
+          choco install mingw --version=11.2.0.07112021 -y --no-progress
+          $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
+          & "$bin\g++.exe" --version | Select-Object -First 1
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
