@@ -113,7 +113,11 @@ Invoke with the `Agent` tool (`subagent_type: "<name>"`) or `@agent-<name>` in c
 | `/update-skills` | `.claude/skills/update-skills/SKILL.md` | user + auto | This file |
 | `/coding-guidelines` | `.claude/skills/coding-guidelines/SKILL.md` | user + auto (`src/**`, `tests/**`, `CMakeLists.txt`) | Language, naming, Qt, DB, and safety rules for all new code |
 | `/release` | `.claude/skills/release/SKILL.md` | user only | Ship release X.Y end-to-end |
+| `/debugging` | `.claude/skills/debugging/SKILL.md` | user + auto | Root-cause a reported bug and guard it with a regression test |
 | `dead-code-finder` | `.claude/agents/dead-code-finder.md` | subagent | Find methods declared in `src/` headers but never called |
+| `test-engineer` | `.claude/agents/test-engineer.md` | subagent | Write Qt Test coverage using the project seam patterns |
+| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | subagent (proactive) | Legal review of Verifactu-sensitive diffs |
+| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | subagent | Re-run the coding-guidelines audit |
 
 ## Rules
 

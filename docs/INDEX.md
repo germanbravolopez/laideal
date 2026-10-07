@@ -38,6 +38,7 @@ Read the full skill file when the skill is relevant to your task.
 | `/tackle-issue` | `.claude/skills/tackle-issue/SKILL.md` | End-to-end workflow to resolve an open issue from `docs/progress_tracker.md` (read → plan → implement → update docs → commit) |
 | `/update-docs` | `.claude/skills/update-docs/SKILL.md` | Update docs after any change |
 | `/update-skills` | `.claude/skills/update-skills/SKILL.md` | Create or update skills (`.claude/skills/`) and subagents (`.claude/agents/`) |
+| `/debugging` | `.claude/skills/debugging/SKILL.md` | Root-cause workflow for a reported bug: reproduce from report/log/DB copy/AEAT response, localize, reduce, fix the cause, guard with a regression test proven non-vacuous |
 | `/coding-guidelines` | `.claude/skills/coding-guidelines/SKILL.md` | Language, naming, Qt, DB, and safety rules for all new code |
 | `/release` | `.claude/skills/release/SKILL.md` | Manual-only (`disable-model-invocation`). Ship a release X.Y end-to-end: pre-flight, version bump commit, PR-style merge to master, tag (which runs `ci.yml`'s `build` job then its tag-gated `release` job to package + publish the GitHub Release), watch CI; `release.ps1` is the local fallback |
 | `/code-review` | Built-in | Review the current diff or a pull request |
@@ -52,6 +53,9 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Agent | File | Purpose |
 |-------|------|---------|
 | `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Scan `src/` for methods declared in headers but never called. Knows about Qt auto-connect / virtual overrides / signals so it doesn't false-flag them. Output goes into `docs/dead_code_report.md`. |
+| `test-engineer` | `.claude/agents/test-engineer.md` | Qt Test + CTest specialist: finds the coverage gap for a change/module and writes tests using the project seam patterns (pure helper, `QTemporaryDir` SQLite, AEAT response fixture, offscreen QPA), proving each fails without the fix. Preloads `/coding-guidelines`. |
+| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only review of a diff against the ten requirements in `docs/modules/verifactu/verifactu-requirements.md` (inalterability, numbering, hash chain, retention, estado, QR/text). Delegated proactively for changes touching invoices / `verifactu_*` / numbering / printed QR. |
+| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Re-runs the `docs/coding_guidelines_audit.md` methodology over `src/` and returns tiered findings + delta, ready to replace that doc's Current findings. |
 
 ## Source Files
 
