@@ -78,7 +78,7 @@ When listing findings, classify into one of three tiers:
 
 ### Tier 1 — Real discrepancies
 
-All six Tier-1 findings from the 2026-05-26 audit are now closed (see `docs/progress_tracker.md` Completed Milestones): SIGNAL/SLOT macro in [src/tableview/tableview.cpp](../src/tableview/tableview.cpp); Spanish locals in [src/imprimir/imprimir.cpp](../src/imprimir/imprimir.cpp), [src/app/cancelinvoicedialog.cpp](../src/app/cancelinvoicedialog.cpp) and [src/recog_prendas/recog_prendas.cpp](../src/recog_prendas/recog_prendas.cpp); `add_sufix_to_filename` typo in [src/listado/genlistado.h](../src/listado/genlistado.h)/[.cpp](../src/listado/genlistado.cpp); two-classes-in-one-header in [src/verifactu/verifactuinvoice.h](../src/verifactu/verifactuinvoice.h) - now split into [verifactutaxitem.h](../src/verifactu/verifactutaxitem.h)/[.cpp](../src/verifactu/verifactutaxitem.cpp) (the tax-line class) and [verifactuinvoice.h](../src/verifactu/verifactuinvoice.h)/[.cpp](../src/verifactu/verifactuinvoice.cpp) (now `VerifactuInvoice`-only). Re-run the audit before re-populating this section.
+All six Tier-1 findings from the 2026-05-26 audit are now closed (see `docs/completed_milestones.md`): SIGNAL/SLOT macro in [src/tableview/tableview.cpp](../src/tableview/tableview.cpp); Spanish locals in [src/imprimir/imprimir.cpp](../src/imprimir/imprimir.cpp), [src/app/cancelinvoicedialog.cpp](../src/app/cancelinvoicedialog.cpp) and [src/recog_prendas/recog_prendas.cpp](../src/recog_prendas/recog_prendas.cpp); `add_sufix_to_filename` typo in [src/listado/genlistado.h](../src/listado/genlistado.h)/[.cpp](../src/listado/genlistado.cpp); two-classes-in-one-header in [src/verifactu/verifactuinvoice.h](../src/verifactu/verifactuinvoice.h) - now split into [verifactutaxitem.h](../src/verifactu/verifactutaxitem.h)/[.cpp](../src/verifactu/verifactutaxitem.cpp) (the tax-line class) and [verifactuinvoice.h](../src/verifactu/verifactuinvoice.h)/[.cpp](../src/verifactu/verifactuinvoice.cpp) (now `VerifactuInvoice`-only). Re-run the audit before re-populating this section.
 
 ### Tier 2 — Architecturally justified
 
@@ -112,6 +112,6 @@ All six Tier-1 findings from the 2026-05-26 audit are now closed (see `docs/prog
 
 1. Re-run the greps above — or delegate the whole run to the [`guidelines-auditor`](../.claude/agents/guidelines-auditor.md) subagent, which returns the findings already tiered (the greps are independent and can run in parallel).
 2. For each finding, decide which tier it belongs to using the **Severity grading** rules.
-3. Replace the **Current findings** section in this file; do not maintain a history (the goal is "what's open today", not "everything we ever found"). Past closures live in `progress_tracker.md` Completed Milestones if they warranted a fix.
+3. Replace the **Current findings** section in this file; do not maintain a history (the goal is "what's open today", not "everything we ever found"). Past closures live in `completed_milestones.md` if they warranted a fix.
 4. Bump the **Last run** date at the top.
 5. Register any new doc files (this one is already in `INDEX.md` and `README.md`).

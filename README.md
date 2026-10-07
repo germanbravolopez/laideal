@@ -122,6 +122,7 @@ mkdocs serve   # http://127.0.0.1:8000
 | [Module docs](./docs/README.md) | One reference page per module |
 | [Verifactu](./docs/modules/verifactu/README.md) | AEAT digital invoicing — setup, API, DB schema |
 | [Progress tracker](./docs/progress_tracker.md) | Open issues, blocking items, roadmap |
+| [Completed milestones](./docs/completed_milestones.md) | History of finished work, newest first |
 | [Quick-find index](./docs/INDEX.md) | Every file, function, concept — Ctrl+F entry point |
 
 ---
@@ -140,11 +141,11 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    ```powershell
    git checkout -b develop
    ```
-2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (Completed Milestones / Open Issues), the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
+2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (status / open issues), `docs/completed_milestones.md`, the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
 3. Before merging to `master`, the branch must be **release-ready**:
    - All planned changes are applied and reviewed.
    - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
-   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
+   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
    - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
    - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.

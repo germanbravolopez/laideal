@@ -150,7 +150,7 @@ exactly what AEAT issued. Keep native `GS ( k` as a documented fallback only.
    bytes through `BiDirectIOEx` and surface `BiGetStatus` paper-out/cover-open in the status bar.
 6. **Phase 5 — Cleanup.** If no module other than `imprimir` used `QXlsx`, remove the vendored
    `QXlsx/` and its CMake wiring (and update the file map / "Excel library" row in the docs).
-   Run `/update-docs`; move the progress-tracker issue to Completed Milestones.
+   Run `/update-docs`; move the progress-tracker issue to `docs/completed_milestones.md`.
 
 ## Testing strategy
 
@@ -181,7 +181,7 @@ exactly what AEAT issued. Keep native `GS ( k` as a documented fallback only.
 - Output matches today's content/ordering at the configured paper width, accents and QR correct.
 - `EscPosBuilder` unit tests pass in the `ctest` gate.
 - Docs updated (`/update-docs`): file map "Print + Excel generation" row, architecture module
-  entry, and the progress-tracker issue moved to Completed Milestones.
+  entry, and the progress-tracker issue moved to `docs/completed_milestones.md`.
 
 ## References
 

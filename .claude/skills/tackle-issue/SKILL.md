@@ -42,9 +42,9 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 
 Always update these, in order:
 
-- **`docs/progress_tracker.md`** —
-  - Remove the entry from Blocking / Open Non-Blocking.
-  - Add a milestone entry at the top of Completed Milestones. **Pick the section by the latest *released* version**, per the `/update-docs` §1 rule: if a release has shipped since the top `### Post-<X.Y> development` section was created (compare against "Latest release" in Current Status), start a new `### Post-<latest-release> development — <Month Year>` section rather than appending to the stale one. Format: `- [x] **Title**: what was done, why, key files. Include rationale that wasn't obvious from the diff.`
+- **`docs/progress_tracker.md`** + **`docs/completed_milestones.md`** —
+  - Remove the entry from the tracker's Blocking / Open Non-Blocking.
+  - Add a milestone entry at the top of `docs/completed_milestones.md`. **Pick the section by the latest *released* version**, per the `/update-docs` §1 rule: if a release has shipped since the top `### Post-<X.Y> development` section was created (compare against "Latest release" in Current Status), start a new `### Post-<latest-release> development — <Month Year>` section rather than appending to the stale one. Format: `- [x] **Title**: what was done, why, key files. Include rationale that wasn't obvious from the diff.`
   - Don't paste the original issue text — write fresh prose that reflects the actual fix.
 - **`docs/architecture.md`** if the structure or data model changed (new module, removed module, signal/slot wiring, DB schema).
 - **`docs/modules/<name>.md`** or `docs/modules/<name>/README.md` if the module's public API or behavior changed.

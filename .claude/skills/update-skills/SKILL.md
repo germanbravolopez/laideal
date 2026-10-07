@@ -95,14 +95,14 @@ Invoke with the `Agent` tool (`subagent_type: "<name>"`) or `@agent-<name>` in c
 4. Register it in two places:
    - `docs/INDEX.md` — Skills / Subagents table
    - `docs/ai_agent_instructions.md` — Skills / Subagents section
-5. Log the creation in `docs/progress_tracker.md`
+5. Log the creation in `docs/completed_milestones.md`
 
 ## Updating an existing skill or subagent
 
 1. Read the file first (always)
 2. Edit in place — do not create a duplicate
 3. If the trigger conditions changed, update the `description` too — a stale description makes Claude miss (or misfire) the skill
-4. Log the update in `docs/progress_tracker.md`
+4. Log the update in `docs/completed_milestones.md`
 
 ## Existing skills and subagents
 

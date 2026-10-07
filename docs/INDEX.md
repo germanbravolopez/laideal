@@ -10,7 +10,8 @@
 |------|-------------|
 | `docs/ai_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
-| `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
+| `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
+| `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
 | `docs/smoke_test.md` | **Manual pre-release checklist** — what `ctest` structurally cannot cover: real network, real printer, the migration on a real DB, Qt wiring with no testable seam. Run at `/release` step 1 |
 | `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](../.claude/agents/dead-code-finder.md) agent) |
 | `docs/INDEX.md` | This file |

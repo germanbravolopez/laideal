@@ -35,14 +35,15 @@ The working branch must be release-ready before the version-bump commit. Verify 
 
 - [ ] **`CMakeLists.txt`** — `project(laideal VERSION X.Y ...)` bumped to the target version.
 - [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file to end users at install time; same file is reused for the GitHub release body in step 6). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
-- [ ] **`docs/progress_tracker.md`** — Current Status points at the new release; the milestone entry covers what shipped. Add a "previous release" pointer to the prior version.
+- [ ] **`docs/progress_tracker.md`** — Current Status "Latest release" describes only the new release (no "previous release" trailer).
+- [ ] **`docs/completed_milestones.md`** — the milestone entries cover what shipped; suffix the top `### Post-<X.Y> development` header with `(shipped in X.Y)`.
 - [ ] **`docs/` and `README.md`** — run the `/update-docs` checklist mentally; if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
 - [ ] **Manual smoke test** — work through `docs/smoke_test.md` against a copy of a real database (never the live one; use a pre-release `backups/` snapshot as the source). `ctest` cannot reach the real network, the real printer, the migration running on real data, or Qt signal/slot wiring with no testable seam — the 10.9 run of that checklist found three bugs the suite could not have caught. Skip only for a docs-only release.
 - [ ] **Bundled Qt translation (only if Qt was upgraded since the last release)** — `resources/i18n/qtbase_es.qm` is copied from `C:\Qt\<version>\mingw_64\translations\qtbase_es.qm` and embedded in the exe (the release runs windeployqt `--no-translations`). If the Qt version bumped, refresh this file from the new Qt so the Spanish standard-dialog strings match the shipped Qt. If Qt is unchanged, no-op.
 
 ### 2. Commit the version bump
 
-Stage `CMakeLists.txt`, `releases_notes.txt`, `docs/progress_tracker.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
+Stage `CMakeLists.txt`, `releases_notes.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
 
 ```
 release X.Y - <one-line summary of what this release ships>

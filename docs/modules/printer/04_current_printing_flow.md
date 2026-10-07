@@ -127,5 +127,5 @@ Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 - [`../../../src/imprimir/imprimir.cpp`](../../../src/imprimir/imprimir.cpp),
   [`../../../src/imprimir/imprimir.h`](../../../src/imprimir/imprimir.h).
 - [`docs/modules/`](..) — per-module reference docs (MainWindow, recog_prendas).
-- `progress_tracker.md` completed milestones on ticket column tuning and the QXlsx page-margin
+- `completed_milestones.md` entries on ticket column tuning and the QXlsx page-margin
   patch (the empirical 58 mm layout history).

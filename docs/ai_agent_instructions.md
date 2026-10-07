@@ -54,7 +54,8 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | `README.md` | Repository root readme files with the project description and initial overview |
 | `docs/INDEX.md` | **Quick-find**: every doc, source file, concept |
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
-| `docs/progress_tracker.md` | What's done, in progress, open issues |
+| `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
+| `docs/completed_milestones.md` | Finished work, newest first, plus the Archive |
 | `docs/smoke_test.md` | Manual pre-release checklist — the network / printer / migration / UI-wiring gaps `ctest` cannot cover |
 | `docs/ai_agent_instructions.md` | This file |
 | `docs/modules/verifactu/` | Full Verifactu implementation docs (4 files) |
@@ -90,11 +91,11 @@ Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one w
 ## Agent Obligations
 
 1. **Run `/update-docs`** (or follow its steps manually) after every meaningful change.
-2. **Update `docs/progress_tracker.md`** — add what you did at the top of the relevant section.
+2. **Update `docs/progress_tracker.md`** (status, open issues) **and `docs/completed_milestones.md`** (what you did, at the top).
 3. **No duplication** — if similar content exists in two docs, consolidate and link.
 4. **Document size limits**: see `/update-docs` skill for thresholds and split rules.
 5. **English only** in all documentation.
-6. **Preserve history** — never delete progress tracker entries; move old ones to Archive.
+6. **Preserve history** — never delete milestone entries; move old ones to the Archive in `docs/completed_milestones.md`.
 7. **Avoid emojis** — do not use emojis in titles or other places
 8. **Consider `/coding-guidelines`** for code updates or creation.
 

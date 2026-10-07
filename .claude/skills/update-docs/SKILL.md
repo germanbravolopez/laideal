@@ -1,6 +1,6 @@
 ---
 name: update-docs
-description: Checklist to keep the La Ideal docs current - progress_tracker.md milestones and release sections, ai_agent_instructions.md, architecture.md, module docs, INDEX.md, README.md, size limits. Use after any feature, fix, refactor or new insight about the codebase, before committing.
+description: Checklist to keep the La Ideal docs current - progress_tracker.md status and open issues, completed_milestones.md entries and release sections, ai_agent_instructions.md, architecture.md, module docs, INDEX.md, README.md, size limits. Use after any feature, fix, refactor or new insight about the codebase, before committing.
 ---
 
 # /update-docs — Update Project Documentation
@@ -9,15 +9,16 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 
 ## What to update (checklist, in order of importance)
 
-### 1. `docs/progress_tracker.md` — always update this
-- Add an entry at the **top** of "In Progress" or "Completed Milestones"
-- Format: `- [x] What you did — which file/module — date`
-- **Milestone section header must track the latest *released* version.** Completed Milestones is grouped into `### Post-<X.Y> development — <Month Year>` sections, where `X.Y` is the release that had **already shipped** when that batch of work was done (the work becomes the *next* release). Before adding your entry, read the "Latest release" version in **Current Status**: if it is newer than the version in the top milestone section's header, **create a new `### Post-<latest-release> development — <Month Year>` section** at the top of Completed Milestones and add your entry there — do **not** append to the now-stale section. Only append to the existing top section when no release has shipped since it was created (i.e. its `X.Y` already equals the latest release). This prevents post-9.2 and post-9.3 work from piling up under a stale "Post-9.1 development" heading.
-- If a blocking issue was fixed, move it out of "Blocking Issues"
+### 1. `docs/progress_tracker.md` + `docs/completed_milestones.md` — always update these
+The tracker holds only **Current Status** and the open lists (Blocking / Open Non-Blocking / Backlog). Finished work goes to `docs/completed_milestones.md`.
+- Add a milestone entry at the **top** of `docs/completed_milestones.md`
+- Format: `- [x] **Title**: what was done, why, key files.`
+- **Milestone section header must track the latest *released* version.** `completed_milestones.md` is grouped into `### Post-<X.Y> development — <Month Year>` sections, where `X.Y` is the release that had **already shipped** when that batch of work was done (the work becomes the *next* release). Before adding your entry, read the "Latest release" version in **Current Status**: if it is newer than the version in the top milestone section's header, **create a new `### Post-<latest-release> development — <Month Year>` section** at the top of `completed_milestones.md` and add your entry there — do **not** append to the now-stale section. Only append to the existing top section when no release has shipped since it was created (i.e. its `X.Y` already equals the latest release). This prevents post-9.2 and post-9.3 work from piling up under a stale "Post-9.1 development" heading.
+- If a blocking issue was fixed, remove it from the tracker's "Blocking Issues" (the milestone entry records it)
 - If a task is newly discovered, add it to the appropriate section
 - **Keep "Open Non-Blocking Issues" a real to-do list.** If an item is consciously parked because the effort outweighs the value (or it waits on an external trigger), put it in the **Backlog (deferred — low value / not currently planned)** table, not in Open. Don't delete it — parking ≠ done.
-- Entries older than ~6 months with no further action: move to Archive
-- **Current Status → "Latest release" paragraph**: describe **only the latest release** — what it ships, its headline changes, and its tag link. Do **not** summarise or link prior releases in this paragraph (no "Previous: X.Y — …" trailer). The full release history already lives in `releases_notes.txt` (and the Completed Milestones below); the reader can consult it for anything before the current version. Keep this paragraph a single-release snapshot so it does not grow every cycle.
+- Milestones older than ~6 months with no further action: move to the Archive section of `completed_milestones.md`
+- **Current Status → "Latest release" paragraph**: describe **only the latest release** — what it ships, its headline changes, and its tag link. Do **not** summarise or link prior releases in this paragraph (no "Previous: X.Y — …" trailer). The full release history already lives in `releases_notes.txt` (and `docs/completed_milestones.md`); the reader can consult it for anything before the current version. Keep this paragraph a single-release snapshot so it does not grow every cycle.
 
 ### 2. `docs/ai_agent_instructions.md` — update when big-picture changed
 - Update File Map if you added, renamed, or removed files
@@ -65,7 +66,8 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 |------|-----------|--------------------------|
 | `docs/ai_agent_instructions.md` | 150 lines | Move details to `architecture.md` |
 | `docs/architecture.md` | 350 lines | Move module section to `docs/modules/<name>/architecture.md` |
-| `docs/progress_tracker.md` | 250 lines | Move older milestones to Archive section |
+| `docs/progress_tracker.md` | 150 lines | Only current status + open items belong here; finished work goes to `completed_milestones.md` |
+| `docs/completed_milestones.md` | no limit | History file; move entries older than ~6 months to its Archive section |
 | `docs/INDEX.md` | 200 lines | Split into `docs/INDEX-<domain>.md` |
 | Any module doc (`docs/modules/`) | 400 lines per file | Split by topic (API ref, implementation guide, examples) |
 
@@ -76,7 +78,7 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 - **English only** in all documentation
 - **No duplication** — if content exists elsewhere, link to it instead of copying
 - **Most important content in the first 100 lines** of any document
-- **Never delete** progress tracker entries — move them to Archive
+- **Never delete** milestone entries — move old ones to the Archive section of `completed_milestones.md`
 - **Preserve insights** — if you discovered something non-obvious about the codebase, document it
 - When adding a new doc file, register it in `docs/INDEX.md` and `docs/README.md`
 - Skills live in `.claude/skills/<name>/SKILL.md` and subagents in `.claude/agents/` — register new ones in `docs/INDEX.md` (see `/update-skills`)
