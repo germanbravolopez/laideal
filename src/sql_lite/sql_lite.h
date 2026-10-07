@@ -91,6 +91,10 @@ bool        updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRec
 // AEAT (verifactu_estado SIN COBRAR/PENDIENTE/empty). A paid/ENVIADA row was registered at
 // AEAT and must be cancelled through CancelInvoiceDialog, not voided in place.
 bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado);
+// True when a garment row counts as collected income: pagado = "SI" and not
+// ANULADA / RECTIFICADA. Row-level twin of the totalPriceBetweenDates ingresos
+// predicate, so on-screen totals reconcile with the Contabilidad report.
+bool        garmentCountsAsIncome(const QString &pagado, const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
 // fecha_pago and fecha_recogida -> today (records when the garment was voided).
 // pagado is left untouched (stays "NO"); the caller is expected to have gated the

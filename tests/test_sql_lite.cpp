@@ -905,6 +905,18 @@ private slots:
         QVERIFY(!garmentIsLocallyVoidable("NO", "ERROR"));
     }
 
+    void test_garmentCountsAsIncome()
+    {
+        QVERIFY(garmentCountsAsIncome("SI", ""));              // legacy pre-Verifactu paid row
+        QVERIFY(garmentCountsAsIncome("SI", "ENVIADA"));
+        QVERIFY(garmentCountsAsIncome("SI", "PENDIENTE"));     // paid, AEAT submission pending
+        QVERIFY(!garmentCountsAsIncome("NO", "SIN COBRAR"));   // not collected yet
+        QVERIFY(!garmentCountsAsIncome("NO", "ANULADA"));      // voided in place (ticket 31045 shape)
+        QVERIFY(!garmentCountsAsIncome("SI", "ANULADA"));      // cancelled at AEAT
+        QVERIFY(!garmentCountsAsIncome("SI", "RECTIFICADA"));  // superseded by a rectificativa
+        QVERIFY(!garmentCountsAsIncome("", ""));               // blank pagado never reads as paid
+    }
+
     void test_voidGarmentRow_setsAnuladoAndScopesByHash()
     {
         insertRow("T9", "hashA");            // pagado NO, verifactu_estado empty

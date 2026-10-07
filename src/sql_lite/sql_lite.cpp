@@ -455,6 +455,14 @@ bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEst
     return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
 
+bool garmentCountsAsIncome(const QString &pagado, const QString &verifactuEstado)
+{
+    if (pagado != QLatin1String("SI"))
+        return false;
+    return verifactuEstado != QLatin1String("ANULADA")
+        && verifactuEstado != QLatin1String("RECTIFICADA");
+}
+
 bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return false;
