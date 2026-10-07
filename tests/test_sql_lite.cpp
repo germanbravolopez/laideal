@@ -101,7 +101,8 @@ private slots:
             " verifactu_invoice_id TEXT)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE gastos ("
-            " id INTEGER PRIMARY KEY, fecha TEXT, importe TEXT, iva INTEGER,"
+            " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
+            " empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER,"
             " edit_lock INTEGER DEFAULT 0)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE clientes ("
@@ -166,6 +167,64 @@ private slots:
         const float v21 = totalPriceBetweenDates(
             m_db, "gastos", QDate(2026, 3, 1), QDate(2026, 4, 1), 21);
         QVERIFY2(qAbs(v21 - 121.0f) < 0.01f, qPrintable(QString::number(v21)));
+    }
+
+    // The Contabilidad detail listings must reconcile with the summary figures:
+    // same rows, same estado / pagado / half-open date filters.
+    void test_incomeTicketsBetweenDates_reconcilesWithTotals()
+    {
+        insertIngreso("12", "10-03-2026", "10.00", "SI", "ENVIADA");    // 2 garments, one ticket
+        insertIngreso("12", "10-03-2026", "15.50", "SI", "ENVIADA");
+        insertIngreso("9",  "05-03-2026", "50.00", "SI", "");           // legacy, earlier date
+        insertIngreso("13", "13-03-2026", "30.00", "SI", "ANULADA");    // excluded
+        insertIngreso("14", "14-03-2026", "20.00", "SI", "RECTIFICADA");// excluded
+        insertIngreso("15", "15-03-2026", "70.00", "NO", "ANULADA");    // voided in place, excluded
+        insertIngreso("16", "01-04-2026", "99.00", "SI", "ENVIADA");    // == end, excluded
+        exec("UPDATE ingresos SET cliente = 'García' WHERE n_recibo = '12'");
+
+        const QDate start(2026, 3, 1), end(2026, 4, 1);
+        const QVector<IncomeTicketDetail> tickets = incomeTicketsBetweenDates(m_db, start, end);
+        QCOMPARE(tickets.size(), countOperationsBetweenDates(m_db, "ingresos", start, end));
+        QCOMPARE(tickets.size(), 2);
+        QCOMPARE(tickets[0].nRecibo, QStringLiteral("9"));             // ordered by payment date
+        QCOMPARE(tickets[1].nRecibo, QStringLiteral("12"));
+        QCOMPARE(tickets[1].garments, 2);
+        QCOMPARE(tickets[1].cliente, QStringLiteral("García"));
+        QCOMPARE(tickets[1].fechaPago, QStringLiteral("10-03-2026"));
+        double sum = 0.0;
+        for (const IncomeTicketDetail &t : tickets)
+            sum += t.importe;
+        const float total = totalPriceBetweenDates(m_db, "ingresos", start, end, 0);
+        QVERIFY2(qAbs(sum - total) < 0.01, qPrintable(QString("%1 vs %2").arg(sum).arg(total)));
+        QVERIFY(qAbs(sum - 75.50) < 0.01);
+    }
+
+    void test_expensesBetweenDates_reconcilesWithTotals()
+    {
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (1, 'F-2', 'Iberdrola', 'Luz', '20-03-2026', '121.00', 21)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (2, 'F-1', 'Agua', 'Agua', '02-03-2026', '110.00', 10)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (3, 'F-3', 'Seguro', 'Seguro', '15-03-2026', '40.00', 0)");
+        exec("INSERT INTO gastos (id, n_factura, empresa, servicio, fecha, importe, iva) "
+             "VALUES (4, 'F-4', 'Otro', 'Otro', '01-04-2026', '99.00', 21)");  // == end, excluded
+
+        const QDate start(2026, 3, 1), end(2026, 4, 1);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(m_db, start, end);
+        QCOMPARE(expenses.size(), countOperationsBetweenDates(m_db, "gastos", start, end));
+        QCOMPARE(expenses.size(), 3);
+        QCOMPARE(expenses[0].nFactura, QStringLiteral("F-1"));         // ordered by date
+        QCOMPARE(expenses[1].nFactura, QStringLiteral("F-3"));
+        QCOMPARE(expenses[2].empresa, QStringLiteral("Iberdrola"));
+        QCOMPARE(expenses[2].iva, 21);
+        for (int iva : {10, 21, 0}) {
+            double sum = 0.0;
+            for (const ExpenseDetail &e : expenses)
+                if (e.iva == iva) sum += e.importe;
+            const float total = totalPriceBetweenDates(m_db, "gastos", start, end, iva);
+            QVERIFY2(qAbs(sum - total) < 0.01, qPrintable(QString("iva %1: %2 vs %3").arg(iva).arg(sum).arg(total)));
+        }
     }
 
     void test_countOperationsBetweenDates_distinctTickets()

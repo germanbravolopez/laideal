@@ -40,7 +40,7 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-float       totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
+double      totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
 // Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
 // "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
 int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
@@ -235,5 +235,27 @@ struct QuarterlyAccountingTotals {
 // date filters; gastos: SUM(importe) bucketed by quarter x iva (10/21/0) plus a
 // per-quarter row count over every rate. Quarter = (month + 2) / 3.
 QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year);
+
+// One paid ticket behind the Contabilidad ingresos summary: its garment rows in
+// the period aggregated by n_recibo (importe is IVA included).
+struct IncomeTicketDetail {
+    QString nRecibo, cliente, fechaPago;
+    double  importe  = 0.0;
+    int     garments = 0;
+};
+// One gastos row behind the Contabilidad gastos summary.
+struct ExpenseDetail {
+    QString nFactura, empresa, servicio, fecha;
+    int     iva     = 0;
+    double  importe = 0.0;
+};
+
+// Detail listings for the Contabilidad report, filtered by the same predicate as
+// totalPriceBetweenDates / countOperationsBetweenDates over [startDate, endDate),
+// so they reconcile: incomeTickets has countOperations("ingresos") entries summing
+// to totalPrice("ingresos"); expenses has countOperations("gastos") rows. Ordered
+// by date, then ticket number / id.
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 
 #endif // SQL_LITE_H

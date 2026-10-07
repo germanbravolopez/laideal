@@ -168,6 +168,7 @@ target_link_libraries(test_contabilidad PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql      # contabilidad.h includes <QSqlQueryModel>
     contabilidad
+    reporthtml                      # formatEuro, to assert the detail-table amounts
 )
 add_test(NAME contabilidad
     COMMAND test_contabilidad -o ${CMAKE_BINARY_DIR}/test-results-contabilidad.xml,junitxml -o -,txt)

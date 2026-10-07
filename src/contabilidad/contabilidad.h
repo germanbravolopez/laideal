@@ -9,6 +9,9 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDate>
+#include <QVector>
+
+#include "sql_lite.h"
 
 namespace Ui {
 class Contabilidad;
@@ -35,6 +38,13 @@ public:
     // range is the half-open [start, endExclusive).
     static void periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive);
 
+    // Detail tables appended to the report so each summary figure can be audited.
+    // Pure HTML rendering (no DB / UI state), exposed for unit testing; the rows come
+    // from incomeTicketsBetweenDates / expensesBetweenDates and the total row equals
+    // the matching summary figure.
+    static QString createHtmlDetailIngresos(const QVector<IncomeTicketDetail> &tickets, double ivaRate);
+    static QString createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses);
+
 private slots:
     void initialSettings();
 
@@ -43,7 +53,7 @@ private slots:
     void on_cb_config_currentTextChanged(const QString &arg1);
 
     void generateContabilidad();
-    float getTotalIncome(QString table, int iva, int trimForYearConfig);
+    double getTotalIncome(QString table, int iva, int trimForYearConfig);
     void updateLock();
     void writeHtml(QString filename, QString html);
 
@@ -91,6 +101,7 @@ private:
                                            double gasNiImporte, int gasFacturas,
                                            double ivaRate);
     QString renderSection(const PeriodFigures &f, const QString &summaryHeading);
+    QString renderDetail(int trimForYearConfig, const QString &heading);
     QString createHtmlTableIngresos(const PeriodFigures &f);
     QString createHtmlTableGastos(const PeriodFigures &f);
     QString createHtmlSummary(const PeriodFigures &f, const QString &heading);

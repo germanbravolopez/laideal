@@ -165,6 +165,7 @@ void Contabilidad::generateContabilidad()
                                                     + " · " + QString::number(year),
                                                     periodSubtitle(0))
                 + renderSection(computeFigures(0), "Resumen del periodo")
+                + renderDetail(0, "Detalle del periodo")
                 + ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath();
         filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
@@ -176,6 +177,7 @@ void Contabilidad::generateContabilidad()
                                                     periodSubtitle(0) + (cerrada ? " · Contabilidad cerrada"
                                                                                   : " · Contabilidad no cerrada"))
                 + renderSection(computeFigures(0), "Resumen del periodo")
+                + renderDetail(0, "Detalle del periodo")
                 + ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Mensual";
         filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
@@ -203,8 +205,10 @@ void Contabilidad::generateContabilidad()
                     + renderSection(f, "Resumen del trimestre");
         }
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
-                + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year))
-                + ReportHtml::documentClose();
+                + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
+        for (int trim = 1; trim < 5; trim++)
+            contabilidadHtml += renderDetail(trim, "Detalle del trimestre " + QString::number(trim));
+        contabilidadHtml += ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" + QString::number(year) + ".pdf";
     }
@@ -244,7 +248,7 @@ void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endEx
     periodRangeFor(mode, unit, ui->sb_year->value(), start, endExclusive);
 }
 
-float Contabilidad::getTotalIncome(QString table,
+double Contabilidad::getTotalIncome(QString table,
                                    int iva,
                                    int trimForYearConfig)
 {
@@ -422,4 +426,88 @@ QString Contabilidad::createHtmlSummary(const PeriodFigures &f, const QString &h
         "<tr><td>N&uacute;mero de tickets (ingresos)</td><td style='text-align:right;'>" + QString::number(f.ingTickets) + "</td></tr>"
         "<tr style='background-color:#f6f7f9;'><td>N&uacute;mero de facturas (gastos)</td><td style='text-align:right;'>" + QString::number(f.gasFacturas) + "</td></tr>"
     "</table>";
+}
+
+QString Contabilidad::renderDetail(int trimForYearConfig, const QString &heading)
+{
+    QDate start, endExclusive;
+    periodRange(trimForYearConfig, start, endExclusive);
+    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
+    return "<h2>" + heading + "</h2>"
+            + createHtmlDetailIngresos(incomeTicketsBetweenDates(db, start, endExclusive), ivaRate)
+            + createHtmlDetailGastos(expensesBetweenDates(db, start, endExclusive));
+}
+
+// Zebra-striped row opener for the long, borderless detail tables.
+static QString detailRowOpen(int index)
+{
+    return index % 2 == 0 ? QStringLiteral("<tr>") : QStringLiteral("<tr style='background-color:#f6f7f9;'>");
+}
+
+QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail> &tickets, double ivaRate)
+{
+    QString html = "<h3>Detalle de ingresos</h3>";
+    if (tickets.isEmpty())
+        return html + "<p>Sin tickets cobrados en el periodo.</p>";
+
+    html += ReportHtml::tableOpen() +
+            "<thead><tr>"
+                "<th>N&ordm; recibo</th><th>Fecha pago</th><th>Cliente</th>"
+                "<th style='text-align:right;'>Prendas</th>"
+                "<th style='text-align:right;'>Base</th>"
+                "<th style='text-align:right;'>IVA</th>"
+                "<th style='text-align:right;'>Importe</th>"
+            "</tr></thead><tbody>";
+    double totalImporte = 0.0, totalBase = 0.0;
+    for (int i = 0; i < tickets.size(); i++) {
+        const IncomeTicketDetail &t = tickets[i];
+        const double base = t.importe / (1.0 + ivaRate / 100.0);
+        totalImporte += t.importe;
+        totalBase += base;
+        html += detailRowOpen(i)
+                + "<td>" + t.nRecibo.toHtmlEscaped() + "</td>"
+                + "<td>" + t.fechaPago.toHtmlEscaped() + "</td>"
+                + "<td>" + t.cliente.toHtmlEscaped() + "</td>"
+                + "<td style='text-align:right;'>" + QString::number(t.garments) + "</td>"
+                + euroCell(base) + euroCell(t.importe - base) + euroCell(t.importe) + "</tr>";
+    }
+    html += "<tr style='font-weight:bold;'><td colspan='4'>Total (" + QString::number(tickets.size()) + " tickets)</td>"
+            + euroCell(totalBase) + euroCell(totalImporte - totalBase) + euroCell(totalImporte) + "</tr>"
+            "</tbody></table>";
+    return html;
+}
+
+QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses)
+{
+    QString html = "<h3>Detalle de gastos</h3>";
+    if (expenses.isEmpty())
+        return html + "<p>Sin facturas de gastos en el periodo.</p>";
+
+    html += ReportHtml::tableOpen() +
+            "<thead><tr>"
+                "<th>Fecha</th><th>N&ordm; factura</th><th>Empresa</th><th>Servicio</th>"
+                "<th style='text-align:right;'>IVA %</th>"
+                "<th style='text-align:right;'>Base</th>"
+                "<th style='text-align:right;'>Cuota IVA</th>"
+                "<th style='text-align:right;'>Importe</th>"
+            "</tr></thead><tbody>";
+    double totalImporte = 0.0, totalBase = 0.0;
+    for (int i = 0; i < expenses.size(); i++) {
+        const ExpenseDetail &e = expenses[i];
+        // Same base derivation as figuresFromTotals; iva 0 means sin IVA (base == importe).
+        const double base = e.iva > 0 ? e.importe / (1.0 + e.iva / 100.0) : e.importe;
+        totalImporte += e.importe;
+        totalBase += base;
+        html += detailRowOpen(i)
+                + "<td>" + e.fecha.toHtmlEscaped() + "</td>"
+                + "<td>" + e.nFactura.toHtmlEscaped() + "</td>"
+                + "<td>" + e.empresa.toHtmlEscaped() + "</td>"
+                + "<td>" + e.servicio.toHtmlEscaped() + "</td>"
+                + "<td style='text-align:right;'>" + QString::number(e.iva) + "</td>"
+                + euroCell(base) + euroCell(e.importe - base) + euroCell(e.importe) + "</tr>";
+    }
+    html += "<tr style='font-weight:bold;'><td colspan='5'>Total (" + QString::number(expenses.size()) + " facturas)</td>"
+            + euroCell(totalBase) + euroCell(totalImporte - totalBase) + euroCell(totalImporte) + "</tr>"
+            "</tbody></table>";
+    return html;
 }

@@ -3,6 +3,7 @@
 #include "../verifactu/verifactutypes.h"
 
 #include <QDateTime>
+#include <QHash>
 #include <QDebug>
 #include <QMessageBox>
 #include <QUuid>
@@ -572,12 +573,29 @@ QString ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo)
     return estado;
 }
 
-float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
-                             QDate startDate, QDate endDate, int iva)
-{
-    if (dbNotConfigured(db, __func__)) return 0.0f;
+// Period predicates shared by the Contabilidad totals, counts and detail listings,
+// so a detail table always lists exactly the rows behind its summary figure.
+// Both bind :start / :end (yyyy-MM-dd) as the half-open range [start, end).
+static const QString kFechaPagoIso =
+    QStringLiteral("date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))");
+static const QString kFechaGastoIso =
+    QStringLiteral("date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2))");
+// Paid ingresos, excluding ANULADA and RECTIFICADA (superseded by a substitution
+// rectificativa). Legacy rows without verifactu_estado count as normal.
+static const QString kIngresosIncomeWhere =
+    QStringLiteral("(pagado = 'SI') AND "
+                   "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
+                   " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND ")
+    + "(" + kFechaPagoIso + " >= date(:start)) AND (" + kFechaPagoIso + " < date(:end))";
+static const QString kGastosPeriodWhere =
+    "(" + kFechaGastoIso + " >= date(:start)) AND (" + kFechaGastoIso + " < date(:end))";
 
-    float totalPrice = 0.0f;
+double totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
+                              QDate startDate, QDate endDate, int iva)
+{
+    if (dbNotConfigured(db, __func__)) return 0.0;
+
+    double totalPrice = 0.0;
     db.open();
     QSqlQuery q(db);
 
@@ -586,20 +604,14 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
         // rectificativa) rows from taxable income. The rectifying row itself carries
         // the corrected total and counts normally. Rows without verifactu_estado
         // (NULL or empty, pre-v8.0) are included as normal.
-        q.prepare("SELECT importe FROM ingresos WHERE (pagado = 'SI') AND "
-                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
-                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.prepare(QStringLiteral("SELECT importe FROM ingresos WHERE ") + kIngresosIncomeWhere);
         q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
         q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
         q.exec();
     } else if (table == "gastos") {
         // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
         // first day of the next quarter are not double-counted in the current quarter.
-        q.prepare("SELECT importe FROM gastos WHERE (iva = :iva) AND "
-                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
-                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.prepare(QStringLiteral("SELECT importe FROM gastos WHERE (iva = :iva) AND ") + kGastosPeriodWhere);
         q.bindValue(":iva",   iva);
         q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
         q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
@@ -610,13 +622,13 @@ float totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
                               "totalPriceBetweenDates: tabla no soportada: " + table,
                               QMessageBox::Ok, QMessageBox::Ok);
         db.close();
-        return 0.0f;
+        return 0.0;
     }
 
     if (q.isSelect()) {
         while (q.next()) {
             if (!q.value(0).toString().contains(',')) {
-                totalPrice += q.value(0).toFloat();
+                totalPrice += q.value(0).toDouble();
             } else {
                 qCritical() << "totalPriceBetweenDates: comma decimal found in" << table;
                 QMessageBox::critical(nullptr, "Error en la base de datos",
@@ -648,18 +660,12 @@ int countOperationsBetweenDates(QSqlDatabase &db, const QString &table,
         // Distinct paid tickets, excluding ANULADA / RECTIFICADA, mirroring the
         // estado + date filter of totalPriceBetweenDates so the operation count
         // matches the income total shown alongside it.
-        q.prepare("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE (pagado = 'SI') AND "
-                  "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-                  " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
-                  "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end))");
+        q.prepare(QStringLiteral("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE ") + kIngresosIncomeWhere);
         q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
         q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
         q.exec();
     } else if (table == "gastos") {
-        q.prepare("SELECT COUNT(*) FROM gastos WHERE "
-                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
-                  "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end))");
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM gastos WHERE ") + kGastosPeriodWhere);
         q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
         q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
         q.exec();
@@ -1072,9 +1078,8 @@ QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
 
     db.open();
 
-    // Ingresos in one scan, GROUP BY quarter. Filters mirror
-    // totalPriceBetweenDates (pagado/estado/date) and the COUNT(DISTINCT n_recibo)
-    // mirrors countOperationsBetweenDates. Quarter = (month + 2) / 3 with month =
+    // Ingresos in one scan, GROUP BY quarter, under the shared kIngresosIncomeWhere
+    // predicate; the COUNT(DISTINCT n_recibo) mirrors countOperationsBetweenDates. Quarter = (month + 2) / 3 with month =
     // substr(fecha_pago,4,2): months 1-3 -> 1, 4-6 -> 2, 7-9 -> 3, 10-12 -> 4
     // (integer division). Rows with an invalid/empty date are dropped by the
     // date() comparison (NULL), exactly as the per-quarter query drops them.
@@ -1083,12 +1088,7 @@ QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
         q.prepare(
             "SELECT (CAST(substr(fecha_pago,4,2) AS INTEGER) + 2) / 3 AS q, "
             "       SUM(importe), COUNT(DISTINCT n_recibo) "
-            "FROM ingresos WHERE (pagado = 'SI') AND "
-            "(verifactu_estado IS NULL OR verifactu_estado = '' OR "
-            " (verifactu_estado != 'ANULADA' AND verifactu_estado != 'RECTIFICADA')) AND "
-            "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) >= date(:start)) AND "
-            "(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2)) < date(:end)) "
-            "GROUP BY q");
+            "FROM ingresos WHERE " + kIngresosIncomeWhere + " GROUP BY q");
         q.bindValue(":start", start);
         q.bindValue(":end",   end);
         if (q.exec()) {
@@ -1112,10 +1112,7 @@ QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
         q.prepare(
             "SELECT (CAST(substr(fecha,4,2) AS INTEGER) + 2) / 3 AS q, iva, "
             "       SUM(importe), COUNT(*) "
-            "FROM gastos WHERE "
-            "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) >= date(:start)) AND "
-            "(date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2)) < date(:end)) "
-            "GROUP BY q, iva");
+            "FROM gastos WHERE " + kGastosPeriodWhere + " GROUP BY q, iva");
         q.bindValue(":start", start);
         q.bindValue(":end",   end);
         if (q.exec()) {
@@ -1239,4 +1236,73 @@ QString removeSpecialChars(const QString &str)
     QString out = str.normalized(QString::NormalizationForm_D).toLatin1();
     out.remove(QChar('?'));
     return out;
+}
+
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+{
+    QVector<IncomeTicketDetail> tickets;
+    if (dbNotConfigured(db, __func__)) return tickets;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, cliente, fecha_pago, importe FROM ingresos WHERE " + kIngresosIncomeWhere
+              + " ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER)");
+    q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+    q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+    if (!q.exec()) {
+        qWarning() << "incomeTicketsBetweenDates: query failed -" << q.lastError().text();
+        db.close();
+        return tickets;
+    }
+    // One entry per n_recibo, matching COUNT(DISTINCT n_recibo). A ticket paid in
+    // several events within the period keeps its first payment date. A comma-decimal
+    // importe parses as 0, the same as totalPriceBetweenDates skipping it.
+    QHash<QString, int> indexByTicket;
+    while (q.next()) {
+        const QString nRecibo = q.value(0).toString();
+        auto it = indexByTicket.find(nRecibo);
+        if (it == indexByTicket.end()) {
+            it = indexByTicket.insert(nRecibo, tickets.size());
+            IncomeTicketDetail t;
+            t.nRecibo   = nRecibo;
+            t.cliente   = q.value(1).toString();
+            t.fechaPago = q.value(2).toString();
+            tickets.append(t);
+        }
+        IncomeTicketDetail &t = tickets[it.value()];
+        t.importe += q.value(3).toDouble();
+        t.garments++;
+    }
+    db.close();
+    return tickets;
+}
+
+QVector<ExpenseDetail> expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+{
+    QVector<ExpenseDetail> expenses;
+    if (dbNotConfigured(db, __func__)) return expenses;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_factura, empresa, servicio, fecha, iva, importe FROM gastos WHERE " + kGastosPeriodWhere
+              + " ORDER BY " + kFechaGastoIso + ", id");
+    q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
+    q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
+    if (!q.exec()) {
+        qWarning() << "expensesBetweenDates: query failed -" << q.lastError().text();
+        db.close();
+        return expenses;
+    }
+    while (q.next()) {
+        ExpenseDetail e;
+        e.nFactura = q.value(0).toString();
+        e.empresa  = q.value(1).toString();
+        e.servicio = q.value(2).toString();
+        e.fecha    = q.value(3).toString();
+        e.iva      = q.value(4).toInt();
+        e.importe  = q.value(5).toDouble();
+        expenses.append(e);
+    }
+    db.close();
+    return expenses;
 }
