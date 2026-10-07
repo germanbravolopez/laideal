@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45   # a hung step must not hold the runner for the 6 h default
 
     steps:
       - uses: actions/checkout@v5
@@ -34,7 +35,7 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          ctest --test-dir build --output-on-failure --no-tests=error
+          ctest --test-dir build --output-on-failure --no-tests=error --timeout 120
           $code = $LASTEXITCODE
           & .github/scripts/Render-TestSummary.ps1 -Title "Test results"
           exit $code

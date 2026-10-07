@@ -2,7 +2,8 @@
 // default and the "Mostrar" toggle only switches how it is displayed - the text
 // (and so the value saved on accept) is unchanged. AppSettings is pointed at a
 // throwaway file via loadFrom(), so the real ~/.laideal_settings.json is never
-// read or written. The dialog is never accepted (accept() would save).
+// read or written. The dialog is never accepted (accept() would save). The
+// printer list is stubbed: QPrinterInfo blocks on CI runners without a spooler.
 
 #include <QtTest>
 #include <QAbstractButton>
@@ -11,6 +12,8 @@
 
 #include "appsettings.h"
 #include "settingsdialog.h"
+
+static QStringList fakePrinterNames() { return { QStringLiteral("TM-T20III") }; }
 
 class TestSettingsDialog : public QObject
 {
@@ -22,6 +25,7 @@ private slots:
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());
+        SettingsDialog::setPrinterNamesSource(fakePrinterNames);
         const QString path = m_dir.filePath("settings.json");
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly));

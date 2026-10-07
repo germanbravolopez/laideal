@@ -184,3 +184,9 @@ target_link_libraries(test_contabilidad PRIVATE
 )
 add_test(NAME contabilidad
     COMMAND test_contabilidad -o ${CMAKE_BINARY_DIR}/test-results-contabilidad.xml,junitxml -o -,txt)
+
+# Fail any suite that hangs (e.g. a blocking system call or an unanswered modal
+# dialog under the offscreen platform) instead of stalling CI until the job
+# limit; ctest then prints the suite's output up to the hang.
+get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
