@@ -38,7 +38,6 @@ DefaultDirName={autopf}\{#MyAppName}
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
 LicenseFile=..\License.txt
-InfoBeforeFile=..\releases_notes.txt
 ; Default output dir; the manual release.ps1 overrides this with ISCC /O so its
 ; installer lands in build-release\ (gitignored) instead of inside releases\.
 OutputDir=setup_outputs
@@ -57,8 +56,9 @@ RestartApplications=yes
 CloseApplicationsFilter=*.exe
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+; Each language shows its own release notes (UTF-8 with BOM, so accents render).
+Name: "english"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "..\releases_notes.txt"
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"; InfoBeforeFile: "..\releases_notes_es.txt"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -68,6 +68,10 @@ Source: "{#MyAppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
+; The installer language becomes the app's initial UI language (read by
+; AppLanguage::installerChoice() only while the settings have none yet).
+Root: HKA; Subkey: "Software\La Ideal"; ValueType: string; ValueName: "Language"; ValueData: "en"; Languages: english; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\La Ideal"; ValueType: string; ValueName: "Language"; ValueData: "es"; Languages: spanish; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"

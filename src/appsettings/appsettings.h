@@ -31,8 +31,9 @@ public:
     QString filePath() const { return m_filePath; }
 
     // --- Language ("es" / "en") ---
-    // Selects the Qt translation loaded at startup (standard dialogs, Yes/No, etc.).
-    // Default "es"; a change takes effect on the next launch.
+    // UI language: Qt's standard dialogs (Yes/No, etc.) and the release notes follow
+    // it, live (AppLanguage::applyQtTranslations). First run takes the installer's
+    // choice, else "es".
     QString language() const;
     void setLanguage(const QString &v);
 

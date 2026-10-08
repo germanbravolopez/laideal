@@ -22,7 +22,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
 - **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
 - **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
-- **In-app release notes** — Ayuda → Notas de la versión shows the bundled `releases_notes.txt` with the full version history, offline.
+- **In-app release notes** — Ayuda → Notas de la versión shows the full version history, offline, in the configured language (`releases_notes.txt` English / `releases_notes_es.txt` Spanish, both bundled).
 
 ---
 
@@ -89,7 +89,7 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 
 | Setting | Key in JSON | Notes |
 |---------|-------------|-------|
-| Language | `app.language` | `es` (default) or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.). Applied on next launch |
+| Language | `app.language` | `es` or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.) and of Ayuda → Notas de la versión. Applied live when Configuración is accepted. On first run it takes the language chosen in the installer (default `es`). The rest of the app is still Spanish |
 | Database path | `db.path` | Full path to the SQLite `.db` file |
 | IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
 | Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |
@@ -147,7 +147,7 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
    - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
    - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
-   - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
+   - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new X.Y section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time; CI fails the release if either section is missing. Keep both files UTF-8 **with BOM** so the installer renders accents.
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
    Commit the version bump + notes on the branch as a single `release X.Y` commit.
 4. Merge the branch to `master` through a pull request, with a merge commit so the release shows up as a single point on `master`'s history. `master` has a branch protection rule that requires a PR, so this is the path of least resistance. With the [GitHub CLI](https://cli.github.com/):

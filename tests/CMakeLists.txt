@@ -77,6 +77,8 @@ target_link_libraries(test_appsettings PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     appsettings
 )
+# The release-notes parity test reads both files from the source tree.
+target_compile_definitions(test_appsettings PRIVATE LAIDEAL_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME appsettings
     COMMAND test_appsettings -o ${CMAKE_BINARY_DIR}/test-results-appsettings.xml,junitxml -o -,txt)
 

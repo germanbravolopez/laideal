@@ -35,6 +35,7 @@ The working branch must be release-ready before the version-bump commit. Verify 
 
 - [ ] **`CMakeLists.txt`** — `project(laideal VERSION X.Y ...)` bumped to the target version.
 - [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file to end users at install time; same file is reused for the GitHub release body in step 6). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
+- [ ] **`releases_notes_es.txt`** — the same `X.Y` section in **Spanish** (the shop's language: Inno Setup shows it when the installer runs in Spanish, and Ayuda → Notas de la versión shows it when the app language is `es`). Same structure and version header as the English file; `ci.yml` refuses to publish without it and `test_appsettings` checks both files list the same versions. Keep both files UTF-8 with BOM.
 - [ ] **`docs/progress_tracker.md`** — Current Status "Latest release" describes only the new release (no "previous release" trailer).
 - [ ] **`docs/completed_milestones.md`** — the milestone entries cover what shipped; suffix the top `### Post-<X.Y> development` header with `(shipped in X.Y)`.
 - [ ] **`docs/` and `README.md`** — run the `/update-docs` checklist mentally; if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
@@ -43,7 +44,7 @@ The working branch must be release-ready before the version-bump commit. Verify 
 
 ### 2. Commit the version bump
 
-Stage `CMakeLists.txt`, `releases_notes.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
+Stage `CMakeLists.txt`, `releases_notes.txt`, `releases_notes_es.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
 
 ```
 release X.Y - <one-line summary of what this release ships>
@@ -195,7 +196,7 @@ Remove-Item $tmpNotes
 - **Never commit to `master` directly.** Even if a last-minute fix is needed mid-release, commit it on the working branch and re-merge.
 - **One release at a time.** If two unrelated changesets are sitting on the working branch, ask the user whether to split them into two releases or bundle.
 - **Stop on the first failure.** Build error, missing doc, dirty tree, tag conflict — surface it and wait, don't paper over.
-- **English in `releases_notes.txt`** (and everywhere else in the repo). Inno Setup and the GitHub release both surface this file to end users — keep it customer-readable, not changelog jargon.
+- **English in `releases_notes.txt`, Spanish in `releases_notes_es.txt`** (English everywhere else in the repo). Inno Setup, the in-app notes and the GitHub release (English) surface them to end users — keep them customer-readable, not changelog jargon.
 
 ---
 

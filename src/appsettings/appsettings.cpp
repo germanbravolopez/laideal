@@ -1,4 +1,5 @@
 #include "appsettings.h"
+#include "applanguage.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -95,8 +96,9 @@ AppSettings::AppSettings()
 void AppSettings::applyDefaults()
 {
     // Sensible defaults so reports work even before the user configures anything.
+    // First run: start in the language picked in the installer (default Spanish).
     if (str({"app", "language"}).isEmpty())
-        setStr({"app", "language"}, "es");
+        setStr({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
     if (businessName().isEmpty())
         setStr({"business", "name"}, "Tintorería La Ideal");
     if (businessAddress().isEmpty())

@@ -3,6 +3,8 @@ add_library(appsettings STATIC
     appsettings.cpp
     settingsdialog.h
     settingsdialog.cpp
+    applanguage.h
+    applanguage.cpp
 )
 target_link_libraries(appsettings
     PRIVATE

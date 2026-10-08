@@ -1,4 +1,4 @@
-Releases:
+﻿Releases:
 
 10.11
 - Bug fix: the total in "Recogida de Prendas" no longer counts voided garments

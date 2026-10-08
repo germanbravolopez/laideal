@@ -79,8 +79,8 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_language->addItem(tr("English"), "en");
     m_language->setCurrentIndex(s->language() == "en" ? 1 : 0);
     m_language->setToolTip(tr(
-        "Idioma de los diálogos estándar de Qt (botones Sí/No, Aceptar/Cancelar, etc.). "
-        "Requiere reiniciar la aplicación para aplicar."));
+        "Idioma de los diálogos estándar (botones Sí/No, Aceptar/Cancelar, etc.) y de las "
+        "notas de la versión. Se aplica al momento. El resto de la aplicación sigue en español."));
     fl->addRow(tr("Idioma:"), m_language);
 
     m_enablePrinting = new QCheckBox(tr("Habilitar impresión de tickets y facturas"));

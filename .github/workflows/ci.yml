@@ -216,6 +216,12 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($body)) {
             throw "Release notes section for version $ver is empty in releases_notes.txt."
           }
+          # The Spanish notes (installer + in-app, language-dependent) must ship the
+          # same version section.
+          $rawEs = Get-Content releases_notes_es.txt -Raw
+          if (-not [regex]::IsMatch($rawEs, "(?m)^$([regex]::Escape($ver))\r?$")) {
+            throw "No release notes section for version $ver in releases_notes_es.txt. Add the Spanish '$ver' block too."
+          }
           $tmp = Join-Path $env:TEMP "laideal_release_$ver.md"
           Set-Content -Path $tmp -Value $body -Encoding utf8
           echo "NOTES_PATH=$tmp" >> $env:GITHUB_OUTPUT

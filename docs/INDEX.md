@@ -66,6 +66,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Debug logger | `src/logging/applogger.h` | `src/logging/applogger.cpp` |
 | App settings singleton | `src/appsettings/appsettings.h` | `src/appsettings/appsettings.cpp` |
 | Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
+| UI language (Qt dialogs, release notes, installer choice) | `src/appsettings/applanguage.h` | `src/appsettings/applanguage.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog (paid/AEAT) | `src/app/cancelinvoicedialog.h` | `.cpp` |
 | Void unpaid garments dialog (local, issue #40) | `src/app/voidgarmentsdialog.h` | `.cpp` |
