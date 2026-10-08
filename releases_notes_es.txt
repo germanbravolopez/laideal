@@ -1,5 +1,22 @@
 ﻿Versiones:
 
+10.12
+- Nuevo: las anulaciones posteriores al cierre de un trimestre ya no lo modifican
+  - Un ticket anulado en la AEAT o sustituido por una factura rectificativa después de cerrar su trimestre ya no altera ese trimestre: el trimestre cerrado lo mantiene, y el trimestre en que se produce la anulación lo muestra como una línea negativa ("Anulaciones / rectificaciones del periodo") con su propia tabla al final del informe. Un ticket cobrado y anulado en el mismo periodo ya no cuenta en "Número de tickets".
+- Nuevo: cada prenda anulada registra su fecha de anulación ("Anulación")
+  - Las prendas anuladas con "Anular prendas" y las facturas anuladas o rectificadas en la AEAT registran la fecha en una nueva columna "Anulación", junto a las otras tres fechas en "Recogida de Prendas" y en el listado de ingresos. Una prenda anulada ya no muestra fecha de pago ni de recogida, porque nunca se cobró ni se recogió; las existentes se actualizan automáticamente. "Recogida de Prendas" también permite buscar por fecha de Anulación, y el "NO" de cualquier prenda anulada se muestra en verde.
+- Nuevo: el idioma se aplica al momento y las notas de la versión están en español e inglés
+  - Configuración -> Idioma se aplica ahora sin reiniciar: los diálogos estándar y Ayuda -> Notas de la versión siguen el idioma elegido (el resto de la aplicación sigue en español por ahora). El instalador muestra las notas en el idioma que se elija, y una instalación nueva arranca en ese idioma.
+- Corrección: anular una factura ya no afecta a las prendas sin cobrar del ticket
+  - Siguen sin cobrar y se pueden cobrar igualmente con "Cobrar".
+- Mejoras en Contabilidad
+  - "Bloquear datos" solo se ofrece en la contabilidad trimestral, el único modo que cierra un periodo.
+  - Ahora se puede cerrar y revertir un trimestre con gastos pero sin ingresos.
+  - El informe anual cuenta una sola vez un ticket cobrado en dos trimestres.
+  - Los importes guardados con coma como separador decimal no se suman en ningún informe; se marcan en las tablas de detalle y un aviso pide corregirlos.
+- Cambio: el tipo de IVA queda fijo en el 21 % y ya no aparece en Configuración.
+- Comprobaciones de seguridad: no se puede anular una factura mientras el trimestre actual esté cerrado, y una factura rectificativa no puede fecharse en un trimestre cerrado ni antes del cobro original.
+
 10.11
 - Corrección: el total de "Recogida de Prendas" ya no suma las prendas anuladas
   - La casilla "Importe total" sumaba todas las prendas de la lista, incluidas las anuladas con "Anular prendas". Una prenda anulada tomaba como fecha de pago la fecha de su anulación, por lo que aparecía al buscar por "Pago" e inflaba el total. La lista sigue mostrando esas prendas, pero las anuladas (y las anuladas o rectificadas en la AEAT) ya no se suman. Las prendas sin cobrar sí cuentan, así que al buscar un ticket por número se sigue viendo lo que debe el cliente.

@@ -1,5 +1,22 @@
 ﻿Releases:
 
+10.12
+- New: cancellations after a quarter is closed no longer change it
+  - A ticket cancelled at the AEAT or replaced by a rectifying invoice after its quarter was closed no longer alters that quarter: the closed quarter keeps it, and the quarter in which the cancellation happens shows it as a negative line ("Anulaciones / rectificaciones del periodo") with its own table at the end of the report. A ticket paid and cancelled in the same period is no longer counted in "Número de tickets".
+- New: every cancelled garment records its cancellation date ("Anulación")
+  - Garments voided with "Anular prendas" and invoices cancelled or rectified at the AEAT record the date in a new "Anulación" column, next to the other three dates in "Recogida de Prendas" and in the ingresos list. A voided garment no longer shows a payment or pickup date, since it was never paid nor collected; existing ones are updated automatically. "Recogida de Prendas" can also search by Anulación date, and the "NO" of any cancelled garment shows in green.
+- New: language setting applied immediately, release notes in Spanish and English
+  - Configuración -> Idioma now applies without restarting: the standard dialogs and Ayuda -> Notas de la versión follow it (the rest of the application stays in Spanish for now). The installer shows the release notes in the language you pick, and a new installation starts in that language.
+- Bug fix: cancelling an invoice no longer affects the unpaid garments of the ticket
+  - They stay unpaid and can still be charged with "Cobrar".
+- Improvements in Contabilidad
+  - "Bloquear datos" is only offered for quarterly accounting, the only mode that closes a period.
+  - A quarter with expenses but no income can now be closed and reverted.
+  - The annual report counts a ticket paid across two quarters only once.
+  - Amounts saved with a comma as decimal separator are never added in any report; they are marked in the detail tables and a warning asks you to fix them.
+- Change: the VAT rate is fixed at 21 % and no longer appears in Configuración.
+- Safety checks: an invoice cannot be cancelled while the current quarter is closed, and a rectifying invoice cannot be dated in a closed quarter or before the original payment.
+
 10.11
 - Bug fix: the total in "Recogida de Prendas" no longer counts voided garments
   - The "Importe total" box added up every garment in the list, including garments voided with "Anular prendas". A voided garment takes the date it was voided as its payment date, so it showed up when searching by "Pago" and inflated the total. The list still shows those garments, but voided (and cancelled or rectified) garments are no longer added. Unpaid garments still count, so searching a ticket by number still shows what the customer owes.
