@@ -287,18 +287,19 @@ private slots:
         QVERIFY(!markInvoiceSeqCancelled(m_db, "NOPE", 0, QDate(2026, 5, 1)));
     }
 
-    // Pre-10.12 cancellations also marked the unpaid remainder ANULADA / RECTIFICADA;
-    // the migration hands those garments back as SIN COBRAR, leaving local voids alone.
+    // Pre-10.12 cancellations also marked the unpaid remainder ANULADA; the migration
+    // hands those garments back as SIN COBRAR. Local voids and RECTIFICADA rows (which
+    // an older substitution may have invoiced) are left alone.
     void test_migrateDatabase_repairsUnpaidRemainderOfCancelledTicket()
     {
         insertIngreso("86", "10-02-2026", "10.00", "SI", "ANULADA");
         insertRow("86", "h86u", "15.00", "NO", "ANULADA");                // wrongly marked remainder
-        insertRow("87", "h87u", "15.00", "NO", "RECTIFICADA");
+        insertRow("87", "h87u", "15.00", "NO", "RECTIFICADA");             // may be in a submitted substitution: kept
         exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado) "
              "VALUES ('88', 'h88v', 'NO', 'Anulado', 'ANULADA')");           // genuine local void
         migrateDatabase(m_db);
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h86u'"), QStringLiteral("SIN COBRAR"));
-        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h87u'"), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h87u'"), QStringLiteral("RECTIFICADA"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='86' AND pagado='SI'"), QStringLiteral("ANULADA"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h88v'"), QStringLiteral("ANULADA"));
     }

@@ -106,19 +106,31 @@ void migrateDatabase(QSqlDatabase &db)
         qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
                  << q.numRowsAffected() << "voided garments";
 
-    // 10.12 repair: before 10.12 an AEAT cancellation / substitution rectification also
-    // marked the ticket's UNPAID garments (they share seq 0) ANULADA / RECTIFICADA, which
-    // left them neither chargeable nor counted. They were never part of that invoice:
-    // relabel them SIN COBRAR so they can be charged. Local voids (estado Anulado) are
-    // genuinely cancelled and untouched. Idempotent.
+    // 10.12 repair: before 10.12 an AEAT cancellation also marked the ticket's UNPAID
+    // garments (they share seq 0) ANULADA, which left them neither chargeable nor
+    // counted. A cancelled invoice only ever covered the paid rows, so relabel them
+    // SIN COBRAR so they can be charged. Local voids (estado Anulado) are genuinely
+    // cancelled and untouched. Idempotent.
+    // RECTIFICADA is deliberately NOT repaired: an older substitution could have been
+    // submitted with the unpaid garments' amounts included, so re-opening them could
+    // invoice them twice. Those rows are only logged for manual review.
+    {
+        QSqlQuery review(db);
+        if (review.exec("SELECT DISTINCT n_recibo FROM ingresos "
+                        "WHERE (pagado IS NULL OR pagado != 'SI') AND verifactu_estado = 'RECTIFICADA' "
+                        "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
+            while (review.next())
+                qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
+                           << "has unpaid garments marked RECTIFICADA - review manually before charging them";
+    }
     if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
                 "WHERE (pagado IS NULL OR pagado != 'SI') "
-                "  AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
+                "  AND verifactu_estado = 'ANULADA' "
                 "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
         qWarning() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
-                 << "unpaid garments wrongly marked by a cancellation as SIN COBRAR";
+                 << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
 
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
     // which verifactuEstadoFromString() does not recognise (it fell through to

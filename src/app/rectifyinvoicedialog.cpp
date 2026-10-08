@@ -464,9 +464,16 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     }
     q.bindValue(":num",  m_newInvoiceNumber);
     q.bindValue(":orig", m_loadedTicket);
-    if (!q.exec())
+    if (!q.exec()) {
         qWarning() << "RectifyInvoiceDialog: UPDATE placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
+        if (result.isSuccess()) {
+            localOk = false;
+            m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo guardar "
+                                         "el nuevo ticket %1 en la base de datos local. Revise el log de depuración "
+                                         "antes de hacer la contabilidad.</b>").arg(m_newInvoiceNumber.toHtmlEscaped()));
+        }
+    }
 
     // For substitution (S), mark the original rows as RECTIFICADA so they no longer
     // count toward accounting. Differences (I) leaves the original untouched - the
