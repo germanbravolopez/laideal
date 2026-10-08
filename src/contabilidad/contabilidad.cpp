@@ -225,6 +225,7 @@ void Contabilidad::generateContabilidad()
                     + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
         }
+        annual.ingTickets = totals.ingTicketsYear;   // distinct over the year, not the quarterly sum
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
         // One scan per table for the whole year, bucketed by quarter.

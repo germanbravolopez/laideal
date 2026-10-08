@@ -226,6 +226,8 @@ struct QuarterlyAccountingTotals {
     double gas21Importe[4] = {0, 0, 0, 0};  // gastos iva = 21
     double gasNiImporte[4] = {0, 0, 0, 0};  // gastos iva = 0 (sin IVA)
     int    gasFacturas[4]  = {0, 0, 0, 0};  // gastos rows, every iva rate (matches countOperations)
+    int    ingTicketsYear  = 0;             // distinct paid n_recibo over the whole year: a ticket
+                                            // paid across two quarters counts once, not twice
 };
 
 // One grouped query per table over the whole year, bucketed by quarter, for the

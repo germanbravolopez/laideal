@@ -738,6 +738,19 @@ private slots:
     // quarter, the per-quarter totalPriceBetweenDates / countOperationsBetweenDates
     // it replaces - so the tax math is provably unchanged. Dot-decimal fixtures
     // (the comma path is an error dialog the grouped SUM does not reproduce).
+    void test_annualTicketCountIsDistinctOverYear()
+    {
+        insertIngreso("T1", "20-03-2026", "10.00", "SI", "ENVIADA");   // Q1 garment
+        insertIngreso("T1", "05-04-2026", "10.00", "SI", "ENVIADA");   // same ticket, Q2 garment
+        insertIngreso("T2", "10-05-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("T3", "10-06-2026", "10.00", "SI", "ANULADA");   // excluded
+        const QuarterlyAccountingTotals t = annualAccountingByQuarter(m_db, 2026);
+        QCOMPARE(t.ingTickets[0] + t.ingTickets[1], 3);                // T1 appears in both quarters
+        QCOMPARE(t.ingTicketsYear, 2);                                 // but is one ticket for the year
+        QCOMPARE(t.ingTicketsYear,
+                 countOperationsBetweenDates(m_db, "ingresos", QDate(2026, 1, 1), QDate(2027, 1, 1)));
+    }
+
     void test_annualAccountingByQuarter()
     {
         // ingresos spread across quarters; ANULADA / unpaid excluded, a two-row

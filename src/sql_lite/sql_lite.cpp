@@ -1105,6 +1105,19 @@ QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
         }
     }
 
+    // Year-level distinct ticket count for the consolidated summary; summing the
+    // per-quarter counts would count a ticket paid across quarters twice.
+    {
+        QSqlQuery q(db);
+        q.prepare("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE " + kIngresosIncomeWhere);
+        q.bindValue(":start", start);
+        q.bindValue(":end",   end);
+        if (q.exec() && q.first())
+            t.ingTicketsYear = q.value(0).toInt();
+        else
+            qWarning() << "annualAccountingByQuarter: ticket count query failed -" << q.lastError().text();
+    }
+
     // Gastos in one scan, GROUP BY (quarter, iva). importe goes to the 10/21/0
     // bucket by rate (other rates contribute to no importe bucket, matching the
     // existing computeFigures which only queries 10/21/0); facturas counts every
