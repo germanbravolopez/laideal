@@ -60,6 +60,16 @@ private slots:
         QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Anual, false));
     }
 
+    void test_combinedLockState()
+    {
+        QCOMPARE(Contabilidad::combinedLockState(2, 2), 2);   // no rows in either table
+        QCOMPARE(Contabilidad::combinedLockState(2, 0), 0);   // gastos-only quarter, open
+        QCOMPARE(Contabilidad::combinedLockState(2, 1), 1);   // gastos-only quarter, locked
+        QCOMPARE(Contabilidad::combinedLockState(0, 2), 0);   // ingresos-only, open
+        QCOMPARE(Contabilidad::combinedLockState(1, 0), 1);   // either locked -> locked
+        QCOMPARE(Contabilidad::combinedLockState(0, 0), 0);
+    }
+
     void test_detailIngresosRowsAndTotal()
     {
         IncomeTicketDetail a; a.nRecibo = "9";  a.cliente = "Ana <S.L.>"; a.fechaPago = "05-03-2026"; a.importe = 121.0; a.garments = 1;

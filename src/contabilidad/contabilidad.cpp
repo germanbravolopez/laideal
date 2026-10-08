@@ -54,6 +54,13 @@ bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
     return mode == Trimestral && !reverting;
 }
 
+int Contabilidad::combinedLockState(int ingresosLock, int gastosLock)
+{
+    if (ingresosLock == 2 && gastosLock == 2)
+        return 2;
+    return (ingresosLock == 1 || gastosLock == 1) ? 1 : 0;
+}
+
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
     // Stays false except when reverting a quarter that was never done: there we
@@ -63,7 +70,8 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         // Read the lock across the whole quarter, not just its last month: a
         // quarter with income only in its first months would otherwise read as
         // "no data" and never get locked.
-        int editLock = readLockForQuarter(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value());
+        int editLock = combinedLockState(readLockForQuarter(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()),
+                                         readLockForQuarter(db, "gastos", ui->sb_trim->value(), ui->sb_year->value()));
         switch (editLock) {
         case 0:
             // contabilidad not done
@@ -115,7 +123,7 @@ void Contabilidad::on_bb_ok_cancel_accepted()
         default:
             qWarning() << "Contabilidad::on_bb_ok_cancel_accepted: invalid lock value read from database:" << editLock;
             QMessageBox::warning(this, "Contabilidad",
-                                 "No hay registros de ingresos para realizar la contabilidad en el periodo indicado.",
+                                 "No hay registros de ingresos ni de gastos para realizar la contabilidad en el periodo indicado.",
                                  QMessageBox::Ok, QMessageBox::Ok);
             break;
         }
@@ -181,7 +189,9 @@ void Contabilidad::generateContabilidad()
         filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
     }
     else if (currentMode() == Mensual) {
-        bool cerrada = readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year) == 1;
+        // readLockForMonthAndYear reports an empty month as 0 (open), never 2.
+        bool cerrada = combinedLockState(readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year),
+                                         readLockForMonthAndYear(db, "gastos", ui->sb_trim->value(), year)) == 1;
         contabilidadHtml = ReportHtml::documentOpen("Reporte Mensual - Mes " + QString::number(ui->sb_trim->value())
                                                     + " · " + QString::number(year),
                                                     periodSubtitle(0) + (cerrada ? " · Contabilidad cerrada"
@@ -204,7 +214,8 @@ void Contabilidad::generateContabilidad()
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
             const int i = trim - 1;
-            bool cerrada = readLockForQuarter(db, "ingresos", trim, year) == 1;
+            bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
+                                             readLockForQuarter(db, "gastos", trim, year)) == 1;
             PeriodFigures f = figuresFromTotals(
                 totals.ingImporte[i], totals.ingTickets[i],
                 totals.gas10Importe[i], totals.gas21Importe[i], totals.gasNiImporte[i],

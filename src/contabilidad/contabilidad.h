@@ -42,6 +42,11 @@ public:
     // reverting: the "Bloquear datos" checkbox is enabled only for Trimestral.
     static bool lockOptionAvailable(ConfigMode mode, bool reverting);
 
+    // Merges the lock state of ingresos and gastos for one period (each 0 = open,
+    // 1 = locked, 2 = no rows): 2 only when both are empty, 1 if either is locked,
+    // else 0. A quarter with only gastos can then be closed and reverted too.
+    static int combinedLockState(int ingresosLock, int gastosLock);
+
     // Detail tables appended to the report so each summary figure can be audited.
     // Pure HTML rendering (no DB / UI state), exposed for unit testing; the rows come
     // from incomeTicketsBetweenDates / expensesBetweenDates and the total row equals
