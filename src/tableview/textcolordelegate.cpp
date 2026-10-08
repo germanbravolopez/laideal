@@ -6,9 +6,10 @@
 
 TextColorDelegate::TextColorDelegate(QTableView* tableView, QObject* parent) : QStyledItemDelegate(parent), m_tableView(tableView) {}
 
-TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText, const QString &rowEstado)
+TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText, const QString &rowEstado,
+                                                       const QString &rowVerifactuEstado)
 {
-    if (rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO))
+    if (rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO) || rowVerifactuEstado == QLatin1String("ANULADA"))
         return TextColor::Green;
     if (cellText == "SI" || cellText == "Recogido")
         return TextColor::Green;
@@ -22,9 +23,10 @@ void TextColorDelegate::initStyleOption(QStyleOptionViewItem* option, const QMod
 
     const QString text      = index.data().toString();
     const QString rowEstado = index.sibling(index.row(), INGRESOS_COL_ESTADO).data().toString();
+    const QString rowVerifactuEstado = index.sibling(index.row(), INGRESOS_COL_VERIFACTU_ESTADO).data().toString();
 
     QColor textColor;
-    switch (classify(text, rowEstado)) {
+    switch (classify(text, rowEstado, rowVerifactuEstado)) {
     case TextColor::Green:   textColor = QColor(0, 180, 0);  break; // Darker green
     case TextColor::Red:     textColor = QColor(210, 0, 0);  break; // Darker red
     case TextColor::Default: textColor = option->palette.text().color(); break;

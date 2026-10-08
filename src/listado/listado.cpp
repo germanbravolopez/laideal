@@ -4,6 +4,7 @@
 #include "insertnewitem.h"
 #include "numberformatdelegate.h"
 #include "textcolordelegate.h"
+#include "ingresoscolumns.h"
 
 Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
@@ -188,6 +189,7 @@ void Listado::populateTable()
             table_listado->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
             table_listado->horizontalHeader()->moveSection(INGRESOS_COL_VERIFACTU_URL_QR, INGRESOS_COL_VERIFACTU_ERROR);
+            placeIngresosDateColumns(table_listado->horizontalHeader());
             // hash is not useful at user interface.
             table_listado->setColumnHidden(INGRESOS_COL_HASH, true);
             // edit_lock is an internal flag (set by Contabilidad on quarter close); not user-facing.

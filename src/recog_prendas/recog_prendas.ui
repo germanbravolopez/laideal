@@ -453,7 +453,7 @@ factura</string>
          </font>
         </property>
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Buscar por fecha de recepción, pago o entregado.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Buscar por fecha de recepción, pago, recogida o anulación.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="editable">
          <bool>false</bool>
@@ -474,6 +474,11 @@ factura</string>
         <item>
          <property name="text">
           <string>Recogida</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Anulación</string>
          </property>
         </item>
        </widget>

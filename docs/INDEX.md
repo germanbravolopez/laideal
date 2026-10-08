@@ -100,6 +100,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
 | Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
 | Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
+| Ingresos date-column placement | `src/tableview/ingresoscolumns.h` | `.cpp` |
 | Link (URL) delegate | `src/tableview/linkdelegate.h` | `.cpp` |
 
 ## Build Files

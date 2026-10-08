@@ -42,7 +42,7 @@ Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Inp
 |------------|-----------|-----------------|
 | Ticket number | All digits, length < 9 | `WHERE n_recibo = :n` |
 | Phone number | All digits, length ≥ 9 | `WHERE tel_fijo LIKE :p OR movil LIKE :p` on `clientes`; then `WHERE cliente = :name` |
-| Date (`dd/MM/yyyy` or `dd-MM-yyyy`) | `QDate::fromString` succeeds | `WHERE <date_column> = :date` |
+| Date (`dd/MM/yyyy` or `dd-MM-yyyy`) | `QDate::fromString` succeeds | `WHERE <date_column> = :date`, where the `cb_search_date` filter picks the column: Recepción → `fecha_recepcion`, Pago → `fecha_pago`, Recogida → `fecha_recogida`, **Anulación → `fecha_anulacion`** (voided, AEAT-cancelled and rectified garments; the Importe total is 0 there, since all are excluded from totals) |
 | Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setNormalizedFilter(text, INGRESOS_COL_CLIENTE)` — **diacritic-insensitive**: typing "garcia" matches "García" |
 
 Name search loads all rows because SQLite LIKE is ASCII-only and cannot match accented characters. The proxy model's `removeDiacritics()` + `toLower()` normalization handles the matching client-side.
@@ -78,6 +78,8 @@ Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the con
 | `INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO` | 22 | verifactu_rectifies_n_recibo |
 | `INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE` | 23 | verifactu_rectification_type |
 | `INGRESOS_COL_VERIFACTU_INVOICE_SEQ` | 24 | verifactu_invoice_seq |
+| `INGRESOS_COL_VERIFACTU_INVOICE_ID` | 25 | verifactu_invoice_id |
+| `INGRESOS_COL_FECHA_ANULACION` | 26 | fecha_anulacion — **visible**, header "Anulación", shown right after Recogida by `placeIngresosDateColumns()` so the four dates sit together |
 
 Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash, edit_lock) and `on_pb_verifactu_clicked()` (verifactu_*).
 

@@ -2,6 +2,7 @@
 #include "ui_recog_prendas.h"
 #include "pay_dialog.h"
 #include "sql_lite.h"
+#include "ingresoscolumns.h"
 #include "imprimir.h"
 #include "appsettings.h"
 #include "textcolordelegate.h"
@@ -399,7 +400,8 @@ void RecogPrendas::on_pb_search_clicked()
             // date_type values come from a hard-coded ComboBox - not user input
             QString dateType = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
-                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
+                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" :
+                               (ui->cb_search_date->currentText() == "Anulación") ? "fecha_anulacion" : "";
             if (!dateSlash.isNull() || !dateDash.isNull()) {
                 db.open();
                 QSqlQuery q(db);
@@ -443,6 +445,7 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_RECEPCION , Qt::Horizontal, tr("Recepción"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_PAGO , Qt::Horizontal, tr("Pago"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_RECOGIDA , Qt::Horizontal, tr("Recogida"));
+        sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_ANULACION, Qt::Horizontal, tr("Anulación"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_IMPORTE    , Qt::Horizontal, tr("Importe"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_PAGADO , Qt::Horizontal, tr("Pagado"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_ESTADO    , Qt::Horizontal, tr("Estado"));
@@ -461,6 +464,7 @@ void RecogPrendas::on_pb_search_clicked()
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
+        placeIngresosDateColumns(ui->tableView->horizontalHeader());
         // Hide internal columns not meant for display
         ui->tableView->setColumnHidden(INGRESOS_COL_EDIT_LOCK,           true);
         ui->tableView->setColumnHidden(INGRESOS_COL_HASH,                true);
@@ -475,7 +479,6 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE,  true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ,         true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_ID,          true);
-        ui->tableView->setColumnHidden(INGRESOS_COL_FECHA_ANULACION,               true);
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(ui->tableView, this));

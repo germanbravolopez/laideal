@@ -42,8 +42,12 @@ target_link_libraries(test_textcolordelegate PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     tableview
 )
+# ingresos_schema.h (column indices) is header-only: the include path is enough.
+target_include_directories(test_textcolordelegate PRIVATE ${CMAKE_SOURCE_DIR}/src/sql_lite)
 add_test(NAME textcolordelegate
     COMMAND test_textcolordelegate -o ${CMAKE_BINARY_DIR}/test-results-textcolordelegate.xml,junitxml -o -,txt)
+# QTEST_MAIN (QApplication) for the header-placement check: run it headless.
+set_tests_properties(textcolordelegate PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # listado: GenListado pure helpers (filename suffix + row filter).
 add_executable(test_genlistado test_genlistado.cpp)
