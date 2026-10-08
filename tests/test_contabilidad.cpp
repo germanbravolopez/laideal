@@ -168,6 +168,35 @@ private slots:
         QVERIFY(html.contains(ReportHtml::formatEuro(-145.2)));         // amounts shown negative
     }
 
+    // Paid and cancelled in the same period nets to zero and is not counted; a
+    // partial cancellation still counts; another period's cancellation does not
+    // affect this period's count.
+    void test_netTicketCount()
+    {
+        IncomeTicketDetail full;    full.nRecibo = "1";    full.importe = 50.0;
+        IncomeTicketDetail partial; partial.nRecibo = "2"; partial.importe = 30.0;
+        IncomeTicketDetail kept;    kept.nRecibo = "3";    kept.importe = 20.0;
+        RegularizationDetail rFull;    rFull.nRecibo = "1";    rFull.importe = 50.0;
+        RegularizationDetail rPartial; rPartial.nRecibo = "2"; rPartial.importe = 10.0;
+        RegularizationDetail rOther;   rOther.nRecibo = "9";   rOther.importe = 99.0;   // paid in another period
+        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {rFull, rPartial, rOther}), 2);
+        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {}), 3);
+        const Contabilidad::PeriodFigures f =
+            Contabilidad::figuresFromDetails({full, partial, kept}, {rFull, rPartial, rOther}, {}, 21.0);
+        QCOMPARE(f.ingTickets, 2);
+    }
+
+    void test_yearTicketCountNetsCancellationsWithinTheYear()
+    {
+        QuarterlyDetails d;
+        IncomeTicketDetail a; a.nRecibo = "T1"; a.importe = 10.0;
+        IncomeTicketDetail b; b.nRecibo = "T2"; b.importe = 10.0;
+        RegularizationDetail r; r.nRecibo = "T2"; r.importe = 10.0;
+        d.income[0] = {a, b};
+        d.regularizations[2] = {r};                                    // T2 paid Q1, cancelled Q3
+        QCOMPARE(Contabilidad::yearTicketCount(d), 1);
+    }
+
     void test_yearTicketCountIsDistinct()
     {
         QuarterlyDetails d;

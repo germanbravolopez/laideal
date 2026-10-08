@@ -258,6 +258,36 @@ private slots:
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='41'"), QStringLiteral("15-05-2026"));  // open quarter too
     }
 
+    // Cancelling / rectifying an invoice touches only the paid rows it covered: the
+    // ticket's unpaid garments (same seq 0) stay chargeable and undated, so a later
+    // payment is invoiced on its own and can never reach back into a closed quarter.
+    void test_cancelAndRectify_leaveUnpaidGarmentsChargeable()
+    {
+        insertIngreso("80", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);
+        insertRow("80", "h80u", "15.00", "NO", "SIN COBRAR");          // unpaid remainder, seq 0
+        QVERIFY(markInvoiceSeqCancelled(m_db, "80", 0, QDate(2026, 5, 15)));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='80' AND pagado='SI'"), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h80u'"), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE hash='h80u'"), QString());
+
+        insertIngreso("81", "10-02-2026", "10.00", "SI", "ENVIADA");
+        insertRow("81", "h81u", "15.00", "NO", "SIN COBRAR");
+        QVERIFY(markTicketRectified(m_db, "81", QDate(2026, 6, 1)));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='81' AND pagado='SI'"), QStringLiteral("RECTIFICADA"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h81u'"), QStringLiteral("SIN COBRAR"));
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE hash='h81u'"), QString());
+    }
+
+    void test_ticketLastPaymentDate()
+    {
+        insertIngreso("90", "10-02-2026", "10.00", "SI", "ENVIADA", 0, 1);
+        insertIngreso("90", "05-04-2026", "10.00", "SI", "ENVIADA", 0, 2);
+        insertRow("90", "h90u");                                      // unpaid: ignored
+        QCOMPARE(ticketLastPaymentDate(m_db, "90"), QDate(2026, 4, 5));
+        insertRow("91", "h91u");
+        QVERIFY(!ticketLastPaymentDate(m_db, "91").isValid());          // nothing paid
+    }
+
     void test_markTicketRectified_stampsRectificationDate()
     {
         insertIngreso("42", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);

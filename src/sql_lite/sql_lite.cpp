@@ -1280,6 +1280,23 @@ bool quarterIsClosed(QSqlDatabase &db, QDate date)
         || readLockForQuarter(db, "gastos", quarter, date.year()) == 1;
 }
 
+QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return QDate();
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT MAX(" + kFechaPagoIso + ") FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
+    q.bindValue(":n", nRecibo);
+    QDate last;
+    if (q.exec() && q.first())
+        last = QDate::fromString(q.value(0).toString(), Qt::ISODate);
+    else
+        qWarning() << "ticketLastPaymentDate: query failed -" << q.lastError().text();
+    db.close();
+    return last;
+}
+
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate)
 {
     if (dbNotConfigured(db, __func__)) return false;
@@ -1288,7 +1305,7 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
               "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
-              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq");
+              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
     q.bindValue(":num",    nRecibo);
@@ -1309,7 +1326,7 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
               "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
-              "WHERE n_recibo = :num");
+              "WHERE n_recibo = :num AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
     q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
     q.bindValue(":num",    nRecibo);

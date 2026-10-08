@@ -258,14 +258,20 @@ QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDat
 // with no rows inside a closed quarter still reads as closed.
 bool quarterIsClosed(QSqlDatabase &db, QDate date);
 
+// Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.
+// A rectificativa may not be dated before it.
+QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
+
 // Marks one payment event (n_recibo + seq) ANULADA after an accepted AEAT
 // cancellation and records fecha_anulacion = cancelDate (never overwriting one
 // already set): the payment period keeps the income and the cancellation is
-// accounted in the period it happens.
+// accounted in the period it happens. Only paid rows - the ones the invoice
+// covered - are marked; unpaid garments of the ticket (which share seq 0) stay
+// chargeable and are invoiced on their own when paid.
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
-// Marks every row of a ticket RECTIFICADA after an accepted substitution
+// Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
 // rectificativa and records fecha_anulacion = the rectificativa's date, the same
-// period its replacement row is counted in.
+// period its replacement row is counted in. Unpaid rows stay chargeable.
 bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectificationDate);
 
 // The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),

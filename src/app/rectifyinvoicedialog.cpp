@@ -256,8 +256,16 @@ void RectifyInvoiceDialog::onRectifyClicked()
         return;
     }
 
-    // The rectificativa row is income dated on this day: never into a closed quarter.
+    // The rectificativa row is income dated on this day: never before the original
+    // payment (its subtraction would land in a period that never counted it), and
+    // never into a closed quarter.
     const QDate rectifyDate = m_deRectifyDate->date();
+    const QDate lastPayment = ticketLastPaymentDate(db, m_loadedTicket);
+    if (lastPayment.isValid() && rectifyDate < lastPayment) {
+        m_lblResult->setText(QString("<b style='color:red'>La fecha de la rectificativa no puede ser anterior "
+                                     "al cobro del ticket original (%1).</b>").arg(lastPayment.toString("dd-MM-yyyy")));
+        return;
+    }
     if (quarterIsClosed(db, rectifyDate)) {
         m_lblResult->setText("<b style='color:red'>La fecha de la rectificativa pertenece a un trimestre "
                              "con la contabilidad cerrada. Elija una fecha de un periodo abierto.</b>");
@@ -459,7 +467,10 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
         qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
-        markTicketRectified(db, m_loadedTicket, m_newInvoiceDate);
+        if (!markTicketRectified(db, m_loadedTicket, m_newInvoiceDate))
+            m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
+                                         "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "
+                                         "de depuración antes de hacer la contabilidad.</b>").arg(m_loadedTicket.toHtmlEscaped()));
     }
     db.close();
 }

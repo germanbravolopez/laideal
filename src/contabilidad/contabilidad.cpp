@@ -5,6 +5,8 @@
 #include "appsettings.h"
 #include "reporthtml.h"
 
+#include <QHash>
+
 Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
     ui(new Ui::Contabilidad),
@@ -326,19 +328,46 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
         else if (e.iva == 21) gas21 += e.importe;
         else if (e.iva == 0)  gasNi += e.importe;
     }
-    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion, income.size(),
+    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion, netTicketCount(income, regularizations),
                                         gas10, gas21, gasNi, expenses.size(), ivaRate);
     f.ingRegularizacion = regularizacion;
     return f;
 }
 
+// Sums each ticket's income and regularisations, then counts the tickets left
+// with a non-zero net amount (1 cent tolerance for float sums).
+static int countNetTickets(const QHash<QString, double> &incomeByTicket,
+                           const QHash<QString, double> &regularizedByTicket)
+{
+    int n = 0;
+    for (auto it = incomeByTicket.cbegin(); it != incomeByTicket.cend(); ++it)
+        if (!regularizedByTicket.contains(it.key())
+                || it.value() - regularizedByTicket.value(it.key()) > 0.005)
+            n++;
+    return n;
+}
+
+int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
+                                 const QVector<RegularizationDetail> &regularizations)
+{
+    QHash<QString, double> incomeByTicket, regularizedByTicket;
+    for (const IncomeTicketDetail &t : income)
+        incomeByTicket[t.nRecibo] += t.importe;
+    for (const RegularizationDetail &r : regularizations)
+        regularizedByTicket[r.nRecibo] += r.importe;
+    return countNetTickets(incomeByTicket, regularizedByTicket);
+}
+
 int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
 {
-    QSet<QString> tickets;
+    QHash<QString, double> incomeByTicket, regularizedByTicket;
     for (const QVector<IncomeTicketDetail> &quarter : details.income)
         for (const IncomeTicketDetail &t : quarter)
-            tickets.insert(t.nRecibo);
-    return tickets.size();
+            incomeByTicket[t.nRecibo] += t.importe;
+    for (const QVector<RegularizationDetail> &quarter : details.regularizations)
+        for (const RegularizationDetail &r : quarter)
+            regularizedByTicket[r.nRecibo] += r.importe;
+    return countNetTickets(incomeByTicket, regularizedByTicket);
 }
 
 int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,

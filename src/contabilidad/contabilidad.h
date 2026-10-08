@@ -96,8 +96,13 @@ public:
                                             const QVector<RegularizationDetail> &regularizations,
                                             const QVector<ExpenseDetail> &expenses,
                                             double ivaRate);
-    // Distinct tickets across the four quarter buckets: a ticket paid across two
-    // quarters appears in both, but is one ticket for the year.
+    // Number of tickets a period counts: those whose income there does not net to
+    // zero against a regularisation of the same period (paid and cancelled in the
+    // same period -> not counted; paid in Q1, cancelled in Q2 -> counted in Q1).
+    static int netTicketCount(const QVector<IncomeTicketDetail> &income,
+                              const QVector<RegularizationDetail> &regularizations);
+    // The same over the whole year: a ticket paid across two quarters is one
+    // ticket, and one paid and cancelled within the year is none.
     static int yearTicketCount(const QuarterlyDetails &details);
     // Comma-decimal amounts in a period's rows (listed but not summed).
     static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,

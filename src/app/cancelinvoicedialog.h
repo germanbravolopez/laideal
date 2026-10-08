@@ -53,6 +53,7 @@ private:
     QDate            m_loadedDate;
     QVector<Event>   m_events;
     QString          m_pendingCancelId;
+    QDate            m_pendingCancelDate;   // the date the closed-quarter guard checked
     int              m_pendingCancelRow = -1; // row index in m_events for the in-flight cancel
     QSqlDatabase     db;
 

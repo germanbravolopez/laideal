@@ -223,7 +223,7 @@ Notable items:
 | verifactu_rectification_type | TEXT | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows. Mirrors the `RectificationType` sent to AEAT |
 | verifactu_invoice_seq | INTEGER | Partial-payment event number (0 for legacy / single-event tickets) |
 | verifactu_invoice_id | TEXT | Literal AEAT InvoiceID submitted for the row |
-| fecha_anulacion | TEXT | `dd-MM-yyyy` date the garment was cancelled: voided in place (`voidGarmentRow`, Anular prendas), cancelled at AEAT (`markInvoiceSeqCancelled`) or superseded by a substitution rectificativa (`markTicketRectified`, the rectificativa's date). Never overwritten once set. A paid row with this date stays income in its payment period and is subtracted in the period of this date (Contabilidad regularisation). Empty otherwise (column 26, added by `migrateDatabase`, which also moves pre-10.12 void dates here) |
+| fecha_anulacion | TEXT | `dd-MM-yyyy` date the garment was cancelled: voided in place (`voidGarmentRow`, Anular prendas), cancelled at AEAT (`markInvoiceSeqCancelled`, paid rows of that event only) or superseded by a substitution rectificativa (`markTicketRectified`, paid rows, the rectificativa's date). Never overwritten once set. A paid row with this date stays income in its payment period and is subtracted in the period of this date (Contabilidad regularisation). Empty otherwise (column 26, added by `migrateDatabase`, which also moves pre-10.12 void dates here) |
 
 ### `prendas` (garment catalogue)
 

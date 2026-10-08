@@ -199,7 +199,8 @@ void CancelInvoiceDialog::onCancelClicked(int row)
 
     // A cancellation of a closed quarter's invoice is accounted today; refuse it while
     // today's quarter is itself closed, or that filed report would change.
-    if (quarterIsClosed(db, QDate::currentDate())) {
+    m_pendingCancelDate = QDate::currentDate();
+    if (quarterIsClosed(db, m_pendingCancelDate)) {
         m_lblResult->setText(tr("<b style='color:red'>El trimestre actual tiene la contabilidad cerrada. "
                                 "Revierta la contabilidad del trimestre actual para poder anular.</b>"));
         return;
@@ -247,7 +248,14 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
     // and would have marked every event ANULADA in one shot.
     qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_loadedTicket << "seq" << e.seq;
-    markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, QDate::currentDate());
+    // Stamp the date the closed-quarter guard checked, not the (later) reply time.
+    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, m_pendingCancelDate)) {
+        m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la anulación de %1, pero no se pudo guardar "
+                                     "en la base de datos local. Revise el log de depuración antes de hacer la "
+                                     "contabilidad.</b>").arg(e.invoiceId.toHtmlEscaped()));
+        setActionsEnabled(true);
+        return;
+    }
 
     e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
     rebuildTable();
