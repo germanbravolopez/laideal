@@ -114,6 +114,56 @@ private slots:
         QVERIFY(!Contabilidad::expenseIvaIsSummarised(-1));
     }
 
+    void test_figuresFromDetails()
+    {
+        IncomeTicketDetail t1; t1.nRecibo = "1"; t1.importe = 121.0;
+        IncomeTicketDetail t2; t2.nRecibo = "2"; t2.importe = 24.2; t2.invalidAmounts = 1;  // comma row already excluded
+        ExpenseDetail g21;  g21.iva = 21;  g21.importe = 121.0;
+        ExpenseDetail g10;  g10.iva = 10;  g10.importe = 110.0;
+        ExpenseDetail g0;   g0.iva = 0;    g0.importe = 40.0;
+        ExpenseDetail g4;   g4.iva = 4;    g4.importe = 104.0;    // unrecognised rate: counted only
+        ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: counted only
+        const Contabilidad::PeriodFigures f =
+            Contabilidad::figuresFromDetails({t1, t2}, {g21, g10, g0, g4, gNul}, 21.0);
+        QVERIFY(qAbs(f.ingImporte - 145.2) < 1e-9);
+        QVERIFY(qAbs(f.ingBase - 120.0) < 1e-9);
+        QCOMPARE(f.ingTickets, 2);
+        QVERIFY(qAbs(f.gas21Importe - 121.0) < 1e-9);
+        QVERIFY(qAbs(f.gas10Base - 100.0) < 1e-9);
+        QVERIFY(qAbs(f.gasNiImporte - 40.0) < 1e-9);
+        QVERIFY(qAbs(f.gastosImporteTotal() - 271.0) < 1e-9);       // 4 % and NULL rows not summed
+        QCOMPARE(f.gasFacturas, 5);                                  // but every row is counted
+    }
+
+    void test_yearTicketCountIsDistinct()
+    {
+        QuarterlyDetails d;
+        IncomeTicketDetail a; a.nRecibo = "T1";
+        IncomeTicketDetail b; b.nRecibo = "T2";
+        d.income[0] = {a};
+        d.income[1] = {a, b};                                        // T1 paid across Q1 and Q2
+        QCOMPARE(Contabilidad::yearTicketCount(d), 2);
+    }
+
+    void test_invalidAmountsFlagged()
+    {
+        IncomeTicketDetail t; t.nRecibo = "7"; t.importe = 10.0; t.garments = 2; t.invalidAmounts = 1;
+        ExpenseDetail bad; bad.nFactura = "F-9"; bad.iva = 21; bad.invalidAmount = true;
+        ExpenseDetail ok;  ok.nFactura = "F-1";  ok.iva = 21;  ok.importe = 121.0;
+        QCOMPARE(Contabilidad::invalidAmountCount({t}, {bad, ok}), 2);
+
+        const QString ing = Contabilidad::createHtmlDetailIngresos({t}, 21.0);
+        QVERIFY(ing.contains("<td>7 *</td>"));
+        QVERIFY(ing.contains("guardado con ',' decimal"));
+        QVERIFY(ing.contains("redondeados al c&eacute;ntimo"));
+
+        const QString gas = Contabilidad::createHtmlDetailGastos({bad, ok});
+        QVERIFY(gas.contains("importe no v&aacute;lido **"));
+        QVERIFY(gas.contains("Total (1 facturas)"));                 // the invalid row stays out
+        QVERIFY(gas.contains("1 factura(s) con el importe guardado con ',' decimal"));
+        QVERIFY(!gas.contains("tipo de IVA no reconocido"));         // not double-flagged as an odd rate
+    }
+
     void test_detailEmptyPeriod()
     {
         QVERIFY(Contabilidad::createHtmlDetailIngresos({}, 21.0).contains("Sin tickets cobrados en el periodo."));

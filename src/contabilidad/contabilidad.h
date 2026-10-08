@@ -9,6 +9,7 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDate>
+#include <QSet>
 #include <QVector>
 
 #include "sql_lite.h"
@@ -57,28 +58,10 @@ public:
     // with any other rate are flagged in the detail and kept out of its total.
     static bool expenseIvaIsSummarised(int iva);
 
-private slots:
-    void initialSettings();
-
-    void on_bb_ok_cancel_accepted();
-    void on_bb_ok_cancel_rejected();
-    void on_cb_config_currentTextChanged(const QString &arg1);
-
-    void generateContabilidad();
-    double getTotalIncome(QString table, int iva, int trimForYearConfig);
-    void updateLock();
-    void writeHtml(QString filename, QString html);
-
-private:
-    Ui::Contabilidad *ui;
-    QSqlDatabase db;
-
-    // Current accounting mode, read from the combobox index (not its text).
-    ConfigMode currentMode() const;
-
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
     // period so the ingresos/gastos tables and the summary share the same numbers.
+    // Public so the pure derivation below can be unit-tested.
     struct PeriodFigures {
         double ingImporte = 0.0, ingBase = 0.0, ingIva = 0.0;
         double gas10Importe = 0.0, gas10Base = 0.0, gas10Iva = 0.0;
@@ -101,19 +84,53 @@ private:
         }
     };
 
+    // Every report figure comes from the same detail rows the report lists, so a
+    // summary can never disagree with its detail tables. Sums the valid amounts
+    // (comma-decimal rows are flagged, not summed), buckets gastos by rate
+    // (10 / 21 / sin IVA; other or NULL rates are only counted), then applies
+    // figuresFromTotals' IVA base/cuota math.
+    static PeriodFigures figuresFromDetails(const QVector<IncomeTicketDetail> &income,
+                                            const QVector<ExpenseDetail> &expenses,
+                                            double ivaRate);
+    // Distinct tickets across the four quarter buckets: a ticket paid across two
+    // quarters appears in both, but is one ticket for the year.
+    static int yearTicketCount(const QuarterlyDetails &details);
+    // Comma-decimal amounts in a period's rows (listed but not summed).
+    static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,
+                                  const QVector<ExpenseDetail> &expenses);
+
+private slots:
+    void initialSettings();
+
+    void on_bb_ok_cancel_accepted();
+    void on_bb_ok_cancel_rejected();
+    void on_cb_config_currentTextChanged(const QString &arg1);
+
+    void generateContabilidad();
+    void updateLock();
+    void writeHtml(QString filename, QString html);
+
+private:
+    Ui::Contabilidad *ui;
+    QSqlDatabase db;
+
+    // Current accounting mode, read from the combobox index (not its text).
+    ConfigMode currentMode() const;
+
+
     void periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive);
     QString periodSubtitle(int trimForYearConfig);
-    PeriodFigures computeFigures(int trimForYearConfig);
-    // Pure IVA base/cuota derivation from the raw per-period totals. Shared by
-    // computeFigures (trimestral/mensual, per-period DB scans) and the annual
-    // path (one prefetched QuarterlyAccountingTotals), so both derive identical
-    // figures from the same inputs.
+    // Pure IVA base/cuota derivation from a period's raw totals (used by
+    // figuresFromDetails).
     static PeriodFigures figuresFromTotals(double ingImporte, int ingTickets,
                                            double gas10Importe, double gas21Importe,
                                            double gasNiImporte, int gasFacturas,
                                            double ivaRate);
     QString renderSection(const PeriodFigures &f, const QString &summaryHeading);
-    QString renderDetail(int trimForYearConfig, const QString &heading);
+    static QString renderDetailTables(const QString &heading,
+                                      const QVector<IncomeTicketDetail> &income,
+                                      const QVector<ExpenseDetail> &expenses,
+                                      double ivaRate);
     QString createHtmlTableIngresos(const PeriodFigures &f);
     QString createHtmlTableGastos(const PeriodFigures &f);
     QString createHtmlSummary(const PeriodFigures &f, const QString &heading);

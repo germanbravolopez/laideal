@@ -176,67 +176,72 @@ void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 void Contabilidad::generateContabilidad()
 {
     const int year = ui->sb_year->value();
+    const double ivaRate = AppSettings::ivaRate();
     QString contabilidadHtml, path, filename;
+    int invalidAmounts = 0;
 
-    if (currentMode() == Trimestral) {
-        contabilidadHtml = ReportHtml::documentOpen("Contabilidad - Trimestre " + QString::number(ui->sb_trim->value())
-                                                    + " · " + QString::number(year),
-                                                    periodSubtitle(0))
-                + renderSection(computeFigures(0), "Resumen del periodo")
-                + renderDetail(0, "Detalle del periodo")
+    if (currentMode() == Trimestral || currentMode() == Mensual) {
+        QDate start, endExclusive;
+        periodRange(0, start, endExclusive);
+        // One fetch per table: the summary and the detail tables use the same rows.
+        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive);
+        invalidAmounts = invalidAmountCount(income, expenses);
+
+        QString title, subtitle = periodSubtitle(0);
+        if (currentMode() == Trimestral) {
+            title = "Contabilidad - Trimestre " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
+            path = AppSettings::instance()->contabilidadPath();
+            filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
+        }
+        else {
+            // readLockForMonthAndYear reports an empty month as 0 (open), never 2.
+            const bool cerrada = combinedLockState(readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year),
+                                                   readLockForMonthAndYear(db, "gastos", ui->sb_trim->value(), year)) == 1;
+            title = "Reporte Mensual - Mes " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
+            subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
+            path = AppSettings::instance()->contabilidadPath() + "/Mensual";
+            filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
+        }
+        contabilidadHtml = ReportHtml::documentOpen(title, subtitle)
+                + renderSection(figuresFromDetails(income, expenses, ivaRate), "Resumen del periodo")
+                + renderDetailTables("Detalle del periodo", income, expenses, ivaRate)
                 + ReportHtml::documentClose();
-        path = AppSettings::instance()->contabilidadPath();
-        filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
-    }
-    else if (currentMode() == Mensual) {
-        // readLockForMonthAndYear reports an empty month as 0 (open), never 2.
-        bool cerrada = combinedLockState(readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year),
-                                         readLockForMonthAndYear(db, "gastos", ui->sb_trim->value(), year)) == 1;
-        contabilidadHtml = ReportHtml::documentOpen("Reporte Mensual - Mes " + QString::number(ui->sb_trim->value())
-                                                    + " · " + QString::number(year),
-                                                    periodSubtitle(0) + (cerrada ? " · Contabilidad cerrada"
-                                                                                  : " · Contabilidad no cerrada"))
-                + renderSection(computeFigures(0), "Resumen del periodo")
-                + renderDetail(0, "Detalle del periodo")
-                + ReportHtml::documentClose();
-        path = AppSettings::instance()->contabilidadPath() + "/Mensual";
-        filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
     }
     else {
         contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year));
-        // One grouped query per table for the whole year (bucketed by quarter)
-        // instead of computeFigures' 6 full-table scans per quarter (24 total).
-        // The IVA base/cuota math is identical (figuresFromTotals) - the grouped
-        // aggregation is asserted equal to the per-quarter helpers in
-        // test_sql_lite::test_annualAccountingByQuarter.
-        const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
-        const QuarterlyAccountingTotals totals = annualAccountingByQuarter(db, year);
+        // One scan per table for the whole year, bucketed by quarter; each quarter's
+        // figures and detail tables come from the same rows.
+        const QuarterlyDetails details = annualDetailsByQuarter(db, year);
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
             const int i = trim - 1;
-            bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
-                                             readLockForQuarter(db, "gastos", trim, year)) == 1;
-            PeriodFigures f = figuresFromTotals(
-                totals.ingImporte[i], totals.ingTickets[i],
-                totals.gas10Importe[i], totals.gas21Importe[i], totals.gasNiImporte[i],
-                totals.gasFacturas[i], ivaRate);
+            const bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
+                                                   readLockForQuarter(db, "gastos", trim, year)) == 1;
+            const PeriodFigures f = figuresFromDetails(details.income[i], details.expenses[i], ivaRate);
             annual.accumulate(f);
+            invalidAmounts += invalidAmountCount(details.income[i], details.expenses[i]);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
                     + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
         }
-        annual.ingTickets = totals.ingTicketsYear;   // distinct over the year, not the quarterly sum
+        annual.ingTickets = yearTicketCount(details);   // distinct over the year, not the quarterly sum
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
-        // One scan per table for the whole year, bucketed by quarter.
-        const QuarterlyDetails details = annualDetailsByQuarter(db, year);
         for (int trim = 1; trim < 5; trim++)
-            contabilidadHtml += "<h2>Detalle del trimestre " + QString::number(trim) + "</h2>"
-                    + createHtmlDetailIngresos(details.income[trim - 1], ivaRate)
-                    + createHtmlDetailGastos(details.expenses[trim - 1]);
+            contabilidadHtml += renderDetailTables("Detalle del trimestre " + QString::number(trim),
+                                                   details.income[trim - 1], details.expenses[trim - 1], ivaRate);
         contabilidadHtml += ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" + QString::number(year) + ".pdf";
+    }
+    if (invalidAmounts > 0) {
+        qCritical() << "Contabilidad::generateContabilidad:" << invalidAmounts << "comma-decimal importe(s) not summed";
+        QMessageBox::critical(this, "Error en la base de datos",
+                              QString("Hay %1 importe(s) guardados con ',' como separador decimal: no se han sumado "
+                                      "en la contabilidad y aparecen marcados en el detalle. Utilizar herramienta "
+                                      "de limpiado de importes decimales.").arg(invalidAmounts),
+                              QMessageBox::Ok, QMessageBox::Ok);
     }
     // create directory in case it does not exists
     if (!QFile::exists(path))
@@ -274,15 +279,6 @@ void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endEx
     periodRangeFor(mode, unit, ui->sb_year->value(), start, endExclusive);
 }
 
-double Contabilidad::getTotalIncome(QString table,
-                                   int iva,
-                                   int trimForYearConfig)
-{
-    QDate startDate, endDate;
-    periodRange(trimForYearConfig, startDate, endDate);
-    return totalPriceBetweenDates(db, table, startDate, endDate, iva);
-}
-
 QString Contabilidad::periodSubtitle(int trimForYearConfig)
 {
     QDate start, endExclusive;
@@ -312,19 +308,39 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
     return f;
 }
 
-Contabilidad::PeriodFigures Contabilidad::computeFigures(int trimForYearConfig)
+Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<IncomeTicketDetail> &income,
+                                                             const QVector<ExpenseDetail> &expenses,
+                                                             double ivaRate)
 {
-    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
-    QDate start, endExclusive;
-    periodRange(trimForYearConfig, start, endExclusive);
-    return figuresFromTotals(
-        getTotalIncome("ingresos", 0, trimForYearConfig),
-        countOperationsBetweenDates(db, "ingresos", start, endExclusive),
-        getTotalIncome("gastos", 10, trimForYearConfig),
-        getTotalIncome("gastos", 21, trimForYearConfig),
-        getTotalIncome("gastos", 0, trimForYearConfig),
-        countOperationsBetweenDates(db, "gastos", start, endExclusive),
-        ivaRate);
+    double ingImporte = 0.0, gas10 = 0.0, gas21 = 0.0, gasNi = 0.0;
+    for (const IncomeTicketDetail &t : income)
+        ingImporte += t.importe;
+    for (const ExpenseDetail &e : expenses) {
+        if (e.iva == 10)      gas10 += e.importe;
+        else if (e.iva == 21) gas21 += e.importe;
+        else if (e.iva == 0)  gasNi += e.importe;
+    }
+    return figuresFromTotals(ingImporte, income.size(), gas10, gas21, gasNi, expenses.size(), ivaRate);
+}
+
+int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
+{
+    QSet<QString> tickets;
+    for (const QVector<IncomeTicketDetail> &quarter : details.income)
+        for (const IncomeTicketDetail &t : quarter)
+            tickets.insert(t.nRecibo);
+    return tickets.size();
+}
+
+int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
+                                     const QVector<ExpenseDetail> &expenses)
+{
+    int n = 0;
+    for (const IncomeTicketDetail &t : income)
+        n += t.invalidAmounts;
+    for (const ExpenseDetail &e : expenses)
+        n += e.invalidAmount ? 1 : 0;
+    return n;
 }
 
 void Contabilidad::updateLock()
@@ -454,15 +470,20 @@ QString Contabilidad::createHtmlSummary(const PeriodFigures &f, const QString &h
     "</table>";
 }
 
-QString Contabilidad::renderDetail(int trimForYearConfig, const QString &heading)
+QString Contabilidad::renderDetailTables(const QString &heading,
+                                        const QVector<IncomeTicketDetail> &income,
+                                        const QVector<ExpenseDetail> &expenses,
+                                        double ivaRate)
 {
-    QDate start, endExclusive;
-    periodRange(trimForYearConfig, start, endExclusive);
-    const double ivaRate = static_cast<double>(AppSettings::instance()->ivaRate());
     return "<h2>" + heading + "</h2>"
-            + createHtmlDetailIngresos(incomeTicketsBetweenDates(db, start, endExclusive), ivaRate)
-            + createHtmlDetailGastos(expensesBetweenDates(db, start, endExclusive));
+            + createHtmlDetailIngresos(income, ivaRate)
+            + createHtmlDetailGastos(expenses);
 }
+
+// Footnote under each detail table: the per-row cells are rounded for display,
+// while the total row sums the unrounded amounts (and equals the summary).
+static const QString kRoundingNote = QStringLiteral(
+    "<p><i>Base e IVA de cada l&iacute;nea redondeados al c&eacute;ntimo; los totales se calculan sin redondear.</i></p>");
 
 // Zebra-striped row opener for the long, borderless detail tables.
 static QString detailRowOpen(int index)
@@ -485,13 +506,16 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
                 "<th style='text-align:right;'>Importe</th>"
             "</tr></thead><tbody>";
     double totalImporte = 0.0, totalBase = 0.0;
+    int flaggedTickets = 0;
     for (int i = 0; i < tickets.size(); i++) {
         const IncomeTicketDetail &t = tickets[i];
         const double base = t.importe / (1.0 + ivaRate / 100.0);
         totalImporte += t.importe;
         totalBase += base;
+        if (t.invalidAmounts > 0)
+            flaggedTickets++;
         html += detailRowOpen(i)
-                + "<td>" + t.nRecibo.toHtmlEscaped() + "</td>"
+                + "<td>" + t.nRecibo.toHtmlEscaped() + (t.invalidAmounts > 0 ? " *" : "") + "</td>"
                 + "<td>" + t.fechaPago.toHtmlEscaped() + "</td>"
                 + "<td>" + t.cliente.toHtmlEscaped() + "</td>"
                 + "<td style='text-align:right;'>" + QString::number(t.garments) + "</td>"
@@ -500,7 +524,10 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
     html += "<tr style='font-weight:bold;'><td colspan='4'>Total (" + QString::number(tickets.size()) + " tickets)</td>"
             + euroCell(totalBase) + euroCell(totalImporte - totalBase) + euroCell(totalImporte) + "</tr>"
             "</tbody></table>";
-    return html;
+    if (flaggedTickets > 0)
+        html += "<p>* " + QString::number(flaggedTickets) + " ticket(s) con alguna prenda cuyo importe est&aacute; "
+                "guardado con ',' decimal: esa prenda no se suma en el importe ni en el total.</p>";
+    return html + kRoundingNote;
 }
 
 bool Contabilidad::expenseIvaIsSummarised(int iva)
@@ -523,7 +550,7 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
                 "<th style='text-align:right;'>Importe</th>"
             "</tr></thead><tbody>";
     double totalImporte = 0.0, totalBase = 0.0;
-    int counted = 0;
+    int counted = 0, invalidRows = 0;
     for (int i = 0; i < expenses.size(); i++) {
         const ExpenseDetail &e = expenses[i];
         html += detailRowOpen(i)
@@ -534,6 +561,13 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
         // The summary only sums the 10 %, 21 % and sin-IVA columns; any other rate
         // (or a NULL one) is listed but flagged and kept out of the total, so the
         // total row still equals the summary.
+        if (e.invalidAmount) {
+            invalidRows++;
+            html += "<td style='text-align:right;'>" + QString::number(e.iva) + "</td>"
+                    "<td style='text-align:right;'>-</td><td style='text-align:right;'>-</td>"
+                    "<td style='text-align:right;'>importe no v&aacute;lido **</td></tr>";
+            continue;
+        }
         if (!expenseIvaIsSummarised(e.iva)) {
             html += "<td style='text-align:right;'>" + (e.iva < 0 ? QStringLiteral("?") : QString::number(e.iva)) + " *</td>"
                     "<td style='text-align:right;'>-</td><td style='text-align:right;'>-</td>"
@@ -551,10 +585,13 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
     html += "<tr style='font-weight:bold;'><td colspan='5'>Total (" + QString::number(counted) + " facturas)</td>"
             + euroCell(totalBase) + euroCell(totalImporte - totalBase) + euroCell(totalImporte) + "</tr>"
             "</tbody></table>";
-    const int flagged = expenses.size() - counted;
+    const int flagged = expenses.size() - counted - invalidRows;
     if (flagged > 0)
         html += "<p>* " + QString::number(flagged) + " factura(s) con un tipo de IVA no reconocido "
                 "(solo se suman sin IVA, 10 % y 21 %): aparecen en el listado pero no entran en el "
                 "resumen de gastos ni en este total. Revise su IVA en la tabla de gastos.</p>";
-    return html;
+    if (invalidRows > 0)
+        html += "<p>** " + QString::number(invalidRows) + " factura(s) con el importe guardado con ',' decimal: "
+                "no se suman en el resumen ni en este total.</p>";
+    return html + kRoundingNote;
 }

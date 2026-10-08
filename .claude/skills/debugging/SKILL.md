@@ -28,7 +28,7 @@ Name the layer before changing anything:
 
 | Symptom | Usually lives in |
 |---|---|
-| Wrong total / count / report figure | `sql_lite` predicates (`totalPriceBetweenDates`, `countOperationsBetweenDates`) or a UI loop summing proxy rows |
+| Wrong total / count / report figure | `sql_lite` detail listings (`incomeTicketsBetweenDates`, `expensesBetweenDates`, predicate `kIngresosIncomeWhere`) or a UI loop summing proxy rows |
 | Edit appears to save but reverts, or hits the wrong row | `RecogPrendas::updateDb` seams — check scoping by `(n_recibo, hash)` |
 | AEAT state wrong / button greyed | `parseVerifactuResponse`, `VerifactuEstado` transitions, `verifactuEstadoIsUnsubmitted()` |
 | Ticket content wrong | `Imprimir` call sites (flags passed to `buildTicket`) vs `TicketRenderer` |

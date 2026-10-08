@@ -40,10 +40,6 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-double      totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
-// Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
-// "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
-int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
 // Quarter-wide edit_lock state (quarter 1-4). Returns 1 if any row of the quarter
 // is accounting-locked, 0 if the quarter has data but is open, 2 if it has no rows.
@@ -212,38 +208,13 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
 // never fires. Ordered newest ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
-// Raw accounting totals for one year, bucketed by quarter (index 0 = Q1 .. 3 = Q4).
-// Produced by annualAccountingByQuarter with one grouped query per table, the
-// IVA base/cuota math is left to the caller (Contabilidad::figuresFromTotals).
-// The per-quarter filters mirror totalPriceBetweenDates / countOperationsBetweenDates
-// exactly. importe is SUM()'d in SQL, so - unlike the per-row helpers - this path
-// does not raise the comma-decimal corruption dialog; the trimestral/mensual
-// reports (which still call the per-row helpers) keep that guard.
-struct QuarterlyAccountingTotals {
-    double ingImporte[4]   = {0, 0, 0, 0};  // paid ingresos total (IVA incl.), ANULADA/RECTIFICADA excluded
-    int    ingTickets[4]   = {0, 0, 0, 0};  // distinct paid n_recibo
-    double gas10Importe[4] = {0, 0, 0, 0};  // gastos iva = 10
-    double gas21Importe[4] = {0, 0, 0, 0};  // gastos iva = 21
-    double gasNiImporte[4] = {0, 0, 0, 0};  // gastos iva = 0 (sin IVA)
-    int    gasFacturas[4]  = {0, 0, 0, 0};  // gastos rows, every iva rate (matches countOperations)
-    int    ingTicketsYear  = 0;             // distinct paid n_recibo over the whole year: a ticket
-                                            // paid across two quarters counts once, not twice
-};
-
-// One grouped query per table over the whole year, bucketed by quarter, for the
-// annual Contabilidad report - replaces the 24 per-quarter full-table substr()
-// scans (computeFigures x 4 quarters) with 2 scans. ingresos: SUM(importe) +
-// COUNT(DISTINCT n_recibo) under the exact pagado='SI' + ANULADA/RECTIFICADA +
-// date filters; gastos: SUM(importe) bucketed by quarter x iva (10/21/0) plus a
-// per-quarter row count over every rate. Quarter = (month + 2) / 3.
-QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year);
-
 // One paid ticket behind the Contabilidad ingresos summary: its garment rows in
 // the period aggregated by n_recibo (importe is IVA included).
 struct IncomeTicketDetail {
     QString nRecibo, cliente, fechaPago;
     double  importe  = 0.0;
     int     garments = 0;
+    int     invalidAmounts = 0;   // garment rows whose importe uses a comma decimal: listed, not summed
 };
 // One gastos row behind the Contabilidad gastos summary. iva is the stored rate
 // (0 = sin IVA), or -1 when the column is NULL.
@@ -251,13 +222,16 @@ struct ExpenseDetail {
     QString nFactura, empresa, servicio, fecha;
     int     iva     = 0;
     double  importe = 0.0;
+    bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
 };
 
-// Detail listings for the Contabilidad report, filtered by the same predicate as
-// totalPriceBetweenDates / countOperationsBetweenDates over [startDate, endDate),
-// so they reconcile: incomeTickets has countOperations("ingresos") entries summing
-// to totalPrice("ingresos"); expenses has countOperations("gastos") rows. Ordered
-// by date, then ticket number / id.
+// Detail listings for the Contabilidad report over [startDate, endDate). They are
+// the single source of every Contabilidad figure: the report sums these same rows,
+// so a summary and its detail table cannot disagree. Income: one entry per paid
+// n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
+// expenses: every gastos row. Ordered by date, then ticket number / id. A
+// comma-decimal importe is never summed: it is counted in invalidAmounts /
+// invalidAmount so the report can flag it.
 QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 

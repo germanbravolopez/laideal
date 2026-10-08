@@ -105,7 +105,7 @@ Defined in `verifactumanager.h` alongside `verifactuEstadoToString()` / `verifac
 | `NotSubmitted` | `"PENDIENTE"` | Paid and due at AEAT: submitted and awaiting a reply, or not sent yet (Verifactu not configured). `verifactuEstadoFromString()` also maps NULL/empty (legacy pre-Verifactu rows) here |
 | `Enviada` | `"ENVIADA"` | Submitted successfully to AEAT |
 | `Anulada` | `"ANULADA"` | Cancelled via `CancelInvoiceDialog` |
-| `Rectificada` | `"RECTIFICADA"` | Superseded by a substitution (`S`) rectificativa from `RectifyInvoiceDialog`. Excluded from `totalPriceBetweenDates()` so the new rectificativa row carries the corrected total without double-counting |
+| `Rectificada` | `"RECTIFICADA"` | Superseded by a substitution (`S`) rectificativa from `RectifyInvoiceDialog`. Excluded from the Contabilidad income predicate (`kIngresosIncomeWhere`) so the new rectificativa row carries the corrected total without double-counting |
 | `Error` | `"ERROR"` | Submission or cancellation failed |
 
 Never hardcode the string values — always go through the helpers, and map an AEAT reply with `verifactuEstadoForResult(result.status)` rather than testing `isSuccess()` by hand: only a definitive AEAT rejection (`ERROR`) may become `Error`. A timeout or transport failure leaves the outcome **unknown** — AEAT may already hold the invoice — so it becomes `PENDIENTE` and is routed to the startup recovery dialog. Recording it as `Error` instead offers the operator a "Reintentar" that can only ever answer "already exists".
@@ -178,7 +178,7 @@ Nine columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 | `verifactu_rectifies_n_recibo` | On a rectificativa row, points back to the `n_recibo` of the original ticket being corrected; empty on non-rectifying rows |
 | `verifactu_rectification_type` | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows |
 
-`Contabilidad::totalPriceBetweenDates()` excludes both `verifactu_estado = 'ANULADA'` and `verifactu_estado = 'RECTIFICADA'` rows from quarterly income — cancelled invoices and rows superseded by a substitution rectificativa must not contribute to taxable income (the rectifying row carries the corrected total). All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
+The Contabilidad income predicate (`kIngresosIncomeWhere` in `sql_lite.cpp`) excludes both `verifactu_estado = 'ANULADA'` and `verifactu_estado = 'RECTIFICADA'` rows from quarterly income — cancelled invoices and rows superseded by a substitution rectificativa must not contribute to taxable income (the rectifying row carries the corrected total). All other estados (including `PENDIENTE` and legacy NULL/empty) are included.
 
 ---
 

@@ -41,40 +41,36 @@ The **Bloquear datos** checkbox is enabled only in Trimestral mode and never whi
 
 ## Report content
 
-Per period the report renders three summary blocks (plus the [detail tables](#detail-tables-audit-annex) at the end), all from one `PeriodFigures` struct computed once by `computeFigures(trim)`:
+Every figure comes from the **detail rows** of the period, the same rows the report lists at the end. `sql_lite::incomeTicketsBetweenDates()` and `sql_lite::expensesBetweenDates()` are fetched once per period (annual: `sql_lite::annualDetailsByQuarter()`, one scan per table bucketed by quarter), and the pure static `Contabilidad::figuresFromDetails(income, expenses, ivaRate)` turns them into one `PeriodFigures`. The summary therefore cannot disagree with its detail tables. Per period the report renders three summary blocks plus the [detail tables](#detail-tables-audit-annex):
 
-- **Ingresos** — importe (IVA incl.), base imponible, IVA repercutido (single rate from `AppSettings::ivaRate()`).
-- **Gastos** — importe / base / IVA across the 10%, 21% and sin-IVA columns plus a Total column.
+- **Ingresos** — importe (IVA incl.), base imponible, IVA repercutido at the fixed 21 % (`AppSettings::ivaRate()`, not configurable).
+- **Gastos** — importe / base / IVA across the 10%, 21% and sin-IVA columns plus a Total column. Rows with another or NULL rate are counted but summed in no column.
 - **Resumen** — the figures added in the report-visualisation pass:
   - **Liquidación de IVA**: IVA repercutido − IVA soportado = **Resultado IVA**, labelled "a ingresar" / "a compensar" by sign (the modelo-303 figure).
   - **Resultado del periodo**: base ingresos − base gastos (beneficio / pérdida).
-  - **Operation counts**: distinct paid tickets (ingresos) and invoice rows (gastos), via `sql_lite::countOperationsBetweenDates()`.
+  - **Operation counts**: distinct paid tickets (the number of income detail rows) and gastos rows.
 
-The page header (business name / address / city / NIF / phone + issue date), the stylesheet and the euro formatting come from the shared `src/reporthtml/` lib (`ReportHtml::documentOpen/documentClose/formatEuro`), shared with the listados PDFs. The annual report renders one section per quarter plus a **Resumen anual consolidado** summing the four (`PeriodFigures::accumulate`). Its ticket count is the exception: it uses the year-level distinct count `QuarterlyAccountingTotals::ingTicketsYear`, because a ticket paid across two quarters would otherwise count twice. The period date range and the four-way quarter/month switch both flow through `periodRange()`. Everything stays table-based because `QTextDocument` only renders a subset of HTML/CSS.
+The page header (business name / address / city / NIF / phone + issue date), the stylesheet and the euro formatting come from the shared `src/reporthtml/` lib (`ReportHtml::documentOpen/documentClose/formatEuro`), shared with the listados PDFs. The annual report renders one section per quarter plus a **Resumen anual consolidado** summing the four (`PeriodFigures::accumulate`). Its ticket count is the exception: it uses `Contabilidad::yearTicketCount()`, the distinct tickets over the whole year, because a ticket paid across two quarters would otherwise count twice. The period date range and the four-way quarter/month switch both flow through `periodRange()`. Everything stays table-based because `QTextDocument` only renders a subset of HTML/CSS.
 
-The annual path does **not** call `computeFigures(trim)` per quarter (that would run 24 full-table `substr()` scans). Instead it fetches all four quarters' raw totals in one grouped query per table via `sql_lite::annualAccountingByQuarter(db, year)` (→ a `QuarterlyAccountingTotals`) and builds each quarter's `PeriodFigures` from it through the shared pure static `Contabilidad::figuresFromTotals(...)`. `computeFigures` (trimestral/mensual) now also derives its figures through `figuresFromTotals` after the per-period DB calls, so both paths apply identical IVA base/cuota math. The grouped aggregation is asserted equal to the per-quarter `totalPriceBetweenDates`/`countOperationsBetweenDates` in `test_sql_lite::test_annualAccountingByQuarter`. One caveat: the grouped query sums `importe` in SQL, so the annual report does not raise the comma-decimal corruption dialog the per-row helpers do — the trimestral/mensual paths retain it.
+**Comma-decimal amounts** (an `importe` stored as `10,50`) are never summed, in any mode. The collectors count them (`IncomeTicketDetail::invalidAmounts`, `ExpenseDetail::invalidAmount`), the detail tables mark them, and `generateContabilidad()` shows one error dialog per report pointing at the decimal clean-up tool. The quarterly and annual reports therefore always agree.
 
 ### Detail tables (audit annex)
 
 After the summary, each period gets a **Detalle** block listing the rows behind its figures, so every number can be audited:
 
-- **Detalle de ingresos**: one line per paid ticket (`n_recibo`, fecha de pago, cliente, number of garments, base, IVA, importe) and a total row. It comes from `sql_lite::incomeTicketsBetweenDates()`, which aggregates the ticket's garment rows by `n_recibo`.
-- **Detalle de gastos**: one line per `gastos` row (fecha, nº factura, empresa, servicio, IVA %, base, cuota, importe) and a total row. It comes from `sql_lite::expensesBetweenDates()`.
+- **Detalle de ingresos**: one line per paid ticket (`n_recibo`, fecha de pago, cliente, number of garments, base, IVA, importe) and a total row. Garment rows are aggregated by `n_recibo`. A ticket with a comma-decimal garment is marked `*` and that garment is not summed.
+- **Detalle de gastos**: one line per `gastos` row (fecha, nº factura, empresa, servicio, IVA %, base, cuota, importe) and a total row. A row with an unrecognised or NULL IVA is marked `*`, a comma-decimal amount `**`, and neither enters the total, with a note under the table.
 
-The listings use the **same SQL predicate** as `totalPriceBetweenDates` / `countOperationsBetweenDates` (the shared `kIngresosIncomeWhere` / `kGastosPeriodWhere` constants in `sql_lite.cpp`, also used by the grouped `annualAccountingByQuarter`), not a copy. Totals and listings both accumulate in `double`. So the line count equals the operation count and the total row equals the summary importe. Trimestral and mensual reports append one Detalle block for the period. The annual report appends one per quarter after the consolidated summary, fetched in one scan per table via `sql_lite::annualDetailsByQuarter`. Gastos rows whose IVA is not one the summary sums (sin IVA, 10 %, 21 %, per `Contabilidad::expenseIvaIsSummarised`), including a NULL IVA, are listed but marked `*` and kept out of the total row, with a note under the table. This keeps the total equal to the summary while still showing the row so it can be corrected. The HTML comes from the pure statics `Contabilidad::createHtmlDetailIngresos` / `createHtmlDetailGastos`, which are unit-tested. They use the borderless, zebra-striped `ReportHtml::tableOpen()` style because these tables span pages.
+Both tables end with a note that per-line base/IVA are rounded to cents while the totals are computed unrounded. The total rows equal the summary by construction. The listings filter with the shared `kIngresosIncomeWhere` / `kGastosPeriodWhere` predicates in `sql_lite.cpp`. Trimestral and mensual reports append one Detalle block for the period, and the annual report one per quarter after the consolidated summary. The HTML comes from the pure statics `Contabilidad::createHtmlDetailIngresos` / `createHtmlDetailGastos`, which are unit-tested. They use the borderless, zebra-striped `ReportHtml::tableOpen()` style because these tables span pages.
 
 ## Output
 
 The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= `<reports.root>/Contabilidad`) and opened automatically via `QDesktopServices::openUrl()`. Trimestral reports land directly in that folder; mensual reports under `Contabilidad/Mensual`, anual reports under `Contabilidad/Anual` (appended in `contabilidad.cpp`). `QDir::mkpath()` is called on demand.
 
-## IVA breakdown
-
-`getTotalIncome(table, iva, trimForYearConfig)` sums `importe` for a specific IVA rate and period. Called separately for 21%, 10%, and 0% rates when generating a trimestral/mensual report (the annual report sources the same per-quarter sums in one pass from `annualAccountingByQuarter`).
-
 ## Verifactu interaction
 
-`totalPriceBetweenDates` (in `sql_lite.cpp`) excludes `ingresos` rows where `verifactu_estado = 'ANULADA'` from the quarterly sum. A Verifactu-cancelled invoice must not appear in taxable income. All other estados (`ENVIADA`, `ERROR`, `PENDIENTE`, and legacy NULL/empty rows from before Verifactu) are included normally.
+The income predicate (`kIngresosIncomeWhere`) counts only `pagado = 'SI'` rows and excludes `verifactu_estado` `ANULADA` (voided in place or cancelled at AEAT) and `RECTIFICADA` (superseded by a substitution rectificativa, whose new row carries the corrected total). All other estados (`ENVIADA`, `ERROR`, `PENDIENTE`, and legacy NULL/empty rows from before Verifactu) are included normally. The excluded states come from the single list `kTotalsExcludedEstados`, shared with `garmentExcludedFromTotals`.
 
 ## Date range
 
-Both `ingresos` and `gastos` queries use a half-open interval `[startDate, endDate)` — `>= startDate AND < endDate`. `endDate` is always the first day of the next quarter, so this correctly excludes that boundary day from the current quarter. The range itself is computed by the pure static `Contabilidad::periodRangeFor(mode, unit, year, &start, &endExclusive)` (the `periodRange()` member just reads the widgets and delegates), unit-tested in `tests/test_contabilidad.cpp`.
+Both detail listings use a half-open interval `[startDate, endDate)` — `>= startDate AND < endDate`. `endDate` is always the first day of the next quarter, so this correctly excludes that boundary day from the current quarter. The range itself is computed by the pure static `Contabilidad::periodRangeFor(mode, unit, year, &start, &endExclusive)` (the `periodRange()` member just reads the widgets and delegates), unit-tested in `tests/test_contabilidad.cpp`.
