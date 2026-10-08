@@ -52,6 +52,14 @@ private slots:
         QCOMPARE(e, QDate(2026, 10, 1));
     }
 
+    void test_lockOptionOnlyForTrimestral()
+    {
+        QVERIFY(Contabilidad::lockOptionAvailable(Contabilidad::Trimestral, false));
+        QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Trimestral, true));   // reverting
+        QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Mensual, false));
+        QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Anual, false));
+    }
+
     void test_detailIngresosRowsAndTotal()
     {
         IncomeTicketDetail a; a.nRecibo = "9";  a.cliente = "Ana <S.L.>"; a.fechaPago = "05-03-2026"; a.importe = 121.0; a.garments = 1;

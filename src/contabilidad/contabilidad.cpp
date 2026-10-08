@@ -46,7 +46,12 @@ void Contabilidad::resetAllContents()
     ui->cb_config->setDisabled(revertirOn); // disable configuration combobox when reverting contabilidad mode
     ui->sb_year->setValue(QDate::currentDate().year());
     ui->checkBox_lock->setChecked(false);
-    ui->checkBox_lock->setDisabled(revertirOn); // disable lock checkbox when reverting
+    ui->checkBox_lock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
+}
+
+bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
+{
+    return mode == Trimestral && !reverting;
 }
 
 void Contabilidad::on_bb_ok_cancel_accepted()
@@ -131,6 +136,11 @@ void Contabilidad::on_bb_ok_cancel_rejected()
 
 void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
 {
+    // Only a quarterly report can close the books; untick so a hidden choice never applies.
+    const bool lockAvailable = lockOptionAvailable(currentMode(), revertirOn);
+    if (!lockAvailable)
+        ui->checkBox_lock->setChecked(false);
+    ui->checkBox_lock->setEnabled(lockAvailable);
     if (currentMode() == Mensual) {
         ui->lbl_trim->setVisible(true);
         ui->sb_trim->setVisible(true);

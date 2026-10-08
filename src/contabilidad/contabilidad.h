@@ -38,6 +38,10 @@ public:
     // range is the half-open [start, endExclusive).
     static void periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive);
 
+    // Closing (locking) the books is a quarterly action, and never offered while
+    // reverting: the "Bloquear datos" checkbox is enabled only for Trimestral.
+    static bool lockOptionAvailable(ConfigMode mode, bool reverting);
+
     // Detail tables appended to the report so each summary figure can be audited.
     // Pure HTML rendering (no DB / UI state), exposed for unit testing; the rows come
     // from incomeTicketsBetweenDates / expensesBetweenDates and the total row equals

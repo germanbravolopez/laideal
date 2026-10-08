@@ -37,6 +37,8 @@ In Trimestral mode the quarter's lock state is read first via `sql_lite::readLoc
    - `revertirOn=false` → sets `edit_lock=1` (locks the period)
    - `revertirOn=true` → sets `edit_lock=0` (unlocks the period)
 
+The **Bloquear datos** checkbox is enabled only in Trimestral mode and never while reverting (`Contabilidad::lockOptionAvailable`). Switching to Mensual or Anual unticks and greys it out, because only the quarterly flow closes the books.
+
 ## Report content
 
 Per period the report renders three summary blocks (plus the [detail tables](#detail-tables-audit-annex) at the end), all from one `PeriodFigures` struct computed once by `computeFigures(trim)`:
