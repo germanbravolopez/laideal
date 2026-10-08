@@ -217,6 +217,9 @@ Notable items:
 | verifactu_hash | TEXT | 64-char hex SHA-256 chained hash (`<sum1:Huella>` extracted from `verifactu_xml`); empty if not submitted or pre-fix. Local copy of AEAT's hash-chain value for tamper-detection (Art. 12 RD 1007/2023). AEAT regulatory term is "Huella"; column is named `verifactu_hash` to keep identifiers in English |
 | verifactu_rectifies_n_recibo | TEXT | On a rectificativa row, points back to the `n_recibo` of the original ticket being corrected; empty on non-rectifying rows. Combined with `verifactu_estado = RECTIFICADA` on the original gives a bidirectional audit link (Art. 8.2.a RD 1007/2023) |
 | verifactu_rectification_type | TEXT | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows. Mirrors the `RectificationType` sent to AEAT |
+| verifactu_invoice_seq | INTEGER | Partial-payment event number (0 for legacy / single-event tickets) |
+| verifactu_invoice_id | TEXT | Literal AEAT InvoiceID submitted for the row |
+| fecha_anulacion | TEXT | `dd-MM-yyyy`, set only when an AEAT cancellation (`markInvoiceSeqCancelled`) or substitution rectification (`markTicketRectified`) hits a row whose quarter was already closed (`edit_lock = 1`); never overwritten. Contabilidad keeps such a row as income in its closed quarter and subtracts it in the period of this date. Empty otherwise (column 26, added by `migrateDatabase`) |
 
 ### `prendas` (garment catalogue)
 

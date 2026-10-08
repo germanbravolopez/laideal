@@ -69,7 +69,16 @@ The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= 
 
 ## Verifactu interaction
 
-The income predicate (`kIngresosIncomeWhere`) counts only `pagado = 'SI'` rows and excludes `verifactu_estado` `ANULADA` (voided in place or cancelled at AEAT) and `RECTIFICADA` (superseded by a substitution rectificativa, whose new row carries the corrected total). All other estados (`ENVIADA`, `ERROR`, `PENDIENTE`, and legacy NULL/empty rows from before Verifactu) are included normally. The excluded states come from the single list `kTotalsExcludedEstados`, shared with `garmentExcludedFromTotals`.
+The income predicate (`kIngresosIncomeWhere`) counts only `pagado = 'SI'` rows and excludes `verifactu_estado` `ANULADA` (voided in place or cancelled at AEAT) and `RECTIFICADA` (superseded by a substitution rectificativa, whose new row carries the corrected total), **unless the row has a `fecha_anulacion`** (see below). All other estados (`ENVIADA`, `ERROR`, `PENDIENTE`, and legacy NULL/empty rows from before Verifactu) are included normally. The excluded states come from the single list `kTotalsExcludedEstados`, shared with `garmentExcludedFromTotals`.
+
+## Closed quarters never change: regularisations
+
+A filed quarter must not change when one of its tickets is later cancelled at the AEAT or replaced by a substitution rectificativa. When either happens to a row whose quarter is already closed (`edit_lock = 1`), `sql_lite::markInvoiceSeqCancelled` / `markTicketRectified` also stamp **`fecha_anulacion`**: the cancellation date (today), or the rectificativa's date. The date is never overwritten once set. Such a row:
+
+- still counts as income in its **original closed quarter** (`kIngresosIncomeWhere` lets it through), so regenerating that quarter reproduces the filed figures;
+- is subtracted in the period containing `fecha_anulacion`. `sql_lite::regularizationsBetweenDates()` (annual: `QuarterlyDetails::regularizations`) lists it, `figuresFromDetails` nets it out of income (`PeriodFigures::ingRegularizacion`), the Ingresos table shows "Ingresos del periodo" / "Anulaciones / rectificaciones de periodos anteriores" / net "Importe total", and the detail annex adds an **Anulaciones y rectificaciones de periodos anteriores** table with negative amounts.
+
+Rows of a quarter that was still open behave as before: they simply drop out of their own quarter. Two guards keep a filed report from moving. The rectificativa date must fall in an open quarter (`RectifyInvoiceDialog`, via `sql_lite::quarterIsClosed`). A cancellation is refused while today's quarter is closed (`CancelInvoiceDialog`), because the subtraction is dated today. `quarterIsClosed` checks the whole quarter across `ingresos` and `gastos`, so a month without rows inside a closed quarter still reads as closed. Cancellations made before 10.12 have no `fecha_anulacion` and stay excluded from their own quarter.
 
 ## Date range
 

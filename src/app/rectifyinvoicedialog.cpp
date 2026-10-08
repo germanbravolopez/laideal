@@ -256,6 +256,14 @@ void RectifyInvoiceDialog::onRectifyClicked()
         return;
     }
 
+    // The rectificativa row is income dated on this day: never into a closed quarter.
+    const QDate rectifyDate = m_deRectifyDate->date();
+    if (quarterIsClosed(db, rectifyDate)) {
+        m_lblResult->setText("<b style='color:red'>La fecha de la rectificativa pertenece a un trimestre "
+                             "con la contabilidad cerrada. Elija una fecha de un periodo abierto.</b>");
+        return;
+    }
+
     const double ivaRate    = AppSettings::instance()->ivaRate();
     const double divisor    = 1.0 + ivaRate / 100.0;
     const double newTaxBase   = amountWithIva / divisor;
@@ -450,15 +458,8 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     // count toward accounting. Differences (I) leaves the original untouched - the
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
-        qDebug() << "RectifyInvoiceDialog: UPDATE ingresos SET verifactu_estado = RECTIFICADA WHERE n_recibo ="
-                 << m_loadedTicket;
-        QSqlQuery up(db);
-        up.prepare("UPDATE ingresos SET verifactu_estado = :estado WHERE n_recibo = :num");
-        up.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
-        up.bindValue(":num",    m_loadedTicket);
-        if (!up.exec())
-            qWarning() << "RectifyInvoiceDialog: UPDATE estado=RECTIFICADA failed for ticket"
-                       << m_loadedTicket << "-" << up.lastError().text();
+        qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
+        markTicketRectified(db, m_loadedTicket, m_newInvoiceDate);
     }
     db.close();
 }

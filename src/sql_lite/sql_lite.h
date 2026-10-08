@@ -225,22 +225,54 @@ struct ExpenseDetail {
     bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
 };
 
+// A paid ticket from an already-closed quarter that was cancelled at AEAT
+// (ANULADA) or superseded by a substitution rectificativa (RECTIFICADA) after the
+// close. Its closed quarter keeps it as income (the filed report never changes);
+// the period containing fechaAnulacion subtracts it. importe is IVA included.
+struct RegularizationDetail {
+    QString nRecibo, cliente, fechaPago, fechaAnulacion, verifactuEstado;
+    double  importe  = 0.0;
+    int     garments = 0;
+    int     invalidAmounts = 0;
+};
+
 // Detail listings for the Contabilidad report over [startDate, endDate). They are
 // the single source of every Contabilidad figure: the report sums these same rows,
 // so a summary and its detail table cannot disagree. Income: one entry per paid
 // n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
 // expenses: every gastos row. Ordered by date, then ticket number / id. A
 // comma-decimal importe is never summed: it is counted in invalidAmounts /
-// invalidAmount so the report can flag it.
+// invalidAmount so the report can flag it. A regularised row (fecha_anulacion
+// set) still counts as income in its original period, and is listed by
+// regularizationsBetweenDates in the period of its fecha_anulacion.
 QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+// Regularisations whose fecha_anulacion falls in [startDate, endDate), one entry per
+// n_recibo, ordered by that date.
+QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+
+// True when Contabilidad has closed the quarter containing date: any ingresos or
+// gastos row of that quarter is locked. Unlike readLockForMonthAndYear, a month
+// with no rows inside a closed quarter still reads as closed.
+bool quarterIsClosed(QSqlDatabase &db, QDate date);
+
+// Marks one payment event (n_recibo + seq) ANULADA after an accepted AEAT
+// cancellation. Rows already closed by Contabilidad (edit_lock = 1) also get
+// fecha_anulacion = cancelDate (never overwriting one already set), so the closed
+// quarter keeps them and the cancellation is accounted in the period it happens.
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
+// Marks every row of a ticket RECTIFICADA after an accepted substitution
+// rectificativa; closed rows get fecha_anulacion = the rectificativa's date, the
+// same period its replacement row is counted in.
+bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectificationDate);
 
 // The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),
 // from one scan per table instead of one per quarter. Each bucket equals the
 // period listing for that quarter's range.
 struct QuarterlyDetails {
-    QVector<IncomeTicketDetail> income[4];
-    QVector<ExpenseDetail>      expenses[4];
+    QVector<IncomeTicketDetail>   income[4];
+    QVector<ExpenseDetail>        expenses[4];
+    QVector<RegularizationDetail> regularizations[4];   // bucketed by fecha_anulacion
 };
 QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year);
 

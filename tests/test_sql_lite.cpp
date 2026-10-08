@@ -98,7 +98,7 @@ private slots:
             " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
             " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
             " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-            " verifactu_invoice_id TEXT)"), qPrintable(q.lastError().text()));
+            " verifactu_invoice_id TEXT, fecha_anulacion TEXT)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE gastos ("
             " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
@@ -241,6 +241,80 @@ private slots:
 
     // The annual one-scan listing must bucket exactly like four per-quarter calls,
     // including a ticket whose garments were paid in two different quarters.
+    // An AEAT cancellation stamps fecha_anulacion only on rows whose quarter was
+    // already closed (edit_lock = 1), and only on the cancelled payment event.
+    void test_markInvoiceSeqCancelled_stampsOnlyClosedRows()
+    {
+        insertIngreso("40", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/1);
+        insertIngreso("40", "20-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0, /*seq=*/2);
+        insertIngreso("41", "20-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0, /*seq=*/1);
+
+        QVERIFY(markInvoiceSeqCancelled(m_db, "40", 1, QDate(2026, 5, 15)));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "41", 1, QDate(2026, 5, 15)));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=1"), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=1"), QStringLiteral("15-05-2026"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='41'"), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='41'"), QString());  // open quarter
+    }
+
+    // A closed quarter reads closed even for a month without rows (August), and
+    // from either table; an existing fecha_anulacion is never overwritten.
+    void test_quarterIsClosed_andStampNotOverwritten()
+    {
+        insertIngreso("60", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);   // Q3 closed via July
+        QVERIFY(quarterIsClosed(m_db, QDate(2026, 8, 15)));             // August has no rows
+        QVERIFY(!quarterIsClosed(m_db, QDate(2026, 10, 1)));
+        exec("INSERT INTO gastos (id, fecha, importe, iva, edit_lock) VALUES (1, '05-11-2026', '10.00', 21, 1)");
+        QVERIFY(quarterIsClosed(m_db, QDate(2026, 12, 1)));             // closed through gastos only
+
+        QVERIFY(markInvoiceSeqCancelled(m_db, "60", 0, QDate(2026, 10, 2)));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "60", 0, QDate(2027, 1, 5)));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='60'"), QStringLiteral("02-10-2026"));
+    }
+
+    void test_markTicketRectified_stampsClosedRowsWithRectificationDate()
+    {
+        insertIngreso("42", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
+        insertIngreso("43", "10-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
+        QVERIFY(markTicketRectified(m_db, "42", QDate(2026, 6, 1)));
+        QVERIFY(markTicketRectified(m_db, "43", QDate(2026, 6, 1)));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='42'"), QStringLiteral("RECTIFICADA"));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='42'"), QStringLiteral("01-06-2026"));
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='43'"), QString());
+    }
+
+    // A ticket from a closed Q1 cancelled in Q2 stays income in Q1 (the filed report
+    // does not change) and is listed as a regularisation in Q2. A cancellation in an
+    // open quarter just drops out, as before.
+    void test_regularizations_countWhereTheyHappen()
+    {
+        insertIngreso("50", "10-02-2026", "121.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);
+        insertIngreso("51", "12-02-2026", "50.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);
+        QVERIFY(markInvoiceSeqCancelled(m_db, "50", 0, QDate(2026, 5, 15)));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "51", 0, QDate(2026, 5, 15)));
+
+        const QDate q1s(2026, 1, 1), q2s(2026, 4, 1), q3s(2026, 7, 1);
+        const QVector<IncomeTicketDetail> q1 = incomeTicketsBetweenDates(m_db, q1s, q2s);
+        QCOMPARE(q1.size(), 1);
+        QCOMPARE(q1[0].nRecibo, QStringLiteral("50"));                  // closed quarter keeps it
+        QVERIFY(regularizationsBetweenDates(m_db, q1s, q2s).isEmpty());
+
+        const QVector<RegularizationDetail> q2 = regularizationsBetweenDates(m_db, q2s, q3s);
+        QCOMPARE(q2.size(), 1);                                         // 51 was open: no regularisation
+        QCOMPARE(q2[0].nRecibo, QStringLiteral("50"));
+        QCOMPARE(q2[0].fechaPago, QStringLiteral("10-02-2026"));
+        QCOMPARE(q2[0].fechaAnulacion, QStringLiteral("15-05-2026"));
+        QCOMPARE(q2[0].verifactuEstado, QStringLiteral("ANULADA"));
+        QVERIFY(qAbs(q2[0].importe - 121.0) < 0.001);
+        QVERIFY(incomeTicketsBetweenDates(m_db, q2s, q3s).isEmpty());
+
+        const QuarterlyDetails d = annualDetailsByQuarter(m_db, 2026);
+        QCOMPARE(d.income[0].size(), 1);
+        QCOMPARE(d.regularizations[0].size(), 0);
+        QCOMPARE(d.regularizations[1].size(), 1);                       // bucketed by fecha_anulacion
+    }
+
     void test_annualDetailsByQuarter_matchesPerQuarterListings()
     {
         insertIngreso("20", "15-02-2026", "10.00", "SI", "ENVIADA");

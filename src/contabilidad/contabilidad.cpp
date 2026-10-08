@@ -186,7 +186,8 @@ void Contabilidad::generateContabilidad()
         // One fetch per table: the summary and the detail tables use the same rows.
         const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive);
         const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive);
-        invalidAmounts = invalidAmountCount(income, expenses);
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, endExclusive);
+        invalidAmounts = invalidAmountCount(income, regs, expenses);
 
         QString title, subtitle = periodSubtitle(0);
         if (currentMode() == Trimestral) {
@@ -204,8 +205,8 @@ void Contabilidad::generateContabilidad()
             filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
         }
         contabilidadHtml = ReportHtml::documentOpen(title, subtitle)
-                + renderSection(figuresFromDetails(income, expenses, ivaRate), "Resumen del periodo")
-                + renderDetailTables("Detalle del periodo", income, expenses, ivaRate)
+                + renderSection(figuresFromDetails(income, regs, expenses, ivaRate), "Resumen del periodo")
+                + renderDetailTables("Detalle del periodo", income, regs, expenses, ivaRate)
                 + ReportHtml::documentClose();
     }
     else {
@@ -218,9 +219,10 @@ void Contabilidad::generateContabilidad()
             const int i = trim - 1;
             const bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
                                                    readLockForQuarter(db, "gastos", trim, year)) == 1;
-            const PeriodFigures f = figuresFromDetails(details.income[i], details.expenses[i], ivaRate);
+            const PeriodFigures f = figuresFromDetails(details.income[i], details.regularizations[i],
+                                                       details.expenses[i], ivaRate);
             annual.accumulate(f);
-            invalidAmounts += invalidAmountCount(details.income[i], details.expenses[i]);
+            invalidAmounts += invalidAmountCount(details.income[i], details.regularizations[i], details.expenses[i]);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
                     + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
@@ -230,7 +232,8 @@ void Contabilidad::generateContabilidad()
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
         for (int trim = 1; trim < 5; trim++)
             contabilidadHtml += renderDetailTables("Detalle del trimestre " + QString::number(trim),
-                                                   details.income[trim - 1], details.expenses[trim - 1], ivaRate);
+                                                   details.income[trim - 1], details.regularizations[trim - 1],
+                                                   details.expenses[trim - 1], ivaRate);
         contabilidadHtml += ReportHtml::documentClose();
         path = AppSettings::instance()->contabilidadPath() + "/Anual";
         filename = "/reporte_anual_" + QString::number(year) + ".pdf";
@@ -309,18 +312,24 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
 }
 
 Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<IncomeTicketDetail> &income,
+                                                             const QVector<RegularizationDetail> &regularizations,
                                                              const QVector<ExpenseDetail> &expenses,
                                                              double ivaRate)
 {
-    double ingImporte = 0.0, gas10 = 0.0, gas21 = 0.0, gasNi = 0.0;
+    double ingImporte = 0.0, regularizacion = 0.0, gas10 = 0.0, gas21 = 0.0, gasNi = 0.0;
     for (const IncomeTicketDetail &t : income)
         ingImporte += t.importe;
+    for (const RegularizationDetail &r : regularizations)
+        regularizacion += r.importe;
     for (const ExpenseDetail &e : expenses) {
         if (e.iva == 10)      gas10 += e.importe;
         else if (e.iva == 21) gas21 += e.importe;
         else if (e.iva == 0)  gasNi += e.importe;
     }
-    return figuresFromTotals(ingImporte, income.size(), gas10, gas21, gasNi, expenses.size(), ivaRate);
+    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion, income.size(),
+                                        gas10, gas21, gasNi, expenses.size(), ivaRate);
+    f.ingRegularizacion = regularizacion;
+    return f;
 }
 
 int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
@@ -333,11 +342,14 @@ int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
 }
 
 int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
+                                     const QVector<RegularizationDetail> &regularizations,
                                      const QVector<ExpenseDetail> &expenses)
 {
     int n = 0;
     for (const IncomeTicketDetail &t : income)
         n += t.invalidAmounts;
+    for (const RegularizationDetail &r : regularizations)
+        n += r.invalidAmounts;
     for (const ExpenseDetail &e : expenses)
         n += e.invalidAmount ? 1 : 0;
     return n;
@@ -411,6 +423,10 @@ QString Contabilidad::createHtmlTableIngresos(const PeriodFigures &f)
     "<h3>Ingresos</h3>"
     + ReportHtml::tableOpen(true) +
         "<tr><th>Concepto</th><th style='text-align:right;'>Importe</th></tr>"
+        + (f.ingRegularizacion > 0.0
+           ? "<tr><td>Ingresos del periodo (IVA incluido)</td>" + euroCell(f.ingImporte + f.ingRegularizacion) + "</tr>"
+             "<tr><td>Anulaciones / rectificaciones de periodos anteriores</td>" + euroCell(-f.ingRegularizacion) + "</tr>"
+           : QString()) +
         "<tr><td>Importe total (IVA incluido)</td>" + euroCell(f.ingImporte) + "</tr>"
         "<tr style='background-color:#f6f7f9;'><td>Base imponible</td>" + euroCell(f.ingBase) + "</tr>"
         "<tr><td>IVA repercutido</td>" + euroCell(f.ingIva) + "</tr>"
@@ -472,11 +488,13 @@ QString Contabilidad::createHtmlSummary(const PeriodFigures &f, const QString &h
 
 QString Contabilidad::renderDetailTables(const QString &heading,
                                         const QVector<IncomeTicketDetail> &income,
+                                        const QVector<RegularizationDetail> &regularizations,
                                         const QVector<ExpenseDetail> &expenses,
                                         double ivaRate)
 {
     return "<h2>" + heading + "</h2>"
             + createHtmlDetailIngresos(income, ivaRate)
+            + createHtmlDetailRegularizaciones(regularizations, ivaRate)
             + createHtmlDetailGastos(expenses);
 }
 
@@ -533,6 +551,50 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
 bool Contabilidad::expenseIvaIsSummarised(int iva)
 {
     return iva == 0 || iva == 10 || iva == 21;
+}
+
+QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<RegularizationDetail> &regularizations,
+                                                      double ivaRate)
+{
+    if (regularizations.isEmpty())
+        return QString();
+
+    QString html = "<h3>Anulaciones y rectificaciones de periodos anteriores</h3>"
+                   "<p>Tickets de un trimestre ya cerrado anulados o sustituidos en este periodo: "
+                   "el trimestre original los mantiene y aqu&iacute; se restan.</p>"
+            + ReportHtml::tableOpen() +
+            "<thead><tr>"
+                "<th>N&ordm; recibo</th><th>Fecha pago</th><th>Fecha anulaci&oacute;n</th><th>Motivo</th><th>Cliente</th>"
+                "<th style='text-align:right;'>Base</th>"
+                "<th style='text-align:right;'>IVA</th>"
+                "<th style='text-align:right;'>Importe</th>"
+            "</tr></thead><tbody>";
+    double total = 0.0, totalBase = 0.0;
+    int flagged = 0;
+    for (int i = 0; i < regularizations.size(); i++) {
+        const RegularizationDetail &r = regularizations[i];
+        const double base = r.importe / (1.0 + ivaRate / 100.0);
+        total += r.importe;
+        totalBase += base;
+        if (r.invalidAmounts > 0)
+            flagged++;
+        const QString motivo = r.verifactuEstado == QLatin1String("RECTIFICADA") ? QStringLiteral("Rectificada")
+                                                                                  : QStringLiteral("Anulada");
+        html += detailRowOpen(i)
+                + "<td>" + r.nRecibo.toHtmlEscaped() + (r.invalidAmounts > 0 ? " *" : "") + "</td>"
+                + "<td>" + r.fechaPago.toHtmlEscaped() + "</td>"
+                + "<td>" + r.fechaAnulacion.toHtmlEscaped() + "</td>"
+                + "<td>" + motivo + "</td>"
+                + "<td>" + r.cliente.toHtmlEscaped() + "</td>"
+                + euroCell(-base) + euroCell(-(r.importe - base)) + euroCell(-r.importe) + "</tr>";
+    }
+    html += "<tr style='font-weight:bold;'><td colspan='5'>Total (" + QString::number(regularizations.size()) + " tickets)</td>"
+            + euroCell(-totalBase) + euroCell(-(total - totalBase)) + euroCell(-total) + "</tr>"
+            "</tbody></table>";
+    if (flagged > 0)
+        html += "<p>* " + QString::number(flagged) + " ticket(s) con alguna prenda cuyo importe est&aacute; "
+                "guardado con ',' decimal: esa prenda no se resta.</p>";
+    return html + kRoundingNote;
 }
 
 QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses)

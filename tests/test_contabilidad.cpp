@@ -124,7 +124,7 @@ private slots:
         ExpenseDetail g4;   g4.iva = 4;    g4.importe = 104.0;    // unrecognised rate: counted only
         ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: counted only
         const Contabilidad::PeriodFigures f =
-            Contabilidad::figuresFromDetails({t1, t2}, {g21, g10, g0, g4, gNul}, 21.0);
+            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul}, 21.0);
         QVERIFY(qAbs(f.ingImporte - 145.2) < 1e-9);
         QVERIFY(qAbs(f.ingBase - 120.0) < 1e-9);
         QCOMPARE(f.ingTickets, 2);
@@ -133,6 +133,39 @@ private slots:
         QVERIFY(qAbs(f.gasNiImporte - 40.0) < 1e-9);
         QVERIFY(qAbs(f.gastosImporteTotal() - 271.0) < 1e-9);       // 4 % and NULL rows not summed
         QCOMPARE(f.gasFacturas, 5);                                  // but every row is counted
+    }
+
+    // A regularisation (cancellation of an earlier closed quarter's ticket) nets the
+    // period's income without touching its ticket count.
+    void test_figuresFromDetailsNetsRegularizations()
+    {
+        IncomeTicketDetail t; t.nRecibo = "50"; t.importe = 242.0;
+        RegularizationDetail r; r.nRecibo = "12"; r.importe = 121.0;
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({t}, {r}, {}, 21.0);
+        QVERIFY(qAbs(f.ingImporte - 121.0) < 1e-9);                  // 242 - 121
+        QVERIFY(qAbs(f.ingRegularizacion - 121.0) < 1e-9);
+        QVERIFY(qAbs(f.ingBase - 100.0) < 1e-9);
+        QCOMPARE(f.ingTickets, 1);                                     // the cancelled ticket is not counted here
+
+        Contabilidad::PeriodFigures year;
+        year.accumulate(f);
+        year.accumulate(f);
+        QVERIFY(qAbs(year.ingRegularizacion - 242.0) < 1e-9);
+    }
+
+    void test_detailRegularizaciones()
+    {
+        QVERIFY(Contabilidad::createHtmlDetailRegularizaciones({}, 21.0).isEmpty());   // no table when none
+
+        RegularizationDetail a; a.nRecibo = "12"; a.cliente = "Ana"; a.fechaPago = "10-02-2026";
+        a.fechaAnulacion = "15-05-2026"; a.verifactuEstado = "ANULADA"; a.importe = 121.0;
+        RegularizationDetail b; b.nRecibo = "13"; b.verifactuEstado = "RECTIFICADA"; b.importe = 24.2;
+        const QString html = Contabilidad::createHtmlDetailRegularizaciones({a, b}, 21.0);
+        QVERIFY(html.contains("Anulaciones y rectificaciones de periodos anteriores"));
+        QVERIFY(html.contains("<td>15-05-2026</td>"));
+        QVERIFY(html.contains("<td>Anulada</td>") && html.contains("<td>Rectificada</td>"));
+        QVERIFY(html.contains("Total (2 tickets)"));
+        QVERIFY(html.contains(ReportHtml::formatEuro(-145.2)));         // amounts shown negative
     }
 
     void test_yearTicketCountIsDistinct()
@@ -150,7 +183,7 @@ private slots:
         IncomeTicketDetail t; t.nRecibo = "7"; t.importe = 10.0; t.garments = 2; t.invalidAmounts = 1;
         ExpenseDetail bad; bad.nFactura = "F-9"; bad.iva = 21; bad.invalidAmount = true;
         ExpenseDetail ok;  ok.nFactura = "F-1";  ok.iva = 21;  ok.importe = 121.0;
-        QCOMPARE(Contabilidad::invalidAmountCount({t}, {bad, ok}), 2);
+        QCOMPARE(Contabilidad::invalidAmountCount({t}, {}, {bad, ok}), 2);
 
         const QString ing = Contabilidad::createHtmlDetailIngresos({t}, 21.0);
         QVERIFY(ing.contains("<td>7 *</td>"));

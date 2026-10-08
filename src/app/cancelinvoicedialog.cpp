@@ -197,6 +197,14 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     if (!m_verifactu) return;
     if (!m_pendingCancelId.isEmpty()) return; // already in flight
 
+    // A cancellation of a closed quarter's invoice is accounted today; refuse it while
+    // today's quarter is itself closed, or that filed report would change.
+    if (quarterIsClosed(db, QDate::currentDate())) {
+        m_lblResult->setText(tr("<b style='color:red'>El trimestre actual tiene la contabilidad cerrada. "
+                                "Revierta la contabilidad del trimestre actual para poder anular.</b>"));
+        return;
+    }
+
     const Event &e = m_events[row];
     setActionsEnabled(false);
     m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId));
@@ -238,19 +246,8 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     // events of the same n_recibo stay ENVIADA. This is the fix the 8.5 blocker
     // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
     // and would have marked every event ANULADA in one shot.
-    qDebug() << "CancelInvoiceDialog: UPDATE ingresos SET verifactu_estado=ANULADA"
-             << "WHERE n_recibo =" << m_loadedTicket << "AND verifactu_invoice_seq =" << e.seq;
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET verifactu_estado = :estado "
-              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
-    q.bindValue(":num",    m_loadedTicket);
-    q.bindValue(":seq",    e.seq);
-    if (!q.exec())
-        qWarning() << "CancelInvoiceDialog: UPDATE estado=ANULADA failed for ticket"
-                   << m_loadedTicket << "seq" << e.seq << "-" << q.lastError().text();
-    db.close();
+    qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_loadedTicket << "seq" << e.seq;
+    markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, QDate::currentDate());
 
     e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
     rebuildTable();
