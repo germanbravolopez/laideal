@@ -194,7 +194,7 @@ The release is the second stage of the CI workflow: `.github/workflows/ci.yml` h
 2. (release job) Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
 3. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, for `windeployqt` + the runtime DLLs) and Inno Setup 6 - no rebuild.
 4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
-5. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+5. Extracts the `X.Y` section from `releases_notes_es.txt` and `releases_notes.txt` (fails if either is missing/empty) and publishes a GitHub Release `X.Y` with a bilingual body (Spanish, then English - also what the in-app updater shows) with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
 
 So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
 
