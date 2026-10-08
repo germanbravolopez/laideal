@@ -256,6 +256,22 @@ void RectifyInvoiceDialog::onRectifyClicked()
         return;
     }
 
+    // The rectificativa row is income dated on this day: never before the original
+    // payment (its subtraction would land in a period that never counted it), and
+    // never into a closed quarter.
+    const QDate rectifyDate = m_deRectifyDate->date();
+    const QDate lastPayment = ticketLastPaymentDate(db, m_loadedTicket);
+    if (lastPayment.isValid() && rectifyDate < lastPayment) {
+        m_lblResult->setText(QString("<b style='color:red'>La fecha de la rectificativa no puede ser anterior "
+                                     "al cobro del ticket original (%1).</b>").arg(lastPayment.toString("dd-MM-yyyy")));
+        return;
+    }
+    if (quarterIsClosed(db, rectifyDate)) {
+        m_lblResult->setText("<b style='color:red'>La fecha de la rectificativa pertenece a un trimestre "
+                             "con la contabilidad cerrada. Elija una fecha de un periodo abierto.</b>");
+        return;
+    }
+
     const double ivaRate    = AppSettings::instance()->ivaRate();
     const double divisor    = 1.0 + ivaRate / 100.0;
     const double newTaxBase   = amountWithIva / divisor;
@@ -313,9 +329,9 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
     if (requestId != m_pendingRectifyId) return; // not ours
     m_pendingRectifyId.clear();
 
-    applyRectificationResult(result);
+    const bool localOk = applyRectificationResult(result);
 
-    if (result.isSuccess()) {
+    if (result.isSuccess() && localOk) {
         m_lblResult->setText(
             QString("<b style='color:green'>Rectificativa enviada.</b><br>"
                     "Nuevo ticket: %1<br>CSV: %2")
@@ -324,6 +340,11 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
         m_loadedTicket.clear();
         m_leTicketNum->clear();
         m_lblInfo->setText("-");
+    } else if (result.isSuccess()) {
+        // AEAT accepted but the local mark failed: keep the red message set by
+        // applyRectificationResult, and do not offer to rectify the same ticket again.
+        m_loadedTicket.clear();
+        m_leTicketNum->clear();
     } else {
         m_lblResult->setText(
             QString("<b style='color:red'>Error al rectificar:</b> %1")
@@ -400,8 +421,9 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     db.close();
 }
 
-void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
+bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
 {
+    bool localOk = true;
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const VerifactuEstado estado = result.isSuccess() ? VerifactuEstado::Enviada
                                                       : VerifactuEstado::Error;
@@ -442,23 +464,29 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     }
     q.bindValue(":num",  m_newInvoiceNumber);
     q.bindValue(":orig", m_loadedTicket);
-    if (!q.exec())
+    if (!q.exec()) {
         qWarning() << "RectifyInvoiceDialog: UPDATE placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
+        if (result.isSuccess()) {
+            localOk = false;
+            m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo guardar "
+                                         "el nuevo ticket %1 en la base de datos local. Revise el log de depuración "
+                                         "antes de hacer la contabilidad.</b>").arg(m_newInvoiceNumber.toHtmlEscaped()));
+        }
+    }
 
     // For substitution (S), mark the original rows as RECTIFICADA so they no longer
     // count toward accounting. Differences (I) leaves the original untouched - the
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
-        qDebug() << "RectifyInvoiceDialog: UPDATE ingresos SET verifactu_estado = RECTIFICADA WHERE n_recibo ="
-                 << m_loadedTicket;
-        QSqlQuery up(db);
-        up.prepare("UPDATE ingresos SET verifactu_estado = :estado WHERE n_recibo = :num");
-        up.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
-        up.bindValue(":num",    m_loadedTicket);
-        if (!up.exec())
-            qWarning() << "RectifyInvoiceDialog: UPDATE estado=RECTIFICADA failed for ticket"
-                       << m_loadedTicket << "-" << up.lastError().text();
+        qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
+        if (!markTicketRectified(db, m_loadedTicket, m_newInvoiceDate)) {
+            localOk = false;
+            m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
+                                         "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "
+                                         "de depuración antes de hacer la contabilidad.</b>").arg(m_loadedTicket.toHtmlEscaped()));
+        }
     }
     db.close();
+    return localOk;
 }

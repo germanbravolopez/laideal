@@ -103,7 +103,8 @@ void CancelInvoiceDialog::onSearchClicked()
     }
 
     // One entry per (n_recibo, verifactu_invoice_seq) pair that was actually
-    // submitted to AEAT. The estado filter excludes never-submitted rows; row-
+    // submitted to AEAT - paid rows only, like verifactuEventFor: unpaid garments
+    // share seq 0 but are not part of that invoice. The estado filter excludes never-submitted rows; row-
     // by-row partial-pay events GROUP BY seq, and a single-event legacy ticket
     // collapses to one group at seq=0. MAX over CSV/estado/invoice_id is safe
     // since rows of the same event share those values.
@@ -115,7 +116,7 @@ void CancelInvoiceDialog::onSearchClicked()
                   "       COALESCE(MAX(verifactu_csv), ''), "
                   "       COALESCE(MAX(verifactu_estado), '') "
                   "FROM ingresos "
-                  "WHERE n_recibo = :num "
+                  "WHERE n_recibo = :num AND pagado = 'SI' "
                   "  AND verifactu_estado IS NOT NULL "
                   "  AND verifactu_estado != '' "
                   "GROUP BY verifactu_invoice_seq "
@@ -197,6 +198,15 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     if (!m_verifactu) return;
     if (!m_pendingCancelId.isEmpty()) return; // already in flight
 
+    // A cancellation of a closed quarter's invoice is accounted today; refuse it while
+    // today's quarter is itself closed, or that filed report would change.
+    m_pendingCancelDate = QDate::currentDate();
+    if (quarterIsClosed(db, m_pendingCancelDate)) {
+        m_lblResult->setText(tr("<b style='color:red'>El trimestre actual tiene la contabilidad cerrada. "
+                                "Revierta la contabilidad del trimestre actual para poder anular.</b>"));
+        return;
+    }
+
     const Event &e = m_events[row];
     setActionsEnabled(false);
     m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId));
@@ -238,19 +248,23 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     // events of the same n_recibo stay ENVIADA. This is the fix the 8.5 blocker
     // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
     // and would have marked every event ANULADA in one shot.
-    qDebug() << "CancelInvoiceDialog: UPDATE ingresos SET verifactu_estado=ANULADA"
-             << "WHERE n_recibo =" << m_loadedTicket << "AND verifactu_invoice_seq =" << e.seq;
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET verifactu_estado = :estado "
-              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
-    q.bindValue(":num",    m_loadedTicket);
-    q.bindValue(":seq",    e.seq);
-    if (!q.exec())
-        qWarning() << "CancelInvoiceDialog: UPDATE estado=ANULADA failed for ticket"
-                   << m_loadedTicket << "seq" << e.seq << "-" << q.lastError().text();
-    db.close();
+    qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_loadedTicket << "seq" << e.seq;
+    // Stamp the date the closed-quarter guard checked, not the (later) reply time -
+    // unless that quarter was closed while the request was in flight.
+    QDate cancelDate = m_pendingCancelDate;
+    if (quarterIsClosed(db, cancelDate) && !quarterIsClosed(db, QDate::currentDate()))
+        cancelDate = QDate::currentDate();
+    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, cancelDate)) {
+        // AEAT did cancel it: show it as such so its button cannot send a second
+        // cancellation, and flag the missing local write.
+        e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
+        rebuildTable();
+        m_lblResult->setText(tr("<b style='color:red'>La AEAT aceptó la anulación de %1, pero no se pudo guardar "
+                                "en la base de datos local. Revise el log de depuración antes de hacer la "
+                                "contabilidad.</b>").arg(e.invoiceId.toHtmlEscaped()));
+        setActionsEnabled(true);
+        return;
+    }
 
     e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
     rebuildTable();

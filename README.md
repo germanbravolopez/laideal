@@ -22,7 +22,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
 - **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
 - **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
-- **In-app release notes** — Ayuda → Notas de la versión shows the bundled `releases_notes.txt` with the full version history, offline.
+- **In-app release notes** — Ayuda → Notas de la versión shows the full version history, offline, in the configured language (`releases_notes.txt` English / `releases_notes_es.txt` Spanish, both bundled).
 
 ---
 
@@ -89,7 +89,7 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 
 | Setting | Key in JSON | Notes |
 |---------|-------------|-------|
-| Language | `app.language` | `es` (default) or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.). Applied on next launch |
+| Language | `app.language` | `es` or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.) and of Ayuda → Notas de la versión. Applied live when Configuración is accepted. On first run it takes the language chosen in the installer (default `es`). The rest of the app is still Spanish |
 | Database path | `db.path` | Full path to the SQLite `.db` file |
 | IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
 | Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |
@@ -122,6 +122,7 @@ mkdocs serve   # http://127.0.0.1:8000
 | [Module docs](./docs/README.md) | One reference page per module |
 | [Verifactu](./docs/modules/verifactu/README.md) | AEAT digital invoicing — setup, API, DB schema |
 | [Progress tracker](./docs/progress_tracker.md) | Open issues, blocking items, roadmap |
+| [Completed milestones](./docs/completed_milestones.md) | History of finished work, newest first |
 | [Quick-find index](./docs/INDEX.md) | Every file, function, concept — Ctrl+F entry point |
 
 ---
@@ -140,13 +141,13 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
    ```powershell
    git checkout -b develop
    ```
-2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (Completed Milestones / Open Issues), the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
+2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (status / open issues), `docs/completed_milestones.md`, the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
 3. Before merging to `master`, the branch must be **release-ready**:
    - All planned changes are applied and reviewed.
    - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
-   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
+   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
    - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
-   - `releases_notes.txt` has a new X.Y section at the top with the customer-facing changes (Inno Setup shows this file at install time).
+   - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new X.Y section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time; CI fails the release if either section is missing. Keep both files UTF-8 **with BOM** so the installer renders accents.
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
    Commit the version bump + notes on the branch as a single `release X.Y` commit.
 4. Merge the branch to `master` through a pull request, with a merge commit so the release shows up as a single point on `master`'s history. `master` has a branch protection rule that requires a PR, so this is the path of least resistance. With the [GitHub CLI](https://cli.github.com/):
@@ -193,7 +194,7 @@ The release is the second stage of the CI workflow: `.github/workflows/ci.yml` h
 2. (release job) Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
 3. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, for `windeployqt` + the runtime DLLs) and Inno Setup 6 - no rebuild.
 4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
-5. Extracts the `X.Y` section from `releases_notes.txt` (fails if missing/empty) and publishes a GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+5. Extracts the `X.Y` section from `releases_notes_es.txt` and `releases_notes.txt` (fails if either is missing/empty) and publishes a GitHub Release `X.Y` with a bilingual body (Spanish, then English - also what the in-app updater shows) with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
 
 So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
 
@@ -230,15 +231,20 @@ When using this local fallback, attach it manually (the automated workflow above
 
 ```powershell
 $ver = 'X.Y'
-# Extract just the new X.Y section from releases_notes.txt into a temp .md so the
-# GitHub release body shows only this release's bullets, not the whole accumulated file.
-# The file uses Markdown-compatible indentation (top-level bullets at column 0,
-# nested at 2 spaces), so no de-indenting is needed - just drop the title line
-# (the regex captures only what follows it) and trim trailing blanks.
+# Extract just the new X.Y section from both notes files into a temp .md so the
+# GitHub release body shows only this release's bullets - Spanish first, then
+# English, the same bilingual body the ci.yml release job publishes (and the
+# in-app updater shows). The files use Markdown-compatible indentation, so the
+# regex just drops the version line and the rest is trimmed.
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
-$raw = Get-Content releases_notes.txt -Raw
-$m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
-Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
+function Get-Section([string]$file) {
+    $raw = Get-Content $file -Raw
+    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
+    if (-not $m.Success) { throw "No section for $ver found in $file" }
+    return $m.Groups[1].Value.TrimEnd()
+}
+$body = "## Español`n`n$(Get-Section 'releases_notes_es.txt')`n`n## English`n`n$(Get-Section 'releases_notes.txt')"
+Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `

@@ -1,5 +1,6 @@
 #include "settingsdialog.h"
 #include "appsettings.h"
+#include "applanguage.h"
 #include "statusapiprinter.h"
 #include <QApplication>
 #include <QTabWidget>
@@ -11,7 +12,6 @@
 #include <QLabel>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QDoubleValidator>
 #include <QDate>
 #include <QDateEdit>
 #include <QComboBox>
@@ -80,14 +80,9 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_language->addItem(tr("English"), "en");
     m_language->setCurrentIndex(s->language() == "en" ? 1 : 0);
     m_language->setToolTip(tr(
-        "Idioma de los diálogos estándar de Qt (botones Sí/No, Aceptar/Cancelar, etc.). "
-        "Requiere reiniciar la aplicación para aplicar."));
+        "Idioma de los diálogos estándar (botones Sí/No, Aceptar/Cancelar, etc.) y de las "
+        "notas de la versión. Se aplica al momento. El resto de la aplicación sigue en español."));
     fl->addRow(tr("Idioma:"), m_language);
-
-    m_ivaRate = new QLineEdit(QString::number(s->ivaRate(), 'f', 1));
-    m_ivaRate->setValidator(new QDoubleValidator(0.0, 100.0, 2, m_ivaRate));
-    m_ivaRate->setFixedWidth(80);
-    fl->addRow(tr("Tipo de IVA (%):"), m_ivaRate);
 
     m_enablePrinting = new QCheckBox(tr("Habilitar impresión de tickets y facturas"));
     m_enablePrinting->setChecked(s->enablePrinting());
@@ -267,7 +262,6 @@ void SettingsDialog::accept()
 
     s->setLanguage(m_language->currentData().toString());
     s->setDbPath(m_dbPath->text().trimmed());
-    s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
     s->setPaperWidthMm(m_paperWidth->currentData().toInt());
@@ -295,6 +289,7 @@ void SettingsDialog::accept()
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
     }
 
+    AppLanguage::applyQtTranslations(s->language());   // live, for every caller
     QDialog::accept();
 }
 

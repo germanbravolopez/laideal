@@ -10,7 +10,8 @@
 |------|-------------|
 | `docs/ai_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
-| `docs/progress_tracker.md` | What's done, blocking issues, in progress, completed milestones |
+| `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
+| `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
 | `docs/smoke_test.md` | **Manual pre-release checklist** — what `ctest` structurally cannot cover: real network, real printer, the migration on a real DB, Qt wiring with no testable seam. Run at `/release` step 1 |
 | `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](../.claude/agents/dead-code-finder.md) agent) |
 | `docs/INDEX.md` | This file |
@@ -65,6 +66,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Debug logger | `src/logging/applogger.h` | `src/logging/applogger.cpp` |
 | App settings singleton | `src/appsettings/appsettings.h` | `src/appsettings/appsettings.cpp` |
 | Settings dialog | `src/appsettings/settingsdialog.h` | `src/appsettings/settingsdialog.cpp` |
+| UI language (Qt dialogs, release notes, installer choice) | `src/appsettings/applanguage.h` | `src/appsettings/applanguage.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog (paid/AEAT) | `src/app/cancelinvoicedialog.h` | `.cpp` |
 | Void unpaid garments dialog (local, issue #40) | `src/app/voidgarmentsdialog.h` | `.cpp` |
@@ -99,6 +101,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
 | Number format delegate | `src/tableview/numberformatdelegate.h` | `.cpp` |
 | Text colour delegate | `src/tableview/textcolordelegate.h` | `.cpp` |
+| Ingresos date-column placement | `src/tableview/ingresoscolumns.h` | `.cpp` |
 | Link (URL) delegate | `src/tableview/linkdelegate.h` | `.cpp` |
 
 ## Build Files
@@ -164,7 +167,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu XML export for Hacienda (Art. 14.1) | `src/app/mainwindow.cpp` (`on_actionExportar_registros_aeat_triggered`); column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |
 | Verifactu chained hash (AEAT "Huella", Art. 12) | column `verifactu_hash` in `ingresos`; extraction in `VerifactuManager::processResponse()` (regex over `Return.Xml`) → `VerifactuResult::rawHash` |
 | verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
-| Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`totalPriceBetweenDates`) + `docs/modules/contabilidad.md` |
+| Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`kIngresosIncomeWhere`, `incomeTicketsBetweenDates`) + `docs/modules/contabilidad.md` |
 | Verifactu integration points (save, retry, cancel, print) | `docs/modules/verifactu/README.md` (Integration points section) |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |

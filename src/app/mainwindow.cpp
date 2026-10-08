@@ -14,6 +14,7 @@
 #include "facturas.h"
 #include "add_garment.h"
 #include "appsettings.h"
+#include "applanguage.h"
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
@@ -1239,24 +1240,29 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
     dlg.exec();
 }
 
-// Reads the bundled releases_notes.txt (a Qt resource compiled into the exe via
+// Reads the bundled release notes in the configured language (releases_notes.txt
+// or releases_notes_es.txt, Qt resources compiled into the exe via
 // resources/laideal.qrc) and shows the full version history in a read-only
-// monospace dialog. Same content the Inno Setup installer shows at install time
-// and the GitHub release page reuses for the latest section.
+// monospace dialog. Same content the Inno Setup installer shows at install time;
+// the GitHub release page reuses the English latest section.
 void MainWindow::on_actionNotas_de_la_version_triggered()
 {
-    QFile f(":/docs/releases_notes.txt");
+    const bool english = AppSettings::instance()->language() == QLatin1String("en");
+    const QString title = english ? QStringLiteral("Release notes") : tr("Notas de la versión");
+    const QString resource = AppLanguage::releaseNotesResource(AppSettings::instance()->language());
+    QFile f(resource);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Notas de la versión"),
-            tr("No se pudieron cargar las notas de la versión "
-               "(recurso :/docs/releases_notes.txt no disponible)."));
+        QMessageBox::warning(this, title,
+            tr("No se pudieron cargar las notas de la versión (recurso %1 no disponible).").arg(resource));
         return;
     }
-    const QString notes = QString::fromUtf8(f.readAll());
+    QString notes = QString::fromUtf8(f.readAll());
     f.close();
+    if (notes.startsWith(QChar(0xFEFF)))   // the files carry a UTF-8 BOM for Inno Setup
+        notes.remove(0, 1);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Notas de la versión"));
+    dlg.setWindowTitle(title);
     dlg.resize(680, 560);
 
     auto *layout = new QVBoxLayout(&dlg);
@@ -1270,7 +1276,7 @@ void MainWindow::on_actionNotas_de_la_version_triggered()
     view->moveCursor(QTextCursor::Start);
     layout->addWidget(view);
 
-    auto *btn = new QPushButton(tr("Cerrar"), &dlg);
+    auto *btn = new QPushButton(english ? QStringLiteral("Close") : tr("Cerrar"), &dlg);
     layout->addWidget(btn, 0, Qt::AlignRight);
     connect(btn, &QPushButton::clicked, &dlg, &QDialog::accept);
 

@@ -6,12 +6,14 @@
 // QTemporaryDir, so they assert deterministically without the user's settings.
 
 #include <QtTest>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 
 #include "appsettings.h"
+#include "applanguage.h"
 
 class TestAppSettings : public QObject
 {
@@ -92,13 +94,51 @@ private slots:
         QCOMPARE(s->listadosGastosPath(),  QStringLiteral("/srv/reports/Listados/Gastos"));
     }
 
-    // ivaRate reads taxes.iva_rate; absent -> the 21.0 default (applied on load).
-    void test_ivaRate()
+    // The ingresos IVA rate is a fixed 21 %: a legacy taxes.iva_rate in the JSON
+    // is ignored (and not rewritten), whatever its value.
+    // First-run language: the installer's choice when it is English, else Spanish.
+    void test_initialLanguageFromInstaller()
+    {
+        QCOMPARE(AppLanguage::initialLanguage("en"), QStringLiteral("en"));
+        QCOMPARE(AppLanguage::initialLanguage("es"), QStringLiteral("es"));
+        QCOMPARE(AppLanguage::initialLanguage(""), QStringLiteral("es"));      // no installer value
+        QCOMPARE(AppLanguage::initialLanguage("fr"), QStringLiteral("es"));    // unknown -> shop default
+    }
+
+    void test_releaseNotesResourcePerLanguage()
+    {
+        QCOMPARE(AppLanguage::releaseNotesResource("en"), QStringLiteral(":/docs/releases_notes.txt"));
+        QCOMPARE(AppLanguage::releaseNotesResource("es"), QStringLiteral(":/docs/releases_notes_es.txt"));
+    }
+
+    // Both release-notes files list the same versions in the same order, so the
+    // Spanish history (installer + Ayuda) never falls behind the English one.
+    void test_releaseNotesFilesHaveTheSameVersions()
+    {
+        auto versions = [](const QString &path) {
+            QFile f(path);
+            if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+                return QStringList();
+            QStringList out;
+            const QRegularExpression header(QStringLiteral("^(r?\\d+\\.\\d+)\\s*$"));
+            for (const QString &line : QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'))) {
+                const QRegularExpressionMatch m = header.match(line);
+                if (m.hasMatch())
+                    out << m.captured(1);
+            }
+            return out;
+        };
+        const QStringList en = versions(QStringLiteral(LAIDEAL_SOURCE_DIR "/releases_notes.txt"));
+        const QStringList es = versions(QStringLiteral(LAIDEAL_SOURCE_DIR "/releases_notes_es.txt"));
+        QVERIFY(!en.isEmpty());
+        QCOMPARE(es, en);
+    }
+
+    void test_ivaRateIsFixedAndIgnoresJson()
     {
         loadJson(R"({"taxes":{"iva_rate":10.0}})");
-        QCOMPARE(AppSettings::instance()->ivaRate(), 10.0);
+        QCOMPARE(AppSettings::instance()->ivaRate(), 21.0);
 
-        // No taxes block: applyDefaults() fills 21.0.
         loadJson(R"({"reports":{"root":"/x"}})");
         QCOMPARE(AppSettings::instance()->ivaRate(), 21.0);
     }

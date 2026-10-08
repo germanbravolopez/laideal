@@ -11,6 +11,8 @@ add_library(tableview STATIC
     textcolordelegate.cpp
     linkdelegate.h
     linkdelegate.cpp
+    ingresoscolumns.h
+    ingresoscolumns.cpp
 )
 target_link_libraries(tableview
     PRIVATE

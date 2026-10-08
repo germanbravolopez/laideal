@@ -108,7 +108,7 @@ Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 | `business.name` | `businessName()` | Header title. |
 | `business.address` / `business.city` / `business.phone` | `businessAddress()` / `businessCity()` / `businessPhone()` | Header lines; phone also RGPD contact. |
 | `verifactu.company_name` / `verifactu.nif` | `verifactuName()` / `verifactuNif()` | Legal name + NIF in header. |
-| `taxes.iva_rate` | `ivaRate()` (default 21) | Base/IVA split on facturas. |
+| (fixed) | `AppSettings::ivaRate()` = 21, no longer configurable | Base/IVA split on facturas. |
 | (internal) | `ticketExcelPath()` / `ticketPrintScriptPath()` | `~/.laideal_ticket.xlsx`, `~/.laideal_print.vbs` — **both retired** by the rewrite. |
 
 > New settings the rewrite will add: printer queue name (and/or "use default printer"), paper
@@ -127,5 +127,5 @@ Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 - [`../../../src/imprimir/imprimir.cpp`](../../../src/imprimir/imprimir.cpp),
   [`../../../src/imprimir/imprimir.h`](../../../src/imprimir/imprimir.h).
 - [`docs/modules/`](..) — per-module reference docs (MainWindow, recog_prendas).
-- `progress_tracker.md` completed milestones on ticket column tuning and the QXlsx page-margin
+- `completed_milestones.md` entries on ticket column tuning and the QXlsx page-margin
   patch (the empirical 58 mm layout history).

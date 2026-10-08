@@ -1,4 +1,5 @@
 #include "appsettings.h"
+#include "applanguage.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -95,16 +96,15 @@ AppSettings::AppSettings()
 void AppSettings::applyDefaults()
 {
     // Sensible defaults so reports work even before the user configures anything.
+    // First run: start in the language picked in the installer (default Spanish).
     if (str({"app", "language"}).isEmpty())
-        setStr({"app", "language"}, "es");
+        setStr({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
     if (businessName().isEmpty())
         setStr({"business", "name"}, "Tintorería La Ideal");
     if (businessAddress().isEmpty())
         setStr({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
     if (businessCity().isEmpty())
         setStr({"business", "city"}, "18012 Granada");
-    if (ivaRate() == 0.0)
-        setDbl({"taxes", "iva_rate"}, 21.0);
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
     if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
@@ -342,8 +342,6 @@ void    AppSettings::setBusinessPhone(const QString &v) { setStr({"business", "p
 // ---------------------------------------------------------------------------
 // Taxes
 // ---------------------------------------------------------------------------
-double AppSettings::ivaRate() const    { return dbl({"taxes", "iva_rate"}, 21.0); }
-void   AppSettings::setIvaRate(double v) { setDbl({"taxes", "iva_rate"}, v); }
 
 // ---------------------------------------------------------------------------
 // Verifactu

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "version.h"
 #include "appsettings.h"
+#include "applanguage.h"
 #include "settingsdialog.h"
 #include "sql_lite.h"
 #include "applogger.h"
@@ -9,7 +10,6 @@
 #include <QFile>
 #include <QIcon>
 #include <QMessageBox>
-#include <QTranslator>
 
 int main(int argc, char *argv[])
 {
@@ -21,19 +21,9 @@ int main(int argc, char *argv[])
     AppSettings *settings = AppSettings::instance();
     settings->load();
 
-    // Localize Qt's built-in strings (standard dialog buttons Sí/No/Aceptar/Cancelar,
-    // QColorDialog, etc.) to the configured language. English is Qt's source language,
-    // so it needs no translator; for Spanish load qtbase_es. It is bundled as a Qt
-    // resource because the release deploys windeployqt with --no-translations, so
-    // Qt's translations dir is absent on the shop PC. The app's own UI strings are
-    // Spanish literals and are unaffected either way.
-    static QTranslator qtTranslator;
-    if (settings->language() != QLatin1String("en")) {
-        if (qtTranslator.load(":/i18n/qtbase_es.qm"))
-            a.installTranslator(&qtTranslator);
-        else
-            qWarning() << "main: could not load bundled qtbase_es translations";
-    }
+    // Localize Qt's built-in strings (standard dialog buttons, etc.) to the configured
+    // language; Configuracion re-applies it live when the setting changes.
+    AppLanguage::applyQtTranslations(settings->language());
 
     // If the DB path is not set or the file is missing, prompt the user to
     // configure it before the main window is constructed. Without a valid

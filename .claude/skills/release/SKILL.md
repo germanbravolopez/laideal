@@ -1,6 +1,6 @@
 ---
 name: release
-description: Ship release X.Y end-to-end - pre-flight checks, version bump in CMakeLists.txt and releases_notes.txt, PR-style merge to master, tag push that triggers the ci.yml release job, then watch CI until the GitHub Release is published. Use only when the user explicitly asks to release, ship or cut a version.
+description: Ship release X.Y end-to-end - pre-flight checks, version bump in CMakeLists.txt and the English + Spanish release notes, PR-style merge to master, tag push that triggers the ci.yml release job, then watch CI until the GitHub Release is published. Use only when the user explicitly asks to release, ship or cut a version.
 argument-hint: "<X.Y>"
 disable-model-invocation: true
 ---
@@ -11,7 +11,7 @@ Executes the full release flow described in the **Development workflow** and **R
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
-The root `README.md` is the source of truth. If a step here ever drifts from the README, the README wins; update this skill afterwards.
+The root `README.md` is the source of truth. If a step here ever drifts from the README, the README wins; update this skill afterwards (`/update-skills`).
 
 ---
 
@@ -20,7 +20,7 @@ The root `README.md` is the source of truth. If a step here ever drifts from the
 1. **Current branch is not `master`.** Releases are cut from a working branch (`develop` or `feature/...`) and merged into `master` — never committed straight to it. If on `master`, stop and ask the user which branch to release from.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
 3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
-4. **`releases_notes.txt` has an `X.Y` section.** The `ci.yml` release job now **fails the publish** if the section is missing or empty (it becomes the GitHub release body), so this is a hard gate, not just a nicety. Verify it before tagging. (The local-artifact file `build-release\laideal_setup_X.Y.exe` only matters for the local fallback in step 8b — CI builds fresh on a runner.)
+4. **`releases_notes.txt` and `releases_notes_es.txt` both have an `X.Y` section.** The `ci.yml` release job **fails the publish** if either section is missing or empty: together they become the GitHub release body (Spanish first, then English), which is also what the in-app updater shows the shop before installing. So this is a hard gate, not just a nicety. Verify it before tagging. (The local-artifact file `build-release\laideal_setup_X.Y.exe` only matters for the local fallback in step 8b — CI builds fresh on a runner.)
 5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404. (The workflow can replace an existing release, but for a clean cut both should be absent.)
 
 If any precondition fails, stop and surface the problem — don't try to "fix it up" without asking.
@@ -34,15 +34,18 @@ If any precondition fails, stop and surface the problem — don't try to "fix it
 The working branch must be release-ready before the version-bump commit. Verify each item; if missing, fix it and stage the change for the bump commit (do not commit yet):
 
 - [ ] **`CMakeLists.txt`** — `project(laideal VERSION X.Y ...)` bumped to the target version.
-- [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file to end users at install time; same file is reused for the GitHub release body in step 6). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
-- [ ] **`docs/progress_tracker.md`** — Current Status points at the new release; the milestone entry covers what shipped. Add a "previous release" pointer to the prior version.
-- [ ] **`docs/` and `README.md`** — run the `/update-docs` checklist mentally; if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
-- [ ] **Manual smoke test** — work through `docs/smoke_test.md` against a copy of a real database (never the live one; use a pre-release `backups/` snapshot as the source). `ctest` cannot reach the real network, the real printer, the migration running on real data, or Qt signal/slot wiring with no testable seam — the 10.9 run of that checklist found three bugs the suite could not have caught. Skip only for a docs-only release.
+- [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file when the installer runs in English; its section is the English half of the GitHub release body in step 8). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
+- [ ] **`releases_notes_es.txt`** — the same `X.Y` section in **Spanish** (the shop's language: Inno Setup shows it when the installer runs in Spanish, and Ayuda → Notas de la versión shows it when the app language is `es`). Same structure and version header as the English file; `ci.yml` refuses to publish without it and `test_appsettings` checks both files list the same versions. Keep both files UTF-8 with BOM.
+- [ ] **`docs/progress_tracker.md`** — Current Status "Latest release" describes only the new release (no "previous release" trailer).
+- [ ] **`docs/completed_milestones.md`** — the milestone entries cover what shipped; suffix the top `### Post-<X.Y> development` header with `(shipped in X.Y)`.
+- [ ] **`docs/` and `README.md`** — run the `/update-docs` skill (or follow its checklist by hand); if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
+- [ ] **Manual smoke test** — work through `docs/smoke_test.md` against a copy of a real database (never the live one; use a pre-release `backups/` snapshot as the source). `ctest` cannot reach the real network, the real printer, the migration running on real data, or Qt signal/slot wiring with no testable seam — the 10.9 run of that checklist found three bugs the suite could not have caught. Skip only for a docs-only release. Each release adds its own block for what changed (e.g. Block G for 10.12). A bug found here is fixed on the working branch with `/debugging` (root cause + regression test), then re-checked.
+- [ ] **Coding-guidelines audit (optional, recommended after a large cycle)** — delegate to the `guidelines-auditor` subagent and fold real Tier-1 findings into the release or into the tracker.
 - [ ] **Bundled Qt translation (only if Qt was upgraded since the last release)** — `resources/i18n/qtbase_es.qm` is copied from `C:\Qt\<version>\mingw_64\translations\qtbase_es.qm` and embedded in the exe (the release runs windeployqt `--no-translations`). If the Qt version bumped, refresh this file from the new Qt so the Spanish standard-dialog strings match the shipped Qt. If Qt is unchanged, no-op.
 
 ### 2. Commit the version bump
 
-Stage `CMakeLists.txt`, `releases_notes.txt`, `docs/progress_tracker.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
+Stage `CMakeLists.txt`, `releases_notes.txt`, `releases_notes_es.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
 
 ```
 release X.Y - <one-line summary of what this release ships>
@@ -103,6 +106,8 @@ A release merge is the last point at which something can be caught before it goe
 - **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes — those are the high-blast-radius areas where false-positive triage should err on the side of fixing.
 - **Findings outside the release scope** (pre-existing issues, unrelated modules): file them as new entries in `docs/progress_tracker.md` Open Non-Blocking Issues, do not block the release on them.
 
+**Verifactu / accounting gate**: when the release diff touches `src/verifactu/`, invoice payment / cancellation / rectification, `n_recibo` numbering, the `ingresos` schema or `verifactu_*` / `fecha_anulacion` columns, or the Contabilidad figures, also run the `verifactu-compliance-auditor` subagent on `git diff <previous-tag>..<working-branch> -- src/`. It checks the ten Verifactu requirements and whether a closed quarter can change, which a generic review does not. Its "should-fix" findings are treated like genuine bugs above. (In the 10.12 cycle it caught a path that could alter a filed quarter.)
+
 Only proceed to step 6 once the user has confirmed the review is clean (or that remaining findings are intentionally deferred).
 
 ### 6. Merge the PR
@@ -150,9 +155,9 @@ The tag push in step 7 kicked off `ci.yml` (the `build` job, then the gated `rel
 gh run watch (gh run list --workflow=ci.yml --branch X.Y --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and the `releases_notes.txt` `X.Y` section as the body. Confirm with `gh release view X.Y` that both assets are present and the body renders as a clean bulleted list.
+On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that both assets are present and both halves render as clean bulleted lists.
 
-**If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
+**If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` or `releases_notes_es.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
 
 #### 8b. Local fallback (only if CI is unavailable)
 
@@ -163,10 +168,15 @@ If GitHub Actions can't run, build and publish locally from the tagged `master` 
 
 $ver = 'X.Y'
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
-$raw = Get-Content releases_notes.txt -Raw
-$m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
-if (-not $m.Success) { throw "No section for $ver found in releases_notes.txt" }
-Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
+# Same bilingual body as the CI release job: Spanish section first, then English.
+function Get-Section([string]$file) {
+    $raw = Get-Content $file -Raw
+    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
+    if (-not $m.Success) { throw "No section for $ver found in $file" }
+    return $m.Groups[1].Value.TrimEnd()
+}
+$body = "## Español`n`n$(Get-Section 'releases_notes_es.txt')`n`n## English`n`n$(Get-Section 'releases_notes.txt')"
+Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `
@@ -194,12 +204,12 @@ Remove-Item $tmpNotes
 - **Never commit to `master` directly.** Even if a last-minute fix is needed mid-release, commit it on the working branch and re-merge.
 - **One release at a time.** If two unrelated changesets are sitting on the working branch, ask the user whether to split them into two releases or bundle.
 - **Stop on the first failure.** Build error, missing doc, dirty tree, tag conflict — surface it and wait, don't paper over.
-- **English in `releases_notes.txt`** (and everywhere else in the repo). Inno Setup and the GitHub release both surface this file to end users — keep it customer-readable, not changelog jargon.
+- **English in `releases_notes.txt`, Spanish in `releases_notes_es.txt`** (English everywhere else in the repo), same versions in both (`test_appsettings` enforces it), both UTF-8 with BOM. Inno Setup, the in-app notes, the updater dialog and the GitHub release (both languages) surface them to end users — keep them customer-readable, not changelog jargon.
 
 ---
 
 ## When NOT to use this skill
 
 - Just bumping `CMakeLists.txt` — that's part of release, but if the user only wants the bump (not the merge/tag/publish), do that one step.
-- "Release notes" updates without an actual release — just edit `releases_notes.txt` directly.
+- "Release notes" updates without an actual release — just edit `releases_notes.txt` and `releases_notes_es.txt` directly.
 - Hotfix that ships outside the normal flow — ask first; the workflow assumes a clean working-branch -> master merge.

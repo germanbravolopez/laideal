@@ -1,0 +1,310 @@
+﻿Versiones:
+
+10.12
+- Nuevo: las anulaciones posteriores al cierre de un trimestre ya no lo modifican
+  - Un ticket anulado en la AEAT o sustituido por una factura rectificativa después de cerrar su trimestre ya no altera ese trimestre: el trimestre cerrado lo mantiene, y el trimestre en que se produce la anulación lo muestra como una línea negativa ("Anulaciones / rectificaciones del periodo") con su propia tabla al final del informe. Un ticket cobrado y anulado en el mismo periodo ya no cuenta en "Número de tickets".
+- Nuevo: cada prenda anulada registra su fecha de anulación ("Anulación")
+  - Las prendas anuladas con "Anular prendas" y las facturas anuladas o rectificadas en la AEAT registran la fecha en una nueva columna "Anulación", junto a las otras tres fechas en "Recogida de Prendas" y en el listado de ingresos. Una prenda anulada ya no muestra fecha de pago ni de recogida, porque nunca se cobró ni se recogió; las existentes se actualizan automáticamente. "Recogida de Prendas" también permite buscar por fecha de Anulación, y el "NO" de cualquier prenda anulada se muestra en verde.
+- Nuevo: el idioma se aplica al momento y las notas de la versión están en español e inglés
+  - Configuración -> Idioma se aplica ahora sin reiniciar: los diálogos estándar y Ayuda -> Notas de la versión siguen el idioma elegido (el resto de la aplicación sigue en español por ahora). El instalador muestra las notas en el idioma que se elija, y una instalación nueva arranca en ese idioma.
+- Corrección: anular una factura ya no afecta a las prendas sin cobrar del ticket
+  - Siguen sin cobrar y se pueden cobrar igualmente con "Cobrar". Las prendas ya afectadas por una anulación anterior vuelven a "SIN COBRAR" automáticamente la primera vez que se abre esta versión.
+- Mejoras en Contabilidad
+  - "Bloquear datos" solo se ofrece en la contabilidad trimestral, el único modo que cierra un periodo.
+  - Ahora se puede cerrar y revertir un trimestre con gastos pero sin ingresos.
+  - El informe anual cuenta una sola vez un ticket cobrado en dos trimestres.
+  - Los importes guardados con coma como separador decimal no se suman en ningún informe; se marcan en las tablas de detalle y un aviso pide corregirlos.
+- Cambio: el tipo de IVA queda fijo en el 21 % y ya no aparece en Configuración.
+- Comprobaciones de seguridad: no se puede anular una factura mientras el trimestre actual esté cerrado, y una factura rectificativa no puede fecharse en un trimestre cerrado ni antes del cobro original.
+
+10.11
+- Corrección: el total de "Recogida de Prendas" ya no suma las prendas anuladas
+  - La casilla "Importe total" sumaba todas las prendas de la lista, incluidas las anuladas con "Anular prendas". Una prenda anulada tomaba como fecha de pago la fecha de su anulación, por lo que aparecía al buscar por "Pago" e inflaba el total. La lista sigue mostrando esas prendas, pero las anuladas (y las anuladas o rectificadas en la AEAT) ya no se suman. Las prendas sin cobrar sí cuentan, así que al buscar un ticket por número se sigue viendo lo que debe el cliente.
+- Nuevo: los informes de contabilidad detallan los tickets y gastos de cada cifra
+  - Al final de cada informe (mensual, trimestral y anual, por trimestre) hay dos tablas nuevas: los tickets cobrados (número, fecha de pago, cliente, prendas, base, IVA e importe) y las facturas de gastos (fecha, número de factura, empresa, servicio, tipo de IVA, base, IVA e importe), cada una con su total. Los totales coinciden siempre con el resumen, así que se puede comprobar exactamente de qué se compone cada cifra.
+- Mejora: la clave de servicio de Verifactu se puede ver en Configuración
+  - La clave sigue oculta por defecto, pero un nuevo botón "Mostrar" junto a ella permite ver lo que se ha escrito o pegado, y "Ocultar" la vuelve a ocultar. Es solo para ver: la clave guardada no cambia.
+
+10.10
+- Corrección: un recibo reimpreso muestra "IMPORTE PAGADO" cuando el ticket está pagado
+  - Al reimprimir un recibo, desde "Recogida de Prendas" o desde Herramientas -> Imprimir -> Recibo, nunca aparecía el importe como pagado, ni siquiera con el ticket pagado por completo. Ahora sí. Si solo se ha cobrado una parte del ticket la nota no se imprime, porque un recibo muestra el ticket entero y sería incorrecto presentarlo como pagado del todo. Las facturas no cambian: no llevan la nota, porque una factura ya implica que la venta está pagada.
+- Corrección: recuperar una factura de la AEAT ya funciona en tickets que se reintentaron
+  - "Consultar en AEAT" no podía recuperar los datos de un ticket enviado más de una vez: el servicio de la AEAT guarda todos los intentos, y la aplicación leía uno de los intentos rechazados en lugar del aceptado, así que "Actualizar con los datos de AEAT" seguía desactivado aunque la factura estuviera registrada. Ahora la aplicación busca el envío aceptado entre todos los intentos guardados e indica cuántos ha encontrado.
+- Mejora: la fecha de recepción ya no se puede modificar en "Recogida de Prendas"
+  - Igual que la fecha de pago en la versión anterior, este campo admitía cambios que nunca se guardaban en la prenda. Peor aún, el valor escrito se aplicaba después a una prenda separada del ticket. Ahora es de solo lectura: la fecha de recepción se fija al crear el ticket.
+
+10.9
+- Nuevo: comprobar una factura en la AEAT y recuperar sus datos ("Consultar en AEAT")
+  - Cuando se cobraba un recibo y la AEAT no llegaba a responder (se cortaba internet o la conexión era lenta), la aplicación se quedaba bloqueada: al reintentar solo se obtenía "la factura ya existe", porque la AEAT sí la tenía y solo se había perdido la respuesta. Ahora hay un botón "Consultar en AEAT" en la ventana Verifactu de un recibo. Pregunta a la AEAT qué tiene registrado, lo muestra junto a sus datos y, si todo coincide, permite recuperar el CSV y el QR de la factura en el recibo con un clic. No se cambia nada automáticamente: siempre se ve primero la comparación y usted decide.
+- Corrección: los recibos que nunca se cobraron ya no aparecen como pendientes con la AEAT
+  - Al abrir la aplicación, la ventana "Envíos Verifactu pendientes" listaba todas las prendas que seguían en la tienda, como si todas esperasen respuesta de la AEAT. Una prenda sin cobrar no tiene nada que enviar. Ahora las prendas sin cobrar aparecen claramente como "SIN COBRAR" en lugar de "PENDIENTE", y solo se listan los envíos realmente pendientes. Los recibos existentes se reetiquetan automáticamente la primera vez que se abre esta versión. Nunca se envió nada incorrecto a la AEAT y ningún importe cambia.
+- Corrección: cobrar parte de un recibo ya no afecta a las prendas que quedan sin cobrar
+  - Cuando un cliente pagaba solo algunas prendas, las demás se marcaban como si también se hubieran enviado a la AEAT, y por eso ya no se podían anular con "Anular prendas". Ahora solo se registran las prendas realmente cobradas.
+- Corrección: el ticket impreso cuando la AEAT no responde a tiempo
+  - Si la AEAT no respondía en unos segundos, el ticket impreso no mostraba ni "IMPORTE PAGADO" ni el código QR, aunque el pago se había registrado. Ahora siempre muestra el importe pagado. Y si la AEAT confirma poco después, la aplicación avisa de que ya se puede imprimir la factura con su código QR desde "Recogida de Prendas".
+- Corrección: un problema de conexión ya no se registra como error definitivo
+  - Perder internet en mitad de un envío se registraba como factura fallida, cuando en realidad la AEAT podía haberla registrado. Ahora estos casos quedan como pendientes para poder revisarlos y recuperarlos, en lugar de acabar en el mensaje "ya existe".
+- Corrección: un recibo marcado como error se puede volver a intentar
+  - Marcar un recibo pendiente como error lo dejaba sin el botón "Reintentar envío a AEAT", así que no había forma de volver a intentarlo. El botón ha vuelto.
+- Mejora: la fecha de pago ya no se puede modificar en "Recogida de Prendas"
+  - El campo admitía cambios que nunca se guardaban. Ahora es de solo lectura: la fecha de pago se registra al cobrar la prenda y debe coincidir con lo que tiene registrado la AEAT.
+
+10.8
+- Corrección: la ventana "Envíos Verifactu pendientes" ya no lista recibos sin pagar
+  - Al abrir la aplicación, esta ventana listaba todos los recibos que seguían en la tienda, como si todos fueran envíos esperando respuesta de la AEAT. No lo eran. Un recibo solo se envía a la AEAT una vez pagado, así que nunca se envió nada indebido ni se vio afectado ningún dato. Ahora la ventana lista solo los envíos pagados que realmente no obtuvieron respuesta de la AEAT, que es su finalidad.
+
+10.7
+- Mejora: una prenda anulada registra cuándo se anuló
+  - Al anular una prenda con "Anular prendas", las fechas de pago y de recogida se rellenan ahora con la fecha de la anulación, de modo que queda constancia de cuándo ocurrió. No afecta a la contabilidad: una prenda anulada sigue sin cobrar y queda fuera de todos los totales.
+- Mejora: se pueden editar las observaciones de una prenda anulada
+  - En "Recogida de Prendas" el campo Observaciones ya no está bloqueado en una prenda marcada "Anulado", así que se puede anotar por qué se anuló o cualquier comentario posterior. Todo lo demás de una prenda anulada sigue bloqueado como antes.
+
+10.6
+- Nuevo: avisos del estado de la impresora y prueba de impresora (Status API de Epson opcional)
+  - Con la Status API de Epson activada, la aplicación avisa si un ticket no se puede imprimir (tapa abierta, sin papel o impresora apagada) y aun así deja el ticket en cola para que se imprima en cuanto se resuelva el problema. Un nuevo botón "Probar Status API (diagnóstico)" en Configuración ejecuta y cronometra cada función de la impresora e informa del resultado, para ayudar a diagnosticar problemas de impresora o de controlador. Además, la aplicación ya no se puede quedar congelada si el controlador de la impresora deja de responder: espera un momento y vuelve a la impresión normal. La Status API sigue desactivada por defecto (se activa en Configuración).
+- Mejora: la cantidad de prendas en "Recogida de Prendas" solo admite números enteros
+  - El campo Cantidad rechaza ahora todo lo que no sea un número entero, así que la cantidad y el importe ya no pueden descuadrarse.
+
+10.5
+- Nuevo: corregir la cantidad, el servicio o el importe de una prenda antes de cobrarla
+  - En "Recogida de Prendas" ahora se puede cambiar la cantidad de una prenda sin cobrar y su servicio (un desplegable con "Limp." / "Plan."), y el importe se recalcula automáticamente. El importe también se puede editar a mano para fijar un precio especial. Estos campos quedan bloqueados una vez cobrada la prenda, porque una prenda cobrada ya se ha enviado a la AEAT.
+
+10.4
+- Corrección: las actualizaciones automáticas funcionan sin permisos de administrador
+  - En algunos PC la actualización automática no podía completarse: el instalador descargado no arrancaba, o Windows impedía ejecutarlo en la carpeta temporal. Ahora la aplicación se instala solo para el usuario actual, así que puede actualizarse sola directamente, sin "ejecutar como administrador" y sin aviso de permisos de Windows.
+  - Paso único: como la aplicación se instala ahora en su perfil de usuario en lugar de en "Archivos de programa", instale esta versión (10.4) a mano una vez. A partir de ahí las actualizaciones son automáticas. Después puede desinstalar la antigua "La Ideal" de "Archivos de programa"; sus datos y su configuración se conservan.
+
+10.2
+- Nuevo: anular prendas de un recibo erróneo o por cambio de opinión ("Anular prendas")
+  - Una nueva opción en Herramientas -> "Anular prendas (recibo erróneo)" permite anular prendas sin cobrar que se introdujeron por error o que el cliente ya no quiere. Estas prendas nunca se enviaron a la AEAT, así que no se envía nada. Una prenda anulada queda marcada como "Anulado", se muestra en verde y ya no se puede cobrar, recoger, imprimir ni contar en la contabilidad.
+- Nuevo: elegir el idioma de los diálogos estándar (español o inglés)
+  - Configuración tiene ahora una opción "Idioma" que fija el idioma de los botones de los diálogos (Sí/No, Aceptar/Cancelar, etc.). El cambio se aplica la próxima vez que se abre la aplicación. Por defecto es español.
+- Corrección: las prendas añadidas a un recibo existente muestran el estado Verifactu correcto
+  - Las prendas añadidas con "Añadir nuevas prendas" se quedaban con el estado Verifactu vacío en lugar de "PENDIENTE"; ahora se marcan como pendientes igual que el resto del ticket.
+- Cambio: solo se pueden añadir prendas a recibos sin cobrar
+  - "Añadir nuevas prendas" rechaza ahora un recibo que ya tiene alguna prenda cobrada, porque un recibo cobrado ya se ha enviado a la AEAT y no debe modificarse después. Use un recibo nuevo.
+
+10.1
+- Mejora: recibos y facturas impresos más claros
+  - Más espacio entre las columnas "Uds." (cantidad) y "Prendas" (artículo), el texto de "Condiciones generales" es más compacto y el QR de Verifactu se imprime más cerca del texto superior en lugar de dejar un hueco grande.
+
+10.0
+- Nuevo: los tickets y facturas se imprimen directamente en la impresora térmica, sin Excel
+  - El recibo y la factura se envían directamente a la impresora en lugar de generarse mediante una hoja de Excel y un script. Ya no hace falta Microsoft Excel en el PC de la tienda, la impresión es más rápida y fiable, y se avisa si una impresión falla. La impresora y el ancho de papel (58 u 80 mm) se eligen en Configuración. El QR de Verifactu y los acentos se imprimen como antes.
+- Nuevo: detección opcional del estado de la impresora (sin papel, tapa abierta, error de la cuchilla)
+  - Si se activa "Usar la Status API de Epson" en Configuración, la aplicación lee el estado de la impresora después de imprimir y avisa cuando el papel se ha acabado o está a punto de acabarse, la tapa está abierta o la cuchilla se atasca. Necesita el software de impresora de Epson instalado; si no está disponible, la impresión continúa con normalidad.
+
+9.3
+- Mejora: un cobro parcial ("Cobrar") sin confirmar porque la AEAT iba lenta o no respondía se recupera ahora al arrancar como cualquier otra factura
+  - Antes, la lista de recuperación al arrancar solo ofrecía las facturas enviadas al guardar el ticket; un cobro parcial sin respuesta había que conciliarlo a mano en la sede de la AEAT. Ahora la aplicación lista cada cobro pendiente con su propio número de factura (p. ej. 3245-1) para reintentarlo, marcarlo como error o posponerlo.
+- Mejora: el informe de contabilidad anual se genera más rápido
+  - El informe anual lee ahora cada tabla en una única pasada agrupada en lugar de recorrerla una vez por trimestre. Los totales, el IVA y los recuentos son exactamente los mismos.
+
+9.2
+- Corrección: al cobrar un pago parcial ("Cobrar") que es el primer pago de un ticket se envía a la AEAT el mismo número de factura que se guarda, así que reimprimir el QR de esa factura o anularla funciona correctamente
+- Cambio: "Cobrar" imprime ahora una sola factura (la copia del cliente) en lugar de dos; use el botón de imprimir de Recogida de prendas si necesita otra copia
+- Mejora: los importes en euros de los PDF de contabilidad y listados muestran ahora el separador de miles (p. ej. 1.234,56 €)
+
+9.1
+- Corrección: las facturas reimpresas de cobros parciales o tardíos muestran un QR con la fecha correcta
+  - El QR de la factura reimpresa usaba la fecha de recepción en lugar de la de pago, así que en un cobro hecho otro día distinto al de la recepción el QR no coincidía con la factura registrada en la AEAT. Ahora usa la fecha de pago, igual que lo enviado.
+- Corrección: un cobro ya no se marca como fallido cuando la AEAT tarda en responder
+  - Si la AEAT no respondía en unos segundos al cobrar con "Cobrar", la factura se registraba como error. Ahora queda como pendiente (el envío puede haber llegado), así que no se muestra erróneamente como fallida y se puede conciliar después.
+- Corrección: cerrar la contabilidad de un trimestre lo bloquea de forma fiable
+  - Cuando un trimestre tenía ingresos solo en sus primeros meses y nada en el último, "Contabilidad" lo trataba como vacío y no lo bloqueaba. Ahora comprueba el trimestre completo.
+- Mejora: la aplicación ya no se queda congelada un momento durante la copia de seguridad automática al arrancar
+  - La copia diaria se hace ahora en segundo plano, así que la ventana sigue respondiendo mientras se crea.
+
+9.0
+- Nuevo: cobro parcial de un ticket ("Cobrar" en Recogida de prendas)
+  - "Pagar todo" abre ahora un diálogo Cobrar con todas las prendas sin cobrar del ticket, cada una preseleccionada. Desmarque las prendas que el cliente no paga esta vez y pulse Cobrar: solo se cobran esas y se emite una factura Verifactu por ese pago. El resto quedan sin cobrar y se pueden cobrar más tarde como un pago aparte, cada uno con su propio número de factura (p. ej. 3245-1, 3245-2). La factura impresa cubre exactamente las prendas pagadas en ese cobro.
+- Nuevo: anular una factura Verifactu concreta de un ticket (Herramientas -> Anular factura Verifactu)
+  - Un ticket pagado en varios cobros muestra ahora una línea por pago, cada una con su propio botón Anular, así que se puede anular un único cobro con la AEAT en lugar del ticket entero.
+- Nuevo: los envíos Verifactu pendientes se recuperan al arrancar
+  - Si un ticket se guardó cuando Verifactu no estaba disponible o configurado, la aplicación lista esos tickets al arrancar y permite reintentar, marcar como error o posponer cada uno. Se puede limitar por fecha y desactivar en Configuración.
+- Nuevo: copias de seguridad automáticas de la base de datos
+  - La aplicación hace una copia verificada de la base de datos al arrancar (diarias durante 30 días, mensuales durante 4 años), y se puede hacer una en cualquier momento desde Herramientas -> Hacer copia de seguridad ahora. Las copias se guardan junto a la base de datos.
+- Nuevo: campo de teléfono fijo en el formulario de Recogida de prendas.
+- Mejora: informes de contabilidad más claros
+  - El PDF trimestral / mensual / anual muestra ahora la liquidación del IVA (IVA repercutido frente a soportado), el resultado neto del periodo, el rango de fechas y el número de tickets y facturas, además de un resumen anual consolidado. Los PDF de listados se han rediseñado a juego.
+- Mejora: la ServiceKey de Verifactu se guarda ahora cifrada
+  - La ServiceKey de la AEAT en el archivo de configuración se cifra para el usuario de Windows actual en lugar de guardarse en texto plano; una clave existente se migra automáticamente. Nota: después de reinstalar Windows o de pasar a otro usuario o PC hay que volver a introducir la clave.
+- Corrección: "Recoger todo" y "Pagar todo" ya no afectan a tickets de otros clientes al buscar por nombre
+  - Cuando una búsqueda por nombre devolvía tickets de varios clientes, estos botones podían actuar sobre todos los tickets cargados. Ahora actúan solo sobre el ticket seleccionado.
+- Corrección: las prendas que dependen del tamaño (p. ej. cortinas cobradas por m2) se calculan bien con decimales con coma
+  - Un tamaño como "2,6" escrito con coma ya no se lee como 0, así que el importe cobrado coincide con el tamaño guardado.
+- Corrección: el recibo de recogida de prendas ya no muestra un QR de Verifactu
+  - El QR corresponde a la factura (documento fiscal), no al resguardo de recogida.
+
+8.4
+- Corrección: al buscar por nombre de cliente en Recogida de prendas, marcar una fila como entregada o separar una prenda ya no afecta al ticket equivocado
+  - Las cabeceras de columna de la tabla se pueden pulsar para ordenar, y el orden por defecto es por número de ticket descendente. Antes, después de que cualquier ordenación cambiara el orden visible, pulsar una fila guardaba la posición visible en lugar del ticket real, así que la siguiente acción (Entregar, Separar prenda) se aplicaba a un ticket distinto del mostrado. Ahora siempre se resuelve el ticket real antes de escribir en la base de datos. Pagar todo y Recoger todo ya eran correctos porque recorren todas las filas cargadas.
+- Mejora: ordenar por cabecera de columna en Recogida de prendas ordena las fechas cronológicamente y el Importe numéricamente
+  - Las columnas de fecha se ordenaban antes como texto (así "31-01-2026" iba antes que "02-02-2026") y el Importe también como texto (así "100" iba antes que "9"). Ahora la ordenación usa la fecha y el valor numérico reales.
+
+8.3
+- Nuevo: actualizador integrado en la aplicación
+  - Ayuda -> Buscar actualizaciones... comprueba en GitHub si hay una versión más reciente y, si se confirma, descarga el instalador y lo ejecuta. La aplicación se cierra y el instalador la sustituye en el mismo sitio, sin descargas manuales ni desinstalaciones. La base de datos, la configuración (~/.laideal_settings.json) y el registro (~/.laideal.log) se conservan.
+  - La misma comprobación se hace también en silencio al arrancar, para que una versión nueva se muestre en cuanto esté disponible. Se desactiva en Archivo -> Configuración -> "Buscar actualizaciones al iniciar la aplicación" si prefiere comprobarlo a mano.
+- Nuevo: Ayuda -> Notas de la versión... muestra el historial completo de cambios de cada versión, sin conexión. Es el mismo contenido que muestra el instalador al instalar.
+
+8.2
+- Corrección: la factura ya no se imprime automáticamente al pulsar "Pagar todo"
+  - La 8.1 añadió una impresión automática justo después de "Pagar todo" y una pregunta de "¿segunda copia?", pero el QR de Verifactu tiene que llegar antes desde el servicio de la AEAT; si la red iba lenta o el servicio fallaba un instante, la factura a veces se imprimía sin QR. El botón de imprimir de la ventana de Recogida de prendas se mantiene: púlselo cuando la fila muestre ENVIADA para que el QR salga en el recibo. La pregunta de segunda copia desaparece junto con la impresión automática; pulse dos veces el botón de imprimir para la segunda copia.
+
+8.1
+- Corrección: la búsqueda por nombre de cliente en Recogida de prendas devuelve ahora todos los tickets de ese cliente
+  - Antes, en clientes con muchos recibos algunos tickets podían quedar ocultos en el resultado sin avisar; ahora la búsqueda es completa sea cual sea el número de filas de la tabla de ingresos.
+- Nuevo: "Pagar todo" imprime ahora automáticamente la factura y pregunta si hace falta una segunda copia
+  - Cuando todas las prendas quedan marcadas como pagadas, la factura se envía a la impresora y un diálogo "¿Imprimir una segunda copia de la factura?" ofrece la copia para el establecimiento
+  - El botón de imprimir ya no cierra Recogida de prendas; en su lugar limpia el formulario, así que pasar al siguiente cliente no obliga a volver a abrir la ventana
+- Herramientas de compilación y publicación (interno): un único comando de PowerShell (releases\release.ps1 X.Y) compila, ejecuta windeployqt, comprime y genera el instalador de Inno Setup en un solo paso; la compilación pasa de MinGW Makefiles a Ninja para evitar bloqueos del antivirus en %TEMP%\*.bat; las secciones Build y Release procedure del README se han reescrito en consecuencia
+
+8.0
+- Nueva función: integración con Verifactu, la facturación digital obligatoria de la AEAT (obligatoria para empresas españolas desde 2026)
+  - Envía facturas simplificadas (F2) a la AEAT; la interfaz es totalmente asíncrona y nunca se bloquea esperando a la red
+  - El envío se hace al cobrar: los tickets guardados sin cobrar quedan como PENDIENTE y se envían solos al cobrarlos en la recogida
+  - QR y leyenda "Factura verificable en la sede electrónica de la AEAT" impresos en los tickets ENVIADA
+  - Anulación de facturas: Herramientas -> Anular factura Verifactu
+  - Rectificación de facturas (R1-R5, sustitución / diferencias): Herramientas -> Rectificar factura Verifactu (Art. 8.2.a RD 1007/2023)
+  - Exportación XML de la AEAT por rango de fechas: Herramientas -> Exportar registros AEAT (XML) (Art. 14.1 RD 1007/2023)
+  - Diálogo de declaración responsable del fabricante: Ayuda -> Acerca de Verifactu (Art. 13 RD 1007/2023)
+  - Huella encadenada de la AEAT (SHA-256) guardada en cada fila para detectar manipulaciones localmente (Art. 12 RD 1007/2023)
+  - Estado Verifactu, CSV, enlace de validación de la AEAT y "Reintentar envío" accesibles por ticket en Recogida de prendas
+  - El botón "Probar conexión" de la configuración valida la ServiceKey y que el servicio sea accesible
+  - Las filas anuladas (ANULADA) y sustituidas por rectificación (RECTIFICADA) quedan fuera de los totales trimestrales de ingresos
+  - Se admiten los entornos de PRUEBAS y PRODUCCIÓN; la v8.0 sale con PRUEBAS (se cambiará tras la reunión con IreneSolutions)
+  - Funcionamiento degradado: un Verifactu sin configurar no impide guardar tickets
+- Nueva función: configuración centralizada; todas las rutas y valores fijos pasan a ~/.laideal_settings.json
+  - Incluye la ruta de la base de datos, los datos del negocio (nombre / dirección / ciudad / teléfono), el tipo de IVA, una única carpeta raíz para los informes, las credenciales de Verifactu y la opción de imprimir
+  - El diálogo de configuración está en Archivo -> Configuración; se abre solo en el primer arranque o si falta la ruta de la base de datos
+  - Los antiguos ~/.laideal_cfg y ~/.verifactu_key se migran en el primer arranque
+- Nueva función: registro de depuración persistente en ~/.laideal.log (rotación a 5 MB, seguro entre hilos)
+  - Cada escritura en la base de datos se registra a nivel de depuración; los fallos registran un aviso con el texto del error SQL
+  - Archivo -> Log de depuración muestra la ruta y abre el archivo directamente
+- Correcciones de contabilidad
+  - Las filas Verifactu ANULADA y RECTIFICADA quedan fuera de los totales trimestrales de ingresos
+  - Corregido el doble recuento de gastos en el cambio de trimestre (intervalo de fechas semiabierto)
+  - Diálogos de confirmación contextuales en contabilidad (bloquear / revertir)
+- Mejoras en recibos e impresión
+  - La cabecera del ticket sale de la configuración (nombre del negocio, NIF, dirección, ciudad, teléfono)
+  - Condiciones generales reescritas para que sean legalmente correctas (RD 1453/1987) y aviso RGPD de primera capa
+  - Las condiciones se imprimen solo en la copia del cliente; la copia del establecimiento las omite
+  - Anchos de columna de la impresora térmica (4 / 20 / 7,5) y márgenes de página (0,2 / 0,1 / 0,1 / 0,4) ajustados en la impresora real
+  - La opción de imprimir en la configuración sustituye al antiguo modo de depuración (el Excel se sigue generando para revisarlo)
+- Búsqueda y uso
+  - Búsqueda sin distinguir acentos en Recogida de prendas y Listado ("garcia" encuentra "García")
+  - El listado de ingresos carga primero las filas más recientes; columna con el enlace de validación de Verifactu que se puede pulsar
+  - Menú Herramientas reorganizado; se añaden las acciones Anular y Rectificar
+  - Cobro por prenda desactivado para evitar el rechazo de la AEAT por número de factura duplicado (se cobra con "Pagar todo")
+- Calidad del código
+  - Normas de código aplicadas a todos los módulos (identificadores camelCase, comentarios y mensajes de depuración en inglés, conexiones de señales con la sintaxis nueva)
+  - Corregida una inyección SQL en la búsqueda de añadir prendas (consulta parametrizada)
+  - Eliminados de los fuentes los guiones largos y otra puntuación no ASCII (riesgo con la página de códigos de Windows)
+  - Módulo Verifactu reescrito con una API totalmente asíncrona (identificador de petición + señal requestFinished)
+- Compilación: el número de versión se gestiona desde el CMakeLists.txt raíz y se propaga al version.h generado
+
+r7.1
+- Nueva función: imprimir el listado de prendas en PDF
+
+r7.0
+- Actualizadas las rutas fijas para el nuevo portátil
+
+r6.1
+- Corregido el cursor de espera en los listados y otras herramientas
+
+r6.0
+- Nueva función: añadir prendas nuevas a tickets existentes
+- Nueva función: separar prendas en Recogida de prendas
+- Se añade un hash a las prendas de ingresos para identificarlas de forma única en la base de datos
+- Actualizado el cursor de espera en varios sitios para las tareas que tardan
+- Las actualizaciones de Recogida de prendas en la base de datos se hacen por recibo y hash
+
+r5.7
+- Corregido deseleccionar la celda cuando los datos están bloqueados en los listados
+- Solo se bloquean los datos si la contabilidad no se había hecho antes, para no volver a bloquear
+- Se añade una casilla para elegir si se bloquean los datos
+- No se cierra la ventana de revertir si los datos no estaban bloqueados
+- Se cierra Recogida de prendas después de imprimir el ticket
+- Las listas se actualizan reordenando y no con populate_table()
+
+r5.6
+- Se impide modificar datos bloqueados en ingresos o gastos
+
+r5.5
+- Se evita imprimir el mensaje "IMPORTE PAGADO" al imprimir facturas
+- Corregido código sin uso y se permite siempre sobrescribir los informes de contabilidad
+
+r5.4
+- El proyecto muestra la versión y otras propiedades en el archivo exe
+- Actualizadas las rutas fijas a las herramientas externas (impresión con Excel e icono)
+
+r5.3
+- La contabilidad mensual se calcula correctamente en el último mes
+- Se mantiene el nombre después de buscar en Recogida de prendas
+- Corregida la búsqueda por teléfono en Recogida de prendas
+- Actualizado el tamaño de todos los tipos de prenda que se miden en m2
+
+r5.2
+- Correcciones para que Recogida de prendas muestre el importe total de la búsqueda
+
+r5.1
+- Correcciones al borrar una prenda en la ventana principal
+- Ingresos usa la clase Listado y se adapta el buscador
+- Se cargan todos los datos en las tablas y se presentan ordenados por la columna correcta
+- Se reduce la letra de las tablas a 8 pt y se mantiene fija la altura de las filas
+- La tabla de Recogida de prendas usa un proxymodel
+
+r5.0
+- Las facturas sin impuestos se guardan con un tipo de IVA 0
+- Nueva función: revertir contabilidades
+- Se usan Listados para crear la vista de la tabla de gastos
+- Se gestionan todas las ordenaciones (fechas, números y texto) en cada tabla
+- Nuevo diálogo (InsertNewItem) para añadir clientes nuevos
+- Corregido ingresos para no permitir introducir ningún ticket en un trimestre bloqueado
+
+r4.4
+- Corregidos los cálculos del IVA
+
+r4.3
+- Los colores de fondo se sustituyen por color del texto en las columnas de pagado y estado
+
+r4.2
+- Clase común para todas las listas
+- Barra de búsqueda en las listas
+- Filas más bajas en todas las tablas
+- Se imprime la factura después de cobrar el ticket
+- Colores de fondo en las columnas de pagado y estado de ingresos y Recogida de prendas
+- Función de imprimir en Recogida de prendas
+- Información de tamaño en los tickets
+- Otras pequeñas actualizaciones y correcciones
+
+r4.1
+- Icono de la aplicación
+
+r4.0
+- Se vuelve al desplegable normal para los servicios
+- Las tablas de ingresos y gastos se ordenan con lo más reciente primero
+- Corregidos los mensajes al escribir un cliente nuevo en la ventana principal
+  - No se cambian mayúsculas ni otros caracteres especiales al guardar un cliente nuevo
+- Modo de depuración para no imprimir el ticket en la ventana principal
+- Corregida la pantalla de facturas: muestra el IVA y la base calculados y sustituye producto por descripción
+- Corregido el importe total calculado al agrupar los gastos por proveedor para generar el PDF
+
+r3.0
+- Impresión mediante Excel y un script por lotes
+- La ventana se maximiza al arrancar y se reorganiza parte del código
+
+r2.0
+- Corregidas las facturas para añadir facturas nuevas
+- Corregido el guardado de filas nuevas en las listas
+- Dos decimales en todos los importes
+- Actualizada la pantalla de búsqueda de Recogida de prendas
+- Corregido generar el listado de gastos
+  - gastos reales de IVA, base e importe
+  - al agrupar por proveedor, se añade el total final
+- Nueva tabla en la base de datos para los servicios, únicos en facturas con un desplegable
+
+r1.0
+- Versión inicial completa del programa La Ideal.
+

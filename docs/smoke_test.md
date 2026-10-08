@@ -1,7 +1,7 @@
 # Smoke Test — manual pre-release checklist
 
 Run this on the working branch **before** the version-bump commit of a release (step 1 of the
-`/release` skill). The automated suite (`ctest`, 14 suites) proves the pure and DB-level logic;
+`/release` skill). The automated suite (`ctest`, 15 suites) proves the pure and DB-level logic;
 this file covers what it structurally cannot: the real network, the real printer, the migration
 running against a real database, and Qt signal/slot wiring that has no testable seam.
 
@@ -186,6 +186,26 @@ If the comparison dialog does **not** open automatically at E2, capture the exac
 F2 is the highest-value item: it is the only remaining check touching a financial control.
 
 ---
+
+## Block G — 10.12 changes · *no AEAT contact unless noted*
+
+What `ctest` covers for these is the logic; this block covers the screens, the PDF and the installer.
+
+| # | Area | Check |
+|---|------|-------|
+| G1 | Anular prendas | Void an unpaid garment: estado `Anulado`, `NO` in green, Pago and Recogida empty, Anulación = today. A **Pago**-date search no longer lists it; an **Anulación**-date search does, with Importe total 0 |
+| G2 | Migration | On the pre-migration copy, an old voided garment shows its void date under Anulación and empty Pago / Recogida |
+| G3 | Columns | Recogida de Prendas and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
+| G4 | Recogida total | Search an **unpaid** ticket by number: Importe total shows what is owed (not 0) |
+| G5 | Contabilidad lock box | "Bloquear datos" is greyed out in Mensual and Anual, enabled in Trimestral, disabled when reverting |
+| G6 | Gastos-only quarter | A quarter with gastos and no ingresos generates, locks and reverts |
+| G7 | Detail annex | Quarterly + annual PDF end with the tickets / gastos tables; their totals equal the summary; the rounding note shows |
+| G8 | Regularisation *(registers at AEAT)* | Pay a ticket, close its quarter, cancel it in a later quarter: the closed quarter's PDF is unchanged; the later quarter shows "Anulaciones / rectificaciones del periodo" with the negative amount and an annex table. A ticket paid **and** cancelled within the same quarter nets to 0 and is not counted in "Número de tickets" |
+| G9 | Unpaid remainder *(registers at AEAT)* | Partially pay a ticket, cancel that payment: the unpaid garments stay `SIN COBRAR` and can still be charged with Cobrar |
+| G10 | Guards | Anular factura refused while the current quarter is closed; Rectificar refuses a date in a closed quarter and a date before the original payment |
+| G11 | IVA | Configuración → General has no "Tipo de IVA" field; tickets and reports still use 21 % |
+| G12 | Language | Configuración → Idioma English → OK: a Sí/No dialog now reads Yes/No and Ayuda → Notas de la versión opens the English notes, no restart. Back to Español: Spanish again |
+| G13 | Installer | Run the setup in Spanish and in English: the information page shows the notes in that language with correct accents; on a machine without settings the app starts in the installer's language |
 
 ## Findings from the 10.9 run
 

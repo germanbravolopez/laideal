@@ -204,18 +204,21 @@ jobs:
         shell: pwsh
         run: |
           $ver = '${{ github.ref_name }}'
-          $raw = Get-Content releases_notes.txt -Raw
-          $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
-          # Fail rather than publish a release (and surface to the in-app updater) with
-          # an empty "what's new". The notes block is a required pre-step, like the
-          # CMakeLists version bump validated above.
-          if (-not $m.Success) {
-            throw "No release notes section for version $ver in releases_notes.txt. Add a '$ver' block first."
+          # Publish the version's section from BOTH notes files - Spanish first (the
+          # shop's language), then English. The body is what the in-app updater shows
+          # before installing, so it must never be empty: a missing or empty section
+          # in either file fails the release, like the CMakeLists version bump above.
+          function Get-Section([string]$file) {
+            $raw = Get-Content $file -Raw
+            $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
+            if (-not $m.Success) { throw "No release notes section for version $ver in $file. Add a '$ver' block first." }
+            $section = $m.Groups[1].Value.TrimEnd()
+            if ([string]::IsNullOrWhiteSpace($section)) { throw "Release notes section for version $ver is empty in $file." }
+            return $section
           }
-          $body = $m.Groups[1].Value.TrimEnd()
-          if ([string]::IsNullOrWhiteSpace($body)) {
-            throw "Release notes section for version $ver is empty in releases_notes.txt."
-          }
+          $es = Get-Section 'releases_notes_es.txt'
+          $en = Get-Section 'releases_notes.txt'
+          $body = "## Español`n`n$es`n`n## English`n`n$en"
           $tmp = Join-Path $env:TEMP "laideal_release_$ver.md"
           Set-Content -Path $tmp -Value $body -Encoding utf8
           echo "NOTES_PATH=$tmp" >> $env:GITHUB_OUTPUT

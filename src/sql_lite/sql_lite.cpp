@@ -72,6 +72,9 @@ void migrateDatabase(QSqlDatabase &db)
     // authoritatively for reprint / QR regen so we never have to guess from
     // seq=0 whether the original AEAT format was bare or "-0".
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
+    // Date a garment was cancelled (10.12+): voided in place (Anular prendas), cancelled
+    // at AEAT, or superseded by a substitution rectificativa. Empty otherwise.
+    q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -87,6 +90,47 @@ void migrateDatabase(QSqlDatabase &db)
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
                  << "unpaid PENDIENTE rows as SIN COBRAR";
+
+    // 10.12 backfill: garments voided in place used to carry the void date in
+    // fecha_pago and fecha_recogida although they were never paid nor collected.
+    // Move it to fecha_anulacion and empty both. Idempotent (only rows without a
+    // fecha_anulacion), and scoped to local voids: pagado != 'SI'.
+    if (!q.exec("UPDATE ingresos SET "
+                "fecha_anulacion = COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')), "
+                "fecha_pago = '', fecha_recogida = '' "
+                "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
+                "  AND (pagado IS NULL OR pagado != 'SI') "
+                "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '')"))
+        qWarning() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
+                 << q.numRowsAffected() << "voided garments";
+
+    // 10.12 repair: before 10.12 an AEAT cancellation also marked the ticket's UNPAID
+    // garments (they share seq 0) ANULADA, which left them neither chargeable nor
+    // counted. A cancelled invoice only ever covered the paid rows, so relabel them
+    // SIN COBRAR so they can be charged. Local voids (estado Anulado) are genuinely
+    // cancelled and untouched. Idempotent.
+    // RECTIFICADA is deliberately NOT repaired: an older substitution could have been
+    // submitted with the unpaid garments' amounts included, so re-opening them could
+    // invoice them twice. Those rows are only logged for manual review.
+    {
+        QSqlQuery review(db);
+        if (review.exec("SELECT DISTINCT n_recibo FROM ingresos "
+                        "WHERE (pagado IS NULL OR pagado != 'SI') AND verifactu_estado = 'RECTIFICADA' "
+                        "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
+            while (review.next())
+                qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
+                           << "has unpaid garments marked RECTIFICADA - review manually before charging them";
+    }
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
+                "WHERE (pagado IS NULL OR pagado != 'SI') "
+                "  AND verifactu_estado = 'ANULADA' "
+                "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
+        qWarning() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
+                 << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
 
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
     // which verifactuEstadoFromString() does not recognise (it fell through to
@@ -493,12 +537,11 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
 
     db.open();
     QSqlQuery q(db);
-    // fecha_pago / fecha_recogida are stamped with the cancellation date so the
-    // moment the garment was voided is recorded. Neither date is taxable here:
-    // the row keeps pagado = "NO" and gets verifactu_estado ANULADA, and every
-    // accounting query filters on pagado = 'SI' plus a not-ANULADA estado.
+    // The void date goes to fecha_anulacion; fecha_pago / fecha_recogida stay empty
+    // because the garment was never paid nor collected. pagado stays "NO", so no
+    // accounting query ever counts it.
     q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest, "
-              "fecha_pago = :fecha, fecha_recogida = :fecha "
+              "fecha_anulacion = :fecha, fecha_pago = '', fecha_recogida = '' "
               "WHERE n_recibo = :n AND hash = :h");
     q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
     q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
@@ -575,116 +618,34 @@ QString ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo)
     return estado;
 }
 
-// Period predicates shared by the Contabilidad totals, counts and detail listings,
-// so a detail table always lists exactly the rows behind its summary figure.
+// Period predicates of the Contabilidad detail listings, which are the single source
+// of every Contabilidad figure (totals, counts and detail tables).
 // Both bind :start / :end (yyyy-MM-dd) as the half-open range [start, end).
 static const QString kFechaPagoIso =
     QStringLiteral("date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))");
 static const QString kFechaGastoIso =
     QStringLiteral("date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2))");
-// Paid ingresos, excluding kTotalsExcludedEstados. Legacy rows without
-// verifactu_estado count as normal.
+static const QString kFechaAnulacionIso =
+    QStringLiteral("date(substr(fecha_anulacion,7,4)||'-'||substr(fecha_anulacion,4,2)||'-'||substr(fecha_anulacion,1,2))");
+static const QString kExcludedEstadosSql =
+    "('" + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')";
+// Paid ingresos, excluding kTotalsExcludedEstados - except a row cancelled /
+// rectified with a fecha_anulacion, which its payment period keeps (the subtraction
+// lands in the period of fecha_anulacion, see kRegularizationWhere).
+// Legacy rows without verifactu_estado count as normal.
 static const QString kIngresosIncomeWhere =
     QStringLiteral("(pagado = 'SI') AND "
-                   "(verifactu_estado IS NULL OR verifactu_estado = '' OR verifactu_estado NOT IN ('")
-    + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')) AND "
+                   "(verifactu_estado IS NULL OR verifactu_estado = '' OR verifactu_estado NOT IN ")
+    + kExcludedEstadosSql + " OR (fecha_anulacion IS NOT NULL AND fecha_anulacion != '')) AND "
     + "(" + kFechaPagoIso + " >= date(:start)) AND (" + kFechaPagoIso + " < date(:end))";
+// Regularisations accounted in the period of their fecha_anulacion.
+static const QString kRegularizationWhere =
+    "(pagado = 'SI') AND verifactu_estado IN " + kExcludedEstadosSql
+    + " AND (" + kFechaAnulacionIso + " >= date(:start)) AND (" + kFechaAnulacionIso + " < date(:end))";
 static const QString kGastosPeriodWhere =
     "(" + kFechaGastoIso + " >= date(:start)) AND (" + kFechaGastoIso + " < date(:end))";
 
-double totalPriceBetweenDates(QSqlDatabase &db, const QString &table,
-                              QDate startDate, QDate endDate, int iva)
-{
-    if (dbNotConfigured(db, __func__)) return 0.0;
 
-    double totalPrice = 0.0;
-    db.open();
-    QSqlQuery q(db);
-
-    if (table == "ingresos") {
-        // Exclude ANULADA (cancelled) and RECTIFICADA (superseded by a substitution
-        // rectificativa) rows from taxable income. The rectifying row itself carries
-        // the corrected total and counts normally. Rows without verifactu_estado
-        // (NULL or empty, pre-v8.0) are included as normal.
-        q.prepare(QStringLiteral("SELECT importe FROM ingresos WHERE ") + kIngresosIncomeWhere);
-        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
-        q.exec();
-    } else if (table == "gastos") {
-        // Use >= start AND < end (same half-open interval as ingresos) so that expenses on the
-        // first day of the next quarter are not double-counted in the current quarter.
-        q.prepare(QStringLiteral("SELECT importe FROM gastos WHERE (iva = :iva) AND ") + kGastosPeriodWhere);
-        q.bindValue(":iva",   iva);
-        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
-        q.exec();
-    } else {
-        qCritical() << "totalPriceBetweenDates: unsupported table:" << table;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "totalPriceBetweenDates: tabla no soportada: " + table,
-                              QMessageBox::Ok, QMessageBox::Ok);
-        db.close();
-        return 0.0;
-    }
-
-    if (q.isSelect()) {
-        while (q.next()) {
-            if (!q.value(0).toString().contains(',')) {
-                totalPrice += q.value(0).toDouble();
-            } else {
-                qCritical() << "totalPriceBetweenDates: comma decimal found in" << table;
-                QMessageBox::critical(nullptr, "Error en la base de datos",
-                                      "En la tabla " + table + " se ha detectado que hay valores decimales "
-                                      "guardados con ','. Utilizar herramienta de limpiado de importes decimales.",
-                                      QMessageBox::Ok, QMessageBox::Ok);
-            }
-        }
-    } else {
-        qCritical() << "totalPriceBetweenDates: query error for table" << table;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar totalPriceBetweenDates.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
-    db.close();
-    return totalPrice;
-}
-
-int countOperationsBetweenDates(QSqlDatabase &db, const QString &table,
-                                QDate startDate, QDate endDate)
-{
-    if (dbNotConfigured(db, __func__)) return 0;
-
-    int count = 0;
-    db.open();
-    QSqlQuery q(db);
-
-    if (table == "ingresos") {
-        // Distinct paid tickets, excluding ANULADA / RECTIFICADA, mirroring the
-        // estado + date filter of totalPriceBetweenDates so the operation count
-        // matches the income total shown alongside it.
-        q.prepare(QStringLiteral("SELECT COUNT(DISTINCT n_recibo) FROM ingresos WHERE ") + kIngresosIncomeWhere);
-        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
-        q.exec();
-    } else if (table == "gastos") {
-        q.prepare(QStringLiteral("SELECT COUNT(*) FROM gastos WHERE ") + kGastosPeriodWhere);
-        q.bindValue(":start", startDate.toString("yyyy-MM-dd"));
-        q.bindValue(":end",   endDate.toString("yyyy-MM-dd"));
-        q.exec();
-    } else {
-        qCritical() << "countOperationsBetweenDates: unsupported table:" << table;
-        db.close();
-        return 0;
-    }
-
-    if (q.isSelect() && q.next())
-        count = q.value(0).toInt();
-    else
-        qWarning() << "countOperationsBetweenDates: query error for table" << table << q.lastError().text();
-
-    db.close();
-    return count;
-}
 
 int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year)
 {
@@ -699,8 +660,8 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     int editLock = 2; // 2 = no data found for period
     // COALESCE(MAX(edit_lock), 0): the month reads locked (1) if ANY row in it is
     // locked, regardless of row order, and 0 when it is open or has no rows. MAX
-    // (not "first row wins") matters now that a voided garment carries edit_lock 0
-    // and a cancellation-stamped fecha_pago - it must not mask a locked sibling and
+    // (not "first row wins") matters because a row added after the close (e.g. a
+    // split-off garment) carries edit_lock 0 - it must not mask a locked sibling and
     // report an already-locked month as open. Callers only branch on == 1 / == 0,
     // so keeping the empty-month result at 0 preserves existing behaviour.
     if (table == "ingresos") {
@@ -1068,74 +1029,6 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     return events;
 }
 
-QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year)
-{
-    QuarterlyAccountingTotals t;
-    if (dbNotConfigured(db, __func__)) return t;
-
-    // Half-open [start, end) over the whole year, same shape as the per-quarter
-    // helpers but for all 12 months at once; quarter bucketing happens in SQL.
-    const QString start = QStringLiteral("%1-01-01").arg(year);
-    const QString end   = QStringLiteral("%1-01-01").arg(year + 1);
-
-    db.open();
-
-    // Ingresos in one scan, GROUP BY quarter, under the shared kIngresosIncomeWhere
-    // predicate; the COUNT(DISTINCT n_recibo) mirrors countOperationsBetweenDates. Quarter = (month + 2) / 3 with month =
-    // substr(fecha_pago,4,2): months 1-3 -> 1, 4-6 -> 2, 7-9 -> 3, 10-12 -> 4
-    // (integer division). Rows with an invalid/empty date are dropped by the
-    // date() comparison (NULL), exactly as the per-quarter query drops them.
-    {
-        QSqlQuery q(db);
-        q.prepare(
-            "SELECT (CAST(substr(fecha_pago,4,2) AS INTEGER) + 2) / 3 AS q, "
-            "       SUM(importe), COUNT(DISTINCT n_recibo) "
-            "FROM ingresos WHERE " + kIngresosIncomeWhere + " GROUP BY q");
-        q.bindValue(":start", start);
-        q.bindValue(":end",   end);
-        if (q.exec()) {
-            while (q.next()) {
-                const int quarter = q.value(0).toInt();
-                if (quarter < 1 || quarter > 4) continue;
-                t.ingImporte[quarter - 1] = q.value(1).toDouble();
-                t.ingTickets[quarter - 1] = q.value(2).toInt();
-            }
-        } else {
-            qWarning() << "annualAccountingByQuarter: ingresos query failed -" << q.lastError().text();
-        }
-    }
-
-    // Gastos in one scan, GROUP BY (quarter, iva). importe goes to the 10/21/0
-    // bucket by rate (other rates contribute to no importe bucket, matching the
-    // existing computeFigures which only queries 10/21/0); facturas counts every
-    // row regardless of rate (matches countOperationsBetweenDates for gastos).
-    {
-        QSqlQuery q(db);
-        q.prepare(
-            "SELECT (CAST(substr(fecha,4,2) AS INTEGER) + 2) / 3 AS q, iva, "
-            "       SUM(importe), COUNT(*) "
-            "FROM gastos WHERE " + kGastosPeriodWhere + " GROUP BY q, iva");
-        q.bindValue(":start", start);
-        q.bindValue(":end",   end);
-        if (q.exec()) {
-            while (q.next()) {
-                const int quarter = q.value(0).toInt();
-                if (quarter < 1 || quarter > 4) continue;
-                const int    iva = q.value(1).toInt();
-                const double imp = q.value(2).toDouble();
-                if (iva == 10)      t.gas10Importe[quarter - 1] = imp;
-                else if (iva == 21) t.gas21Importe[quarter - 1] = imp;
-                else if (iva == 0)  t.gasNiImporte[quarter - 1] = imp;
-                t.gasFacturas[quarter - 1] += q.value(3).toInt();
-            }
-        } else {
-            qWarning() << "annualAccountingByQuarter: gastos query failed -" << q.lastError().text();
-        }
-    }
-
-    db.close();
-    return t;
-}
 
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)
@@ -1248,8 +1141,8 @@ static int quarterBucket(const QString &ddMMyyyy) { return (ddMMyyyy.mid(3, 2).t
 // Runs the shared income predicate over [start, end) and aggregates the rows by
 // n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
 // COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
-// a bucket keeps its first payment date. A comma-decimal importe parses as 0,
-// the same as totalPriceBetweenDates skipping it.
+// a bucket keeps its first payment date. A comma-decimal importe is not summed;
+// it is counted in invalidAmounts so the report can flag it.
 static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
                                  QVector<IncomeTicketDetail> *buckets, int bucketCount,
                                  int (*bucketOf)(const QString &))
@@ -1265,7 +1158,7 @@ static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
         db.close();
         return;
     }
-    QHash<QString, int> indexByTicket[4];
+    QVector<QHash<QString, int>> indexByTicket(bucketCount);
     while (q.next()) {
         const int bucket = bucketOf(q.value(2).toString());
         if (bucket < 0 || bucket >= bucketCount) continue;
@@ -1281,7 +1174,11 @@ static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
             tickets.append(t);
         }
         IncomeTicketDetail &t = tickets[it.value()];
-        t.importe += q.value(3).toDouble();
+        const QString importe = q.value(3).toString();
+        if (importe.contains(QLatin1Char(',')))
+            t.invalidAmounts++;
+        else
+            t.importe += importe.toDouble();
         t.garments++;
     }
     db.close();
@@ -1313,8 +1210,56 @@ static void collectExpenses(QSqlDatabase &db, QDate start, QDate end,
         e.servicio = q.value(2).toString();
         e.fecha    = q.value(3).toString();
         e.iva      = q.value(4).isNull() ? -1 : q.value(4).toInt();
-        e.importe  = q.value(5).toDouble();
+        const QString importe = q.value(5).toString();
+        e.invalidAmount = importe.contains(QLatin1Char(','));
+        e.importe  = e.invalidAmount ? 0.0 : importe.toDouble();
         buckets[bucket].append(e);
+    }
+    db.close();
+}
+
+// Regularised rows in [start, end) of their fecha_anulacion, aggregated by n_recibo
+// into buckets[bucketOf(fecha_anulacion)].
+static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
+                                   QVector<RegularizationDetail> *buckets, int bucketCount,
+                                   int (*bucketOf)(const QString &))
+{
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, cliente, fecha_pago, fecha_anulacion, verifactu_estado, importe "
+              "FROM ingresos WHERE " + kRegularizationWhere
+              + " ORDER BY " + kFechaAnulacionIso + ", CAST(n_recibo AS INTEGER)");
+    q.bindValue(":start", start.toString("yyyy-MM-dd"));
+    q.bindValue(":end",   end.toString("yyyy-MM-dd"));
+    if (!q.exec()) {
+        qWarning() << "collectRegularizations: query failed -" << q.lastError().text();
+        db.close();
+        return;
+    }
+    QVector<QHash<QString, int>> indexByTicket(bucketCount);
+    while (q.next()) {
+        const int bucket = bucketOf(q.value(3).toString());
+        if (bucket < 0 || bucket >= bucketCount) continue;
+        QVector<RegularizationDetail> &regs = buckets[bucket];
+        const QString nRecibo = q.value(0).toString();
+        auto it = indexByTicket[bucket].find(nRecibo);
+        if (it == indexByTicket[bucket].end()) {
+            it = indexByTicket[bucket].insert(nRecibo, regs.size());
+            RegularizationDetail r;
+            r.nRecibo         = nRecibo;
+            r.cliente         = q.value(1).toString();
+            r.fechaPago       = q.value(2).toString();
+            r.fechaAnulacion  = q.value(3).toString();
+            r.verifactuEstado = q.value(4).toString();
+            regs.append(r);
+        }
+        RegularizationDetail &r = regs[it.value()];
+        const QString importe = q.value(5).toString();
+        if (importe.contains(QLatin1Char(',')))
+            r.invalidAmounts++;
+        else
+            r.importe += importe.toDouble();
+        r.garments++;
     }
     db.close();
 }
@@ -1335,6 +1280,14 @@ QVector<ExpenseDetail> expensesBetweenDates(QSqlDatabase &db, QDate startDate, Q
     return expenses;
 }
 
+QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+{
+    QVector<RegularizationDetail> regs;
+    if (dbNotConfigured(db, __func__)) return regs;
+    collectRegularizations(db, startDate, endDate, &regs, 1, singleBucket);
+    return regs;
+}
+
 QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year)
 {
     QuarterlyDetails d;
@@ -1342,5 +1295,70 @@ QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year)
     const QDate start(year, 1, 1), end(year + 1, 1, 1);
     collectIncomeTickets(db, start, end, d.income, 4, quarterBucket);
     collectExpenses(db, start, end, d.expenses, 4, quarterBucket);
+    collectRegularizations(db, start, end, d.regularizations, 4, quarterBucket);
     return d;
+}
+
+bool quarterIsClosed(QSqlDatabase &db, QDate date)
+{
+    const int quarter = (date.month() + 2) / 3;
+    return readLockForQuarter(db, "ingresos", quarter, date.year()) == 1
+        || readLockForQuarter(db, "gastos", quarter, date.year()) == 1;
+}
+
+QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__)) return QDate();
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT MAX(" + kFechaPagoIso + ") FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
+    q.bindValue(":n", nRecibo);
+    QDate last;
+    if (q.exec() && q.first())
+        last = QDate::fromString(q.value(0).toString(), Qt::ISODate);
+    else
+        qWarning() << "ticketLastPaymentDate: query failed -" << q.lastError().text();
+    db.close();
+    return last;
+}
+
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
+              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
+    q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
+    q.bindValue(":num",    nRecibo);
+    q.bindValue(":seq",    seq);
+    const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
+    if (!ok)
+        qWarning() << "markInvoiceSeqCancelled: UPDATE failed or matched no paid row for ticket" << nRecibo
+                   << "seq" << seq << "-" << q.lastError().text();
+    db.close();
+    return ok;
+}
+
+bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectificationDate)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
+              "WHERE n_recibo = :num AND pagado = 'SI'");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
+    q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
+    q.bindValue(":num",    nRecibo);
+    const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
+    if (!ok)
+        qWarning() << "markTicketRectified: UPDATE failed or matched no paid row for ticket" << nRecibo << "-" << q.lastError().text();
+    db.close();
+    return ok;
 }

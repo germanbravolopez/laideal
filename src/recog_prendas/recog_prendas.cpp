@@ -2,6 +2,7 @@
 #include "ui_recog_prendas.h"
 #include "pay_dialog.h"
 #include "sql_lite.h"
+#include "ingresoscolumns.h"
 #include "imprimir.h"
 #include "appsettings.h"
 #include "textcolordelegate.h"
@@ -399,7 +400,8 @@ void RecogPrendas::on_pb_search_clicked()
             // date_type values come from a hard-coded ComboBox - not user input
             QString dateType = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
                                (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
-                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" : "";
+                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" :
+                               (ui->cb_search_date->currentText() == "Anulación") ? "fecha_anulacion" : "";
             if (!dateSlash.isNull() || !dateDash.isNull()) {
                 db.open();
                 QSqlQuery q(db);
@@ -443,6 +445,7 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_RECEPCION , Qt::Horizontal, tr("Recepción"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_PAGO , Qt::Horizontal, tr("Pago"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_RECOGIDA , Qt::Horizontal, tr("Recogida"));
+        sqlQueryModel->setHeaderData(INGRESOS_COL_FECHA_ANULACION, Qt::Horizontal, tr("Anulación"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_IMPORTE    , Qt::Horizontal, tr("Importe"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_PAGADO , Qt::Horizontal, tr("Pagado"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_ESTADO    , Qt::Horizontal, tr("Estado"));
@@ -461,6 +464,7 @@ void RecogPrendas::on_pb_search_clicked()
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
+        placeIngresosDateColumns(ui->tableView->horizontalHeader());
         // Hide internal columns not meant for display
         ui->tableView->setColumnHidden(INGRESOS_COL_EDIT_LOCK,           true);
         ui->tableView->setColumnHidden(INGRESOS_COL_HASH,                true);
@@ -483,9 +487,8 @@ void RecogPrendas::on_pb_search_clicked()
         qDebug() << "RecogPrendas::on_pb_search_clicked: result"
                  << proxyModel->rowCount() << "of" << sqlQueryModel->rowCount() << "rows match";
         // Fill total_price from proxy rows (reflects the filtered set in all search modes).
-        // Voided / superseded rows are skipped: a voided row gets the void date as
-        // fecha_pago, so a Pago-date search would otherwise add it. Unpaid rows still
-        // count, so a ticket searched by number shows the amount owed.
+        // Voided / cancelled / superseded rows (ANULADA, RECTIFICADA) are skipped.
+        // Unpaid rows still count, so a ticket searched by number shows the amount owed.
         if (totalPriceActive) {
             float totalPrice = 0.0;
             for (int row = 0; row < proxyModel->rowCount(); row++) {

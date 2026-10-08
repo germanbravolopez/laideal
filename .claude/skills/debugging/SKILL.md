@@ -28,13 +28,13 @@ Name the layer before changing anything:
 
 | Symptom | Usually lives in |
 |---|---|
-| Wrong total / count / report figure | `sql_lite` predicates (`totalPriceBetweenDates`, `countOperationsBetweenDates`) or a UI loop summing proxy rows |
+| Wrong total / count / report figure | `sql_lite` detail listings (`incomeTicketsBetweenDates`, `expensesBetweenDates`, predicate `kIngresosIncomeWhere`) or a UI loop summing proxy rows |
 | Edit appears to save but reverts, or hits the wrong row | `RecogPrendas::updateDb` seams — check scoping by `(n_recibo, hash)` |
 | AEAT state wrong / button greyed | `parseVerifactuResponse`, `VerifactuEstado` transitions, `verifactuEstadoIsUnsubmitted()` |
 | Ticket content wrong | `Imprimir` call sites (flags passed to `buildTicket`) vs `TicketRenderer` |
 | Works in one dialog, not another | two code paths for the same action — compare them |
 
-Use `git log -S '<identifier>'` / `git log -L` to find when the behaviour was introduced, and check `docs/progress_tracker.md` Completed Milestones for an earlier fix in the same area.
+Use `git log -S '<identifier>'` / `git log -L` to find when the behaviour was introduced, and check `docs/completed_milestones.md` for an earlier fix in the same area.
 
 ## 3. Reduce
 

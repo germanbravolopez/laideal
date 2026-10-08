@@ -39,7 +39,6 @@ private:
 
     class QComboBox *m_language;      // "es" / "en" (Qt standard-dialog language)
     QLineEdit *m_dbPath;
-    QLineEdit *m_ivaRate;
     QCheckBox *m_enablePrinting;
     class QComboBox *m_printerName;   // editable: queue name, blank = default printer
     class QComboBox *m_paperWidth;    // 58 / 80 mm

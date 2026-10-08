@@ -40,10 +40,6 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-double      totalPriceBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate, int iva);
-// Number of operations in [startDate, endDate): distinct paid tickets (n_recibo) for
-// "ingresos", invoice rows for "gastos". Same estado/date filters as totalPriceBetweenDates.
-int         countOperationsBetweenDates(QSqlDatabase &db, const QString &table, QDate startDate, QDate endDate);
 int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
 // Quarter-wide edit_lock state (quarter 1-4). Returns 1 if any row of the quarter
 // is accounting-locked, 0 if the quarter has data but is open, 2 if it has no rows.
@@ -96,9 +92,9 @@ bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verif
 // the same excluded-estado list as the Contabilidad income predicate.
 bool        garmentExcludedFromTotals(const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
-// fecha_pago and fecha_recogida -> today (records when the garment was voided).
-// pagado is left untouched (stays "NO"); the caller is expected to have gated the
-// row through garmentIsLocallyVoidable first.
+// fecha_anulacion -> today, fecha_pago and fecha_recogida emptied (never paid nor
+// collected). pagado is left untouched (stays "NO"); the caller is expected to have
+// gated the row through garmentIsLocallyVoidable first.
 bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);
 // True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
 // has been submitted to AEAT, so AddGarment refuses to append new garments to it
@@ -212,36 +208,13 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
 // never fires. Ordered newest ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
-// Raw accounting totals for one year, bucketed by quarter (index 0 = Q1 .. 3 = Q4).
-// Produced by annualAccountingByQuarter with one grouped query per table, the
-// IVA base/cuota math is left to the caller (Contabilidad::figuresFromTotals).
-// The per-quarter filters mirror totalPriceBetweenDates / countOperationsBetweenDates
-// exactly. importe is SUM()'d in SQL, so - unlike the per-row helpers - this path
-// does not raise the comma-decimal corruption dialog; the trimestral/mensual
-// reports (which still call the per-row helpers) keep that guard.
-struct QuarterlyAccountingTotals {
-    double ingImporte[4]   = {0, 0, 0, 0};  // paid ingresos total (IVA incl.), ANULADA/RECTIFICADA excluded
-    int    ingTickets[4]   = {0, 0, 0, 0};  // distinct paid n_recibo
-    double gas10Importe[4] = {0, 0, 0, 0};  // gastos iva = 10
-    double gas21Importe[4] = {0, 0, 0, 0};  // gastos iva = 21
-    double gasNiImporte[4] = {0, 0, 0, 0};  // gastos iva = 0 (sin IVA)
-    int    gasFacturas[4]  = {0, 0, 0, 0};  // gastos rows, every iva rate (matches countOperations)
-};
-
-// One grouped query per table over the whole year, bucketed by quarter, for the
-// annual Contabilidad report - replaces the 24 per-quarter full-table substr()
-// scans (computeFigures x 4 quarters) with 2 scans. ingresos: SUM(importe) +
-// COUNT(DISTINCT n_recibo) under the exact pagado='SI' + ANULADA/RECTIFICADA +
-// date filters; gastos: SUM(importe) bucketed by quarter x iva (10/21/0) plus a
-// per-quarter row count over every rate. Quarter = (month + 2) / 3.
-QuarterlyAccountingTotals annualAccountingByQuarter(QSqlDatabase &db, int year);
-
 // One paid ticket behind the Contabilidad ingresos summary: its garment rows in
 // the period aggregated by n_recibo (importe is IVA included).
 struct IncomeTicketDetail {
     QString nRecibo, cliente, fechaPago;
     double  importe  = 0.0;
     int     garments = 0;
+    int     invalidAmounts = 0;   // garment rows whose importe uses a comma decimal: listed, not summed
 };
 // One gastos row behind the Contabilidad gastos summary. iva is the stored rate
 // (0 = sin IVA), or -1 when the column is NULL.
@@ -249,22 +222,66 @@ struct ExpenseDetail {
     QString nFactura, empresa, servicio, fecha;
     int     iva     = 0;
     double  importe = 0.0;
+    bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
 };
 
-// Detail listings for the Contabilidad report, filtered by the same predicate as
-// totalPriceBetweenDates / countOperationsBetweenDates over [startDate, endDate),
-// so they reconcile: incomeTickets has countOperations("ingresos") entries summing
-// to totalPrice("ingresos"); expenses has countOperations("gastos") rows. Ordered
-// by date, then ticket number / id.
+// A paid ticket later cancelled at AEAT (ANULADA) or superseded by a substitution
+// rectificativa (RECTIFICADA), with its fecha_anulacion. Its payment period keeps
+// it as income (a filed report never changes); the period containing
+// fechaAnulacion subtracts it - in the same period the two net out. importe is
+// IVA included.
+struct RegularizationDetail {
+    QString nRecibo, cliente, fechaPago, fechaAnulacion, verifactuEstado;
+    double  importe  = 0.0;
+    int     garments = 0;
+    int     invalidAmounts = 0;
+};
+
+// Detail listings for the Contabilidad report over [startDate, endDate). They are
+// the single source of every Contabilidad figure: the report sums these same rows,
+// so a summary and its detail table cannot disagree. Income: one entry per paid
+// n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
+// expenses: every gastos row. Ordered by date, then ticket number / id. A
+// comma-decimal importe is never summed: it is counted in invalidAmounts /
+// invalidAmount so the report can flag it. A paid row cancelled / rectified with a
+// fecha_anulacion still counts as income in its payment period, and is listed by
+// regularizationsBetweenDates in the period of its fecha_anulacion. (Pre-10.12
+// cancellations have no date and simply stay excluded.)
 QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+// Regularisations whose fecha_anulacion falls in [startDate, endDate), one entry per
+// n_recibo, ordered by that date.
+QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+
+// True when Contabilidad has closed the quarter containing date: any ingresos or
+// gastos row of that quarter is locked. Unlike readLockForMonthAndYear, a month
+// with no rows inside a closed quarter still reads as closed.
+bool quarterIsClosed(QSqlDatabase &db, QDate date);
+
+// Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.
+// A rectificativa may not be dated before it.
+QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
+
+// Marks one payment event (n_recibo + seq) ANULADA after an accepted AEAT
+// cancellation and records fecha_anulacion = cancelDate (never overwriting one
+// already set): the payment period keeps the income and the cancellation is
+// accounted in the period it happens. Only paid rows - the ones the invoice
+// covered - are marked; unpaid garments of the ticket (which share seq 0) stay
+// chargeable and are invoiced on their own when paid. Returns false when the
+// UPDATE fails or matches no paid row.
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
+// Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
+// rectificativa and records fecha_anulacion = the rectificativa's date, the same
+// period its replacement row is counted in. Unpaid rows stay chargeable.
+bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectificationDate);
 
 // The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),
 // from one scan per table instead of one per quarter. Each bucket equals the
 // period listing for that quarter's range.
 struct QuarterlyDetails {
-    QVector<IncomeTicketDetail> income[4];
-    QVector<ExpenseDetail>      expenses[4];
+    QVector<IncomeTicketDetail>   income[4];
+    QVector<ExpenseDetail>        expenses[4];
+    QVector<RegularizationDetail> regularizations[4];   // bucketed by fecha_anulacion
 };
 QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year);
 
