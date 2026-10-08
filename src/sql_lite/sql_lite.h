@@ -92,9 +92,9 @@ bool        garmentIsLocallyVoidable(const QString &pagado, const QString &verif
 // the same excluded-estado list as the Contabilidad income predicate.
 bool        garmentExcludedFromTotals(const QString &verifactuEstado);
 // Void one garment row in place: estado -> "Anulado", verifactu_estado -> "ANULADA",
-// fecha_pago and fecha_recogida -> today (records when the garment was voided).
-// pagado is left untouched (stays "NO"); the caller is expected to have gated the
-// row through garmentIsLocallyVoidable first.
+// fecha_anulacion -> today, fecha_pago and fecha_recogida emptied (never paid nor
+// collected). pagado is left untouched (stays "NO"); the caller is expected to have
+// gated the row through garmentIsLocallyVoidable first.
 bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash);
 // True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
 // has been submitted to AEAT, so AddGarment refuses to append new garments to it
@@ -225,10 +225,11 @@ struct ExpenseDetail {
     bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
 };
 
-// A paid ticket from an already-closed quarter that was cancelled at AEAT
-// (ANULADA) or superseded by a substitution rectificativa (RECTIFICADA) after the
-// close. Its closed quarter keeps it as income (the filed report never changes);
-// the period containing fechaAnulacion subtracts it. importe is IVA included.
+// A paid ticket later cancelled at AEAT (ANULADA) or superseded by a substitution
+// rectificativa (RECTIFICADA), with its fecha_anulacion. Its payment period keeps
+// it as income (a filed report never changes); the period containing
+// fechaAnulacion subtracts it - in the same period the two net out. importe is
+// IVA included.
 struct RegularizationDetail {
     QString nRecibo, cliente, fechaPago, fechaAnulacion, verifactuEstado;
     double  importe  = 0.0;
@@ -242,9 +243,10 @@ struct RegularizationDetail {
 // n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
 // expenses: every gastos row. Ordered by date, then ticket number / id. A
 // comma-decimal importe is never summed: it is counted in invalidAmounts /
-// invalidAmount so the report can flag it. A regularised row (fecha_anulacion
-// set) still counts as income in its original period, and is listed by
-// regularizationsBetweenDates in the period of its fecha_anulacion.
+// invalidAmount so the report can flag it. A paid row cancelled / rectified with a
+// fecha_anulacion still counts as income in its payment period, and is listed by
+// regularizationsBetweenDates in the period of its fecha_anulacion. (Pre-10.12
+// cancellations have no date and simply stay excluded.)
 QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 // Regularisations whose fecha_anulacion falls in [startDate, endDate), one entry per
@@ -257,13 +259,13 @@ QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDat
 bool quarterIsClosed(QSqlDatabase &db, QDate date);
 
 // Marks one payment event (n_recibo + seq) ANULADA after an accepted AEAT
-// cancellation. Rows already closed by Contabilidad (edit_lock = 1) also get
-// fecha_anulacion = cancelDate (never overwriting one already set), so the closed
-// quarter keeps them and the cancellation is accounted in the period it happens.
+// cancellation and records fecha_anulacion = cancelDate (never overwriting one
+// already set): the payment period keeps the income and the cancellation is
+// accounted in the period it happens.
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
 // Marks every row of a ticket RECTIFICADA after an accepted substitution
-// rectificativa; closed rows get fecha_anulacion = the rectificativa's date, the
-// same period its replacement row is counted in.
+// rectificativa and records fecha_anulacion = the rectificativa's date, the same
+// period its replacement row is counted in.
 bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectificationDate);
 
 // The same detail listings for a whole year, bucketed by quarter (index 0 = Q1),

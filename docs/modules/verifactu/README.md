@@ -178,7 +178,7 @@ Nine columns added to `ingresos` by `migrateDatabase()` in `sql_lite.cpp` (idemp
 | `verifactu_rectifies_n_recibo` | On a rectificativa row, points back to the `n_recibo` of the original ticket being corrected; empty on non-rectifying rows |
 | `verifactu_rectification_type` | `"S"` (sustitución) or `"I"` (diferencias) on a rectificativa row; empty on non-rectifying rows |
 
-The Contabilidad income predicate (`kIngresosIncomeWhere` in `sql_lite.cpp`) excludes both `verifactu_estado = 'ANULADA'` and `verifactu_estado = 'RECTIFICADA'` rows from quarterly income — cancelled invoices and rows superseded by a substitution rectificativa must not contribute to taxable income (the rectifying row carries the corrected total). All other estados (including `PENDIENTE` and legacy NULL/empty) are included. Exception: a row cancelled or rectified **after its quarter was closed** carries `fecha_anulacion`; it stays income in that closed quarter and is subtracted in the period of `fecha_anulacion` (see `docs/modules/contabilidad.md` → Closed quarters never change).
+The Contabilidad income predicate (`kIngresosIncomeWhere` in `sql_lite.cpp`) excludes both `verifactu_estado = 'ANULADA'` and `verifactu_estado = 'RECTIFICADA'` rows from quarterly income — cancelled invoices and rows superseded by a substitution rectificativa must not contribute to taxable income (the rectifying row carries the corrected total). All other estados (including `PENDIENTE` and legacy NULL/empty) are included. Exception: a row cancelled or rectified from 10.12 on carries `fecha_anulacion`; it stays income in its payment period and is subtracted in the period of `fecha_anulacion` (see `docs/modules/contabilidad.md` → Cancellations are counted where they happen).
 
 ---
 

@@ -241,9 +241,9 @@ private slots:
 
     // The annual one-scan listing must bucket exactly like four per-quarter calls,
     // including a ticket whose garments were paid in two different quarters.
-    // An AEAT cancellation stamps fecha_anulacion only on rows whose quarter was
-    // already closed (edit_lock = 1), and only on the cancelled payment event.
-    void test_markInvoiceSeqCancelled_stampsOnlyClosedRows()
+    // An AEAT cancellation records fecha_anulacion on the cancelled payment event
+    // only, whether or not its quarter was closed.
+    void test_markInvoiceSeqCancelled_stampsTheCancelledEvent()
     {
         insertIngreso("40", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/1);
         insertIngreso("40", "20-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0, /*seq=*/2);
@@ -254,26 +254,11 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=1"), QStringLiteral("ANULADA"));
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=1"), QStringLiteral("15-05-2026"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QStringLiteral("ENVIADA"));
-        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='41'"), QStringLiteral("ANULADA"));
-        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='41'"), QString());  // open quarter
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QString());
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='41'"), QStringLiteral("15-05-2026"));  // open quarter too
     }
 
-    // A closed quarter reads closed even for a month without rows (August), and
-    // from either table; an existing fecha_anulacion is never overwritten.
-    void test_quarterIsClosed_andStampNotOverwritten()
-    {
-        insertIngreso("60", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);   // Q3 closed via July
-        QVERIFY(quarterIsClosed(m_db, QDate(2026, 8, 15)));             // August has no rows
-        QVERIFY(!quarterIsClosed(m_db, QDate(2026, 10, 1)));
-        exec("INSERT INTO gastos (id, fecha, importe, iva, edit_lock) VALUES (1, '05-11-2026', '10.00', 21, 1)");
-        QVERIFY(quarterIsClosed(m_db, QDate(2026, 12, 1)));             // closed through gastos only
-
-        QVERIFY(markInvoiceSeqCancelled(m_db, "60", 0, QDate(2026, 10, 2)));
-        QVERIFY(markInvoiceSeqCancelled(m_db, "60", 0, QDate(2027, 1, 5)));
-        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='60'"), QStringLiteral("02-10-2026"));
-    }
-
-    void test_markTicketRectified_stampsClosedRowsWithRectificationDate()
+    void test_markTicketRectified_stampsRectificationDate()
     {
         insertIngreso("42", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
         insertIngreso("43", "10-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
@@ -281,38 +266,64 @@ private slots:
         QVERIFY(markTicketRectified(m_db, "43", QDate(2026, 6, 1)));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='42'"), QStringLiteral("RECTIFICADA"));
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='42'"), QStringLiteral("01-06-2026"));
-        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='43'"), QString());
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='43'"), QStringLiteral("01-06-2026"));
     }
 
-    // A ticket from a closed Q1 cancelled in Q2 stays income in Q1 (the filed report
-    // does not change) and is listed as a regularisation in Q2. A cancellation in an
-    // open quarter just drops out, as before.
+    // A paid ticket cancelled in a later quarter stays income in its payment quarter
+    // (closed or not) and is a regularisation in the cancellation quarter; one
+    // cancelled within its own quarter nets out there. A local void (unpaid) is
+    // never income nor a regularisation.
     void test_regularizations_countWhereTheyHappen()
     {
-        insertIngreso("50", "10-02-2026", "121.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);
-        insertIngreso("51", "12-02-2026", "50.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);
+        insertIngreso("50", "10-02-2026", "121.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);  // Q1 closed
+        insertIngreso("51", "12-02-2026", "50.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);  // Q1 open
+        insertIngreso("52", "10-05-2026", "30.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);  // Q2, cancelled in Q2
+        insertRow("53", "hashV");                                                                   // unpaid, voided
         QVERIFY(markInvoiceSeqCancelled(m_db, "50", 0, QDate(2026, 5, 15)));
         QVERIFY(markInvoiceSeqCancelled(m_db, "51", 0, QDate(2026, 5, 15)));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "52", 0, QDate(2026, 5, 20)));
+        QVERIFY(voidGarmentRow(m_db, "53", "hashV"));
 
         const QDate q1s(2026, 1, 1), q2s(2026, 4, 1), q3s(2026, 7, 1);
         const QVector<IncomeTicketDetail> q1 = incomeTicketsBetweenDates(m_db, q1s, q2s);
-        QCOMPARE(q1.size(), 1);
-        QCOMPARE(q1[0].nRecibo, QStringLiteral("50"));                  // closed quarter keeps it
+        QCOMPARE(q1.size(), 2);                                         // payment quarter keeps 50 and 51
         QVERIFY(regularizationsBetweenDates(m_db, q1s, q2s).isEmpty());
 
+        const QVector<IncomeTicketDetail> q2Income = incomeTicketsBetweenDates(m_db, q2s, q3s);
+        QCOMPARE(q2Income.size(), 1);                                   // 52 is income in Q2...
         const QVector<RegularizationDetail> q2 = regularizationsBetweenDates(m_db, q2s, q3s);
-        QCOMPARE(q2.size(), 1);                                         // 51 was open: no regularisation
+        QCOMPARE(q2.size(), 3);                                         // ...and subtracted there; 53 never appears
         QCOMPARE(q2[0].nRecibo, QStringLiteral("50"));
         QCOMPARE(q2[0].fechaPago, QStringLiteral("10-02-2026"));
         QCOMPARE(q2[0].fechaAnulacion, QStringLiteral("15-05-2026"));
         QCOMPARE(q2[0].verifactuEstado, QStringLiteral("ANULADA"));
         QVERIFY(qAbs(q2[0].importe - 121.0) < 0.001);
-        QVERIFY(incomeTicketsBetweenDates(m_db, q2s, q3s).isEmpty());
+        QCOMPARE(q2[2].nRecibo, QStringLiteral("52"));
 
         const QuarterlyDetails d = annualDetailsByQuarter(m_db, 2026);
-        QCOMPARE(d.income[0].size(), 1);
+        QCOMPARE(d.income[0].size(), 2);
         QCOMPARE(d.regularizations[0].size(), 0);
-        QCOMPARE(d.regularizations[1].size(), 1);                       // bucketed by fecha_anulacion
+        QCOMPARE(d.regularizations[1].size(), 3);                       // bucketed by fecha_anulacion
+    }
+
+    // Garments voided before 10.12 carried the void date in fecha_pago and
+    // fecha_recogida: the migration moves it to fecha_anulacion, once.
+    void test_migrateDatabase_movesVoidDateToFechaAnulacion()
+    {
+        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('70', 'h70', 'NO', 'Anulado', 'ANULADA', '07-08-2026', '07-08-2026')");
+        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('71', 'h71', 'SI', 'Recogido', 'ANULADA', '01-03-2026', '02-03-2026')");  // AEAT-cancelled: untouched
+        migrateDatabase(m_db);
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='70'"), QStringLiteral("07-08-2026"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE n_recibo='70'"), QString());
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE n_recibo='70'"), QString());
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE n_recibo='71'"), QStringLiteral("01-03-2026"));
+        QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='71'"), QString());
+
+        exec("UPDATE ingresos SET fecha_pago = '09-09-2026' WHERE n_recibo = '70'");
+        migrateDatabase(m_db);                                           // idempotent: date already set
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='70'"), QStringLiteral("07-08-2026"));
     }
 
     void test_annualDetailsByQuarter_matchesPerQuarterListings()
@@ -1053,10 +1064,12 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("ANULADA"));
         // pagado is deliberately left as-is (the row is closed, not collected).
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
-        // Both dates record when the garment was voided.
+        // The void date goes to fecha_anulacion; never paid nor collected, so both
+        // fecha_pago and fecha_recogida are empty.
         const QString today = QDate::currentDate().toString("dd-MM-yyyy");
-        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"), today);
-        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'"), today);
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hashA'"), today);
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"), QString());
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'"), QString());
         // The sibling garment of the same ticket is keyed out by hash.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
@@ -1078,10 +1091,11 @@ private slots:
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hA'"), QStringLiteral("10-04-2026"));
-        // The voided garment stays Anulado and keeps its cancellation date - the
-        // "Recoger todo" pickup date is never written over it.
+        // The voided garment stays Anulado and is never "picked up": the "Recoger
+        // todo" date is not written to it, and its void date stays in fecha_anulacion.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hB'"), QStringLiteral("Anulado"));
-        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"),
+        QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"), QString());
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hB'"),
                  QDate::currentDate().toString("dd-MM-yyyy"));
         // The NULL-estado legacy row is picked up like any normal row.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));

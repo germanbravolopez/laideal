@@ -72,8 +72,8 @@ void migrateDatabase(QSqlDatabase &db)
     // authoritatively for reprint / QR regen so we never have to guess from
     // seq=0 whether the original AEAT format was bare or "-0".
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
-    // Date an AEAT cancellation / substitution rectification hit a row whose quarter
-    // was already closed (10.12+). Empty for every other row; see markInvoiceSeqCancelled.
+    // Date a garment was cancelled (10.12+): voided in place (Anular prendas), cancelled
+    // at AEAT, or superseded by a substitution rectificativa. Empty otherwise.
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
@@ -90,6 +90,21 @@ void migrateDatabase(QSqlDatabase &db)
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
                  << "unpaid PENDIENTE rows as SIN COBRAR";
+
+    // 10.12 backfill: garments voided in place used to carry the void date in
+    // fecha_pago and fecha_recogida although they were never paid nor collected.
+    // Move it to fecha_anulacion and empty both. Idempotent (only rows without a
+    // fecha_anulacion), and scoped to local voids: pagado != 'SI'.
+    if (!q.exec("UPDATE ingresos SET "
+                "fecha_anulacion = COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')), "
+                "fecha_pago = '', fecha_recogida = '' "
+                "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado = 'ANULADA' "
+                "  AND (pagado IS NULL OR pagado != 'SI') "
+                "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '')"))
+        qWarning() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
+                 << q.numRowsAffected() << "voided garments";
 
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
     // which verifactuEstadoFromString() does not recognise (it fell through to
@@ -496,12 +511,11 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
 
     db.open();
     QSqlQuery q(db);
-    // fecha_pago / fecha_recogida are stamped with the cancellation date so the
-    // moment the garment was voided is recorded. Neither date is taxable here:
-    // the row keeps pagado = "NO" and gets verifactu_estado ANULADA, and every
-    // accounting query filters on pagado = 'SI' plus a not-ANULADA estado.
+    // The void date goes to fecha_anulacion; fecha_pago / fecha_recogida stay empty
+    // because the garment was never paid nor collected. pagado stays "NO", so no
+    // accounting query ever counts it.
     q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest, "
-              "fecha_pago = :fecha, fecha_recogida = :fecha "
+              "fecha_anulacion = :fecha, fecha_pago = '', fecha_recogida = '' "
               "WHERE n_recibo = :n AND hash = :h");
     q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
     q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
@@ -589,8 +603,9 @@ static const QString kFechaAnulacionIso =
     QStringLiteral("date(substr(fecha_anulacion,7,4)||'-'||substr(fecha_anulacion,4,2)||'-'||substr(fecha_anulacion,1,2))");
 static const QString kExcludedEstadosSql =
     "('" + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')";
-// Paid ingresos, excluding kTotalsExcludedEstados - except a row regularised after
-// its quarter was closed (fecha_anulacion set), which its closed quarter keeps.
+// Paid ingresos, excluding kTotalsExcludedEstados - except a row cancelled /
+// rectified with a fecha_anulacion, which its payment period keeps (the subtraction
+// lands in the period of fecha_anulacion, see kRegularizationWhere).
 // Legacy rows without verifactu_estado count as normal.
 static const QString kIngresosIncomeWhere =
     QStringLiteral("(pagado = 'SI') AND "
@@ -619,8 +634,8 @@ int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, i
     int editLock = 2; // 2 = no data found for period
     // COALESCE(MAX(edit_lock), 0): the month reads locked (1) if ANY row in it is
     // locked, regardless of row order, and 0 when it is open or has no rows. MAX
-    // (not "first row wins") matters now that a voided garment carries edit_lock 0
-    // and a cancellation-stamped fecha_pago - it must not mask a locked sibling and
+    // (not "first row wins") matters because a row added after the close (e.g. a
+    // split-off garment) carries edit_lock 0 - it must not mask a locked sibling and
     // report an already-locked month as open. Callers only branch on == 1 / == 0,
     // so keeping the empty-month result at 0 preserves existing behaviour.
     if (table == "ingresos") {
@@ -1272,7 +1287,7 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
-              "fecha_anulacion = CASE WHEN edit_lock = 1 THEN COALESCE(NULLIF(fecha_anulacion, ''), :fecha) ELSE fecha_anulacion END "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
               "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
@@ -1293,7 +1308,7 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
-              "fecha_anulacion = CASE WHEN edit_lock = 1 THEN COALESCE(NULLIF(fecha_anulacion, ''), :fecha) ELSE fecha_anulacion END "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
               "WHERE n_recibo = :num");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
     q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
