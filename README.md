@@ -231,15 +231,20 @@ When using this local fallback, attach it manually (the automated workflow above
 
 ```powershell
 $ver = 'X.Y'
-# Extract just the new X.Y section from releases_notes.txt into a temp .md so the
-# GitHub release body shows only this release's bullets, not the whole accumulated file.
-# The file uses Markdown-compatible indentation (top-level bullets at column 0,
-# nested at 2 spaces), so no de-indenting is needed - just drop the title line
-# (the regex captures only what follows it) and trim trailing blanks.
+# Extract just the new X.Y section from both notes files into a temp .md so the
+# GitHub release body shows only this release's bullets - Spanish first, then
+# English, the same bilingual body the ci.yml release job publishes (and the
+# in-app updater shows). The files use Markdown-compatible indentation, so the
+# regex just drops the version line and the rest is trimmed.
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
-$raw = Get-Content releases_notes.txt -Raw
-$m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\d+\.\d+\r?\n|\z)")
-Set-Content -Path $tmpNotes -Value $m.Groups[1].Value.TrimEnd() -Encoding utf8
+function Get-Section([string]$file) {
+    $raw = Get-Content $file -Raw
+    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
+    if (-not $m.Success) { throw "No section for $ver found in $file" }
+    return $m.Groups[1].Value.TrimEnd()
+}
+$body = "## Español`n`n$(Get-Section 'releases_notes_es.txt')`n`n## English`n`n$(Get-Section 'releases_notes.txt')"
+Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `
