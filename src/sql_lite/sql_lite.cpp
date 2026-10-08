@@ -106,6 +106,20 @@ void migrateDatabase(QSqlDatabase &db)
         qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
                  << q.numRowsAffected() << "voided garments";
 
+    // 10.12 repair: before 10.12 an AEAT cancellation / substitution rectification also
+    // marked the ticket's UNPAID garments (they share seq 0) ANULADA / RECTIFICADA, which
+    // left them neither chargeable nor counted. They were never part of that invoice:
+    // relabel them SIN COBRAR so they can be charged. Local voids (estado Anulado) are
+    // genuinely cancelled and untouched. Idempotent.
+    if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
+                "WHERE (pagado IS NULL OR pagado != 'SI') "
+                "  AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
+                "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
+        qWarning() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
+    else if (q.numRowsAffected() > 0)
+        qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
+                 << "unpaid garments wrongly marked by a cancellation as SIN COBRAR";
+
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
     // which verifactuEstadoFromString() does not recognise (it fell through to
     // NotSubmitted, so those rows stopped offering "Reintentar"). Every canonical
@@ -1310,9 +1324,9 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
-    const bool ok = q.exec();
+    const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
     if (!ok)
-        qWarning() << "markInvoiceSeqCancelled: UPDATE failed for ticket" << nRecibo
+        qWarning() << "markInvoiceSeqCancelled: UPDATE failed or matched no paid row for ticket" << nRecibo
                    << "seq" << seq << "-" << q.lastError().text();
     db.close();
     return ok;
@@ -1330,9 +1344,9 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
     q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
     q.bindValue(":num",    nRecibo);
-    const bool ok = q.exec();
+    const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
     if (!ok)
-        qWarning() << "markTicketRectified: UPDATE failed for ticket" << nRecibo << "-" << q.lastError().text();
+        qWarning() << "markTicketRectified: UPDATE failed or matched no paid row for ticket" << nRecibo << "-" << q.lastError().text();
     db.close();
     return ok;
 }

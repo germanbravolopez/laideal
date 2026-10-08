@@ -8,7 +8,7 @@
 - New: language setting applied immediately, release notes in Spanish and English
   - Configuración -> Idioma now applies without restarting: the standard dialogs and Ayuda -> Notas de la versión follow it (the rest of the application stays in Spanish for now). The installer shows the release notes in the language you pick, and a new installation starts in that language.
 - Bug fix: cancelling an invoice no longer affects the unpaid garments of the ticket
-  - They stay unpaid and can still be charged with "Cobrar".
+  - They stay unpaid and can still be charged with "Cobrar". Garments already affected by an earlier cancellation are returned to "SIN COBRAR" automatically the first time you open this version.
 - Improvements in Contabilidad
   - "Bloquear datos" is only offered for quarterly accounting, the only mode that closes a period.
   - A quarter with expenses but no income can now be closed and reverted.

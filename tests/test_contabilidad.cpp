@@ -181,6 +181,10 @@ private slots:
         RegularizationDetail rOther;   rOther.nRecibo = "9";   rOther.importe = 99.0;   // paid in another period
         QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {rFull, rPartial, rOther}), 2);
         QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {}), 3);
+        IncomeTicketDetail credit; credit.nRecibo = "4"; credit.importe = -20.0;   // by-differences credit note
+        QCOMPARE(Contabilidad::netTicketCount({kept, credit}, {}), 1);
+        IncomeTicketDetail commaOnly; commaOnly.nRecibo = "5"; commaOnly.invalidAmounts = 1;  // real sale, amount flagged
+        QCOMPARE(Contabilidad::netTicketCount({commaOnly}, {}), 1);
         const Contabilidad::PeriodFigures f =
             Contabilidad::figuresFromDetails({full, partial, kept}, {rFull, rPartial, rOther}, {}, 21.0);
         QCOMPARE(f.ingTickets, 2);
@@ -200,8 +204,8 @@ private slots:
     void test_yearTicketCountIsDistinct()
     {
         QuarterlyDetails d;
-        IncomeTicketDetail a; a.nRecibo = "T1";
-        IncomeTicketDetail b; b.nRecibo = "T2";
+        IncomeTicketDetail a; a.nRecibo = "T1"; a.importe = 10.0;
+        IncomeTicketDetail b; b.nRecibo = "T2"; b.importe = 10.0;
         d.income[0] = {a};
         d.income[1] = {a, b};                                        // T1 paid across Q1 and Q2
         QCOMPARE(Contabilidad::yearTicketCount(d), 2);

@@ -334,40 +334,42 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
     return f;
 }
 
-// Sums each ticket's income and regularisations, then counts the tickets left
-// with a non-zero net amount (1 cent tolerance for float sums).
-static int countNetTickets(const QHash<QString, double> &incomeByTicket,
-                           const QHash<QString, double> &regularizedByTicket)
+int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
+                                 const QVector<RegularizationDetail> &regularizations)
 {
+    // Per ticket: income minus its regularisations. Count only a positive net (1 cent
+    // tolerance): paid-and-cancelled nets to 0, and a by-differences credit note is
+    // negative. A ticket whose amounts are all comma-flagged (net 0 but a real sale)
+    // still counts unless it was regularised.
+    QHash<QString, double> net;
+    QSet<QString> flagged;
+    for (const IncomeTicketDetail &t : income) {
+        net[t.nRecibo] += t.importe;
+        if (t.invalidAmounts > 0)
+            flagged.insert(t.nRecibo);
+    }
+    QSet<QString> regularized;
+    for (const RegularizationDetail &r : regularizations) {
+        if (net.contains(r.nRecibo))
+            net[r.nRecibo] -= r.importe;
+        regularized.insert(r.nRecibo);
+    }
     int n = 0;
-    for (auto it = incomeByTicket.cbegin(); it != incomeByTicket.cend(); ++it)
-        if (!regularizedByTicket.contains(it.key())
-                || it.value() - regularizedByTicket.value(it.key()) > 0.005)
+    for (auto it = net.cbegin(); it != net.cend(); ++it)
+        if (it.value() > 0.005 || (flagged.contains(it.key()) && !regularized.contains(it.key())))
             n++;
     return n;
 }
 
-int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
-                                 const QVector<RegularizationDetail> &regularizations)
-{
-    QHash<QString, double> incomeByTicket, regularizedByTicket;
-    for (const IncomeTicketDetail &t : income)
-        incomeByTicket[t.nRecibo] += t.importe;
-    for (const RegularizationDetail &r : regularizations)
-        regularizedByTicket[r.nRecibo] += r.importe;
-    return countNetTickets(incomeByTicket, regularizedByTicket);
-}
-
 int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
 {
-    QHash<QString, double> incomeByTicket, regularizedByTicket;
+    QVector<IncomeTicketDetail> income;
+    QVector<RegularizationDetail> regularizations;
     for (const QVector<IncomeTicketDetail> &quarter : details.income)
-        for (const IncomeTicketDetail &t : quarter)
-            incomeByTicket[t.nRecibo] += t.importe;
+        income += quarter;
     for (const QVector<RegularizationDetail> &quarter : details.regularizations)
-        for (const RegularizationDetail &r : quarter)
-            regularizedByTicket[r.nRecibo] += r.importe;
-    return countNetTickets(incomeByTicket, regularizedByTicket);
+        regularizations += quarter;
+    return netTicketCount(income, regularizations);
 }
 
 int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,

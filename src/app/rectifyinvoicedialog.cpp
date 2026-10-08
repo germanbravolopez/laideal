@@ -329,9 +329,9 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
     if (requestId != m_pendingRectifyId) return; // not ours
     m_pendingRectifyId.clear();
 
-    applyRectificationResult(result);
+    const bool localOk = applyRectificationResult(result);
 
-    if (result.isSuccess()) {
+    if (result.isSuccess() && localOk) {
         m_lblResult->setText(
             QString("<b style='color:green'>Rectificativa enviada.</b><br>"
                     "Nuevo ticket: %1<br>CSV: %2")
@@ -340,6 +340,11 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
         m_loadedTicket.clear();
         m_leTicketNum->clear();
         m_lblInfo->setText("-");
+    } else if (result.isSuccess()) {
+        // AEAT accepted but the local mark failed: keep the red message set by
+        // applyRectificationResult, and do not offer to rectify the same ticket again.
+        m_loadedTicket.clear();
+        m_leTicketNum->clear();
     } else {
         m_lblResult->setText(
             QString("<b style='color:red'>Error al rectificar:</b> %1")
@@ -416,8 +421,9 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     db.close();
 }
 
-void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
+bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
 {
+    bool localOk = true;
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const VerifactuEstado estado = result.isSuccess() ? VerifactuEstado::Enviada
                                                       : VerifactuEstado::Error;
@@ -467,10 +473,13 @@ void RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
         qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
-        if (!markTicketRectified(db, m_loadedTicket, m_newInvoiceDate))
+        if (!markTicketRectified(db, m_loadedTicket, m_newInvoiceDate)) {
+            localOk = false;
             m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
                                          "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "
                                          "de depuración antes de hacer la contabilidad.</b>").arg(m_loadedTicket.toHtmlEscaped()));
+        }
     }
     db.close();
+    return localOk;
 }

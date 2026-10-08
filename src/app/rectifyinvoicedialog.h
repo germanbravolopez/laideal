@@ -45,7 +45,8 @@ private:
     // xml / hash / url + estado=ENVIADA on success, or estado=ERROR + description
     // on failure. For substitution-mode success it also marks the original rows
     // RECTIFICADA.
-    void applyRectificationResult(const VerifactuResult &result);
+    // Returns false when AEAT accepted but the local RECTIFICADA mark failed.
+    bool applyRectificationResult(const VerifactuResult &result);
 
     // Top row - ticket lookup
     QLineEdit *m_leTicketNum;

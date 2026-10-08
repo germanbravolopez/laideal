@@ -8,7 +8,7 @@
 - Nuevo: el idioma se aplica al momento y las notas de la versión están en español e inglés
   - Configuración -> Idioma se aplica ahora sin reiniciar: los diálogos estándar y Ayuda -> Notas de la versión siguen el idioma elegido (el resto de la aplicación sigue en español por ahora). El instalador muestra las notas en el idioma que se elija, y una instalación nueva arranca en ese idioma.
 - Corrección: anular una factura ya no afecta a las prendas sin cobrar del ticket
-  - Siguen sin cobrar y se pueden cobrar igualmente con "Cobrar".
+  - Siguen sin cobrar y se pueden cobrar igualmente con "Cobrar". Las prendas ya afectadas por una anulación anterior vuelven a "SIN COBRAR" automáticamente la primera vez que se abre esta versión.
 - Mejoras en Contabilidad
   - "Bloquear datos" solo se ofrece en la contabilidad trimestral, el único modo que cierra un periodo.
   - Ahora se puede cerrar y revertir un trimestre con gastos pero sin ingresos.

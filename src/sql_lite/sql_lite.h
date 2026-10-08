@@ -267,7 +267,8 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
 // already set): the payment period keeps the income and the cancellation is
 // accounted in the period it happens. Only paid rows - the ones the invoice
 // covered - are marked; unpaid garments of the ticket (which share seq 0) stay
-// chargeable and are invoiced on their own when paid.
+// chargeable and are invoiced on their own when paid. Returns false when the
+// UPDATE fails or matches no paid row.
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
 // Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
 // rectificativa and records fecha_anulacion = the rectificativa's date, the same
