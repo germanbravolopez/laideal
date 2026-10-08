@@ -103,8 +103,6 @@ void AppSettings::applyDefaults()
         setStr({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
     if (businessCity().isEmpty())
         setStr({"business", "city"}, "18012 Granada");
-    if (ivaRate() == 0.0)
-        setDbl({"taxes", "iva_rate"}, 21.0);
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
     if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
@@ -342,8 +340,6 @@ void    AppSettings::setBusinessPhone(const QString &v) { setStr({"business", "p
 // ---------------------------------------------------------------------------
 // Taxes
 // ---------------------------------------------------------------------------
-double AppSettings::ivaRate() const    { return dbl({"taxes", "iva_rate"}, 21.0); }
-void   AppSettings::setIvaRate(double v) { setDbl({"taxes", "iva_rate"}, v); }
 
 // ---------------------------------------------------------------------------
 // Verifactu

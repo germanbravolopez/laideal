@@ -92,13 +92,13 @@ private slots:
         QCOMPARE(s->listadosGastosPath(),  QStringLiteral("/srv/reports/Listados/Gastos"));
     }
 
-    // ivaRate reads taxes.iva_rate; absent -> the 21.0 default (applied on load).
-    void test_ivaRate()
+    // The ingresos IVA rate is a fixed 21 %: a legacy taxes.iva_rate in the JSON
+    // is ignored (and not rewritten), whatever its value.
+    void test_ivaRateIsFixedAndIgnoresJson()
     {
         loadJson(R"({"taxes":{"iva_rate":10.0}})");
-        QCOMPARE(AppSettings::instance()->ivaRate(), 10.0);
+        QCOMPARE(AppSettings::instance()->ivaRate(), 21.0);
 
-        // No taxes block: applyDefaults() fills 21.0.
         loadJson(R"({"reports":{"root":"/x"}})");
         QCOMPARE(AppSettings::instance()->ivaRate(), 21.0);
     }

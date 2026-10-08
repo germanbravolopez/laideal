@@ -78,8 +78,12 @@ public:
     void setBusinessPhone(const QString &v);
 
     // --- Taxes ---
-    double ivaRate() const;      // percentage, e.g. 21.0
-    void setIvaRate(double v);
+    // IVA rate (%) on ingresos: fixed at 21 by business decision, no longer
+    // configurable. A legacy taxes.iva_rate key in the settings JSON is kept on
+    // disk for older versions but ignored, so a stray value can never alter
+    // tickets, AEAT submissions or past Contabilidad reports.
+    static constexpr double kIngresosIvaRate = 21.0;
+    static double ivaRate() { return kIngresosIvaRate; }
 
     // --- Verifactu ---
     QString verifactuNif() const;

@@ -11,7 +11,6 @@
 #include <QLabel>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QDoubleValidator>
 #include <QDate>
 #include <QDateEdit>
 #include <QComboBox>
@@ -83,11 +82,6 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
         "Idioma de los diálogos estándar de Qt (botones Sí/No, Aceptar/Cancelar, etc.). "
         "Requiere reiniciar la aplicación para aplicar."));
     fl->addRow(tr("Idioma:"), m_language);
-
-    m_ivaRate = new QLineEdit(QString::number(s->ivaRate(), 'f', 1));
-    m_ivaRate->setValidator(new QDoubleValidator(0.0, 100.0, 2, m_ivaRate));
-    m_ivaRate->setFixedWidth(80);
-    fl->addRow(tr("Tipo de IVA (%):"), m_ivaRate);
 
     m_enablePrinting = new QCheckBox(tr("Habilitar impresión de tickets y facturas"));
     m_enablePrinting->setChecked(s->enablePrinting());
@@ -267,7 +261,6 @@ void SettingsDialog::accept()
 
     s->setLanguage(m_language->currentData().toString());
     s->setDbPath(m_dbPath->text().trimmed());
-    s->setIvaRate(m_ivaRate->text().replace(',', '.').toDouble());
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
     s->setPaperWidthMm(m_paperWidth->currentData().toInt());
