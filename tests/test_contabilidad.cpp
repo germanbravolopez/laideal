@@ -161,7 +161,7 @@ private slots:
         a.fechaAnulacion = "15-05-2026"; a.verifactuEstado = "ANULADA"; a.importe = 121.0;
         RegularizationDetail b; b.nRecibo = "13"; b.verifactuEstado = "RECTIFICADA"; b.importe = 24.2;
         const QString html = Contabilidad::createHtmlDetailRegularizaciones({a, b}, 21.0);
-        QVERIFY(html.contains("Anulaciones y rectificaciones de periodos anteriores"));
+        QVERIFY(html.contains("Anulaciones y rectificaciones del periodo"));
         QVERIFY(html.contains("<td>15-05-2026</td>"));
         QVERIFY(html.contains("<td>Anulada</td>") && html.contains("<td>Rectificada</td>"));
         QVERIFY(html.contains("Total (2 tickets)"));
@@ -224,6 +224,11 @@ private slots:
         QVERIFY(gas.contains("Total (1 facturas)"));                 // the invalid row stays out
         QVERIFY(gas.contains("1 factura(s) con el importe guardado con ',' decimal"));
         QVERIFY(!gas.contains("tipo de IVA no reconocido"));         // not double-flagged as an odd rate
+
+        ExpenseDetail noRate; noRate.nFactura = "F-7"; noRate.iva = -1; noRate.invalidAmount = true;
+        const QString gasNull = Contabilidad::createHtmlDetailGastos({noRate});
+        QVERIFY(gasNull.contains("<td style='text-align:right;'>?</td>"));   // NULL rate never shown as -1
+        QVERIFY(!gasNull.contains(">-1<"));
     }
 
     void test_detailEmptyPeriod()

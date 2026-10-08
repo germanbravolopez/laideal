@@ -198,9 +198,9 @@ void Contabilidad::generateContabilidad()
             filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
         }
         else {
-            // readLockForMonthAndYear reports an empty month as 0 (open), never 2.
-            const bool cerrada = combinedLockState(readLockForMonthAndYear(db, "ingresos", ui->sb_trim->value(), year),
-                                                   readLockForMonthAndYear(db, "gastos", ui->sb_trim->value(), year)) == 1;
+            // Closing is quarterly: the month reads closed when its quarter is (even a
+            // month without rows, which readLockForMonthAndYear would report as open).
+            const bool cerrada = quarterIsClosed(db, QDate(year, ui->sb_trim->value(), 1));
             title = "Reporte Mensual - Mes " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
             subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
             path = AppSettings::instance()->contabilidadPath() + "/Mensual";
@@ -454,7 +454,7 @@ QString Contabilidad::createHtmlTableIngresos(const PeriodFigures &f)
         "<tr><th>Concepto</th><th style='text-align:right;'>Importe</th></tr>"
         + (f.ingRegularizacion > 0.0
            ? "<tr><td>Ingresos del periodo (IVA incluido)</td>" + euroCell(f.ingImporte + f.ingRegularizacion) + "</tr>"
-             "<tr><td>Anulaciones / rectificaciones de periodos anteriores</td>" + euroCell(-f.ingRegularizacion) + "</tr>"
+             "<tr><td>Anulaciones / rectificaciones del periodo</td>" + euroCell(-f.ingRegularizacion) + "</tr>"
            : QString()) +
         "<tr><td>Importe total (IVA incluido)</td>" + euroCell(f.ingImporte) + "</tr>"
         "<tr style='background-color:#f6f7f9;'><td>Base imponible</td>" + euroCell(f.ingBase) + "</tr>"
@@ -588,9 +588,9 @@ QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<Regularizat
     if (regularizations.isEmpty())
         return QString();
 
-    QString html = "<h3>Anulaciones y rectificaciones de periodos anteriores</h3>"
-                   "<p>Tickets de un trimestre ya cerrado anulados o sustituidos en este periodo: "
-                   "el trimestre original los mantiene y aqu&iacute; se restan.</p>"
+    QString html = "<h3>Anulaciones y rectificaciones del periodo</h3>"
+                   "<p>Tickets cobrados en este u otro periodo y anulados o sustituidos en este: "
+                   "el periodo de cobro los mantiene como ingreso y aqu&iacute; se restan.</p>"
             + ReportHtml::tableOpen() +
             "<thead><tr>"
                 "<th>N&ordm; recibo</th><th>Fecha pago</th><th>Fecha anulaci&oacute;n</th><th>Motivo</th><th>Cliente</th>"
@@ -652,15 +652,16 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
         // The summary only sums the 10 %, 21 % and sin-IVA columns; any other rate
         // (or a NULL one) is listed but flagged and kept out of the total, so the
         // total row still equals the summary.
+        const QString ivaText = e.iva < 0 ? QStringLiteral("?") : QString::number(e.iva);
         if (e.invalidAmount) {
             invalidRows++;
-            html += "<td style='text-align:right;'>" + QString::number(e.iva) + "</td>"
+            html += "<td style='text-align:right;'>" + ivaText + "</td>"
                     "<td style='text-align:right;'>-</td><td style='text-align:right;'>-</td>"
                     "<td style='text-align:right;'>importe no v&aacute;lido **</td></tr>";
             continue;
         }
         if (!expenseIvaIsSummarised(e.iva)) {
-            html += "<td style='text-align:right;'>" + (e.iva < 0 ? QStringLiteral("?") : QString::number(e.iva)) + " *</td>"
+            html += "<td style='text-align:right;'>" + ivaText + " *</td>"
                     "<td style='text-align:right;'>-</td><td style='text-align:right;'>-</td>"
                     + euroCell(e.importe) + "</tr>";
             continue;

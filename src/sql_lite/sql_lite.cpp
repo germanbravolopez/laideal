@@ -98,7 +98,7 @@ void migrateDatabase(QSqlDatabase &db)
     if (!q.exec("UPDATE ingresos SET "
                 "fecha_anulacion = COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')), "
                 "fecha_pago = '', fecha_recogida = '' "
-                "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado = 'ANULADA' "
+                "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
                 "  AND (pagado IS NULL OR pagado != 'SI') "
                 "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '')"))
         qWarning() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
@@ -1132,7 +1132,7 @@ static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
         db.close();
         return;
     }
-    QHash<QString, int> indexByTicket[4];
+    QVector<QHash<QString, int>> indexByTicket(bucketCount);
     while (q.next()) {
         const int bucket = bucketOf(q.value(2).toString());
         if (bucket < 0 || bucket >= bucketCount) continue;
@@ -1210,7 +1210,7 @@ static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
         db.close();
         return;
     }
-    QHash<QString, int> indexByTicket[4];
+    QVector<QHash<QString, int>> indexByTicket(bucketCount);
     while (q.next()) {
         const int bucket = bucketOf(q.value(3).toString());
         if (bucket < 0 || bucket >= bucketCount) continue;

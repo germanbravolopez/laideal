@@ -1,5 +1,6 @@
 #include "settingsdialog.h"
 #include "appsettings.h"
+#include "applanguage.h"
 #include "statusapiprinter.h"
 #include <QApplication>
 #include <QTabWidget>
@@ -288,6 +289,7 @@ void SettingsDialog::accept()
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
     }
 
+    AppLanguage::applyQtTranslations(s->language());   // live, for every caller
     QDialog::accept();
 }
 

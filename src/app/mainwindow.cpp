@@ -156,7 +156,6 @@ void MainWindow::mainwindowInitialSettings()
         if (dlg.exec() == QDialog::Accepted) {
             // Reload Verifactu with potentially new credentials
             initializeVerifactu();
-            AppLanguage::applyQtTranslations(AppSettings::instance()->language());
         }
     });
     ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);

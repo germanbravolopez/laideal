@@ -344,7 +344,11 @@ private slots:
              "VALUES ('70', 'h70', 'NO', 'Anulado', 'ANULADA', '07-08-2026', '07-08-2026')");
         exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
              "VALUES ('71', 'h71', 'SI', 'Recogido', 'ANULADA', '01-03-2026', '02-03-2026')");  // AEAT-cancelled: untouched
+        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('72', 'h72', 'NO', 'Anulado', 'RECTIFICADA', '03-08-2026', '03-08-2026')");  // void later relabelled
         migrateDatabase(m_db);
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='72'"), QStringLiteral("03-08-2026"));
+        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE n_recibo='72'"), QString());
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='70'"), QStringLiteral("07-08-2026"));
         QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE n_recibo='70'"), QString());
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE n_recibo='70'"), QString());
