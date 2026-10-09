@@ -1,7 +1,7 @@
 # Smoke Test — manual pre-release checklist
 
 Run this on the working branch **before** the version-bump commit of a release (step 1 of the
-`/release` skill). The automated suite (`ctest`, 15 suites) proves the pure and DB-level logic;
+`/release` skill). The automated suite (`ctest`, 16 suites, incl. the `test_e2e_verifactu` end-to-end bench, which already automates the PayDialog / AEAT reply / reconciliation / closed-quarter refusal paths against a fake server) proves the pure and DB-level logic;
 this file covers what it structurally cannot: the real network, the real printer, the migration
 running against a real database, and Qt signal/slot wiring that has no testable seam.
 

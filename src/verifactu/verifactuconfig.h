@@ -31,6 +31,12 @@ public:
     QString getSystemVersion() const;
 
     QString getEndpointUrl() const;
+
+    // Test seam: redirects every endpoint (Create / Cancel / GetFilteredList /
+    // GetQrCode) to a local fake server. Only code linked into a test can call it -
+    // nothing in the settings, environment or registry reaches it, so a shop install
+    // can never divert real invoices. Empty restores the real endpoints.
+    static void setEndpointOverride(const QString &baseUrl);
     QString getValidationUrl() const;
     QString getQrUrl() const;
 
