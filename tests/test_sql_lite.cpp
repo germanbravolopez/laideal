@@ -908,25 +908,6 @@ private slots:
                {":h", hash}, {":est", verifactuEstado} });
     }
 
-    void test_updateTicketPayment_setAndClear()
-    {
-        insertRow("T1", "hashA");
-        insertRow("T1", "hashB"); // same ticket, different garment - must stay untouched
-
-        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "15-03-2026", "SI"));
-        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"),
-                 QStringLiteral("15-03-2026"));
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("SI"));
-        // The sibling row is keyed out by hash.
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
-        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashB'").isEmpty());
-
-        // PAY_NO path: empty fecha_pago, pagado back to NO.
-        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "", "NO"));
-        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'").isEmpty());
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
-    }
-
     void test_updateTicketPickup_setAndClear()
     {
         insertRow("T1", "hashA");
@@ -1077,15 +1058,6 @@ private slots:
         QVERIFY(ticketHasPaidGarment(m_db, "PAR"));   // any paid row -> blocked
 
         QVERIFY(!ticketHasPaidGarment(m_db, "NOPE")); // unknown ticket
-    }
-
-    // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
-    // row, empty when the ticket has no rows.
-    void test_ticketVerifactuEstado()
-    {
-        QVERIFY(ticketVerifactuEstado(m_db, "T1").isEmpty()); // no rows
-        insertRow("T1", "hashA", "10.00", "SI", "ENVIADA");
-        QCOMPARE(ticketVerifactuEstado(m_db, "T1"), QStringLiteral("ENVIADA"));
     }
 
     // --- VoidGarmentsDialog seams (issue #40) ----------------------------------

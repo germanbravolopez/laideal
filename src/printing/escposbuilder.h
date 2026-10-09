@@ -51,7 +51,6 @@ public:
 
     EscPosBuilder &rasterImage(const QImage &img);   // GS v 0 (1bpp, MSB-first)
     EscPosBuilder &cut(int feedBefore = 3);          // ESC d n + GS V 66 0
-    EscPosBuilder &raw(const QByteArray &bytes);     // escape hatch
 
     int columns() const { return m_cols; }           // cols at current font + width
     const QByteArray &bytes() const { return m_buf; }

@@ -25,12 +25,6 @@ class MySortFilterProxyModel : public QSortFilterProxyModel
 public:
     MySortFilterProxyModel(QObject *parent = nullptr);
 
-    QDate filterMinimumDate() const { return minDate; }
-    void setFilterMinimumDate(QDate date);
-
-    QDate filterMaximumDate() const { return maxDate; }
-    void setFilterMaximumDate(QDate date);
-
     // Sets a plain-text filter that matches diacritic-insensitively.
     // column: column index to check, or -1 to check all columns (default).
     void setNormalizedFilter(const QString &normalizedText, int column = -1);
@@ -45,10 +39,6 @@ protected:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 
 private:
-    bool dateInRange(QDate date) const;
-
-    QDate minDate;
-    QDate maxDate;
     QString m_normalizedFilterText;
     int m_filterColumn = -1;
 };

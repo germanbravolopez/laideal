@@ -353,26 +353,6 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     return ok;
 }
 
-bool updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
-                         const QString &fechaPago, const QString &pagado)
-{
-    if (dbNotConfigured(db, __func__)) return false;
-
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET fecha_pago = :fp, pagado = :pag "
-              "WHERE n_recibo = :n AND hash = :h");
-    q.bindValue(":fp",  fechaPago);
-    q.bindValue(":pag", pagado);
-    q.bindValue(":n",   nRecibo);
-    q.bindValue(":h",   hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateTicketPayment: UPDATE failed -" << q.lastError().text();
-    db.close();
-    return ok;
-}
-
 bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                         const QString &fechaRecogida, const QString &estado)
 {
@@ -601,21 +581,6 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
         qWarning() << "insertGarmentRow: INSERT failed -" << q.lastError().text();
     db.close();
     return ok;
-}
-
-QString ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo)
-{
-    if (dbNotConfigured(db, __func__)) return QString();
-
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n LIMIT 1");
-    q.bindValue(":n", nRecibo);
-    QString estado;
-    if (q.exec() && q.next())
-        estado = q.value(0).toString();
-    db.close();
-    return estado;
 }
 
 // Period predicates of the Contabilidad detail listings, which are the single source

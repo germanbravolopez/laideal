@@ -84,8 +84,6 @@ nav:
       - End-to-end test bench: testing/e2e.md
       - Manual smoke test: testing/smoke_test.md
   - Index: INDEX.md
-  - Coding guidelines audit: coding_guidelines_audit.md
-  - Dead code report: dead_code_report.md
   - Modules:
       - MainWindow: modules/mainwindow.md
       - SQLite API: modules/sql_lite.md

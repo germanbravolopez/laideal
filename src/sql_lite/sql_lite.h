@@ -60,9 +60,6 @@ QString     genHash16();
 // and hands them here, so the writes are unit-testable against a temp DB. The
 // edit_lock / blocked-quarter / Verifactu-submit business rules stay in the slot.
 
-// PAY_YES / PAY_NO: set fecha_pago + pagado. PAY_NO passes an empty fechaPago.
-bool        updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
-                                const QString &fechaPago, const QString &pagado);
 // PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
 bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                const QString &fechaRecogida, const QString &estado);
@@ -134,10 +131,6 @@ struct IngresoGarmentRow {
     QString verifactuEstado;  // "" (legacy/split), "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
-
-// verifactu_estado of the first row of a ticket ("" if the ticket has no rows).
-// Read after a payment write so the pay-all loop dedup sees the persisted estado.
-QString     ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo);
 
 // Strip diacritics / non-Latin1 marks for accent-insensitive name matching:
 // NFD-normalise, narrow to Latin-1 (combining marks become '?'), drop every '?'.

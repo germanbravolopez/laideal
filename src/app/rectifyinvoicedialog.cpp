@@ -231,7 +231,6 @@ void RectifyInvoiceDialog::onSearchClicked()
         m_loadedTicket        = ticketNum;
         m_loadedCliente       = cliente;
         m_loadedImporteTotal  = importe;
-        m_loadedCSV           = csv;
         // Sensible default: in S mode, prefill with the original total so the user
         // adjusts down; in I mode, leave at 0.
         m_sbAmount->setValue(m_rbDifferences->isChecked() ? 0.00 : importe);

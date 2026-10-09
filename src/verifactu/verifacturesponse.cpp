@@ -120,7 +120,6 @@ VerifactuResult parseVerifactuResponse(const QByteArray &response, bool isQrRequ
     }
 
     QJsonObject obj = doc.object();
-    result.rawResponse = QString::fromUtf8(response);
 
     int resultCode = obj.value("ResultCode").toInt(-1);
 

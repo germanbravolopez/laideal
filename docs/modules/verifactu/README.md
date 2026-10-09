@@ -91,9 +91,7 @@ An empty returned `QString` means the call was rejected synchronously (Verifactu
 | `errorDescription` | `QString` | Human-readable error message |
 | `validationUrl` | `QString` | AEAT portal URL with invoice params pre-filled |
 | `qrCode` | `QPixmap` | BMP QR image decoded from base64 |
-| `rawResponse` | `QString` | Full server JSON response (for logging/debugging) |
 | `isSuccess()` | `bool` | `status == SUCCESS` |
-| `isError()` | `bool` | `ERROR` / `NETWORK_ERROR` / `INVALID_CONFIG` |
 
 ### `VerifactuEstado` (DB-persisted state)
 
@@ -189,7 +187,6 @@ The Contabilidad income predicate (`kIngresosIncomeWhere` in `sql_lite.cpp`) exc
 | Location | Behaviour |
 |----------|-----------|
 | `MainWindow::on_bb_save_reset_clicked()` | Saves rows with `estado = PENDIENTE` when paid / `SIN COBRAR` when not, prints receipts (without QR — AEAT is in flight), fires `verifactuSubmitInvoice()` (paid only), resets form. Status bar shows progress. Async handler `onVerifactuRequestFinished()` UPDATEs the row(s) with CSV when AEAT replies. |
-| `RecogPrendas::updateDb(PAY_YES)` | When a ticket is paid late at pickup: re-queries `verifactu_estado` from DB AND checks `hasPendingSubmit(ticketNum)` (in-memory dedup — async submit hasn't updated DB yet, so DB-only check would double-fire from the pay-all loop). If both clear, calls `retryVerifactuSubmit()`. |
 | `RecogPrendas::on_pb_verifactu_clicked()` | Opens a dialog showing estado / CSV / timestamp / error / clickable AEAT validation URL. If `estado == ERROR` and configured, also shows "Reintentar envío a AEAT" → calls `retryVerifactuSubmit()` (async, status bar). |
 | `PayDialog::onCobrarClicked()` (partial payment) | Submits the selected garments as `InvoiceID = "<n_recibo>-<seq>"` (`nextVerifactuInvoiceSeq`) with a 5 s bounded wait. On reply: `SUCCESS` → `ENVIADA` + CSV/QR; AEAT `ERROR` → `Error`. On **timeout / transport failure** (`NETWORK_ERROR`/`PENDING`) the outcome is unknown, so `markPendingVerifactu(seq)` records the rows `PENDIENTE` (not `Error`), keeping the `<n_recibo>-<seq>` InvoiceID. Both write-backs are scoped `AND pagado = 'SI'`: a ticket's **first** payment event gets seq 0 (`nextVerifactuInvoiceSeq` counts paid rows), and the unpaid remainder carries seq 0 too, so seq alone would stamp it with a result for an invoice that never covered it. The recibo fallback prints **IMPORTE PAGADO** (the rows are already `pagado='SI'`), and before closing, the dialog emits `submitAdopted(reqId, ticketNum, seq)` so `RecogPrendas` — which outlives it — applies a reply that arrives after the wait expired. Verifactu-disabled → rows paid, `verifactu_*` left empty. |
 | `PendingSubmitsDialog` (startup recovery) | Lists submission events left `PENDIENTE`/NULL/empty (one per `(n_recibo, verifactu_invoice_seq)` via `sql_lite::pendingVerifactuEvents`, gated by `verifactu.pending_recovery_enabled` + floor date + **paid** (`pagado='SI'` with a `fecha_pago`) — an unpaid ticket was never submitted, so it is not pending reconciliation) and offers Reintentar / Error / Posponer. Seq-aware: each row shows its `<n>-<seq>` InvoiceID and Reintentar re-submits that event's own `SUM(importe)` under `verifactuInvoiceId(n_recibo, seq)`, so partial-pay events (`seq>0`) are recovered too — not only save-time / full-ticket (`seq=0`) submissions. Mark-Error scopes its UPDATE by `seq`. A slow-but-already-registered AEAT submission is caught by the duplicate-InvoiceID rejection. |

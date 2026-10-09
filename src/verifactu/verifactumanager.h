@@ -34,8 +34,6 @@ public:
     // mistaken for a submission reply by the existing handlers.
     QString queryInvoiceAsync(const QString &invoiceNumber);
 
-    QString getValidationUrl(const VerifactuInvoice &invoice) const;
-    QString getLastError() const { return m_lastError; }
     QString getConfigurationInfo() const;
 
     // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
@@ -47,6 +45,9 @@ signals:
     void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
 
 private:
+    QString getValidationUrl(const VerifactuInvoice &invoice) const;
+    QString getLastError() const { return m_lastError; }
+
     VerifactuConfig *m_config;
     QNetworkAccessManager *m_networkManager;
     QString m_lastError;

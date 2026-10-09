@@ -95,14 +95,14 @@ The `Invoice` object is the main input parameter for all operations (submit, can
 - **Valid values**: NIF, VAT number, passport, official document
 - **Type**: Alphanumeric (20)
 - **Example**: `"12345678A"`
-- **In LAIDEAL**: `m_buyerNIF` of `VerifactuInvoice`
+- **In LAIDEAL**: not sent - the app only issues F2 (simplified) invoices and their rectificativas, which carry no buyer
 
 ### RelatedPartyName (CONDITIONAL)
 - **Description**: Buyer company name
 - **Required if**: RelatedPartyID is present
 - **Type**: Alphanumeric (120)
 - **Example**: `"Juan García López"` or `"Cliente SL"`
-- **In LAIDEAL**: `m_buyerName` of `VerifactuInvoice`
+- **In LAIDEAL**: not sent - the app only issues F2 (simplified) invoices and their rectificativas, which carry no buyer
 
 ### RelatedPartyIDType
 - **Description**: Buyer identification type key (list L7)
@@ -308,7 +308,7 @@ Contains the same Invoice properties plus processing results.
 ### Xml
 - **Description**: XML file sent to AEAT
 - **Type**: String (XML)
-- **In LAIDEAL**: `result.rawResponse` (JSON — Verifactu converts to XML internally)
+- **In LAIDEAL**: the raw reply is logged (`Server response:`); the AEAT XML is kept in `result.rawXml`
 
 ### Response
 - **Description**: XML response file from AEAT

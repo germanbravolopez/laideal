@@ -253,8 +253,3 @@ EscPosBuilder &EscPosBuilder::cut(int feedBefore)
     return *this;
 }
 
-EscPosBuilder &EscPosBuilder::raw(const QByteArray &bytes)
-{
-    m_buf.append(bytes);
-    return *this;
-}

@@ -17,7 +17,6 @@ ui->show();
 
 | Operation | `UpdateDBop` value | What it writes |
 |-----------|-------------------|----------------|
-| Mark paid | `PAY_YES` / `PAY_NO` | `pagado`, `fecha_pago` |
 | Mark picked up | `PKU_YES` / `PKU_NO` | `estado`, `fecha_recogida` |
 | Edit observation | `OBSV` | `observaciones` |
 | Edit size + price | `SIZE_AND_PRICE` | `size`, `importe` |
@@ -26,7 +25,7 @@ ui->show();
 | Edit importe (manual) | `PRICE` | `importe` (comma-normalised manual override; `size` left as-is) |
 | Split garment row | `SEPARATE_GARM` | Inserts a new row with `genHash16()`; decrements quantity on original |
 
-`updateDb()` keeps the business rules (edit_lock guard, blocked-quarter check, the post-PAY_YES Verifactu-submit decision) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPayment` / `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split, and `ticketVerifactuEstado` for the pay-all dedup read-back — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
+`updateDb()` keeps the business rules (edit_lock guard, the `Anulado` lock) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
 
 ## Pre-payment editing of quantity / service / importe
 
@@ -116,9 +115,9 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
-`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow, sourceCol)` which stores `rowClickedCell` as a **source-model row** and calls `updateRowClickedToFields()` — the single source of truth for the per-row button enables: it enables the row-selection group (excluding `pb_payment`, and excluding all edit buttons for an `Anulado` row) and conditionally enables `pb_verifactu`.
+`resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow)` which stores `rowClickedCell` as a **source-model row** and calls `updateRowClickedToFields()` — the single source of truth for the per-row button enables: it enables the row-selection group (excluding `pb_payment`, and excluding all edit buttons for an `Anulado` row) and conditionally enables `pb_verifactu`.
 
-Because `pb_payment` is never enabled, **`updateDb(PAY_YES)` / `PAY_NO` are unreachable from the UI**. `on_pb_payment_toggled` is still connected, but the programmatic `setChecked()` in `updateRowClickedToFields()` cannot fire a write: `selectSourceRow()` clears `isCellClicked` before repopulating, and re-selecting the same row sets an unchanged value so no `toggled` is emitted. Treat that whole branch as dead code when reasoning about the payment path.
+`pb_payment` is only the paid indicator: `on_pb_payment_toggled` sets its text (SI / NO) and colour and writes nothing. The old per-garment payment writes (`updateDb(PAY_YES / PAY_NO)`) were unreachable and were removed in the October 2026 dead-code pass; every payment goes through `PayDialog`.
 
 ## Date fields: which ones actually write
 
@@ -127,7 +126,7 @@ None of the three `QDateEdit`s has a `dateChanged`/`editingFinished` handler —
 | Widget | Written by | Editable? |
 |--------|-----------|-----------|
 | `de_date_pickup` | `updateDb(PKU_YES)` (via `pb_state`) and `markTicketPickedUp()` (via `pb_pku_all`) | Yes — the only one that works |
-| `de_date_paym` | Only `updateDb(PAY_YES)` — **dead path** | **No** — forced `setReadOnly(true)` with no spin buttons since 10.9 |
+| `de_date_paym` | Never (only `PayDialog` writes `fecha_pago`) | **No** — forced `setReadOnly(true)` with no spin buttons since 10.9 |
 | `de_date_recep` | Never written back for the clicked row; only read to build the split-off row in `SEPARATE_GARM` | **No** — `setReadOnly(true)` with no spin buttons since 10.10 |
 
 `de_date_paym` is deliberately display-only: `fecha_pago` is part of the AEAT invoice identity `(emisor, InvoiceID, fecha)`, which `sql_lite::verifactuEventFor` (retry) and `verifactuRemoteMatches` (reconcile) both depend on. Editing it after submission would make a retry register a *second* invoice instead of being rejected as duplicate, and could move income into a locked quarter. The payment date is set by `PayDialog` alone.

@@ -83,10 +83,10 @@ Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one w
 
 | Agent | File | When to use |
 |-------|------|-------------|
-| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). Output goes into `docs/dead_code_report.md`. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
+| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). It reports back; remove what it finds or file it in the tracker - no report file is kept. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
 | `test-engineer` | `.claude/agents/test-engineer.md` | Write/extend Qt Test coverage for a change or module, proving each test fails without the fix. |
 | `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only legal review of any diff touching invoices, `verifactu_*` columns, estado, numbering or the printed QR — run before committing such changes. |
-| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Re-run the `docs/coding_guidelines_audit.md` audit (before a release / after large work). |
+| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Run the coding-guidelines audit in `.claude/skills/coding-guidelines/audit.md` (before a release / after large work). |
 
 ## Agent Obligations
 

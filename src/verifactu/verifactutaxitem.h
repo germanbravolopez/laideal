@@ -8,12 +8,6 @@
 class VerifactuTaxItem
 {
 public:
-    enum TaxType {
-        VAT,    // IVA (standard)
-        IGIC,   // Canary Islands tax
-        OTHER
-    };
-
     enum OperationType {
         S1,     // subject to tax (standard)
         S2,     // reverse charge
@@ -38,12 +32,10 @@ public:
     static QString operationTypeToString(OperationType type);
 
 private:
-    TaxType m_taxType;
     double m_taxRate;
     double m_taxBase;
     double m_taxAmount;
     OperationType m_operationType;
-    QString m_description;
     mutable QString m_validationError;
 };
 

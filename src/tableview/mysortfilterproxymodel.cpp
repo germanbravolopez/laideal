@@ -29,18 +29,6 @@ void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, 
     invalidateFilter();
 }
 
-void MySortFilterProxyModel::setFilterMinimumDate(QDate date)
-{
-    minDate = date;
-    invalidateFilter();
-}
-
-void MySortFilterProxyModel::setFilterMaximumDate(QDate date)
-{
-    maxDate = date;
-    invalidateFilter();
-}
-
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
                                               const QModelIndex &sourceParent) const
 {
@@ -91,8 +79,3 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
         return QString::localeAwareCompare(leftData.toString(), rightData.toString()) < 0;
 }
 
-bool MySortFilterProxyModel::dateInRange(QDate date) const
-{
-    return (!minDate.isValid() || date > minDate)
-            && (!maxDate.isValid() || date < maxDate);
-}

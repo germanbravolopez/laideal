@@ -4,7 +4,7 @@
 #include <cmath>
 
 VerifactuTaxItem::VerifactuTaxItem()
-    : m_taxType(VAT), m_taxRate(0.0), m_taxBase(0.0), m_taxAmount(0.0),
+    : m_taxRate(0.0), m_taxBase(0.0), m_taxAmount(0.0),
       m_operationType(S1)
 {
 }
@@ -16,10 +16,6 @@ QJsonObject VerifactuTaxItem::toJson() const
     json["TaxBase"] = m_taxBase;
     json["TaxAmount"] = m_taxAmount;
     json["TaxType"] = VerifactuTaxItem::operationTypeToString(m_operationType);
-
-    if (!m_description.isEmpty()) {
-        json["Description"] = m_description;
-    }
 
     return json;
 }

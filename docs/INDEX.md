@@ -16,7 +16,6 @@
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
 | `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
 | `docs/testing/smoke_test.md` | **Manual pre-release checklist** — what `ctest` cannot cover: real network, real printer, the migration on real data, screens not yet automated |
-| `docs/dead_code_report.md` | Snapshot of unused methods in `src/` (regenerate with the [`dead-code-finder`](../.claude/agents/dead-code-finder.md) agent) |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
@@ -56,10 +55,10 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Scan `src/` for methods declared in headers but never called. Knows about Qt auto-connect / virtual overrides / signals so it doesn't false-flag them. Output goes into `docs/dead_code_report.md`. |
+| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Scan `src/` for methods declared in headers but never called. Knows about Qt auto-connect / virtual overrides / signals and the deliberate test hooks so it doesn't false-flag them. Reports to the main agent, which removes the dead code; no report file is kept. |
 | `test-engineer` | `.claude/agents/test-engineer.md` | Qt Test + CTest specialist: finds the coverage gap for a change/module and writes tests using the project seam patterns (pure helper, `QTemporaryDir` SQLite, AEAT response fixture, offscreen QPA), proving each fails without the fix. Preloads `/coding-guidelines`. |
 | `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only review of a diff against the ten requirements in `docs/modules/verifactu/verifactu-requirements.md` (inalterability, numbering, hash chain, retention, estado, QR/text). Delegated proactively for changes touching invoices / `verifactu_*` / numbering / printed QR. |
-| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Re-runs the `docs/coding_guidelines_audit.md` methodology over `src/` and returns tiered findings + delta, ready to replace that doc's Current findings. |
+| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Runs the coding-guidelines audit (`.claude/skills/coding-guidelines/audit.md`: grep checklist, severity tiers, accepted exceptions) over `src/` and returns tiered findings |
 
 ## Source Files
 

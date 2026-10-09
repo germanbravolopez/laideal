@@ -56,11 +56,6 @@ Qt::CaseSensitivity FilterWidget::caseSensitivity() const
     return m_caseSensitivityAction->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive;
 }
 
-void FilterWidget::setCaseSensitivity(Qt::CaseSensitivity cs)
-{
-    m_caseSensitivityAction->setChecked(cs == Qt::CaseSensitive);
-}
-
 static inline FilterWidget::PatternSyntax patternSyntaxFromAction(const QAction *a)
 {
     return static_cast<FilterWidget::PatternSyntax>(a->data().toInt());
@@ -71,13 +66,3 @@ FilterWidget::PatternSyntax FilterWidget::patternSyntax() const
     return patternSyntaxFromAction(m_patternGroup->checkedAction());
 }
 
-void FilterWidget::setPatternSyntax(PatternSyntax s)
-{
-    const QList<QAction*> actions = m_patternGroup->actions();
-    for (QAction *a : actions) {
-        if (patternSyntaxFromAction(a) == s) {
-            a->setChecked(true);
-            break;
-        }
-    }
-}

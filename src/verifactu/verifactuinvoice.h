@@ -48,10 +48,6 @@ public:
     void setRectificationTaxBase(double base) { m_rectificationTaxBase = base; }
     void setRectificationTaxAmount(double amount) { m_rectificationTaxAmount = amount; }
 
-    RectificationType getRectificationType() const { return m_rectificationType; }
-    double getRectificationTaxBase() const { return m_rectificationTaxBase; }
-    double getRectificationTaxAmount() const { return m_rectificationTaxAmount; }
-
     static QString rectificationTypeToString(RectificationType type);
     static bool isRectificationInvoiceType(InvoiceType type);
 
@@ -59,12 +55,10 @@ public:
     QDate getInvoiceDate() const { return m_invoiceDate; }
 
     QString getSellerNIF() const { return m_sellerNIF; }
-    QString getSellerName() const { return m_sellerName; }
 
     double getTotalAmount() const { return m_totalAmount; }
 
     void addTaxItem(const VerifactuTaxItem &item) { m_taxItems.append(item); }
-    const QList<VerifactuTaxItem> &getTaxItems() const { return m_taxItems; }
 
     QJsonObject toJson() const;
     bool isValid() const;
@@ -79,9 +73,6 @@ private:
 
     QString m_sellerNIF;
     QString m_sellerName;
-
-    QString m_buyerNIF;
-    QString m_buyerName;
 
     QList<VerifactuTaxItem> m_taxItems;
 

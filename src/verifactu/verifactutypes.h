@@ -69,7 +69,6 @@ struct VerifactuResult
     QString errorDescription;
     QString validationUrl;
     QPixmap qrCode;
-    QString rawResponse;
     QString rawXml; // AEAT-style XML payload (Return.Xml from Irene Solutions /Create reply)
     // 64-char hex SHA-256 chained hash extracted from <sum1:Huella> in rawXml
     // (AEAT regulatory term: "Huella"). Art. 12 RD 1007/2023.
@@ -78,14 +77,8 @@ struct VerifactuResult
     VerifactuResult() : status(INVALID_CONFIG) {}
 
     bool isSuccess() const { return status == SUCCESS; }
-    bool isError() const { return status == ERROR || status == NETWORK_ERROR || status == INVALID_CONFIG; }
 };
 
-// Which estado an AEAT reply must be recorded as. Only a definitive AEAT
-// rejection (ERROR) may become Error. A timeout or transport failure leaves the
-// outcome UNKNOWN - AEAT may well have registered the invoice - so it becomes
-// PENDIENTE and is routed to the startup recovery dialog. Recording it as Error
-// instead offers a "Reintentar" that can only ever come back "already exists".
 // One invoice record as AEAT/Irene Solutions holds it, from a GetFilteredList
 // query. Used to reconcile a local row that says ERROR (typically "already
 // exists" after a retry) against what the AEAT side actually registered.
@@ -123,6 +116,11 @@ struct VerifactuRemoteRecord
     }
 };
 
+// Which estado an AEAT reply must be recorded as. Only a definitive AEAT
+// rejection (ERROR) may become Error. A timeout or transport failure leaves the
+// outcome UNKNOWN - AEAT may well have registered the invoice - so it becomes
+// PENDIENTE and is routed to the startup recovery dialog. Recording it as Error
+// instead offers a "Reintentar" that can only ever come back "already exists".
 inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)
 {
     switch (s) {
