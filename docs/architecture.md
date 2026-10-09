@@ -42,6 +42,8 @@ Shared infrastructure:
 ### MainWindow (`src/app/`)
 Central controller. Owns the SQLite `db` connection. Instantiates all child windows.
 
+`src/app/` builds the `laideal_app` static library (MainWindow + the Cancel / Rectify / Void / Pending dialogs) and the `laideal` executable (`main.cpp`, the Qt resources and the Windows version resource) linking it, so the end-to-end bench can drive the windows ([testing/e2e.md](testing/e2e.md)).
+
 Key methods:
 
 | Method | Purpose |

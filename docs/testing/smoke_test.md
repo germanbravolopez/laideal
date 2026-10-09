@@ -1,7 +1,7 @@
 # Smoke Test — manual pre-release checklist
 
 Run this on the working branch **before** the version-bump commit of a release (step 1 of the
-`/release` skill). The automated suite (`ctest`, 16 suites, incl. the `test_e2e_verifactu` end-to-end bench, which already automates the PayDialog / AEAT reply / reconciliation / closed-quarter refusal paths against a fake server) proves the pure and DB-level logic;
+`/release` skill). The automated suite (`ctest`, 17 suites, incl. the end-to-end bench — `test_e2e_verifactu` for PayDialog / AEAT reply / reconciliation / closed-quarter refusal, `test_e2e_app` for MainWindow save, Anular prendas, Anular factura, Rectificar, the startup recovery dialog, reprint QR gating and Contabilidad generate/lock/revert, all against a fake server) proves the pure and DB-level logic and those screen flows;
 this file covers what it structurally cannot: the real network, the real printer, the migration
 running against a real database, and Qt signal/slot wiring that has no testable seam.
 
@@ -88,20 +88,18 @@ FROM ingresos WHERE cliente='SMOKE' ORDER BY n_recibo;
 | A2 | Verification query | **S1 → `SIN COBRAR`**, **S2 stays `PENDIENTE`**, **S3 stays blank** (empty, not `SIN COBRAR`) |
 | A3 | Log | `migrateDatabase: re-labelled N unpaid PENDIENTE rows as SIN COBRAR` |
 | A4 | Close and relaunch | No second re-label line — the migration is idempotent |
-| A5 | Save a new **unpaid** ticket in MainWindow | Rows read `SIN COBRAR` |
-| A6 | Save a new **paid** ticket | Rows read `PENDIENTE`, then `ENVIADA` if AEAT answers |
-| A7 | Herramientas → Anular prendas on a `SIN COBRAR` garment | Still selectable and voidable. **If greyed out, stop** — that is the regression the estado split most risks |
 | A8 | Herramientas → Añadir nuevas prendas on an unpaid ticket | Added row reads `SIN COBRAR` |
 
 A2's three outcomes are the whole point. S3 staying blank is what protects printed invoices: several
 print/cancel queries detect legacy split rows via `verifactu_estado != ''`.
 
+*A5–A7 (MainWindow save of unpaid / paid tickets, Anular prendas on a `SIN COBRAR` garment) are automated by `test_e2e_app`.*
+
 ## Block B — Recovery dialog and seq-0 scoping · *no AEAT contact*
 
 | # | Step | Expected |
 |---|------|----------|
-| B1 | Restart, watch for "Envíos Verifactu pendientes" | Lists only **paid** pending events (S2). Unpaid rows absent — this was the original customer complaint |
-| B2 | Press **Posponer**, restart | Reappears (nothing written) |
+| B2 | Restart; in "Envíos Verifactu pendientes" press **Posponer**, restart | Reappears (nothing written) |
 | B3 | Recogida de Prendas → ticket S4 → **pay-all button** → untick the Pantalon → **Cobrar** | Only the Camisa is charged |
 | B3b | Verification query | Camisa paid with a seq. **Pantalon still `pagado=NO`, `SIN COBRAR`, empty CSV, empty invoice_id** |
 | B3c | Anular prendas on S4 | The Pantalon is still voidable |
@@ -113,6 +111,8 @@ print/cancel queries detect legacy split rows via `verifactu_estado != ''`.
 B3b/B3c are the seq-0 fix: a ticket's first payment event gets seq 0, which the unpaid remainder
 also carries, so an unscoped write-back used to stamp it with the AEAT result and make it
 un-voidable.
+
+*B1 (the recovery dialog lists only paid pending events) is automated by `test_e2e_app`.*
 
 ## Block C — Offline behaviour · *no AEAT contact, safe with any key*
 
@@ -202,10 +202,11 @@ What `ctest` covers for these is the logic; this block covers the screens, the P
 | G7 | Detail annex | Quarterly + annual PDF end with the tickets / gastos tables; their totals equal the summary; the rounding note shows |
 | G8 | Regularisation *(registers at AEAT)* | Pay a ticket, close its quarter, cancel it in a later quarter: the closed quarter's PDF is unchanged; the later quarter shows "Anulaciones / rectificaciones del periodo" with the negative amount and an annex table. A ticket paid **and** cancelled within the same quarter nets to 0 and is not counted in "Número de tickets" |
 | G9 | Unpaid remainder *(registers at AEAT)* | Partially pay a ticket, cancel that payment: the unpaid garments stay `SIN COBRAR` and can still be charged with Cobrar |
-| G10 | Guards | Anular factura refused while the current quarter is closed; Rectificar refuses a date in a closed quarter and a date before the original payment |
 | G11 | IVA | Configuración → General has no "Tipo de IVA" field; tickets and reports still use 21 % |
 | G12 | Language | Configuración → Idioma English → OK: a Sí/No dialog now reads Yes/No and Ayuda → Notas de la versión opens the English notes, no restart. Back to Español: Spanish again |
 | G13 | Installer | Run the setup in Spanish and in English: the information page shows the notes in that language with correct accents; on a machine without settings the app starts in the installer's language |
+
+*G10 (Anular factura refused while the current quarter is closed; Rectificar refuses a closed-quarter date and a date before the payment) is automated by `test_e2e_app`.*
 
 ## Findings from the 10.9 run
 

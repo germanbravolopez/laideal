@@ -58,6 +58,10 @@ public:
     // with any other rate are flagged in the detail and kept out of its total.
     static bool expenseIvaIsSummarised(int iva);
 
+    // Test seam: when false, a generated report is written but not opened in the
+    // PDF viewer (the end-to-end bench generates reports headless). Default true.
+    static void setOpenGeneratedReports(bool open);
+
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
     // period so the ingresos/gastos tables and the summary share the same numbers.

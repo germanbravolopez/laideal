@@ -51,6 +51,13 @@ void Contabilidad::resetAllContents()
     ui->checkBox_lock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
 }
 
+static bool s_openGeneratedReports = true;
+
+void Contabilidad::setOpenGeneratedReports(bool open)
+{
+    s_openGeneratedReports = open;
+}
+
 bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
 {
     return mode == Trimestral && !reverting;
@@ -442,7 +449,8 @@ void Contabilidad::writeHtml(QString filename,
 
     document.print(&printer);
 
-    QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
+    if (s_openGeneratedReports)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
     //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
 }
 

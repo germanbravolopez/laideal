@@ -48,6 +48,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     QHBoxLayout *searchRow = new QHBoxLayout();
     searchRow->addWidget(new QLabel("Número de ticket original:"));
     m_leTicketNum = new QLineEdit();
+    m_leTicketNum->setObjectName("leTicketNum");   // stable names for the e2e test bench
     m_leTicketNum->setPlaceholderText("Ej: 24417");
     searchRow->addWidget(m_leTicketNum);
     QPushButton *btnSearch = new QPushButton("Buscar");
@@ -68,6 +69,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     QHBoxLayout *rowType = new QHBoxLayout();
     rowType->addWidget(new QLabel("Tipo:"));
     m_cbInvoiceType = new QComboBox();
+    m_cbInvoiceType->setObjectName("cbInvoiceType");
     m_cbInvoiceType->addItem("R1 - Error fundado en derecho (art. 80.1, 80.2 y 80.6 LIVA)");
     m_cbInvoiceType->addItem("R2 - Concurso de acreedores (art. 80.3 LIVA)");
     m_cbInvoiceType->addItem("R3 - Créditos incobrables (art. 80.4 LIVA)");
@@ -81,6 +83,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     rowMode->addWidget(new QLabel("Modo:"));
     m_rbDifferences  = new QRadioButton("Por diferencias (I)");
     m_rbSubstitution = new QRadioButton("Por sustitución (S)");
+    m_rbSubstitution->setObjectName("rbSubstitution");
     m_rbDifferences->setChecked(true);
     rowMode->addWidget(m_rbDifferences);
     rowMode->addWidget(m_rbSubstitution);
@@ -90,6 +93,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     QHBoxLayout *rowDate = new QHBoxLayout();
     rowDate->addWidget(new QLabel("Fecha rectificativa:"));
     m_deRectifyDate = new QDateEdit(QDate::currentDate());
+    m_deRectifyDate->setObjectName("deRectifyDate");
     m_deRectifyDate->setCalendarPopup(true);
     m_deRectifyDate->setDisplayFormat("dd-MM-yyyy");
     rowDate->addWidget(m_deRectifyDate);
@@ -100,6 +104,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_lblAmount = new QLabel(); // text set by onRectificationModeChanged()
     rowAmount->addWidget(m_lblAmount);
     m_sbAmount = new QDoubleSpinBox();
+    m_sbAmount->setObjectName("sbAmount");
     m_sbAmount->setDecimals(2);
     m_sbAmount->setRange(-100000.00, 100000.00); // negative deltas allowed in I mode
     m_sbAmount->setSingleStep(0.10);
@@ -124,6 +129,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     layout->addWidget(m_btnRectify);
 
     m_lblResult = new QLabel();
+    m_lblResult->setObjectName("lblResult");
     m_lblResult->setWordWrap(true);
     layout->addWidget(m_lblResult);
 

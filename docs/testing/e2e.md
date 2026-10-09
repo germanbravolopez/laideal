@@ -1,8 +1,8 @@
 # End-to-end test bench
 
-Runs the real application objects together — not one module in isolation — against a seeded throwaway database and a **fake Verifactu server**, so whole flows (payment → AEAT submission → reply → estado / QR → reconciliation → Contabilidad) are checked on every CI run without ever reaching the real AEAT. Conventions shared with the other suites are in [README.md](README.md).
+Runs the real application objects together — not one module in isolation — against a seeded throwaway database and a **fake Verifactu server**, so whole flows (ticket save / payment → AEAT submission → reply → estado / QR → cancellation / rectification / recovery → Contabilidad) are checked on every CI run without ever reaching the real AEAT. Conventions shared with the other suites are in [README.md](README.md).
 
-**Status**: phase 1 done (`test_e2e_verifactu`, PayDialog and the Verifactu client). Phase 2 — MainWindow and the app dialogs at screen level — is an Open item in `docs/progress_tracker.md`.
+Two suites: `test_e2e_verifactu` (phase 1: PayDialog and the Verifactu client) and `test_e2e_app` (phase 2: MainWindow, the app dialogs, Imprimir and the Contabilidad form at screen level).
 
 ---
 
@@ -12,7 +12,7 @@ The bench must never reach the real AEAT nor change the shop's database or setti
 
 - **Endpoint**: the test-only seam `VerifactuConfig::setEndpointOverride(baseUrl)` points every Verifactu call (Create, Cancel, GetFilteredList, GetQrCode) at the local fake server. Only code linked into a test can call it; nothing in the settings, environment or registry reaches it, so a shop install can never divert real invoices. The suite **refuses to start** unless the resolved endpoint is `http://127.0.0.1:…`.
 - **Database**: a throwaway SQLite file in a `QTemporaryDir`, created and seeded by the test.
-- **Settings**: a throwaway file via `AppSettings::loadFrom`, so every save goes there and `~/.laideal_settings.json` is never read or written. Printing is disabled (`enablePrinting = false`); the ticket is still built.
+- **Settings**: a throwaway file via `AppSettings::loadFrom`, so every save goes there and `~/.laideal_settings.json` is never read or written. Printing is disabled (`enablePrinting = false`); the ticket is still built. `test_e2e_app` also turns off the startup update check and backup, points the reports root at the temp dir, and sets `Contabilidad::setOpenGeneratedReports(false)` so a generated PDF is not opened in a viewer.
 
 ---
 
@@ -25,12 +25,16 @@ A minimal HTTP/1.1 server on `127.0.0.1` (random port) standing in for the Irene
 - `start()` / `baseUrl()` — pass `baseUrl()` to `VerifactuConfig::setEndpointOverride`.
 - **Records every request**: `requests()` / `requestsTo("Create")` give the endpoint and the parsed JSON body, so a test can assert what was sent (invoice id, amount, service key).
 - **Scripted replies**: `enqueue(endpoint, Reply)` answers the next request to that endpoint with a given body, after `delayMs` (simulates a slow AEAT), or `drop`s the connection (no answer). Later requests fall back to the default.
-- **Default replies**: Create / Cancel → accepted (incrementing CSV `A-FAKE0001`…, a validation URL, a `Huella` in the XML, a real PNG QR); GetFilteredList → an empty list.
+- **Default replies**: Create / Cancel → accepted (incrementing CSV `A-FAKE0001`…, a validation URL, a `Huella` in the XML, a real PNG QR); GetQrCode → the same PNG (as the real service, `Return` is the image itself); GetFilteredList → an empty list.
 - **Reply builders** shaped like the captured fixtures in `test_verifactu_response`: `acceptedReply(csv)`, `rejectedReply(code, text)`, `queryReply(invoiceId, isoDate, total, csv)`.
 
 ### `ModalAutoCloser`
 
-Headless there is nobody to click "Aceptar", so a single `QMessageBox` would block the suite until the CTest timeout. This helper closes any message box shortly after it opens and **records its title and text**; a scenario asserts with `sawMessageContaining("Trimestre bloqueado")`.
+Headless there is nobody to click "Aceptar", so a single `QMessageBox` would block the suite until the CTest timeout. This helper closes any message box shortly after it opens and **records its title and text**; a Yes/No confirmation is answered **Yes**, like an operator who agrees. A scenario asserts with `sawMessageContaining("Trimestre bloqueado")`.
+
+### `e2efixture.h`
+
+Shared setup for `test_e2e_app` (namespace `E2e`): `createSchema` (ingresos / gastos / clientes / prendas, column for column with the shop DB), `configureSettings` (the throwaway settings above), `clearTables`, `exec` / `scalar`, and the seeders `seedGarment` (unpaid, `SIN COBRAR`) and `seedSentGarment` (paid, `ENVIADA`, with a CSV).
 
 ---
 
@@ -59,6 +63,22 @@ The last scenario found a real bug on its first run: the 10.12 ticket count let 
 
 ---
 
-## Phase 2 (open)
+## `test_e2e_app` (phase 2)
 
-Move MainWindow and the Cancel / Rectify / Void / Pending dialogs from the executable into a static library so a test can link them, then add screen-level scenarios: saving a ticket, Anular prendas, Anular factura (incl. the closed-quarter refusal and the failed-local-write path), Rectificar (date rules, `RECTIFICADA`, regularisation), the startup pending-submissions recovery, and Contabilidad report generation (needs a seam that skips `QDesktopServices::openUrl` on the PDF). Then retire the matching manual checks in [smoke_test.md](smoke_test.md).
+The application's windows live in the `laideal_app` static library (`src/app/CMakeLists.txt`; the executable is only `main.cpp` + resources), so the suite links and drives them the way an operator would: fill the widgets (found by object name), press the button or invoke the slot it is wired to, then assert on the DB, on what reached the fake AEAT and on the pop-ups. MainWindow opens `DB_PATH` (set with `setDbPath` to the throwaway file) as the default connection, so the test reads the same file through its own connection. The dialogs are built with a `VerifactuIntegration` exactly as the menu actions do. `QTEST_MAIN` under offscreen; about 6 s.
+
+| Scenario | Flow | Checks |
+|----------|------|--------|
+| `test_mainWindow_saveUnpaidThenPaidTicket` | Type client + garment (price looked up from `prendas`), Save; then a paid one | Unpaid: `SIN COBRAR`, importe, new client stored, no request, form reset to the next number. Paid: one Create with the ticket number, row `SI` / `fecha_pago` today / `ENVIADA` / CSV (the 3 s print-after-submit wait and the reqId correlation) |
+| `test_mainWindow_saveWithoutClient_refused` | Save with no client | Refusal message, nothing stored |
+| `test_voidGarments_voidsOnlyTheTickedGarment` | Anular prendas, tick one of two, confirm | That garment `Anulado` / `NO` / `ANULADA`, `fecha_anulacion` today, Pago and Recogida empty; the other untouched; no AEAT request; the voided row can no longer be ticked |
+| `test_cancelInvoice_markedAnulada` | Anular factura → AEAT accepts | One Cancel with the InvoiceID; `ANULADA` + `fecha_anulacion` today |
+| `test_cancelInvoice_refusedWhileCurrentQuarterClosed` | Same with today's quarter locked | Refused before any request; row still `ENVIADA` |
+| `test_rectifySubstitution_dateRuleThenRectified` | Rectificar por sustitución | A date before the payment and a date in a closed quarter are refused (nothing inserted); then the new ticket `701` is sent, `ENVIADA`, rectifies `700`; the original is `RECTIFICADA` |
+| `test_startupRecovery_retryPendingSubmission` | MainWindow opens with a `PENDIENTE` payment + an unpaid ticket | About 4 s later Envíos pendientes lists only the payment; Reintentar re-submits it under the same InvoiceID → `ENVIADA`; the dialog closes after its last row |
+| `test_reprintPaymentEvent_scopedRowsAndQrGating` | Imprimir for event `600-1`, then `600` | Only that event's paid garments are loaded (the unpaid seq-0 garment is not); GetQrCode carries `600-1` and its payment date; once the event is `ANULADA` no QR is requested |
+| `test_contabilidad_generateLockThenRevert` | Contabilidad Trimestral Q1 with Bloquear, then Revertir | The PDF is written under `reportsRoot/Contabilidad`, rows locked, form closes; revert unlocks them |
+
+Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`); each mutation made its scenario fail.
+
+**Not automated** (still in [smoke_test.md](smoke_test.md)): the real network and printer, the migration on real data, offline behaviour and the late-reply / reconciliation dialogs in Recogida de Prendas, Recogida and Listado rendering (colours, columns, searches), and the language / installer checks.

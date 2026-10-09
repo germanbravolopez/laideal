@@ -99,15 +99,6 @@ void FakeVerifactuServer::handle(QTcpSocket *socket)
         send();
 }
 
-QByteArray FakeVerifactuServer::defaultReply(const QString &endpoint)
-{
-    if (endpoint == QLatin1String("Create") || endpoint == QLatin1String("Cancel"))
-        return acceptedReply(QStringLiteral("A-FAKE%1").arg(++m_csvCounter, 4, 10, QLatin1Char('0')));
-    if (endpoint == QLatin1String("GetFilteredList"))
-        return R"({"Offset":0,"Count":0,"Items":[],"ResultCode":0,"ResultMessage":"Retrieved element filtered list."})";
-    return R"({"ResultCode":0,"Return":""})";
-}
-
 // Small real image so the client's QR decode path runs as in production.
 static QString tinyQrPngBase64()
 {
@@ -118,6 +109,17 @@ static QString tinyQrPngBase64()
     buffer.open(QIODevice::WriteOnly);
     img.save(&buffer, "PNG");
     return QString::fromLatin1(png.toBase64());
+}
+
+QByteArray FakeVerifactuServer::defaultReply(const QString &endpoint)
+{
+    if (endpoint == QLatin1String("Create") || endpoint == QLatin1String("Cancel"))
+        return acceptedReply(QStringLiteral("A-FAKE%1").arg(++m_csvCounter, 4, 10, QLatin1Char('0')));
+    if (endpoint == QLatin1String("GetFilteredList"))
+        return R"({"Offset":0,"Count":0,"Items":[],"ResultCode":0,"ResultMessage":"Retrieved element filtered list."})";
+    if (endpoint == QLatin1String("GetQrCode"))
+        return QByteArray(R"({"ResultCode":0,"Return":")") + tinyQrPngBase64().toLatin1() + "\"}";
+    return R"({"ResultCode":0,"Return":""})";
 }
 
 QByteArray FakeVerifactuServer::acceptedReply(const QString &csv)

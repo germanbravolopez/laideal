@@ -5,7 +5,7 @@ How the application is tested, how to run the tests, and where each kind of test
 | Layer | What it proves | Where | Runs |
 |-------|----------------|-------|------|
 | **Unit / integration suites** | Pure logic and the `sql_lite` DB functions, each module in isolation | `tests/test_*.cpp` — see [unit_suites.md](unit_suites.md) | `ctest`, every CI run |
-| **End-to-end test bench** | Real objects working together (PayDialog + Verifactu client + HTTP + DB) against a fake Verifactu server | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
+| **End-to-end test bench** | Real objects working together (PayDialog, MainWindow and the app dialogs + Verifactu client + HTTP + DB) against a fake Verifactu server | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
 | **Manual smoke test** | What no automated test can reach: the real AEAT, the real printer, the migration on real data, screens not yet automated | [smoke_test.md](smoke_test.md) | Before each release (`/release` step 1) |
 
 ---
@@ -46,6 +46,7 @@ A suite can also be run directly for its full per-function report, e.g. `build\t
 | Settings | `AppSettings::loadFrom(tempFile)` | `test_appsettings`, `test_settingsdialog` |
 | Widget / header behaviour | `QTEST_MAIN` offscreen, drive the real widget | `test_settingsdialog`, `test_textcolordelegate` |
 | Flow across modules + network | Fake server + seeded DB + real objects | `test_e2e_verifactu` ([e2e.md](e2e.md)) |
+| A window driven at screen level | Link `laideal_app`, find widgets by object name, invoke the slot a button is wired to | `test_e2e_app` ([e2e.md](e2e.md)) |
 
 ---
 

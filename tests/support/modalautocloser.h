@@ -2,10 +2,12 @@
 #define MODALAUTOCLOSER_H
 
 // Closes any QMessageBox that a flow under test opens, shortly after it appears,
-// and records its title and text. Headless there is nobody to click "Aceptar", so
-// without this a single pop-up would block the suite until the CTest timeout. A
-// scenario asserts on messages() to check that the right warning was shown.
+// and records its title and text; a Yes/No confirmation is answered Yes.
+// Headless there is nobody to click "Aceptar", so without this a single pop-up
+// would block the suite until the CTest timeout. A scenario asserts on
+// messages() to check that the right warning was shown.
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QMessageBox>
 #include <QStringList>
@@ -22,7 +24,12 @@ public:
                 auto *box = qobject_cast<QMessageBox *>(w);
                 if (box && box->isVisible()) {
                     m_messages << box->windowTitle() + QStringLiteral(": ") + box->text();
-                    box->done(QMessageBox::Ok);
+                    // Answer a Yes/No confirmation like an operator who agrees; any
+                    // other box is just acknowledged.
+                    if (QAbstractButton *yes = box->button(QMessageBox::Yes))
+                        yes->click();
+                    else
+                        box->done(QMessageBox::Ok);
                 }
             }
         });

@@ -10,7 +10,12 @@ if (WIN32)
     set(EXE_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/laideal.rc)
 endif()
 
-add_executable(laideal
+# The application's own windows (MainWindow + the Verifactu / void / pending
+# dialogs) live in a static library so the end-to-end test bench can link and
+# drive them at screen level (tests/test_e2e_app.cpp). The executable is only
+# main.cpp plus the Qt resources (icon, release notes, Qt translations) and the
+# Windows version resource.
+add_library(laideal_app STATIC
     mainwindow.ui
     mainwindow.h
     mainwindow.cpp
@@ -22,15 +27,15 @@ add_executable(laideal
     rectifyinvoicedialog.cpp
     pendingsubmitsdialog.h
     pendingsubmitsdialog.cpp
-    main.cpp
-    ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
-    ${EXE_SOURCES}
 )
 
-target_include_directories(laideal PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(laideal_app PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}          # version.h
+)
 
-target_link_libraries(laideal
-    PRIVATE
+target_link_libraries(laideal_app
+    PUBLIC
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     logging
@@ -47,6 +52,14 @@ target_link_libraries(laideal
     updater
     backup
 )
+
+add_executable(laideal
+    main.cpp
+    ${CMAKE_SOURCE_DIR}/resources/laideal.qrc
+    ${EXE_SOURCES}
+)
+
+target_link_libraries(laideal PRIVATE laideal_app)
 
 set_target_properties(laideal PROPERTIES
     VERSION ${PROJECT_VERSION}

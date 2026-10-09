@@ -37,6 +37,7 @@ void CancelInvoiceDialog::buildUi()
     auto *searchRow = new QHBoxLayout;
     searchRow->addWidget(new QLabel(tr("Número de ticket:")));
     m_leTicketNum = new QLineEdit;
+    m_leTicketNum->setObjectName("leTicketNum");   // stable names for the e2e test bench
     m_leTicketNum->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leTicketNum);
     auto *btnSearch = new QPushButton(tr("Buscar"));
@@ -50,6 +51,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addWidget(m_lblHeader);
 
     m_table = new QTableWidget;
+    m_table->setObjectName("table");
     m_table->setColumnCount(COL_COUNT);
     m_table->setHorizontalHeaderLabels(
         { tr("InvoiceID"), tr("Importe"), tr("Estado"), tr("CSV"), tr("Acción") });
@@ -61,6 +63,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addWidget(m_table);
 
     m_lblResult = new QLabel;
+    m_lblResult->setObjectName("lblResult");
     m_lblResult->setWordWrap(true);
     layout->addWidget(m_lblResult);
 
