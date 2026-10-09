@@ -33,6 +33,7 @@
 #include "cancelinvoicedialog.h"
 #include "contabilidad.h"
 #include "e2efixture.h"
+#include "add_garment.h"
 #include "fakeverifactuserver.h"
 #include "imprimir.h"
 #include "mainwindow.h"
@@ -698,6 +699,37 @@ private slots:
         QCOMPARE(anulaciones, QStringList({ "1800|15-03-2026|" }));
         QCOMPARE(payloadIds, QStringList({ "IDFacturaAnulada:1800", "IDFactura:1600", "IDFactura:1900",
                                            "IDFactura:1600-1" }));
+    }
+
+    // Añadir nuevas prendas: a garment added as already paid is that ticket's first
+    // invoice (seq 0, InvoiceID = the ticket number), submitted to AEAT right away
+    // instead of waiting for the next startup's recovery dialog; the ticket's unpaid
+    // garment stays SIN COBRAR and chargeable.
+    void test_addGarmentPaid_submittedAtOnce()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "2000", "h2000a", "10.00", today()));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
+        auto *add = mw.findChild<AddGarment *>();
+        QVERIFY(add);
+        add->findChild<QLineEdit *>("le_n_recibo")->setText("2000");
+        QMetaObject::invokeMethod(add, "on_pb_search_pressed");
+        QVERIFY(add->ticketFound);
+        add->findChild<QComboBox *>("cb_prenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("le_cantidad")->setText("2");
+        add->findChild<QPushButton *>("pb_pagado")->setChecked(true);
+        add->findChild<QDialogButtonBox *>("buttonBox")->button(QDialogButtonBox::Save)->click();
+
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='2000' AND pagado='SI'"),
+                                  QStringLiteral("ENVIADA"), 10000);
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("2000"));
+        QCOMPARE(creates[0].json.value("InvoiceDate").toString(), QDate::currentDate().toString(Qt::ISODate));
+        QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 7.0);
+        QCOMPARE(scalar("SELECT verifactu_invoice_seq FROM ingresos WHERE n_recibo='2000' AND pagado='SI'"),
+                 QStringLiteral("0"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h2000a'"), QStringLiteral("SIN COBRAR"));
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

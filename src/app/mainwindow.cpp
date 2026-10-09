@@ -881,6 +881,12 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
+    // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
+    // PENDIENTE for the startup recovery.
+    connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,
+            [this](const QString &ticketNum, const QDate &paymentDate, double amount) {
+        verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0);
+    });
     ui_add_garment->show();
 }
 

@@ -244,5 +244,8 @@ void AddGarment::saveFactura()
     row.verifactuEstado = verifactuEstadoToString(
         row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                           : VerifactuEstado::Unpaid);
-    insertGarmentRow(db, row);
+    // A ticket that already has a paid garment is refused in on_pb_search_pressed, so
+    // this payment is the ticket's first invoice: seq 0, InvoiceID = n_recibo.
+    if (insertGarmentRow(db, row) && row.pagado == QLatin1String("SI"))
+        emit paidGarmentSaved(row.nRecibo, QDate::fromString(row.fechaPago, "dd-MM-yyyy"), row.importe.toDouble());
 }
