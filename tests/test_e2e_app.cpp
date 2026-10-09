@@ -14,6 +14,7 @@
 #include <QDateEdit>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -716,6 +717,134 @@ private slots:
         QCOMPARE(anulaciones, QStringList({ "1800|15-03-2026|" }));
         QCOMPARE(payloadIds, QStringList({ "IDFacturaAnulada:1800", "IDFactura:1600", "IDFactura:1900",
                                            "IDFactura:1600-1" }));
+    }
+
+    // Exportar registros AEAT on awkward stored data: a payload that is not a
+    // well-formed fragment is written as text and the file stays readable; an
+    // invoice AEAT registered under another date than its payment says so
+    // (fechaExpedicion, from the payload); a cancellation made before 10.12 (no
+    // date) goes with its invoice, marked sinFecha; an undated invoice is counted.
+    void test_aeatExport_awkwardStoredData()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "2100", "h2100a", "10.00", "05-03-2026", "CSV-2100"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
+                                "'<!DOCTYPE x><RegistroAlta>2100</RegistroAlta>' WHERE hash='h2100a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "2200", "h2200a", "12.00", "06-03-2026", "CSV-2200"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET fecha_recepcion = '02-03-2026', verifactu_estado = 'ANULADA', "
+                                "verifactu_xml = '<sum1:RegistroAlta xmlns:sum1=\"urn:sum1\"><sum1:IDFactura>"
+                                "<sum1:FechaExpedicionFactura>02-03-2026</sum1:FechaExpedicionFactura>"
+                                "</sum1:IDFactura><sum1:Encadenamiento><sum1:FechaExpedicionFactura>01-03-2026"
+                                "</sum1:FechaExpedicionFactura></sum1:Encadenamiento></sum1:RegistroAlta>', "
+                                "verifactu_cancel_xml = '<sum1:RegistroAnulacion xmlns:sum1=\"urn:sum1\"><sum1:FechaExpedicionFacturaAnulada>"
+                                "02-03-2026</sum1:FechaExpedicionFacturaAnulada></sum1:RegistroAnulacion>', "
+                                "fecha_anulacion = '20-03-2026' WHERE hash='h2200a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "2300", "h2300a", "7.00", "07-03-2026", "CSV-2300"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ANULADA', verifactu_xml = "
+                                "'<sum1:FechaExpedicionFactura xmlns:sum1=\"urn:sum1\">07-03-2026</sum1:FechaExpedicionFactura>' "
+                                "WHERE hash='h2300a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "2350", "h2350a", "3.00", "07-03-2026", "CSV-2350"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ANULADA', fecha_anulacion = '3/20' "
+                                "WHERE hash='h2350a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "2400", "h2400a", "9.00", "", "CSV-2400"));
+        QVERIFY(E2e::seedSentGarment(m_db, "2450", "h2450a", "4.00", "08-03-2026", "CSV-2450"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = '<sum1:Huella>AB</sum1:Huella>' "
+                                "WHERE hash='h2450a'"));
+
+        QVector<AeatExportRecord> records;
+        int undated = 0;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), records, &undated));
+        QCOMPARE(undated, 1);
+        QBuffer buffer;
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QCOMPARE(writeAeatExportXml(&buffer, records, QDate(2026, 3, 1), QDate(2026, 3, 31),
+                                    "B00000000", "Tintoreria E2E"), 8);
+        buffer.close();
+
+        QXmlStreamReader xml(buffer.data());
+        QStringList found;
+        while (!xml.atEnd()) {
+            if (xml.readNext() != QXmlStreamReader::StartElement)
+                continue;
+            if (xml.name() != QLatin1String("Registro") && xml.name() != QLatin1String("Anulacion"))
+                continue;
+            const QXmlStreamAttributes a = xml.attributes();
+            const QString kind = xml.name().toString();
+            const QString text = a.value("payloadComoTexto") == QLatin1String("1") ? xml.readElementText() : QString();
+            found << kind + ":" + a.value("invoiceId").toString() + "|" + a.value("fechaExpedicion").toString()
+                     + "|" + a.value("fechaAnulacion").toString() + "|" + a.value("sinFecha").toString()
+                     + "|" + text;
+        }
+        QVERIFY2(!xml.hasError(), qPrintable(xml.errorString()));
+        QCOMPARE(found, QStringList({
+            "Registro:2100||||<!DOCTYPE x><RegistroAlta>2100</RegistroAlta>",
+            "Registro:2200|02-03-2026|20-03-2026||",
+            "Anulacion:2200|02-03-2026|20-03-2026||",
+            "Registro:2300||||",
+            "Anulacion:2300|||1|",
+            "Registro:2350||||",
+            "Anulacion:2350|||1|",
+            "Registro:2450||||<sum1:Huella>AB</sum1:Huella>" }));
+    }
+
+    // Recogida -> Separar prendas on a paid garment of a sent invoice: the split-off
+    // garment stays in that invoice (same seq, estado, CSV) and the two rows keep
+    // its total, whatever the price list says now.
+    void test_recogida_splitPaidGarment_staysInItsInvoice()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "2500", "h2500a", "10.00", "05-03-2026", "CSV-2500"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cantidad = '3', verifactu_invoice_seq = 1, "
+                                "verifactu_invoice_id = '2500-1' WHERE hash='h2500a'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "2500", "h2500a"));
+        m_driver->expect(ModalDriver::ofType<QInputDialog>(), [](QWidget *w) {
+            auto *dlg = qobject_cast<QInputDialog *>(w);
+            dlg->setIntValue(1);
+            dlg->accept();
+        });
+        rp.findChild<QPushButton *>("pb_separ_garm")->click();
+
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(cantidad || ':' || importe || ':' || verifactu_estado || ':' || "
+                        "verifactu_csv || ':' || verifactu_invoice_seq || ':' || verifactu_invoice_id, ' ') "
+                        "FROM (SELECT * FROM ingresos WHERE n_recibo = '2500' ORDER BY CAST(cantidad AS INTEGER))"),
+                 QStringLiteral("1:3.33:ENVIADA:CSV-2500:1:2500-1 2:6.67:ENVIADA:CSV-2500:1:2500-1"));
+    }
+
+    // A reply that lands once the invoice is already settled (here: a duplicate
+    // rejection for rows another path registered meanwhile) changes nothing, and
+    // Recogida says so instead of "Error al enviar", without asking AEAT again.
+    void test_recogida_replyForSettledInvoiceIgnored()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "2600", "h2600a", "25.00", "10-09-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR', "
+                                "verifactu_error = 'Tiempo de espera agotado' WHERE hash='h2600a'"));
+        FakeVerifactuServer::Reply dup;
+        dup.body = FakeVerifactuServer::rejectedReply("3000", "Registro de factura duplicado: ya existe");
+        dup.delayMs = 1500;
+        m_server.enqueue("Create", dup);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "2600", "h2600a"));
+        m_driver->expect(ModalDriver::named("verifactuDialog"), [](QWidget *w) {
+            w->findChild<QPushButton *>("btnRetry")->click();
+        });
+        rp.findChild<QPushButton *>("pb_verifactu")->click();
+        QCOMPARE(m_driver->handled(), 1);
+        bool compared = false;     // must not open: closed if it does, so the test fails instead of hanging
+        m_driver->expect(ModalDriver::named("aeatReconcileDialog"), [&compared](QWidget *w) {
+            compared = true;
+            qobject_cast<QDialog *>(w)->reject();
+        });
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA', verifactu_csv = 'A-SETTLED', "
+                                "verifactu_error = '' WHERE hash='h2600a'"));
+
+        QTRY_VERIFY_WITH_TIMEOUT(rp.statusBar()->currentMessage().contains("la factura ya estaba registrada"), 10000);
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash='h2600a'"),
+                 QStringLiteral("ENVIADA|A-SETTLED"));
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+        QCOMPARE(m_server.requestsTo("GetFilteredList").size(), 0);
+        QVERIFY(!compared);
     }
 
     // Añadir nuevas prendas: a garment added as already paid is that ticket's first

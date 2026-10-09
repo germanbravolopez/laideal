@@ -23,7 +23,7 @@ ui->show();
 | Edit quantity | `QTY` | `cantidad`, `importe` (re-priced via `garmentImporte`) |
 | Change service | `SERVICE` | `servicio`, `importe` (re-priced against the new service's unit price) |
 | Edit importe (manual) | `PRICE` | `importe` (comma-normalised manual override; `size` left as-is) |
-| Split garment row | `SEPARATE_GARM` | Inserts a new row with `genHash16()`; decrements quantity on original |
+| Split garment row | `SEPARATE_GARM` | `sql_lite::splitGarmentRow`: moves the chosen quantity to a new row (`genHash16()`) that copies every other column, `verifactu_*` included, so split-off garments of a paid row stay in the invoice AEAT registered; the `importe` is divided in proportion, to the cent, so the two rows keep the original total (no re-pricing from the price list) |
 
 `updateDb()` keeps the business rules (edit_lock guard, the `Anulado` lock) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
 
@@ -127,11 +127,11 @@ None of the three `QDateEdit`s has a `dateChanged`/`editingFinished` handler —
 |--------|-----------|-----------|
 | `de_date_pickup` | `updateDb(PKU_YES)` (via `pb_state`) and `markTicketPickedUp()` (via `pb_pku_all`) | Yes — the only one that works |
 | `de_date_paym` | Never (only `PayDialog` writes `fecha_pago`) | **No** — forced `setReadOnly(true)` with no spin buttons since 10.9 |
-| `de_date_recep` | Never written back for the clicked row; only read to build the split-off row in `SEPARATE_GARM` | **No** — `setReadOnly(true)` with no spin buttons since 10.10 |
+| `de_date_recep` | Never written back for the clicked row (the split-off row copies the original's dates from the DB) | **No** — `setReadOnly(true)` with no spin buttons since 10.10 |
 
 `de_date_paym` is deliberately display-only: `fecha_pago` is part of the AEAT invoice identity `(emisor, InvoiceID, fecha)`, which `sql_lite::verifactuEventFor` (retry) and `verifactuRemoteMatches` (reconcile) both depend on. Editing it after submission would make a retry register a *second* invoice instead of being rejected as duplicate, and could move income into a locked quarter. The payment date is set by `PayDialog` alone.
 
-`de_date_recep` is display-only for the same "nothing writes it back" reason, plus one of its own: its only remaining reader is the split-off row, which must inherit the original reception date. A hand-typed value there would also shift that row in or out of the Verifactu startup-recovery window, which gates on `fecha_recepcion` (`sql_lite::pendingVerifactuEvents`).
+`de_date_recep` is display-only for the same "nothing writes it back" reason. A hand-typed value would also shift a row in or out of the Verifactu startup-recovery window, which gates on `fecha_recepcion` (`sql_lite::pendingVerifactuEvents`).
 
 ## Partial-payment dialog (8.5+)
 

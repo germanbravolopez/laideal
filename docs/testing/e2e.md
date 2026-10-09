@@ -36,9 +36,13 @@ Headless there is nobody to click "Aceptar", so a single `QMessageBox` would blo
 
 Operates the app's own modal dialogs. A screen that opens a dialog with `exec()` (Recogida's pay-all → PayDialog, the Verifactu dialog, the AEAT comparison dialog) blocks the test until the dialog closes, so the scenario registers the step beforehand: `expect(ModalDriver::named("aeatReconcileDialog"), [](QWidget *w) { ... })` (or `ModalDriver::ofType<PayDialog>()`) runs the callback once on the first visible window that matches. It reads the dialog, presses its buttons or closes it. Message boxes stay with `ModalAutoCloser`.
 
+### `testschema.h`
+
+`TestSchema::create` builds the shop tables on a throwaway DB: `ingresos` with its original pre-Verifactu columns, then the app's own `migrateDatabase()`, so a column added by a migration reaches every suite without being copied by hand. Used by `e2efixture.h`, `test_e2e_verifactu` and `test_sql_lite` (whose `test_ingresosSchema_matchesColumnIndices` checks the result against `INGRESOS_COL_*`).
+
 ### `e2efixture.h`
 
-Shared setup for `test_e2e_app` (namespace `E2e`): `createSchema` (ingresos / gastos / clientes / prendas, column for column with the shop DB), `configureSettings` (the throwaway settings above), `clearTables`, `exec` / `scalar`, and the seeders `seedGarment` (unpaid, `SIN COBRAR`) and `seedSentGarment` (paid, `ENVIADA`, with a CSV).
+Shared setup for `test_e2e_app` (namespace `E2e`): `createSchema` (via `testschema.h`), `configureSettings` (the throwaway settings above), `clearTables`, `exec` / `scalar`, and the seeders `seedGarment` (unpaid, `SIN COBRAR`) and `seedSentGarment` (paid, `ENVIADA`, with a CSV).
 
 ---
 
@@ -87,6 +91,9 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 | `test_recogida_duplicateRetry_comparisonDialogAdoptsAeatCsv` | Verifactu dialog on an `ERROR` row → Reintentar; AEAT answers "duplicado", then the query returns the matching record | Reintentar and Consultar offered; the comparison dialog opens by itself, says the data match, shows AEAT's CSV, Actualizar enabled; after it the row is `ENVIADA` with AEAT's CSV and the confirmation shows |
 | `test_recogida_aeatQuery_noAdoptionUnlessItMatches` | Consultar en AEAT: not found, different amount, row already `ENVIADA`; Verifactu dialog on an unpaid row | Actualizar disabled in all three ("no ha devuelto ninguna factura", "NO coinciden", "solo informativa"); `ENVIADA` row offers no Reintentar; unpaid row offers neither button; nothing re-submitted |
 | `test_aeatExport_oneRegistroPerPaymentEvent` | Exportar registros AEAT as the menu runs it (records + XML writer) for March: a two-garment payment, a later partial payment, an unpaid garment, an invoice known only by its CSV, a January invoice cancelled in March (cancellation record stored), a March invoice cancelled in April | Four `<Registro>` for the invoices issued in March (`1600` with the event total 14.50, `1600-1`, `1700` marked `sinPayload`, `1900` with its later `fechaAnulacion`) and one `<Anulacion>` for `1800` with AEAT's cancellation record; the January invoice itself is not repeated; each payload inlined once; the document parses |
+| `test_aeatExport_awkwardStoredData` | Exportar registros AEAT over a DOCTYPE payload, an undeclared-prefix payload, an invoice registered under its reception date and cancelled, a cancellation without a date and one with an unreadable date, an undated invoice | The bad payloads are written as text (`payloadComoTexto`) and the file parses; `fechaExpedicion` from the first date of the payload on both `<Registro>` and `<Anulacion>`; both undated cancellations follow their invoice with `sinFecha`; the undated invoice is counted |
+| `test_recogida_splitPaidGarment_staysInItsInvoice` | Recogida → Separar prendas (1 of 3) on a paid garment of invoice `2500-1` | Both rows `ENVIADA`, same CSV, seq 1 and id; 3.33 + 6.67 = the original 10.00 |
+| `test_recogida_replyForSettledInvoiceIgnored` | Reintentar on an `ERROR` row; the invoice is registered meanwhile; AEAT then answers "duplicate" | Nothing rewritten, status bar "...ignorada: la factura ya estaba registrada", no AEAT query |
 | `test_addGarmentPaid_submittedAtOnce` | Herramientas → Añadir nuevas prendas on an unpaid ticket, adding a garment as paid | Submitted at once as the ticket's first invoice (`2000`, today, 7.00), row `ENVIADA` in seq 0; the ticket's unpaid garment stays `SIN COBRAR` |
 | `test_addGarment_retypedTicketNumberRefused` | Añadir nuevas prendas: search an unpaid ticket, retype an already sent one, save as paid | Refused ("No se ha buscado…"); nothing inserted into the sent ticket, no Create, its CSV intact |
 | `test_contabilidad_generateLockThenRevert` | Contabilidad Trimestral Q1 with Bloquear, then Revertir | The PDF is written under `reportsRoot/Contabilidad`, rows locked, form closes; revert unlocks them |

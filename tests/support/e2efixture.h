@@ -16,6 +16,7 @@
 #include <QtTest>
 
 #include "appsettings.h"
+#include "testschema.h"
 
 namespace E2e {
 
@@ -41,24 +42,10 @@ inline QString scalar(QSqlDatabase &db, const QString &sql)
     return v;
 }
 
-// The tables the app reads, column for column with the shop database.
+// The tables the app reads, through the app's own migrations (support/testschema.h).
 inline bool createSchema(QSqlDatabase &db)
 {
-    return exec(db, "CREATE TABLE ingresos ("
-                    " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
-                    " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
-                    " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-                    " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT,"
-                    " verifactu_csv TEXT, verifactu_timestamp TEXT, verifactu_estado TEXT,"
-                    " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
-                    " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
-                    " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-                    " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)")
-        && exec(db, "CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
-                    "descripcion TEXT, empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER, "
-                    "edit_lock INTEGER DEFAULT 0)")
-        && exec(db, "CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)")
-        && exec(db, "CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)");
+    return TestSchema::create(db);
 }
 
 inline void clearTables(QSqlDatabase &db)

@@ -105,56 +105,23 @@ void CancelInvoiceDialog::onSearchClicked()
         client = q.value(0).toString();
         date   = q.value(1).toString();
     }
-
-    // One entry per (n_recibo, verifactu_invoice_seq) pair that was actually
-    // submitted to AEAT - paid rows only, like verifactuEventFor: unpaid garments
-    // share seq 0 but are not part of that invoice. The estado filter excludes never-submitted rows; row-
-    // by-row partial-pay events GROUP BY seq, and a single-event legacy ticket
-    // collapses to one group at seq=0. MAX over CSV/estado/invoice_id is safe
-    // since rows of the same event share those values.
-    {
-        QSqlQuery q(db);
-        q.prepare("SELECT verifactu_invoice_seq, "
-                  "       COALESCE(MAX(verifactu_invoice_id), ''), "
-                  "       SUM(importe), "
-                  "       COALESCE(MAX(verifactu_csv), ''), "
-                  "       COALESCE(MAX(verifactu_estado), '') "
-                  "FROM ingresos "
-                  "WHERE n_recibo = :num AND pagado = 'SI' "
-                  "  AND verifactu_estado IS NOT NULL "
-                  "  AND verifactu_estado != '' "
-                  "GROUP BY verifactu_invoice_seq "
-                  "ORDER BY verifactu_invoice_seq");
-        q.bindValue(":num", ticketNum);
-        if (!q.exec()) {
-            qWarning() << "CancelInvoiceDialog: events SELECT failed for ticket"
-                       << ticketNum << "-" << q.lastError().text();
-            db.close();
-            m_lblHeader->setText(tr("<i>Error al leer el ticket.</i>"));
-            return;
-        }
-        while (q.next()) {
-            Event e;
-            e.seq       = q.value(0).toInt();
-            e.invoiceId = q.value(1).toString();
-            e.importe   = q.value(2).toDouble();
-            e.csv       = q.value(3).toString();
-            e.estado    = q.value(4).toString();
-            // Reconstruct the literal AEAT InvoiceID when the column is empty:
-            // legacy 8.0-8.4 rows submitted as bare n_recibo (seq=0), and
-            // pre-Phase-G PayDialog rows that did not populate the column.
-            if (e.invoiceId.isEmpty())
-                e.invoiceId = verifactuInvoiceId(ticketNum, e.seq);
-            m_events.append(e);
-        }
-    }
     db.close();
+    m_receptionDate = QDate::fromString(date, "dd-MM-yyyy");
 
-    // The date each invoice was issued under, by the same rule the submit, retry and
-    // AEAT query use.
-    for (Event &e : m_events) {
-        e.invoiceDate   = QDate::fromString(verifactuEventFor(db, ticketNum, e.seq).fechaPago, "dd-MM-yyyy");
-        e.receptionDate = QDate::fromString(date, "dd-MM-yyyy");
+    QVector<SubmittedInvoiceEvent> submitted;
+    if (!submittedInvoiceEvents(db, ticketNum, submitted)) {
+        m_lblHeader->setText(tr("<i>Error al leer el ticket.</i>"));
+        return;
+    }
+    for (const SubmittedInvoiceEvent &s : submitted) {
+        Event e;
+        e.seq         = s.seq;
+        e.invoiceId   = s.invoiceId;
+        e.importe     = s.importe;
+        e.csv         = s.csv;
+        e.estado      = s.estado;
+        e.invoiceDate = QDate::fromString(s.fechaPago, "dd-MM-yyyy");
+        m_events.append(e);
     }
 
     m_loadedTicket = ticketNum;
@@ -237,8 +204,8 @@ void CancelInvoiceDialog::onCancelClicked(int row)
 
     m_pendingCancelRow = row;
     m_firstRejection.clear();
-    m_pendingFallbackDate = (e.seq == 0 && e.receptionDate.isValid() && e.receptionDate != e.invoiceDate)
-                            ? e.receptionDate : QDate();
+    m_pendingFallbackDate = (e.seq == 0 && m_receptionDate.isValid() && m_receptionDate != e.invoiceDate)
+                            ? m_receptionDate : QDate();
     m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
     if (m_pendingCancelId.isEmpty()) {
         m_lblResult->setText(QString("<b style='color:red'>Verifactu no configurado:</b> %1")

@@ -72,7 +72,13 @@ bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, c
 // SIZE_AND_PRICE: set size + importe.
 bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &size, const QString &importe);
-// SEPARATE_GARM (1/2) / QTY: set cantidad + importe on the row being reduced.
+// SEPARATE_GARM: move nGarm of the row's garments (1 <= nGarm < cantidad) to a new
+// row that copies every other column, verifactu_* included, so the split-off
+// garments stay in the same invoice and estado. The importe is divided in
+// proportion, to the cent, keeping the sum. A row locked by Contabilidad is
+// refused. Returns the new row's hash, or an empty string when nothing was written.
+QString     splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash, int nGarm);
+// QTY: set cantidad + importe.
 bool        updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                        const QString &cantidad, const QString &importe);
 // SERVICE: set servicio + importe (a service change re-prices the row).
@@ -102,16 +108,10 @@ bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
 // ticket total - "any paid" would claim a partially-paid ticket was settled in full.
 bool        ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo);
 
-// One `ingresos` garment line to insert. Shared by RecogPrendas SEPARATE_GARM
-// (the split-off row) and MainWindow saveTicket (a freshly-saved ticket row).
+// One `ingresos` garment line to insert (MainWindow saveTicket, AddGarment).
 // `verifactuEstado` is the only verifactu_* column written; the rest start empty:
-//  - split-off row: leave it "" so the row reads as legacy/NotSubmitted - the AEAT
-//    submission for the ticket covered the full importe and the chained Huella
-//    stays on the original rows, so re-submitting a split row would create a
-//    duplicate-InvoiceID error at AEAT.
-//  - saveTicket / AddGarment row: "PENDIENTE" (NotSubmitted) when the row is paid
-//    and an AEAT submit is due - the async reply patches it - else "SIN COBRAR"
-//    (Unpaid), which means there is no invoice to send yet.
+// "PENDIENTE" (NotSubmitted) when the row is paid and an AEAT submit is due - the
+// async reply patches it - else "SIN COBRAR" (Unpaid), no invoice to send yet.
 struct IngresoGarmentRow {
     QString nRecibo;
     QString cliente;
@@ -128,7 +128,7 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString editLock = "0";
     QString hash;
-    QString verifactuEstado;  // "" (legacy/split), "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
+    QString verifactuEstado;  // "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 
@@ -141,8 +141,10 @@ QString     removeSpecialChars(const QString &str);
 // (CSV, timestamp, estado, error, QR URL, signed XML, hash, invoice_id).
 // seq=0 binds invoice_id=ticketNum (save-time submit format); seq>0 binds
 // invoice_id="<ticketNum>-<seq>" (PayDialog format). The seq filter prevents
-// a retry of the save-time submit from clobbering later PayDialog rows.
-void        updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
+// a retry of the save-time submit from clobbering later PayDialog rows. A row
+// already ENVIADA / ANULADA / RECTIFICADA is never rewritten. Returns the number
+// of rows changed (0: the invoice was already settled), -1 on a DB failure.
+int         updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                         const VerifactuResult &result, int seq = 0);
 
 // Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
@@ -190,6 +192,21 @@ int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq
 // paid event exists.
 PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo, int seq);
 
+// One invoice of a ticket that was submitted to AEAT (Anular factura): the paid
+// rows of one verifactu_invoice_seq with a verifactu_estado. Unpaid garments share
+// seq 0 but were never part of the invoice.
+struct SubmittedInvoiceEvent {
+    int     seq = 0;
+    QString invoiceId;    // literal AEAT InvoiceID, rebuilt for legacy rows without one
+    double  importe = 0.0;
+    QString csv;
+    QString estado;
+    QString fechaPago;    // dd-MM-yyyy, earliest over all paid rows of the seq (as verifactuEventFor)
+};
+// Ordered by seq. Returns false when the query fails.
+bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
+                            QVector<SubmittedInvoiceEvent> &events);
+
 // Pending Verifactu events for startup recovery: one entry per
 // (n_recibo, verifactu_invoice_seq) whose estado is still PENDIENTE / empty and
 // whose fecha_recepcion (rebuilt to ISO) is on or after floorIso. Grouping by
@@ -221,9 +238,10 @@ struct AeatExportRecord {
 // a stored payload or a CSV (e.g. recovered with "Consultar en AEAT") - issued
 // (fecha_pago) or cancelled (fecha_anulacion) between from and to inclusive, any
 // estado. Ordered by issue date, then number. Returns false when the query fails, so
-// a failure is never mistaken for "no records".
+// a failure is never mistaken for "no records". `undatedEvents`, when given, receives
+// the number of such events with no readable fecha_pago, which no period includes.
 bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
-                       QVector<AeatExportRecord> &records);
+                       QVector<AeatExportRecord> &records, int *undatedEvents = nullptr);
 
 // One paid ticket behind the Contabilidad ingresos summary: its garment rows in
 // the period aggregated by n_recibo (importe is IVA included).

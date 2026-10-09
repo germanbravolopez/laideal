@@ -23,6 +23,7 @@
 #include "modalautocloser.h"
 #include "pay_dialog.h"
 #include "sql_lite.h"
+#include "testschema.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
 #include "verifacturesponse.h"
@@ -117,20 +118,7 @@ private slots:
 
         m_db = QSqlDatabase::addDatabase("QSQLITE", "e2e");
         m_db.setDatabaseName(m_dir.filePath("laideal_e2e.db"));
-        exec("CREATE TABLE ingresos ("
-             " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
-             " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
-             " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-             " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT,"
-             " verifactu_csv TEXT, verifactu_timestamp TEXT, verifactu_estado TEXT,"
-             " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
-             " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
-             " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-             " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)");
-        exec("CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
-             "descripcion TEXT, empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER, "
-             "edit_lock INTEGER DEFAULT 0)");
-        exec("CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)");
+        QVERIFY(TestSchema::create(m_db));
 
         m_verifactu = new VerifactuIntegration(this);
         QVERIFY2(m_verifactu->initialize(), "Verifactu client must initialise from the test settings");

@@ -176,40 +176,9 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
     case SEPARATE_GARM:
         // If editLock payment info cannot be changed
         if (!editLock) {
-            // Update current garments
-            int newQtyUpd = ui->le_qty->text().toInt() - nGarm;
-            float newImpUpd = QString::number(newQtyUpd).toFloat() * readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
-            if (newImpUpd < 0) {
-                break;
-            }
-            updateGarmentQtyAndImporte(db, ticketNum, rowHash,
-                                       QString::number(newQtyUpd),
-                                       QString::number(newImpUpd, 'f', 2).replace(",","."));
-
-            // Insert separated garments. The split row intentionally leaves verifactu_*
-            // columns at their defaults: the AEAT submission for this ticket covered the
-            // full importe and the chained Huella is attached to the original rows -
-            // re-submitting the split-off row would create a duplicate-InvoiceID error
-            // at AEAT. Helpers treat empty verifactu_estado as legacy (NotSubmitted),
-            // which is the desired accounting/print behaviour for split rows.
-            float newImpIns = nGarm * readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
-            IngresoGarmentRow row;
-            row.nRecibo        = ui->le_nr_ticket->text();
-            row.cliente        = ui->le_client->text();
-            row.fechaRecepcion = ui->de_date_recep->date().toString("dd-MM-yyyy");
-            row.fechaPago      = ui->pb_payment->isChecked() ? ui->de_date_paym->date().toString("dd-MM-yyyy") : QString("");
-            row.fechaRecogida  = ui->pb_state->isChecked() ? ui->de_date_pickup->date().toString("dd-MM-yyyy") : QString("");
-            row.importe        = QString::number(newImpIns, 'f', 2).replace(",",".");
-            row.pagado         = ui->pb_payment->text();
-            row.estado         = ui->pb_state->text();
-            row.cantidad       = QString::number(nGarm);
-            row.prenda         = ui->le_garm->text();
-            row.size           = ui->le_size->text().replace(",",".");
-            row.servicio       = ui->cb_servic->currentText();
-            row.observaciones  = ui->le_obsv->text();
-            row.editLock       = "0";
-            row.hash           = genHash16();
-            insertGarmentRow(db, row);
+            // The split-off row keeps the original's invoice (seq, estado, CSV): on a
+            // paid row those garments are part of the invoice AEAT registered.
+            splitGarmentRow(db, ticketNum, rowHash, nGarm);
         }
         else {
             QMessageBox::warning(this, tr("Ticket bloqueado"),
@@ -941,13 +910,23 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
     const bool    adopted   = it.value().adopted;
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(db, ticketNum, result, seq);
+    const int changed = updateTicketVerifactuFields(db, ticketNum, result, seq);
 
     // Refresh the table so the new estado is visible (only if user is still on this view)
     on_pb_search_clicked();
     if (rowClickedCell >= 0 && rowClickedCell < sqlQueryModel->rowCount()) {
         updateRowClickedToFields();
         isCellClicked = true;
+    }
+
+    // Nothing to reconcile either: AEAT already holds the invoice we have.
+    if (changed <= 0) {
+        statusBar()->showMessage(changed == 0
+            ? tr("Respuesta de AEAT para el ticket %1 ignorada: la factura ya estaba registrada")
+                  .arg(verifactuInvoiceId(ticketNum, seq))
+            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq)),
+            15000);
+        return;
     }
 
     if (result.isSuccess()) {

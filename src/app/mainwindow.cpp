@@ -462,7 +462,15 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
     const bool    lateReply = it.value().printedWithoutQr;
     m_pendingSubmits.erase(it);
 
-    updateTicketVerifactuFields(db, ticketNum, result, seq);
+    const int changed = updateTicketVerifactuFields(db, ticketNum, result, seq);
+    if (changed <= 0) {
+        statusBar()->showMessage(changed == 0
+            ? tr("Respuesta de AEAT para el ticket %1 ignorada: la factura ya estaba registrada")
+                  .arg(verifactuInvoiceId(ticketNum, seq))
+            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq)),
+            15000);
+        return;
+    }
 
     if (result.isSuccess()) {
         statusBar()->showMessage(
@@ -1092,7 +1100,8 @@ void MainWindow::on_actionExportar_registros_aeat_triggered()
     // One record per invoice submitted to AEAT (payment event), any current estado:
     // Hacienda holds cancelled and rectified invoices too.
     QVector<AeatExportRecord> records;
-    if (!aeatExportRecords(db, from, to, records)) {
+    int undated = 0;
+    if (!aeatExportRecords(db, from, to, records, &undated)) {
         QMessageBox::critical(this, "Exportar registros AEAT",
                               "Error al consultar la base de datos. No se ha creado el archivo.",
                               QMessageBox::Ok);
@@ -1118,16 +1127,18 @@ void MainWindow::on_actionExportar_registros_aeat_triggered()
         return;
     }
 
-    if (count == 0) {
-        QMessageBox::information(this, "Exportar registros AEAT",
-            QString("No se encontraron registros enviados a AEAT entre %1 y %2.\n"
-                    "El archivo se ha creado vacío.")
-                .arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy")),
-            QMessageBox::Ok);
+    QString message = count == 0
+        ? QString("No se encontraron registros enviados a AEAT entre %1 y %2.\n"
+                  "El archivo se ha creado vacío.")
+              .arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy"))
+        : QString("Se han exportado %1 registros al archivo:\n%2").arg(count).arg(filePath);
+    if (undated > 0) {
+        message += QString("\n\nAtención: %1 factura(s) enviadas a AEAT no tienen una fecha de pago "
+                           "válida y no aparecen en ningún periodo. Revise el log y contacte con "
+                           "soporte.").arg(undated);
+        QMessageBox::warning(this, "Exportar registros AEAT", message, QMessageBox::Ok);
     } else {
-        QMessageBox::information(this, "Exportar registros AEAT",
-            QString("Se han exportado %1 registros al archivo:\n%2").arg(count).arg(filePath),
-            QMessageBox::Ok);
+        QMessageBox::information(this, "Exportar registros AEAT", message, QMessageBox::Ok);
     }
 }
 
