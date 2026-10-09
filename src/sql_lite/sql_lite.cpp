@@ -590,6 +590,11 @@ static const QString kFechaPagoIso =
     QStringLiteral("date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))");
 static const QString kFechaGastoIso =
     QStringLiteral("date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2))");
+// Earliest fecha_pago of a group, by date (MIN over the dd-MM-yyyy text would compare
+// day first). Rows paid on different days in one seq-0 invoice predate 10.9: AEAT
+// registered it under the first payment.
+static const QString kEarliestFechaPago =
+    QStringLiteral("strftime('%d-%m-%Y', MIN(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))))");
 static const QString kFechaAnulacionIso =
     QStringLiteral("date(substr(fecha_anulacion,7,4)||'-'||substr(fecha_anulacion,4,2)||'-'||substr(fecha_anulacion,1,2))");
 static const QString kExcludedEstadosSql =
@@ -908,7 +913,7 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
     // submission on - reusing it is what makes a duplicate register as a duplicate
     // instead of silently creating a second invoice.
     QSqlQuery q(db);
-    q.prepare("SELECT MIN(fecha_pago), MIN(cliente), SUM(importe), COUNT(*) "
+    q.prepare("SELECT " + kEarliestFechaPago + ", MIN(cliente), SUM(importe), COUNT(*) "
               "FROM ingresos "
               "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":n",   nRecibo);
@@ -963,7 +968,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // store dd-MM-yyyy, substr-rebuilt to yyyy-MM-dd for lexicographic compares.
     QSqlQuery q(db);
     q.prepare(
-        "SELECT n_recibo, verifactu_invoice_seq, MIN(fecha_pago), "
+        "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
         "       MIN(cliente), SUM(importe) "
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
@@ -1006,7 +1011,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     // Rows of one event share its dates, CSV, payload and ids, so MAX picks them.
     // Grouping also by CSV keeps two submissions apart should old data ever share a seq.
     QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, verifactu_invoice_seq, MAX(fecha_pago), SUM(importe), "
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(importe), "
               "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
               "       COALESCE(MAX(verifactu_estado), ''), COALESCE(MAX(fecha_anulacion), ''), "
               "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "

@@ -263,25 +263,86 @@ private slots:
         QCOMPARE(table->item(0, 0)->flags() & Qt::ItemIsUserCheckable, Qt::ItemFlags());
     }
 
-    // Anular factura: AEAT accepts the cancellation -> ANULADA with today's date.
+    // Anular factura: AEAT accepts the cancellation -> ANULADA with today's date. The
+    // cancellation names each invoice by the date it was issued under - its payment
+    // date - not the ticket's reception date: here the first payment was made days
+    // after reception and a second garment was paid later as its own invoice "850-1".
     void test_cancelInvoice_markedAnulada()
     {
-        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", today(), "A-ORIG0800"));
+        const QDate received = QDate::currentDate().addDays(-20);
+        const QDate firstPaid = QDate::currentDate().addDays(-10);
+        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", firstPaid.toString("dd-MM-yyyy"), "A-ORIG0800"));
+        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800b", "6.00", today(), "A-ORIG0801"));
+        QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET fecha_recepcion = '%1' WHERE n_recibo = '800'")
+                                    .arg(received.toString("dd-MM-yyyy"))));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '800-1' "
+                                "WHERE hash = 'h800b'"));
 
         CancelInvoiceDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
         dlg.findChild<QLineEdit *>("leTicketNum")->setText("800");
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");
-        QCOMPARE(dlg.findChild<QTableWidget *>("table")->rowCount(), 1);
-        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
-
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->rowCount(), 2);
         auto *result = dlg.findChild<QLabel *>("lblResult");
+
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 10000);
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 1));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 800-1"), 10000);
+
         const auto cancels = m_server.requestsTo("Cancel");
-        QCOMPARE(cancels.size(), 1);
         QCOMPARE(cancels[0].json.value("InvoiceID").toString(), QStringLiteral("800"));
+        QCOMPARE(cancels[0].json.value("InvoiceDate").toString(), firstPaid.toString(Qt::ISODate));
+        QCOMPARE(cancels[1].json.value("InvoiceID").toString(), QStringLiteral("800-1"));
+        QCOMPARE(cancels[1].json.value("InvoiceDate").toString(), QDate::currentDate().toString(Qt::ISODate));
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h800a'"),
                  QStringLiteral("ANULADA|%1").arg(today()));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h800b'"),
+                 QStringLiteral("ANULADA|%1").arg(today()));
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), firstPaid.toString("dd-MM-yyyy"));
+    }
+
+    // Anular factura on older data. (1) A seq-0 invoice whose garments were paid on
+    // different days was registered under the first payment, so that date is sent.
+    // (2) Before 10.9 a failed submission was re-sent with the reception date, so
+    // AEAT may hold the invoice under it: when AEAT rejects the cancellation, it is
+    // tried once more with the reception date. (3) An invoice with no readable
+    // payment date is refused locally and nothing is sent.
+    void test_cancelInvoice_olderDataDates()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "860", "h860a", "10.00", "28-01-2026", "A-ORIG0860"));
+        QVERIFY(E2e::seedSentGarment(m_db, "860", "h860b", "5.00", "05-03-2026", "A-ORIG0860"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET fecha_recepcion = '20-01-2026' WHERE n_recibo = '860'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "870", "h870a", "8.00", "garbage", "A-ORIG0870"));
+
+        FakeVerifactuServer::Reply notFound;
+        notFound.body = FakeVerifactuServer::rejectedReply("3002", "No existe el registro de facturacion");
+        m_server.enqueue("Cancel", notFound);
+
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("860");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->rowCount(), 1);
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 860"), 10000);
+
+        const auto cancels = m_server.requestsTo("Cancel");
+        QCOMPARE(cancels.size(), 2);
+        QCOMPARE(cancels[0].json.value("InvoiceDate").toString(), QStringLiteral("2026-01-28"));   // earliest payment
+        QCOMPARE(cancels[1].json.value("InvoiceDate").toString(), QStringLiteral("2026-01-20"));   // reception, after the rejection
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='860' AND verifactu_estado='ANULADA'"),
+                 QStringLiteral("2"));
+
+        m_server.clear();
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("870");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY(result->text().contains("no tiene fecha de pago"));
+        QTest::qWait(300);
+        QVERIFY(m_server.requestsTo("Cancel").isEmpty());
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h870a'"), QStringLiteral("ENVIADA"));
     }
 
     // Anular factura while today's quarter is closed: refused before any request.
@@ -317,7 +378,7 @@ private slots:
         cancel.findChild<QLineEdit *>("leTicketNum")->setText("820");
         QMetaObject::invokeMethod(&cancel, "onSearchClicked");
         QCOMPARE(table->rowCount(), 1);
-        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 4))->isEnabled());
+        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
 
         cancel.findChild<QLineEdit *>("leTicketNum")->setText("830");
         QMetaObject::invokeMethod(&cancel, "onSearchClicked");

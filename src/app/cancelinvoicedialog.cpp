@@ -15,11 +15,12 @@
 
 namespace {
 constexpr int COL_INVOICE_ID = 0;
-constexpr int COL_IMPORTE    = 1;
-constexpr int COL_ESTADO     = 2;
-constexpr int COL_CSV        = 3;
-constexpr int COL_ACTION     = 4;
-constexpr int COL_COUNT      = 5;
+constexpr int COL_DATE       = 1;
+constexpr int COL_IMPORTE    = 2;
+constexpr int COL_ESTADO     = 3;
+constexpr int COL_CSV        = 4;
+constexpr int COL_ACTION     = 5;
+constexpr int COL_COUNT      = 6;
 } // namespace
 
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
@@ -54,7 +55,7 @@ void CancelInvoiceDialog::buildUi()
     m_table->setObjectName("table");
     m_table->setColumnCount(COL_COUNT);
     m_table->setHorizontalHeaderLabels(
-        { tr("InvoiceID"), tr("Importe"), tr("Estado"), tr("CSV"), tr("Acción") });
+        { tr("InvoiceID"), tr("Fecha factura"), tr("Importe"), tr("Estado"), tr("CSV"), tr("Acción") });
     m_table->horizontalHeader()->setSectionResizeMode(COL_CSV, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(COL_ACTION, QHeaderView::ResizeToContents);
     m_table->verticalHeader()->setVisible(false);
@@ -149,8 +150,14 @@ void CancelInvoiceDialog::onSearchClicked()
     }
     db.close();
 
+    // The date each invoice was issued under, by the same rule the submit, retry and
+    // AEAT query use.
+    for (Event &e : m_events) {
+        e.invoiceDate   = QDate::fromString(verifactuEventFor(db, ticketNum, e.seq).fechaPago, "dd-MM-yyyy");
+        e.receptionDate = QDate::fromString(date, "dd-MM-yyyy");
+    }
+
     m_loadedTicket = ticketNum;
-    m_loadedDate   = QDate::fromString(date, "dd-MM-yyyy");
 
     m_lblHeader->setText(QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2")
                              .arg(client.toHtmlEscaped(), date.toHtmlEscaped()));
@@ -168,6 +175,8 @@ void CancelInvoiceDialog::rebuildTable()
     for (int row = 0; row < m_events.size(); ++row) {
         const Event &e = m_events[row];
         m_table->setItem(row, COL_INVOICE_ID, new QTableWidgetItem(e.invoiceId));
+        m_table->setItem(row, COL_DATE, new QTableWidgetItem(
+            e.invoiceDate.isValid() ? e.invoiceDate.toString("dd-MM-yyyy") : QStringLiteral("-")));
         m_table->setItem(row, COL_IMPORTE,
             new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
         m_table->setItem(row, COL_ESTADO,
@@ -211,6 +220,15 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     }
 
     const Event &e = m_events[row];
+    // AEAT keys an invoice on (emisor, InvoiceID, date): cancel it under the date it
+    // was issued with - the payment date, not the ticket's reception date.
+    if (!e.invoiceDate.isValid()) {
+        qWarning() << "CancelInvoiceDialog: no payment date for" << e.invoiceId << "- cancellation not sent";
+        m_lblResult->setText(tr("<b style='color:red'>La factura %1 no tiene fecha de pago, "
+                                "no se puede anular en AEAT.</b><br>Compruebe qué tiene registrado la AEAT "
+                                "con \"Consultar en AEAT\" en Recogida de prendas.").arg(e.invoiceId.toHtmlEscaped()));
+        return;
+    }
     setActionsEnabled(false);
     m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId));
 
@@ -218,7 +236,9 @@ void CancelInvoiceDialog::onCancelClicked(int row)
             this, &CancelInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
 
     m_pendingCancelRow = row;
-    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, m_loadedDate);
+    m_pendingFallbackDate = (e.seq == 0 && e.receptionDate.isValid() && e.receptionDate != e.invoiceDate)
+                            ? e.receptionDate : QDate();
+    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
     if (m_pendingCancelId.isEmpty()) {
         m_lblResult->setText(QString("<b style='color:red'>Verifactu no configurado:</b> %1")
                                  .arg(m_verifactu->getLastError()));
@@ -239,6 +259,24 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         return;
     }
     Event &e = m_events[row];
+
+    // Before 10.9 a failed submission was re-sent with the reception date, so some old
+    // seq-0 invoices are registered under it. When AEAT rejects the cancellation, try
+    // that date once: only one invoice has this InvoiceID, so it cannot hit another.
+    const QDate fallback = m_pendingFallbackDate;
+    m_pendingFallbackDate = QDate();
+    if (result.status == VerifactuResult::ERROR && fallback.isValid()) {
+        qWarning() << "CancelInvoiceDialog: AEAT rejected the cancellation of" << e.invoiceId
+                   << "on" << e.invoiceDate.toString("dd-MM-yyyy") << "-" << result.errorDescription
+                   << "- retrying with the reception date" << fallback.toString("dd-MM-yyyy");
+        m_lblResult->setText(tr("Reintentando la anulación de %1 con la fecha de recepción (%2)...")
+                                 .arg(e.invoiceId.toHtmlEscaped(), fallback.toString("dd-MM-yyyy")));
+        m_pendingCancelRow = row;
+        m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback);
+        if (!m_pendingCancelId.isEmpty())
+            return;
+        m_pendingCancelRow = -1;
+    }
 
     if (!result.isSuccess()) {
         m_lblResult->setText(QString("<b style='color:red'>Error al anular %1:</b> %2")

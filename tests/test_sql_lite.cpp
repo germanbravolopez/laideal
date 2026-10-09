@@ -746,6 +746,13 @@ private slots:
         // No paid rows for that seq -> empty, so the caller refuses to re-submit.
         QVERIFY(verifactuEventFor(m_db, "R1", 7).nRecibo.isEmpty());
         QVERIFY(verifactuEventFor(m_db, "NOPE", 0).nRecibo.isEmpty());
+
+        // A pre-10.9 seq-0 invoice paid garment by garment on different days was
+        // registered under the first payment: the earliest DATE, not the smallest
+        // dd-MM-yyyy text ("05-03" sorts before "28-01").
+        insertIngreso("R2", "28-01-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("R2", "05-03-2026", "15.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        QCOMPARE(verifactuEventFor(m_db, "R2", 0).fechaPago, QStringLiteral("28-01-2026"));
     }
 
     // Adopting AEAT's own CSV is how an "already exists" rejection gets resolved:

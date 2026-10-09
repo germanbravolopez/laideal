@@ -42,6 +42,8 @@ private:
         double  importe = 0.0;
         QString csv;
         QString estado;
+        QDate   invoiceDate; // fecha_pago: the date AEAT registered the invoice under
+        QDate   receptionDate; // fallback for old invoices registered under it (see onVerifactuRequestFinished)
     };
 
     QLineEdit    *m_leTicketNum;
@@ -50,10 +52,10 @@ private:
     QLabel       *m_lblResult;
 
     QString          m_loadedTicket;
-    QDate            m_loadedDate;
     QVector<Event>   m_events;
     QString          m_pendingCancelId;
     QDate            m_pendingCancelDate;   // the date the closed-quarter guard checked
+    QDate            m_pendingFallbackDate; // set while a reception-date retry is still possible
     int              m_pendingCancelRow = -1; // row index in m_events for the in-flight cancel
     QSqlDatabase     db;
 
