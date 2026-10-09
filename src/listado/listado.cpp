@@ -198,6 +198,7 @@ void Listado::populateTable()
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CSV, true);
             // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_XML, true);
+            table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CANCEL_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH, true);
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ, true);

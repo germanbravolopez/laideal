@@ -35,11 +35,6 @@ QJsonObject VerifactuInvoice::toJson() const
     json["SellerID"] = m_sellerNIF;
     json["CompanyName"] = m_sellerName; // SellerName is not used
 
-    if (!m_buyerNIF.isEmpty()) {
-        json["BuyerID"] = m_buyerNIF;
-        json["BuyerName"] = m_buyerName;
-    }
-
     if (!m_description.isEmpty())
         json["Text"] = m_description;
 
@@ -88,18 +83,11 @@ bool VerifactuInvoice::isValid() const
         return false;
     }
 
-    // Buyer required except for F2 (simplified) and rectificativas of simplified
-    // invoices (R5 by definition, plus R1-R4 when the original was simplified -
-    // La Ideal only issues F2, so all our rectificativas inherit no-buyer).
+    // Only F2 (simplified) and its rectificativas are issued: every other type needs
+    // a buyer, which this app never records.
     if (m_invoiceType != SIMPLIFIED && !isRectificationInvoiceType(m_invoiceType)) {
-        if (m_buyerNIF.isEmpty()) {
-            m_validationError = "NIF del comprador no configurado";
-            return false;
-        }
-        if (m_buyerName.isEmpty()) {
-            m_validationError = "Nombre del comprador no configurado";
-            return false;
-        }
+        m_validationError = "NIF del comprador no configurado";
+        return false;
     }
 
     if (m_taxItems.isEmpty()) {

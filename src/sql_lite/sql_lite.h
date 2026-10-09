@@ -60,9 +60,6 @@ QString     genHash16();
 // and hands them here, so the writes are unit-testable against a temp DB. The
 // edit_lock / blocked-quarter / Verifactu-submit business rules stay in the slot.
 
-// PAY_YES / PAY_NO: set fecha_pago + pagado. PAY_NO passes an empty fechaPago.
-bool        updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
-                                const QString &fechaPago, const QString &pagado);
 // PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
 bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                const QString &fechaRecogida, const QString &estado);
@@ -135,10 +132,6 @@ struct IngresoGarmentRow {
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 
-// verifactu_estado of the first row of a ticket ("" if the ticket has no rows).
-// Read after a payment write so the pay-all loop dedup sees the persisted estado.
-QString     ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo);
-
 // Strip diacritics / non-Latin1 marks for accent-insensitive name matching:
 // NFD-normalise, narrow to Latin-1 (combining marks become '?'), drop every '?'.
 // Pure; used by MainWindow client-name matching. Does not change case.
@@ -208,6 +201,30 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
 // never fires. Ordered newest ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
+// One invoice submitted to AEAT, as exported for Hacienda (Exportar registros AEAT).
+struct AeatExportRecord {
+    QString nRecibo;
+    int     seq = 0;
+    QString invoiceId;    // literal AEAT InvoiceID ("<n>" or "<n>-<seq>")
+    QString fechaPago;    // dd-MM-yyyy, the date the invoice was issued under
+    double  importe = 0.0; // the event's total, all its garments
+    QString csv;
+    QString estado;       // current local estado (ENVIADA / ANULADA / RECTIFICADA...)
+    QString fechaAnulacion;    // dd-MM-yyyy when cancelled / substituted, else empty
+    QString rectifiesNRecibo;  // a rectificativa: the ticket it corrects
+    QString rectificationType; // a rectificativa: "S" (substitution) or "I" (differences)
+    QString xml;          // the stored AEAT payload; empty when only the CSV is known
+    QString cancelXml;    // AEAT's cancellation record, when cancelled and stored
+};
+
+// One record per paid payment event (n_recibo, verifactu_invoice_seq) that AEAT holds -
+// a stored payload or a CSV (e.g. recovered with "Consultar en AEAT") - issued
+// (fecha_pago) or cancelled (fecha_anulacion) between from and to inclusive, any
+// estado. Ordered by issue date, then number. Returns false when the query fails, so
+// a failure is never mistaken for "no records".
+bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
+                       QVector<AeatExportRecord> &records);
+
 // One paid ticket behind the Contabilidad ingresos summary: its garment rows in
 // the period aggregated by n_recibo (importe is IVA included).
 struct IncomeTicketDetail {
@@ -269,7 +286,8 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
 // covered - are marked; unpaid garments of the ticket (which share seq 0) stay
 // chargeable and are invoiced on their own when paid. Returns false when the
 // UPDATE fails or matches no paid row.
-bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
+                                    const QString &cancelXml = QString());
 // Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
 // rectificativa and records fecha_anulacion = the rectificativa's date, the same
 // period its replacement row is counted in. Unpaid rows stay chargeable.

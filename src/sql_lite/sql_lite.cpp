@@ -75,6 +75,8 @@ void migrateDatabase(QSqlDatabase &db)
     // Date a garment was cancelled (10.12+): voided in place (Anular prendas), cancelled
     // at AEAT, or superseded by a substitution rectificativa. Empty otherwise.
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
+    // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -353,26 +355,6 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     return ok;
 }
 
-bool updateTicketPayment(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
-                         const QString &fechaPago, const QString &pagado)
-{
-    if (dbNotConfigured(db, __func__)) return false;
-
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET fecha_pago = :fp, pagado = :pag "
-              "WHERE n_recibo = :n AND hash = :h");
-    q.bindValue(":fp",  fechaPago);
-    q.bindValue(":pag", pagado);
-    q.bindValue(":n",   nRecibo);
-    q.bindValue(":h",   hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateTicketPayment: UPDATE failed -" << q.lastError().text();
-    db.close();
-    return ok;
-}
-
 bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                         const QString &fechaRecogida, const QString &estado)
 {
@@ -603,21 +585,6 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     return ok;
 }
 
-QString ticketVerifactuEstado(QSqlDatabase &db, const QString &nRecibo)
-{
-    if (dbNotConfigured(db, __func__)) return QString();
-
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT verifactu_estado FROM ingresos WHERE n_recibo = :n LIMIT 1");
-    q.bindValue(":n", nRecibo);
-    QString estado;
-    if (q.exec() && q.next())
-        estado = q.value(0).toString();
-    db.close();
-    return estado;
-}
-
 // Period predicates of the Contabilidad detail listings, which are the single source
 // of every Contabilidad figure (totals, counts and detail tables).
 // Both bind :start / :end (yyyy-MM-dd) as the half-open range [start, end).
@@ -625,8 +592,13 @@ static const QString kFechaPagoIso =
     QStringLiteral("date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))");
 static const QString kFechaGastoIso =
     QStringLiteral("date(substr(fecha,7,4)||'-'||substr(fecha,4,2)||'-'||substr(fecha,1,2))");
+// Earliest fecha_pago of a group, by date (MIN over the dd-MM-yyyy text would compare
+// day first). Rows paid on different days in one seq-0 invoice predate 10.9: AEAT
+// registered it under the first payment.
+static const QString kEarliestFechaPago = "strftime('%d-%m-%Y', MIN(" + kFechaPagoIso + "))";
 static const QString kFechaAnulacionIso =
     QStringLiteral("date(substr(fecha_anulacion,7,4)||'-'||substr(fecha_anulacion,4,2)||'-'||substr(fecha_anulacion,1,2))");
+static const QString kLatestFechaAnulacion = "strftime('%d-%m-%Y', MAX(" + kFechaAnulacionIso + "))";
 static const QString kExcludedEstadosSql =
     "('" + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')";
 // Paid ingresos, excluding kTotalsExcludedEstados - except a row cancelled /
@@ -943,7 +915,7 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
     // submission on - reusing it is what makes a duplicate register as a duplicate
     // instead of silently creating a second invoice.
     QSqlQuery q(db);
-    q.prepare("SELECT MIN(fecha_pago), MIN(cliente), SUM(importe), COUNT(*) "
+    q.prepare("SELECT " + kEarliestFechaPago + ", MIN(cliente), SUM(importe), COUNT(*) "
               "FROM ingresos "
               "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":n",   nRecibo);
@@ -998,7 +970,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // store dd-MM-yyyy, substr-rebuilt to yyyy-MM-dd for lexicographic compares.
     QSqlQuery q(db);
     q.prepare(
-        "SELECT n_recibo, verifactu_invoice_seq, MIN(fecha_pago), "
+        "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
         "       MIN(cliente), SUM(importe) "
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
@@ -1027,6 +999,66 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     }
     db.close();
     return events;
+}
+
+bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
+                       QVector<AeatExportRecord> &records)
+{
+    records.clear();
+    if (dbNotConfigured(db, __func__)) return false;
+    if (!db.open()) {
+        qWarning() << "aeatExportRecords: db.open() failed -" << db.lastError().text();
+        return false;
+    }
+    // Rows of one event share its dates, CSV, payload and ids, so MAX picks them.
+    // Grouping also by CSV keeps two submissions apart should old data ever share a seq.
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(importe), "
+              "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
+              "       COALESCE(MAX(verifactu_estado), ''), COALESCE(" + kLatestFechaAnulacion + ", ''), "
+              "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
+              "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), ''), "
+              "       COALESCE(MAX(verifactu_cancel_xml), '') "
+              "FROM ingresos "
+              "WHERE pagado = 'SI' "
+              "  AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
+              "       OR (verifactu_csv IS NOT NULL AND verifactu_csv != '')) "
+              "GROUP BY n_recibo, verifactu_invoice_seq, COALESCE(verifactu_csv, '') "
+              // On the invoice's own dates, not row by row: a legacy invoice paid over
+              // several days is one record, in the period it was issued.
+              "HAVING (MIN(" + kFechaPagoIso + ") >= date(:from) AND MIN(" + kFechaPagoIso + ") <= date(:to)) "
+              "    OR (MAX(" + kFechaAnulacionIso + ") >= date(:from2) AND MAX(" + kFechaAnulacionIso + ") <= date(:to2)) "
+              "ORDER BY MIN(" + kFechaPagoIso + "), CAST(n_recibo AS INTEGER), verifactu_invoice_seq");
+    q.bindValue(":from",  from.toString(Qt::ISODate));
+    q.bindValue(":to",    to.toString(Qt::ISODate));
+    q.bindValue(":from2", from.toString(Qt::ISODate));
+    q.bindValue(":to2",   to.toString(Qt::ISODate));
+    if (!q.exec()) {
+        qWarning() << "aeatExportRecords: SELECT failed -" << q.lastError().text();
+        db.close();
+        return false;
+    }
+    while (q.next()) {
+        AeatExportRecord r;
+        r.nRecibo           = q.value(0).toString();
+        r.seq               = q.value(1).toInt();
+        r.fechaPago         = q.value(2).toString();
+        r.importe           = q.value(3).toDouble();
+        r.invoiceId         = q.value(4).toString();
+        r.csv               = q.value(5).toString();
+        r.estado            = q.value(6).toString();
+        r.fechaAnulacion    = q.value(7).toString();
+        r.rectifiesNRecibo  = q.value(8).toString();
+        r.rectificationType = q.value(9).toString();
+        r.xml               = q.value(10).toString();
+        r.cancelXml         = q.value(11).toString();
+        // Legacy rows predate the stored id; they were sent under the same rule.
+        if (r.invoiceId.isEmpty())
+            r.invoiceId = verifactuInvoiceId(r.nRecibo, r.seq);
+        records.append(r);
+    }
+    db.close();
+    return true;
 }
 
 
@@ -1063,7 +1095,10 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
               "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq "
-              "  AND pagado = 'SI'");
+              "  AND pagado = 'SI' "
+              // A settled invoice is never rewritten by a later reply (e.g. a duplicate
+              // rejection), or its CSV / payload / Huella would be lost.
+              "  AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);
@@ -1254,6 +1289,11 @@ static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
             regs.append(r);
         }
         RegularizationDetail &r = regs[it.value()];
+        // Several cancelled payment events merge into one entry: keep the LATEST payment,
+        // which is in this period exactly when any of them is (they precede the cancellation).
+        const QDate rowPago = QDate::fromString(q.value(2).toString(), "dd-MM-yyyy");
+        if (rowPago.isValid() && rowPago > QDate::fromString(r.fechaPago, "dd-MM-yyyy"))
+            r.fechaPago = q.value(2).toString();
         const QString importe = q.value(5).toString();
         if (importe.contains(QLatin1Char(',')))
             r.invalidAmounts++;
@@ -1323,17 +1363,20 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
     return last;
 }
 
-bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate)
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
+                             const QString &cancelXml)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
-              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha), "
+              "verifactu_cancel_xml = COALESCE(NULLIF(:cxml, ''), verifactu_cancel_xml) "
               "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
+    q.bindValue(":cxml",   cancelXml);
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
     const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked

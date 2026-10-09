@@ -11,13 +11,12 @@ QT_END_NAMESPACE
 class FilterWidget : public QLineEdit
 {
     Q_OBJECT
-    Q_PROPERTY(Qt::CaseSensitivity caseSensitivity READ caseSensitivity WRITE setCaseSensitivity)
-    Q_PROPERTY(PatternSyntax patternSyntax READ patternSyntax WRITE setPatternSyntax)
+    Q_PROPERTY(Qt::CaseSensitivity caseSensitivity READ caseSensitivity)
+    Q_PROPERTY(PatternSyntax patternSyntax READ patternSyntax)
 public:
     explicit FilterWidget(QWidget *parent = nullptr);
 
     Qt::CaseSensitivity caseSensitivity() const;
-    void setCaseSensitivity(Qt::CaseSensitivity);
 
     enum PatternSyntax {
         RegularExpression,
@@ -27,7 +26,6 @@ public:
     Q_ENUM(PatternSyntax)
 
     PatternSyntax patternSyntax() const;
-    void setPatternSyntax(PatternSyntax);
 
 signals:
     void filterChanged();

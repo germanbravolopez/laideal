@@ -45,11 +45,10 @@ public:
     // with the directory listing + removal.
     static QStringList backupsToPrune(const QStringList &fileNames, const QDateTime &now);
 
+private:
     // Resolved absolute path of the backups/ subdirectory next to dbPath()
     // (creates it if missing).
     QString backupDirectory() const;
-
-private:
     static QString timestampedFileName();
 };
 

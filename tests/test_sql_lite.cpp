@@ -98,7 +98,7 @@ private slots:
             " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
             " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
             " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-            " verifactu_invoice_id TEXT, fecha_anulacion TEXT)"), qPrintable(q.lastError().text()));
+            " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE gastos ("
             " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
@@ -256,6 +256,14 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QStringLiteral("ENVIADA"));
         QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QString());
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='41'"), QStringLiteral("15-05-2026"));  // open quarter too
+
+        // AEAT's cancellation record is stored on the event's paid rows, and a later
+        // call without one never erases it.
+        insertIngreso("42", "20-04-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 15), "<anulacion/>"));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 20)));
+        QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='42'"), QStringLiteral("<anulacion/>"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_cancel_xml, '') FROM ingresos WHERE n_recibo='41'"), QString());
     }
 
     // Cancelling / rectifying an invoice touches only the paid rows it covered: the
@@ -721,6 +729,26 @@ private slots:
                         "WHERE n_recibo = 'P4'"), QString());
     }
 
+    // A reply never rewrites an invoice that is already settled: a duplicate rejection
+    // arriving for an event whose rows are ENVIADA must not turn them into ERROR and
+    // wipe their CSV (only a still-pending row of the same event takes the result).
+    void test_updateTicketVerifactuFields_neverRewritesSettledRows()
+    {
+        insertIngreso("P5", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        exec("UPDATE ingresos SET verifactu_csv = 'CSV-P5', hash = 'p5a' WHERE n_recibo = 'P5'");
+        insertIngreso("P5", "10-03-2026", "8.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult dup;
+        dup.status           = VerifactuResult::ERROR;
+        dup.errorDescription = "Registro duplicado";
+        updateTicketVerifactuFields(m_db, "P5", dup, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash = 'p5a'"),
+                 QStringLiteral("ENVIADA|CSV-P5"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P5' AND importe = '8.00'"),
+                 QStringLiteral("ERROR"));
+    }
+
     // A retry re-submits ONE payment event. Before this seam RecogPrendas summed
     // every row of the ticket and sent it under the bare n_recibo on the RECEPTION
     // date - so retrying a partial payment submitted the wrong amount under an
@@ -746,6 +774,13 @@ private slots:
         // No paid rows for that seq -> empty, so the caller refuses to re-submit.
         QVERIFY(verifactuEventFor(m_db, "R1", 7).nRecibo.isEmpty());
         QVERIFY(verifactuEventFor(m_db, "NOPE", 0).nRecibo.isEmpty());
+
+        // A pre-10.9 seq-0 invoice paid garment by garment on different days was
+        // registered under the first payment: the earliest DATE, not the smallest
+        // dd-MM-yyyy text ("05-03" sorts before "28-01").
+        insertIngreso("R2", "28-01-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("R2", "05-03-2026", "15.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        QCOMPARE(verifactuEventFor(m_db, "R2", 0).fechaPago, QStringLiteral("28-01-2026"));
     }
 
     // Adopting AEAT's own CSV is how an "already exists" rejection gets resolved:
@@ -872,6 +907,95 @@ private slots:
         QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
     }
 
+    // A ticket whose two payment events (Q1 and Q2) are both cancelled in Q2 is one
+    // regularisation entry in Q2; it keeps the LATEST payment date whatever the row
+    // order, so the Q2 ticket count knows a Q2 payment was cancelled.
+    void test_regularizations_mergedTicketKeepsLatestPayment()
+    {
+        insertIngreso("R9", "10-02-2026", "20.00", "SI", "ANULADA", 0, /*seq=*/0);
+        insertIngreso("R9", "10-05-2026", "30.00", "SI", "ANULADA", 0, /*seq=*/1);
+        exec("UPDATE ingresos SET fecha_anulacion = '20-05-2026' WHERE n_recibo = 'R9'");
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(m_db, QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QCOMPARE(regs.size(), 1);
+        QCOMPARE(regs[0].fechaPago, QStringLiteral("10-05-2026"));
+        QCOMPARE(regs[0].importe, 50.0);
+    }
+
+    // Exportar registros AEAT: one record per payment event AEAT holds, not per
+    // garment row; its literal InvoiceID, payment date and total; in the range by
+    // payment or cancellation date; unpaid rows and rows AEAT never confirmed are
+    // left out.
+    void test_aeatExportRecords_onePerPaymentEvent()
+    {
+        const char *ins = "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+                          "pagado, estado, edit_lock, hash, verifactu_csv, verifactu_estado, "
+                          "verifactu_invoice_seq, verifactu_invoice_id, verifactu_xml, fecha_anulacion, "
+                          "verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+                          "VALUES (:n, '', :rec, :pago, :imp, :pag, '', 0, :h, :csv, :est, :seq, :id, :xml, "
+                          ":anul, :rect, :rtype)";
+        auto row = [&](const char *n, const char *h, const char *rec, const char *pago, const char *imp,
+                       const char *pag, const char *csv, const char *est, int seq, const char *id,
+                       const char *xml, const char *anul = "", const char *rect = "", const char *rtype = "") {
+            exec(ins, { {":n", n}, {":rec", rec}, {":pago", pago}, {":imp", imp}, {":pag", pag},
+                        {":h", h}, {":csv", csv}, {":est", est}, {":seq", seq}, {":id", id}, {":xml", xml},
+                        {":anul", anul}, {":rect", rect}, {":rtype", rtype} });
+        };
+        // Ticket 100: received in February, first event (two garments) paid 05-03,
+        // second event paid 20-03, one garment still unpaid.
+        row("100", "a", "10-02-2026", "05-03-2026", "10.00", "SI", "CSV1", "ENVIADA", 0, "100", "<x>e0</x>");
+        row("100", "b", "10-02-2026", "05-03-2026", "4.50",  "SI", "CSV1", "ENVIADA", 0, "100", "<x>e0</x>");
+        row("100", "c", "10-02-2026", "20-03-2026", "6.00",  "SI", "CSV2", "ENVIADA", 1, "100-1", "<x>e1</x>");
+        row("100", "d", "10-02-2026", "",           "3.00",  "NO", "",     "SIN COBRAR", 0, "", "");
+        // Ticket 101: legacy row without stored id.
+        row("101", "e", "01-03-2026", "02-03-2026", "8.00",  "SI", "CSV3", "ENVIADA", 0, "", "<x>e2</x>");
+        // Ticket 102: paid, AEAT never answered (no CSV, no payload) - nothing to export.
+        row("102", "f", "01-03-2026", "03-03-2026", "9.00",  "SI", "",     "PENDIENTE", 0, "", "");
+        // Ticket 103: paid in April - outside the range.
+        row("103", "g", "01-03-2026", "02-04-2026", "7.00",  "SI", "CSV4", "ENVIADA", 0, "103", "<x>e3</x>");
+        // Ticket 104: recovered with "Consultar en AEAT" - CSV but no stored payload.
+        row("104", "h", "01-03-2026", "10-03-2026", "5.00",  "SI", "CSV5", "ENVIADA", 0, "104", "");
+        // Ticket 105: paid in January, cancelled in March - in March by its cancellation.
+        row("105", "i", "05-01-2026", "05-01-2026", "12.00", "SI", "CSV6", "ANULADA", 0, "105", "<x>e4</x>", "15-03-2026");
+        // Ticket 106: rectificativa of 100 by substitution.
+        row("106", "j", "25-03-2026", "25-03-2026", "12.00", "SI", "CSV7", "ENVIADA", 0, "106", "<x>e5</x>", "", "100", "S");
+        // Ticket 107: a pre-10.9 seq-0 invoice paid over two days across the quarter
+        // end - one invoice, issued on 30-03 (its first payment), total 25.
+        row("107", "k", "20-03-2026", "30-03-2026", "10.00", "SI", "CSV8", "ENVIADA", 0, "107", "<x>e6</x>");
+        row("107", "l", "20-03-2026", "02-04-2026", "15.00", "SI", "CSV8", "ENVIADA", 0, "107", "<x>e6</x>");
+
+        QVector<AeatExportRecord> r;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r));
+        QStringList ids;
+        for (const AeatExportRecord &e : r)
+            ids << e.invoiceId;
+        QCOMPARE(ids, QStringList({ "105", "101", "100", "104", "100-1", "106", "107" }));   // by issue date
+        QCOMPARE(r[0].fechaAnulacion, QStringLiteral("15-03-2026"));
+        QCOMPARE(r[0].estado, QStringLiteral("ANULADA"));
+        QCOMPARE(r[2].seq, 0);
+        QCOMPARE(r[2].importe, 14.5);                              // both garments, unpaid one excluded
+        QCOMPARE(r[2].csv, QStringLiteral("CSV1"));
+        QCOMPARE(r[2].xml, QStringLiteral("<x>e0</x>"));
+        QVERIFY(r[3].xml.isEmpty());                               // known by its CSV only
+        QCOMPARE(r[3].csv, QStringLiteral("CSV5"));
+        QCOMPARE(r[4].fechaPago, QStringLiteral("20-03-2026"));
+        QCOMPARE(r[4].importe, 6.0);
+        QCOMPARE(r[5].rectifiesNRecibo, QStringLiteral("100"));
+        QCOMPARE(r[5].rectificationType, QStringLiteral("S"));
+        QCOMPARE(r[6].fechaPago, QStringLiteral("30-03-2026"));
+        QCOMPARE(r[6].importe, 25.0);                              // both rows, though one is in April
+
+        // April: the legacy invoice is not repeated with its April row alone.
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 4, 1), QDate(2026, 4, 30), r));
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r[0].invoiceId, QStringLiteral("103"));
+
+        // The range is inclusive on both ends; reception dates do not count.
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 5), QDate(2026, 3, 5), r));
+        QCOMPARE(r.size(), 1);
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 2, 1), QDate(2026, 2, 28), r));
+        QCOMPARE(r.size(), 0);
+    }
+
 
 
     void test_readClientPhones()
@@ -906,25 +1030,6 @@ private slots:
              " '0', 'Lavar', '', 0, :h, :est)",
              { {":n", nRecibo}, {":imp", importe}, {":pag", pagado},
                {":h", hash}, {":est", verifactuEstado} });
-    }
-
-    void test_updateTicketPayment_setAndClear()
-    {
-        insertRow("T1", "hashA");
-        insertRow("T1", "hashB"); // same ticket, different garment - must stay untouched
-
-        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "15-03-2026", "SI"));
-        QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'"),
-                 QStringLiteral("15-03-2026"));
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("SI"));
-        // The sibling row is keyed out by hash.
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
-        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashB'").isEmpty());
-
-        // PAY_NO path: empty fecha_pago, pagado back to NO.
-        QVERIFY(updateTicketPayment(m_db, "T1", "hashA", "", "NO"));
-        QVERIFY(scalar("SELECT fecha_pago FROM ingresos WHERE hash='hashA'").isEmpty());
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
     }
 
     void test_updateTicketPickup_setAndClear()
@@ -1077,15 +1182,6 @@ private slots:
         QVERIFY(ticketHasPaidGarment(m_db, "PAR"));   // any paid row -> blocked
 
         QVERIFY(!ticketHasPaidGarment(m_db, "NOPE")); // unknown ticket
-    }
-
-    // Read-back used by the PAY_YES pay-all dedup: estado of the ticket's first
-    // row, empty when the ticket has no rows.
-    void test_ticketVerifactuEstado()
-    {
-        QVERIFY(ticketVerifactuEstado(m_db, "T1").isEmpty()); // no rows
-        insertRow("T1", "hashA", "10.00", "SI", "ENVIADA");
-        QCOMPARE(ticketVerifactuEstado(m_db, "T1"), QStringLiteral("ENVIADA"));
     }
 
     // --- VoidGarmentsDialog seams (issue #40) ----------------------------------

@@ -191,6 +191,59 @@ target_link_libraries(test_contabilidad PRIVATE
 add_test(NAME contabilidad
     COMMAND test_contabilidad -o ${CMAKE_BINARY_DIR}/test-results-contabilidad.xml,junitxml -o -,txt)
 
+# End-to-end test bench (phase 1): PayDialog + the real Verifactu client and HTTP
+# stack + sql_lite, against a seeded throwaway DB and a local fake Verifactu server
+# (tests/support), never the real AEAT. QTEST_MAIN under offscreen.
+add_executable(test_e2e_verifactu
+    test_e2e_verifactu.cpp
+    support/fakeverifactuserver.h
+    support/fakeverifactuserver.cpp
+    support/modalautocloser.h
+)
+target_include_directories(test_e2e_verifactu PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/support
+    ${CMAKE_SOURCE_DIR}/src/verifactu
+    ${CMAKE_SOURCE_DIR}/src/recog_prendas
+)
+target_link_libraries(test_e2e_verifactu PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    Qt${QT_VERSION_MAJOR}::Network
+    recog_prendas
+    verifactu
+    sql_lite
+    appsettings
+    imprimir
+    contabilidad
+)
+add_test(NAME e2e_verifactu
+    COMMAND test_e2e_verifactu -o ${CMAKE_BINARY_DIR}/test-results-e2e_verifactu.xml,junitxml -o -,txt)
+set_tests_properties(e2e_verifactu PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Test bench phase 2: the application's own windows (MainWindow and the app
+# dialogs, from the laideal_app library) driven at screen level against the same
+# fake Verifactu server and throwaway DB / settings.
+add_executable(test_e2e_app
+    test_e2e_app.cpp
+    support/e2efixture.h
+    support/fakeverifactuserver.h
+    support/fakeverifactuserver.cpp
+    support/modalautocloser.h
+    support/modaldriver.h
+)
+target_include_directories(test_e2e_app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/support
+)
+target_link_libraries(test_e2e_app PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Network
+    laideal_app
+)
+add_test(NAME e2e_app
+    COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
+set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Fail any suite that hangs (e.g. a blocking system call or an unanswered modal
 # dialog under the offscreen platform) instead of stalling CI until the job
 # limit; ctest then prints the suite's output up to the hang.

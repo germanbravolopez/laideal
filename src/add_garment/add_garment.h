@@ -2,6 +2,7 @@
 #define ADDGARMENT_H
 
 // Handle logic
+#include <QDate>
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QSqlQueryModel>
@@ -20,6 +21,10 @@ public:
     ~AddGarment();
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     bool ticketFound = false;
+
+signals:
+    // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does).
+    void paidGarmentSaved(const QString &ticketNum, const QDate &paymentDate, double amount);
 
 private slots:
     void initialSettings();
@@ -41,6 +46,7 @@ private slots:
 private:
     Ui::AddGarment *ui;
     QSqlDatabase db;
+    QString m_searchedTicket;   // the number the search checked; a save must use the same one
 };
 
 #endif // ADDGARMENT_H

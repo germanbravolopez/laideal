@@ -10,19 +10,22 @@ Adds new garment rows to an existing ticket already in the database. Used when a
 
 ```cpp
 AddGarment *ui = new AddGarment(db, this);  // db injected via constructor
+connect(ui, &AddGarment::paidGarmentSaved, this, /* submit to AEAT */);
 ui->show();
 ```
+
+`paidGarmentSaved(ticketNum, paymentDate, amount)` is emitted after a garment saved as **paid** is inserted; MainWindow submits it to AEAT at once (`verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0)`).
 
 ## Workflow
 
 1. User enters a receipt number and presses **Search** (`on_pb_search_pressed`). If the ticket already has a **paid** garment (`sql_lite::ticketHasPaidGarment`), the search is refused with a message: a paid ticket has been submitted to AEAT, so only unpaid (not-yet-submitted) receipts may have garments appended locally.
 2. If the ticket exists, `fillContentFromDb()` populates client and reception date; `populateGarments()` fills the garment combobox from `prendas`.
 3. User selects garment, quantity, service, optional size, and optional payment info.
-4. On **Save**: `validateForm()` runs checks, then `saveFactura()` inserts a new row into `ingresos` with a fresh `genHash16()` hash. The insert goes through the shared `sql_lite::insertGarmentRow` seam with `verifactu_estado = "PENDIENTE"` (like `MainWindow::saveTicket`) — a garment added to an existing ticket is un-submitted and consistent with the rest of the ticket (issue #41; the previous inline INSERT omitted `verifactu_estado`, leaving added garments blank).
+4. On **Save**: `validateForm()` runs checks, then `saveFactura()` inserts a new row into `ingresos` with a fresh `genHash16()` hash. The insert goes through the shared `sql_lite::insertGarmentRow` seam with `verifactu_estado` `SIN COBRAR` when unpaid or `PENDIENTE` when paid (like `MainWindow::saveTicket`; issue #41). A garment saved as paid is an invoice: since step 1 refuses any ticket that already has a paid garment, it is always the ticket's **first** payment event - seq 0, InvoiceID = the ticket number, dated with the payment date - and `paidGarmentSaved` has MainWindow submit it to AEAT immediately, like a paid ticket on save. The reply patches the row through MainWindow's usual handler; without one it stays `PENDIENTE` for the startup recovery. (Until October 2026 nothing submitted it until the next startup's recovery dialog.)
 
 ## Validation
 
-- Search must succeed before saving (`ticketFound=true`).
+- Search must succeed before saving (`ticketFound=true`), for the number actually saved: if the receipt number is retyped after the search, the save is refused ("No se ha buscado ningún Nº recibo…"). The paid-garment check is repeated at save, so a ticket charged meanwhile is refused too.
 - Receipt number, client, garment, and quantity must not be empty.
 - Garments whose name contains "m2" require a non-empty size field.
 - If marking as paid: date must fall in an unlocked accounting quarter.

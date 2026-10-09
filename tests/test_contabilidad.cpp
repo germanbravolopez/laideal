@@ -124,7 +124,8 @@ private slots:
         ExpenseDetail g4;   g4.iva = 4;    g4.importe = 104.0;    // unrecognised rate: counted only
         ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: counted only
         const Contabilidad::PeriodFigures f =
-            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul}, 21.0);
+            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul}, 21.0,
+                                             QDate(2026, 4, 1), QDate(2026, 7, 1));
         QVERIFY(qAbs(f.ingImporte - 145.2) < 1e-9);
         QVERIFY(qAbs(f.ingBase - 120.0) < 1e-9);
         QCOMPARE(f.ingTickets, 2);
@@ -140,8 +141,9 @@ private slots:
     void test_figuresFromDetailsNetsRegularizations()
     {
         IncomeTicketDetail t; t.nRecibo = "50"; t.importe = 242.0;
-        RegularizationDetail r; r.nRecibo = "12"; r.importe = 121.0;
-        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({t}, {r}, {}, 21.0);
+        RegularizationDetail r; r.nRecibo = "12"; r.importe = 121.0; r.fechaPago = "10-02-2026";
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({t}, {r}, {}, 21.0,
+                                                                               QDate(2026, 4, 1), QDate(2026, 7, 1));
         QVERIFY(qAbs(f.ingImporte - 121.0) < 1e-9);                  // 242 - 121
         QVERIFY(qAbs(f.ingRegularizacion - 121.0) < 1e-9);
         QVERIFY(qAbs(f.ingBase - 100.0) < 1e-9);
@@ -168,25 +170,32 @@ private slots:
         QVERIFY(html.contains(ReportHtml::formatEuro(-145.2)));         // amounts shown negative
     }
 
-    // Paid and cancelled in the same period nets to zero and is not counted; a
-    // partial cancellation still counts; another period's cancellation does not
-    // affect this period's count.
+    // Period Q2 2026. Paid and cancelled in Q2 nets to zero and is not counted; a
+    // partial same-period cancellation still counts; a Q1 payment cancelled in Q2
+    // does not cancel out a new Q2 sale of the same ticket (found by the e2e bench).
     void test_netTicketCount()
     {
+        const QDate q2(2026, 4, 1), q3(2026, 7, 1);
         IncomeTicketDetail full;    full.nRecibo = "1";    full.importe = 50.0;
         IncomeTicketDetail partial; partial.nRecibo = "2"; partial.importe = 30.0;
         IncomeTicketDetail kept;    kept.nRecibo = "3";    kept.importe = 20.0;
-        RegularizationDetail rFull;    rFull.nRecibo = "1";    rFull.importe = 50.0;
-        RegularizationDetail rPartial; rPartial.nRecibo = "2"; rPartial.importe = 10.0;
-        RegularizationDetail rOther;   rOther.nRecibo = "9";   rOther.importe = 99.0;   // paid in another period
-        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {rFull, rPartial, rOther}), 2);
-        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {}), 3);
+        RegularizationDetail rFull;    rFull.nRecibo = "1";    rFull.importe = 50.0;    rFull.fechaPago = "10-05-2026";
+        RegularizationDetail rPartial; rPartial.nRecibo = "2"; rPartial.importe = 10.0; rPartial.fechaPago = "12-05-2026";
+        RegularizationDetail rOther;   rOther.nRecibo = "9";   rOther.importe = 99.0;   rOther.fechaPago = "10-02-2026";
+        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {rFull, rPartial, rOther}, q2, q3), 2);
+        QCOMPARE(Contabilidad::netTicketCount({full, partial, kept}, {}, q2, q3), 3);
         IncomeTicketDetail credit; credit.nRecibo = "4"; credit.importe = -20.0;   // by-differences credit note
-        QCOMPARE(Contabilidad::netTicketCount({kept, credit}, {}), 1);
+        QCOMPARE(Contabilidad::netTicketCount({kept, credit}, {}, q2, q3), 1);
         IncomeTicketDetail commaOnly; commaOnly.nRecibo = "5"; commaOnly.invalidAmounts = 1;  // real sale, amount flagged
-        QCOMPARE(Contabilidad::netTicketCount({commaOnly}, {}), 1);
+        QCOMPARE(Contabilidad::netTicketCount({commaOnly}, {}, q2, q3), 1);
+
+        // Ticket 6: 30 charged in Q2, its 50 Q1 payment cancelled in Q2 -> still a Q2 ticket.
+        IncomeTicketDetail newSale; newSale.nRecibo = "6"; newSale.importe = 30.0;
+        RegularizationDetail oldPayment; oldPayment.nRecibo = "6"; oldPayment.importe = 50.0; oldPayment.fechaPago = "10-02-2026";
+        QCOMPARE(Contabilidad::netTicketCount({newSale}, {oldPayment}, q2, q3), 1);
+
         const Contabilidad::PeriodFigures f =
-            Contabilidad::figuresFromDetails({full, partial, kept}, {rFull, rPartial, rOther}, {}, 21.0);
+            Contabilidad::figuresFromDetails({full, partial, kept}, {rFull, rPartial, rOther}, {}, 21.0, q2, q3);
         QCOMPARE(f.ingTickets, 2);
     }
 
@@ -195,10 +204,10 @@ private slots:
         QuarterlyDetails d;
         IncomeTicketDetail a; a.nRecibo = "T1"; a.importe = 10.0;
         IncomeTicketDetail b; b.nRecibo = "T2"; b.importe = 10.0;
-        RegularizationDetail r; r.nRecibo = "T2"; r.importe = 10.0;
+        RegularizationDetail r; r.nRecibo = "T2"; r.importe = 10.0; r.fechaPago = "15-02-2026";
         d.income[0] = {a, b};
         d.regularizations[2] = {r};                                    // T2 paid Q1, cancelled Q3
-        QCOMPARE(Contabilidad::yearTicketCount(d), 1);
+        QCOMPARE(Contabilidad::yearTicketCount(d, 2026), 1);
     }
 
     void test_yearTicketCountIsDistinct()
@@ -208,7 +217,7 @@ private slots:
         IncomeTicketDetail b; b.nRecibo = "T2"; b.importe = 10.0;
         d.income[0] = {a};
         d.income[1] = {a, b};                                        // T1 paid across Q1 and Q2
-        QCOMPARE(Contabilidad::yearTicketCount(d), 2);
+        QCOMPARE(Contabilidad::yearTicketCount(d, 2026), 2);
     }
 
     void test_invalidAmountsFlagged()

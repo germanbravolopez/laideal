@@ -11,7 +11,7 @@ build*
 *.tmp
 *.log
 
-# scratch SQLite databases. Smoke testing (docs/smoke_test.md) works against
+# scratch SQLite databases. Smoke testing (docs/testing/smoke_test.md) works against
 # copies of a real database - never let one be committed, they contain customer data.
 *.db
 *.db-wal

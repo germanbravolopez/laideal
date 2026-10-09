@@ -75,8 +75,17 @@ QString VerifactuConfig::getSystemVersion() const
     return m_systemVersion;
 }
 
+static QString s_endpointOverride;
+
+void VerifactuConfig::setEndpointOverride(const QString &baseUrl)
+{
+    s_endpointOverride = baseUrl;
+}
+
 QString VerifactuConfig::getEndpointUrl() const
 {
+    if (!s_endpointOverride.isEmpty())
+        return s_endpointOverride;
     return (m_environment == TESTING ? TEST_ENDPOINT : PROD_ENDPOINT);
 }
 

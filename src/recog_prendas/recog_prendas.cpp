@@ -103,7 +103,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
     static const char *const opNames[] = {
-        "PAY_YES", "PAY_NO", "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
+        "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
         "QTY", "SERVICE", "PRICE", "SEPARATE_GARM"
     };
     const QString ticketNum = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
@@ -123,52 +123,6 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         return;
     }
     switch (op) {
-    case PAY_YES:
-        // If editLock payment info cannot be changed
-        if (!editLock) {
-            // dont update payment date for blocked quarters
-            if (readLockForMonthAndYear(db, "ingresos", ui->de_date_paym->date().month(), ui->de_date_paym->date().year()) == 1) {
-                qWarning() << "updateDb PAY_YES: attempt to update payment date for a blocked quarter:" << ui->de_date_paym->date().toString("dd-MM-yyyy");
-                QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                     tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
-                                     QMessageBox::Ok, QMessageBox::Ok);
-            } else {
-                updateTicketPayment(db, ticketNum, rowHash,
-                                    ui->de_date_paym->date().toString("dd-MM-yyyy"),
-                                    ui->pb_payment->text());
-                // Check verifactu_estado from DB (not model) so pay-all loop does not double-submit
-                QString estadoDb = ticketVerifactuEstado(db, ticketNum);
-                // Dedup pay-all loop: if a submit is already in flight for this ticket,
-                // a per-row check of estadoDb is not enough because the async DB write
-                // hasn't happened yet. hasPendingSubmit() consults the in-memory map.
-                // Unsubmitted covers SIN COBRAR too: the row is still marked unpaid
-                // here (updateTicketPayment does not touch verifactu_estado), so
-                // testing PENDIENTE alone would skip the AEAT submit entirely.
-                if (verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(estadoDb))
-                        && m_verifactuIntegration && m_verifactuIntegration->isConfigured()
-                        && !hasPendingSubmit(ticketNum)) {
-                    retryVerifactuSubmit(ticketNum, sqlQueryModel->data(sqlQueryModel->index(
-                        rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
-                }
-            }
-        }
-        else {
-            QMessageBox::warning(this, tr("Ticket bloqueado"),
-                                 tr("El ticket actual se encuentra bloqueado por la contabilidad."),
-                                 QMessageBox::Ok, QMessageBox::Ok);
-        }
-        break;
-    case PAY_NO:
-        // If editLock payment info cannot be changed
-        if (!editLock) {
-            updateTicketPayment(db, ticketNum, rowHash, "", ui->pb_payment->text());
-        }
-        else {
-            QMessageBox::warning(this, tr("Ticket bloqueado"),
-                                 tr("El ticket actual se encuentra bloqueado por la contabilidad."),
-                                 QMessageBox::Ok, QMessageBox::Ok);
-        }
-        break;
     case PKU_YES:
         updateTicketPickup(db, ticketNum, rowHash,
                            ui->de_date_pickup->date().toString("dd-MM-yyyy"),
@@ -474,6 +428,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_ERROR,     true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_URL_QR,    true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_XML,        true);
+        ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_CANCEL_XML, true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH,       true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO,  true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE,  true);
@@ -517,14 +472,10 @@ void RecogPrendas::on_pb_payment_toggled(bool checked)
     if (checked) {
         ui->pb_payment->setText("SI");
         ui->pb_payment->setStyleSheet("background-color: green; font-size: 18px");
-        if (isCellClicked)
-            updateDb(PAY_YES);
     }
     else {
         ui->pb_payment->setText("NO");
         ui->pb_payment->setStyleSheet("background-color: red; font-size: 18px");
-        if (isCellClicked)
-            updateDb(PAY_NO);
     }
 }
 
@@ -548,15 +499,14 @@ void RecogPrendas::on_tableView_clicked(const QModelIndex &index)
 {
     // index is in proxy coords; rowClickedCell is consumed as a source row.
     const QModelIndex sourceIndex = proxyModel ? proxyModel->mapToSource(index) : index;
-    selectSourceRow(sourceIndex.row(), sourceIndex.column());
+    selectSourceRow(sourceIndex.row());
 }
 
-void RecogPrendas::selectSourceRow(int sourceRow, int sourceCol)
+void RecogPrendas::selectSourceRow(int sourceRow)
 {
     if (sourceRow != rowClickedCell)
         isCellClicked = false;
     rowClickedCell = sourceRow;
-    columnClickedCell = sourceCol;
     // updateRowClickedToFields() sets the per-row button enables (respecting the
     // Anulado read-only lock), so it is the single source of truth here.
     updateRowClickedToFields();
@@ -719,6 +669,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     const int rowSeq    = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
 
     QDialog *dlg = new QDialog(this);
+    dlg->setObjectName("verifactuDialog");   // stable names for the e2e test bench
     dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -747,6 +698,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     const bool verifactuUsable = m_verifactuIntegration && m_verifactuIntegration->isConfigured();
     if (stateEnum == VerifactuEstado::Error && verifactuUsable) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
+        btnRetry->setObjectName("btnRetry");
         connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, rowSeq]() {
             dlg->accept();
             retryVerifactuSubmit(ticketNum, rowSeq);
@@ -763,6 +715,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
                              || stateEnum == VerifactuEstado::Rectificada;
     if (verifactuUsable && rowPaid) {
         QPushButton *btnQuery = new QPushButton("Consultar en AEAT", dlg);
+        btnQuery->setObjectName("btnQuery");
         btnQuery->setToolTip(alreadySettled
             ? "Consulta a AEAT los datos registrados de esta factura (solo informativo)."
             : "Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV.");
@@ -869,10 +822,12 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     const bool canAdopt = matches && rec.hasUsableCsv() && !localAlreadySettled;
 
     QDialog dlg(this);
+    dlg.setObjectName("aeatReconcileDialog");   // stable names for the e2e test bench
     dlg.setWindowTitle(tr("Consulta AEAT - %1").arg(invoiceId));
     auto *layout = new QVBoxLayout(&dlg);
 
     auto *summary = new QLabel(&dlg);
+    summary->setObjectName("lblSummary");
     summary->setTextFormat(Qt::RichText);
     summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     if (!rec.parsed) {
@@ -913,6 +868,7 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     layout->addWidget(summary);
 
     auto *table = new QTableWidget(4, 3, &dlg);
+    table->setObjectName("tableCompare");
     table->setHorizontalHeaderLabels({ tr("Campo"), tr("AEAT"), tr("Ticket") });
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -945,6 +901,7 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
 
     auto *btnRow = new QHBoxLayout();
     auto *btnApply = new QPushButton(tr("Actualizar con los datos de AEAT"), &dlg);
+    btnApply->setObjectName("btnApply");
     btnApply->setEnabled(canAdopt);
     if (!canAdopt && localAlreadySettled)
         btnApply->setToolTip(tr("El ticket ya está registrado localmente; "
@@ -1022,14 +979,6 @@ void RecogPrendas::ensureVerifactuConnected()
     if (m_verifactuIntegration)
         connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
                 this, &RecogPrendas::onVerifactuRequestFinished, Qt::UniqueConnection);
-}
-
-bool RecogPrendas::hasPendingSubmit(const QString &ticketNum) const
-{
-    for (auto it = m_pendingSubmits.constBegin(); it != m_pendingSubmits.constEnd(); ++it) {
-        if (it.value().ticketNum == ticketNum) return true;
-    }
-    return false;
 }
 
 void RecogPrendas::on_pb_separ_garm_clicked()

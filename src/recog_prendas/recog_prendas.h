@@ -36,11 +36,9 @@ public:
     QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
     MySortFilterProxyModel *proxyModel = nullptr;
     bool isCellClicked = false;
-    int rowClickedCell, columnClickedCell;
+    int rowClickedCell = -1;
 
     enum UpdateDBop {
-        PAY_YES,
-        PAY_NO,
         PKU_YES,
         PKU_NO,
         OBSV,
@@ -97,9 +95,7 @@ private slots:
 private:
     Ui::RecogPrendas *ui;
     QSqlDatabase db;
-    // Async submit tracking: reqId -> the payment event it belongs to. Also used
-    // to dedup the pay-all loop so multiple garments of the same ticket only fire
-    // one AEAT submission.
+    // Async submit tracking: reqId -> the payment event it belongs to.
     struct PendingSubmit {
         QString ticketNum;
         int     seq = 0;
@@ -111,12 +107,11 @@ private:
     QHash<QString, PendingSubmit> m_pendingSubmits;
 
     void ensureVerifactuConnected();
-    bool hasPendingSubmit(const QString &ticketNum) const;
     // invoiceSeq forwarded to Imprimir so the reprint loads only the rows of
     // the given payment event. -1 = legacy / all rows for the ticket.
     void printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq = -1);
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
-    void selectSourceRow(int sourceRow, int sourceCol);
+    void selectSourceRow(int sourceRow);
 };
 
 #endif // RECOGPRENDAS_H

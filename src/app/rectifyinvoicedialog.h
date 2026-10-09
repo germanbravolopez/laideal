@@ -69,7 +69,6 @@ private:
     QString m_loadedTicket;
     QString m_loadedCliente;
     double  m_loadedImporteTotal = 0.0; // includes IVA
-    QString m_loadedCSV;
     QString m_pendingRectifyId;         // empty when no AEAT call in flight
 
     // Captured at submit time so onVerifactuRequestFinished can persist correctly

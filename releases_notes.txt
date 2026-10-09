@@ -1,5 +1,14 @@
 ﻿Releases:
 
+10.13
+- Bug fix: cancelling an invoice now uses the date it was issued with
+  - "Anular factura" sent every cancellation with the date the ticket was received, while the AEAT registered the invoice with its payment date. For a ticket paid when collected, or paid in parts, the AEAT could reject the cancellation. Each invoice is now cancelled with its own payment date, shown in a new "Fecha factura" column of the dialog.
+- Improvement: "Exportar registros AEAT" now lists each invoice once
+  - One record per invoice sent to the AEAT, with its invoice number (also for partial payments), payment date and total. Cancellations made in the period appear as their own record, with the AEAT cancellation record. Invoices recovered with "Consultar en AEAT" are included too, and a database or disk error now shows a message instead of an empty file.
+- Improvement: a garment added as already paid with "Añadir nuevas prendas" is sent to the AEAT straight away, instead of at the next start-up.
+- Bug fix: in Contabilidad, a ticket paid in one quarter and cancelled in a later one no longer reduces the ticket count of the later quarter when the rest of the ticket is charged there.
+- Change: in Configuración, the note under the database path now makes clear that it is the database change that needs a restart.
+
 10.12
 - New: cancellations after a quarter is closed no longer change it
   - A ticket cancelled at the AEAT or replaced by a rectifying invoice after its quarter was closed no longer alters that quarter: the closed quarter keeps it, and the quarter in which the cancellation happens shows it as a negative line ("Anulaciones / rectificaciones del periodo") with its own table at the end of the report. A ticket paid and cancelled in the same period is no longer counted in "Número de tickets".

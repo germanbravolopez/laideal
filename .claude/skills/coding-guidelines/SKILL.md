@@ -38,7 +38,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 | Files | lowercase, match class name | `verifactumanager.h`, `mainwindow.cpp` |
 | Boolean variables / methods | `is`/`has`/`can` prefix | `isConfigured()`, `isPaid`, `hasError` |
 
-> **Legacy note**: existing code in `src/app/`, `src/add_garment/`, and similar older modules uses `snake_case` for method names (e.g., `save_ticket()`, `reset_all_contents()`). Do **not** rename those — it breaks Qt auto-connect and adds unnecessary diff noise. Use camelCase for all **new** methods.
+> **Legacy note**: existing code in `src/app/`, `src/add_garment/`, and similar older modules uses `snake_case` for method names (e.g., `save_ticket()`, `reset_all_contents()`). Do **not** rename those — it breaks Qt auto-connect and adds unnecessary diff noise. Use camelCase for all **new** methods. The full list of accepted legacy names and justified exceptions is in [audit.md](audit.md).
 
 ---
 
@@ -128,3 +128,9 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 | Committed debug-only code or `qDebug()` prints left in production paths | Use the `debug` flag in `MainWindow` or remove before merging |
 | Comma as decimal separator in numeric strings | DB stores data with `.`; commas cause silent data corruption |
 | Non-ASCII punctuation in `.cpp` / `.h` files: em-dash (`—` U+2014), en-dash (`–` U+2013), curly quotes (`“ ” ‘ ’`), ellipsis (`…` U+2026) | Some Windows code pages mangle these characters in source files; use plain ASCII (`-`, `"`, `'`, `...`) in comments, log strings, and string literals. Exception: Spanish characters (`á`, `é`, `í`, `ó`, `ú`, `ñ`, `¿`, `¡`, `°`) are required in user-facing UI strings and are allowed everywhere. |
+
+---
+
+## Auditing the codebase
+
+To check all of `src/` against these rules (before a release, or after large feature work), delegate to the `guidelines-auditor` subagent. Its checklist, severity tiers and the accepted exceptions are in [audit.md](audit.md). Fix Tier 1 findings in the current work or file them in `docs/progress_tracker.md`; no findings report is kept in `docs/`.

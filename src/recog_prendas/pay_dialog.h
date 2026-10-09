@@ -43,7 +43,6 @@ signals:
 
 private slots:
     void onCobrarClicked();
-    void onSelectionChanged();
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:

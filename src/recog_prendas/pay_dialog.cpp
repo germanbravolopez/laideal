@@ -131,8 +131,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         // must not enter the payable set or it could be submitted to AEAT.
         if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
         // edit_lock=1 means the row's quarter has been closed by contabilidad
-        // (`updateLockForMonth`). RecogPrendas::updateDb blocks PAY_YES under
-        // the same condition; skip here so the locked row never enters the
+        // (`updateLockForMonth`); skip it so the locked row never enters the
         // selectable set. Unpaid rows usually have edit_lock=0 (the lock keys
         // on fecha_pago LIKE), so this is mostly a defensive filter.
         if (editLock) { ++lockedCount; continue; }
@@ -191,11 +190,6 @@ void PayDialog::recomputeTotal()
     m_lblTotal->setText(tr("Total seleccionado (%1 prendas): %2 €")
                         .arg(selected).arg(total, 0, 'f', 2));
     m_btnCobrar->setEnabled(selected > 0);
-}
-
-void PayDialog::onSelectionChanged()
-{
-    recomputeTotal();
 }
 
 void PayDialog::setFormEnabled(bool enabled)

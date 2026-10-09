@@ -19,6 +19,7 @@ For every method declared in any `.h` under `src/`, grep for callers across all 
 5. **Public static singletons** like `AppSettings::instance()`.
 6. **Methods that form a deliberate library API** exposed across module boundaries — be conservative if a getter/setter pair is the natural surface of a model class even when only one side has callers today.
 7. Free helper functions known to be widely used by name lookup (e.g. `verifactuEstadoFromString`, `verifactuEstadoToString`).
+8. **Deliberate test hooks** — production never calls them, the tests depend on them to stay off the real AEAT, the PDF viewer and the user's settings: `VerifactuConfig::setEndpointOverride`, `Contabilidad::setOpenGeneratedReports`, `AppSettings::loadFrom`, `AppSettings::setBackupEnabled`, `dpapiEncrypt` / `dpapiDecrypt` / `dpapiIsEncrypted`, `EscPosBuilder::columns()` (guards the ticket column math). Mention a new one only if it looks accidental.
 
 ## Method
 
@@ -40,7 +41,9 @@ Group by module. For each dead method, give:
 
 Add a **Caveats** section for transitively-dead methods (live caller is itself dead), API surface decisions, or anything else the reviewer should know before deleting.
 
-Keep the report under 600 words. If there are zero candidates, say so explicitly.
+Keep the report under 600 words. If there are zero candidates, say so explicitly. The main agent removes what you report (or files it in `docs/progress_tracker.md`); no report file is kept in `docs/`.
+
+Also flag functions whose **only** callers are in `tests/` (production-dead, kept alive by a test) separately from the hooks above.
 
 ## What you do NOT do
 

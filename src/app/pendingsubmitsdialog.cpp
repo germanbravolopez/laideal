@@ -55,6 +55,7 @@ void PendingSubmitsDialog::buildUi()
     layout->addWidget(legend);
 
     m_table = new QTableWidget(this);
+    m_table->setObjectName("table");   // stable names for the e2e test bench
     m_table->setColumnCount(COL_COUNT);
     m_table->setHorizontalHeaderLabels(
         { tr("Nº recibo"), tr("Fecha"), tr("Cliente"), tr("Importe"), tr("Acciones") });

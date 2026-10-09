@@ -77,9 +77,13 @@ nav:
   - Agent instructions: ai_agent_instructions.md
   - Architecture: architecture.md
   - Progress tracker: progress_tracker.md
+  - Completed milestones: completed_milestones.md
+  - Testing:
+      - Overview: testing/README.md
+      - Unit and integration suites: testing/unit_suites.md
+      - End-to-end test bench: testing/e2e.md
+      - Manual smoke test: testing/smoke_test.md
   - Index: INDEX.md
-  - Coding guidelines audit: coding_guidelines_audit.md
-  - Dead code report: dead_code_report.md
   - Modules:
       - MainWindow: modules/mainwindow.md
       - SQLite API: modules/sql_lite.md

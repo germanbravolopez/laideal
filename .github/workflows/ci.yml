@@ -34,8 +34,12 @@ jobs:
       - name: Install MinGW 11.2 (matches Qt 6.4.3)
         shell: pwsh
         run: |
-          choco install mingw --version=11.2.0.07112021 -y --no-progress
+          # The community feed intermittently answers "package not found": retry before failing.
           $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          for ($i = 1; $i -le 4 -and -not (Test-Path "$bin\g++.exe"); $i++) {
+            choco install mingw --version=11.2.0.07112021 -y --no-progress
+            if (-not (Test-Path "$bin\g++.exe")) { Write-Host "MinGW install attempt $i failed; retrying in 30 s"; Start-Sleep -Seconds 30 }
+          }
           if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
           & "$bin\g++.exe" --version | Select-Object -First 1
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -134,8 +138,12 @@ jobs:
       - name: Install MinGW 11.2 (matches Qt 6.4.3; windeployqt copies its runtime)
         shell: pwsh
         run: |
-          choco install mingw --version=11.2.0.07112021 -y --no-progress
+          # The community feed intermittently answers "package not found": retry before failing.
           $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          for ($i = 1; $i -le 4 -and -not (Test-Path "$bin\g++.exe"); $i++) {
+            choco install mingw --version=11.2.0.07112021 -y --no-progress
+            if (-not (Test-Path "$bin\g++.exe")) { Write-Host "MinGW install attempt $i failed; retrying in 30 s"; Start-Sleep -Seconds 30 }
+          }
           if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
           & "$bin\g++.exe" --version | Select-Object -First 1
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append

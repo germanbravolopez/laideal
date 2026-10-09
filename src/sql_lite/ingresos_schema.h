@@ -32,6 +32,7 @@
 #define INGRESOS_COL_VERIFACTU_INVOICE_SEQ         24
 #define INGRESOS_COL_VERIFACTU_INVOICE_ID          25
 #define INGRESOS_COL_FECHA_ANULACION               26
+#define INGRESOS_COL_VERIFACTU_CANCEL_XML          27
 
 // `estado` column value for a garment voided locally (erroneous receipt or a
 // change of mind before delivery). Sits alongside "Recogido" / "En tienda".

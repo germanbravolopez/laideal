@@ -65,7 +65,7 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
 
     m_dbPath = new QLineEdit(s->dbPath());
     auto *dbRow = browseRow(m_dbPath, false, this);
-    auto *dbNote = new QLabel(tr("<i>Requiere reiniciar la aplicación para aplicar.</i>"));
+    auto *dbNote = new QLabel(tr("<i>El cambio de base de datos requiere reiniciar la aplicación.</i>"));
     dbNote->setStyleSheet("color: gray;");
     auto *dbLayout = new QVBoxLayout;
     dbLayout->setContentsMargins(0, 0, 0, 0);

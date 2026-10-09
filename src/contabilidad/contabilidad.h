@@ -58,6 +58,10 @@ public:
     // with any other rate are flagged in the detail and kept out of its total.
     static bool expenseIvaIsSummarised(int iva);
 
+    // Test seam: when false, a generated report is written but not opened in the
+    // PDF viewer (the end-to-end bench generates reports headless). Default true.
+    static void setOpenGeneratedReports(bool open);
+
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
     // period so the ingresos/gastos tables and the summary share the same numbers.
@@ -92,18 +96,24 @@ public:
     // of earlier closed periods from income, buckets gastos by rate (10 / 21 /
     // sin IVA; other or NULL rates are only counted), then applies
     // figuresFromTotals' IVA base/cuota math.
+    // [periodStart, periodEnd) is the report period, used by netTicketCount.
     static PeriodFigures figuresFromDetails(const QVector<IncomeTicketDetail> &income,
                                             const QVector<RegularizationDetail> &regularizations,
                                             const QVector<ExpenseDetail> &expenses,
-                                            double ivaRate);
-    // Number of tickets a period counts: those whose income there does not net to
-    // zero against a regularisation of the same period (paid and cancelled in the
-    // same period -> not counted; paid in Q1, cancelled in Q2 -> counted in Q1).
+                                            double ivaRate,
+                                            const QDate &periodStart, const QDate &periodEnd);
+    // Number of tickets the period [periodStart, periodEnd) counts. A regularisation
+    // offsets a ticket's income only when the cancelled payment was itself made in
+    // this period (paid and cancelled in the same period -> not counted). A payment
+    // from an earlier period being cancelled here does not cancel out a new sale of
+    // the same ticket in this period (paid Q1, cancelled Q2, rest charged Q2 -> the
+    // ticket counts in Q1 and in Q2).
     static int netTicketCount(const QVector<IncomeTicketDetail> &income,
-                              const QVector<RegularizationDetail> &regularizations);
-    // The same over the whole year: a ticket paid across two quarters is one
-    // ticket, and one paid and cancelled within the year is none.
-    static int yearTicketCount(const QuarterlyDetails &details);
+                              const QVector<RegularizationDetail> &regularizations,
+                              const QDate &periodStart, const QDate &periodEnd);
+    // The same over the whole calendar year: a ticket paid across two quarters is
+    // one ticket, and one paid and cancelled within the year is none.
+    static int yearTicketCount(const QuarterlyDetails &details, int year);
     // Comma-decimal amounts in a period's rows (listed but not summed).
     static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,
                                   const QVector<RegularizationDetail> &regularizations,

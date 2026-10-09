@@ -68,6 +68,7 @@ void AddGarment::on_pb_search_pressed()
             return;
         }
         ticketFound = true;
+        m_searchedTicket = ui->le_n_recibo->text();
         fillContentFromDb();
         populateGarments();
     } else {
@@ -174,6 +175,19 @@ void AddGarment::on_buttonBox_clicked(QAbstractButton *button)
 bool AddGarment::validateForm()
 {
     bool ok = 1;
+    // The number may have been retyped after the search: that ticket was never checked.
+    if (ui->le_n_recibo->text() != m_searchedTicket)
+        ticketFound = false;
+    // Re-checked at save: a ticket paid meanwhile has an invoice at AEAT and cannot grow.
+    if (ticketFound && ticketHasPaidGarment(db, m_searchedTicket)) {
+        qWarning() << "AddGarment::validateForm: ticket" << m_searchedTicket << "has a paid garment - refused";
+        QMessageBox::warning(this, "Añadir prenda",
+                             "El recibo Nº " + m_searchedTicket + " ya tiene prendas "
+                             "pagadas (enviado a la AEAT).\nNo se pueden añadir prendas a un "
+                             "recibo pagado; utiliza un recibo nuevo.",
+                             QMessageBox::Ok, QMessageBox::Ok);
+        return false;
+    }
     if (ticketFound) {
         // Avoid n_recibo, client, garment, quantity to be empty
         if (ui->le_n_recibo->text() != "" &&
@@ -244,5 +258,8 @@ void AddGarment::saveFactura()
     row.verifactuEstado = verifactuEstadoToString(
         row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                           : VerifactuEstado::Unpaid);
-    insertGarmentRow(db, row);
+    // A ticket that already has a paid garment is refused in on_pb_search_pressed, so
+    // this payment is the ticket's first invoice: seq 0, InvoiceID = n_recibo.
+    if (insertGarmentRow(db, row) && row.pagado == QLatin1String("SI"))
+        emit paidGarmentSaved(row.nRecibo, QDate::fromString(row.fechaPago, "dd-MM-yyyy"), row.importe.toDouble());
 }
