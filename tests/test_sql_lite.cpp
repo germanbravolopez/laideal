@@ -98,7 +98,7 @@ private slots:
             " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
             " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
             " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-            " verifactu_invoice_id TEXT, fecha_anulacion TEXT)"), qPrintable(q.lastError().text()));
+            " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)"), qPrintable(q.lastError().text()));
         QVERIFY2(q.exec(
             "CREATE TABLE gastos ("
             " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
@@ -256,6 +256,14 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QStringLiteral("ENVIADA"));
         QCOMPARE(scalar("SELECT COALESCE(fecha_anulacion, '') FROM ingresos WHERE n_recibo='40' AND verifactu_invoice_seq=2"), QString());
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='41'"), QStringLiteral("15-05-2026"));  // open quarter too
+
+        // AEAT's cancellation record is stored on the event's paid rows, and a later
+        // call without one never erases it.
+        insertIngreso("42", "20-04-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 15), "<anulacion/>"));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 20)));
+        QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='42'"), QStringLiteral("<anulacion/>"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_cancel_xml, '') FROM ingresos WHERE n_recibo='41'"), QString());
     }
 
     // Cancelling / rectifying an invoice touches only the paid rows it covered: the

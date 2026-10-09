@@ -75,6 +75,8 @@ void migrateDatabase(QSqlDatabase &db)
     // Date a garment was cancelled (10.12+): voided in place (Anular prendas), cancelled
     // at AEAT, or superseded by a substitution rectificativa. Empty otherwise.
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
+    // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
+    q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -1015,7 +1017,8 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
               "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
               "       COALESCE(MAX(verifactu_estado), ''), COALESCE(MAX(fecha_anulacion), ''), "
               "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
-              "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), '') "
+              "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), ''), "
+              "       COALESCE(MAX(verifactu_cancel_xml), '') "
               "FROM ingresos "
               "WHERE pagado = 'SI' "
               "  AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
@@ -1046,6 +1049,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
         r.rectifiesNRecibo  = q.value(8).toString();
         r.rectificationType = q.value(9).toString();
         r.xml               = q.value(10).toString();
+        r.cancelXml         = q.value(11).toString();
         // Legacy rows predate the stored id; they were sent under the same rule.
         if (r.invoiceId.isEmpty())
             r.invoiceId = verifactuInvoiceId(r.nRecibo, r.seq);
@@ -1349,17 +1353,20 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
     return last;
 }
 
-bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate)
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
+                             const QString &cancelXml)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
-              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
+              "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha), "
+              "verifactu_cancel_xml = COALESCE(NULLIF(:cxml, ''), verifactu_cancel_xml) "
               "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
+    q.bindValue(":cxml",   cancelXml);
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
     const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked

@@ -214,6 +214,7 @@ struct AeatExportRecord {
     QString rectifiesNRecibo;  // a rectificativa: the ticket it corrects
     QString rectificationType; // a rectificativa: "S" (substitution) or "I" (differences)
     QString xml;          // the stored AEAT payload; empty when only the CSV is known
+    QString cancelXml;    // AEAT's cancellation record, when cancelled and stored
 };
 
 // One record per paid payment event (n_recibo, verifactu_invoice_seq) that AEAT holds -
@@ -285,7 +286,8 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
 // covered - are marked; unpaid garments of the ticket (which share seq 0) stay
 // chargeable and are invoiced on their own when paid. Returns false when the
 // UPDATE fails or matches no paid row.
-bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate);
+bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
+                                    const QString &cancelXml = QString());
 // Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
 // rectificativa and records fecha_anulacion = the rectificativa's date, the same
 // period its replacement row is counted in. Unpaid rows stay chargeable.

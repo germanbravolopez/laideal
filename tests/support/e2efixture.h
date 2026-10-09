@@ -53,7 +53,7 @@ inline bool createSchema(QSqlDatabase &db)
                     " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
                     " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
                     " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-                    " verifactu_invoice_id TEXT, fecha_anulacion TEXT)")
+                    " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)")
         && exec(db, "CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
                     "descripcion TEXT, empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER, "
                     "edit_lock INTEGER DEFAULT 0)")

@@ -226,6 +226,7 @@ Notable items:
 | verifactu_invoice_seq | INTEGER | Partial-payment event number (0 for legacy / single-event tickets) |
 | verifactu_invoice_id | TEXT | Literal AEAT InvoiceID submitted for the row |
 | fecha_anulacion | TEXT | `dd-MM-yyyy` date the garment was cancelled: voided in place (`voidGarmentRow`, Anular prendas), cancelled at AEAT (`markInvoiceSeqCancelled`, paid rows of that event only) or superseded by a substitution rectificativa (`markTicketRectified`, paid rows, the rectificativa's date). Never overwritten once set. A paid row with this date stays income in its payment period and is subtracted in the period of this date (Contabilidad regularisation). Empty otherwise (column 26, added by `migrateDatabase`, which also moves pre-10.12 void dates here) |
+| verifactu_cancel_xml | TEXT | AEAT's cancellation record (`Return.Xml` of the `/Cancel` reply), stored on the cancelled event's paid rows by `markInvoiceSeqCancelled`; empty for cancellations before October 2026. Exported as `<Anulacion>` by Exportar registros AEAT |
 
 ### `prendas` (garment catalogue)
 

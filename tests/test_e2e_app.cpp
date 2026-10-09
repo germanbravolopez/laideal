@@ -299,6 +299,8 @@ private slots:
                  QStringLiteral("ANULADA|%1").arg(today()));
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h800b'"),
                  QStringLiteral("ANULADA|%1").arg(today()));
+        // AEAT's cancellation record is kept for the Hacienda export.
+        QVERIFY(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE hash='h800a'").contains("Huella"));
         QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), firstPaid.toString("dd-MM-yyyy"));
     }
 
@@ -643,12 +645,20 @@ private slots:
                                 "'<?xml version=\"1.0\"?><RegistroAlta><IDFactura>' || verifactu_invoice_id || "
                                 "'</IDFactura></RegistroAlta>' WHERE pagado = 'SI'"));
 
-        // Recovered with "Consultar en AEAT": CSV only. Cancelled in March, issued in January.
+        // Recovered with "Consultar en AEAT": CSV only. Issued in January, cancelled in
+        // March with AEAT's cancellation record stored; issued in March, cancelled in
+        // April (after the period).
         QVERIFY(E2e::seedSentGarment(m_db, "1700", "h1700a", "5.00", "10-03-2026", "CSV-1700"));
         QVERIFY(E2e::seedSentGarment(m_db, "1800", "h1800a", "12.00", "05-01-2026", "CSV-1800"));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
                                 "'<RegistroAlta><IDFactura>1800</IDFactura></RegistroAlta>', "
+                                "verifactu_cancel_xml = '<?xml version=\"1.0\"?><RegistroAnulacion>"
+                                "<IDFacturaAnulada>1800</IDFacturaAnulada></RegistroAnulacion>', "
                                 "verifactu_estado = 'ANULADA', fecha_anulacion = '15-03-2026' WHERE hash='h1800a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "1900", "h1900a", "9.00", "12-03-2026", "CSV-1900"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
+                                "'<RegistroAlta><IDFactura>1900</IDFactura></RegistroAlta>', "
+                                "verifactu_estado = 'ANULADA', fecha_anulacion = '02-04-2026' WHERE hash='h1900a'"));
 
         QVector<AeatExportRecord> records;
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), records));
@@ -657,10 +667,10 @@ private slots:
         const int written = writeAeatExportXml(&buffer, records, QDate(2026, 3, 1), QDate(2026, 3, 31),
                                                "B00000000", "Tintoreria E2E");
         buffer.close();
-        QCOMPARE(written, 4);
+        QCOMPARE(written, 5);
 
         QXmlStreamReader xml(buffer.data());
-        QStringList registros, payloadIds;
+        QStringList registros, anulaciones, payloadIds;
         while (!xml.atEnd()) {
             if (xml.readNext() != QXmlStreamReader::StartElement)
                 continue;
@@ -671,15 +681,23 @@ private slots:
                              + xml.attributes().value("csv").toString() + "|"
                              + xml.attributes().value("fechaAnulacion").toString() + "|"
                              + xml.attributes().value("sinPayload").toString();
-            else if (xml.name() == QLatin1String("IDFactura"))
-                payloadIds << xml.readElementText();
+            else if (xml.name() == QLatin1String("Anulacion"))
+                anulaciones << xml.attributes().value("invoiceId").toString() + "|"
+                               + xml.attributes().value("fechaAnulacion").toString() + "|"
+                               + xml.attributes().value("sinPayload").toString();
+            else if (xml.name() == QLatin1String("IDFactura") || xml.name() == QLatin1String("IDFacturaAnulada"))
+                payloadIds << xml.name().toString() + ":" + xml.readElementText();
         }
         QVERIFY2(!xml.hasError(), qPrintable(xml.errorString()));
-        QCOMPARE(registros, QStringList({ "1800|05-01-2026|12.00|CSV-1800|15-03-2026|",
-                                          "1600|05-03-2026|14.50|CSV-1600||",
+        // Issued in March: Registro. Cancelled in March: Anulacion with AEAT's
+        // record; the January invoice itself is not repeated here.
+        QCOMPARE(registros, QStringList({ "1600|05-03-2026|14.50|CSV-1600||",
                                           "1700|10-03-2026|5.00|CSV-1700||1",
+                                          "1900|12-03-2026|9.00|CSV-1900|02-04-2026|",
                                           "1600-1|20-03-2026|6.00|CSV-1600-1||" }));
-        QCOMPARE(payloadIds, QStringList({ "1800", "1600", "1600-1" }));
+        QCOMPARE(anulaciones, QStringList({ "1800|15-03-2026|" }));
+        QCOMPARE(payloadIds, QStringList({ "IDFacturaAnulada:1800", "IDFactura:1600", "IDFactura:1900",
+                                           "IDFactura:1600-1" }));
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

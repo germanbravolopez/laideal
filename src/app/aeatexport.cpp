@@ -22,33 +22,54 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
     // Each stored payload loses its XML declaration so the outer document stays well-formed.
     static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
 
-    for (const AeatExportRecord &r : records) {
-        QString payload = r.xml;
+    const auto inRange = [&from, &to](const QString &ddMMyyyy) {
+        const QDate d = QDate::fromString(ddMMyyyy, "dd-MM-yyyy");
+        return d.isValid() && d >= from && d <= to;
+    };
+    // Writes the payload's raw bytes inside the open element, closing its start tag first.
+    const auto writePayload = [&w, out](QString payload) {
         payload.remove(xmlDeclRx);
-
-        w.writeStartElement("Registro");
-        w.writeAttribute("nRecibo",   r.nRecibo);
-        w.writeAttribute("invoiceId", r.invoiceId);
-        w.writeAttribute("fechaPago", r.fechaPago);
-        w.writeAttribute("importe",   QString::number(r.importe, 'f', 2));
-        w.writeAttribute("csv",       r.csv);
-        w.writeAttribute("estado",    r.estado);
-        if (!r.fechaAnulacion.isEmpty())
-            w.writeAttribute("fechaAnulacion", r.fechaAnulacion);
-        if (!r.rectifiesNRecibo.isEmpty()) {
-            w.writeAttribute("rectifica",          r.rectifiesNRecibo);
-            w.writeAttribute("tipoRectificacion",  r.rectificationType);
-        }
-        // Known to AEAT only by its CSV (recovered with "Consultar en AEAT"): no payload stored.
         if (payload.isEmpty())
-            w.writeAttribute("sinPayload", "1");
-        // Close the start tag before writing the payload's raw bytes to the device.
+            w.writeAttribute("sinPayload", "1");   // known to AEAT, payload not stored
         w.writeCharacters(QString());
         out->write(payload.toUtf8());
-        w.writeEndElement(); // Registro
+    };
+
+    int written = 0;
+    for (const AeatExportRecord &r : records) {
+        if (inRange(r.fechaPago)) {
+            w.writeStartElement("Registro");
+            w.writeAttribute("nRecibo",   r.nRecibo);
+            w.writeAttribute("invoiceId", r.invoiceId);
+            w.writeAttribute("fechaPago", r.fechaPago);
+            w.writeAttribute("importe",   QString::number(r.importe, 'f', 2));
+            w.writeAttribute("csv",       r.csv);
+            w.writeAttribute("estado",    r.estado);
+            if (!r.fechaAnulacion.isEmpty())
+                w.writeAttribute("fechaAnulacion", r.fechaAnulacion);
+            if (!r.rectifiesNRecibo.isEmpty()) {
+                w.writeAttribute("rectifica",         r.rectifiesNRecibo);
+                w.writeAttribute("tipoRectificacion", r.rectificationType);
+            }
+            writePayload(r.xml);
+            w.writeEndElement(); // Registro
+            ++written;
+        }
+        // A cancellation is AEAT's own record, dated when it happened (a substituted
+        // invoice has none: its rectificativa is a Registro of its own).
+        if (r.estado == QLatin1String("ANULADA") && inRange(r.fechaAnulacion)) {
+            w.writeStartElement("Anulacion");
+            w.writeAttribute("nRecibo",        r.nRecibo);
+            w.writeAttribute("invoiceId",      r.invoiceId);
+            w.writeAttribute("fechaPago",      r.fechaPago);
+            w.writeAttribute("fechaAnulacion", r.fechaAnulacion);
+            writePayload(r.cancelXml);
+            w.writeEndElement(); // Anulacion
+            ++written;
+        }
     }
 
     w.writeEndElement(); // RegistrosFacturacionLaIdeal
     w.writeEndDocument();
-    return records.size();
+    return written;
 }

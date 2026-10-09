@@ -428,6 +428,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_ERROR,     true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_URL_QR,    true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_XML,        true);
+        ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_CANCEL_XML, true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_HASH,       true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO,  true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE,  true);

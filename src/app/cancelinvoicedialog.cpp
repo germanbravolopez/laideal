@@ -295,7 +295,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     QDate cancelDate = m_pendingCancelDate;
     if (quarterIsClosed(db, cancelDate) && !quarterIsClosed(db, QDate::currentDate()))
         cancelDate = QDate::currentDate();
-    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, cancelDate)) {
+    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, cancelDate, result.rawXml)) {
         // AEAT did cancel it: show it as such so its button cannot send a second
         // cancellation, and flag the missing local write.
         e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
