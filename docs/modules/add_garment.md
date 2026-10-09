@@ -25,7 +25,7 @@ ui->show();
 
 ## Validation
 
-- Search must succeed before saving (`ticketFound=true`).
+- Search must succeed before saving (`ticketFound=true`), for the number actually saved: if the receipt number is retyped after the search, the save is refused ("No se ha buscado ningún Nº recibo…"). The paid-garment check is repeated at save, so a ticket charged meanwhile is refused too.
 - Receipt number, client, garment, and quantity must not be empty.
 - Garments whose name contains "m2" require a non-empty size field.
 - If marking as paid: date must fall in an unlocked accounting quarter.

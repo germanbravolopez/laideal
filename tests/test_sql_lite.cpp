@@ -729,6 +729,26 @@ private slots:
                         "WHERE n_recibo = 'P4'"), QString());
     }
 
+    // A reply never rewrites an invoice that is already settled: a duplicate rejection
+    // arriving for an event whose rows are ENVIADA must not turn them into ERROR and
+    // wipe their CSV (only a still-pending row of the same event takes the result).
+    void test_updateTicketVerifactuFields_neverRewritesSettledRows()
+    {
+        insertIngreso("P5", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        exec("UPDATE ingresos SET verifactu_csv = 'CSV-P5', hash = 'p5a' WHERE n_recibo = 'P5'");
+        insertIngreso("P5", "10-03-2026", "8.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+
+        VerifactuResult dup;
+        dup.status           = VerifactuResult::ERROR;
+        dup.errorDescription = "Registro duplicado";
+        updateTicketVerifactuFields(m_db, "P5", dup, /*seq=*/0);
+
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash = 'p5a'"),
+                 QStringLiteral("ENVIADA|CSV-P5"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P5' AND importe = '8.00'"),
+                 QStringLiteral("ERROR"));
+    }
+
     // A retry re-submits ONE payment event. Before this seam RecogPrendas summed
     // every row of the ticket and sent it under the bare n_recibo on the RECEPTION
     // date - so retrying a partial payment submitted the wrong amount under an
@@ -887,6 +907,20 @@ private slots:
         QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
     }
 
+    // A ticket whose two payment events (Q1 and Q2) are both cancelled in Q2 is one
+    // regularisation entry in Q2; it keeps the LATEST payment date whatever the row
+    // order, so the Q2 ticket count knows a Q2 payment was cancelled.
+    void test_regularizations_mergedTicketKeepsLatestPayment()
+    {
+        insertIngreso("R9", "10-02-2026", "20.00", "SI", "ANULADA", 0, /*seq=*/0);
+        insertIngreso("R9", "10-05-2026", "30.00", "SI", "ANULADA", 0, /*seq=*/1);
+        exec("UPDATE ingresos SET fecha_anulacion = '20-05-2026' WHERE n_recibo = 'R9'");
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(m_db, QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QCOMPARE(regs.size(), 1);
+        QCOMPARE(regs[0].fechaPago, QStringLiteral("10-05-2026"));
+        QCOMPARE(regs[0].importe, 50.0);
+    }
+
     // Exportar registros AEAT: one record per payment event AEAT holds, not per
     // garment row; its literal InvoiceID, payment date and total; in the range by
     // payment or cancellation date; unpaid rows and rows AEAT never confirmed are
@@ -924,13 +958,17 @@ private slots:
         row("105", "i", "05-01-2026", "05-01-2026", "12.00", "SI", "CSV6", "ANULADA", 0, "105", "<x>e4</x>", "15-03-2026");
         // Ticket 106: rectificativa of 100 by substitution.
         row("106", "j", "25-03-2026", "25-03-2026", "12.00", "SI", "CSV7", "ENVIADA", 0, "106", "<x>e5</x>", "", "100", "S");
+        // Ticket 107: a pre-10.9 seq-0 invoice paid over two days across the quarter
+        // end - one invoice, issued on 30-03 (its first payment), total 25.
+        row("107", "k", "20-03-2026", "30-03-2026", "10.00", "SI", "CSV8", "ENVIADA", 0, "107", "<x>e6</x>");
+        row("107", "l", "20-03-2026", "02-04-2026", "15.00", "SI", "CSV8", "ENVIADA", 0, "107", "<x>e6</x>");
 
         QVector<AeatExportRecord> r;
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r));
         QStringList ids;
         for (const AeatExportRecord &e : r)
             ids << e.invoiceId;
-        QCOMPARE(ids, QStringList({ "105", "101", "100", "104", "100-1", "106" }));   // by issue date
+        QCOMPARE(ids, QStringList({ "105", "101", "100", "104", "100-1", "106", "107" }));   // by issue date
         QCOMPARE(r[0].fechaAnulacion, QStringLiteral("15-03-2026"));
         QCOMPARE(r[0].estado, QStringLiteral("ANULADA"));
         QCOMPARE(r[2].seq, 0);
@@ -943,6 +981,13 @@ private slots:
         QCOMPARE(r[4].importe, 6.0);
         QCOMPARE(r[5].rectifiesNRecibo, QStringLiteral("100"));
         QCOMPARE(r[5].rectificationType, QStringLiteral("S"));
+        QCOMPARE(r[6].fechaPago, QStringLiteral("30-03-2026"));
+        QCOMPARE(r[6].importe, 25.0);                              // both rows, though one is in April
+
+        // April: the legacy invoice is not repeated with its April row alone.
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 4, 1), QDate(2026, 4, 30), r));
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r[0].invoiceId, QStringLiteral("103"));
 
         // The range is inclusive on both ends; reception dates do not count.
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 5), QDate(2026, 3, 5), r));

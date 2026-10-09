@@ -346,6 +346,23 @@ private slots:
         QTest::qWait(300);
         QVERIFY(m_server.requestsTo("Cancel").isEmpty());
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h870a'"), QStringLiteral("ENVIADA"));
+
+        // (4) Both attempts rejected: the operator sees AEAT's answer to each, the
+        // first one (the real cause) included, and the invoice stays ENVIADA.
+        QVERIFY(E2e::seedSentGarment(m_db, "880", "h880a", "9.00", "05-03-2026", "A-ORIG0880"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET fecha_recepcion = '01-03-2026' WHERE n_recibo = '880'"));
+        FakeVerifactuServer::Reply first, second;
+        first.body  = FakeVerifactuServer::rejectedReply("4118", "Factura ya anulada");
+        second.body = FakeVerifactuServer::rejectedReply("3002", "No existe el registro de facturacion");
+        m_server.enqueue("Cancel", first);
+        m_server.enqueue("Cancel", second);
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("880");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Con la fecha de recepción"), 10000);
+        QVERIFY(result->text().contains("Factura ya anulada"));
+        QVERIFY(result->text().contains("No existe"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h880a'"), QStringLiteral("ENVIADA"));
     }
 
     // Anular factura while today's quarter is closed: refused before any request.
@@ -730,6 +747,33 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_invoice_seq FROM ingresos WHERE n_recibo='2000' AND pagado='SI'"),
                  QStringLiteral("0"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h2000a'"), QStringLiteral("SIN COBRAR"));
+    }
+
+    // Añadir nuevas prendas: the number retyped after the search (here into an already
+    // sent ticket) was never checked, so the save is refused - nothing is inserted into
+    // that ticket and nothing is sent to AEAT under its InvoiceID.
+    void test_addGarment_retypedTicketNumberRefused()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "2100", "h2100a", "10.00", today()));
+        QVERIFY(E2e::seedSentGarment(m_db, "2200", "h2200a", "12.00", today(), "A-ORIG2200"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
+        auto *add = mw.findChild<AddGarment *>();
+        add->findChild<QLineEdit *>("le_n_recibo")->setText("2100");
+        QMetaObject::invokeMethod(add, "on_pb_search_pressed");
+        QVERIFY(add->ticketFound);
+        add->findChild<QLineEdit *>("le_n_recibo")->setText("2200");
+        add->findChild<QComboBox *>("cb_prenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("le_cantidad")->setText("1");
+        add->findChild<QPushButton *>("pb_pagado")->setChecked(true);
+        add->findChild<QDialogButtonBox *>("buttonBox")->button(QDialogButtonBox::Save)->click();
+
+        QTRY_VERIFY(m_popups->sawMessageContaining("No se ha buscado"));
+        QTest::qWait(300);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='2200'"), QStringLiteral("1"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash='h2200a'"),
+                 QStringLiteral("ENVIADA|A-ORIG2200"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

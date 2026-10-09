@@ -236,6 +236,7 @@ void CancelInvoiceDialog::onCancelClicked(int row)
             this, &CancelInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
 
     m_pendingCancelRow = row;
+    m_firstRejection.clear();
     m_pendingFallbackDate = (e.seq == 0 && e.receptionDate.isValid() && e.receptionDate != e.invoiceDate)
                             ? e.receptionDate : QDate();
     m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
@@ -271,6 +272,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
                    << "- retrying with the reception date" << fallback.toString("dd-MM-yyyy");
         m_lblResult->setText(tr("Reintentando la anulación de %1 con la fecha de recepción (%2)...")
                                  .arg(e.invoiceId.toHtmlEscaped(), fallback.toString("dd-MM-yyyy")));
+        m_firstRejection   = result.errorDescription;
         m_pendingCancelRow = row;
         m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback);
         if (!m_pendingCancelId.isEmpty())
@@ -278,9 +280,17 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         m_pendingCancelRow = -1;
     }
 
+    const QString firstRejection = m_firstRejection;
+    m_firstRejection.clear();
     if (!result.isSuccess()) {
-        m_lblResult->setText(QString("<b style='color:red'>Error al anular %1:</b> %2")
-                                 .arg(e.invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()));
+        QString text = QString("<b style='color:red'>Error al anular %1:</b> %2")
+                           .arg(e.invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped());
+        if (!firstRejection.isEmpty())
+            text = tr("<b style='color:red'>Error al anular %1.</b><br>Con la fecha de pago: %2<br>"
+                      "Con la fecha de recepción: %3")
+                       .arg(e.invoiceId.toHtmlEscaped(), firstRejection.toHtmlEscaped(),
+                            result.errorDescription.toHtmlEscaped());
+        m_lblResult->setText(text);
         setActionsEnabled(true);
         return;
     }

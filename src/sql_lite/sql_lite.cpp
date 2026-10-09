@@ -595,10 +595,10 @@ static const QString kFechaGastoIso =
 // Earliest fecha_pago of a group, by date (MIN over the dd-MM-yyyy text would compare
 // day first). Rows paid on different days in one seq-0 invoice predate 10.9: AEAT
 // registered it under the first payment.
-static const QString kEarliestFechaPago =
-    QStringLiteral("strftime('%d-%m-%Y', MIN(date(substr(fecha_pago,7,4)||'-'||substr(fecha_pago,4,2)||'-'||substr(fecha_pago,1,2))))");
+static const QString kEarliestFechaPago = "strftime('%d-%m-%Y', MIN(" + kFechaPagoIso + "))";
 static const QString kFechaAnulacionIso =
     QStringLiteral("date(substr(fecha_anulacion,7,4)||'-'||substr(fecha_anulacion,4,2)||'-'||substr(fecha_anulacion,1,2))");
+static const QString kLatestFechaAnulacion = "strftime('%d-%m-%Y', MAX(" + kFechaAnulacionIso + "))";
 static const QString kExcludedEstadosSql =
     "('" + kTotalsExcludedEstados.join(QStringLiteral("','")) + "')";
 // Paid ingresos, excluding kTotalsExcludedEstados - except a row cancelled /
@@ -1015,7 +1015,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(importe), "
               "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
-              "       COALESCE(MAX(verifactu_estado), ''), COALESCE(MAX(fecha_anulacion), ''), "
+              "       COALESCE(MAX(verifactu_estado), ''), COALESCE(" + kLatestFechaAnulacion + ", ''), "
               "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
               "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), ''), "
               "       COALESCE(MAX(verifactu_cancel_xml), '') "
@@ -1023,10 +1023,12 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
               "WHERE pagado = 'SI' "
               "  AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
               "       OR (verifactu_csv IS NOT NULL AND verifactu_csv != '')) "
-              "  AND ((" + kFechaPagoIso + " >= date(:from) AND " + kFechaPagoIso + " <= date(:to)) "
-              "       OR (" + kFechaAnulacionIso + " >= date(:from2) AND " + kFechaAnulacionIso + " <= date(:to2))) "
               "GROUP BY n_recibo, verifactu_invoice_seq, COALESCE(verifactu_csv, '') "
-              "ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER), verifactu_invoice_seq");
+              // On the invoice's own dates, not row by row: a legacy invoice paid over
+              // several days is one record, in the period it was issued.
+              "HAVING (MIN(" + kFechaPagoIso + ") >= date(:from) AND MIN(" + kFechaPagoIso + ") <= date(:to)) "
+              "    OR (MAX(" + kFechaAnulacionIso + ") >= date(:from2) AND MAX(" + kFechaAnulacionIso + ") <= date(:to2)) "
+              "ORDER BY MIN(" + kFechaPagoIso + "), CAST(n_recibo AS INTEGER), verifactu_invoice_seq");
     q.bindValue(":from",  from.toString(Qt::ISODate));
     q.bindValue(":to",    to.toString(Qt::ISODate));
     q.bindValue(":from2", from.toString(Qt::ISODate));
@@ -1093,7 +1095,10 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
               "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
               "WHERE n_recibo = :n_recibo AND verifactu_invoice_seq = :seq "
-              "  AND pagado = 'SI'");
+              "  AND pagado = 'SI' "
+              // A settled invoice is never rewritten by a later reply (e.g. a duplicate
+              // rejection), or its CSV / payload / Huella would be lost.
+              "  AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);
@@ -1284,6 +1289,11 @@ static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
             regs.append(r);
         }
         RegularizationDetail &r = regs[it.value()];
+        // Several cancelled payment events merge into one entry: keep the LATEST payment,
+        // which is in this period exactly when any of them is (they precede the cancellation).
+        const QDate rowPago = QDate::fromString(q.value(2).toString(), "dd-MM-yyyy");
+        if (rowPago.isValid() && rowPago > QDate::fromString(r.fechaPago, "dd-MM-yyyy"))
+            r.fechaPago = q.value(2).toString();
         const QString importe = q.value(5).toString();
         if (importe.contains(QLatin1Char(',')))
             r.invalidAmounts++;

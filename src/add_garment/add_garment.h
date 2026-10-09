@@ -46,6 +46,7 @@ private slots:
 private:
     Ui::AddGarment *ui;
     QSqlDatabase db;
+    QString m_searchedTicket;   // the number the search checked; a save must use the same one
 };
 
 #endif // ADDGARMENT_H
