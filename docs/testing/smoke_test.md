@@ -58,7 +58,12 @@ emptied (step 1.3), so the only tickets are the seeded ones below.
    path. This first launch also runs the migrations on the copy's schema (Block A). Close the app.
 6. **Seed the smoke tickets** (after the first launch, so the schema already has every column).
    Ticket numbers are plain integers; since `ingresos` is empty, the app's next ticket is 6.
+   The block starts by emptying both tables, so running it twice cannot duplicate a row (the
+   tables have no key that would reject one). Afterwards `SELECT COUNT(*) FROM ingresos` is 6 and
+   `SELECT COUNT(*) FROM gastos` is 1.
    ```sql
+   DELETE FROM ingresos;
+   DELETE FROM gastos;
    -- 1: unpaid, two garments -> partial payment through Recogida, Recogida total
    INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_estado,verifactu_invoice_seq)
    VALUES ('1','SMOKE','15-09-2026','','','12.00','NO','En tienda','1','Camisa','','Limp.','','0','smokehash000001','SIN COBRAR',0);
