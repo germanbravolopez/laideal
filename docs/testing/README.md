@@ -6,7 +6,7 @@ How the application is tested, how to run the tests, and where each kind of test
 |-------|----------------|-------|------|
 | **Unit / integration suites** | Pure logic and the `sql_lite` DB functions, each module in isolation | `tests/test_*.cpp` — see [unit_suites.md](unit_suites.md) | `ctest`, every CI run |
 | **End-to-end test bench** | Real objects working together (PayDialog, MainWindow and the app dialogs + Verifactu client + HTTP + DB) against a fake Verifactu server | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
-| **Manual smoke test** | What no automated test can reach: the real AEAT, the real printer, the migration on real data, screens not yet automated | [smoke_test.md](smoke_test.md) | Before each release (`/release` step 1) |
+| **Manual smoke test** | What no automated test can see: the release build on a real schema, the real printer, PDF / screen rendering, menu wiring, the Listado lock, backup, language, installer. Never contacts AEAT | [smoke_test.md](smoke_test.md) | Before each release (`/release` step 1) |
 
 ---
 

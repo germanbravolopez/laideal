@@ -223,6 +223,37 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h810a'"), QStringLiteral("ENVIADA"));
     }
 
+    // Anular factura is offered only on an ENVIADA invoice (a PENDIENTE one has nothing
+    // to cancel at AEAT), an unpaid ticket has no invoice at all, and Rectificar
+    // refuses an unpaid ticket.
+    void test_cancelAndRectify_offeredOnlyForSentInvoices()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "820", "h820a", "12.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h820a'"));
+        QVERIFY(E2e::seedGarment(m_db, "830", "h830a", "5.00", today()));
+
+        CancelInvoiceDialog cancel(m_db);
+        cancel.m_verifactu = m_verifactu;
+        auto *table = cancel.findChild<QTableWidget *>("table");
+        cancel.findChild<QLineEdit *>("leTicketNum")->setText("820");
+        QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+        QCOMPARE(table->rowCount(), 1);
+        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 4))->isEnabled());
+
+        cancel.findChild<QLineEdit *>("leTicketNum")->setText("830");
+        QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+        QCOMPARE(table->rowCount(), 0);
+        QVERIFY(cancel.findChild<QLabel *>("lblResult")->text().contains("no tiene envíos"));
+
+        RectifyInvoiceDialog rectify(m_db);
+        rectify.m_verifactu = m_verifactu;
+        rectify.findChild<QLineEdit *>("leTicketNum")->setText("830");
+        QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        QVERIFY(rectify.findChild<QLabel *>("lblResult")->text().contains("no fue enviado"));
+        QVERIFY(!rectify.findChild<QDoubleSpinBox *>("sbAmount")->isEnabled());
+        QVERIFY(m_server.requests().isEmpty());
+    }
+
     // Rectificar por sustitución: a date before the original payment, or in a closed
     // quarter, is refused; with a valid date the rectificativa is a new ENVIADA ticket and the original
     // becomes RECTIFICADA.
