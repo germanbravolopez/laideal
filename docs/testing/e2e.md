@@ -32,6 +32,10 @@ A minimal HTTP/1.1 server on `127.0.0.1` (random port) standing in for the Irene
 
 Headless there is nobody to click "Aceptar", so a single `QMessageBox` would block the suite until the CTest timeout. This helper closes any message box shortly after it opens and **records its title and text**; a Yes/No confirmation is answered **Yes**, like an operator who agrees. A scenario asserts with `sawMessageContaining("Trimestre bloqueado")`.
 
+### `ModalDriver`
+
+Operates the app's own modal dialogs. A screen that opens a dialog with `exec()` (Recogida's pay-all → PayDialog, the Verifactu dialog, the AEAT comparison dialog) blocks the test until the dialog closes, so the scenario registers the step beforehand: `expect(ModalDriver::named("aeatReconcileDialog"), [](QWidget *w) { ... })` (or `ModalDriver::ofType<PayDialog>()`) runs the callback once on the first visible window that matches. It reads the dialog, presses its buttons or closes it. Message boxes stay with `ModalAutoCloser`.
+
 ### `e2efixture.h`
 
 Shared setup for `test_e2e_app` (namespace `E2e`): `createSchema` (ingresos / gastos / clientes / prendas, column for column with the shop DB), `configureSettings` (the throwaway settings above), `clearTables`, `exec` / `scalar`, and the seeders `seedGarment` (unpaid, `SIN COBRAR`) and `seedSentGarment` (paid, `ENVIADA`, with a CSV).
@@ -65,7 +69,7 @@ The last scenario found a real bug on its first run: the 10.12 ticket count let 
 
 ## `test_e2e_app` (phase 2)
 
-The application's windows live in the `laideal_app` static library (`src/app/CMakeLists.txt`; the executable is only `main.cpp` + resources), so the suite links and drives them the way an operator would: fill the widgets (found by object name), press the button or invoke the slot it is wired to, then assert on the DB, on what reached the fake AEAT and on the pop-ups. MainWindow opens `DB_PATH` (set with `setDbPath` to the throwaway file) as the default connection, so the test reads the same file through its own connection. The dialogs are built with a `VerifactuIntegration` exactly as the menu actions do. `QTEST_MAIN` under offscreen; about 6 s.
+The application's windows live in the `laideal_app` static library (`src/app/CMakeLists.txt`; the executable is only `main.cpp` + resources), so the suite links and drives them the way an operator would: fill the widgets (found by object name), press the button or invoke the slot it is wired to, then assert on the DB, on what reached the fake AEAT and on the pop-ups. MainWindow opens `DB_PATH` (set with `setDbPath` to the throwaway file) as the default connection, so the test reads the same file through its own connection. The dialogs are built with a `VerifactuIntegration` exactly as the menu actions do. Recogida is driven through its search field and a row selection (`selectRow`), then its buttons, with `ModalDriver` operating the dialogs they open. `QTEST_MAIN` under offscreen; about 15 s (the late-reply scenario waits out PayDialog's 5 s).
 
 | Scenario | Flow | Checks |
 |----------|------|--------|
@@ -78,8 +82,11 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 | `test_rectifySubstitution_dateRuleThenRectified` | Rectificar por sustitución | A date before the payment and a date in a closed quarter are refused (nothing inserted); then the new ticket `701` is sent, `ENVIADA`, rectifies `700`; the original is `RECTIFICADA` |
 | `test_startupRecovery_retryPendingSubmission` | MainWindow opens with a `PENDIENTE` payment + an unpaid ticket | About 4 s later Envíos pendientes lists only the payment; Reintentar re-submits it under the same InvoiceID → `ENVIADA`; the dialog closes after its last row |
 | `test_reprintPaymentEvent_scopedRowsAndQrGating` | Imprimir for event `600-1`, then `600` | Only that event's paid garments are loaded (the unpaid seq-0 garment is not); GetQrCode carries `600-1` and its payment date; once the event is `ANULADA` no QR is requested |
+| `test_recogida_lateReplyAdoptedAfterPayDialogGivesUp` | Recogida → pay-all → Cobrar; AEAT answers after 7 s | PayDialog gives up at 5 s and the payment is kept `SI` / `PENDIENTE`; Recogida takes over the in-flight request and the late reply makes it `ENVIADA` with the CSV; the status bar says the factura with QR can be printed; one Create only |
+| `test_recogida_duplicateRetry_comparisonDialogAdoptsAeatCsv` | Verifactu dialog on an `ERROR` row → Reintentar; AEAT answers "duplicado", then the query returns the matching record | Reintentar and Consultar offered; the comparison dialog opens by itself, says the data match, shows AEAT's CSV, Actualizar enabled; after it the row is `ENVIADA` with AEAT's CSV and the confirmation shows |
+| `test_recogida_aeatQuery_noAdoptionUnlessItMatches` | Consultar en AEAT: not found, different amount, row already `ENVIADA`; Verifactu dialog on an unpaid row | Actualizar disabled in all three ("no ha devuelto ninguna factura", "NO coinciden", "solo informativa"); `ENVIADA` row offers no Reintentar; unpaid row offers neither button; nothing re-submitted |
 | `test_contabilidad_generateLockThenRevert` | Contabilidad Trimestral Q1 with Bloquear, then Revertir | The PDF is written under `reportsRoot/Contabilidad`, rows locked, form closes; revert unlocks them |
 
-Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`, the Anular button enabled for every estado); each mutation made its scenario fail.
+Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`, the Anular button enabled for every estado, Recogida not taking over PayDialog's request, no query after a duplicate, Actualizar enabled on any found record, Consultar shown on unpaid rows); each mutation made its scenario fail.
 
-**Not automated**: the real printer, PDF and screen rendering, menu wiring and the Listado lock are in [smoke_test.md](smoke_test.md), which never contacts AEAT. The Recogida late-reply adoption and the AEAT comparison dialog are not covered by either yet (open item in `docs/progress_tracker.md`).
+**Not automated**: the real printer, PDF and screen rendering, menu wiring and the Listado lock are in [smoke_test.md](smoke_test.md), which never contacts AEAT. The real AEAT itself is checked once, with a single real ticket after the production switch.

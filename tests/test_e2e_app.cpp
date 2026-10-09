@@ -2,7 +2,8 @@
 //
 // Drives the application's own windows - MainWindow and the Anular prendas /
 // Anular factura / Rectificar / Envíos pendientes dialogs, plus the Contabilidad
-// form - the way an operator would: fill the widgets, press the buttons (or invoke
+// form, and Recogida de prendas with its Verifactu / AEAT comparison dialogs - the
+// way an operator would: fill the widgets, press the buttons (or invoke
 // the slot a button is wired to), then assert on the database, on what reached
 // the fake AEAT and on the pop-ups shown. Same safety rules as phase 1: every
 // Verifactu call goes to FakeVerifactuServer on 127.0.0.1, the database is a
@@ -20,6 +21,8 @@
 #include <QRadioButton>
 #include <QSpinBox>
 #include <QCheckBox>
+#include <QStatusBar>
+#include <QTableView>
 #include <QTableWidget>
 #include <QTemporaryDir>
 
@@ -31,6 +34,9 @@
 #include "imprimir.h"
 #include "mainwindow.h"
 #include "modalautocloser.h"
+#include "modaldriver.h"
+#include "pay_dialog.h"
+#include "recog_prendas.h"
 #include "pendingsubmitsdialog.h"
 #include "rectifyinvoicedialog.h"
 #include "sql_lite.h"
@@ -47,6 +53,7 @@ class TestE2eApp : public QObject
     FakeVerifactuServer m_server;
     VerifactuIntegration *m_verifactu = nullptr;
     ModalAutoCloser *m_popups = nullptr;
+    ModalDriver *m_driver = nullptr;
 
     QString scalar(const QString &sql) { return E2e::scalar(m_db, sql); }
     static QString today() { return QDate::currentDate().toString("dd-MM-yyyy"); }
@@ -66,6 +73,73 @@ class TestE2eApp : public QObject
     static void clickSave(MainWindow &mw)
     {
         mw.findChild<QDialogButtonBox *>("bb_save_reset")->button(QDialogButtonBox::Save)->click();
+    }
+
+    // Recogida: searches the ticket by number and selects the garment `hash`, as a
+    // click on its row in the table does.
+    static bool selectRow(RecogPrendas &rp, const QString &ticketNum, const QString &hash)
+    {
+        rp.findChild<QLineEdit *>("le_search")->setText(ticketNum);
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        QAbstractItemModel *view = rp.findChild<QTableView *>("tableView")->model();
+        for (int r = 0; r < view->rowCount(); ++r) {
+            const QModelIndex index = view->index(r, 0);
+            const int sourceRow = rp.proxyModel->mapToSource(index).row();
+            if (rp.sqlQueryModel->data(rp.sqlQueryModel->index(sourceRow, INGRESOS_COL_HASH)).toString() == hash) {
+                QMetaObject::invokeMethod(&rp, "on_tableView_clicked", Q_ARG(QModelIndex, index));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // What the Verifactu dialog and the AEAT comparison dialog offered.
+    struct AeatQuery {
+        bool hadRetry = false, hadQuery = false;
+        bool compared = false;               // the comparison dialog was shown
+        QString summary, aeatCsv, applyTip;
+        bool applyEnabled = false;
+    };
+
+    static void recordComparison(QWidget *w, AeatQuery &q)
+    {
+        q.compared = true;
+        q.summary = w->findChild<QLabel *>("lblSummary")->text();
+        q.aeatCsv = w->findChild<QTableWidget *>("tableCompare")->item(3, 1)->text();
+        auto *apply = w->findChild<QPushButton *>("btnApply");
+        q.applyEnabled = apply->isEnabled();
+        q.applyTip = apply->toolTip();
+    }
+
+    // Recogida -> Verifactu button on the selected row. With `query`, presses
+    // "Consultar en AEAT" and records the comparison dialog, closing it without
+    // adopting; otherwise just records which buttons were offered.
+    AeatQuery openVerifactuDialog(RecogPrendas &rp, bool query)
+    {
+        AeatQuery q;
+        m_driver->expect(ModalDriver::named("verifactuDialog"), [&q, query](QWidget *w) {
+            q.hadRetry = w->findChild<QPushButton *>("btnRetry") != nullptr;
+            auto *btnQuery = w->findChild<QPushButton *>("btnQuery");
+            q.hadQuery = btnQuery != nullptr;
+            if (query && btnQuery)
+                btnQuery->click();
+            else
+                qobject_cast<QDialog *>(w)->reject();
+        });
+        if (query)
+            m_driver->expect(ModalDriver::named("aeatReconcileDialog"), [&q](QWidget *w) {
+                recordComparison(w, q);
+                qobject_cast<QDialog *>(w)->reject();
+            });
+        rp.findChild<QPushButton *>("pb_verifactu")->click();
+        if (query && q.hadQuery) {
+            QElapsedTimer t;
+            t.start();
+            while (!q.compared && t.elapsed() < 10000)
+                QTest::qWait(30);
+        }
+        m_driver->clear();
+        return q;
     }
 
 private slots:
@@ -93,6 +167,7 @@ private slots:
         m_verifactu = new VerifactuIntegration(this);
         QVERIFY2(m_verifactu->initialize(), "Verifactu client must initialise from the test settings");
         m_popups = new ModalAutoCloser(this);
+        m_driver = new ModalDriver(this);
     }
 
     void cleanupTestCase()
@@ -106,6 +181,7 @@ private slots:
         AppSettings::instance()->setVerifactuPendingRecoveryEnabled(false);
         m_server.clear();
         m_popups->clear();
+        m_driver->clear();
     }
 
     // MainWindow: an unpaid ticket is stored SIN COBRAR and nothing is sent; a paid
@@ -356,6 +432,133 @@ private slots:
         first.getTicketInfo();
         QVERIFY(first.resolveQrCode().isNull());
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);              // no second request
+    }
+
+    // Recogida, Cobrar: AEAT answers after PayDialog's 5 s wait. The payment is kept
+    // PENDIENTE, Recogida takes over the in-flight request, and the late reply marks
+    // the rows ENVIADA and says the factura with QR can now be printed.
+    void test_recogida_lateReplyAdoptedAfterPayDialogGivesUp()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "1100", "h1100a", "10.00", today()));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 7000;
+        m_server.enqueue("Create", slow);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "1100", "h1100a"));
+        m_driver->expect(ModalDriver::ofType<PayDialog>(), [](QWidget *w) {
+            QMetaObject::invokeMethod(w, "onCobrarClicked");
+        });
+        rp.findChild<QPushButton *>("pb_pay_all")->click();     // returns when PayDialog gives up (5 s)
+
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(scalar("SELECT pagado || '|' || verifactu_estado FROM ingresos WHERE hash='h1100a'"),
+                 QStringLiteral("SI|PENDIENTE"));
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h1100a'"),
+                                  QStringLiteral("ENVIADA"), 10000);
+        QVERIFY(scalar("SELECT verifactu_csv FROM ingresos WHERE hash='h1100a'").startsWith("A-FAKE"));
+        QVERIFY2(rp.statusBar()->currentMessage().contains("ya se puede imprimir la factura con QR"),
+                 qPrintable(rp.statusBar()->currentMessage()));
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+    }
+
+    // Recogida, Verifactu dialog on an ERROR row: Reintentar is answered "duplicate",
+    // the app asks AEAT by itself, the comparison dialog shows the matching record,
+    // and "Actualizar con los datos de AEAT" adopts its CSV.
+    void test_recogida_duplicateRetry_comparisonDialogAdoptsAeatCsv()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "1200", "h1200a", "25.00", "10-09-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR', "
+                                "verifactu_error = 'Tiempo de espera agotado' WHERE hash='h1200a'"));
+        FakeVerifactuServer::Reply dup;
+        dup.body = FakeVerifactuServer::rejectedReply("3000", "Registro de factura duplicado: ya existe");
+        m_server.enqueue("Create", dup);
+        FakeVerifactuServer::Reply found;
+        found.body = FakeVerifactuServer::queryReply("1200", "2026-09-10", 25.0, "A-AEAT1200");
+        m_server.enqueue("GetFilteredList", found);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "1200", "h1200a"));
+        AeatQuery q;
+        m_driver->expect(ModalDriver::named("verifactuDialog"), [&q](QWidget *w) {
+            q.hadRetry = w->findChild<QPushButton *>("btnRetry") != nullptr;
+            q.hadQuery = w->findChild<QPushButton *>("btnQuery") != nullptr;
+            if (auto *retry = w->findChild<QPushButton *>("btnRetry"))
+                retry->click();
+        });
+        m_driver->expect(ModalDriver::named("aeatReconcileDialog"), [&q](QWidget *w) {
+            recordComparison(w, q);
+            w->findChild<QPushButton *>("btnApply")->click();
+        });
+        rp.findChild<QPushButton *>("pb_verifactu")->click();
+
+        QVERIFY(q.hadRetry);
+        QVERIFY(q.hadQuery);
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos "
+                                         "WHERE hash='h1200a'"),
+                                  QStringLiteral("ENVIADA|A-AEAT1200"), 15000);
+        QVERIFY(q.compared);
+        QVERIFY2(q.summary.contains("coinciden con los del ticket"), qPrintable(q.summary));
+        QCOMPARE(q.aeatCsv, QStringLiteral("A-AEAT1200"));
+        QVERIFY(q.applyEnabled);
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+        QCOMPARE(m_server.requestsTo("GetFilteredList").size(), 1);
+        QTRY_VERIFY(m_popups->sawMessageContaining("se ha actualizado con el CSV de AEAT"));
+    }
+
+    // Recogida, "Consultar en AEAT" when nothing can be adopted: AEAT does not hold
+    // the invoice, holds it with different data, or the row is already ENVIADA
+    // (informational only). And the buttons each row offers: Reintentar only on
+    // ERROR, Consultar on any paid row, neither on an unpaid one.
+    void test_recogida_aeatQuery_noAdoptionUnlessItMatches()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "1300", "h1300a", "25.00", "10-09-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR' WHERE hash='h1300a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "1400", "h1400a", "18.00", "11-09-2026", "A-ORIG1400"));
+        QVERIFY(E2e::seedGarment(m_db, "1500", "h1500a", "7.00", today()));
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+
+        // Not found: the default GetFilteredList reply is an empty list.
+        QVERIFY(selectRow(rp, "1300", "h1300a"));
+        const AeatQuery notFound = openVerifactuDialog(rp, true);
+        QVERIFY(notFound.hadRetry && notFound.hadQuery);
+        QVERIFY(notFound.compared);
+        QVERIFY2(notFound.summary.contains("no ha devuelto ninguna factura"), qPrintable(notFound.summary));
+        QVERIFY(!notFound.applyEnabled);
+
+        // Found, but the amount differs from the ticket.
+        FakeVerifactuServer::Reply other;
+        other.body = FakeVerifactuServer::queryReply("1300", "2026-09-10", 99.0, "A-OTHER1300");
+        m_server.enqueue("GetFilteredList", other);
+        QVERIFY(selectRow(rp, "1300", "h1300a"));
+        const AeatQuery mismatch = openVerifactuDialog(rp, true);
+        QVERIFY(mismatch.compared);
+        QVERIFY2(mismatch.summary.contains("NO coinciden"), qPrintable(mismatch.summary));
+        QVERIFY(!mismatch.applyEnabled);
+
+        // Already ENVIADA: no Reintentar; the query matches but is informational only.
+        FakeVerifactuServer::Reply same;
+        same.body = FakeVerifactuServer::queryReply("1400", "2026-09-11", 18.0, "A-ORIG1400");
+        m_server.enqueue("GetFilteredList", same);
+        QVERIFY(selectRow(rp, "1400", "h1400a"));
+        const AeatQuery settled = openVerifactuDialog(rp, true);
+        QVERIFY(!settled.hadRetry && settled.hadQuery);
+        QVERIFY(settled.compared);
+        QVERIFY(!settled.applyEnabled);
+        QVERIFY2(settled.applyTip.contains("solo informativa"), qPrintable(settled.applyTip));
+
+        // Unpaid: no invoice, so neither button.
+        QVERIFY(selectRow(rp, "1500", "h1500a"));
+        const AeatQuery unpaid = openVerifactuDialog(rp, false);
+        QVERIFY(!unpaid.hadRetry && !unpaid.hadQuery);
+
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+        QCOMPARE(m_server.requestsTo("GetFilteredList").size(), 3);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h1300a'"), QStringLiteral("ERROR"));
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

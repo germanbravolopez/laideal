@@ -719,6 +719,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     const int rowSeq    = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
 
     QDialog *dlg = new QDialog(this);
+    dlg->setObjectName("verifactuDialog");   // stable names for the e2e test bench
     dlg->setWindowTitle("Verifactu - Ticket " + ticketNum);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -747,6 +748,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     const bool verifactuUsable = m_verifactuIntegration && m_verifactuIntegration->isConfigured();
     if (stateEnum == VerifactuEstado::Error && verifactuUsable) {
         QPushButton *btnRetry = new QPushButton("Reintentar envío a AEAT", dlg);
+        btnRetry->setObjectName("btnRetry");
         connect(btnRetry, &QPushButton::clicked, this, [this, dlg, ticketNum, rowSeq]() {
             dlg->accept();
             retryVerifactuSubmit(ticketNum, rowSeq);
@@ -763,6 +765,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
                              || stateEnum == VerifactuEstado::Rectificada;
     if (verifactuUsable && rowPaid) {
         QPushButton *btnQuery = new QPushButton("Consultar en AEAT", dlg);
+        btnQuery->setObjectName("btnQuery");
         btnQuery->setToolTip(alreadySettled
             ? "Consulta a AEAT los datos registrados de esta factura (solo informativo)."
             : "Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV.");
@@ -869,10 +872,12 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     const bool canAdopt = matches && rec.hasUsableCsv() && !localAlreadySettled;
 
     QDialog dlg(this);
+    dlg.setObjectName("aeatReconcileDialog");   // stable names for the e2e test bench
     dlg.setWindowTitle(tr("Consulta AEAT - %1").arg(invoiceId));
     auto *layout = new QVBoxLayout(&dlg);
 
     auto *summary = new QLabel(&dlg);
+    summary->setObjectName("lblSummary");
     summary->setTextFormat(Qt::RichText);
     summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     if (!rec.parsed) {
@@ -913,6 +918,7 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     layout->addWidget(summary);
 
     auto *table = new QTableWidget(4, 3, &dlg);
+    table->setObjectName("tableCompare");
     table->setHorizontalHeaderLabels({ tr("Campo"), tr("AEAT"), tr("Ticket") });
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -945,6 +951,7 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
 
     auto *btnRow = new QHBoxLayout();
     auto *btnApply = new QPushButton(tr("Actualizar con los datos de AEAT"), &dlg);
+    btnApply->setObjectName("btnApply");
     btnApply->setEnabled(canAdopt);
     if (!canAdopt && localAlreadySettled)
         btnApply->setToolTip(tr("El ticket ya está registrado localmente; "

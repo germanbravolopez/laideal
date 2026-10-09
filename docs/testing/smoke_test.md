@@ -155,14 +155,13 @@ Then the Teardown, and A3 once more on the final log.
 
 ---
 
-## Not covered anywhere yet
+## The real AEAT round trip
 
-The real AEAT round trip (accepted reply, QR on the printed factura, late reply adopted in
-Recogida, the duplicate → "Consultar en AEAT" comparison dialog) is no longer checked by hand,
-since that would register smoke tickets in the shop's AEAT records. Its logic is covered by
-`test_e2e_verifactu` and the unit suites; the two Recogida screens are an open item in
-`docs/progress_tracker.md`. The one real-AEAT check left is a single real ticket right after the
-production switch (see that tracker row).
+Not checked by hand, since that would register smoke tickets in the shop's AEAT records. The
+end-to-end bench covers it against the fake server: the accepted reply and QR request, the late
+reply adopted in Recogida, the duplicate → "Consultar en AEAT" comparison dialog
+(`test_e2e_verifactu`, `test_e2e_app`). The one real-AEAT check left is a single real ticket right
+after the production switch (see that row in `docs/progress_tracker.md`).
 
 ## Findings from the 10.9 run
 

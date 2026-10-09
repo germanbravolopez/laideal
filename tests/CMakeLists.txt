@@ -230,6 +230,7 @@ add_executable(test_e2e_app
     support/fakeverifactuserver.h
     support/fakeverifactuserver.cpp
     support/modalautocloser.h
+    support/modaldriver.h
 )
 target_include_directories(test_e2e_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support
