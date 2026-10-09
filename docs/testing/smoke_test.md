@@ -22,6 +22,8 @@ query path is skipped locally. Never run it with a key: `TEST_ENDPOINT` and `PRO
 lands in the shop's own AEAT records. Its number would also collide with a real ticket the shop
 issues later.
 
+*Possible future change:* if IreneSolutions confirms that production uses a different URL from testing, a test key would only ever reach the AEAT test environment and the real-AEAT checks could come back. The conditions, including a fresh ticket-number base per run, are in the "Switch Verifactu to PRODUCTION" row of `docs/progress_tracker.md`. Until then, keep the key removed.
+
 **Never test against the live database.** Work on a copy of a backup, with `ingresos` and `gastos`
 emptied (step 1.3), so the only tickets are the seeded ones below.
 
