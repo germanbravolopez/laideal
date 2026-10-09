@@ -994,6 +994,62 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     return events;
 }
 
+bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
+                       QVector<AeatExportRecord> &records)
+{
+    records.clear();
+    if (dbNotConfigured(db, __func__)) return false;
+    if (!db.open()) {
+        qWarning() << "aeatExportRecords: db.open() failed -" << db.lastError().text();
+        return false;
+    }
+    // Rows of one event share its dates, CSV, payload and ids, so MAX picks them.
+    // Grouping also by CSV keeps two submissions apart should old data ever share a seq.
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, MAX(fecha_pago), SUM(importe), "
+              "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
+              "       COALESCE(MAX(verifactu_estado), ''), COALESCE(MAX(fecha_anulacion), ''), "
+              "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
+              "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), '') "
+              "FROM ingresos "
+              "WHERE pagado = 'SI' "
+              "  AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
+              "       OR (verifactu_csv IS NOT NULL AND verifactu_csv != '')) "
+              "  AND ((" + kFechaPagoIso + " >= date(:from) AND " + kFechaPagoIso + " <= date(:to)) "
+              "       OR (" + kFechaAnulacionIso + " >= date(:from2) AND " + kFechaAnulacionIso + " <= date(:to2))) "
+              "GROUP BY n_recibo, verifactu_invoice_seq, COALESCE(verifactu_csv, '') "
+              "ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER), verifactu_invoice_seq");
+    q.bindValue(":from",  from.toString(Qt::ISODate));
+    q.bindValue(":to",    to.toString(Qt::ISODate));
+    q.bindValue(":from2", from.toString(Qt::ISODate));
+    q.bindValue(":to2",   to.toString(Qt::ISODate));
+    if (!q.exec()) {
+        qWarning() << "aeatExportRecords: SELECT failed -" << q.lastError().text();
+        db.close();
+        return false;
+    }
+    while (q.next()) {
+        AeatExportRecord r;
+        r.nRecibo           = q.value(0).toString();
+        r.seq               = q.value(1).toInt();
+        r.fechaPago         = q.value(2).toString();
+        r.importe           = q.value(3).toDouble();
+        r.invoiceId         = q.value(4).toString();
+        r.csv               = q.value(5).toString();
+        r.estado            = q.value(6).toString();
+        r.fechaAnulacion    = q.value(7).toString();
+        r.rectifiesNRecibo  = q.value(8).toString();
+        r.rectificationType = q.value(9).toString();
+        r.xml               = q.value(10).toString();
+        // Legacy rows predate the stored id; they were sent under the same rule.
+        if (r.invoiceId.isEmpty())
+            r.invoiceId = verifactuInvoiceId(r.nRecibo, r.seq);
+        records.append(r);
+    }
+    db.close();
+    return true;
+}
+
 
 void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                  const VerifactuResult &result, int seq)

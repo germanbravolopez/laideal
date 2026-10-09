@@ -25,7 +25,10 @@
 #include <QTableView>
 #include <QTableWidget>
 #include <QTemporaryDir>
+#include <QBuffer>
+#include <QXmlStreamReader>
 
+#include "aeatexport.h"
 #include "appsettings.h"
 #include "cancelinvoicedialog.h"
 #include "contabilidad.h"
@@ -559,6 +562,63 @@ private slots:
         QVERIFY(m_server.requestsTo("Create").isEmpty());
         QCOMPARE(m_server.requestsTo("GetFilteredList").size(), 3);
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h1300a'"), QStringLiteral("ERROR"));
+    }
+
+    // Exportar registros AEAT, as the menu runs it (aeatExportRecords + the XML
+    // writer): one <Registro> per invoice AEAT holds - a two-garment payment is one
+    // record with the event total, a later partial payment its own "<n>-1" record,
+    // an invoice known only by its CSV is marked sinPayload, an earlier invoice
+    // cancelled in the period carries fechaAnulacion - each stored payload inlined
+    // once, and the document well-formed.
+    void test_aeatExport_oneRegistroPerPaymentEvent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "1600", "h1600a", "10.00", "05-03-2026", "CSV-1600"));
+        QVERIFY(E2e::seedSentGarment(m_db, "1600", "h1600b", "4.50", "05-03-2026", "CSV-1600"));
+        QVERIFY(E2e::seedSentGarment(m_db, "1600", "h1600c", "6.00", "20-03-2026", "CSV-1600-1"));
+        QVERIFY(E2e::seedGarment(m_db, "1600", "h1600d", "3.00", "05-03-2026"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '1600-1' "
+                                "WHERE hash='h1600c'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
+                                "'<?xml version=\"1.0\"?><RegistroAlta><IDFactura>' || verifactu_invoice_id || "
+                                "'</IDFactura></RegistroAlta>' WHERE pagado = 'SI'"));
+
+        // Recovered with "Consultar en AEAT": CSV only. Cancelled in March, issued in January.
+        QVERIFY(E2e::seedSentGarment(m_db, "1700", "h1700a", "5.00", "10-03-2026", "CSV-1700"));
+        QVERIFY(E2e::seedSentGarment(m_db, "1800", "h1800a", "12.00", "05-01-2026", "CSV-1800"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
+                                "'<RegistroAlta><IDFactura>1800</IDFactura></RegistroAlta>', "
+                                "verifactu_estado = 'ANULADA', fecha_anulacion = '15-03-2026' WHERE hash='h1800a'"));
+
+        QVector<AeatExportRecord> records;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), records));
+        QBuffer buffer;
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        const int written = writeAeatExportXml(&buffer, records, QDate(2026, 3, 1), QDate(2026, 3, 31),
+                                               "B00000000", "Tintoreria E2E");
+        buffer.close();
+        QCOMPARE(written, 4);
+
+        QXmlStreamReader xml(buffer.data());
+        QStringList registros, payloadIds;
+        while (!xml.atEnd()) {
+            if (xml.readNext() != QXmlStreamReader::StartElement)
+                continue;
+            if (xml.name() == QLatin1String("Registro"))
+                registros << xml.attributes().value("invoiceId").toString() + "|"
+                             + xml.attributes().value("fechaPago").toString() + "|"
+                             + xml.attributes().value("importe").toString() + "|"
+                             + xml.attributes().value("csv").toString() + "|"
+                             + xml.attributes().value("fechaAnulacion").toString() + "|"
+                             + xml.attributes().value("sinPayload").toString();
+            else if (xml.name() == QLatin1String("IDFactura"))
+                payloadIds << xml.readElementText();
+        }
+        QVERIFY2(!xml.hasError(), qPrintable(xml.errorString()));
+        QCOMPARE(registros, QStringList({ "1800|05-01-2026|12.00|CSV-1800|15-03-2026|",
+                                          "1600|05-03-2026|14.50|CSV-1600||",
+                                          "1700|10-03-2026|5.00|CSV-1700||1",
+                                          "1600-1|20-03-2026|6.00|CSV-1600-1||" }));
+        QCOMPARE(payloadIds, QStringList({ "1800", "1600", "1600-1" }));
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

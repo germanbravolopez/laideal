@@ -21,6 +21,7 @@
 #include "updaterdialog.h"
 #include "pendingsubmitsdialog.h"
 #include "version.h"
+#include "aeatexport.h"
 #include <QTimer>
 #include <QThread>
 #include <QEventLoop>
@@ -37,8 +38,6 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
-#include <QRegularExpression>
-#include <QXmlStreamWriter>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -1084,76 +1083,34 @@ void MainWindow::on_actionExportar_registros_aeat_triggered()
         QDir::homePath() + "/" + suggestedName, "XML (*.xml)");
     if (filePath.isEmpty()) return;
 
-    // Step 2: query rows with non-empty stored XML. We include every row that was
-    // submitted to AEAT regardless of its current local estado (ENVIADA, ANULADA,
-    // RECTIFICADA) - Hacienda has the corresponding records on their side too.
-    // The verifactu_xml column itself is the proof of submission.
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, fecha_recepcion, importe, verifactu_csv, verifactu_xml "
-              "FROM ingresos "
-              "WHERE verifactu_xml IS NOT NULL AND verifactu_xml != '' "
-              "ORDER BY fecha_recepcion, n_recibo");
-    if (!q.exec()) {
-        qWarning() << "Exportar registros AEAT: SELECT failed -" << q.lastError().text();
-        db.close();
+    // One record per invoice submitted to AEAT (payment event), any current estado:
+    // Hacienda holds cancelled and rectified invoices too.
+    QVector<AeatExportRecord> records;
+    if (!aeatExportRecords(db, from, to, records)) {
         QMessageBox::critical(this, "Exportar registros AEAT",
-                              "Error al consultar la base de datos.",
+                              "Error al consultar la base de datos. No se ha creado el archivo.",
                               QMessageBox::Ok);
         return;
     }
 
-    // Step 3: write the envelope file
     QFile out(filePath);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        db.close();
         QMessageBox::critical(this, "Exportar registros AEAT",
                               "No se pudo abrir el archivo de salida para escritura.",
                               QMessageBox::Ok);
         return;
     }
-
-    QXmlStreamWriter w(&out);
-    w.setAutoFormatting(true);
-    w.writeStartDocument();
-    w.writeStartElement("RegistrosFacturacionLaIdeal");
-    w.writeAttribute("fechaDesde", from.toString("dd-MM-yyyy"));
-    w.writeAttribute("fechaHasta", to.toString("dd-MM-yyyy"));
-    w.writeAttribute("generadoEl", QDateTime::currentDateTime().toString(Qt::ISODate));
-    w.writeAttribute("nif",        AppSettings::instance()->verifactuNif());
-    w.writeAttribute("emisor",     AppSettings::instance()->verifactuName());
-
-    // Strip the XML declaration of each stored payload so the outer document stays
-    // well-formed when payloads are concatenated.
-    static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
-
-    int count = 0;
-    while (q.next()) {
-        const QString fechaStr = q.value("fecha_recepcion").toString();
-        const QDate fecha = QDate::fromString(fechaStr, "dd-MM-yyyy");
-        if (!fecha.isValid() || fecha < from || fecha > to)
-            continue;
-
-        QString payload = q.value("verifactu_xml").toString();
-        payload.remove(xmlDeclRx);
-
-        w.writeStartElement("Registro");
-        w.writeAttribute("nRecibo",        q.value("n_recibo").toString());
-        w.writeAttribute("fechaRecepcion", fechaStr);
-        w.writeAttribute("importe",        q.value("importe").toString());
-        w.writeAttribute("csv",            q.value("verifactu_csv").toString());
-        // Flush the writer's state before injecting raw bytes (QXmlStreamWriter
-        // writes directly to the device, so this keeps the byte stream consistent).
-        w.writeCharacters(QString());
-        out.write(payload.toUtf8());
-        w.writeEndElement(); // Registro
-        ++count;
-    }
-
-    w.writeEndElement(); // RegistrosFacturacionLaIdeal
-    w.writeEndDocument();
+    const int count = writeAeatExportXml(&out, records, from, to,
+                                         AppSettings::instance()->verifactuNif(),
+                                         AppSettings::instance()->verifactuName());
     out.close();
-    db.close();
+    if (out.error() != QFileDevice::NoError) {
+        qWarning() << "Exportar registros AEAT: write failed -" << out.errorString();
+        QMessageBox::critical(this, "Exportar registros AEAT",
+                              "Error al escribir el archivo:\n" + out.errorString(),
+                              QMessageBox::Ok);
+        return;
+    }
 
     if (count == 0) {
         QMessageBox::information(this, "Exportar registros AEAT",

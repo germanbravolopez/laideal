@@ -872,6 +872,70 @@ private slots:
         QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
     }
 
+    // Exportar registros AEAT: one record per payment event AEAT holds, not per
+    // garment row; its literal InvoiceID, payment date and total; in the range by
+    // payment or cancellation date; unpaid rows and rows AEAT never confirmed are
+    // left out.
+    void test_aeatExportRecords_onePerPaymentEvent()
+    {
+        const char *ins = "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
+                          "pagado, estado, edit_lock, hash, verifactu_csv, verifactu_estado, "
+                          "verifactu_invoice_seq, verifactu_invoice_id, verifactu_xml, fecha_anulacion, "
+                          "verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+                          "VALUES (:n, '', :rec, :pago, :imp, :pag, '', 0, :h, :csv, :est, :seq, :id, :xml, "
+                          ":anul, :rect, :rtype)";
+        auto row = [&](const char *n, const char *h, const char *rec, const char *pago, const char *imp,
+                       const char *pag, const char *csv, const char *est, int seq, const char *id,
+                       const char *xml, const char *anul = "", const char *rect = "", const char *rtype = "") {
+            exec(ins, { {":n", n}, {":rec", rec}, {":pago", pago}, {":imp", imp}, {":pag", pag},
+                        {":h", h}, {":csv", csv}, {":est", est}, {":seq", seq}, {":id", id}, {":xml", xml},
+                        {":anul", anul}, {":rect", rect}, {":rtype", rtype} });
+        };
+        // Ticket 100: received in February, first event (two garments) paid 05-03,
+        // second event paid 20-03, one garment still unpaid.
+        row("100", "a", "10-02-2026", "05-03-2026", "10.00", "SI", "CSV1", "ENVIADA", 0, "100", "<x>e0</x>");
+        row("100", "b", "10-02-2026", "05-03-2026", "4.50",  "SI", "CSV1", "ENVIADA", 0, "100", "<x>e0</x>");
+        row("100", "c", "10-02-2026", "20-03-2026", "6.00",  "SI", "CSV2", "ENVIADA", 1, "100-1", "<x>e1</x>");
+        row("100", "d", "10-02-2026", "",           "3.00",  "NO", "",     "SIN COBRAR", 0, "", "");
+        // Ticket 101: legacy row without stored id.
+        row("101", "e", "01-03-2026", "02-03-2026", "8.00",  "SI", "CSV3", "ENVIADA", 0, "", "<x>e2</x>");
+        // Ticket 102: paid, AEAT never answered (no CSV, no payload) - nothing to export.
+        row("102", "f", "01-03-2026", "03-03-2026", "9.00",  "SI", "",     "PENDIENTE", 0, "", "");
+        // Ticket 103: paid in April - outside the range.
+        row("103", "g", "01-03-2026", "02-04-2026", "7.00",  "SI", "CSV4", "ENVIADA", 0, "103", "<x>e3</x>");
+        // Ticket 104: recovered with "Consultar en AEAT" - CSV but no stored payload.
+        row("104", "h", "01-03-2026", "10-03-2026", "5.00",  "SI", "CSV5", "ENVIADA", 0, "104", "");
+        // Ticket 105: paid in January, cancelled in March - in March by its cancellation.
+        row("105", "i", "05-01-2026", "05-01-2026", "12.00", "SI", "CSV6", "ANULADA", 0, "105", "<x>e4</x>", "15-03-2026");
+        // Ticket 106: rectificativa of 100 by substitution.
+        row("106", "j", "25-03-2026", "25-03-2026", "12.00", "SI", "CSV7", "ENVIADA", 0, "106", "<x>e5</x>", "", "100", "S");
+
+        QVector<AeatExportRecord> r;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r));
+        QStringList ids;
+        for (const AeatExportRecord &e : r)
+            ids << e.invoiceId;
+        QCOMPARE(ids, QStringList({ "105", "101", "100", "104", "100-1", "106" }));   // by issue date
+        QCOMPARE(r[0].fechaAnulacion, QStringLiteral("15-03-2026"));
+        QCOMPARE(r[0].estado, QStringLiteral("ANULADA"));
+        QCOMPARE(r[2].seq, 0);
+        QCOMPARE(r[2].importe, 14.5);                              // both garments, unpaid one excluded
+        QCOMPARE(r[2].csv, QStringLiteral("CSV1"));
+        QCOMPARE(r[2].xml, QStringLiteral("<x>e0</x>"));
+        QVERIFY(r[3].xml.isEmpty());                               // known by its CSV only
+        QCOMPARE(r[3].csv, QStringLiteral("CSV5"));
+        QCOMPARE(r[4].fechaPago, QStringLiteral("20-03-2026"));
+        QCOMPARE(r[4].importe, 6.0);
+        QCOMPARE(r[5].rectifiesNRecibo, QStringLiteral("100"));
+        QCOMPARE(r[5].rectificationType, QStringLiteral("S"));
+
+        // The range is inclusive on both ends; reception dates do not count.
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 5), QDate(2026, 3, 5), r));
+        QCOMPARE(r.size(), 1);
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 2, 1), QDate(2026, 2, 28), r));
+        QCOMPARE(r.size(), 0);
+    }
+
 
 
     void test_readClientPhones()

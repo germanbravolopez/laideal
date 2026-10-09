@@ -201,6 +201,29 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
 // never fires. Ordered newest ticket first, then by seq.
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso);
 
+// One invoice submitted to AEAT, as exported for Hacienda (Exportar registros AEAT).
+struct AeatExportRecord {
+    QString nRecibo;
+    int     seq = 0;
+    QString invoiceId;    // literal AEAT InvoiceID ("<n>" or "<n>-<seq>")
+    QString fechaPago;    // dd-MM-yyyy, the date the invoice was issued under
+    double  importe = 0.0; // the event's total, all its garments
+    QString csv;
+    QString estado;       // current local estado (ENVIADA / ANULADA / RECTIFICADA...)
+    QString fechaAnulacion;    // dd-MM-yyyy when cancelled / substituted, else empty
+    QString rectifiesNRecibo;  // a rectificativa: the ticket it corrects
+    QString rectificationType; // a rectificativa: "S" (substitution) or "I" (differences)
+    QString xml;          // the stored AEAT payload; empty when only the CSV is known
+};
+
+// One record per paid payment event (n_recibo, verifactu_invoice_seq) that AEAT holds -
+// a stored payload or a CSV (e.g. recovered with "Consultar en AEAT") - issued
+// (fecha_pago) or cancelled (fecha_anulacion) between from and to inclusive, any
+// estado. Ordered by issue date, then number. Returns false when the query fails, so
+// a failure is never mistaken for "no records".
+bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
+                       QVector<AeatExportRecord> &records);
+
 // One paid ticket behind the Contabilidad ingresos summary: its garment rows in
 // the period aggregated by n_recibo (importe is IVA included).
 struct IncomeTicketDetail {

@@ -27,6 +27,8 @@ add_library(laideal_app STATIC
     rectifyinvoicedialog.cpp
     pendingsubmitsdialog.h
     pendingsubmitsdialog.cpp
+    aeatexport.h
+    aeatexport.cpp
 )
 
 target_include_directories(laideal_app PUBLIC
