@@ -140,7 +140,7 @@ The QR itself is checked by `test_e2e_app` (when it is requested) and `test_tick
 | # | Step | Expected |
 |---|------|----------|
 | D1 | Contabilidad → Trimestral, Q3 2026 (no lock) | PDF opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 €; IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows |
-| D2 | Contabilidad → Trimestral, Q4 2026 | "Anulaciones / rectificaciones del periodo" shows ticket 5 at −12.10 € with its annex table; Q3 regenerated is unchanged |
+| D2 | Contabilidad → Trimestral, Q4 2026 | "Anulaciones / rectificaciones del periodo" shows ticket 5 at −12.10 € with its annex table; Q3 regenerated is unchanged. (Ticket 5 was paid in Q3, so Q3 counted it as income; Q4, where it was cancelled, takes it back. Paid and cancelled in the same quarter, the two lines net to 0.) |
 | D3 | Contabilidad → Anual 2026 | PDF renders and ends with the tickets / gastos tables |
 | D4 | Lock box | "Bloquear datos" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad |
 | D5 | Lock Q3 2026, then in Listado → ingresos edit ticket 4 (inside) and ticket 6 (outside) | Inside is blocked, outside is allowed |
