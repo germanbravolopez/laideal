@@ -244,15 +244,14 @@ void RecogPrendas::updateRowClickedToFields()
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
 }
 
-float RecogPrendas::calculatePrice()
+double RecogPrendas::calculatePrice()
 {
-    float itemPrice = readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText());
     if (ui->le_size->text().contains(",")) {
         QStringList sizeSplitted = ui->le_size->text().split(",");
         ui->le_size->setText(sizeSplitted.first() + "." + sizeSplitted.last());
     }
-    float calculatedPrice = itemPrice * ui->le_qty->text().toFloat() * ui->le_size->text().toFloat();
-    return calculatedPrice;
+    return garmentImporte(ui->le_qty->text(), ui->le_size->text(),
+                          readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
 }
 
 void RecogPrendas::on_le_search_returnPressed()
@@ -490,10 +489,12 @@ void RecogPrendas::on_le_obsv_editingFinished()
 
 void RecogPrendas::on_le_size_editingFinished()
 {
-    if (isCellClicked && ui->le_garm->text().contains("m2")) {
-        float price = calculatePrice();
+    // No size yet: nothing to price (garmentImporte reads size 0 as "no size factor").
+    if (isCellClicked && ui->le_garm->text().contains("m2")
+            && ui->le_size->text().replace(',', '.').toDouble() > 0) {
+        const double price = calculatePrice();
         if (price > 0) {
-            ui->le_price->setText(QString::number(price));
+            ui->le_price->setText(moneyText(price));
             updateDb(SIZE_AND_PRICE);
         }
     }

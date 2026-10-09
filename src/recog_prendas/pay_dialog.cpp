@@ -148,7 +148,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
         m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
         m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
-        auto *imp = new QTableWidgetItem(QString::number(q.value(6).toDouble(), 'f', 2));
+        auto *imp = new QTableWidgetItem(moneyText(q.value(6).toString()));
         imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_table->setItem(r, COL_AMOUNT,  imp);
         m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));

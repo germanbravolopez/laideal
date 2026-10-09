@@ -10,6 +10,8 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include <cmath>
+
 // ---------------------------------------------------------------------------
 // DB path - set once in main() before MainWindow is constructed
 // ---------------------------------------------------------------------------
@@ -38,6 +40,12 @@ static QString monthStr(int month)
 {
     return month < 10 ? QStringLiteral("0%1").arg(month) : QString::number(month);
 }
+
+// The row's amount is still open: unpaid, never sent to AEAT, not locked by Contabilidad.
+static const QString kAmountEditableWhere =
+    QStringLiteral(" AND COALESCE(pagado, '') != 'SI' "
+                   " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') "
+                   " AND COALESCE(edit_lock, 0) = 0");
 
 // ---------------------------------------------------------------------------
 // Public functions
@@ -177,6 +185,35 @@ void migrateDatabase(QSqlDatabase &db)
         else if (q.numRowsAffected() > 0)
             qDebug() << "migrateDatabase: relinked" << q.numRowsAffected()
                      << "split-off paid garment(s) to their AEAT invoice";
+    }
+
+    // 10.14: amounts are stored in cents. Rows still open (unpaid, never sent) that an
+    // older Recogida m2 edit stored with more decimals are rounded the way they will be
+    // charged; no invoice covers them yet. Paid rows keep what was stored.
+    {
+        QSqlQuery sel(db);
+        QVector<QPair<QString, QString>> rows;   // (n_recibo, hash)
+        QStringList values;
+        if (sel.exec("SELECT n_recibo, hash, importe FROM ingresos "
+                     "WHERE importe GLOB '*.[0-9][0-9][0-9]*'" + kAmountEditableWhere)) {
+            while (sel.next()) {
+                rows.append({ sel.value(0).toString(), sel.value(1).toString() });
+                values << moneyText(sel.value(2).toString());
+            }
+        }
+        sel.finish();
+        QSqlQuery upd(db);
+        upd.prepare("UPDATE ingresos SET importe = :imp WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
+        for (int i = 0; i < rows.size(); ++i) {
+            upd.bindValue(":imp", values[i]);
+            upd.bindValue(":n",   rows[i].first);
+            upd.bindValue(":h",   rows[i].second);
+            if (!upd.exec())
+                qWarning() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
+                           << upd.lastError().text();
+        }
+        if (!rows.isEmpty())
+            qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
     }
 
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
@@ -460,6 +497,21 @@ bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QS
     return ok;
 }
 
+// Runs one amount UPDATE; false (and logged) when the row is invoiced or missing.
+static bool execAmountUpdate(QSqlQuery &q, const char *caller, const QString &nRecibo, const QString &hash)
+{
+    if (!q.exec()) {
+        qWarning() << caller << ": UPDATE failed -" << q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        qWarning() << caller << ": refused - ticket" << nRecibo << "row" << hash
+                   << "is paid / sent to AEAT (or missing); its amount is frozen";
+        return false;
+    }
+    return true;
+}
+
 bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                               const QString &size, const QString &importe)
 {
@@ -468,14 +520,12 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET size = :sz, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":sz",  size);
-    q.bindValue(":imp", importe);
+    q.bindValue(":imp", moneyText(importe));
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateTicketSizeAndPrice: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
 }
@@ -488,14 +538,12 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":cant", cantidad);
-    q.bindValue(":imp",  importe);
+    q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateGarmentQtyAndImporte: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
 }
@@ -525,10 +573,18 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
         db.close();
         return QString();
     }
-    // In cents, so the two rows add up to exactly the original importe.
-    const qint64 totalCents = qRound64(q.value(1).toString().replace(',', '.').toDouble() * 100.0);
-    const qint64 splitCents = qRound64(double(totalCents) * nGarm / qty);
-    const auto money = [](qint64 cents) { return QString::number(cents / 100.0, 'f', 2); };
+    // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
+    // so the two rows add up to the stored importe and an older paid amount stored
+    // with more decimals is never re-rounded.
+    const double total = q.value(1).toString().replace(',', '.').toDouble();
+    const qint64 total4 = qRound64(total * 10000.0);
+    const qint64 split4 = qRound64(roundToCents(total * nGarm / qty) * 100.0) * 100;
+    const auto money = [](qint64 v4) {
+        QString text = QString::number(v4 / 10000.0, 'f', 4);
+        while (text.endsWith('0') && text.indexOf('.') < text.size() - 3)
+            text.chop(1);
+        return text;
+    };
     const QString newHash = genHash16();
     q.finish();
 
@@ -536,7 +592,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     QSqlQuery u(db);
     u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h");
     u.bindValue(":cant", QString::number(qty - nGarm));
-    u.bindValue(":imp",  money(totalCents - splitCents));
+    u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);
     u.bindValue(":h",    hash);
     bool ok = u.exec();
@@ -556,7 +612,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
               "  verifactu_rectification_type, verifactu_invoice_seq, verifactu_invoice_id, "
               "  fecha_anulacion, verifactu_cancel_xml "
               "FROM ingresos WHERE n_recibo = :n AND hash = :h");
-    i.bindValue(":imp",     money(splitCents));
+    i.bindValue(":imp",     money(split4));
     i.bindValue(":cant",    QString::number(nGarm));
     i.bindValue(":newHash", newHash);
     i.bindValue(":n",       nRecibo);
@@ -581,14 +637,12 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET servicio = :serv, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":serv", servicio);
-    q.bindValue(":imp",  importe);
+    q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateGarmentServiceAndImporte: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
 }
@@ -685,7 +739,7 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
     q.bindValue(":fecha_pago",       row.fechaPago);
     q.bindValue(":fecha_recogida",   row.fechaRecogida);
-    q.bindValue(":importe",          row.importe);
+    q.bindValue(":importe",          moneyText(row.importe));
     q.bindValue(":pagado",           row.pagado);
     q.bindValue(":estado",           row.estado);
     q.bindValue(":cantidad",         row.cantidad);
@@ -843,11 +897,28 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
 double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
 {
     const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
-    double price = quantity * unitPrice;
+    // The price list is in cents; readGarmentPrice hands a float, so re-round first.
+    double price = quantity * roundToCents(unitPrice);
     if (price < 0.0)
         return 0.0;
     const double size = sizeText.trimmed().replace(',', '.').toDouble();
-    return (size != 0.0) ? size * price : price;
+    return roundToCents((size != 0.0) ? size * price : price);
+}
+
+double roundToCents(double value)
+{
+    const double cents = value * 100.0;
+    return std::round(cents + (cents >= 0.0 ? 1e-6 : -1e-6)) / 100.0;
+}
+
+QString moneyText(double value)
+{
+    return QString::number(roundToCents(value), 'f', 2);
+}
+
+QString moneyText(const QString &value)
+{
+    return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
 }
 
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)

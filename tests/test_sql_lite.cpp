@@ -488,6 +488,59 @@ private slots:
         QVERIFY(qAbs(garmentImporte("-1", "", 5.0)) < 0.001);
         // empty quantity -> 0
         QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
+        // m2 garments land on half a cent: rounded up, as AEAT received them (ticket
+        // 30723: 2.99 m2 x 9.50 = 28.405 -> 28.41), also from a float list price
+        QCOMPARE(moneyText(garmentImporte("1", "2.99", 9.5)), QStringLiteral("28.41"));
+        QCOMPARE(moneyText(garmentImporte("1", "2,37", 9.5)), QStringLiteral("22.52"));
+        QCOMPARE(moneyText(garmentImporte("1", "1.25", double(3.3f))), QStringLiteral("4.13"));
+    }
+
+    // Money is stored in cents, half away from zero, whatever binary error the
+    // double carries (28.405 is 28.40499... as a double).
+    void test_moneyText_roundsHalfAwayFromZero()
+    {
+        QCOMPARE(moneyText(28.405), QStringLiteral("28.41"));
+        QCOMPARE(moneyText(22.515), QStringLiteral("22.52"));
+        QCOMPARE(moneyText(16.625), QStringLiteral("16.63"));
+        QCOMPARE(moneyText(36.0525), QStringLiteral("36.05"));
+        QCOMPARE(moneyText(40.7265), QStringLiteral("40.73"));
+        QCOMPARE(moneyText(-1.005), QStringLiteral("-1.01"));
+        QCOMPARE(moneyText(10.0), QStringLiteral("10.00"));
+        QCOMPARE(moneyText(QStringLiteral("10,5")), QStringLiteral("10.50"));
+        QCOMPARE(moneyText(QStringLiteral(" 12.464 ")), QStringLiteral("12.46"));
+        QCOMPARE(roundToCents(28.405), 28.41);
+    }
+
+    // Every amount writer stores two decimals, and none of them touches a row whose
+    // amount AEAT holds (or a legacy paid row): that invoice changes only through
+    // Anular / Rectificar factura. Ticket 30837 was re-priced after payment.
+    void test_amountWriters_roundAndRefuseInvoicedRows()
+    {
+        insertRow("T1", "open", "10.00", "NO", "SIN COBRAR");
+        QVERIFY(updateTicketSizeAndPrice(m_db, "T1", "open", "2.99", "28.405"));
+        QCOMPARE(scalar("SELECT size || '|' || importe FROM ingresos WHERE hash='open'"), QStringLiteral("2.99|28.41"));
+        QVERIFY(updateGarmentQtyAndImporte(m_db, "T1", "open", "2", "22,515"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("22.52"));
+        QVERIFY(updateGarmentServiceAndImporte(m_db, "T1", "open", "Plan.", "16.625"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("16.63"));
+
+        insertRow("T2", "sent", "30.00", "SI", "ENVIADA");
+        insertRow("T2", "pend", "30.00", "SI", "PENDIENTE");
+        insertRow("T2", "legacy", "30.00", "SI", "");
+        for (const char *h : { "sent", "pend", "legacy" }) {
+            QVERIFY(!updateTicketSizeAndPrice(m_db, "T2", h, "1", "36.00"));
+            QVERIFY(!updateGarmentQtyAndImporte(m_db, "T2", h, "3", "36.00"));
+            QVERIFY(!updateGarmentServiceAndImporte(m_db, "T2", h, "Plan.", "36.00"));
+        }
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(importe || ':' || cantidad || ':' || servicio || ':' || size, ' ') "
+                        "FROM ingresos WHERE n_recibo = 'T2'"),
+                 QStringLiteral("30.00:1:Lavar:0 30.00:1:Lavar:0 30.00:1:Lavar:0"));
+        // A voided garment is frozen too, and so is a row locked by Contabilidad.
+        insertRow("T3", "void", "5.00", "NO", "ANULADA");
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "T3", "void", "1", "6.00"));
+        insertRow("T3", "locked", "5.00", "NO", "SIN COBRAR");
+        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "T3", "locked", "2", "10.00"));
     }
 
     // The single source of truth for the AEAT InvoiceID format (used at submit,
@@ -993,6 +1046,14 @@ private slots:
         QVERIFY(splitGarmentRow(m_db, "401", "locked", 1).isEmpty());
         QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '401'"),
                  QStringLiteral("1|3"));
+
+        // An older paid row stored with three decimals is never re-rounded: the part
+        // split off is in cents, the original keeps the exact remainder.
+        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, cantidad, hash, verifactu_estado) "
+             "VALUES ('402', '05-04-2026', '22.515', 'SI', '3', 'm2', 'ENVIADA')");
+        const QString part = splitGarmentRow(m_db, "402", "m2", 1);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = :h", { {":h", part} }), QStringLiteral("7.51"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'm2'"), QStringLiteral("15.005"));
     }
 
     // Garments split off a paid row before 10.14 were left with an empty estado,
@@ -1029,6 +1090,20 @@ private slots:
                  QString());
         QCOMPARE(scalar("SELECT COALESCE(verifactu_estado, '') || '|' || verifactu_invoice_seq "
                         "FROM ingresos WHERE hash = 'ownEvent'"), QStringLiteral("|2"));
+    }
+
+    // Open amounts an older Recogida m2 edit stored with three or four decimals are
+    // rounded to cents, the way they will be charged; a paid amount stays as stored.
+    void test_migrateDatabase_roundsOpenAmountsToCents()
+    {
+        insertRow("M1", "open", "28.405", "NO", "SIN COBRAR");
+        insertRow("M1", "open4", "36.0525", "NO", "");
+        insertRow("M2", "paid", "22.515", "SI", "ENVIADA");
+        migrateDatabase(m_db);
+        migrateDatabase(m_db);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'open'"), QStringLiteral("28.41"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'open4'"), QStringLiteral("36.05"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'paid'"), QStringLiteral("22.515"));
     }
 
     // The suites build ingresos through the app's own migrations; the column
@@ -1209,7 +1284,7 @@ private slots:
         row.fechaRecepcion = "01-03-2026";
         row.fechaPago      = "05-03-2026";
         row.fechaRecogida  = "";
-        row.importe        = "12.50";
+        row.importe        = "12.505";
         row.pagado         = "SI";
         row.estado         = "NO";
         row.cantidad       = "2";
@@ -1224,7 +1299,7 @@ private slots:
         QCOMPARE(scalar("SELECT n_recibo FROM ingresos WHERE hash='splitHash'"), QStringLiteral("T7"));
         QCOMPARE(scalar("SELECT cliente FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Ana"));
         QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='splitHash'"), QStringLiteral("05-03-2026"));
-        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='splitHash'"), QStringLiteral("12.50"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='splitHash'"), QStringLiteral("12.51"));   // stored in cents
         QCOMPARE(scalar("SELECT cantidad FROM ingresos WHERE hash='splitHash'"), QStringLiteral("2"));
         QCOMPARE(scalar("SELECT prenda FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Pantalon"));
         QCOMPARE(scalar("SELECT servicio FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Tinte"));

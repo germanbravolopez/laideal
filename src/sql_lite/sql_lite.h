@@ -26,10 +26,16 @@ QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const Q
 float       readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &service);
 // Importe for one garment line, shared by MainWindow/AddGarment setGarmentPrice.
 // Pure (no DB): quantity * unitPrice, multiplied by a non-zero size factor (m2
-// garments), clamped to >= 0. Quantity and size are parsed with comma->dot
-// normalisation (Spanish input), matching how both are stored at save time - so
-// a size like "2,6" is not silently read as 0 (the 9.0 comma-decimal bug).
+// garments), clamped to >= 0, rounded to cents. Quantity and size are parsed with
+// comma->dot normalisation (Spanish input), matching how both are stored at save
+// time - so a size like "2,6" is not silently read as 0 (the 9.0 comma-decimal bug).
 double      garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice);
+// Money is stored and sent to AEAT in cents, rounded half away from zero (28.405 ->
+// 28.41): the tolerance absorbs binary error, so 28.405 (28.40499...) still rounds up.
+double      roundToCents(double value);
+// An importe as stored in `ingresos`: "28.41". Text input may use a decimal comma.
+QString     moneyText(double value);
+QString     moneyText(const QString &value);
 QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
                                 const QString &columnToSearch, const QString &itemToSearch,
                                 bool exactMatch, bool printMsg);
@@ -69,13 +75,19 @@ bool        markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const Q
 // OBSV: set observaciones.
 bool        updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &observaciones);
+// The amount writers below (size+price, quantity, service) only touch a row whose
+// amount is still open: unpaid, never sent to AEAT and not locked by Contabilidad. A paid row belongs to an
+// invoice AEAT registered (or a legacy payment) and is refused (false, logged);
+// its amounts change only through Anular factura / Rectificar factura. Each stores
+// the importe through moneyText().
 // SIZE_AND_PRICE: set size + importe.
 bool        updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                      const QString &size, const QString &importe);
 // SEPARATE_GARM: move nGarm of the row's garments (1 <= nGarm < cantidad) to a new
 // row that copies every other column, verifactu_* included, so the split-off
-// garments stay in the same invoice and estado. The importe is divided in
-// proportion, to the cent, keeping the sum. A row locked by Contabilidad is
+// garments stay in the same invoice and estado. The split-off part is the
+// proportional importe in cents; the original keeps the exact remainder, so the
+// sum never changes. A row locked by Contabilidad is
 // refused. Returns the new row's hash, or an empty string when nothing was written.
 QString     splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash, int nGarm);
 // QTY: set cantidad + importe.

@@ -54,7 +54,7 @@ private slots:
     void resetAllContents();
     void updateDb(UpdateDBop op, int nGarm = 0);
     void updateRowClickedToFields();
-    float calculatePrice();
+    double calculatePrice();
 
     void on_le_search_returnPressed();
     void on_cb_search_date_currentTextChanged(const QString &arg1);

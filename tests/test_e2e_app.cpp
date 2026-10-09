@@ -810,6 +810,28 @@ private slots:
                  QStringLiteral("1:3.33:ENVIADA:CSV-2500:1:2500-1 2:6.67:ENVIADA:CSV-2500:1:2500-1"));
     }
 
+    // Recogida, an m2 garment measured at pickup: 2,99 m2 of a 9.50 garment is
+    // stored as 28.41, the two-decimal amount AEAT will receive, not 28.405.
+    void test_recogida_m2SizeStoredInCents()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) "
+                                "VALUES ('Jarapa (m2)', '9.5', '0')"));
+        QVERIFY(E2e::seedGarment(m_db, "2700", "h2700a", "0.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET prenda = 'Jarapa (m2)' WHERE hash='h2700a'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "2700", "h2700a"));
+        rp.findChild<QLineEdit *>("le_size")->setText("0");               // not measured yet: not priced
+        QMetaObject::invokeMethod(&rp, "on_le_size_editingFinished");
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h2700a'"), QStringLiteral("0.00"));
+        rp.findChild<QLineEdit *>("le_size")->setText("2,99");
+        QMetaObject::invokeMethod(&rp, "on_le_size_editingFinished");
+
+        QCOMPARE(scalar("SELECT size || '|' || importe FROM ingresos WHERE hash='h2700a'"),
+                 QStringLiteral("2.99|28.41"));
+        QCOMPARE(rp.findChild<QLineEdit *>("le_price")->text(), QStringLiteral("28.41"));
+        E2e::exec(m_db, "DELETE FROM prendas WHERE nombre = 'Jarapa (m2)'");
+    }
+
     // A reply that lands once the invoice is already settled (here: a duplicate
     // rejection for rows another path registered meanwhile) changes nothing, and
     // Recogida says so instead of "Error al enviar", without asking AEAT again.
