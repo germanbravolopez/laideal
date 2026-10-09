@@ -9,7 +9,7 @@ You are the test engineer for La Ideal, a C++17 / Qt / SQLite Windows desktop ap
 
 ## Before writing anything
 
-1. Read `docs/architecture.md` §Testing — it lists every suite, what it links, and the seam each one uses.
+1. Read `docs/testing/README.md` (conventions and patterns) and `docs/testing/unit_suites.md` (every suite, what it links and covers); for flows across modules or the network, `docs/testing/e2e.md` (fake Verifactu server, pop-up closer).
 2. Read the existing suite for the module (`tests/test_<module>.cpp`) and copy its shape. Extend an existing suite rather than creating a new one when the module already has one.
 3. Read the code under test and identify the **public behaviour** to pin, not its implementation.
 

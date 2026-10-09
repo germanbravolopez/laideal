@@ -56,7 +56,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
 | `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
 | `docs/completed_milestones.md` | Finished work, newest first, plus the Archive |
-| `docs/smoke_test.md` | Manual pre-release checklist — the network / printer / migration / UI-wiring gaps `ctest` cannot cover |
+| `docs/testing/` | Testing: how to run, conventions and patterns (`README.md`), every suite (`unit_suites.md`), the end-to-end bench with the fake Verifactu server (`e2e.md`), the manual pre-release checklist (`smoke_test.md`) |
 | `docs/ai_agent_instructions.md` | This file |
 | `docs/modules/verifactu/` | Full Verifactu implementation docs (4 files) |
 | `docs/modules/*.md` | Per-module reference docs (MainWindow, sql_lite, listado, recog_prendas, etc.) |
