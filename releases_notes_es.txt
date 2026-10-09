@@ -1,5 +1,14 @@
 ﻿Versiones:
 
+10.13
+- Corrección: al anular una factura se usa la fecha con la que se emitió
+  - "Anular factura" enviaba todas las anulaciones con la fecha de recepción del ticket, mientras que la AEAT registró la factura con su fecha de pago. En un ticket cobrado al recogerlo, o cobrado en varias veces, la AEAT podía rechazar la anulación. Ahora cada factura se anula con su propia fecha de pago, que se muestra en una nueva columna "Fecha factura" del diálogo.
+- Mejora: "Exportar registros AEAT" muestra cada factura una sola vez
+  - Un registro por cada factura enviada a la AEAT, con su número de factura (también en los cobros parciales), su fecha de pago y su importe total. Las anulaciones hechas en el periodo aparecen como un registro propio, con el registro de anulación de la AEAT. También se incluyen las facturas recuperadas con "Consultar en AEAT", y un error de la base de datos o del disco ahora muestra un mensaje en lugar de crear un archivo vacío.
+- Mejora: una prenda añadida ya cobrada con "Añadir nuevas prendas" se envía a la AEAT en el momento, en lugar de al volver a abrir la aplicación.
+- Corrección: en Contabilidad, un ticket cobrado en un trimestre y anulado en otro posterior ya no reduce el número de tickets de ese trimestre posterior cuando el resto del ticket se cobra en él.
+- Cambio: en Configuración, la nota bajo la ruta de la base de datos deja claro que es el cambio de base de datos lo que requiere reiniciar.
+
 10.12
 - Nuevo: las anulaciones posteriores al cierre de un trimestre ya no lo modifican
   - Un ticket anulado en la AEAT o sustituido por una factura rectificativa después de cerrar su trimestre ya no altera ese trimestre: el trimestre cerrado lo mantiene, y el trimestre en que se produce la anulación lo muestra como una línea negativa ("Anulaciones / rectificaciones del periodo") con su propia tabla al final del informe. Un ticket cobrado y anulado en el mismo periodo ya no cuenta en "Número de tickets".
