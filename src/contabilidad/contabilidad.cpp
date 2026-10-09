@@ -207,7 +207,8 @@ void Contabilidad::generateContabilidad()
             filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
         }
         contabilidadHtml = ReportHtml::documentOpen(title, subtitle)
-                + renderSection(figuresFromDetails(income, regs, expenses, ivaRate), "Resumen del periodo")
+                + renderSection(figuresFromDetails(income, regs, expenses, ivaRate, start, endExclusive),
+                                "Resumen del periodo")
                 + renderDetailTables("Detalle del periodo", income, regs, expenses, ivaRate)
                 + ReportHtml::documentClose();
     }
@@ -221,15 +222,17 @@ void Contabilidad::generateContabilidad()
             const int i = trim - 1;
             const bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
                                                    readLockForQuarter(db, "gastos", trim, year)) == 1;
+            QDate quarterStart, quarterEnd;
+            periodRangeFor(Anual, trim, year, quarterStart, quarterEnd);
             const PeriodFigures f = figuresFromDetails(details.income[i], details.regularizations[i],
-                                                       details.expenses[i], ivaRate);
+                                                       details.expenses[i], ivaRate, quarterStart, quarterEnd);
             annual.accumulate(f);
             invalidAmounts += invalidAmountCount(details.income[i], details.regularizations[i], details.expenses[i]);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
                     + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
         }
-        annual.ingTickets = yearTicketCount(details);   // distinct over the year, not the quarterly sum
+        annual.ingTickets = yearTicketCount(details, year);   // distinct over the year, not the quarterly sum
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
         for (int trim = 1; trim < 5; trim++)
@@ -316,7 +319,8 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
 Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<IncomeTicketDetail> &income,
                                                              const QVector<RegularizationDetail> &regularizations,
                                                              const QVector<ExpenseDetail> &expenses,
-                                                             double ivaRate)
+                                                             double ivaRate,
+                                                             const QDate &periodStart, const QDate &periodEnd)
 {
     double ingImporte = 0.0, regularizacion = 0.0, gas10 = 0.0, gas21 = 0.0, gasNi = 0.0;
     for (const IncomeTicketDetail &t : income)
@@ -328,14 +332,16 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
         else if (e.iva == 21) gas21 += e.importe;
         else if (e.iva == 0)  gasNi += e.importe;
     }
-    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion, netTicketCount(income, regularizations),
+    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion,
+                                        netTicketCount(income, regularizations, periodStart, periodEnd),
                                         gas10, gas21, gasNi, expenses.size(), ivaRate);
     f.ingRegularizacion = regularizacion;
     return f;
 }
 
 int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
-                                 const QVector<RegularizationDetail> &regularizations)
+                                 const QVector<RegularizationDetail> &regularizations,
+                                 const QDate &periodStart, const QDate &periodEnd)
 {
     // Per ticket: income minus its regularisations. Count only a positive net (1 cent
     // tolerance): paid-and-cancelled nets to 0, and a by-differences credit note is
@@ -350,6 +356,9 @@ int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
     }
     QSet<QString> regularized;
     for (const RegularizationDetail &r : regularizations) {
+        const QDate paid = QDate::fromString(r.fechaPago, QStringLiteral("dd-MM-yyyy"));
+        if (!paid.isValid() || paid < periodStart || paid >= periodEnd)
+            continue;                       // an earlier period's payment: does not offset this period's sales
         if (net.contains(r.nRecibo))
             net[r.nRecibo] -= r.importe;
         regularized.insert(r.nRecibo);
@@ -361,7 +370,7 @@ int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
     return n;
 }
 
-int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
+int Contabilidad::yearTicketCount(const QuarterlyDetails &details, int year)
 {
     QVector<IncomeTicketDetail> income;
     QVector<RegularizationDetail> regularizations;
@@ -369,7 +378,7 @@ int Contabilidad::yearTicketCount(const QuarterlyDetails &details)
         income += quarter;
     for (const QVector<RegularizationDetail> &quarter : details.regularizations)
         regularizations += quarter;
-    return netTicketCount(income, regularizations);
+    return netTicketCount(income, regularizations, QDate(year, 1, 1), QDate(year + 1, 1, 1));
 }
 
 int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
