@@ -40,7 +40,7 @@ emptied (step 1.3), so the only tickets are the seeded ones below.
 2. **Copy a backup snapshot** and start a clean log:
    ```powershell
    Copy-Item "<db folder>/backups/laideal_<newest>.db" "$env:USERPROFILE\Desktop\laideal_SMOKE.db" -Force
-   Move-Item "$env:USERPROFILE\.laideal.log" "$env:USERPROFILE\.laideal.log.old" -ErrorAction SilentlyContinue
+   Move-Item "$env:USERPROFILE\.laideal.log" "$env:USERPROFILE\.laideal.log.old" -Force -ErrorAction SilentlyContinue
    ```
 3. **Empty ingresos and gastos** in the copy ([DB Browser for SQLite](https://sqlitebrowser.org/)
    → Execute SQL → Write Changes). `clientes` and `prendas` stay, so prices and client search work.
@@ -112,9 +112,10 @@ A3 is the AEAT safety check: repeat it at the end.
 | B1 | Recovery dialog: **Posponer**, restart | It appears again (nothing written) |
 | B2 | Recovery dialog: **Marcar como error** | Ticket 3 reads `ERROR` (upper-case) in Recogida; its Verifactu dialog shows **Reintentar envío a AEAT** (do not press it) |
 | B3 | Recogida → search ticket 1 by number | Importe total shows 20.00 (what is owed, not 0) |
-| B4 | Recogida → ticket 1 → **pay-all button** → untick the Pantalon → **Cobrar** | Only the Camisa is charged; the Pantalon stays `NO` / `SIN COBRAR` |
-| B5 | Herramientas → Anular prendas → ticket 2 → tick → confirm | In Recogida: `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
-| B6 | Herramientas → Añadir nuevas prendas on ticket 1 | The added garment reads `SIN COBRAR` |
+| B4 | Herramientas → Añadir nuevas prendas on ticket 1 (still unpaid), add one garment **unpaid** | The added garment reads `SIN COBRAR`; ticket 1 now has three garments |
+| B5 | Recogida → ticket 1 → **pay-all button** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
+| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused: "El recibo Nº 1 ya tiene prendas pagadas (enviado a la AEAT)…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
+| B6b | Herramientas → Anular prendas → ticket 2 → tick → confirm | In Recogida: `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
 | B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
 | B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
 | B9 | Herramientas → Anular factura / Rectificar | Both show "Verifactu no configurado" (correct in smoke mode; their flows are in `test_e2e_app`) |
