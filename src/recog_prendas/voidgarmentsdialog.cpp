@@ -75,7 +75,7 @@ void VoidGarmentsDialog::buildUi()
     layout->addLayout(UiKit::closeRow(this));
 
     connect(btnSearch,     &QPushButton::clicked,     this, &VoidGarmentsDialog::onSearchClicked);
-    connect(m_leTicketNum, &QLineEdit::returnPressed, this, &VoidGarmentsDialog::onSearchClicked);
+    UiKit::onEnter(m_leTicketNum, [this]() { onSearchClicked(); });
     connect(m_btnVoid,     &QPushButton::clicked,     this, &VoidGarmentsDialog::onVoidSelectedClicked);
 }
 

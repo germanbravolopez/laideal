@@ -76,7 +76,7 @@ void Imprimir::buildUi()
     layout->addLayout(UiKit::closeRow(this));
 
     connect(m_btnPrint, &QPushButton::clicked, this, &Imprimir::onPrintClicked);
-    connect(le_n_ticket, &QLineEdit::returnPressed, this, &Imprimir::onPrintClicked);
+    UiKit::onEnter(le_n_ticket, [this]() { onPrintClicked(); });
     // Another number: its partial-payment invoices are listed again on the next print.
     connect(le_n_ticket, &QLineEdit::textEdited, this, [this]() {
         m_eventsTicket.clear();

@@ -62,6 +62,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 - Build new windows **in code** with `src/uikit/` (no new `.ui` files): `UiKit::setUpDialog`, an `introPanel`, fields in `QGroupBox` + `QFormLayout`, one `primaryButton` at the right of the action row, `secondaryButton` for the rest, `dateEdit` for dates, a `ResultPanel`, `closeRow`. See `docs/modules/uikit.md`.
 - Report outcomes in the `ResultPanel` with `okHtml` / `warnHtml` / `errorHtml`, not `QMessageBox`. Message boxes only to confirm a destructive action, or for a notice when the window closes right after.
+- Enter in a field of a dialog: `UiKit::onEnter(edit, action)`, never `QLineEdit::returnPressed` - the key also reaches the dialog's default button, which then runs too (Imprimir printed twice in 11.0).
 - No fixed point sizes or pixel stylesheets: use the app font, or a size relative to it.
 - Give the widgets a test drives camelCase object names (`leFra`, `btnSave`, `lblResult`); the `pb_` / `le_` prefixes above are for the remaining `.ui` forms.
 - PDFs go through `ReportHtml::writePdf`.
