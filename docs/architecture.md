@@ -27,8 +27,9 @@ Shared infrastructure:
   src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
-  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format),
-                                      used by Contabilidad and Listado (GenListado)
+  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format)
+                                      and the one PDF writer (ReportHtml::writePdf), used by Contabilidad and Listado (GenListado)
+  src/uikit/                      — shared dialog style (UiKit: window setup, explanation panel, result panel, buttons)
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate,

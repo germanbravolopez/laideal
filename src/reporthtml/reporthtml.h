@@ -32,6 +32,15 @@ QString documentClose();
 // trailing euro sign, e.g. "1.234,56 €".
 QString formatEuro(double value);
 
+// Prints `html` to an A4 PDF at `file` (15 mm margins) and opens it in the PDF
+// viewer unless opening is switched off. Returns false when the file could not be
+// written. Every report goes through here.
+bool writePdf(const QString &file, const QString &html);
+// Test seam: when false, reports are written but not opened (the e2e bench runs headless).
+void setOpenGeneratedReports(bool open);
+// Test seam: the HTML of the last report written (the PDFs are compressed).
+QString lastReportHtml();
+
 } // namespace ReportHtml
 
 #endif // REPORTHTML_H

@@ -1,6 +1,5 @@
 #include "contabilidad.h"
 #include "sql_lite.h"
-#include "qprinter.h"
 #include "appsettings.h"
 #include "reporthtml.h"
 #include "uikit.h"
@@ -15,7 +14,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QTextDocument>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -136,20 +134,6 @@ void Contabilidad::resetAllContents()
     m_chkDetail->setEnabled(!revertirOn);  // reverting writes no report
     m_btnGenerate->setText(revertirOn ? "Revertir contabilidad" : "Generar contabilidad");
     m_lblResult->setText("Seleccione el periodo y pulse \"" + m_btnGenerate->text() + "\".");
-}
-
-static bool s_openGeneratedReports = true;
-
-void Contabilidad::setOpenGeneratedReports(bool open)
-{
-    s_openGeneratedReports = open;
-}
-
-static QString s_lastReportHtml;
-
-QString Contabilidad::lastReportHtml()
-{
-    return s_lastReportHtml;
 }
 
 bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
@@ -354,8 +338,7 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
     const QString file = AppSettings::instance()->contabilidadPath()
             + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : m_sbPeriod->value(), year, withDetail);
     QDir().mkpath(QFileInfo(file).absolutePath());
-    writeHtml(file, contabilidadHtml);
-    return file;
+    return ReportHtml::writePdf(file, contabilidadHtml) ? file : QString();
 }
 
 void Contabilidad::periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive)
@@ -529,25 +512,6 @@ void Contabilidad::updateLock()
              << "for trim" << m_sbPeriod->value() << "year" << year;
 }
 
-void Contabilidad::writeHtml(QString filename,
-                             QString html)
-{
-    s_lastReportHtml = html;
-    QTextDocument document;
-    document.setHtml(html);
-
-    QPrinter printer(QPrinter::PrinterResolution);
-    printer.setOutputFormat(QPrinter::PdfFormat);
-    printer.setPageSize(QPageSize::A4);
-    printer.setOutputFileName(filename);
-    printer.setPageMargins(QMarginsF(15, 15, 15, 15));
-
-    document.print(&printer);
-
-    if (s_openGeneratedReports)
-        QDesktopServices::openUrl(QUrl::fromLocalFile(filename));
-    //QDesktopServices::openUrl(QUrl::fromLocalFile(qApp->applicationDirPath() + "/docs/" + "nameof.pdf"));
-}
 
 QString Contabilidad::renderSection(const PeriodFigures &f, const QString &summaryHeading)
 {

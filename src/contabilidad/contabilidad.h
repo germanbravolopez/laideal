@@ -70,11 +70,6 @@ public:
     // contabilidad). A month reads its quarter; a year lists its four quarters.
     static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
 
-    // Test seam: when false, a generated report is written but not opened in the
-    // PDF viewer (the end-to-end bench generates reports headless). Default true.
-    static void setOpenGeneratedReports(bool open);
-    // Test seam: the HTML of the last report written (PDFs are compressed).
-    static QString lastReportHtml();
 
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
@@ -149,11 +144,10 @@ private slots:
 private:
     void buildUi();
     void initialSettings();
-    // Writes the selected report; returns its file. invalidAmounts receives the
+    // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
     // comma-decimal amounts left out of the sums.
     QString generateContabilidad(int &invalidAmounts);
     void updateLock();
-    void writeHtml(QString filename, QString html);
 
     QSqlDatabase db;
     QLabel      *m_lblIntro = nullptr;

@@ -3,6 +3,12 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QDebug>
+#include <QDesktopServices>
+#include <QFileInfo>
+#include <QPrinter>
+#include <QTextDocument>
+#include <QUrl>
 
 namespace ReportHtml {
 
@@ -103,6 +109,39 @@ QString formatEuro(double value)
     if (negative)
         out.prepend('-');
     return out + " €";
+}
+
+static bool s_openGeneratedReports = true;
+static QString s_lastReportHtml;
+
+void setOpenGeneratedReports(bool open)
+{
+    s_openGeneratedReports = open;
+}
+
+QString lastReportHtml()
+{
+    return s_lastReportHtml;
+}
+
+bool writePdf(const QString &file, const QString &html)
+{
+    s_lastReportHtml = html;
+    QTextDocument document;
+    document.setHtml(html);
+    QPrinter printer(QPrinter::PrinterResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setPageSize(QPageSize::A4);
+    printer.setOutputFileName(file);
+    printer.setPageMargins(QMarginsF(15, 15, 15, 15));
+    document.print(&printer);
+    if (!QFileInfo::exists(file)) {
+        qWarning() << "ReportHtml::writePdf: could not write" << file;
+        return false;
+    }
+    if (s_openGeneratedReports)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(file));
+    return true;
 }
 
 } // namespace ReportHtml

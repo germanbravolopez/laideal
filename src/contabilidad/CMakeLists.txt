@@ -11,6 +11,5 @@ target_link_libraries(contabilidad
     appsettings
     reporthtml
     uikit
-    Qt${QT_VERSION_MAJOR}::PrintSupport
 )
 target_include_directories(contabilidad INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

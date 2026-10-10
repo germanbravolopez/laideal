@@ -23,8 +23,9 @@ inline bool create(QSqlDatabase &db)
         " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
         " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
         " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT)",
+        // Column order as in the shop DB (GASTOS_IDX_* read rows by position).
         "CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
-        "descripcion TEXT, empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER, "
+        "descripcion TEXT, empresa TEXT, fecha TEXT, iva TEXT, importe TEXT, "
         "edit_lock INTEGER DEFAULT 0)",
         "CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)",
         "CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)",

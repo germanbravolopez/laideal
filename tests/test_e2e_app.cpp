@@ -27,6 +27,7 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QBuffer>
+#include <QSqlTableModel>
 #include <QXmlStreamReader>
 
 #include "aeatexport.h"
@@ -35,6 +36,7 @@
 #include "contabilidad.h"
 #include "e2efixture.h"
 #include "facturas.h"
+#include "genlistado.h"
 #include "add_garment.h"
 #include "fakeverifactuserver.h"
 #include "imprimir.h"
@@ -43,6 +45,7 @@
 #include "modaldriver.h"
 #include "pay_dialog.h"
 #include "recog_prendas.h"
+#include "reporthtml.h"
 #include "pendingsubmitsdialog.h"
 #include "rectifyinvoicedialog.h"
 #include "sql_lite.h"
@@ -160,7 +163,7 @@ private slots:
 
         QVERIFY(E2e::configureSettings(QDir(m_dir.path())));
         AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
-        Contabilidad::setOpenGeneratedReports(false);
+        ReportHtml::setOpenGeneratedReports(false);
 
         // MainWindow opens DB_PATH as the default connection; the test reads the same file.
         const QString dbFile = m_dir.filePath("laideal_e2e_app.db");
@@ -985,6 +988,48 @@ private slots:
         E2e::exec(m_db, "DELETE FROM servicios");
     }
 
+    // Listado de gastos -> Generar PDF: the year's expenses grouped by supplier, with
+    // a subtotal per supplier, written to Listados/Gastos and linked in the window;
+    // a year without expenses is reported there, nothing written. No pop-ups.
+    void test_genListadoGastos_pdfAndEmptyYear()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe, edit_lock) VALUES "
+                                "(1, 'A-1', 'Luz', '', 'Beta', '10-02-2026', '21', '121.00', 1), "
+                                "(2, 'A-2', 'Agua', '', 'Alfa', '11-02-2026', '10', '11.00', 0), "
+                                "(3, 'A-3', 'Luz', '', 'Beta', '12-03-2025', '21', '50.00', 0)"));
+        QPointer<GenListado> dlg = new GenListado(m_db);   // reads the years, then closes the connection
+        // A SQLite model reads its rows from the live query, so open it after the dialog.
+        QVERIFY(m_db.open());
+        QSqlTableModel model(nullptr, m_db);
+        model.setTable("gastos");
+        QVERIFY2(model.select(), qPrintable(model.lastError().text()));
+        dlg->model = &model;
+        const auto result = [&dlg]() { return dlg->findChild<QLabel *>("lblResult")->text(); };
+        dlg->findChild<QComboBox *>("cbYear")->setCurrentText("2026");
+        dlg->findChild<QComboBox *>("cbGroup")->setCurrentText(C_PROVEEDORES);
+        dlg->findChild<QPushButton *>("btnGenerate")->click();
+
+        QVERIFY2(result().contains("Listado de gastos generado"), qPrintable(result()));
+        const QString html = ReportHtml::lastReportHtml();
+        QVERIFY(html.contains("A-1") && html.contains("A-2") && !html.contains("A-3"));   // only 2026
+        QVERIFY(html.indexOf("Alfa") < html.indexOf("Beta"));                              // by supplier
+        QVERIFY(html.contains(ReportHtml::formatEuro(121.0)) && html.contains("IMPORTE TOTAL"));
+        const QString file = AppSettings::instance()->listadosGastosPath() + "/listado_gastos_"
+                             + QDate::currentDate().toString("yyyy-MM-dd_")
+                             + GenListado::filenameSuffix(C_PROVEEDORES, C_INCL_TODOS, false, "2026") + ".pdf";
+        QVERIFY(QFile::exists(file));
+        QVERIFY(result().contains(QFileInfo(file).fileName().toHtmlEscaped()));
+
+        dlg->findChild<QComboBox *>("cbType")->setCurrentText(C_CONTAB_CERR);
+        dlg->findChild<QComboBox *>("cbYear")->setCurrentText("2025");               // nothing closed there
+        dlg->findChild<QPushButton *>("btnGenerate")->click();
+        QVERIFY2(result().contains("No hay gastos"), qPrintable(result()));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+        dlg->close();
+        delete dlg;
+    }
+
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
     // the quarter's rows; Revertir contabilidad unlocks them again.
     void test_contabilidad_generateLockThenRevert()
@@ -1008,7 +1053,7 @@ private slots:
         QVERIFY(QFile::exists(pdf));
         QVERIFY(QFileInfo(pdf).size() > 0);
         QVERIFY(!QFile::exists(detailedPdf));                             // the detail is opt-in
-        QVERIFY(!Contabilidad::lastReportHtml().contains("Detalle del periodo"));
+        QVERIFY(!ReportHtml::lastReportHtml().contains("Detalle del periodo"));
         // Every outcome is shown in the window, never in a pop-up.
         QVERIFY2(result(form).contains("El trimestre se ha bloqueado"), qPrintable(result(form)));
         QVERIFY(result(form).contains("contabilidad_trimestral_2026_1.pdf"));
@@ -1023,8 +1068,8 @@ private slots:
         form->findChild<QCheckBox *>("chkDetail")->setChecked(true);
         form->findChild<QPushButton *>("btnGenerate")->click();
         QVERIFY(QFile::exists(detailedPdf));
-        QVERIFY(Contabilidad::lastReportHtml().contains("Detalle del periodo"));
-        QVERIFY(Contabilidad::lastReportHtml().contains("Trimestre 1 · 2026 · Detalle"));
+        QVERIFY(ReportHtml::lastReportHtml().contains("Detalle del periodo"));
+        QVERIFY(ReportHtml::lastReportHtml().contains("Trimestre 1 · 2026 · Detalle"));
         QVERIFY(result(form).contains("ya estaba realizada"));
         QVERIFY(result(form).contains("contabilidad_trimestral_2026_1_detalle.pdf"));
         form->findChild<QPushButton *>("btnClose")->click();
