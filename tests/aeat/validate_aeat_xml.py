@@ -1,8 +1,8 @@
 """Validate XML written by the direct AEAT client against the official AEAT schemas.
 
-Usage: validate_aeat_xml.py <xsd dir> <xml dir>
+Usage: validate_aeat_xml.py <xsd dir> <xml dir> [<xml dir> ...]
 
-Every *.xml file in <xml dir> is checked: a SOAP envelope is validated by the
+Every *.xml file in the XML dirs is checked: a SOAP envelope is validated by the
 element inside its Body, a bare record (RegistroAlta / RegistroAnulacion) by its
 own element. The schemas in <xsd dir> are the files AEAT publishes, unchanged;
 the W3C signature schema they import from the web is resolved to the local copy,
@@ -61,10 +61,11 @@ def payload(root):
 
 def main():
     xsd_dir = pathlib.Path(sys.argv[1])
-    xml_dir = pathlib.Path(sys.argv[2])
-    files = sorted(xml_dir.glob("*.xml"))
+    # Files named nonschema_* are fixtures outside the schemas (a SOAP fault).
+    files = sorted(f for d in sys.argv[2:] for f in pathlib.Path(d).glob("*.xml")
+                   if not f.name.startswith("nonschema_"))
     if not files:
-        print("no XML files in", xml_dir)
+        print("no XML files in", sys.argv[2:])
         return 1
     cache = {}
     failed = 0

@@ -152,11 +152,24 @@ add_test(NAME aeat_record
 set_tests_properties(aeat_record PROPERTIES
     ENVIRONMENT "AEAT_XML_OUT=${CMAKE_BINARY_DIR}/aeat-xml"
     FIXTURES_SETUP aeat_xml)
+# AeatResponse: AEAT's replies (fixtures in tests/fixtures/aeat-responses, also
+# schema-checked by aeat_xsd) and their mapping onto the app's result types.
+add_executable(test_aeat_response test_aeat_response.cpp)
+target_link_libraries(test_aeat_response PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+target_compile_definitions(test_aeat_response PRIVATE
+    AEAT_RESPONSES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-responses")
+add_test(NAME aeat_response
+    COMMAND test_aeat_response -o ${CMAKE_BINARY_DIR}/test-results-aeat_response.xml,junitxml -o -,txt)
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME aeat_xsd
         COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/aeat/validate_aeat_xml.py
-                ${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-xsd ${CMAKE_BINARY_DIR}/aeat-xml)
+                ${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-xsd ${CMAKE_BINARY_DIR}/aeat-xml
+                ${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-responses)
     set_tests_properties(aeat_xsd PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED aeat_xml)
 endif()
 

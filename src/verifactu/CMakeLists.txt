@@ -17,6 +17,8 @@ set(PROJECT_SOURCES
     aeathash.cpp
     aeatrecord.h
     aeatrecord.cpp
+    aeatresponse.h
+    aeatresponse.cpp
     verifactuconfig.h
     verifactuconfig.cpp
     verifactutaxitem.h
