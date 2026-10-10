@@ -148,8 +148,10 @@ private slots:
         RecordSummary a{ true, "Alta", "89890001K", "1", "10-10-2026", h1, "2026-10-10T10:00:00+02:00", "" };
         RecordSummary b{ true, "Alta", "89890001K", "2", "10-10-2026", h2, "2026-10-10T10:00:00+02:00", h1 };
         RecordSummary c{ true, "Anulacion", "89890001K", "1", "10-10-2026", h3, "2026-10-10T10:00:00+02:00", h2 };
-        QCOMPARE(chainTip({ c, a, b })->hash, h3);
-        QCOMPARE(chainTip({ b, a })->invoiceNumber, QStringLiteral("2"));
+        // Same second for all: only the links can tell, whatever the order of the list.
+        QCOMPARE(chainTip({ a, c, b })->hash, h3);
+        QCOMPARE(chainTip({ a, b, c })->hash, h3);
+        QCOMPARE(chainTip({ a, b })->invoiceNumber, QStringLiteral("2"));
         QVERIFY(!chainTip({}));
         RecordSummary loop1 = a, loop2 = b;
         loop1.previousHash = h2;                                          // each chains to the other
