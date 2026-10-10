@@ -97,6 +97,11 @@ So there is no deadline pressure: the shop can stay on IreneSolutions (or not su
 3. **Phase 2 - proof of concept against pre-production**: with the owner's consent and certificate, one alta, one anulación and one query against `prewww1`, checking the mutual-TLS setup on the shop's Windows build and the response mapping.
 4. **Phase 3 - decide**: with the fee, the PoC result and the final legal date, choose whether to switch. If yes, migrate the chain from the last AEAT record, run a smoke test in pre-production, and keep the gateway backend available for one release as a fallback.
 
+## Progress on this branch
+
+- **Phase 2, step 1 - huella and QR URL** (October 2026): `src/verifactu/aeathash.h/.cpp` (namespace `AeatHash`): the hash input text and SHA-256 huella of alta and anulación records, the amount (`123.40`) and timestamp (`+hh:mm`) formats they need, and the QR verification URL for the test and production hosts. Pure functions, not wired into the app. `tests/test_aeat_hash.cpp` checks the three official huella vectors and the official QR URLs; breaking any format rule (trimming, upper-case hex, two decimals, the offset, URL encoding) fails it.
+- Next: the record builder (RegistroAlta F2 / R5, RegistroAnulacion, SistemaInformatico) with XSD validation in CI, the chain state, then the `VerifactuBackend` interface.
+
 ## Sources
 
 - AEAT, VERI*FACTU technical information: <https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/informacion-tecnica/esquemas.html>

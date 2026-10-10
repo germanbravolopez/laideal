@@ -128,6 +128,16 @@ add_test(NAME verifactu_response
     COMMAND test_verifactu_response -o ${CMAKE_BINARY_DIR}/test-results-verifactu_response.xml,junitxml -o -,txt)
 set_tests_properties(verifactu_response PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# AeatHash: record hash (huella) and QR URL of a direct AEAT client, checked against
+# the official AEAT examples. Pure.
+add_executable(test_aeat_hash test_aeat_hash.cpp)
+target_link_libraries(test_aeat_hash PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME aeat_hash
+    COMMAND test_aeat_hash -o ${CMAKE_BINARY_DIR}/test-results-aeat_hash.xml,junitxml -o -,txt)
+
 # verifactu model classes (config / tax item / invoice / estado), all pure.
 add_executable(test_verifactu_models test_verifactu_models.cpp)
 target_link_libraries(test_verifactu_models PRIVATE

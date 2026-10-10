@@ -8,6 +8,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_contabilidad` | `contabilidad`, `reporthtml` | guiless | Accounting periods, figures, ticket counts, report tables |
 | `test_verifactu_models` | `verifactu` | guiless | Invoice / tax-item / config models |
 | `test_verifactu_response` | `verifactu` | offscreen | AEAT reply parsing, query records, QR decode |
+| `test_aeat_hash` | `verifactu` | - | Direct-client huella and QR URL against the official AEAT vectors |
 | `test_appsettings` | `appsettings` | guiless | DPAPI secret, settings getters, language, fixed IVA |
 | `test_settingsdialog` | `appsettings` | offscreen | Configuración dialog behaviour |
 | `test_mysortfilterproxymodel` | `tableview` | guiless | Search and sort in the grids |
@@ -49,10 +50,11 @@ Links `contabilidad` (and `reporthtml` for amount formatting). All pure statics,
 
 ---
 
-## Verifactu — `test_verifactu_models`, `test_verifactu_response`
+## Verifactu — `test_verifactu_models`, `test_verifactu_response`, `test_aeat_hash`
 
 - **`test_verifactu_models`**: `VerifactuConfig` validation and environment URLs; `VerifactuTaxItem` JSON and operation type; `VerifactuInvoice` JSON, totals, validation and rectificativa fields; the `verifactu_estado` string round-trip.
 - **`test_verifactu_response`** (offscreen, because `QPixmap` needs a `QGuiApplication`): `parseVerifactuResponse` error and success shapes, `Huella` extraction, base64 → `QPixmap` QR decode; `parseVerifactuQueryResponse` against captured real replies (empty list, a populated record, several stored attempts where the accepted one must win); `verifactuRemoteMatches`; `verifactuErrorIsDuplicate`.
+- **`test_aeat_hash`** (pure; the direct AEAT client researched in `docs/modules/verifactu/aeat-direct-investigation.md`, not used by the app yet): `AeatHash` against the three official huella vectors (first alta with an empty `Huella=`, chained alta, chained anulación) and the official QR URLs; value trimming, two-decimal amounts, the timestamp always with its `+hh:mm` offset (never `Z`), percent-encoded QR values. Each rule fails the suite when broken.
 
 ---
 

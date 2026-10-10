@@ -13,6 +13,8 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS
 )
 
 set(PROJECT_SOURCES
+    aeathash.h
+    aeathash.cpp
     verifactuconfig.h
     verifactuconfig.cpp
     verifactutaxitem.h
