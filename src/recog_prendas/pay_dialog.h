@@ -20,6 +20,8 @@ class VerifactuIntegration;
 // chosen rows pagado=SI with the matching seq, and print the partial factura.
 // Remaining unpaid rows stay unpaid and can be charged in a later event with
 // the next seq.
+namespace UiKit { class ResultPanel; }
+
 class PayDialog : public QDialog
 {
     Q_OBJECT
@@ -66,7 +68,7 @@ private:
     QDateEdit    *m_dePago      = nullptr;
     QPushButton  *m_btnCobrar   = nullptr;
     QPushButton  *m_btnCancel   = nullptr;
-    QLabel       *m_lblStatus   = nullptr;
+    UiKit::ResultPanel *m_lblStatus = nullptr;   // objectName lblResult
 
     // In-flight submission state - non-empty only between submit and reply.
     QString     m_pendingReqId;

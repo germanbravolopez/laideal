@@ -2,13 +2,13 @@
 
 #include "appsettings.h"
 #include "sql_lite.h"
+#include "uikit.h"
 #include "verifactutypes.h"
 
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -27,8 +27,8 @@ constexpr int COL_COUNT    = 5;
 PendingSubmitsDialog::PendingSubmitsDialog(QSqlDatabase &db, QWidget *parent)
     : QDialog(parent), db(db)
 {
-    setWindowTitle(tr("Envíos Verifactu pendientes"));
-    setMinimumSize(720, 360);
+    UiKit::setUpDialog(this, tr("Envíos Verifactu pendientes"), 720);
+    setMinimumHeight(400);
     buildUi();
 }
 
@@ -36,23 +36,13 @@ void PendingSubmitsDialog::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
 
-    auto *header = new QLabel(this);
-    header->setWordWrap(true);
-    header->setText(tr(
-        "Estos tickets quedaron sin respuesta de AEAT en una sesión anterior "
-        "(verifactu_estado = PENDIENTE). Decide para cada uno:"));
-    layout->addWidget(header);
-
-    auto *legend = new QLabel(this);
-    legend->setWordWrap(true);
-    legend->setText(tr(
-        "<b>Reintentar</b>: vuelve a enviar a AEAT (puede fallar con "
-        "InvoiceID duplicado si la AEAT ya lo registró antes del cierre).<br>"
-        "<b>Marcar como error</b>: deja la fila como ERROR para que la revises "
-        "manualmente en la sede electrónica AEAT.<br>"
-        "<b>Posponer</b>: no hace nada; el ticket volverá a aparecer en el "
-        "próximo arranque."));
-    layout->addWidget(legend);
+    layout->addWidget(UiKit::introPanel(tr(
+        "Estos tickets se enviaron a AEAT en una sesión anterior y no llegó la respuesta "
+        "(estado PENDIENTE). Decida para cada uno:<br>"
+        "<b>Reintentar</b>: vuelve a enviarlo a AEAT (si AEAT ya lo tenía, se consulta y se "
+        "recupera su CSV).<br>"
+        "<b>Error</b>: lo deja en ERROR para revisarlo en la sede electrónica de AEAT.<br>"
+        "<b>Posponer</b>: no hace nada; volverá a aparecer en el próximo arranque.")));
 
     m_table = new QTableWidget(this);
     m_table->setObjectName("table");   // stable names for the e2e test bench
@@ -64,10 +54,16 @@ void PendingSubmitsDialog::buildUi()
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
-    layout->addWidget(m_table);
+    layout->addWidget(m_table, 1);
 
-    auto *btnClose = new QPushButton(tr("Cerrar"), this);
-    layout->addWidget(btnClose, 0, Qt::AlignRight);
+    m_lblResult = new UiKit::ResultPanel();
+    m_lblResult->setMinimumHeight(40);
+    layout->addWidget(m_lblResult);
+    auto *closeRow = new QHBoxLayout();
+    closeRow->addStretch();
+    auto *btnClose = UiKit::secondaryButton(tr("Cerrar"), "btnClose");
+    closeRow->addWidget(btnClose);
+    layout->addLayout(closeRow);
     connect(btnClose, &QPushButton::clicked, this, &QDialog::accept);
 }
 
@@ -147,9 +143,9 @@ void PendingSubmitsDialog::onRetryClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
     if (!e.fechaPago.isValid()) {
-        QMessageBox::warning(this, tr("Fecha inválida"),
-            tr("El ticket %1 no tiene fecha de pago, así que no se puede reenviar a AEAT "
-               "(un ticket sin cobrar no tiene factura que recuperar).").arg(e.ticketNum));
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no tiene fecha de pago.").arg(e.ticketNum))
+                             + "<br>" + tr("No se puede reenviar a AEAT: un ticket sin cobrar no tiene "
+                                           "factura que recuperar."));
         return;
     }
     qDebug() << "PendingSubmitsDialog: retry requested for ticket" << e.ticketNum
@@ -157,6 +153,8 @@ void PendingSubmitsDialog::onRetryClicked(int row)
              << "date=" << e.fechaPago.toString(Qt::ISODate)
              << "total=" << e.importe;
     emit retryRequested(e.ticketNum, e.seq, e.fechaPago, e.importe);
+    m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+                         + "<br>" + tr("La respuesta aparece en la barra de estado de la ventana principal."));
     // Drop the row from the table; the async reply will patch the DB. If it
     // fails the row reverts to ERROR and the operator can revisit via the
     // normal RecogPrendas retry button.
@@ -187,18 +185,21 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     if (!q.exec()) {
         qWarning() << "PendingSubmitsDialog: UPDATE estado=Error failed for ticket"
                    << e.ticketNum << "-" << q.lastError().text();
-        QMessageBox::warning(this, tr("Error"),
-            tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum));
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum)));
         db.close();
         return;
     }
     db.close();
+    m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+                         + "<br>" + tr("Revíselo en la sede electrónica de AEAT o con Consultar en AEAT en Recogida."));
     removeRowAt(row);
 }
 
 void PendingSubmitsDialog::onPostponeClicked(int row)
 {
     if (row < 0 || row >= m_entries.size()) return;
+    m_lblResult->showInfo(tr("Ticket %1 pospuesto al próximo arranque.")
+                              .arg(verifactuInvoiceId(m_entries[row].ticketNum, m_entries[row].seq)));
     removeRowAt(row);
 }
 

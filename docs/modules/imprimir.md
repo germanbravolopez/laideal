@@ -65,7 +65,8 @@ build a copy, optionally print it, then build + print the next copy. A second
    in the dialog's result panel when it is shown, else a `QMessageBox`. Callers still gate the call on `AppSettings::enablePrinting()`.
    When `AppSettings::useStatusApi()` is on, the bytes go through
    `StatusApiPrinter::sendAndReadStatus()` first (Epson Status API) and a device
-   problem (paper out / cover open / cutter) is surfaced in a `QMessageBox`; if
+   problem (paper out / cover open / cutter) is reported the same way (result panel or
+   `QMessageBox`); if
    the Status API is unavailable it falls back to the RAW `send()` above.
 
 The column layout is computed from the real paper width (dots / char width per

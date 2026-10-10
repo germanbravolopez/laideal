@@ -14,5 +14,6 @@ target_link_libraries(recog_prendas
     tableview
     verifactu
     appsettings
+    uikit
 )
 target_include_directories(recog_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

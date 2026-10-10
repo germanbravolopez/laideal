@@ -1,5 +1,6 @@
 #include "updaterdialog.h"
 #include "updater.h"
+#include "uikit.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -8,7 +9,6 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QDialogButtonBox>
-#include <QMessageBox>
 #include <QProcess>
 #include <QCoreApplication>
 #include <QDebug>
@@ -24,14 +24,12 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
     , m_installerUrl(installerUrl)
     , m_latestVersion(latestVersion)
 {
-    setWindowTitle(tr("Actualización disponible"));
-    setMinimumWidth(560);
+    UiKit::setUpDialog(this, tr("Actualización disponible"), 560);
 
     auto *layout = new QVBoxLayout(this);
 
-    m_header = new QLabel(this);
+    m_header = UiKit::introPanel(QString());
     m_header->setTextFormat(Qt::RichText);
-    m_header->setWordWrap(true);
     m_header->setText(tr(
         "<p>Hay una nueva versión disponible:</p>"
         "<p>&nbsp;&nbsp;Versión actual: <b>%1</b><br/>"
@@ -53,13 +51,17 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
     layout->addWidget(m_progress);
 
     auto *btnRow = new QHBoxLayout;
-    btnRow->addStretch();
-    m_btnLater  = new QPushButton(tr("Más tarde"), this);
-    m_btnUpdate = new QPushButton(tr("Actualizar ahora"), this);
-    m_btnUpdate->setDefault(true);
+    m_btnLater  = UiKit::secondaryButton(tr("Más tarde"), "btnLater");
+    m_btnUpdate = UiKit::primaryButton(tr("Actualizar ahora"), "btnUpdate");
     btnRow->addWidget(m_btnLater);
+    btnRow->addStretch();
     btnRow->addWidget(m_btnUpdate);
     layout->addLayout(btnRow);
+
+    m_lblResult = new UiKit::ResultPanel();
+    m_lblResult->setMinimumHeight(40);
+    m_lblResult->setVisible(false);   // only when something goes wrong
+    layout->addWidget(m_lblResult);
 
     connect(m_btnLater,  &QPushButton::clicked, this, &QDialog::reject);
     connect(m_btnUpdate, &QPushButton::clicked, this, &UpdaterDialog::onUpdateClicked);
@@ -109,9 +111,9 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
     qputenv("TEMP", launchDir);
     const bool started = QProcess::startDetached(localPath, {});
     if (!started) {
-        QMessageBox::critical(this, tr("Error"),
-            tr("No se pudo iniciar el instalador descargado:\n%1\n\n"
-               "Puedes ejecutarlo manualmente desde esa ruta.").arg(localPath));
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo iniciar el instalador descargado."))
+                             + "<br>" + tr("Puede ejecutarlo manualmente desde: %1").arg(localPath.toHtmlEscaped()));
+        m_lblResult->setVisible(true);
         m_btnLater->setEnabled(true);
         m_btnLater->setText(tr("Cerrar"));
         return;
@@ -123,8 +125,9 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
 
 void UpdaterDialog::onDownloadFailed(const QString &error)
 {
-    QMessageBox::warning(this, tr("Descarga fallida"),
-        tr("No se pudo descargar el instalador:\n%1").arg(error));
+    m_lblResult->setText(UiKit::errorHtml(tr("No se pudo descargar el instalador."))
+                         + "<br>" + error.toHtmlEscaped());
+    m_lblResult->setVisible(true);
     m_progress->setVisible(false);
     m_btnUpdate->setEnabled(true);
     m_btnLater->setEnabled(true);

@@ -3,6 +3,7 @@
 #include "appsettings.h"
 #include "imprimir.h"
 #include "sql_lite.h"
+#include "uikit.h"
 #include "verifactuintegration.h"
 
 #include <QCheckBox>
@@ -42,14 +43,13 @@ PayDialog::PayDialog(const QSqlDatabase &database, QWidget *parent)
 
 void PayDialog::buildUi()
 {
-    setWindowTitle(tr("Cobrar"));
+    UiKit::setUpDialog(this, tr("Cobrar"), 720);
     setModal(true);
-    resize(720, 480);
+    resize(720, 520);
 
     auto *root = new QVBoxLayout(this);
 
-    m_lblHeader = new QLabel(this);
-    m_lblHeader->setStyleSheet("font-size: 14px; font-weight: bold;");
+    m_lblHeader = UiKit::introPanel(QString());   // ticket, client, reception (loadTicket)
     root->addWidget(m_lblHeader);
 
     m_table = new QTableWidget(this);
@@ -71,7 +71,10 @@ void PayDialog::buildUi()
 
     m_lblTotal = new QLabel(this);
     m_lblTotal->setAlignment(Qt::AlignRight);
-    m_lblTotal->setStyleSheet("font-size: 14px; font-weight: bold;");
+    QFont totalFont = m_lblTotal->font();
+    totalFont.setPointSizeF(totalFont.pointSizeF() + 2);
+    totalFont.setBold(true);
+    m_lblTotal->setFont(totalFont);
     root->addWidget(m_lblTotal);
 
     auto *form = new QFormLayout;
@@ -81,18 +84,17 @@ void PayDialog::buildUi()
     form->addRow(tr("Fecha de pago:"), m_dePago);
     root->addLayout(form);
 
-    m_lblStatus = new QLabel(this);
-    m_lblStatus->setStyleSheet("color: #555;");
-    root->addWidget(m_lblStatus);
-
     auto *btns = new QHBoxLayout;
-    btns->addStretch(1);
-    m_btnCobrar = new QPushButton(tr("Cobrar"), this);
-    m_btnCobrar->setDefault(true);
-    m_btnCancel = new QPushButton(tr("Cancelar"), this);
-    btns->addWidget(m_btnCobrar);
+    m_btnCancel = UiKit::secondaryButton(tr("Cancelar"), "btnCancel");
     btns->addWidget(m_btnCancel);
+    btns->addStretch(1);
+    m_btnCobrar = UiKit::primaryButton(tr("Cobrar"), "btnCobrar");
+    btns->addWidget(m_btnCobrar);
     root->addLayout(btns);
+
+    m_lblStatus = new UiKit::ResultPanel(tr("Marque las prendas que se cobran y pulse \"Cobrar\"."), this);
+    m_lblStatus->setMinimumHeight(40);
+    root->addWidget(m_lblStatus);
 
     connect(m_btnCobrar, &QPushButton::clicked, this, &PayDialog::onCobrarClicked);
     connect(m_btnCancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -212,15 +214,15 @@ void PayDialog::onCobrarClicked()
         }
     }
     if (hashes.isEmpty()) {
-        QMessageBox::information(this, tr("Sin selección"),
-                                 tr("Selecciona al menos una prenda para cobrar."));
+        m_lblStatus->setText(UiKit::warnHtml(tr("Selecciona al menos una prenda para cobrar.")));
         return;
     }
 
     const QDate fechaPago = m_dePago->date();
-    if (readLockForMonthAndYear(db, "ingresos", fechaPago.month(), fechaPago.year()) == 1) {
-        QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                             tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."));
+    // The whole quarter: a month without rows inside a closed quarter is closed too.
+    if (quarterIsClosed(db, fechaPago)) {
+        m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                             + "<br>" + tr("La fecha de pago pertenece a un trimestre cerrado por la contabilidad."));
         return;
     }
 
@@ -246,10 +248,10 @@ void PayDialog::onCobrarClicked()
             locked = lockQ.value(0).toInt();
         db.close();
         if (locked > 0) {
-            QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                 tr("Una o más prendas seleccionadas pertenecen a un trimestre "
-                                    "que se ha bloqueado durante la operación. Cierra y vuelve "
-                                    "a abrir el cobro para refrescar el estado del ticket."));
+            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                                 + "<br>" + tr("Una o más prendas seleccionadas pertenecen a un trimestre "
+                                               "que se ha bloqueado durante la operación. Cierra y vuelve "
+                                               "a abrir el cobro para refrescar el estado del ticket."));
             return;
         }
     }
@@ -297,7 +299,7 @@ void PayDialog::onCobrarClicked()
     }
 
     setFormEnabled(false);
-    m_lblStatus->setText(tr("Enviando %1 a AEAT...").arg(invoiceId));
+    m_lblStatus->showInfo(tr("Enviando %1 a AEAT...").arg(invoiceId));
 
     // Bounded 5s wait for the AEAT reply. onVerifactuRequestFinished will
     // accept() us once it lands; if it doesn't, persist the rows as PENDIENTE

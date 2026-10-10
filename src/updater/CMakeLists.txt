@@ -20,6 +20,7 @@ target_link_libraries(updater
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Network
+    uikit
 )
 
 # Inherits PROJECT_VERSION from the top-level project() call.
