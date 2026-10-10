@@ -142,6 +142,12 @@ void AddGarment::buildUi()
     connect(m_chkRecogido, &QCheckBox::toggled, m_deFechaRecogida, &QWidget::setEnabled);
 }
 
+void AddGarment::loadTicket(const QString &ticketNum)
+{
+    m_leNRecibo->setText(ticketNum);
+    onSearchClicked();
+}
+
 void AddGarment::resetAllContents()
 {
     ticketFound = false;
@@ -313,6 +319,7 @@ bool AddGarment::saveGarment()
              << "pagado=" << row.pagado << "hash=" << hash;
     if (!insertGarmentRow(db, row))
         return false;
+    emit garmentSaved(row.nRecibo);
     // A ticket that already has a paid garment is refused above, so this payment is
     // the ticket's first invoice: seq 0, InvoiceID = n_recibo.
     if (row.pagado == QLatin1String("SI"))

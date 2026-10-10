@@ -83,6 +83,7 @@ private slots:
     void on_pb_separ_garm_clicked();
     void showPickupBadge(bool pickedUp);
     void on_pb_void_clicked();
+    void on_pb_add_clicked();
     void on_pb_verifactu_clicked();
     // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
     // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
@@ -121,7 +122,7 @@ private:
         QLabel *lbl_payment_badge = nullptr, *lbl_state_badge = nullptr, *lbl_anul_badge = nullptr;
         QLabel *lbl_total = nullptr;
         QPushButton *pb_pay_all = nullptr, *pb_pku_all = nullptr, *pb_separ_garm = nullptr;
-        QPushButton *pb_print = nullptr, *pb_verifactu = nullptr, *pb_void = nullptr;
+        QPushButton *pb_print = nullptr, *pb_verifactu = nullptr, *pb_void = nullptr, *pb_add = nullptr;
         QSpinBox *sb_separ = nullptr;
     };
     void buildUi();

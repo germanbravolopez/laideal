@@ -16,7 +16,7 @@ connect(ui, &AddGarment::paidGarmentSaved, this, /* submit to AEAT */);
 ui->show();
 ```
 
-`paidGarmentSaved(ticketNum, paymentDate, amount)` is emitted after a garment saved as **paid** is inserted; MainWindow submits it to AEAT at once (`verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0)`).
+`paidGarmentSaved(ticketNum, paymentDate, amount)` is emitted after a garment saved as **paid** is inserted; whoever opened the window submits it to AEAT at once - MainWindow (Herramientas → Añadir nuevas prendas) with `verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0)`, Recogida de prendas (its **Añadir prendas…** button, which opens the window on the selected ticket with `loadTicket`) with `retryVerifactuSubmit(ticketNum, 0)`. `garmentSaved(ticketNum)` is emitted for every saved garment (Recogida counts them).
 
 ## Workflow
 

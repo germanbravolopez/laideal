@@ -16,5 +16,6 @@ target_link_libraries(recog_prendas
     verifactu
     appsettings
     uikit
+    add_garment
 )
 target_include_directories(recog_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

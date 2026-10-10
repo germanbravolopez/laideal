@@ -24,11 +24,15 @@ class AddGarment : public QDialog
 
 public:
     explicit AddGarment(const QSqlDatabase &database, QWidget *parent = nullptr);
+    // Types the receipt number and searches it, as the operator would.
+    void loadTicket(const QString &ticketNum);
     bool ticketFound = false;
 
 signals:
     // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does).
     void paidGarmentSaved(const QString &ticketNum, const QDate &paymentDate, double amount);
+    // Any garment saved (paid or not), e.g. for Recogida to refresh and report it.
+    void garmentSaved(const QString &ticketNum);
 
 private slots:
     void onSearchClicked();

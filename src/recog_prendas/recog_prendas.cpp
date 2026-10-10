@@ -9,6 +9,7 @@
 #include "verifactuintegration.h"
 #include "verifacturesponse.h"
 #include "voidgarmentsdialog.h"
+#include "add_garment.h"
 #include "uikit.h"
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -18,6 +19,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLineEdit>
+#include <QSharedPointer>
 #include <QSpinBox>
 #include <QTableView>
 #include <QDateTime>
@@ -186,6 +188,9 @@ void RecogPrendas::buildUi()
     splitRow->addWidget(new QLabel(tr("prenda(s)")));
     splitRow->addStretch();
     t->addLayout(splitRow);
+    ui->pb_add = UiKit::secondaryButton(tr("Añadir prendas…"), "pb_add");
+    ui->pb_add->setToolTip(tr("Añadir prendas al ticket seleccionado (solo si aún no tiene prendas pagadas)."));
+    t->addWidget(ui->pb_add);
     ui->pb_void = UiKit::secondaryButton(tr("Anular prendas…"), "pb_void");
     ui->pb_void->setToolTip(tr("Anular prendas no cobradas ni entregadas del ticket seleccionado "
                                "(recibo erróneo o cambio de opinión)."));
@@ -261,6 +266,7 @@ void RecogPrendas::resetAllContents()
     ui->pb_print->setEnabled(false);
     ui->pb_verifactu->setEnabled(false);
     ui->pb_void->setEnabled(false);
+    ui->pb_add->setEnabled(false);
     showOptionalDate(ui->de_date_anul, QString());
     ui->lbl_anul_badge->clear();
     ui->de_date_recep->setDate(QDate::currentDate());
@@ -442,6 +448,7 @@ void RecogPrendas::updateRowClickedToFields()
     QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
     ui->pb_void->setEnabled(true);
+    ui->pb_add->setEnabled(true);
 }
 
 double RecogPrendas::calculatePrice()
@@ -655,6 +662,32 @@ void RecogPrendas::showOptionalDate(QDateEdit *edit, const QString &ddMMyyyy)
     edit->setMinimumDate(QDate(2000, 1, 1));
     edit->setSpecialValueText(QStringLiteral("-"));
     edit->setDate(date.isValid() ? date : edit->minimumDate());
+}
+
+void RecogPrendas::on_pb_add_clicked()
+{
+    const QString ticketNum = ui->le_nr_ticket->text();
+    if (ticketNum.isEmpty())
+        return;
+    // The same window as Herramientas -> Añadir nuevas prendas, on the selected ticket.
+    // It deletes itself on close; window-modal over Recogida while it is open.
+    auto *dlg = new AddGarment(db, this);
+    dlg->setWindowModality(Qt::WindowModal);
+    auto added = QSharedPointer<int>::create(0);
+    connect(dlg, &AddGarment::garmentSaved, this, [added](const QString &) { ++*added; });
+    // A garment added as paid is the ticket's first invoice (seq 0): send it to AEAT
+    // now, through the same path as a retry, which reads its date and total from the DB.
+    connect(dlg, &AddGarment::paidGarmentSaved, this,
+            [this](const QString &ticket, const QDate &, double) { retryVerifactuSubmit(ticket, 0); });
+    // finished, not destroyed: destruction also happens while Recogida itself closes.
+    connect(dlg, &QDialog::finished, this, [this, added, ticketNum]() {
+        on_pb_search_clicked();
+        m_result->setText(*added > 0
+            ? UiKit::okHtml(tr("%1 prenda(s) añadidas al ticket %2.").arg(*added).arg(ticketNum.toHtmlEscaped()))
+            : UiKit::warnHtml(tr("No se ha añadido ninguna prenda al ticket %1.").arg(ticketNum.toHtmlEscaped())));
+    });
+    dlg->loadTicket(ticketNum);
+    dlg->show();
 }
 
 void RecogPrendas::on_pb_void_clicked()
@@ -1121,8 +1154,11 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
 
     const int changed = updateTicketVerifactuFields(db, ticketNum, result, seq);
 
-    // Refresh the table so the new estado is visible (only if user is still on this view)
+    // Refresh the table so the new estado is visible (only if user is still on this view).
+    // A background refresh keeps the operator's last message; the reply goes to the status bar.
+    const QString lastMessage = m_result->text();
     on_pb_search_clicked();
+    m_result->setText(lastMessage);
     if (rowClickedCell >= 0 && rowClickedCell < sqlQueryModel->rowCount()) {
         updateRowClickedToFields();
         isCellClicked = true;

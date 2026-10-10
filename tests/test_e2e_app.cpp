@@ -16,6 +16,7 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
@@ -269,6 +270,47 @@ private slots:
         QVERIFY(m_server.requests().isEmpty());
         // Reloaded: the voided garment can no longer be ticked.
         QCOMPARE(table->item(0, 0)->flags() & Qt::ItemIsUserCheckable, Qt::ItemFlags());
+    }
+
+    // Recogida -> Añadir prendas…: the Añadir nuevas prendas window opens on the
+    // selected ticket; a garment added as paid is sent to AEAT as the ticket's first
+    // invoice; closing it refreshes Recogida, which reports the addition. Herramientas
+    // keeps the entry, now grouped by function.
+    void test_recogida_addGarmentFromTheWindow()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "920", "h920a", "10.00", today()));
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "920", "h920a"));
+        rp.findChild<QPushButton *>("pb_add")->click();
+        QPointer<AddGarment> add = rp.findChild<AddGarment *>();
+        QVERIFY(add);
+        QCOMPARE(add->findChild<QLineEdit *>("leNRecibo")->text(), QStringLiteral("920"));
+        QVERIFY(add->ticketFound);
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("1");
+        add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
+        add->findChild<QPushButton *>("btnSave")->click();
+        add->findChild<QPushButton *>("btnClose")->click();
+
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='920' AND pagado='SI'"),
+                                  QStringLiteral("ENVIADA"), 10000);
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("920"));
+        QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("1 prenda(s) añadidas al ticket 920"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+        QTRY_VERIFY(add.isNull());                                        // deletes itself on close
+
+        MainWindow mw;
+        QMenu *tools = mw.findChild<QMenu *>("menuHerramientas");
+        QVERIFY(tools);
+        QStringList order;
+        for (QAction *a : tools->actions())
+            order << (a->isSeparator() ? QStringLiteral("|") : a->objectName().isEmpty() ? a->text() : a->objectName());
+        QCOMPARE(order.mid(0, 2), QStringList({ "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas" }));
+        QVERIFY(order.indexOf("actionAnular_factura_verifactu") < order.indexOf("actionFormulario_facturas"));
+        QVERIFY(order.indexOf("actionFormulario_facturas") < order.indexOf("actionGenerar_contabilidad"));
     }
 
     // Recogida -> Anular prendas…: opens the void dialog on the selected garment's
