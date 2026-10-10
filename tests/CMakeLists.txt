@@ -164,6 +164,16 @@ target_compile_definitions(test_aeat_response PRIVATE
 add_test(NAME aeat_response
     COMMAND test_aeat_response -o ${CMAKE_BINARY_DIR}/test-results-aeat_response.xml,junitxml -o -,txt)
 
+# AeatStore: the direct client's chain head and record outbox (throwaway SQLite DB).
+add_executable(test_aeat_store test_aeat_store.cpp)
+target_link_libraries(test_aeat_store PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Sql
+    verifactu
+)
+add_test(NAME aeat_store
+    COMMAND test_aeat_store -o ${CMAKE_BINARY_DIR}/test-results-aeat_store.xml,junitxml -o -,txt)
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME aeat_xsd

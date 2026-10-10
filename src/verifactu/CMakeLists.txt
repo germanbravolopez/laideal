@@ -4,12 +4,14 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS
     Core
     Gui
     Network
+    Sql
 )
 
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS
     Core
     Gui
     Network
+    Sql
 )
 
 set(PROJECT_SOURCES
@@ -19,6 +21,8 @@ set(PROJECT_SOURCES
     aeatrecord.cpp
     aeatresponse.h
     aeatresponse.cpp
+    aeatstore.h
+    aeatstore.cpp
     verifactuconfig.h
     verifactuconfig.cpp
     verifactutaxitem.h
@@ -40,6 +44,7 @@ target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::Sql
     appsettings
 )
 
