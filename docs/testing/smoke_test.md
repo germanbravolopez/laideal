@@ -129,7 +129,7 @@ A3 is the AEAT safety check: repeat it at the end.
 
 | # | Step | Expected |
 |---|------|----------|
-| C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances |
+| C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances; the main window is the new layout (Cliente / Ticket / Prendas groups, Guardar ticket) and the result panel summarises the saved ticket. Picking a garment before typing its quantity fills 1; an m2 garment shows 0,00 until its size is typed |
 | C2 | Save a new **paid** ticket | A recibo with `IMPORTE PAGADO`, no QR (no AEAT in smoke mode) |
 | C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode; the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
 

@@ -259,7 +259,7 @@ Columns include `importe` (REAL) and supplier/date/description fields. Managed v
 ```
 User fills form in MainWindow
   ↓
-on_bb_save_reset_clicked(Save)
+on_pb_save_clicked() (Guardar ticket)
   ├── validateTicket()                       — checks client, amounts, quarter lock
   ├── checkClientData()                      — adds/updates client in `clientes`
   ├── saveTicket()                           — writes N rows to `ingresos` (verifactu_estado = PENDIENTE when paid, SIN COBRAR when not)

@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "./ui_mainwindow.h"
 #include "sql_lite.h"
 #include "applogger.h"
 #include <QDateTime>
@@ -39,12 +38,22 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHeaderView>
+#include <QKeySequence>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
+#include <QTableWidget>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
+    , ui(new Widgets)
 {
-    ui->setupUi(this);
+    buildUi();
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
     mainwindowInitialSettings();
@@ -97,9 +106,8 @@ MainWindow::MainWindow(QWidget *parent)
                 const BackupManager::Result res = m_backupManager->performBackup();
                 QMetaObject::invokeMethod(this, [this, res]() {
                     if (!res.success) {
-                        QMessageBox::warning(this, tr("Copia de seguridad"),
-                                             tr("No se pudo crear la copia automática:\n%1")
-                                                 .arg(res.errorMessage));
+                        m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
+                                          + "<br>" + res.errorMessage.toHtmlEscaped());
                     } else {
                         statusBar()->showMessage(
                             tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
@@ -115,6 +123,284 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::buildUi()
+{
+    setObjectName("MainWindow");
+    setWindowTitle("La Ideal");
+    setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
+    resize(1240, 760);
+
+    // Actions (names as in the former .ui: the on_action<Name>_triggered slots connect by name).
+    QAction *actionRecibo = new QAction(tr("Recibo"), this);
+    actionRecibo->setObjectName("actionRecibo");
+    actionRecibo->setToolTip(tr("Imprimir recibo"));
+    actionRecibo->setShortcut(QKeySequence("Alt+P, R"));
+    QAction *actionFactura = new QAction(tr("Factura"), this);
+    actionFactura->setObjectName("actionFactura");
+    actionFactura->setToolTip(tr("Imprimir factura"));
+    actionFactura->setShortcut(QKeySequence("Alt+P, F"));
+    QAction *actionRecogida_de_prendas = new QAction(tr("Recogida de prendas"), this);
+    actionRecogida_de_prendas->setObjectName("actionRecogida_de_prendas");
+    actionRecogida_de_prendas->setShortcut(QKeySequence("Alt+R"));
+    QAction *actionFormulario_facturas = new QAction(tr("Añadir factura de gastos"), this);
+    actionFormulario_facturas->setObjectName("actionFormulario_facturas");
+    actionFormulario_facturas->setShortcut(QKeySequence("Alt+F"));
+    QAction *actionGenerar_contabilidad = new QAction(tr("Generar contabilidad"), this);
+    actionGenerar_contabilidad->setObjectName("actionGenerar_contabilidad");
+    actionGenerar_contabilidad->setShortcut(QKeySequence("Alt+G"));
+    QAction *actionIngresos = new QAction(tr("Ingresos"), this);
+    actionIngresos->setObjectName("actionIngresos");
+    actionIngresos->setToolTip(tr("Visualizar tabla ingresos"));
+    actionIngresos->setShortcut(QKeySequence("Alt+Shift+I"));
+    QAction *actionGastos = new QAction(tr("Gastos"), this);
+    actionGastos->setObjectName("actionGastos");
+    actionGastos->setToolTip(tr("Visualizar tabla gastos"));
+    actionGastos->setShortcut(QKeySequence("Alt+Shift+G"));
+    QAction *actionListado_de_prendas = new QAction(tr("Listado de prendas"), this);
+    actionListado_de_prendas->setObjectName("actionListado_de_prendas");
+    actionListado_de_prendas->setToolTip(tr("Visualizar listado de prendas"));
+    actionListado_de_prendas->setShortcut(QKeySequence("Alt+Shift+P"));
+    QAction *actionListado_de_clientes = new QAction(tr("Listado de clientes"), this);
+    actionListado_de_clientes->setObjectName("actionListado_de_clientes");
+    actionListado_de_clientes->setToolTip(tr("Visualizar listado de clientes"));
+    actionListado_de_clientes->setShortcut(QKeySequence("Alt+Shift+C"));
+    QAction *actionListado_de_proveedores = new QAction(tr("Listado de proveedores"), this);
+    actionListado_de_proveedores->setObjectName("actionListado_de_proveedores");
+    actionListado_de_proveedores->setToolTip(tr("Visualizar listado de proveedores"));
+    actionListado_de_proveedores->setShortcut(QKeySequence("Alt+Shift+O"));
+    QAction *actionListado_de_servicios = new QAction(tr("Listado de servicios"), this);
+    actionListado_de_servicios->setObjectName("actionListado_de_servicios");
+    actionListado_de_servicios->setToolTip(tr("Visualizar listado de servicios"));
+    actionListado_de_servicios->setShortcut(QKeySequence("Alt+Shift+S"));
+    QAction *actionFactura_completa = new QAction(tr("Factura completa"), this);
+    actionFactura_completa->setObjectName("actionFactura_completa");
+    actionFactura_completa->setToolTip(tr("Imprimir factura completa"));
+    actionFactura_completa->setShortcut(QKeySequence("Alt+P, Alt+F"));
+    QAction *actionCerrar = new QAction(tr("Cerrar"), this);
+    actionCerrar->setObjectName("actionCerrar");
+    actionCerrar->setToolTip(tr("Cerrar aplicación"));
+    actionCerrar->setShortcut(QKeySequence("Alt+C"));
+    QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad"), this);
+    actionRevertir_contabilidad->setObjectName("actionRevertir_contabilidad");
+    actionRevertir_contabilidad->setShortcut(QKeySequence("Alt+Shift+R"));
+    QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas"), this);
+    actionAnadir_nuevas_prendas->setObjectName("actionAnadir_nuevas_prendas");
+    actionAnadir_nuevas_prendas->setToolTip(tr("Añadir nuevas prendas a un ticket guardado"));
+    actionAnadir_nuevas_prendas->setShortcut(QKeySequence("Alt+Shift+N"));
+    QAction *actionLimpiar_base_de_datos = new QAction(tr("Limpiar base de datos"), this);
+    actionLimpiar_base_de_datos->setObjectName("actionLimpiar_base_de_datos");
+    actionLimpiar_base_de_datos->setToolTip(tr("Limpiar comas ',' en importes guardados en la base de datos"));
+    actionLimpiar_base_de_datos->setShortcut(QKeySequence("Alt+L"));
+    QAction *actionCrear_hash_en_ingresos = new QAction(tr("Crear hash en ingresos"), this);
+    actionCrear_hash_en_ingresos->setObjectName("actionCrear_hash_en_ingresos");
+    actionCrear_hash_en_ingresos->setToolTip(tr("Crear hashes para los recibos que no tengan ya un hash en ingresos"));
+    QAction *actionAnular_factura_verifactu = new QAction(tr("Anular factura Verifactu..."), this);
+    actionAnular_factura_verifactu->setObjectName("actionAnular_factura_verifactu");
+    actionAnular_factura_verifactu->setToolTip(tr("Anular una factura previamente enviada a la AEAT a través de Verifactu"));
+    QAction *actionRectificar_factura_verifactu = new QAction(tr("Rectificar factura Verifactu..."), this);
+    actionRectificar_factura_verifactu->setObjectName("actionRectificar_factura_verifactu");
+    actionRectificar_factura_verifactu->setToolTip(tr("Emitir una factura rectificativa (R1-R5) de una factura previamente enviada a la AEAT (Art. 8.2.a RD 1007/2023)"));
+    QAction *actionExportar_registros_aeat = new QAction(tr("Exportar registros AEAT (XML)..."), this);
+    actionExportar_registros_aeat->setObjectName("actionExportar_registros_aeat");
+    actionExportar_registros_aeat->setToolTip(tr("Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)"));
+    QAction *actionMostrar_log = new QAction(tr("Log de depuración..."), this);
+    actionMostrar_log->setObjectName("actionMostrar_log");
+    actionMostrar_log->setToolTip(tr("Muestra la ubicación del archivo de log para enviar al soporte técnico"));
+    QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu..."), this);
+    actionAcerca_de_Verifactu->setObjectName("actionAcerca_de_Verifactu");
+    actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)"));
+    QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora..."), this);
+    actionHacer_copia_de_seguridad->setObjectName("actionHacer_copia_de_seguridad");
+    actionHacer_copia_de_seguridad->setToolTip(tr("Crea una copia íntegra de la base de datos en la carpeta de copias (Art. 8.2.c RD 1007/2023)"));
+    QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones..."), this);
+    actionBuscar_actualizaciones->setObjectName("actionBuscar_actualizaciones");
+    actionBuscar_actualizaciones->setToolTip(tr("Comprueba en GitHub si hay una versión más reciente y la instala"));
+    QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión..."), this);
+    actionNotas_de_la_version->setObjectName("actionNotas_de_la_version");
+    actionNotas_de_la_version->setToolTip(tr("Muestra el historial de cambios de todas las versiones publicadas"));
+
+    // Menus
+    QMenu *menuArchivo = menuBar()->addMenu(tr("Archivo"));
+    menuArchivo->setObjectName("menuArchivo");
+    menuArchivo->setToolTipsVisible(true);
+    menuArchivo->addAction(actionLimpiar_base_de_datos);
+    menuArchivo->addAction(actionCrear_hash_en_ingresos);
+    menuArchivo->addSeparator();
+    menuArchivo->addAction(actionCerrar);
+    QMenu *menuHerramientas = menuBar()->addMenu(tr("Herramientas"));
+    menuHerramientas->setObjectName("menuHerramientas");
+    menuHerramientas->setToolTipsVisible(true);
+    menuHerramientas->addAction(actionRecogida_de_prendas);
+    menuHerramientas->addAction(actionAnadir_nuevas_prendas);
+    QMenu *menuImprimir_ticket = menuHerramientas->addMenu(tr("Imprimir"));
+    menuImprimir_ticket->setObjectName("menuImprimir_ticket");
+    menuImprimir_ticket->setToolTipsVisible(true);
+    menuImprimir_ticket->addAction(actionRecibo);
+    menuImprimir_ticket->addAction(actionFactura);
+    menuImprimir_ticket->addAction(actionFactura_completa);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionAnular_factura_verifactu);
+    menuHerramientas->addAction(actionRectificar_factura_verifactu);
+    menuHerramientas->addAction(actionExportar_registros_aeat);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionFormulario_facturas);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionGenerar_contabilidad);
+    menuHerramientas->addAction(actionRevertir_contabilidad);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionHacer_copia_de_seguridad);
+    QMenu *menuVisualizar = menuBar()->addMenu(tr("Ver"));
+    menuVisualizar->setObjectName("menuVisualizar");
+    menuVisualizar->setToolTipsVisible(true);
+    menuVisualizar->addAction(actionIngresos);
+    menuVisualizar->addAction(actionGastos);
+    menuVisualizar->addSeparator();
+    menuVisualizar->addAction(actionListado_de_prendas);
+    menuVisualizar->addAction(actionListado_de_clientes);
+    menuVisualizar->addAction(actionListado_de_proveedores);
+    menuVisualizar->addAction(actionListado_de_servicios);
+    QMenu *menuAyuda = menuBar()->addMenu(tr("Ayuda"));
+    menuAyuda->setObjectName("menuAyuda");
+    menuAyuda->setToolTipsVisible(true);
+    menuAyuda->addAction(actionBuscar_actualizaciones);
+    menuAyuda->addAction(actionNotas_de_la_version);
+    menuAyuda->addSeparator();
+    menuAyuda->addAction(actionAcerca_de_Verifactu);
+
+    ui->menuArchivo = menuArchivo;
+    ui->actionMostrar_log = actionMostrar_log;
+
+    QWidget *central = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(central);
+
+    // Heading, explanation and the windows used most, one click away -------------
+    QHBoxLayout *top = new QHBoxLayout();
+    const QString shop = AppSettings::instance()->businessName();
+    ui->lbl_title = UiKit::heading(shop.isEmpty() ? tr("Tintorería La Ideal") : shop);
+    top->addWidget(ui->lbl_title);
+    top->addStretch();
+    const auto quick = [this, top](QAction *action, const QString &text, const QString &name) {
+        QPushButton *button = UiKit::secondaryButton(text, name);
+        button->setToolTip(action->toolTip());
+        connect(button, &QPushButton::clicked, action, &QAction::trigger);
+        top->addWidget(button);
+    };
+    quick(actionRecogida_de_prendas, tr("Recogida de prendas"), "pb_quick_recogida");
+    quick(actionAnadir_nuevas_prendas, tr("Añadir prendas"), "pb_quick_add");
+    quick(actionFormulario_facturas, tr("Factura de gastos"), "pb_quick_gastos");
+    layout->addLayout(top);
+    layout->addWidget(UiKit::introPanel(tr(
+        "Nuevo ticket: elija o escriba el cliente, añada las prendas y pulse \"Guardar ticket\". "
+        "Se imprime el recibo; si el ticket queda pagado, se envía a AEAT y se imprime la factura.")));
+
+    // Client and ticket ----------------------------------------------------------
+    QHBoxLayout *head = new QHBoxLayout();
+    QGroupBox *grpClient = new QGroupBox(tr("Cliente"));
+    QGridLayout *c = new QGridLayout(grpClient);
+    ui->cb_client = new QComboBox();
+    ui->cb_client->setObjectName("cb_client");
+    ui->cb_client->setEditable(true);
+    ui->cb_client->setInsertPolicy(QComboBox::NoInsert);
+    ui->cb_client->setToolTip(tr("Elija un cliente del listado o escriba uno nuevo: se añade al guardar."));
+    ui->le_phone = new QLineEdit();
+    ui->le_phone->setObjectName("le_phone");
+    ui->le_mobile = new QLineEdit();
+    ui->le_mobile->setObjectName("le_mobile");
+    ui->le_addr = new QLineEdit();
+    ui->le_addr->setObjectName("le_addr");
+    c->addWidget(new QLabel(tr("Cliente:")), 0, 0);
+    c->addWidget(ui->cb_client, 0, 1, 1, 3);
+    c->addWidget(new QLabel(tr("Teléfono:")), 1, 0);
+    c->addWidget(ui->le_phone, 1, 1);
+    c->addWidget(new QLabel(tr("Móvil:")), 1, 2);
+    c->addWidget(ui->le_mobile, 1, 3);
+    c->addWidget(new QLabel(tr("Dirección:")), 2, 0);
+    c->addWidget(ui->le_addr, 2, 1, 1, 3);
+    c->setColumnStretch(1, 1);
+    c->setColumnStretch(3, 1);
+    head->addWidget(grpClient, 3);
+
+    QGroupBox *grpTicket = new QGroupBox(tr("Ticket"));
+    QGridLayout *t = new QGridLayout(grpTicket);
+    ui->le_nr_ticket = new QLineEdit();
+    ui->le_nr_ticket->setObjectName("le_nr_ticket");
+    ui->le_nr_ticket->setReadOnly(true);
+    ui->le_nr_ticket->setToolTip(tr("El siguiente número libre; se asigna solo."));
+    QFont numberFont = ui->le_nr_ticket->font();
+    numberFont.setPointSizeF(numberFont.pointSizeF() + 3);
+    numberFont.setBold(true);
+    ui->le_nr_ticket->setFont(numberFont);
+    ui->le_nr_ticket->setMaximumWidth(160);
+    ui->de_date_recep = UiKit::dateEdit(QDate::currentDate(), "de_date_recep");
+    ui->de_date_recep->setToolTip(tr("Fecha de recepción de las prendas."));
+    ui->pb_payment = new QCheckBox(tr("Pagado al dejarlo"));
+    ui->pb_payment->setObjectName("pb_payment");
+    ui->pb_payment->setToolTip(tr("Márquelo si el cliente paga ahora: el ticket se envía a AEAT al guardar."));
+    ui->lbl_payment_badge = new QLabel();
+    ui->lbl_payment_badge->setObjectName("lbl_payment_badge");
+    t->addWidget(new QLabel(tr("Nº recibo:")), 0, 0);
+    t->addWidget(ui->le_nr_ticket, 0, 1);
+    t->addWidget(new QLabel(tr("Recepción:")), 1, 0);
+    t->addWidget(ui->de_date_recep, 1, 1);
+    QHBoxLayout *paid = new QHBoxLayout();
+    paid->addWidget(ui->pb_payment);
+    paid->addWidget(ui->lbl_payment_badge);
+    paid->addStretch();
+    t->addLayout(paid, 2, 0, 1, 3);
+    t->setColumnStretch(3, 1);
+    head->addWidget(grpTicket, 2);
+    layout->addLayout(head);
+
+    // Garments -------------------------------------------------------------------
+    QGroupBox *grpGarments = new QGroupBox(tr("Prendas"));
+    QVBoxLayout *g = new QVBoxLayout(grpGarments);
+    ui->table_ticket = new QTableWidget(kInitialTicketRows, 6);
+    ui->table_ticket->setObjectName("table_ticket");
+    ui->table_ticket->setHorizontalHeaderLabels(
+        { tr("Cant."), tr("Prenda"), tr("Tamaño (m2)"), tr("Serv."), tr("Observaciones"), tr("Importe") });
+    ui->table_ticket->setAlternatingRowColors(true);
+    ui->table_ticket->setToolTip(tr("Cantidad y prenda calculan el importe; el importe se puede cambiar a mano."));
+    g->addWidget(ui->table_ticket, 1);
+    QHBoxLayout *garmentFooter = new QHBoxLayout();
+    ui->pb_add_row = UiKit::secondaryButton(tr("Añadir fila"), "pb_add_row");
+    garmentFooter->addWidget(ui->pb_add_row);
+    garmentFooter->addStretch();
+    QLabel *lblTotal = new QLabel(tr("Importe total:"));
+    QFont totalFont = lblTotal->font();
+    totalFont.setPointSizeF(totalFont.pointSizeF() + 3);
+    totalFont.setBold(true);
+    lblTotal->setFont(totalFont);
+    garmentFooter->addWidget(lblTotal);
+    ui->le_cost_total = new QLineEdit();
+    ui->le_cost_total->setObjectName("le_cost_total");
+    ui->le_cost_total->setReadOnly(true);   // always the sum of the rows
+    ui->le_cost_total->setFont(totalFont);
+    ui->le_cost_total->setAlignment(Qt::AlignRight);
+    ui->le_cost_total->setMaximumWidth(150);
+    garmentFooter->addWidget(ui->le_cost_total);
+    garmentFooter->addWidget(new QLabel(QStringLiteral("€")));
+    g->addLayout(garmentFooter);
+    layout->addWidget(grpGarments, 1);
+
+    // Actions + result -------------------------------------------------------------
+    QHBoxLayout *actions = new QHBoxLayout();
+    ui->pb_reset = UiKit::secondaryButton(tr("Limpiar"), "pb_reset");
+    ui->pb_reset->setToolTip(tr("Borra el ticket en curso sin guardarlo."));
+    actions->addWidget(ui->pb_reset);
+    actions->addStretch();
+    ui->pb_save = UiKit::primaryButton(tr("Guardar ticket"), "pb_save");
+    ui->pb_save->setToolTip(tr("Guarda el ticket e imprime el recibo (y la factura si está pagado)."));
+    actions->addWidget(ui->pb_save);
+    layout->addLayout(actions);
+    m_result = new UiKit::ResultPanel();
+    m_result->setMinimumHeight(44);
+    layout->addWidget(m_result);
+    setCentralWidget(central);
+    statusBar();   // AEAT replies, backups
+
+    QMetaObject::connectSlotsByName(this);
 }
 
 void MainWindow::mainwindowInitialSettings()
@@ -162,22 +448,19 @@ void MainWindow::mainwindowInitialSettings()
     ui->menuArchivo->insertAction(ui->menuArchivo->actions().at(1), ui->actionMostrar_log);
     ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(2));
 
-    // Taskbar
-    ui->menuArchivo->setToolTipsVisible(true);
-    ui->menuHerramientas->setToolTipsVisible(true);
-    ui->menuImprimir_ticket->setToolTipsVisible(true);
-    ui->menuVisualizar->setToolTipsVisible(true);
-    ui->menuAyuda->setToolTipsVisible(true);
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     ui->table_ticket->verticalHeader()->setVisible(false);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_QNTY, 60);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_GARM, 400);
     ui->table_ticket->setColumnWidth(TABLE_TICKET_SERV, 70);
-    ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 150);
-    // Push button settings
-    ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
+    ui->table_ticket->setColumnWidth(TABLE_TICKET_SIZE, 110);
+    ui->table_ticket->setColumnWidth(TABLE_TICKET_OBSE, 260);
+    ui->table_ticket->setColumnWidth(TABLE_TICKET_PRIC, 120);
+    // The garment name takes the spare width; the amounts keep a fixed column.
+    ui->table_ticket->horizontalHeader()->setSectionResizeMode(TABLE_TICKET_GARM, QHeaderView::Stretch);
     resetAllContents();
+    m_result->showInfo(tr("Listo para un nuevo ticket."));
 }
 
 void MainWindow::initializeVerifactu()
@@ -186,11 +469,9 @@ void MainWindow::initializeVerifactu()
 
     if (!m_verifactuIntegration->initialize()) {
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
-        QMessageBox::warning(this, "Advertencia",
-            QString("No se pudo inicializar Verifactu:\n%1\n\n"
-                    "Las facturas se guardarán localmente.\n"
-                    "Configura Verifactu más tarde.")
-            .arg(m_verifactuIntegration->getLastError()));
+        m_result->setText(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
+                                              .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
+                          + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
     connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
@@ -212,6 +493,7 @@ void MainWindow::resetAllContents()
     ui->le_phone->clear();
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->pb_payment->setChecked(false);
+    on_pb_payment_toggled(false);
 }
 
 /********************************************************************************************
@@ -267,123 +549,94 @@ void MainWindow::setGarmentToCbAndPopulate(int initialRow = 0)
     }
 }
 
-void MainWindow::setGarmentPrice(int garmentRow,
-                                 QString garmentText,
-                                 QString serviceText)
+void MainWindow::setGarmentPrice(int garmentRow, QString garmentText, QString serviceText)
 {
-    QTableWidgetItem *qntyItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_QNTY));
-    QTableWidgetItem *item = new QTableWidgetItem;
-    item->setText("");
-    if (qntyItem) {
-        // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
-        // (unit-tested); see its comment for why the comma matters (m2 garments).
-        QTableWidgetItem *sizeItem(ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE));
-        const double importe = garmentImporte(qntyItem->text(),
-                                              sizeItem ? sizeItem->text() : QString(),
-                                              readGarmentPrice(db, garmentText, serviceText));
-        item->setText(QString::number(importe, 'f', 2));
+    QTableWidgetItem *qntyItem = ui->table_ticket->item(garmentRow, TABLE_TICKET_QNTY);
+    if (!qntyItem || qntyItem->text().trimmed().isEmpty()) {
+        // A garment picked before its quantity counts one; the new cell re-prices the row.
+        ui->table_ticket->setItem(garmentRow, TABLE_TICKET_QNTY, new QTableWidgetItem("1"));
+        return;
     }
-    else {
-        qWarning() << "setGarmentPrice: quantity field is empty for row" << garmentRow;
-        QMessageBox::warning(nullptr, "Error en la casilla de cantidad",
-                              "Cantidad de prendas está vacía.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
-    ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, item);
+    // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
+    // (unit-tested); see its comment for why the comma matters (m2 garments).
+    QTableWidgetItem *sizeItem = ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE);
+    const QString size = sizeItem ? sizeItem->text() : QString();
+    // An m2 garment is priced by its size; until it is measured it is 0, not one m2.
+    const bool unmeasured = garmentText.contains("m2") && size.trimmed().replace(',', '.').toDouble() <= 0;
+    const double importe = unmeasured ? 0.0
+        : garmentImporte(qntyItem->text(), size, readGarmentPrice(db, garmentText, serviceText));
+    auto *amount = new QTableWidgetItem(QString::number(importe, 'f', 2));
+    amount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, amount);
 }
 
-void MainWindow::cbGarmChanged(const QString &text)
+int MainWindow::rowOfCellWidget(QObject *widget, int column) const
 {
-    int garmentRow = ui->table_ticket->currentRow();
-    QComboBox *cbService = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garmentRow, TABLE_TICKET_SERV));
-    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(garmentRow, TABLE_TICKET_GARM));
-    // Check garment is included in combobox
-    if (cbGarment->findText(text, Qt::MatchExactly) != -1)
-        setGarmentPrice(garmentRow, text, cbService->currentText());
-    else if (cbGarment->currentText() == "") {
-        QTableWidgetItem *item = new QTableWidgetItem;
-        ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, item);
-    }
+    for (int row = 0; row < ui->table_ticket->rowCount(); ++row)
+        if (ui->table_ticket->cellWidget(row, column) == widget)
+            return row;
+    return -1;
 }
 
-void MainWindow::cbServChanged(const QString &text)
+void MainWindow::updateRowPrice(int row)
 {
-    int serviceRow = ui->table_ticket->currentRow();
-    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(serviceRow, TABLE_TICKET_GARM));
-    if (cbGarment->currentText() != "")
-        setGarmentPrice(serviceRow, cbGarment->currentText(), text);
+    if (row < 0)
+        return;
+    auto *cbGarment = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+    auto *cbService = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
+    if (!cbGarment || !cbService)
+        return;
+    if (cbGarment->findText(cbGarment->currentText(), Qt::MatchExactly) != -1)
+        setGarmentPrice(row, cbGarment->currentText(), cbService->currentText());
+    else if (cbGarment->currentText().isEmpty())
+        ui->table_ticket->setItem(row, TABLE_TICKET_PRIC, new QTableWidgetItem);
+}
+
+void MainWindow::cbGarmChanged(const QString &)
+{
+    // The row of the combo that changed - not the table's current row, which a
+    // combo inside a cell does not move.
+    updateRowPrice(rowOfCellWidget(sender(), TABLE_TICKET_GARM));
+}
+
+void MainWindow::cbServChanged(const QString &)
+{
+    updateRowPrice(rowOfCellWidget(sender(), TABLE_TICKET_SERV));
 }
 
 bool MainWindow::validateTicket()
 {
-    QMessageBox msgBox;
-    float totalCost = 0.0;
-    if (ui->cb_client->currentText().isEmpty()) {
-        msgBox.setText("No se ha introducido ningún cliente.");
-        msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-        msgBox.exec();
-        return 0;
+    const auto refuse = [this](const QString &reason) {
+        m_result->setText(UiKit::errorHtml(reason) + "<br>" + tr("No se ha guardado nada."));
+        return false;
+    };
+    if (ui->cb_client->currentText().trimmed().isEmpty())
+        return refuse(tr("No se ha introducido ningún cliente."));
+    double totalCost = 0.0;
+    bool sizePending = false;   // an m2 garment can be saved before it is measured
+    for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
+        if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC))
+            continue;
+        auto *cbGarment = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+        QTableWidgetItem *qty = ui->table_ticket->item(row, TABLE_TICKET_QNTY);
+        const QString garment = cbGarment ? cbGarment->currentText() : QString();
+        if (garment.isEmpty() && ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
+            continue;   // an empty slot
+        if (!qty || qty->text().toInt() == 0)
+            return refuse(tr("La prenda de la fila %1 no tiene cantidad.").arg(row + 1));
+        if (garment.isEmpty())
+            return refuse(tr("La fila %1 tiene importe pero no prenda.").arg(row + 1));
+        if (garment.contains("m2") || garment.startsWith("Alfombra"))
+            sizePending = sizePending || !ui->table_ticket->item(row, TABLE_TICKET_SIZE)
+                                      || ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().trimmed().isEmpty();
+        totalCost += ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
     }
-    else {
-        // Calculate the expected total cost
-        for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
-            if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
-                if (!ui->table_ticket->item(row, TABLE_TICKET_QNTY)) {
-                    msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
-                    msgBox.setInformativeText("La cantidad no puede estar vacía. No se va a guardar nada en la tabla de ingresos.");
-                    msgBox.exec();
-                    return 0;
-                }
-                else if (ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text().toInt() == 0) {
-                    msgBox.setText("El valor del IMPORTE individual de la prenda " + QString::number(row + 1) + " no se puede cambiar directamente.");
-                    msgBox.setInformativeText("La cantidad no puede ser 0. No se va a guardar nada en la tabla de ingresos.");
-                    msgBox.exec();
-                    return 0;
-                }
-                else {
-                    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
-                    if (cbGarment->currentText().isEmpty()) {
-                        msgBox.setText("La prenda " + QString::number(row + 1) + " no puede tener el nombre vacío.");
-                        msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-                        msgBox.exec();
-                        return 0;
-                    }
-                }
-                // If there is data in the row get the float and accumulate
-                totalCost = totalCost + ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().toFloat();
-            }
-        }
-        if (totalCost == 0.0) {
-            QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(0, TABLE_TICKET_GARM));
-            QString leftSide = cbGarment->currentText().left(8);
-            if (leftSide == "Alfombra")
-                return 1;
-            msgBox.setText("La suma de los IMPORTES individuales es 0.");
-            msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-            msgBox.exec();
-            return 0;
-        }
-        else {
-            // If there is data in lbl_cost_total it has to match with the previous calculation
-            if (ui->le_cost_total->text().toFloat() != totalCost) {
-                msgBox.setText("El valor del IMPORTE TOTAL no puede ser diferente al de los IMPORTES individuales.");
-                msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-                msgBox.exec();
-                return 0;
-            }
-            else {
-                // if the current date belongs to a locked quarter, data cannot be saved
-                if (readLockForMonthAndYear(db, "ingresos", ui->de_date_recep->date().month(), ui->de_date_recep->date().year()) == 1) {
-                    msgBox.setText("No se puede introducir un nuevo recibo en un trimestre que tiene la contabilidad cerrada.");
-                    msgBox.setInformativeText("No se va a guardar nada en la tabla de ingresos.");
-                    msgBox.exec();
-                    return 0;
-                }
-                else
-                    return 1;
-            }
-        }
-    }
+    if (totalCost == 0.0 && !sizePending)
+        return refuse(tr("El ticket no tiene ninguna prenda con importe."));
+    // The whole quarter: a month without rows inside a closed quarter is closed too.
+    if (quarterIsClosed(db, ui->de_date_recep->date()))
+        return refuse(tr("La fecha de recepción pertenece a un trimestre con la contabilidad cerrada."));
+    return true;
 }
 
 QString MainWindow::removeSpecialChar(QString str)
@@ -415,12 +668,8 @@ void MainWindow::checkClientData()
             qDebug() << "checkClientData: client found in database after removing special characters like accents or 'ñ'. "
                      << "The data entered for the client in this receipt has not been added to the client in the client list. "
                      << "If you want to update the data, add manually in the client list.";
-            QMessageBox::information(this, "Listado de clientes",
-                                  "Cliente encontrado en la base de datos tras suprimir carácteres especiales como tildes o 'ñ'.\n"
-                                  "Los datos introducidos para el cliente en este recibo no se han añadido al cliente en el listado de clientes. "
-                                  "Si se desean actualizar los datos, añadir manualmente en el listado de clientes.",
-                                  QMessageBox::Ok,
-                                  QMessageBox::Ok);
+            m_clientNote = tr("El cliente ya existía escrito de otra forma (tildes o 'ñ'): sus teléfonos y "
+                              "dirección no se han cambiado; actualícelos en Listado de clientes si hace falta.");
         }
     }
 
@@ -505,10 +754,10 @@ void MainWindow::saveTicket()
             r.cliente        = ui->cb_client->currentText();
             r.fechaRecepcion = ui->de_date_recep->date().toString("dd-MM-yyyy");
             // A paid-at-save ticket books the payment on the reception date.
-            r.fechaPago      = ui->pb_payment->text() == "SI" ? r.fechaRecepcion : QString("");
+            r.fechaPago      = ui->pb_payment->isChecked() ? r.fechaRecepcion : QString("");
             r.fechaRecogida  = "";
             r.importe        = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(",",".");
-            r.pagado         = ui->pb_payment->text();
+            r.pagado         = ui->pb_payment->isChecked() ? "SI" : "NO";
             r.estado         = "En tienda";
             r.cantidad       = ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text();
             r.prenda         = cbGarment->currentText();
@@ -535,7 +784,7 @@ void MainWindow::saveTicket()
              << "-" << savedGarments << "garment(s) saved";
 }
 
-void MainWindow::printRecibo()
+bool MainWindow::printRecibo()
 {
     // Save-time print: AEAT submission is in flight (async). DB still has empty CSV,
     // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
@@ -548,14 +797,14 @@ void MainWindow::printRecibo()
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(true, ui->pb_payment->isChecked());
-    if (AppSettings::instance()->enablePrinting()) {
-        ui_impr->printTicket();
-        ui_impr->buildTicket(false, ui->pb_payment->isChecked());
-        ui_impr->printTicket();
-    }
+    if (!AppSettings::instance()->enablePrinting())
+        return false;
+    const bool printed = ui_impr->printTicket();
+    ui_impr->buildTicket(false, ui->pb_payment->isChecked());
+    return ui_impr->printTicket() && printed;
 }
 
-void MainWindow::printFra(const QPixmap &qrCode)
+bool MainWindow::printFra(const QPixmap &qrCode)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
@@ -566,11 +815,11 @@ void MainWindow::printFra(const QPixmap &qrCode)
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(true, false);
-    if (AppSettings::instance()->enablePrinting()) {
-        ui_impr->printTicket();
-        ui_impr->buildTicket(false, false);
-        ui_impr->printTicket();
-    }
+    if (!AppSettings::instance()->enablePrinting())
+        return false;
+    const bool printed = ui_impr->printTicket();
+    ui_impr->buildTicket(false, false);
+    return ui_impr->printTicket() && printed;
 }
 
 /********************************************************************************************
@@ -579,28 +828,20 @@ void MainWindow::printFra(const QPixmap &qrCode)
 
 void MainWindow::on_pb_payment_toggled(bool checked)
 {
-    if (checked) {
-        ui->pb_payment->setText("SI");
-        ui->pb_payment->setStyleSheet("background-color: green; font-size: 20px");
-    }
-    else
-    {
-        ui->pb_payment->setText("NO");
-        ui->pb_payment->setStyleSheet("background-color: red; font-size: 20px");
-    }
+    ui->lbl_payment_badge->setText(checked ? UiKit::okHtml(tr("SÍ")) : UiKit::errorHtml(tr("NO")));
 }
 
-void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
+void MainWindow::on_pb_save_clicked()
 {
-    if (button == ui->bb_save_reset->button(QDialogButtonBox::Reset))
-        resetAllContents();
-    else if (button == ui->bb_save_reset->button(QDialogButtonBox::Save)) {
+    {
         if (validateTicket()) {
+            m_clientNote.clear();
             checkClientData();
             const QString ticketNum   = ui->le_nr_ticket->text();
             const QDate   invoiceDate = ui->de_date_recep->date();
-            const bool    isPaid      = ui->pb_payment->text() == "SI";
+            const bool    isPaid      = ui->pb_payment->isChecked();
             const double  totalAmount = ui->le_cost_total->text().toDouble();
+            QString printedWhat;
 
             saveTicket();
             if (isPaid) {
@@ -631,23 +872,48 @@ void MainWindow::on_bb_save_reset_clicked(QAbstractButton *button)
                          << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
                          << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
                 if (gotSuccessfulReply) {
-                    printFra(qrCode);
+                    printedWhat = printFra(qrCode) ? tr("Factura con QR impresa.") : QString();
                 } else {
                     // AEAT has not confirmed within the bounded wait, but the request
                     // may still be in flight (the transport timeout is longer). Print
                     // the paid recibo now and flag the event so a late confirmation
                     // tells the operator the factura with QR can be printed.
-                    printRecibo();
+                    printedWhat = printRecibo() ? tr("Recibo impreso (pagado); la factura con QR se puede "
+                                                     "reimprimir en Recogida cuando AEAT confirme.") : QString();
                     auto it = m_pendingSubmits.find(reqId);
                     if (it != m_pendingSubmits.end())
                         it.value().printedWithoutQr = true;
                 }
             } else {
-                printRecibo();
+                printedWhat = printRecibo() ? tr("Recibo impreso.") : QString();
             }
+            const int garments = [this]() {
+                int n = 0;
+                for (int row = 0; row < ui->table_ticket->rowCount(); ++row)
+                    if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)
+                            && !ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
+                        ++n;
+                return n;
+            }();
+            const QString client = ui->cb_client->currentText();
             resetAllContents();
+            m_result->setText(UiKit::okHtml(tr("Ticket %1 guardado: %2, %3 prenda(s), %4 €, %5.")
+                                                .arg(ticketNum, client.toHtmlEscaped()).arg(garments)
+                                                .arg(moneyText(totalAmount).replace('.', ','),
+                                                     isPaid ? tr("pagado") : tr("sin cobrar")))
+                              + "<br>" + (printedWhat.isEmpty()
+                                              ? tr("No se ha impreso (impresión desactivada o impresora sin respuesta).")
+                                              : printedWhat)
+                              + (isPaid ? "<br>" + tr("El envío a AEAT se confirma en la barra de estado.") : QString())
+                              + (m_clientNote.isEmpty() ? QString() : "<br>" + UiKit::warnHtml(m_clientNote)));
         }
     }
+}
+
+void MainWindow::on_pb_reset_clicked()
+{
+    resetAllContents();
+    m_result->showInfo(tr("Ticket borrado. Listo para un nuevo ticket."));
 }
 
 void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
@@ -661,22 +927,22 @@ void MainWindow::on_cb_client_editTextChanged(const QString &arg1)
 
 void MainWindow::on_table_ticket_cellChanged(int row, int column)
 {
-    QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
     if (column == TABLE_TICKET_QNTY || column == TABLE_TICKET_SIZE) {
-        if (cbGarment->currentText() != "")
-            cbGarmChanged(cbGarment->currentText());
+        updateRowPrice(row);
     }
     else if (column == TABLE_TICKET_PRIC) {
-        float totalPrice = 0.0;
+        double totalPrice = 0.0;
+        const QSignalBlocker block(ui->table_ticket);   // normalising a price must not re-enter here
         for (int rowCnt = 0; rowCnt < ui->table_ticket->rowCount(); rowCnt++) {
-            QTableWidgetItem *priceItem(ui->table_ticket->item(rowCnt, column));
-            if (priceItem && priceItem->text() != "" && priceItem->text().toFloat() != 0.0) {
-                float priceValue = priceItem->text().toFloat();
-                priceItem->setText(QString::number(priceValue, 'f', 2));
-                totalPrice = totalPrice + priceValue;
+            QTableWidgetItem *priceItem = ui->table_ticket->item(rowCnt, column);
+            if (priceItem && !priceItem->text().isEmpty()) {
+                const double priceValue = priceItem->text().replace(',', '.').toDouble();
+                priceItem->setText(moneyText(priceValue));
+                priceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                totalPrice += roundToCents(priceValue);
             }
         }
-        ui->le_cost_total->setText(QString::number(totalPrice, 'f', 2));
+        ui->le_cost_total->setText(moneyText(totalPrice));
     }
 }
 
@@ -876,13 +1142,9 @@ void MainWindow::cleanDatabase(bool print)
     // Restore the cursor to default
     QApplication::restoreOverrideCursor();
     if (print)
-        QMessageBox::information(this, "Limpieza de la base de datos",
-                                 "Se han corregido los siguientes importes decimales que se encontraban"
-                                 " en la base de datos con ',' en lugar de '.':\n"
-                                 + QString::number(gastosCnt) + " en la tabla de gastos.\n"
-                                 + QString::number(ingresosCnt) + " en la tabla de ingresos.\n"
-                                 + QString::number(prendasCnt) + " en la tabla de lista de prendas.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
+        m_result->setText(UiKit::okHtml(tr("Limpieza de la base de datos terminada."))
+                          + "<br>" + tr("Importes con ',' corregidos: %1 en gastos, %2 en ingresos, %3 en la lista de prendas.")
+                                         .arg(gastosCnt).arg(ingresosCnt).arg(prendasCnt));
 }
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
@@ -991,29 +1253,20 @@ void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
              << "regenerated=" << regenerated
              << "still_colliding_groups=" << stillColliding;
 
-    QString body = tr("Se actualizó la tabla ingresos:\n"
-                      "  • %1 filas con hash vacío rellenadas\n"
-                      "  • %2 grupos de hash duplicado detectados\n"
-                      "  • %3 filas regeneradas para resolverlos")
-                       .arg(filled).arg(remainingGroups).arg(regenerated);
-    if (stillColliding > 0) {
-        body += tr("\n\nAtención: quedan %1 grupos colisionando tras la "
-                   "regeneración. Vuelve a ejecutar la acción; si persiste, "
-                   "consulta el log.").arg(stillColliding);
-        QMessageBox::warning(this, tr("Crear hash en ingresos"), body);
-    } else {
-        QMessageBox::information(this, tr("Crear hash en ingresos"), body);
-    }
+    const QString body = tr("Tabla de ingresos: %1 fila(s) sin hash rellenadas, %2 grupo(s) de hash duplicado "
+                            "detectados, %3 fila(s) regeneradas.").arg(filled).arg(remainingGroups).arg(regenerated);
+    m_result->setText(stillColliding > 0
+        ? UiKit::warnHtml(tr("Quedan %1 grupo(s) de hash duplicado: vuelva a ejecutar la acción; si persiste, "
+                             "consulte el log.").arg(stillColliding)) + "<br>" + body
+        : UiKit::okHtml(tr("Hashes de ingresos revisados.")) + "<br>" + body);
 }
 
 void MainWindow::on_actionAnular_factura_verifactu_triggered()
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "Cancel invoice action: Verifactu not configured";
-        QMessageBox::warning(this, "Verifactu no configurado",
-                             "Verifactu no está configurado correctamente.\n"
-                             "Configura las credenciales en Archivo → Configuración.",
-                             QMessageBox::Ok);
+        m_result->setText(UiKit::errorHtml(tr("Verifactu no está configurado."))
+                          + "<br>" + tr("Configure las credenciales en Archivo → Configuración."));
         return;
     }
     CancelInvoiceDialog dlg(db, this);
@@ -1027,10 +1280,8 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
 {
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "Rectify invoice action: Verifactu not configured";
-        QMessageBox::warning(this, "Verifactu no configurado",
-                             "Verifactu no está configurado correctamente.\n"
-                             "Configura las credenciales en Archivo → Configuración.",
-                             QMessageBox::Ok);
+        m_result->setText(UiKit::errorHtml(tr("Verifactu no está configurado."))
+                          + "<br>" + tr("Configure las credenciales en Archivo → Configuración."));
         return;
     }
     RectifyInvoiceDialog dlg(db, this);
@@ -1054,15 +1305,8 @@ void MainWindow::on_actionExportar_registros_aeat_triggered()
 void MainWindow::on_actionMostrar_log_triggered()
 {
     const QString path = AppLogger::logFilePath();
-    QMessageBox msg(this);
-    msg.setWindowTitle("Log de depuración");
-    msg.setText(QString("El archivo de log se encuentra en:\n%1\n\n"
-                        "Envíe este archivo al soporte técnico cuando tenga un problema.").arg(path));
-    msg.setStandardButtons(QMessageBox::Ok);
-    QPushButton *openBtn = msg.addButton("Abrir archivo", QMessageBox::ActionRole);
-    msg.exec();
-    if (msg.clickedButton() == openBtn)
-        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    m_result->setText(UiKit::fileLinkHtml(path, tr("Log de depuración")) + "<br>"
+                      + tr("Envíe este archivo al soporte técnico cuando tenga un problema (clic para abrirlo)."));
 }
 
 // Declaración responsable visible in the software, as required by Art. 13
@@ -1130,8 +1374,8 @@ void MainWindow::on_actionNotas_de_la_version_triggered()
     const QString resource = AppLanguage::releaseNotesResource(AppSettings::instance()->language());
     QFile f(resource);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, title,
-            tr("No se pudieron cargar las notas de la versión (recurso %1 no disponible).").arg(resource));
+        m_result->setText(UiKit::errorHtml(tr("No se pudieron cargar las notas de la versión (%1).")
+                                               .arg(resource.toHtmlEscaped())));
         return;
     }
     QString notes = QString::fromUtf8(f.readAll());
@@ -1177,8 +1421,7 @@ void MainWindow::onUpdaterNoUpdateAvailable()
 {
     if (m_updater->isSilentCheck())
         return;
-    QMessageBox::information(this, tr("Sin actualizaciones"),
-        tr("Está usando la versión más reciente (%1).").arg(Updater::currentVersion()));
+    m_result->setText(UiKit::okHtml(tr("Está usando la versión más reciente (%1).").arg(Updater::currentVersion())));
 }
 
 void MainWindow::onUpdaterCheckFailed(const QString &error)
@@ -1187,8 +1430,8 @@ void MainWindow::onUpdaterCheckFailed(const QString &error)
         qDebug() << "Updater: silent check failed -" << error;
         return;
     }
-    QMessageBox::warning(this, tr("Comprobación fallida"),
-        tr("No se pudo comprobar si hay actualizaciones:\n%1").arg(error));
+    m_result->setText(UiKit::errorHtml(tr("No se pudo comprobar si hay actualizaciones."))
+                      + "<br>" + error.toHtmlEscaped());
 }
 
 void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
@@ -1198,12 +1441,10 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
     QApplication::restoreOverrideCursor();
 
     if (!res.success) {
-        QMessageBox::warning(this, tr("Copia de seguridad"),
-                             tr("No se pudo crear la copia:\n%1").arg(res.errorMessage));
+        m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad."))
+                          + "<br>" + res.errorMessage.toHtmlEscaped());
         return;
     }
-    QMessageBox::information(this, tr("Copia de seguridad"),
-        tr("Copia creada correctamente:\n%1\n\nTamaño: %2 KB")
-            .arg(res.backupPath)
-            .arg(res.bytesWritten / 1024));
+    m_result->setText(UiKit::okHtml(tr("Copia de seguridad creada (%1 KB).").arg(res.bytesWritten / 1024))
+                      + "<br>" + UiKit::fileLinkHtml(res.backupPath, tr("Copia")));
 }

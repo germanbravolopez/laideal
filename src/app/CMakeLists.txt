@@ -16,7 +16,6 @@ endif()
 # main.cpp plus the Qt resources (icon, release notes, Qt translations) and the
 # Windows version resource.
 add_library(laideal_app STATIC
-    mainwindow.ui
     mainwindow.h
     mainwindow.cpp
     cancelinvoicedialog.h

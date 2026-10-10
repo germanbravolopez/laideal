@@ -84,7 +84,7 @@ class TestE2eApp : public QObject
 
     static void clickSave(MainWindow &mw)
     {
-        mw.findChild<QDialogButtonBox *>("bb_save_reset")->button(QDialogButtonBox::Save)->click();
+        mw.findChild<QPushButton *>("pb_save")->click();
     }
 
     // Recogida: searches the ticket by number and selects the garment `hash`, as a
@@ -224,7 +224,7 @@ private slots:
 
         mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Pantalla");
         enterGarment(mw, "Camisa", "1");
-        mw.findChild<QPushButton *>("pb_payment")->setChecked(true);
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
         clickSave(mw);
 
         const auto creates = m_server.requestsTo("Create");
@@ -236,14 +236,67 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
     }
 
-    // MainWindow: Save without a client is refused with a message and stores nothing.
+    // MainWindow: Save without a client is refused in the result panel and stores nothing.
     void test_mainWindow_saveWithoutClient_refused()
     {
         MainWindow mw;
         enterGarment(mw, "Camisa", "1");
         clickSave(mw);
-        QTRY_VERIFY(m_popups->sawMessageContaining("No se ha introducido ningún cliente"));
+        QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("No se ha introducido ningún cliente"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("0"));
+    }
+
+    // MainWindow, the new layout: a garment picked before its quantity counts one and
+    // is priced; the total is read-only; an m2 garment can be saved before it is
+    // measured (any "m2", not only Alfombra); the save is summarised in the result
+    // panel; the quick buttons open Recogida; a closed quarter is refused there too.
+    void test_mainWindow_entryFlowAndMessages()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO prendas VALUES ('Jarapa (m2)', '9.5', '0')"));
+        MainWindow mw;
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        QCOMPARE(table->rowCount(), kInitialTicketRows);
+        QVERIFY(mw.findChild<QLineEdit *>("le_cost_total")->isReadOnly());
+        QVERIFY(mw.findChild<QLineEdit *>("le_nr_ticket")->isReadOnly());
+
+        // Garment on row 1 without touching the current cell (a combo does not move it).
+        qobject_cast<QComboBox *>(table->cellWidget(1, 1))->setCurrentText("Camisa");
+        QCOMPARE(table->item(1, 0)->text(), QStringLiteral("1"));
+        QCOMPARE(table->item(1, 5)->text(), QStringLiteral("3.50"));
+        QVERIFY(!table->item(0, 5) || table->item(0, 5)->text().isEmpty());   // row 0 untouched
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3.50"));
+        // A hand-typed price is kept and counted, with a decimal comma.
+        table->item(1, 5)->setText("3,00");
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3.00"));
+
+        // An m2 garment alone, not measured yet: saved with 0.
+        mw.findChild<QPushButton *>("pb_reset")->click();
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Jarapa");
+        qobject_cast<QComboBox *>(table->cellWidget(0, 1))->setCurrentText("Jarapa (m2)");
+        clickSave(mw);
+        QCOMPARE(scalar(QStringLiteral("SELECT prenda || '|' || importe FROM ingresos WHERE n_recibo='%1'").arg(ticket)),
+                 QStringLiteral("Jarapa (m2)|0.00"));
+        const QString result = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(result.contains(QStringLiteral("Ticket %1 guardado: Cliente Jarapa, 1 prenda(s)").arg(ticket))
+                 && result.contains("sin cobrar"), qPrintable(result));
+
+        // Closed quarter: refused in the panel, nothing saved.
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, "
+                                "importe, edit_lock) VALUES (9, 'X', '', '', '', '05-01-2026', '21', '1.00', 1)"));
+        const QString next = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Jarapa");
+        mw.findChild<QDateEdit *>("de_date_recep")->setDate(QDate(2026, 2, 10));
+        enterGarment(mw, "Camisa", "1");
+        clickSave(mw);
+        QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("contabilidad cerrada"));
+        QCOMPARE(scalar(QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE n_recibo='%1'").arg(next)), QStringLiteral("0"));
+
+        mw.findChild<QPushButton *>("pb_quick_recogida")->click();
+        QTRY_VERIFY(mw.findChild<RecogPrendas *>());
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
+        E2e::exec(m_db, "DELETE FROM prendas WHERE nombre = 'Jarapa (m2)'");
     }
 
     // Anular prendas: the ticked unpaid garment is voided locally (no AEAT request),
