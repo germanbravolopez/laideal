@@ -10,6 +10,12 @@ library, then sends those bytes **RAW** to the thermal printer queue.
 > the Epson TM-T20III — see the research dossier in
 > [`printer/`](printer/README.md) and the runtime lib in [`printing.md`](printing.md).
 
+## Dialog (Imprimir → Recibo / Factura / Factura completa)
+
+Built in code with the shared [UiKit](uikit.md) style (no hand-copied form code, app font): an explanation panel worded for the mode; a **Ticket** group (Nº recibo, Enter prints; a **Factura** list that appears when the ticket has several partial-payment invoices; for a recibo, **Imprimir también la copia del establecimiento**, ticked by default); for a full invoice a **Datos del cliente** group (Dirección - empty uses the client's saved address - and DNI / NIF); the primary **Imprimir recibo** / **Imprimir factura**; the result panel; Cerrar. The window stays open. Every outcome is written in the result panel: not found, no paid garment for a factura, printed (which copies, which invoices), no QR because AEAT has not confirmed it, printing disabled in Configuración, and printer problems. The three former pop-ups are gone: the address / DNI input boxes, the choice among partial payments (first press lists them, second prints the chosen one or all) and the shop-copy question.
+
+When the class is used as a **print engine** (MainWindow save, Cobrar, Recogida), nothing is shown: `printTicket()` returns whether the ticket reached the printer and printer problems still pop up, since there is no panel (`reportPrinterProblem`).
+
 ## Source files
 
 - `src/imprimir/imprimir.h/cpp`
@@ -19,7 +25,7 @@ library, then sends those bytes **RAW** to the thermal printer queue.
 ```cpp
 Imprimir *ui = new Imprimir(db, this);  // db injected via constructor
 ui->isRecibo = true;            // receipt layout
-ui->isCompleteInvoice = false;  // true adds billing address + DNI prompts
+ui->isCompleteInvoice = false;  // true adds billing address + DNI (dialog fields)
 ui->verifactuIntegration = m_verifactuIntegration; // enables /GetQrCode fallback
 ui->qrCode = result.qrCode;     // optional: pixmap from a fresh /Create response
 ui->le_n_ticket->setText(ticketNumber);
@@ -39,7 +45,7 @@ build a copy, optionally print it, then build + print the next copy. A second
 |------------|---------------------|--------|
 | `true` | `false` | Standard customer receipt (recibo) |
 | `false` | `false` | Simplified invoice (factura simplificada) |
-| `false` | `true` | Full invoice with billing-address + DNI prompts |
+| `false` | `true` | Full invoice with billing address + DNI (typed in the dialog) |
 
 ## Process
 
@@ -55,8 +61,8 @@ build a copy, optionally print it, then build + print the next copy. A second
    58 mm → 420).
 3. `printTicket()` hands `m_ticketBytes` to `ThermalPrinter::send(bytes,
    AppSettings::printerName())`. An empty printer name uses the Windows default
-   printer. On failure it shows a `QMessageBox` (the old path had no such
-   feedback). Callers still gate the call on `AppSettings::enablePrinting()`.
+   printer and returns whether it was sent. On failure it reports the problem -
+   in the dialog's result panel when it is shown, else a `QMessageBox`. Callers still gate the call on `AppSettings::enablePrinting()`.
    When `AppSettings::useStatusApi()` is on, the bytes go through
    `StatusApiPrinter::sendAndReadStatus()` first (Epson Status API) and a device
    problem (paper out / cover open / cutter) is surfaced in a `QMessageBox`; if

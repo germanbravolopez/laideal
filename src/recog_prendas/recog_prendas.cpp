@@ -12,6 +12,7 @@
 #include <QAbstractSpinBox>
 #include <QDateTime>
 #include <QDialog>
+#include <QInputDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QPushButton>

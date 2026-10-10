@@ -523,6 +523,64 @@ private slots:
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);              // no second request
     }
 
+    // Imprimir from the menu, all in the window (printing is off in the test settings):
+    // an unknown number; a recibo with the shop copy; a full invoice with the typed
+    // DNI and address on the ticket; a ticket with two partial-payment invoices, where
+    // the first press lists them and the second prints the chosen one. No pop-ups.
+    void test_imprimirDialog_reciboFacturaCompletaAndPartialPayments()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "650", "h650a", "10.00", "10-02-2026", "A-650"));
+        QVERIFY(E2e::seedSentGarment(m_db, "651", "h651a", "8.00", "10-02-2026", "A-651"));
+        QVERIFY(E2e::seedSentGarment(m_db, "651", "h651b", "5.00", "12-02-2026", "A-651-1"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '651-1' "
+                                "WHERE hash='h651b'"));
+        const auto open = [this](bool recibo, bool complete) {
+            auto *dlg = new Imprimir(m_db);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            dlg->isRecibo = recibo;
+            dlg->isCompleteInvoice = complete;
+            dlg->show();
+            return QPointer<Imprimir>(dlg);
+        };
+        const auto press = [](Imprimir *dlg, const QString &ticket) {
+            dlg->le_n_ticket->setText(ticket);
+            dlg->findChild<QPushButton *>("btnPrint")->click();
+            return dlg->findChild<QLabel *>("lblResult")->text();
+        };
+
+        QPointer<Imprimir> recibo = open(true, false);
+        QVERIFY(press(recibo, "999").contains("No se ha encontrado el recibo"));
+        QString text = press(recibo, "650");
+        QVERIFY2(text.contains("Recibo Nº 650 impreso (copia del cliente y del establecimiento)")
+                 && text.contains("impresión está desactivada"), qPrintable(text));
+        recibo->close();
+
+        QPointer<Imprimir> complete = open(false, true);
+        QVERIFY(complete->findChild<QLineEdit *>("leDni")->isVisible());
+        complete->findChild<QLineEdit *>("leDni")->setText("12345678Z");
+        complete->findChild<QLineEdit *>("leAddress")->setText("Calle Mayor 1");
+        text = press(complete, "650");
+        QVERIFY2(text.contains("Factura completa 650 impresa"), qPrintable(text));
+        QVERIFY(complete->ticketBytes().contains("DNI: 12345678Z"));
+        QVERIFY(complete->ticketBytes().contains("Calle Mayor 1"));
+        complete->close();
+
+        QPointer<Imprimir> factura = open(false, false);
+        QVERIFY(!factura->findChild<QLineEdit *>("leDni")->isVisible());
+        text = press(factura, "651");
+        QVERIFY2(text.contains("tiene 2 facturas en AEAT"), qPrintable(text));
+        auto *events = factura->findChild<QComboBox *>("cbEvent");
+        QVERIFY(events->isVisible());
+        QCOMPARE(events->count(), 3);                                       // 651, 651-1, all
+        events->setCurrentIndex(1);
+        text = press(factura, "651");
+        QVERIFY2(text.contains("Facturas impresas: 651-1."), qPrintable(text));
+        QVERIFY(factura->ticketBytes().contains("651-1"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+        factura->close();
+        QTRY_VERIFY(factura.isNull());
+    }
+
     // Recogida, Cobrar: AEAT answers after PayDialog's 5 s wait. The payment is kept
     // PENDIENTE, Recogida takes over the in-flight request, and the late reply marks
     // the rows ENVIADA and says the factura with QR can now be printed.

@@ -131,7 +131,7 @@ A3 is the AEAT safety check: repeat it at the end.
 |---|------|----------|
 | C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances |
 | C2 | Save a new **paid** ticket | A recibo with `IMPORTE PAGADO`, no QR (no AEAT in smoke mode) |
-| C3 | Imprimir → Factura for ticket 4 | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode |
+| C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode; the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
 
 The QR itself is checked by `test_e2e_app` (when it is requested) and `test_ticket_preview` (how it renders).
 

@@ -8,6 +8,7 @@ target_link_libraries(imprimir PRIVATE
     sql_lite
     appsettings
     printing
+    uikit
 )
 target_link_libraries(imprimir PUBLIC
     verifactu

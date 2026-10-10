@@ -1,63 +1,114 @@
 #include "imprimir.h"
 #include "sql_lite.h"
 #include "appsettings.h"
+#include "uikit.h"
 
 #include "ticketrenderer.h"
 #include "thermalprinter.h"
 #include "statusapiprinter.h"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDate>
-#include <QImage>
 #include <QDebug>
 #include <QEventLoop>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QImage>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QTimer>
+#include <QVBoxLayout>
 
 Imprimir::Imprimir(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setupUi(this);
+    setWindowModality(Qt::WindowModal);
+    UiKit::setUpDialog(this, "Imprimir", 460);
+    buildUi();
 }
 
-void Imprimir::setupUi(QDialog *Imprimir)
+void Imprimir::buildUi()
 {
-    if (Imprimir->objectName().isEmpty())
-        Imprimir->setObjectName("Imprimir");
-    Imprimir->setWindowModality(Qt::WindowModal);
-    Imprimir->resize(190, 90);
-    QFont font;
-    font.setPointSize(12);
-    Imprimir->setFont(font);
-    Imprimir->setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
-    formLayout = new QFormLayout(Imprimir);
-    formLayout->setObjectName("formLayout");
-    lbl_n_ticket = new QLabel(Imprimir);
-    lbl_n_ticket->setObjectName("lbl_n_ticket");
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    m_lblIntro = UiKit::introPanel(QString());   // text per mode, see showEvent()
+    layout->addWidget(m_lblIntro);
 
-    formLayout->setWidget(0, QFormLayout::LabelRole, lbl_n_ticket);
+    QGroupBox *grpTicket = new QGroupBox("Ticket");
+    QFormLayout *ticketForm = new QFormLayout(grpTicket);
+    le_n_ticket = new QLineEdit();
+    le_n_ticket->setObjectName("le_n_ticket");   // stable names for the e2e test bench
+    le_n_ticket->setPlaceholderText("Ej: 24417");
+    ticketForm->addRow("Nº recibo:", le_n_ticket);
+    m_lblEvent = new QLabel("Factura:");
+    m_cbEvent = new QComboBox();
+    m_cbEvent->setObjectName("cbEvent");
+    ticketForm->addRow(m_lblEvent, m_cbEvent);
+    m_lblEvent->setVisible(false);
+    m_cbEvent->setVisible(false);
+    m_chkShopCopy = new QCheckBox("Imprimir también la copia del establecimiento");
+    m_chkShopCopy->setObjectName("chkShopCopy");
+    m_chkShopCopy->setChecked(true);
+    ticketForm->addRow(m_chkShopCopy);
+    layout->addWidget(grpTicket);
 
-    le_n_ticket = new QLineEdit(Imprimir);
-    le_n_ticket->setObjectName("le_n_ticket");
+    m_grpClient = new QGroupBox("Datos del cliente para la factura completa");
+    QFormLayout *clientForm = new QFormLayout(m_grpClient);
+    m_leAddress = new QLineEdit();
+    m_leAddress->setObjectName("leAddress");
+    m_leAddress->setPlaceholderText("Vacío: la dirección guardada del cliente");
+    clientForm->addRow("Dirección:", m_leAddress);
+    m_leDni = new QLineEdit();
+    m_leDni->setObjectName("leDni");
+    clientForm->addRow("DNI / NIF:", m_leDni);
+    layout->addWidget(m_grpClient);
 
-    formLayout->setWidget(0, QFormLayout::FieldRole, le_n_ticket);
+    QHBoxLayout *actions = new QHBoxLayout();
+    actions->addStretch();
+    m_btnPrint = UiKit::primaryButton("Imprimir", "btnPrint");
+    actions->addWidget(m_btnPrint);
+    layout->addLayout(actions);
+    m_lblResult = new UiKit::ResultPanel();
+    layout->addWidget(m_lblResult);
+    layout->addLayout(UiKit::closeRow(this));
 
-    bb_ok_cancel = new QDialogButtonBox(Imprimir);
-    bb_ok_cancel->setObjectName("bb_ok_cancel");
-    bb_ok_cancel->setOrientation(Qt::Horizontal);
-    bb_ok_cancel->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
+    connect(m_btnPrint, &QPushButton::clicked, this, &Imprimir::onPrintClicked);
+    connect(le_n_ticket, &QLineEdit::returnPressed, this, &Imprimir::onPrintClicked);
+    // Another number: its partial-payment invoices are listed again on the next print.
+    connect(le_n_ticket, &QLineEdit::textEdited, this, [this]() {
+        m_eventsTicket.clear();
+        m_lblEvent->setVisible(false);
+        m_cbEvent->setVisible(false);
+    });
+}
 
-    formLayout->setWidget(1, QFormLayout::SpanningRole, bb_ok_cancel);
-
-    Imprimir->setWindowTitle(QCoreApplication::translate("Imprimir", "Dialog", nullptr));
-    lbl_n_ticket->setText(QCoreApplication::translate("Imprimir", "N. Ticket:", nullptr));
-    QObject::connect(bb_ok_cancel, &QDialogButtonBox::accepted, Imprimir, qOverload<>(&QDialog::accept));
-    QObject::connect(bb_ok_cancel, &QDialogButtonBox::rejected, Imprimir, qOverload<>(&QDialog::reject));
-
-    QMetaObject::connectSlotsByName(Imprimir);
+void Imprimir::showEvent(QShowEvent *event)
+{
+    // The mode (isRecibo / isCompleteInvoice) is set by the caller after construction.
+    const QString what = isRecibo ? "el recibo" : isCompleteInvoice ? "la factura completa" : "la factura";
+    m_lblIntro->setText(isRecibo
+        ? "Imprime el recibo (resguardo) de un ticket con todas sus prendas: la copia del cliente "
+          "y, si se marca, la del establecimiento."
+        : isCompleteInvoice
+            ? "Imprime la factura completa de un ticket pagado, con la dirección y el DNI / NIF del "
+              "cliente, y el código QR de AEAT si la factura está confirmada."
+            : "Imprime la factura simplificada de un ticket pagado, con el código QR de AEAT si la "
+              "factura está confirmada.");
+    m_grpClient->setVisible(isCompleteInvoice);
+    m_chkShopCopy->setVisible(isRecibo);
+    m_btnPrint->setText(isRecibo ? "Imprimir recibo" : "Imprimir factura");
+    if (m_lblResult->text().isEmpty())
+        m_lblResult->showInfo("Introduzca el Nº de recibo y pulse \"" + m_btnPrint->text() + "\".");
+    qDebug() << "Imprimir: opened to print" << what;
+    QDialog::showEvent(event);
 }
 
 void Imprimir::getTicketInfo()
 {
-    sqlQueryModel = new QSqlQueryModel;
+    sqlQueryModel = new QSqlQueryModel(this);
     db.open();
     QSqlQuery q(db);
     // Anulado rows (locally voided garments) never appear on a printed recibo or
@@ -210,18 +261,6 @@ QPixmap Imprimir::resolveQrCode()
     return qrCode;
 }
 
-QString Imprimir::addExtraInfoToInvoice(QString title, QString request)
-{
-    bool ok;
-    QString text = QInputDialog::getText(this, title,
-                                         request, QLineEdit::Normal,
-                                         "", &ok);
-    if (ok)
-        return text;
-    else
-        return "";
-}
-
 int Imprimir::paperDots() const
 {
     // 80 mm roll = 576 printable dots, 58 mm = 420 (203 dpi). Anything other
@@ -248,13 +287,11 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     d.clientName     = client;
     d.receptionDate  = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-", "/");
 
-    // Complete invoice: billing address (looked up, else prompted) + DNI (prompted).
+    // Complete invoice: billing address (typed, else the client's) + DNI / NIF (typed).
     if (isCompleteInvoice) {
-        QString clientAddress = searchItemFromClient(db, "direccion", client, false);
-        if (clientAddress.isEmpty())
-            clientAddress = addExtraInfoToInvoice("Añadir dirección de facturación", "Dirección:");
-        d.clientAddress = clientAddress;
-        d.clientDni     = addExtraInfoToInvoice("Añadir DNI", "DNI:");
+        const QString typed = m_leAddress->text().trimmed();
+        d.clientAddress = typed.isEmpty() ? searchItemFromClient(db, "direccion", client, false) : typed;
+        d.clientDni     = m_leDni->text().trimmed();
     }
 
     // Garment rows: every row on a recibo, only paid rows on a factura.
@@ -301,13 +338,13 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     m_ticketBytes = TicketRenderer::render(d, paperDots());
 }
 
-void Imprimir::printTicket()
+bool Imprimir::printTicket()
 {
     // Send the ESC/POS bytes built by buildTicket() straight to the printer
     // queue as RAW spool data - no Excel, no .vbs, no cscript.
     if (m_ticketBytes.isEmpty()) {
         qWarning() << "Imprimir::printTicket: no ticket built";
-        return;
+        return false;
     }
     const QString printer = AppSettings::instance()->printerName();
     QString err;
@@ -337,26 +374,23 @@ void Imprimir::printTicket()
         if (status.valid && (status.hasError() || status.hasWarning())) {
             qWarning() << "Imprimir::printTicket status:" << status.summary()
                        << Qt::hex << status.raw;
-            QMessageBox::warning(this, "Impresora", status.summary(),
-                                 QMessageBox::Ok, QMessageBox::Ok);
+            reportPrinterProblem(status.summary(), false);
             warned = true;
         }
         // Fatal fault (cutter/mechanical/unrecoverable): do not queue the ticket -
         // the operator must fix the printer and reprint.
         if (status.valid && status.isFatal())
-            return;
+            return false;
         if (sent)
-            return;
+            return true;
         // The send was refused but the ASB did not decode to a known fault: the
         // TM-T20III reports an open cover / offline as ASB_NO_RESPONSE (0x1), not
         // ASB_COVER_OPEN. When we did reach the printer's status (status.valid),
         // warn generically so the operator gets feedback; a missing DLL/API leaves
         // status invalid and stays silent (RAW alone works there).
         if (status.valid && !warned) {
-            QMessageBox::warning(this, "Impresora",
-                "No se pudo enviar a la impresora.\n"
-                "Comprueba que la tapa está cerrada, que hay papel y la conexión.",
-                QMessageBox::Ok, QMessageBox::Ok);
+            reportPrinterProblem("No se pudo enviar a la impresora.\n"
+                                 "Comprueba que la tapa está cerrada, que hay papel y la conexión.", false);
         }
         // Recoverable state (cover open / paper out) or a non-status send failure:
         // fall through to the RAW spooler, which queues the job so it prints once
@@ -369,22 +403,47 @@ void Imprimir::printTicket()
     QApplication::restoreOverrideCursor();
     if (!ok) {
         qCritical() << "Imprimir::printTicket:" << err;
-        QMessageBox::critical(this, "Imprimir",
-                              "No se pudo imprimir el ticket.\n" + err,
-                              QMessageBox::Ok, QMessageBox::Ok);
+        reportPrinterProblem("No se pudo imprimir el ticket.\n" + err, true);
     }
+    return ok;
 }
 
-void Imprimir::on_bb_ok_cancel_accepted()
+void Imprimir::reportPrinterProblem(const QString &text, bool critical)
 {
-    if (le_n_ticket->text() != selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", le_n_ticket->text(), true, true)) {
-        QMessageBox::information(this, "Imprimir",
-                              "El número de recibo " + le_n_ticket->text() + " no se ha encontrado en la base de datos.\n"
-                              "Utilizar otro número o buscarlo en la lista de ingresos.",
-                              QMessageBox::Ok,
-                              QMessageBox::Ok);
+    if (isVisible()) {
+        m_printProblems << text;
         return;
     }
+    if (critical)
+        QMessageBox::critical(this, "Imprimir", text, QMessageBox::Ok, QMessageBox::Ok);
+    else
+        QMessageBox::warning(this, "Impresora", text, QMessageBox::Ok, QMessageBox::Ok);
+}
+
+bool Imprimir::sendIfEnabled()
+{
+    return AppSettings::instance()->enablePrinting() && printTicket();
+}
+
+void Imprimir::onPrintClicked()
+{
+    m_printProblems.clear();
+    const QString ticket = le_n_ticket->text().trimmed();
+    if (ticket.isEmpty() || ticket != selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", ticket, true, false)) {
+        m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + ".")
+                             + "<br>Utilice otro número o búsquelo en el listado de ingresos.");
+        return;
+    }
+    const bool printing = AppSettings::instance()->enablePrinting();
+    const QString printingOff = printing ? QString()
+        : "<br>" + UiKit::warnHtml("La impresión está desactivada en Configuración: no se ha enviado a la impresora.");
+    const auto problems = [this]() {
+        QStringList lines;
+        for (const QString &problem : m_printProblems)
+            lines << problem.toHtmlEscaped().replace('\n', "<br>");
+        return lines.isEmpty() ? QString() : "<br>" + UiKit::errorHtml(lines.join("<br>"));
+    };
+    invoiceSeq = -1;
 
     // Factura path: enumerate the (seq, invoice_id) pairs that have actually
     // been submitted to AEAT for this n_recibo. A multi-seq ticket cannot be
@@ -404,47 +463,50 @@ void Imprimir::on_bb_ok_cancel_accepted()
                    "AND verifactu_estado != '' "
                    "GROUP BY verifactu_invoice_seq "
                    "ORDER BY verifactu_invoice_seq");
-        sq.bindValue(":n", le_n_ticket->text());
+        sq.bindValue(":n", ticket);
         if (sq.exec()) {
             while (sq.next())
                 events.append({ sq.value(0).toInt(), sq.value(1).toString() });
         }
         db.close();
     }
-
-    auto labelFor = [this](const QPair<int, QString> &ev) {
+    const auto labelFor = [&ticket](const QPair<int, QString> &ev) {
         // Authoritative when set: literal column matches what AEAT received.
-        if (!ev.second.isEmpty()) return ev.second;
-        // Empty column: reconstruct the AEAT InvoiceID from n_recibo + seq
-        // (bare for seq 0 legacy/save-time, <n>-<seq> for a PayDialog event).
-        return verifactuInvoiceId(le_n_ticket->text(), ev.first);
+        // Empty column: reconstruct the AEAT InvoiceID from n_recibo + seq.
+        return ev.second.isEmpty() ? verifactuInvoiceId(ticket, ev.first) : ev.second;
     };
 
     if (events.size() > 1) {
-        QStringList options;
-        for (const auto &ev : events)
-            options << labelFor(ev);
-        const QString allOption = tr("Imprimir todas");
-        options << allOption;
-        bool ok = false;
-        const QString choice = QInputDialog::getItem(this, tr("Múltiples pagos parciales"),
-            tr("Este ticket tiene %1 facturas distintas en AEAT.\n¿Cuál imprimir?").arg(events.size()),
-            options, options.size() - 1, /*editable=*/false, &ok);
-        if (!ok) return;
-
-        QList<QPair<int, QString>> toPrint;
-        if (choice == allOption) {
-            toPrint = events;
-        } else {
-            toPrint << events[options.indexOf(choice)];
+        // Several partial payments: the operator picks one (or all) in the window.
+        if (m_eventsTicket != ticket) {
+            m_cbEvent->clear();
+            for (const auto &ev : events)
+                m_cbEvent->addItem(labelFor(ev));
+            m_cbEvent->addItem("Todas las facturas");
+            m_cbEvent->setCurrentIndex(m_cbEvent->count() - 1);
+            m_lblEvent->setVisible(true);
+            m_cbEvent->setVisible(true);
+            m_eventsTicket = ticket;
+            m_lblResult->setText(UiKit::warnHtml(QString("El recibo Nº %1 tiene %2 facturas en AEAT (pagos parciales).")
+                                                     .arg(ticket.toHtmlEscaped()).arg(events.size()))
+                                 + "<br>Elija cuál imprimir y pulse \"" + m_btnPrint->text() + "\" de nuevo.");
+            return;
         }
+        QList<QPair<int, QString>> toPrint;
+        if (m_cbEvent->currentIndex() >= events.size())
+            toPrint = events;
+        else
+            toPrint << events[m_cbEvent->currentIndex()];
+        QStringList printed;
         for (const auto &ev : toPrint) {
             invoiceSeq = ev.first;
             getTicketInfo();
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
-            if (AppSettings::instance()->enablePrinting())
-                printTicket();
+            sendIfEnabled();
+            printed << labelFor(ev);
         }
+        m_lblResult->setText(UiKit::okHtml("Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".")
+                             + printingOff + problems());
         return;
     }
 
@@ -454,36 +516,34 @@ void Imprimir::on_bb_ok_cancel_accepted()
     if (!isRecibo && events.size() == 1)
         invoiceSeq = events.first().first;
     getTicketInfo();
+    if (!isRecibo && !checkAnyItemPaid()) {
+        m_lblResult->setText(UiKit::warnHtml("No hay ninguna prenda pagada en el recibo Nº " + ticket.toHtmlEscaped() + ".")
+                             + "<br>Una factura solo se emite por lo cobrado; imprima el recibo.");
+        return;
+    }
     // A reprinted recibo shows the WHOLE ticket, so it may only claim IMPORTE
     // PAGADO when every garment is paid - "any paid" would mark a partially-paid
     // ticket as settled in full. Facturas never carry the marker (payment is
     // implied), same as every other factura path.
-    const bool paidMarker = isRecibo && ticketAllGarmentsPaid(db, le_n_ticket->text());
-    if (isRecibo || (!isRecibo && checkAnyItemPaid())) {
-        buildTicket(true, paidMarker);
-        if (AppSettings::instance()->enablePrinting()) {
-            printTicket();
+    const bool paidMarker = isRecibo && ticketAllGarmentsPaid(db, ticket);
+    buildTicket(true, paidMarker);
+    sendIfEnabled();
+    if (isRecibo) {
+        const bool shopCopy = m_chkShopCopy->isChecked();
+        if (shopCopy) {
+            buildTicket(false, paidMarker);
+            sendIfEnabled();
         }
-        if (isRecibo) {
-            int resp = QMessageBox::question(this, "Copia establecimiento",
-                                             "¿Desea copia para el establecimiento?",
-                                             QMessageBox::Yes | QMessageBox::No,
-                                             QMessageBox::Yes);
-            if (resp == QMessageBox::Yes) {
-                buildTicket(false, paidMarker);
-                if (AppSettings::instance()->enablePrinting()) {
-                    printTicket();
-                }
-            }
-        }
-    } else if (!isRecibo)
-        QMessageBox::information(this, "Imprimir",
-                                 "No hay ninguna prenda pagada en el recibo " + le_n_ticket->text() + ".",
-                                 QMessageBox::Ok,
-                                 QMessageBox::Ok);
-}
-
-void Imprimir::on_bb_ok_cancel_rejected()
-{
-    this->close();
+        m_lblResult->setText(UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
+                                           + (shopCopy ? " (copia del cliente y del establecimiento)."
+                                                       : " (copia del cliente)."))
+                             + printingOff + problems());
+        return;
+    }
+    m_lblResult->setText(UiKit::okHtml((isCompleteInvoice ? "Factura completa " : "Factura ")
+                                       + displayInvoiceId().toHtmlEscaped() + " impresa.")
+                         + (qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
+                                              "o AEAT no respondió a tiempo."
+                                            : QString())
+                         + printingOff + problems());
 }
