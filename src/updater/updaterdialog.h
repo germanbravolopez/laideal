@@ -16,6 +16,8 @@ class Updater;
 // On confirm: drives Updater::downloadInstaller, swaps the dialog to a
 // progress bar, launches the downloaded installer detached, and quits the app
 // (qApp->quit()) so Inno Setup can replace the running files.
+namespace UiKit { class ResultPanel; }
+
 class UpdaterDialog : public QDialog
 {
     Q_OBJECT
@@ -39,6 +41,7 @@ private:
     QString m_latestVersion;
 
     QLabel       *m_header;
+    UiKit::ResultPanel *m_lblResult = nullptr;
     QTextEdit    *m_notes;
     QProgressBar *m_progress;
     QPushButton  *m_btnUpdate;

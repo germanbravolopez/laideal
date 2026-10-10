@@ -116,11 +116,11 @@ A3 is the AEAT safety check: repeat it at the end.
 |---|------|----------|
 | B1 | Recovery dialog: **Posponer**, restart | It appears again (nothing written) |
 | B2 | Recovery dialog: **Marcar como error** | Ticket 3 reads `ERROR` (upper-case) in Recogida; its Verifactu dialog shows **Reintentar envío a AEAT** (do not press it) |
-| B3 | Recogida → search ticket 1 by number | Importe total shows 20.00 (what is owed, not 0) |
-| B4 | Herramientas → Añadir nuevas prendas on ticket 1 (still unpaid), add one garment **unpaid** | The added garment reads `SIN COBRAR`; ticket 1 now has three garments |
-| B5 | Recogida → ticket 1 → **pay-all button** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
-| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused: "El recibo Nº 1 ya tiene prendas pagadas (enviado a la AEAT)…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
-| B6b | Herramientas → Anular prendas → ticket 2 → tick → confirm | In Recogida: `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
+| B3 | Recogida → search ticket 1 by number | Importe total shows 20,00 € (what is owed, not 0); the window is the new layout (search group, table, Prenda / Estado / Ticket groups, result panel) and every message appears in its result panel, not in pop-ups |
+| B4 | Recogida → ticket 1 (still unpaid) → select a garment → **Añadir prendas…** (opens with ticket 1 found), add one garment **unpaid**, Cerrar | Recogida reports "1 prenda(s) añadidas"; the added garment reads `SIN COBRAR`; ticket 1 now has three garments |
+| B5 | Recogida → ticket 1 → **Cobrar…** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
+| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused in the window's result panel: "El recibo Nº 1 ya tiene prendas pagadas…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
+| B6b | Recogida → search ticket 2 → select a garment → **Anular prendas…** (opens with ticket 2 loaded) → tick → confirm → Cerrar | Recogida reports the voided garment in its result panel; the row reads `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today (also in the Anulación date under Recogida, with a red "Anulada"); Herramientas no longer lists Anular prendas. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
 | B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
 | B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
 | B9 | Herramientas → Anular factura / Rectificar | Both show "Verifactu no configurado" (correct in smoke mode; their flows are in `test_e2e_app`) |
@@ -129,9 +129,9 @@ A3 is the AEAT safety check: repeat it at the end.
 
 | # | Step | Expected |
 |---|------|----------|
-| C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances |
+| C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances; the main window is the new layout (Cliente / Ticket / Prendas groups, Guardar ticket) and the result panel summarises the saved ticket. Picking a garment before typing its quantity fills 1; an m2 garment shows 0,00 until its size is typed |
 | C2 | Save a new **paid** ticket | A recibo with `IMPORTE PAGADO`, no QR (no AEAT in smoke mode) |
-| C3 | Imprimir → Factura for ticket 4 | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode |
+| C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode; the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
 
 The QR itself is checked by `test_e2e_app` (when it is requested) and `test_ticket_preview` (how it renders).
 
@@ -139,11 +139,11 @@ The QR itself is checked by `test_e2e_app` (when it is requested) and `test_tick
 
 | # | Step | Expected |
 |---|------|----------|
-| D1 | Contabilidad → Trimestral, Q3 2026 (no lock) | PDF opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 €; IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows |
+| D1 | Contabilidad → Trimestral, Q3 2026 (no lock), **Incluir el detalle de tickets y facturas** ticked, Generar contabilidad | PDF `..._detalle.pdf` opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 € (columns IVA 21 %, IVA 10 %, Subtotal con IVA, Sin IVA, Total); IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows. No pop-up: the result shows in the window with a link that opens the PDF; the dialog stays open over the main window, which cannot be used until Cerrar. Texts, buttons and groups are legible and aligned |
 | D2 | Contabilidad → Trimestral, Q4 2026 | "Anulaciones / rectificaciones del periodo" shows ticket 5 at −12.10 € with its annex table; Q3 regenerated is unchanged. (Ticket 5 was paid in Q3, so Q3 counted it as income; Q4, where it was cancelled, takes it back. Paid and cancelled in the same quarter, the two lines net to 0.) |
 | D3 | Contabilidad → Anual 2026 | PDF renders and ends with the tickets / gastos tables |
-| D4 | Lock box | "Bloquear datos" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad |
-| D5 | Contabilidad → Trimestral Q3 2026 with **Bloquear datos**. Then (a) Listado → Gastos: double-click the SMOKE-G1 expense; (b) Añadir factura de gastos dated 20-09-2026; (c) the same form dated today | (a) "Edición bloqueada"; (b) refused with "Trimestre bloqueado"; (c) saved. (The ingresos list is read-only for every row, locked or not: invoices change only through Recogida / Anular / Rectificar, so there is nothing to try there. Closed-quarter refusals of Cobrar, Anular factura and Rectificar are covered by the e2e suites.) |
+| D4 | Lock box; same Q3 without the detail box; Comprobar bloqueo | "Bloquear el trimestre" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad. Without the detail box the PDF (no `_detalle`) has only the summary. Comprobar bloqueo says Q3 2026 is not locked (after D5: locked) |
+| D5 | Contabilidad → Trimestral Q3 2026 with **Bloquear el trimestre**. Then (a) Listado → Gastos: double-click the SMOKE-G1 expense; (b) Añadir factura de gastos dated 20-09-2026; (c) the same form dated today | (a) "Edición bloqueada" in the listado's result panel; (b) refused with "Trimestre bloqueado"; (c) saved. (The ingresos list is read-only for every row, locked or not: invoices change only through Recogida / Anular / Rectificar, so there is nothing to try there. Closed-quarter refusals of Cobrar, Anular factura and Rectificar are covered by the e2e suites.) |
 | D6 | Revertir contabilidad Q3 2026, then Listado → Gastos: double-click SMOKE-G1 | Editable again |
 
 D5 is the highest-value item: it is the only manual check left on a financial control.

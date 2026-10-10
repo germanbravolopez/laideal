@@ -10,7 +10,6 @@
 #include <QHash>
 #include "verifactuintegration.h"
 #include "cancelinvoicedialog.h"
-#include "voidgarmentsdialog.h"
 #include "rectifyinvoicedialog.h"
 #include "updater.h"
 #include "backup_manager.h"
@@ -22,9 +21,22 @@
 #define TABLE_TICKET_OBSE   4
 #define TABLE_TICKET_PRIC   5
 
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
+class QCheckBox;
+class QComboBox;
+class QDateEdit;
+class QLabel;
+class QLineEdit;
+class QMenu;
+class QPushButton;
+class QTableWidget;
+namespace UiKit { class ResultPanel; }
+
+// Rows the ticket table starts with; "Añadir fila" adds more for a long ticket.
+constexpr int kInitialTicketRows = 9;
+
+// The ticket-entry window: client, ticket, garments, Guardar ticket, plus the menus
+// that open every other window. Built in code with the shared UiKit style; messages
+// go to its result panel, AEAT replies and backups to the status bar.
 
 class MainWindow : public QMainWindow
 {
@@ -51,6 +63,8 @@ private slots:
 
     void cbGarmChanged(const QString &text);
     void cbServChanged(const QString &text);
+    // Re-prices one row from its garment, service, quantity and size.
+    void updateRowPrice(int row);
 
     bool validateTicket();
     QString removeSpecialChar(QString str);
@@ -61,14 +75,18 @@ private slots:
     // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
     QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
                                    double totalAmount, int seq = 0);
-    void saveTicket();
-    void printRecibo();
-    void printFra(const QPixmap &qrCode = QPixmap());
+    // Inserts the ticket's garments; storedTotal = the sum of the stored amounts.
+    // False (stops at the first failed insert) when the ticket was not stored whole.
+    bool saveTicket(double &storedTotal);
+    // Each returns whether both copies reached the printer.
+    bool printRecibo();
+    bool printFra(const QPixmap &qrCode = QPixmap());
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
-    void on_bb_save_reset_clicked(QAbstractButton *button);
+    void on_pb_save_clicked();
+    void on_pb_reset_clicked();
     void on_cb_client_editTextChanged(const QString &arg1);
     void on_table_ticket_cellChanged(int row, int column);
     void on_pb_add_row_clicked();
@@ -95,7 +113,6 @@ private slots:
     void on_actionAnadir_nuevas_prendas_triggered();
     void on_actionCrear_hash_en_ingresos_triggered();
     void on_actionAnular_factura_verifactu_triggered();
-    void on_actionAnular_prendas_triggered();
     void on_actionRectificar_factura_verifactu_triggered();
     void on_actionExportar_registros_aeat_triggered();
     void on_actionMostrar_log_triggered();
@@ -112,7 +129,27 @@ private slots:
     void onUpdaterCheckFailed(const QString &error);
 
 private:
-    Ui::MainWindow *ui;
+    // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
+    // slots connect by name and the e2e bench finds them by it).
+    struct Widgets {
+        QLabel *lbl_title = nullptr;
+        QComboBox *cb_client = nullptr;
+        QLineEdit *le_phone = nullptr, *le_mobile = nullptr, *le_addr = nullptr;
+        QLineEdit *le_nr_ticket = nullptr, *le_cost_total = nullptr;
+        QDateEdit *de_date_recep = nullptr;
+        QCheckBox *pb_payment = nullptr;          // paid at drop-off
+        QLabel *lbl_payment_badge = nullptr;
+        QTableWidget *table_ticket = nullptr;
+        QPushButton *pb_add_row = nullptr, *pb_save = nullptr, *pb_reset = nullptr;
+        QMenu *menuArchivo = nullptr;
+        QAction *actionMostrar_log = nullptr;
+    };
+    void buildUi();
+    int rowOfCellWidget(QObject *widget, int column) const;
+
+    Widgets *ui = nullptr;
+    UiKit::ResultPanel *m_result = nullptr;
+    QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration;
     // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
     // the requestFinished handler can patch exactly the rows of that submission

@@ -1,5 +1,22 @@
 ﻿Releases:
 
+11.0
+- New: every window has a new, clearer design
+  - Same fonts and buttons everywhere, with the main action in bold. Messages no longer pop up: they appear in a panel at the bottom of each window (green when done, orange as a notice, red for an error). Only actions that cannot be undone still ask for confirmation.
+- Important: garments priced by m2 must be measured before they are charged
+  - Until its size is entered, a garment priced by m2 is worth 0,00. A ticket with one can be saved unpaid, but not as paid, since its invoice would reach the AEAT at 0. Once measured, enter the size in "Recogida de Prendas" and charge it with "Cobrar...".
+- New: main window
+  - Quick buttons for "Recogida de prendas", "Añadir prendas" and "Factura de gastos". "Pagado al dejarlo" is a checkbox. A garment chosen without a quantity counts 1. The total is always the sum of the garments. After saving, a summary shows the ticket, client, amount and what was printed.
+- New: "Recogida de Prendas"
+  - "Cobrar..." (formerly "Pagar todo"), a "Recogida" checkbox, "Separar" with the number of garments beside it, the cancellation date, and two new buttons for the selected ticket: "Añadir prendas..." and "Anular prendas..." (no longer in the Herramientas menu). A voided garment shows "Anulada" in green.
+- Change: a garment already charged can no longer have its price, quantity or service changed; corrections are made with "Anular factura" or "Rectificar factura". Splitting charged garments keeps the price that was charged, and every amount is stored with 2 decimals.
+- New: "Generar contabilidad"
+  - The window stays open until "Cerrar". The gastos table has a "Subtotal con IVA" column (21% + 10%). The ticket detail is optional and saved as a separate PDF ending in "_detalle". "Comprobar bloqueo" tells whether a quarter is closed, and a link opens the generated PDF.
+- Improvement: "Imprimir" asks the address and DNI of a complete invoice in the same window, lists the invoices of a ticket paid in parts to choose one, and the shop copy is a checkbox.
+- Improvement: in "Formulario facturas" suppliers and services are listed in alphabetical order, and an invoice dated in a closed quarter is refused even if that month has no expenses yet.
+- Improvement: the lists have buttons for adding and deleting rows and for the PDF, and the Herramientas menu is grouped by topic (Recogida, Verifactu, Gastos, Contabilidad, backup).
+- Bug fixes: prices in the main window are always recalculated on the row that was edited; split garments of a charged ticket now stay part of its AEAT invoice (existing ones are fixed automatically when this version starts); the gastos PDF list is always regenerated with current data; a quarter is no longer closed when its Contabilidad PDF could not be saved (the error is shown instead); expenses of a closed quarter can no longer be edited or deleted in the list, and an expense's date cannot be changed there into a closed quarter.
+
 10.13
 - Bug fix: cancelling an invoice now uses the date it was issued with
   - "Anular factura" sent every cancellation with the date the ticket was received, while the AEAT registered the invoice with its payment date. For a ticket paid when collected, or paid in parts, the AEAT could reject the cancellation. Each invoice is now cancelled with its own payment date, shown in a new "Fecha factura" column of the dialog.

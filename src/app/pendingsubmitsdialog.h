@@ -21,6 +21,8 @@ class QPushButton;
 // Posponer (no-op, surfaces again next launch). No blind auto-resubmit -
 // AEAT may already hold a registered invoice under the same InvoiceID and a
 // naive resubmit would get a duplicate-InvoiceID rejection.
+namespace UiKit { class ResultPanel; }
+
 class PendingSubmitsDialog : public QDialog
 {
     Q_OBJECT
@@ -55,6 +57,7 @@ private slots:
 private:
     QSqlDatabase   &db;
     QTableWidget   *m_table = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
     QVector<Entry>  m_entries;
 
     void buildUi();

@@ -58,6 +58,16 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 ---
 
+## Windows and dialogs (UiKit)
+
+- Build new windows **in code** with `src/uikit/` (no new `.ui` files): `UiKit::setUpDialog`, an `introPanel`, fields in `QGroupBox` + `QFormLayout`, one `primaryButton` at the right of the action row, `secondaryButton` for the rest, `dateEdit` for dates, a `ResultPanel`, `closeRow`. See `docs/modules/uikit.md`.
+- Report outcomes in the `ResultPanel` with `okHtml` / `warnHtml` / `errorHtml`, not `QMessageBox`. Message boxes only to confirm a destructive action, or for a notice when the window closes right after.
+- No fixed point sizes or pixel stylesheets: use the app font, or a size relative to it.
+- Give the widgets a test drives camelCase object names (`leFra`, `btnSave`, `lblResult`); the `pb_` / `le_` prefixes above are for the remaining `.ui` forms.
+- PDFs go through `ReportHtml::writePdf`.
+
+---
+
 ## Qt-specific conventions
 
 - **Memory management**: always pass a Qt parent (`this` or valid `QObject*`) to every `QObject`-derived object allocated with `new`. Do not use raw `delete` when Qt ownership covers it.

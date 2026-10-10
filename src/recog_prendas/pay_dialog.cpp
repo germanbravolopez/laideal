@@ -3,6 +3,7 @@
 #include "appsettings.h"
 #include "imprimir.h"
 #include "sql_lite.h"
+#include "uikit.h"
 #include "verifactuintegration.h"
 
 #include <QCheckBox>
@@ -42,14 +43,13 @@ PayDialog::PayDialog(const QSqlDatabase &database, QWidget *parent)
 
 void PayDialog::buildUi()
 {
-    setWindowTitle(tr("Cobrar"));
+    UiKit::setUpDialog(this, tr("Cobrar"), 720);
     setModal(true);
-    resize(720, 480);
+    resize(720, 520);
 
     auto *root = new QVBoxLayout(this);
 
-    m_lblHeader = new QLabel(this);
-    m_lblHeader->setStyleSheet("font-size: 14px; font-weight: bold;");
+    m_lblHeader = UiKit::introPanel(QString());   // ticket, client, reception (loadTicket)
     root->addWidget(m_lblHeader);
 
     m_table = new QTableWidget(this);
@@ -71,28 +71,29 @@ void PayDialog::buildUi()
 
     m_lblTotal = new QLabel(this);
     m_lblTotal->setAlignment(Qt::AlignRight);
-    m_lblTotal->setStyleSheet("font-size: 14px; font-weight: bold;");
+    QFont totalFont = m_lblTotal->font();
+    totalFont.setPointSizeF(totalFont.pointSizeF() + 2);
+    totalFont.setBold(true);
+    m_lblTotal->setFont(totalFont);
     root->addWidget(m_lblTotal);
 
     auto *form = new QFormLayout;
-    m_dePago = new QDateEdit(QDate::currentDate(), this);
-    m_dePago->setCalendarPopup(true);
-    m_dePago->setDisplayFormat("dd-MM-yyyy");
+    form->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    m_dePago = UiKit::dateEdit(QDate::currentDate(), "dePago");
     form->addRow(tr("Fecha de pago:"), m_dePago);
     root->addLayout(form);
 
-    m_lblStatus = new QLabel(this);
-    m_lblStatus->setStyleSheet("color: #555;");
-    root->addWidget(m_lblStatus);
-
     auto *btns = new QHBoxLayout;
-    btns->addStretch(1);
-    m_btnCobrar = new QPushButton(tr("Cobrar"), this);
-    m_btnCobrar->setDefault(true);
-    m_btnCancel = new QPushButton(tr("Cancelar"), this);
-    btns->addWidget(m_btnCobrar);
+    m_btnCancel = UiKit::secondaryButton(tr("Cancelar"), "btnCancel");
     btns->addWidget(m_btnCancel);
+    btns->addStretch(1);
+    m_btnCobrar = UiKit::primaryButton(tr("Cobrar"), "btnCobrar");
+    btns->addWidget(m_btnCobrar);
     root->addLayout(btns);
+
+    m_lblStatus = new UiKit::ResultPanel(tr("Marque las prendas que se cobran y pulse \"Cobrar\"."), this);
+    m_lblStatus->setMinimumHeight(40);
+    root->addWidget(m_lblStatus);
 
     connect(m_btnCobrar, &QPushButton::clicked, this, &PayDialog::onCobrarClicked);
     connect(m_btnCancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -148,7 +149,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
         m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
         m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
-        auto *imp = new QTableWidgetItem(QString::number(q.value(6).toDouble(), 'f', 2));
+        auto *imp = new QTableWidgetItem(moneyText(q.value(6).toString()));
         imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_table->setItem(r, COL_AMOUNT,  imp);
         m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
@@ -203,24 +204,33 @@ void PayDialog::setFormEnabled(bool enabled)
 void PayDialog::onCobrarClicked()
 {
     QStringList hashes;
+    QHash<QString, QString> amounts;   // hash -> the amount shown, in cents
     double total = 0.0;
     for (int r = 0; r < m_table->rowCount(); ++r) {
         auto *chk = m_table->item(r, COL_CHECK);
         if (chk && chk->checkState() == Qt::Checked) {
+            // Once charged its amount is frozen: measure it first.
+            if (garmentUnmeasured(m_table->item(r, COL_GARMENT)->text(), m_table->item(r, COL_SIZE)->text())) {
+                m_lblStatus->setText(UiKit::errorHtml(tr("La prenda \"%1\" se cobra por m2 y no tiene tamaño.")
+                                                          .arg(m_table->item(r, COL_GARMENT)->text().toHtmlEscaped()))
+                                     + "<br>" + tr("Introduzca su tamaño en Recogida o desmárquela para cobrar el resto."));
+                return;
+            }
             hashes << m_table->item(r, COL_HASH)->text();
+            amounts.insert(m_table->item(r, COL_HASH)->text(), m_table->item(r, COL_AMOUNT)->text());
             total += m_table->item(r, COL_AMOUNT)->text().toDouble();
         }
     }
     if (hashes.isEmpty()) {
-        QMessageBox::information(this, tr("Sin selección"),
-                                 tr("Selecciona al menos una prenda para cobrar."));
+        m_lblStatus->setText(UiKit::warnHtml(tr("Selecciona al menos una prenda para cobrar.")));
         return;
     }
 
     const QDate fechaPago = m_dePago->date();
-    if (readLockForMonthAndYear(db, "ingresos", fechaPago.month(), fechaPago.year()) == 1) {
-        QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                             tr("La fecha de pago pertenece a un trimestre que se encuentra bloqueado por la contabilidad."));
+    // The whole quarter: a month without rows inside a closed quarter is closed too.
+    if (quarterIsClosed(db, fechaPago)) {
+        m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                             + "<br>" + tr("La fecha de pago pertenece a un trimestre cerrado por la contabilidad."));
         return;
     }
 
@@ -246,10 +256,10 @@ void PayDialog::onCobrarClicked()
             locked = lockQ.value(0).toInt();
         db.close();
         if (locked > 0) {
-            QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                 tr("Una o más prendas seleccionadas pertenecen a un trimestre "
-                                    "que se ha bloqueado durante la operación. Cierra y vuelve "
-                                    "a abrir el cobro para refrescar el estado del ticket."));
+            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                                 + "<br>" + tr("Una o más prendas seleccionadas pertenecen a un trimestre "
+                                               "que se ha bloqueado durante la operación. Cierra y vuelve "
+                                               "a abrir el cobro para refrescar el estado del ticket."));
             return;
         }
     }
@@ -263,6 +273,7 @@ void PayDialog::onCobrarClicked()
 
     m_pendingSeq        = seq;
     m_pendingHashes     = hashes;
+    m_pendingAmounts    = amounts;
     m_pendingFechaPago  = fechaPago;
 
     if (!m_verifactu || !m_verifactu->isConfigured()) {
@@ -297,7 +308,7 @@ void PayDialog::onCobrarClicked()
     }
 
     setFormEnabled(false);
-    m_lblStatus->setText(tr("Enviando %1 a AEAT...").arg(invoiceId));
+    m_lblStatus->showInfo(tr("Enviando %1 a AEAT...").arg(invoiceId));
 
     // Bounded 5s wait for the AEAT reply. onVerifactuRequestFinished will
     // accept() us once it lands; if it doesn't, persist the rows as PENDIENTE
@@ -338,17 +349,24 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
     // AND edit_lock = 0: defensive against a row whose quarter was closed
     // between loadTicket and persistPayment (very narrow race window, but
     // free to guard - keeps accounting lock authoritative).
+    // importe = the amount shown and sent (cents), so an older row stored with more
+    // decimals is invoiced and stored with the same figure.
     q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
-              "verifactu_invoice_seq = :seq "
-              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0");
+              "verifactu_invoice_seq = :seq, importe = :imp "
+              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0 AND COALESCE(pagado, '') != 'SI'");
+    m_unstoredHashes.clear();
     for (const QString &h : m_pendingHashes) {
+        q.bindValue(":imp", moneyText(m_pendingAmounts.value(h)));
         q.bindValue(":fp",  m_pendingFechaPago.toString("dd-MM-yyyy"));
         q.bindValue(":seq", seq);
         q.bindValue(":n",   m_ticketNum);
         q.bindValue(":h",   h);
-        if (!q.exec())
-            qWarning() << "PayDialog::persistPayment: UPDATE failed for hash" << h
-                       << "-" << q.lastError().text();
+        if (!q.exec() || q.numRowsAffected() != 1) {
+            // The invoice is already on its way to AEAT: the row must be reviewed by hand.
+            qCritical() << "PayDialog::persistPayment: garment" << h << "of ticket" << m_ticketNum
+                        << "not stored as paid (locked or already paid meanwhile) -" << q.lastError().text();
+            m_unstoredHashes << h;
+        }
     }
     db.close();
 

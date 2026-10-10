@@ -11,7 +11,7 @@
 # (one <testcase> per test method - consumed by the CI step that renders the
 # foldable per-method summary) and the plain-text report on stdout (so ctest
 # --output-on-failure still shows readable output on failure).
-add_executable(test_sql_lite test_sql_lite.cpp)
+add_executable(test_sql_lite test_sql_lite.cpp support/testschema.h)
 target_link_libraries(test_sql_lite PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Sql
@@ -199,6 +199,7 @@ add_executable(test_e2e_verifactu
     support/fakeverifactuserver.h
     support/fakeverifactuserver.cpp
     support/modalautocloser.h
+    support/testschema.h
 )
 target_include_directories(test_e2e_verifactu PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support
@@ -231,6 +232,7 @@ add_executable(test_e2e_app
     support/fakeverifactuserver.cpp
     support/modalautocloser.h
     support/modaldriver.h
+    support/testschema.h
 )
 target_include_directories(test_e2e_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support
@@ -239,6 +241,7 @@ target_link_libraries(test_e2e_app PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Network
     laideal_app
+    reporthtml
 )
 add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)

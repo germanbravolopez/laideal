@@ -3,6 +3,7 @@
 
 #include <QDate>
 #include <QDialog>
+#include <QHash>
 #include <QSqlDatabase>
 #include <QStringList>
 
@@ -20,6 +21,8 @@ class VerifactuIntegration;
 // chosen rows pagado=SI with the matching seq, and print the partial factura.
 // Remaining unpaid rows stay unpaid and can be charged in a later event with
 // the next seq.
+namespace UiKit { class ResultPanel; }
+
 class PayDialog : public QDialog
 {
     Q_OBJECT
@@ -33,6 +36,8 @@ public:
     // the ticket is not found or every row is already paid (caller should
     // not show the dialog in that case).
     bool loadTicket(const QString &ticketNum);
+    // Garments charged (sent to AEAT) that could not be stored as paid afterwards.
+    int unstoredGarments() const { return m_unstoredHashes.size(); }
 
 signals:
     // Emitted when the bounded wait expires with the request still in flight.
@@ -66,12 +71,14 @@ private:
     QDateEdit    *m_dePago      = nullptr;
     QPushButton  *m_btnCobrar   = nullptr;
     QPushButton  *m_btnCancel   = nullptr;
-    QLabel       *m_lblStatus   = nullptr;
+    UiKit::ResultPanel *m_lblStatus = nullptr;   // objectName lblResult
 
     // In-flight submission state - non-empty only between submit and reply.
     QString     m_pendingReqId;
     int         m_pendingSeq = -1;
     QStringList m_pendingHashes;
+    QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
+    QStringList             m_unstoredHashes;
     QDate       m_pendingFechaPago;
 };
 

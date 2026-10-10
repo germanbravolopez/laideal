@@ -1,8 +1,8 @@
 #include "voidgarmentsdialog.h"
 #include "sql_lite.h"
+#include "uikit.h"
 
 #include <QDebug>
-#include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -26,29 +26,30 @@ constexpr int COL_COUNT   = 5;
 VoidGarmentsDialog::VoidGarmentsDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setWindowTitle(tr("Anular prendas (recibo erróneo)"));
-    setMinimumSize(620, 380);
+    UiKit::setUpDialog(this, tr("Anular prendas (recibo erróneo)"), 620);
+    setMinimumHeight(420);
     buildUi();
 }
 
 void VoidGarmentsDialog::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
+    layout->addWidget(UiKit::introPanel(tr(
+        "Anula prendas que no se han cobrado ni entregado (recibo erróneo o cambio de opinión). "
+        "No se envía nada a AEAT. Las prendas pagadas se anulan con Anular factura Verifactu.")));
 
     auto *searchRow = new QHBoxLayout;
-    searchRow->addWidget(new QLabel(tr("Número de ticket:")));
+    searchRow->addWidget(new QLabel(tr("Nº de recibo:")));
     m_leTicketNum = new QLineEdit;
     m_leTicketNum->setObjectName("leTicketNum");   // stable names for the e2e test bench
     m_leTicketNum->setPlaceholderText(tr("Ej: 30877"));
-    searchRow->addWidget(m_leTicketNum);
-    auto *btnSearch = new QPushButton(tr("Buscar"));
+    searchRow->addWidget(m_leTicketNum, 1);
+    auto *btnSearch = UiKit::secondaryButton(tr("Buscar"), "btnSearch");
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
     m_lblHeader = new QLabel("-");
     m_lblHeader->setWordWrap(true);
-    m_lblHeader->setFrameShape(QFrame::StyledPanel);
-    m_lblHeader->setContentsMargins(8, 8, 8, 8);
     layout->addWidget(m_lblHeader);
 
     m_table = new QTableWidget;
@@ -60,31 +61,32 @@ void VoidGarmentsDialog::buildUi()
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
-    layout->addWidget(m_table);
+    layout->addWidget(m_table, 1);
 
-    m_lblResult = new QLabel;
-    m_lblResult->setObjectName("lblResult");
-    m_lblResult->setWordWrap(true);
-    layout->addWidget(m_lblResult);
-
-    auto *buttonRow = new QHBoxLayout;
-    m_btnVoid = new QPushButton(tr("Anular seleccionadas"));
+    auto *actions = new QHBoxLayout;
+    actions->addStretch();
+    m_btnVoid = UiKit::primaryButton(tr("Anular seleccionadas"), "btnVoid");
     m_btnVoid->setEnabled(false);
-    buttonRow->addWidget(m_btnVoid);
-    buttonRow->addStretch();
-    auto *btnClose = new QPushButton(tr("Cerrar"));
-    buttonRow->addWidget(btnClose);
-    layout->addLayout(buttonRow);
+    actions->addWidget(m_btnVoid);
+    layout->addLayout(actions);
+
+    m_lblResult = new UiKit::ResultPanel(tr("Marque las prendas que se anulan y pulse \"Anular seleccionadas\"."));
+    layout->addWidget(m_lblResult);
+    layout->addLayout(UiKit::closeRow(this));
 
     connect(btnSearch,     &QPushButton::clicked,     this, &VoidGarmentsDialog::onSearchClicked);
     connect(m_leTicketNum, &QLineEdit::returnPressed, this, &VoidGarmentsDialog::onSearchClicked);
     connect(m_btnVoid,     &QPushButton::clicked,     this, &VoidGarmentsDialog::onVoidSelectedClicked);
-    connect(btnClose,      &QPushButton::clicked,     this, &QDialog::accept);
+}
+
+void VoidGarmentsDialog::loadTicket(const QString &ticketNum)
+{
+    m_leTicketNum->setText(ticketNum);
+    onSearchClicked();
 }
 
 void VoidGarmentsDialog::onSearchClicked()
 {
-    m_lblResult->clear();
     m_loadedTicket.clear();
     m_garments.clear();
     m_table->setRowCount(0);
@@ -105,7 +107,7 @@ void VoidGarmentsDialog::onSearchClicked()
         qWarning() << "VoidGarmentsDialog: SELECT failed for ticket"
                    << ticketNum << "-" << q.lastError().text();
         db.close();
-        m_lblHeader->setText(tr("<i>Error al leer el ticket.</i>"));
+        m_lblResult->setText(UiKit::errorHtml(tr("Error al leer el ticket.")));
         return;
     }
     while (q.next()) {
@@ -126,7 +128,7 @@ void VoidGarmentsDialog::onSearchClicked()
     db.close();
 
     if (m_garments.isEmpty()) {
-        m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
+        m_lblResult->setText(UiKit::warnHtml(tr("No se ha encontrado el recibo Nº %1.").arg(ticketNum.toHtmlEscaped())));
         return;
     }
 
@@ -164,6 +166,9 @@ void VoidGarmentsDialog::rebuildTable()
         anyVoidable = anyVoidable || g.voidable;
     }
     m_btnVoid->setEnabled(anyVoidable);
+    if (!anyVoidable)
+        m_lblResult->setText(UiKit::warnHtml(tr("Este recibo no tiene prendas que se puedan anular aquí."))
+                             + "<br>" + tr("Las pagadas se anulan con Anular factura Verifactu."));
 }
 
 void VoidGarmentsDialog::onVoidSelectedClicked()
@@ -177,7 +182,7 @@ void VoidGarmentsDialog::onVoidSelectedClicked()
             rowsToVoid.append(row);
     }
     if (rowsToVoid.isEmpty()) {
-        m_lblResult->setText(tr("Marca al menos una prenda para anular."));
+        m_lblResult->setText(UiKit::warnHtml(tr("Marque al menos una prenda para anular.")));
         return;
     }
 
@@ -196,6 +201,11 @@ void VoidGarmentsDialog::onVoidSelectedClicked()
     qDebug() << "VoidGarmentsDialog: voided" << voided << "of" << rowsToVoid.size()
              << "garment(s) for ticket" << m_loadedTicket;
 
-    m_lblResult->setText(tr("Anuladas %1 prenda(s).").arg(voided));
+    m_voidedTotal += voided;
+    QString done = UiKit::okHtml(tr("%1 prenda(s) del recibo %2 anuladas.").arg(voided).arg(m_loadedTicket.toHtmlEscaped()));
+    if (voided < rowsToVoid.size())
+        done += "<br>" + UiKit::errorHtml(tr("%1 prenda(s) no se han anulado: se han cobrado, enviado o bloqueado "
+                                             "mientras tanto.").arg(rowsToVoid.size() - voided));
     onSearchClicked(); // reload so the voided rows show as Anulado / non-selectable
+    m_lblResult->setText(done);
 }

@@ -11,11 +11,14 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QSqlRecord>
 #include <QTemporaryDir>
 #include <QRegularExpression>
 #include <QVariantMap>
 
 #include "sql_lite.h"
+#include "support/testschema.h"
+#include "ingresos_schema.h"
 #include "verifactutypes.h"   // VerifactuResult, for the updateTicketVerifactuFields tests
 
 namespace {
@@ -86,29 +89,8 @@ private slots:
         m_db = QSqlDatabase::addDatabase("QSQLITE", kConn);
         m_db.setDatabaseName(m_dir.filePath("test.db"));
         QVERIFY2(m_db.open(), qPrintable(m_db.lastError().text()));
-        QSqlQuery q(m_db);
-        // Column names (not order) are what the sql_lite functions key on.
-        QVERIFY2(q.exec(
-            "CREATE TABLE ingresos ("
-            " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
-            " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
-            " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-            " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT,"
-            " verifactu_csv TEXT, verifactu_timestamp TEXT, verifactu_estado TEXT,"
-            " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
-            " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
-            " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-            " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)"), qPrintable(q.lastError().text()));
-        QVERIFY2(q.exec(
-            "CREATE TABLE gastos ("
-            " id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT,"
-            " empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER,"
-            " edit_lock INTEGER DEFAULT 0)"), qPrintable(q.lastError().text()));
-        QVERIFY2(q.exec(
-            "CREATE TABLE clientes ("
-            " nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)"),
-            qPrintable(q.lastError().text()));
         m_db.close();
+        QVERIFY(TestSchema::create(m_db));
     }
 
     void cleanupTestCase()
@@ -506,6 +488,75 @@ private slots:
         QVERIFY(qAbs(garmentImporte("-1", "", 5.0)) < 0.001);
         // empty quantity -> 0
         QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
+        // m2 garments land on half a cent: rounded up, as AEAT received them (ticket
+        // 30723: 2.99 m2 x 9.50 = 28.405 -> 28.41), also from a float list price
+        QCOMPARE(moneyText(garmentImporte("1", "2.99", 9.5)), QStringLiteral("28.41"));
+        QCOMPARE(moneyText(garmentImporte("1", "2,37", 9.5)), QStringLiteral("22.52"));
+        QCOMPARE(moneyText(garmentImporte("1", "1.25", double(3.3f))), QStringLiteral("4.13"));
+    }
+
+    // Unmeasured = priced by size (name with "m2") and no usable size yet.
+    void test_garmentUnmeasured()
+    {
+        QVERIFY(garmentUnmeasured("Jarapa (m2)", ""));
+        QVERIFY(garmentUnmeasured("Alfombra (m2)", "0"));
+        QVERIFY(garmentUnmeasured("Kilim (m2)", " 0,0 "));
+        QVERIFY(!garmentUnmeasured("Alfombra (m2)", "2,5"));
+        QVERIFY(!garmentUnmeasured("Camisa", ""));
+    }
+
+    // Money is stored in cents, half away from zero, whatever binary error the
+    // double carries (28.405 is 28.40499... as a double).
+    void test_moneyText_roundsHalfAwayFromZero()
+    {
+        QCOMPARE(moneyText(28.405), QStringLiteral("28.41"));
+        QCOMPARE(moneyText(22.515), QStringLiteral("22.52"));
+        QCOMPARE(moneyText(16.625), QStringLiteral("16.63"));
+        QCOMPARE(moneyText(36.0525), QStringLiteral("36.05"));
+        QCOMPARE(moneyText(40.7265), QStringLiteral("40.73"));
+        QCOMPARE(moneyText(-1.005), QStringLiteral("-1.01"));
+        QCOMPARE(moneyText(10.0), QStringLiteral("10.00"));
+        QCOMPARE(moneyText(QStringLiteral("10,5")), QStringLiteral("10.50"));
+        QCOMPARE(moneyText(QStringLiteral(" 12.464 ")), QStringLiteral("12.46"));
+        QCOMPARE(roundToCents(28.405), 28.41);
+    }
+
+    // Every amount writer stores two decimals, and none of them touches a row whose
+    // amount AEAT holds (or a legacy paid row): that invoice changes only through
+    // Anular / Rectificar factura. Ticket 30837 was re-priced after payment.
+    void test_amountWriters_roundAndRefuseInvoicedRows()
+    {
+        insertRow("T1", "open", "10.00", "NO", "SIN COBRAR");
+        QVERIFY(updateTicketSizeAndPrice(m_db, "T1", "open", "2.99", "28.405"));
+        QCOMPARE(scalar("SELECT size || '|' || importe FROM ingresos WHERE hash='open'"), QStringLiteral("2.99|28.41"));
+        QVERIFY(updateGarmentQtyAndImporte(m_db, "T1", "open", "2", "22,515"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("22.52"));
+        QVERIFY(updateGarmentServiceAndImporte(m_db, "T1", "open", "Plan.", "16.625"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("16.63"));
+
+        insertRow("T2", "sent", "30.00", "SI", "ENVIADA");
+        insertRow("T2", "pend", "30.00", "SI", "PENDIENTE");
+        insertRow("T2", "legacy", "30.00", "SI", "");
+        for (const char *h : { "sent", "pend", "legacy" }) {
+            QVERIFY(!updateTicketSizeAndPrice(m_db, "T2", h, "1", "36.00"));
+            QVERIFY(!updateGarmentQtyAndImporte(m_db, "T2", h, "3", "36.00"));
+            QVERIFY(!updateGarmentServiceAndImporte(m_db, "T2", h, "Plan.", "36.00"));
+        }
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(importe || ':' || cantidad || ':' || servicio || ':' || size, ' ') "
+                        "FROM ingresos WHERE n_recibo = 'T2'"),
+                 QStringLiteral("30.00:1:Lavar:0 30.00:1:Lavar:0 30.00:1:Lavar:0"));
+        // A negative amount is a correction (Rectificar factura), never a price.
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "T1", "open", "", "-5,00"));
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "T1", "open", "1", "-1"));
+        QVERIFY(!updateGarmentServiceAndImporte(m_db, "T1", "open", "Limp.", "-0.50"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("16.63"));
+
+        // A voided garment is frozen too, and so is a row locked by Contabilidad.
+        insertRow("T3", "void", "5.00", "NO", "ANULADA");
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "T3", "void", "1", "6.00"));
+        insertRow("T3", "locked", "5.00", "NO", "SIN COBRAR");
+        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "T3", "locked", "2", "10.00"));
     }
 
     // The single source of truth for the AEAT InvoiceID format (used at submit,
@@ -741,12 +792,17 @@ private slots:
         VerifactuResult dup;
         dup.status           = VerifactuResult::ERROR;
         dup.errorDescription = "Registro duplicado";
-        updateTicketVerifactuFields(m_db, "P5", dup, /*seq=*/0);
+        QCOMPARE(updateTicketVerifactuFields(m_db, "P5", dup, /*seq=*/0), 1);
 
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash = 'p5a'"),
                  QStringLiteral("ENVIADA|CSV-P5"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'P5' AND importe = '8.00'"),
                  QStringLiteral("ERROR"));
+
+        // Once every row is settled a reply changes nothing, and says so (0), so the
+        // caller does not report "enviado" / "Error al enviar" for it.
+        exec("UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE n_recibo = 'P5'");
+        QCOMPARE(updateTicketVerifactuFields(m_db, "P5", dup, /*seq=*/0), 0);
     }
 
     // A retry re-submits ONE payment event. Before this seam RecogPrendas summed
@@ -925,6 +981,164 @@ private slots:
     // garment row; its literal InvoiceID, payment date and total; in the range by
     // payment or cancellation date; unpaid rows and rows AEAT never confirmed are
     // left out.
+    // An invoice AEAT holds without a readable payment date belongs to no period:
+    // it is counted so the export can warn about it, never silently dropped.
+    void test_aeatExportRecords_countsUndatedInvoices()
+    {
+        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
+             "verifactu_estado) VALUES ('200', '', '5.00', 'SI', 'u1', 'CSV-U', 'ENVIADA'), "
+             "('201', '3/5/26', '6.00', 'SI', 'u2', 'CSV-V', 'ENVIADA'), "
+             "('202', '05-03-2026', '7.00', 'SI', 'u3', 'CSV-W', 'ENVIADA'), "
+             "('203', '', '8.00', 'SI', 'u4', '', 'PENDIENTE')");     // unknown to AEAT: not counted
+        QVector<AeatExportRecord> r;
+        int undated = -1;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r, &undated));
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(undated, 2);
+    }
+
+    // Anular factura reads each invoice of a ticket in one query: the paid rows of
+    // each seq with an estado, its earliest payment date by date (not text), the
+    // legacy InvoiceID rebuilt; unpaid garments and legacy pre-Verifactu rows out.
+    void test_submittedInvoiceEvents()
+    {
+        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
+             "verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id) VALUES "
+             "('300', '05-03-2026', '10.00', 'SI', 'a', 'CSV-0', 'ENVIADA', 0, ''), "
+             "('300', '28-01-2026', '4.00',  'SI', 'b', 'CSV-0', 'ENVIADA', 0, ''), "
+             "('300', '',           '3.00',  'NO', 'c', '',      'SIN COBRAR', 0, ''), "
+             "('300', '10-04-2026', '6.00',  'SI', 'd', 'CSV-1', 'ANULADA', 1, '300-1'), "
+             "('300', '01-01-2025', '9.00',  'SI', 'e', '',      '', 2, ''), "
+             // a paid row of seq 1 without estado: not listed, but its date counts
+             "('300', '01-04-2026', '2.00',  'SI', 'f', '',      '', 1, '')");
+        QVector<SubmittedInvoiceEvent> ev;
+        QVERIFY(submittedInvoiceEvents(m_db, "300", ev));
+        QCOMPARE(ev.size(), 2);
+        QCOMPARE(ev[0].seq, 0);
+        QCOMPARE(ev[0].invoiceId, QStringLiteral("300"));
+        QCOMPARE(ev[0].importe, 14.0);
+        QCOMPARE(ev[0].fechaPago, QStringLiteral("28-01-2026"));
+        QCOMPARE(ev[0].csv, QStringLiteral("CSV-0"));
+        QCOMPARE(ev[1].invoiceId, QStringLiteral("300-1"));
+        QCOMPARE(ev[1].estado, QStringLiteral("ANULADA"));
+        QCOMPARE(ev[1].importe, 6.0);
+        QCOMPARE(ev[1].fechaPago, QStringLiteral("01-04-2026"));     // as verifactuEventFor dates it
+        QCOMPARE(ev[1].fechaPago, verifactuEventFor(m_db, "300", 1).fechaPago);
+    }
+
+    // Separar prendas on a paid garment: the split-off garments stay in the invoice
+    // AEAT registered (seq, estado, CSV, id, payload), and the two rows add up to
+    // the original importe to the cent, so the invoice total does not change.
+    void test_splitGarmentRow_paidRowStaysInItsInvoice()
+    {
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+             "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+             "verifactu_csv, verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id, verifactu_xml) "
+             "VALUES ('400', 'Ana', '01-03-2026', '05-03-2026', '', '10.00', 'SI', 'En tienda', '3', "
+             "'Mantel', '', 'Limp.', 'nota', 0, 'orig', 'CSV-400', 'ENVIADA', 1, '400-1', '<x/>'), "
+             "('401', 'Ana', '01-03-2026', '05-04-2026', '', '10.00', 'SI', 'En tienda', '3', "
+             "'Mantel', '', 'Limp.', '', 1, 'locked', 'CSV-401', 'ENVIADA', 0, '401', '')");
+
+        const QString newHash = splitGarmentRow(m_db, "400", "orig", 1);
+        QCOMPARE(newHash.size(), 16);
+        QCOMPARE(scalar("SELECT cantidad || '|' || importe FROM ingresos WHERE hash = 'orig'"),
+                 QStringLiteral("2|6.67"));
+        QCOMPARE(scalar("SELECT cantidad || '|' || importe || '|' || pagado || '|' || fecha_pago || '|' || "
+                        "prenda || '|' || observaciones || '|' || verifactu_csv || '|' || verifactu_estado || '|' || "
+                        "verifactu_invoice_seq || '|' || verifactu_invoice_id || '|' || verifactu_xml "
+                        "FROM ingresos WHERE hash = :h", { {":h", newHash} }),
+                 QStringLiteral("1|3.33|SI|05-03-2026|Mantel|nota|CSV-400|ENVIADA|1|400-1|<x/>"));
+
+        QVector<AeatExportRecord> r;
+        QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r));
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r[0].importe, 10.0);
+
+        // Nothing is written for a split that would leave no garment behind.
+        QVERIFY(splitGarmentRow(m_db, "400", "orig", 2).isEmpty());
+        QVERIFY(splitGarmentRow(m_db, "400", "orig", 0).isEmpty());
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '400'"), QStringLiteral("2"));
+        // A row locked by Contabilidad is never split.
+        QVERIFY(splitGarmentRow(m_db, "401", "locked", 1).isEmpty());
+        QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '401'"),
+                 QStringLiteral("1|3"));
+
+        // An older paid row stored with three decimals is never re-rounded: the part
+        // split off is in cents, the original keeps the exact remainder.
+        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, cantidad, hash, verifactu_estado) "
+             "VALUES ('402', '05-04-2026', '22.515', 'SI', '3', 'm2', 'ENVIADA')");
+        const QString part = splitGarmentRow(m_db, "402", "m2", 1);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = :h", { {":h", part} }), QStringLiteral("7.51"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'm2'"), QStringLiteral("15.005"));
+    }
+
+    // Garments split off a paid row before 10.14 were left with an empty estado,
+    // outside their invoice. The migration links each back to the one ENVIADA
+    // invoice on the ticket with the same payment date, garment and service; legacy
+    // payments, a cancelled invoice (would move income) and an ambiguous match stay.
+    void test_migrateDatabase_relinksSplitOffPaidGarment()
+    {
+        const QString ins = "INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, prenda, servicio, "
+                            "hash, verifactu_csv, verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id, "
+                            "fecha_anulacion) VALUES ";
+        exec(ins + "('500', '02-06-2026', '20.00', 'SI', 'Camisa', 'Limp.', 'a', 'CSV-500', 'ENVIADA', 1, '500-1', ''), "
+                   "('500', '02-06-2026', '5.00',  'SI', 'Camisa', 'Limp.', 'split', '', NULL, 0, NULL, ''), "
+                   "('500', '25-04-2025', '9.00',  'SI', 'Camisa', 'Limp.', 'legacy', '', NULL, 0, NULL, ''), "
+                   "('501', '03-06-2026', '6.00',  'SI', 'Traje', 'Limp.', 'b', 'CSV-501', 'ANULADA', 0, '501', '20-06-2026'), "
+                   "('501', '03-06-2026', '3.00',  'SI', 'Traje', 'Limp.', 'cancelledSplit', '', '', 0, '', ''), "
+                   "('502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'c', 'CSV-502', 'ENVIADA', 0, '502', ''), "
+                   "('502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'd', 'CSV-502-1', 'ENVIADA', 1, '502-1', ''), "
+                   "('502', '04-06-2026', '3.00',  'SI', 'Falda', 'Limp.', 'ambiguous', '', '', 0, '', ''), "
+                   // paid at seq 2 while Verifactu was off: its own event, never a split
+                   "('500', '02-06-2026', '4.00',  'SI', 'Camisa', 'Limp.', 'ownEvent', '', '', 2, '', '')");
+
+        // Every relinked row is logged, so an old separate payment can be found and checked.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("relinking paid garment \"split\" of ticket \"500\""));
+        migrateDatabase(m_db);
+        migrateDatabase(m_db);   // idempotent
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv || '|' || verifactu_invoice_seq || '|' || "
+                        "verifactu_invoice_id FROM ingresos WHERE hash = 'split'"),
+                 QStringLiteral("ENVIADA|CSV-500|1|500-1"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'split'"), QStringLiteral("5.00"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_estado, '') || '|' || COALESCE(verifactu_csv, '') "
+                        "FROM ingresos WHERE hash = 'legacy'"), QStringLiteral("|"));
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_estado, '') FROM ingresos WHERE hash = 'cancelledSplit'"),
+                 QString());
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_estado, '') FROM ingresos WHERE hash = 'ambiguous'"),
+                 QString());
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_estado, '') || '|' || verifactu_invoice_seq "
+                        "FROM ingresos WHERE hash = 'ownEvent'"), QStringLiteral("|2"));
+    }
+
+    // Open amounts an older Recogida m2 edit stored with three or four decimals are
+    // rounded to cents, the way they will be charged; a paid amount stays as stored.
+    void test_migrateDatabase_roundsOpenAmountsToCents()
+    {
+        insertRow("M1", "open", "28.405", "NO", "SIN COBRAR");
+        insertRow("M1", "open4", "36.0525", "NO", "");
+        insertRow("M2", "paid", "22.515", "SI", "ENVIADA");
+        migrateDatabase(m_db);
+        migrateDatabase(m_db);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'open'"), QStringLiteral("28.41"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'open4'"), QStringLiteral("36.05"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'paid'"), QStringLiteral("22.515"));
+    }
+
+    // The suites build ingresos through the app's own migrations; the column
+    // positions are the ones INGRESOS_COL_* (used by every table view) expect.
+    void test_ingresosSchema_matchesColumnIndices()
+    {
+        QVERIFY(m_db.open());
+        const QSqlRecord rec = m_db.record("ingresos");
+        m_db.close();
+        QCOMPARE(rec.count(), INGRESOS_COL_VERIFACTU_CANCEL_XML + 1);
+        QCOMPARE(rec.indexOf("hash"), INGRESOS_COL_HASH);
+        QCOMPARE(rec.indexOf("verifactu_csv"), INGRESOS_COL_VERIFACTU_CSV);
+        QCOMPARE(rec.indexOf("verifactu_invoice_seq"), INGRESOS_COL_VERIFACTU_INVOICE_SEQ);
+        QCOMPARE(rec.indexOf("fecha_anulacion"), INGRESOS_COL_FECHA_ANULACION);
+        QCOMPARE(rec.indexOf("verifactu_cancel_xml"), INGRESOS_COL_VERIFACTU_CANCEL_XML);
+    }
+
     void test_aeatExportRecords_onePerPaymentEvent()
     {
         const char *ins = "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
@@ -1079,9 +1293,7 @@ private slots:
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("8.50"));
     }
 
-    // The split-off row must persist all garment fields and leave verifactu_estado
-    // empty (legacy/NotSubmitted) so accounting/print treat it as un-submitted - a
-    // re-submission would duplicate the ticket's AEAT InvoiceID.
+    // Every garment field is persisted; verifactu_estado is only what the caller sets.
     void test_insertGarmentRow_fieldsAndVerifactuLeftEmpty()
     {
         IngresoGarmentRow row;
@@ -1090,7 +1302,7 @@ private slots:
         row.fechaRecepcion = "01-03-2026";
         row.fechaPago      = "05-03-2026";
         row.fechaRecogida  = "";
-        row.importe        = "12.50";
+        row.importe        = "12.505";
         row.pagado         = "SI";
         row.estado         = "NO";
         row.cantidad       = "2";
@@ -1105,12 +1317,11 @@ private slots:
         QCOMPARE(scalar("SELECT n_recibo FROM ingresos WHERE hash='splitHash'"), QStringLiteral("T7"));
         QCOMPARE(scalar("SELECT cliente FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Ana"));
         QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE hash='splitHash'"), QStringLiteral("05-03-2026"));
-        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='splitHash'"), QStringLiteral("12.50"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='splitHash'"), QStringLiteral("12.51"));   // stored in cents
         QCOMPARE(scalar("SELECT cantidad FROM ingresos WHERE hash='splitHash'"), QStringLiteral("2"));
         QCOMPARE(scalar("SELECT prenda FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Pantalon"));
         QCOMPARE(scalar("SELECT servicio FROM ingresos WHERE hash='splitHash'"), QStringLiteral("Tinte"));
         QCOMPARE(scalar("SELECT observaciones FROM ingresos WHERE hash='splitHash'"), QStringLiteral("urgente"));
-        // A split-off row leaves verifactuEstado empty -> reads as legacy/NotSubmitted.
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='splitHash'").isEmpty());
     }
 
@@ -1229,6 +1440,18 @@ private slots:
         // The sibling garment of the same ticket is keyed out by hash.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
+
+        // The write itself refuses what the dialog would not offer: a paid, a sent,
+        // an already voided and a locked garment stay as they were.
+        insertRow("T9", "paid", "10.00", "SI", "ENVIADA");
+        insertRow("T9", "sent", "10.00", "NO", "ERROR");
+        insertRow("T9", "locked");
+        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        for (const char *h : { "paid", "sent", "hashA", "locked" })
+            QVERIFY2(!voidGarmentRow(m_db, "T9", h), h);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='T9' AND estado = 'Anulado'"),
+                 QStringLiteral("1"));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hashA'"), today);
     }
 
     // "Recoger todo" marks the whole ticket Recogido but must leave a voided

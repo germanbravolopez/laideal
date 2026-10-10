@@ -13,17 +13,20 @@
 #define C_CONTAB_CERR "Contabilidad cerrada"
 #define C_NO_ROWS     "No rows to print"
 
-namespace Ui {
-class GenListado;
-}
+class QCheckBox;
+class QComboBox;
+namespace UiKit { class ResultPanel; }
 
+// Listado de gastos -> Generar PDF: the expense listing of one year (or all),
+// grouped by date or supplier, optionally only closed quarters. Built in code with
+// the shared UiKit style; stays open and reports each PDF in its result panel.
+// Listado de prendas uses print_table() without showing the dialog.
 class GenListado : public QDialog
 {
     Q_OBJECT
 
 public:
     explicit GenListado(const QSqlDatabase &database, QWidget *parent = nullptr);
-    ~GenListado();
     QAbstractItemModel *model;
     QString table_name;
     void print_table();
@@ -38,22 +41,23 @@ public:
                                     const QString &rowYear, bool onlyClosed, bool rowClosed);
 
 private slots:
-    void initial_settings();
+    void onGenerateClicked();
+
+private:
+    void buildUi();
     void set_cb_fechas();
     QString generate_html_prendas_table();
-    void write_html(QString filename, QString html);
     QString generate_html_gastos_table_with_specific_conditions();
     QString generate_html_gastos_table();
     bool check_years_invoice_type_for_row(int row);
     QString add_suffix_to_filename();
 
-    void on_bb_ok_cancel_accepted();
-    void on_bb_ok_cancel_rejected();
-    void on_checkb_allys_clicked(bool checked);
-
-private:
-    Ui::GenListado *ui;
     QSqlDatabase db;
+    QComboBox *m_cbYear = nullptr;
+    QCheckBox *m_chkAllYears = nullptr;
+    QComboBox *m_cbType = nullptr;
+    QComboBox *m_cbGroup = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
 };
 
 #endif // GENLISTADO_H

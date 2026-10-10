@@ -1,5 +1,22 @@
 ﻿Versiones:
 
+11.0
+- Nuevo: todas las ventanas tienen un diseño nuevo y más claro
+  - La misma letra y los mismos botones en todas, con la acción principal en negrita. Los mensajes ya no salen en ventanas emergentes: aparecen en un recuadro abajo de cada ventana (en verde si todo fue bien, en naranja como aviso y en rojo si hay un error). Solo se pide confirmación para lo que no se puede deshacer.
+- Importante: las prendas por m2 se miden antes de cobrarlas
+  - Mientras no tiene el tamaño, una prenda por m2 vale 0,00. Un ticket con una de ellas se puede guardar sin cobrar, pero no como pagado, porque su factura llegaría a la AEAT a 0. Cuando esté medida, se escribe el tamaño en "Recogida de Prendas" y se cobra con "Cobrar...".
+- Nuevo: ventana principal
+  - Botones directos a "Recogida de prendas", "Añadir prendas" y "Factura de gastos". "Pagado al dejarlo" es una casilla. Una prenda elegida sin cantidad cuenta 1. El total es siempre la suma de las prendas. Al guardar, un resumen muestra el ticket, el cliente, el importe y lo que se ha impreso.
+- Nuevo: "Recogida de Prendas"
+  - "Cobrar..." (antes "Pagar todo"), una casilla "Recogida", "Separar" con el número de prendas al lado, la fecha de anulación y dos botones nuevos para el ticket seleccionado: "Añadir prendas..." y "Anular prendas..." (que ya no está en el menú Herramientas). Una prenda anulada aparece como "Anulada" en verde.
+- Cambio: a una prenda ya cobrada ya no se le puede cambiar el precio, la cantidad ni el servicio; las correcciones se hacen con "Anular factura" o "Rectificar factura". Al separar prendas cobradas se mantiene el precio cobrado, y todos los importes se guardan con 2 decimales.
+- Nuevo: "Generar contabilidad"
+  - La ventana queda abierta hasta pulsar "Cerrar". La tabla de gastos tiene una columna "Subtotal con IVA" (21 % + 10 %). El detalle de tickets es opcional y se guarda en un PDF aparte terminado en "_detalle". "Comprobar bloqueo" indica si un trimestre está cerrado, y un enlace abre el PDF generado.
+- Mejora: "Imprimir" pide la dirección y el DNI de la factura completa en la misma ventana, muestra en una lista las facturas de un ticket cobrado en varias veces para elegir una, y la copia del establecimiento es una casilla.
+- Mejora: en "Formulario facturas" los proveedores y servicios salen en orden alfabético, y una factura con fecha de un trimestre cerrado se rechaza aunque ese mes aún no tenga gastos.
+- Mejora: los listados tienen botones para añadir y eliminar filas y para el PDF, y el menú Herramientas está agrupado por temas (Recogida, Verifactu, Gastos, Contabilidad, copia de seguridad).
+- Correcciones: en la ventana principal los precios se recalculan siempre en la fila que se ha editado; las prendas separadas de un ticket cobrado siguen formando parte de su factura de la AEAT (las existentes se corrigen solas al abrir esta versión); el listado de gastos en PDF se genera siempre con los datos actuales; un trimestre ya no se cierra si no se ha podido guardar el PDF de la contabilidad (se muestra el error); los gastos de un trimestre cerrado ya no se pueden modificar ni eliminar en el listado, y en él no se puede cambiar la fecha de un gasto a un trimestre cerrado.
+
 10.13
 - Corrección: al anular una factura se usa la fecha con la que se emitió
   - "Anular factura" enviaba todas las anulaciones con la fecha de recepción del ticket, mientras que la AEAT registró la factura con su fecha de pago. En un ticket cobrado al recogerlo, o cobrado en varias veces, la AEAT podía rechazar la anulación. Ahora cada factura se anula con su propia fecha de pago, que se muestra en una nueva columna "Fecha factura" del diálogo.

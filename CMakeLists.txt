@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(laideal VERSION 10.13 LANGUAGES CXX)
+project(laideal VERSION 11.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -18,6 +18,7 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport 
 add_subdirectory(src/logging)
 add_subdirectory(src/appsettings)
 add_subdirectory(src/reporthtml)
+add_subdirectory(src/uikit)
 add_subdirectory(src/app)
 add_subdirectory(src/sql_lite)
 add_subdirectory(src/tableview)

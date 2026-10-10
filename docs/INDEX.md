@@ -14,7 +14,7 @@
 | `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
 | `docs/testing/README.md` | **Testing overview** — the three layers (unit suites, end-to-end bench, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
-| `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
+| `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `testschema.h`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
 | `docs/testing/smoke_test.md` | **Manual pre-release checklist** — what `ctest` cannot cover: real network, real printer, the migration on real data, screens not yet automated |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
@@ -71,7 +71,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | UI language (Qt dialogs, release notes, installer choice) | `src/appsettings/applanguage.h` | `src/appsettings/applanguage.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog (paid/AEAT) | `src/app/cancelinvoicedialog.h` | `.cpp` |
-| Void unpaid garments dialog (local, issue #40) | `src/app/voidgarmentsdialog.h` | `.cpp` |
+| Void unpaid garments dialog (local, issue #40; opened from Recogida → Anular prendas…) | `src/recog_prendas/voidgarmentsdialog.h` | `.cpp` |
 | Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` | `.cpp` |
 | Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | AEAT records export (XML envelope writer) | `src/app/aeatexport.h` | `.cpp` |
@@ -98,7 +98,8 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
 | Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
-| Shared PDF report scaffolding (style + header + euro format) | `src/reporthtml/reporthtml.h` | `.cpp` |
+| Shared PDF report scaffolding (style + header + euro format) and the PDF writer `writePdf` (opens the file; `setOpenGeneratedReports(false)` in tests) | `src/reporthtml/reporthtml.h` | `.cpp` |
+| Shared dialog style ([modules/uikit.md](modules/uikit.md)): `UiKit::setUpDialog`, `heading`, `introPanel`, `ResultPanel`, `primaryButton` / `secondaryButton`, `dateEdit`, `closeRow`, `okHtml` / `warnHtml` / `errorHtml`, `fileLinkHtml` | `src/uikit/uikit.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |
@@ -116,7 +117,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate, LinkDelegate) |
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
-| `tests/` (17 Qt Test + CTest suites, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
+| `tests/` (17 Qt Test + CTest suites, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture + `testschema.h`, the shop schema built through `migrateDatabase`) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
 | `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and appends the `test_ticket_preview` ASCII receipt in a fenced block (GitHub strips inline images from summaries; the graphical PNG renders live in `docs/modules/printer/` + the `ticket-previews` artifact). Called by the `ci.yml` build job; also runnable locally. |
 | `mkdocs.yml` | MkDocs Material config for the documentation site: theme (light/dark toggle, search), `docs/` tree as nav, and `validation:` settings that demote cross-repo links (to `src/` + root files) to build warnings so a non-strict `mkdocs build` stays green |
 | `pyproject.toml` | Hosts the docs build tooling only (no Python package shipped): the `docs` optional-dependency group (`pip install ".[docs]"` → `mkdocs-material`) |
@@ -167,7 +168,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Release procedure | Root `README.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |
-| Verifactu XML export for Hacienda (Art. 14.1) | `src/app/mainwindow.cpp` (`on_actionExportar_registros_aeat_triggered`), records from `sql_lite::aeatExportRecords` (one per payment event), XML written by `src/app/aeatexport.cpp`; column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |
+| Verifactu XML export for Hacienda (Art. 14.1) | `src/app/aeatexportdialog.cpp` (`AeatExportDialog`, opened by `MainWindow::on_actionExportar_registros_aeat_triggered`), records from `sql_lite::aeatExportRecords` (one per payment event), XML written by `src/app/aeatexport.cpp`; column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |
 | Verifactu chained hash (AEAT "Huella", Art. 12) | column `verifactu_hash` in `ingresos`; extraction in `VerifactuManager::processResponse()` (regex over `Return.Xml`) → `VerifactuResult::rawHash` |
 | verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
 | Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`kIngresosIncomeWhere`, `incomeTicketsBetweenDates`) + `docs/modules/contabilidad.md` |

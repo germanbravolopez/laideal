@@ -10,6 +10,7 @@
 
 #include <QtTest>
 #include <QDateEdit>
+#include <QLabel>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -23,6 +24,7 @@
 #include "modalautocloser.h"
 #include "pay_dialog.h"
 #include "sql_lite.h"
+#include "testschema.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
 #include "verifacturesponse.h"
@@ -72,7 +74,7 @@ class TestE2eVerifactu : public QObject
     // Garments whose hash is in `skip` are unticked (partial payment). Returns
     // whether the dialog completed (accept), false when it refused.
     bool payThroughDialog(const QString &nRecibo, const QDate &fechaPago,
-                          const QStringList &skip = {}, int waitMs = 15000)
+                          const QStringList &skip = {}, int waitMs = 15000, QString *resultText = nullptr)
     {
         PayDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
@@ -88,6 +90,8 @@ class TestE2eVerifactu : public QObject
         t.start();
         while (dlg.result() != QDialog::Accepted && t.elapsed() < waitMs)
             QTest::qWait(50);
+        if (resultText)
+            *resultText = dlg.findChild<QLabel *>("lblResult")->text();
         return dlg.result() == QDialog::Accepted;
     }
 
@@ -117,20 +121,7 @@ private slots:
 
         m_db = QSqlDatabase::addDatabase("QSQLITE", "e2e");
         m_db.setDatabaseName(m_dir.filePath("laideal_e2e.db"));
-        exec("CREATE TABLE ingresos ("
-             " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
-             " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
-             " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-             " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT,"
-             " verifactu_csv TEXT, verifactu_timestamp TEXT, verifactu_estado TEXT,"
-             " verifactu_error TEXT, verifactu_url_qr TEXT, verifactu_xml TEXT,"
-             " verifactu_hash TEXT, verifactu_rectifies_n_recibo TEXT,"
-             " verifactu_rectification_type TEXT, verifactu_invoice_seq INTEGER DEFAULT 0,"
-             " verifactu_invoice_id TEXT, fecha_anulacion TEXT, verifactu_cancel_xml TEXT)");
-        exec("CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
-             "descripcion TEXT, empresa TEXT, fecha TEXT, importe TEXT, iva INTEGER, "
-             "edit_lock INTEGER DEFAULT 0)");
-        exec("CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)");
+        QVERIFY(TestSchema::create(m_db));
 
         m_verifactu = new VerifactuIntegration(this);
         QVERIFY2(m_verifactu->initialize(), "Verifactu client must initialise from the test settings");
@@ -245,14 +236,16 @@ private slots:
         QVERIFY(scalar("SELECT verifactu_error FROM ingresos WHERE hash='h400a'").contains("NIF del emisor"));
     }
 
-    // A payment dated in a closed quarter is refused with a warning, and nothing is sent.
+    // A payment dated in a closed quarter is refused in the dialog's result panel, and nothing is sent.
     void test_paymentIntoClosedQuarter_refusedAndNothingSent()
     {
         exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, edit_lock, hash, verifactu_estado) "
              "VALUES ('499', '10-01-2026', '5.00', 'SI', 1, 'h499', 'ENVIADA')");   // January closed
         seedGarment("500", "h500a", "18.00");
-        QVERIFY(!payThroughDialog("500", QDate(2026, 1, 20), {}, 2000));
-        QVERIFY(m_popups->sawMessageContaining("Trimestre bloqueado"));
+        QString result;
+        QVERIFY(!payThroughDialog("500", QDate(2026, 1, 20), {}, 2000, &result));
+        QVERIFY2(result.contains("Trimestre bloqueado"), qPrintable(result));   // in the window
+        QVERIFY(m_popups->messages().isEmpty());
         QVERIFY(m_server.requestsTo("Create").isEmpty());
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h500a'"), QStringLiteral("NO"));
     }

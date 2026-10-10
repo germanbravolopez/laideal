@@ -4,6 +4,7 @@
 
 #include <QtTest>
 #include <QDate>
+#include <QRegularExpression>
 
 #include "contabilidad.h"
 #include "reporthtml.h"
@@ -13,6 +14,46 @@ class TestContabilidad : public QObject
     Q_OBJECT
 
 private slots:
+    // Gastos summary, in the order the shop reads it: IVA 21 %, IVA 10 %, their
+    // subtotal with IVA, sin IVA, total - each row adding up across.
+    void test_gastosTable_columnsAndSubtotal()
+    {
+        Contabilidad::PeriodFigures f;
+        f.gas21Importe = 121.0; f.gas21Base = 100.0; f.gas21Iva = 21.0;
+        f.gas10Importe = 110.0; f.gas10Base = 100.0; f.gas10Iva = 10.0;
+        f.gasNiImporte = 50.0;
+        QString html = Contabilidad::createHtmlTableGastos(f);
+        html.remove(QRegularExpression("<td style='text-align:right;'>|</td>"));
+        const QStringList headers = { "IVA 21%", "IVA 10%", "Subtotal con IVA", "Sin IVA", "Total" };
+        int at = 0;
+        for (const QString &h : headers) {
+            const int next = html.indexOf(h, at);
+            QVERIFY2(next > at, qPrintable(h));
+            at = next;
+        }
+        const auto row = [](double a, double b, double c, double d, double e) {
+            return ReportHtml::formatEuro(a) + ReportHtml::formatEuro(b) + ReportHtml::formatEuro(c)
+                   + ReportHtml::formatEuro(d) + ReportHtml::formatEuro(e);
+        };
+        QVERIFY(html.contains("Importe" + row(121.0, 110.0, 231.0, 50.0, 281.0)));
+        QVERIFY(html.contains("Base imponible" + row(100.0, 100.0, 200.0, 50.0, 250.0)));
+        QVERIFY(html.contains("IVA soportado" + ReportHtml::formatEuro(21.0) + ReportHtml::formatEuro(10.0)
+                              + ReportHtml::formatEuro(31.0) + "-" + ReportHtml::formatEuro(31.0)));
+    }
+
+    // The summary and the detailed report are separate files, so both are kept.
+    void test_reportRelativePath()
+    {
+        QCOMPARE(Contabilidad::reportRelativePath(Contabilidad::Trimestral, 1, 2026, false),
+                 QStringLiteral("/contabilidad_trimestral_2026_1.pdf"));
+        QCOMPARE(Contabilidad::reportRelativePath(Contabilidad::Trimestral, 1, 2026, true),
+                 QStringLiteral("/contabilidad_trimestral_2026_1_detalle.pdf"));
+        QCOMPARE(Contabilidad::reportRelativePath(Contabilidad::Mensual, 11, 2026, true),
+                 QStringLiteral("/Mensual/reporte_mensual_2026_11_detalle.pdf"));
+        QCOMPARE(Contabilidad::reportRelativePath(Contabilidad::Anual, 0, 2026, false),
+                 QStringLiteral("/Anual/reporte_anual_2026.pdf"));
+    }
+
     void test_trimestralQuarters()
     {
         QDate s, e;

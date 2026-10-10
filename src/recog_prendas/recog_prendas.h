@@ -3,7 +3,6 @@
 
 #include <QMainWindow>
 #include <QDate>
-#include <QMessageBox>
 #include <QSqlQueryModel>
 #include <QHash>
 
@@ -20,10 +19,20 @@ struct VerifactuResult;
 
 // `ingresos` column indices come from sql_lite.h (INGRESOS_COL_*).
 
-namespace Ui {
-class RecogPrendas;
-}
+class QCheckBox;
+class QComboBox;
+class QDateEdit;
+class QLabel;
+class QLineEdit;
+class QPushButton;
+class QSpinBox;
+class QTableView;
+namespace UiKit { class ResultPanel; }
 
+// Recogida de prendas: search tickets, inspect / edit one garment, and act on its
+// ticket (Cobrar, Recoger todo, Separar, Imprimir, Verifactu). Built in code with
+// the shared UiKit style; messages go to the result panel, AEAT replies (which
+// arrive later) to the status bar.
 class RecogPrendas : public QMainWindow
 {
     Q_OBJECT
@@ -54,7 +63,7 @@ private slots:
     void resetAllContents();
     void updateDb(UpdateDBop op, int nGarm = 0);
     void updateRowClickedToFields();
-    float calculatePrice();
+    double calculatePrice();
 
     void on_le_search_returnPressed();
     void on_cb_search_date_currentTextChanged(const QString &arg1);
@@ -72,6 +81,9 @@ private slots:
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
+    void showPickupBadge(bool pickedUp);
+    void on_pb_void_clicked();
+    void on_pb_add_clicked();
     void on_pb_verifactu_clicked();
     // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
     // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
@@ -93,7 +105,33 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
-    Ui::RecogPrendas *ui;
+    // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
+    // slots connect by name and the e2e bench finds them by it).
+    struct Widgets {
+        QLabel *lbl_title = nullptr;
+        QLineEdit *le_search = nullptr;
+        QComboBox *cb_search_date = nullptr;
+        QPushButton *pb_search = nullptr, *pb_reset = nullptr;
+        QTableView *tableView = nullptr;
+        QLineEdit *le_nr_ticket = nullptr, *le_client = nullptr, *le_phone = nullptr, *le_mobile = nullptr;
+        QLineEdit *le_garm = nullptr, *le_qty = nullptr, *le_size = nullptr, *le_price = nullptr, *le_obsv = nullptr;
+        QComboBox *cb_servic = nullptr;
+        QDateEdit *de_date_recep = nullptr, *de_date_paym = nullptr, *de_date_pickup = nullptr, *de_date_anul = nullptr;
+        QCheckBox *pb_payment = nullptr;   // read-only: payment happens through Cobrar
+        QCheckBox *pb_state = nullptr;     // Recogida
+        QLabel *lbl_payment_badge = nullptr, *lbl_state_badge = nullptr, *lbl_anul_badge = nullptr;
+        QLabel *lbl_total = nullptr;
+        QPushButton *pb_pay_all = nullptr, *pb_pku_all = nullptr, *pb_separ_garm = nullptr;
+        QPushButton *pb_print = nullptr, *pb_verifactu = nullptr, *pb_void = nullptr, *pb_add = nullptr;
+        QSpinBox *sb_separ = nullptr;
+    };
+    void buildUi();
+    // Shows a dd-MM-yyyy date, or "-" when it is empty.
+    static void showOptionalDate(QDateEdit *edit, const QString &ddMMyyyy);
+
+    Widgets *ui = nullptr;
+    UiKit::ResultPanel *m_result = nullptr;
+    bool m_lastWriteOk = true;   // the last updateDb() write was stored
     QSqlDatabase db;
     // Async submit tracking: reqId -> the payment event it belongs to.
     struct PendingSubmit {
@@ -108,8 +146,9 @@ private:
 
     void ensureVerifactuConnected();
     // invoiceSeq forwarded to Imprimir so the reprint loads only the rows of
-    // the given payment event. -1 = legacy / all rows for the ticket.
-    void printFactura(const QString &ticketNum, bool askSecondCopy, int invoiceSeq = -1);
+    // the given payment event. -1 = legacy / all rows for the ticket. Returns
+    // whether it reached the printer.
+    bool printFactura(const QString &ticketNum, int invoiceSeq = -1);
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
     void selectSourceRow(int sourceRow);
 };

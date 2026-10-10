@@ -1,5 +1,4 @@
 add_library(listado STATIC
-    genlistado.ui
     genlistado.h
     genlistado.cpp
     insertnewitem.h
@@ -11,10 +10,10 @@ target_link_libraries(listado
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
-    Qt${QT_VERSION_MAJOR}::PrintSupport
     sql_lite
     appsettings
     reporthtml
+    uikit
     PUBLIC
     tableview
 )

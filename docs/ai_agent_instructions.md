@@ -105,6 +105,6 @@ Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one w
 - **Services**: "Limp." (limpieza/cleaning) and "Plan." (plancha/ironing) — each garment has a price per service.
 - **Size**: `size` column multiplies unit price (e.g., rugs measured in m²).
 - **Accounting lock**: once a quarter is locked, `ingresos` rows for that quarter cannot be added/modified.
-- **Verifactu call** happens during ticket save in `on_bb_save_reset_clicked()` → `verifactuSubmitInvoice()`.
+- **Verifactu call** happens during ticket save in `on_pb_save_clicked()` → `verifactuSubmitInvoice()`.
 - **Hash**: each `ingresos` row has a 16-char hash (`genHash16()`) for deduplication.
 - **Formal invoice (factura)**: separate from receipt. Entered via the Facturas form, stored in `facturas` table.

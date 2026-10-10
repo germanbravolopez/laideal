@@ -16,19 +16,18 @@ endif()
 # main.cpp plus the Qt resources (icon, release notes, Qt translations) and the
 # Windows version resource.
 add_library(laideal_app STATIC
-    mainwindow.ui
     mainwindow.h
     mainwindow.cpp
     cancelinvoicedialog.h
     cancelinvoicedialog.cpp
-    voidgarmentsdialog.h
-    voidgarmentsdialog.cpp
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
     pendingsubmitsdialog.h
     pendingsubmitsdialog.cpp
     aeatexport.h
     aeatexport.cpp
+    aeatexportdialog.h
+    aeatexportdialog.cpp
 )
 
 target_include_directories(laideal_app PUBLIC
@@ -53,6 +52,7 @@ target_link_libraries(laideal_app
     verifactu
     updater
     backup
+    uikit
 )
 
 add_executable(laideal

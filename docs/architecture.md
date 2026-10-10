@@ -27,8 +27,9 @@ Shared infrastructure:
   src/logging/                    — AppLogger (persistent debug log, qInstallMessageHandler)
   src/appsettings/                — AppSettings singleton + SettingsDialog
   src/sql_lite/                   — stateless DB free-function API
-  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format),
-                                      used by Contabilidad and Listado (GenListado)
+  src/reporthtml/                 — shared A4 PDF report scaffolding (style + business header + euro format)
+                                      and the one PDF writer (ReportHtml::writePdf), used by Contabilidad and Listado (GenListado)
+  src/uikit/                      — shared dialog style (UiKit: window setup, explanation panel, result panel, buttons)
   src/tableview/                  — all table-view utility classes (single CMake target):
                                       TableView, MySortFilterProxyModel, FilterWidget,
                                       NumberFormatDelegate, TextColorDelegate,
@@ -77,8 +78,8 @@ Search modes: by ticket number, by phone, by date, or by client name.
 Name search loads all `ingresos` and filters client-side via `MySortFilterProxyModel::setNormalizedFilter` (diacritic-insensitive — handles García, Jiménez, etc.).
 
 ### Facturas (`src/facturas/`)
-Formal supplier invoice entry form. Distinct from receipts.
-Writes to the `facturas` table. Populated from `empresas` and `servicios` tables.
+Formal supplier invoice entry form (code-built dialog, UiKit style). Distinct from receipts.
+Writes to the `gastos` table. Populated from the `proveedores` and `servicios` tables.
 
 ### Contabilidad (`src/contabilidad/`)
 Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.
@@ -258,7 +259,7 @@ Columns include `importe` (REAL) and supplier/date/description fields. Managed v
 ```
 User fills form in MainWindow
   ↓
-on_bb_save_reset_clicked(Save)
+on_pb_save_clicked() (Guardar ticket)
   ├── validateTicket()                       — checks client, amounts, quarter lock
   ├── checkClientData()                      — adds/updates client in `clientes`
   ├── saveTicket()                           — writes N rows to `ingresos` (verifactu_estado = PENDIENTE when paid, SIN COBRAR when not)

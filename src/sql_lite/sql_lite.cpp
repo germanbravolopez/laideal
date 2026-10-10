@@ -10,6 +10,8 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include <cmath>
+
 // ---------------------------------------------------------------------------
 // DB path - set once in main() before MainWindow is constructed
 // ---------------------------------------------------------------------------
@@ -38,6 +40,12 @@ static QString monthStr(int month)
 {
     return month < 10 ? QStringLiteral("0%1").arg(month) : QString::number(month);
 }
+
+// The row's amount is still open: unpaid, never sent to AEAT, not locked by Contabilidad.
+static const QString kAmountEditableWhere =
+    QStringLiteral(" AND COALESCE(pagado, '') != 'SI' "
+                   " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') "
+                   " AND COALESCE(edit_lock, 0) = 0");
 
 // ---------------------------------------------------------------------------
 // Public functions
@@ -134,6 +142,95 @@ void migrateDatabase(QSqlDatabase &db)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
                  << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
 
+    // 11.0 repair: Separar prendas used to insert the split-off garments with empty
+    // verifactu_* columns and seq 0, so a split of a paid row fell out of the invoice
+    // AEAT registered for it (export total, cancellation, reprint). Such a row is paid
+    // with an empty estado at seq 0 and has, on the same ticket, rows of exactly one
+    // AEAT invoice with the same fecha_pago, prenda and servicio: copy that invoice's
+    // columns. Only ENVIADA invoices are relinked, which leaves every Contabilidad
+    // figure as it was; a match with a cancelled, rectified or second invoice would move
+    // income between periods, so it is only logged. One join (SQLite builds a temporary
+    // index for it) keeps this cheap enough to run at every start.
+    {
+        QSqlQuery match(db);
+        QVector<QPair<qlonglong, qlonglong>> relinks;   // (split row, invoice row)
+        if (!match.exec("SELECT c.rowid, c.n_recibo, c.hash, c.importe, c.fecha_pago, "
+                        "  COUNT(DISTINCT s.verifactu_invoice_seq), SUM(s.verifactu_estado != 'ENVIADA'), MIN(s.rowid) "
+                        "FROM ingresos c JOIN ingresos s ON s.n_recibo = c.n_recibo AND s.pagado = 'SI' "
+                        "  AND s.fecha_pago = c.fecha_pago AND s.prenda = c.prenda AND s.servicio = c.servicio "
+                        "  AND COALESCE(s.verifactu_csv, '') != '' "
+                        "WHERE c.pagado = 'SI' AND COALESCE(c.verifactu_estado, '') = '' "
+                        "  AND COALESCE(c.verifactu_invoice_seq, 0) = 0 "
+                        "GROUP BY c.rowid"))
+            qWarning() << "migrateDatabase: split-row search failed -" << match.lastError().text();
+        while (match.next()) {
+            const QString ticket = match.value(1).toString();
+            if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
+                qWarning() << "migrateDatabase: ticket" << ticket
+                           << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
+                              " - review manually";
+                continue;
+            }
+            // A payment made with Verifactu off by a version before 8.5 on the same day,
+            // garment and service matches the same way, so every relink is logged.
+            qWarning() << "migrateDatabase: relinking paid garment" << match.value(2).toString()
+                       << "of ticket" << ticket << "(" << match.value(3).toString()
+                       << "paid" << match.value(4).toString()
+                       << ") to its AEAT invoice as a split-off part - check it if it was a separate payment";
+            relinks.append({ match.value(0).toLongLong(), match.value(7).toLongLong() });
+        }
+        match.finish();
+        QSqlQuery upd(db);
+        upd.prepare("UPDATE ingresos SET (verifactu_csv, verifactu_timestamp, verifactu_estado, "
+                    "  verifactu_error, verifactu_url_qr, verifactu_xml, verifactu_hash, "
+                    "  verifactu_rectifies_n_recibo, verifactu_rectification_type, "
+                    "  verifactu_invoice_seq, verifactu_invoice_id, fecha_anulacion, verifactu_cancel_xml) = "
+                    "(SELECT s.verifactu_csv, s.verifactu_timestamp, s.verifactu_estado, "
+                    "  s.verifactu_error, s.verifactu_url_qr, s.verifactu_xml, s.verifactu_hash, "
+                    "  s.verifactu_rectifies_n_recibo, s.verifactu_rectification_type, "
+                    "  s.verifactu_invoice_seq, s.verifactu_invoice_id, s.fecha_anulacion, "
+                    "  s.verifactu_cancel_xml FROM ingresos s WHERE s.rowid = :src) "
+                    "WHERE rowid = :dst AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = ''");
+        for (const auto &r : relinks) {
+            upd.bindValue(":src", r.second);
+            upd.bindValue(":dst", r.first);
+            if (!upd.exec())
+                qWarning() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
+        }
+        if (!relinks.isEmpty())
+            qDebug() << "migrateDatabase: relinked" << relinks.size()
+                     << "split-off paid garment(s) to their AEAT invoice";
+    }
+
+    // 10.14: amounts are stored in cents. Rows still open (unpaid, never sent) that an
+    // older Recogida m2 edit stored with more decimals are rounded the way they will be
+    // charged; no invoice covers them yet. Paid rows keep what was stored.
+    {
+        QSqlQuery sel(db);
+        QVector<QPair<QString, QString>> rows;   // (n_recibo, hash)
+        QStringList values;
+        if (sel.exec("SELECT n_recibo, hash, importe FROM ingresos "
+                     "WHERE importe GLOB '*.[0-9][0-9][0-9]*'" + kAmountEditableWhere)) {
+            while (sel.next()) {
+                rows.append({ sel.value(0).toString(), sel.value(1).toString() });
+                values << moneyText(sel.value(2).toString());
+            }
+        }
+        sel.finish();
+        QSqlQuery upd(db);
+        upd.prepare("UPDATE ingresos SET importe = :imp WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
+        for (int i = 0; i < rows.size(); ++i) {
+            upd.bindValue(":imp", values[i]);
+            upd.bindValue(":n",   rows[i].first);
+            upd.bindValue(":h",   rows[i].second);
+            if (!upd.exec())
+                qWarning() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
+                           << upd.lastError().text();
+        }
+        if (!rows.isEmpty())
+            qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
+    }
+
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
     // which verifactuEstadoFromString() does not recognise (it fell through to
     // NotSubmitted, so those rows stopped offering "Reintentar"). Every canonical
@@ -146,6 +243,7 @@ void migrateDatabase(QSqlDatabase &db)
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
                  << "verifactu_estado value(s)";
+
     db.close();
 }
 
@@ -415,22 +513,39 @@ bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QS
     return ok;
 }
 
+// Runs one amount UPDATE; false (and logged) when the row is invoiced or missing.
+static bool execAmountUpdate(QSqlQuery &q, const char *caller, const QString &nRecibo, const QString &hash)
+{
+    if (!q.exec()) {
+        qWarning() << caller << ": UPDATE failed -" << q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        qWarning() << caller << ": refused - ticket" << nRecibo << "row" << hash
+                   << "is paid / sent to AEAT (or missing); its amount is frozen";
+        return false;
+    }
+    return true;
+}
+
 bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                               const QString &size, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET size = :sz, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":sz",  size);
-    q.bindValue(":imp", importe);
+    q.bindValue(":imp", moneyText(importe));
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateTicketSizeAndPrice: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
 }
@@ -439,38 +554,132 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
                                 const QString &cantidad, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":cant", cantidad);
-    q.bindValue(":imp",  importe);
+    q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateGarmentQtyAndImporte: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
+}
+
+QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash, int nGarm)
+{
+    if (dbNotConfigured(db, __func__)) return QString();
+
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT cantidad, importe, edit_lock FROM ingresos WHERE n_recibo = :n AND hash = :h");
+    q.bindValue(":n", nRecibo);
+    q.bindValue(":h", hash);
+    if (!q.exec() || !q.first()) {
+        qWarning() << "splitGarmentRow: row not found -" << nRecibo << hash << q.lastError().text();
+        db.close();
+        return QString();
+    }
+    const int qty = q.value(0).toInt();
+    if (q.value(2).toInt() != 0) {
+        qWarning() << "splitGarmentRow: row is locked by Contabilidad -" << nRecibo << hash;
+        db.close();
+        return QString();
+    }
+    if (nGarm < 1 || nGarm >= qty) {
+        qWarning() << "splitGarmentRow: cannot split" << nGarm << "of" << qty << "on" << nRecibo << hash;
+        db.close();
+        return QString();
+    }
+    // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
+    // so the two rows add up to the stored importe and an older paid amount stored
+    // with more decimals is never re-rounded.
+    const double total = q.value(1).toString().replace(',', '.').toDouble();
+    const qint64 total4 = qRound64(total * 10000.0);
+    const qint64 split4 = qRound64(roundToCents(total * nGarm / qty) * 100.0) * 100;
+    const auto money = [](qint64 v4) {
+        QString text = QString::number(v4 / 10000.0, 'f', 4);
+        while (text.endsWith('0') && text.indexOf('.') < text.size() - 3)
+            text.chop(1);
+        return text;
+    };
+    const QString newHash = genHash16();
+    q.finish();
+
+    // Both writes or none: without a transaction a failed INSERT would leave the
+    // original row reduced and the split-off garments lost.
+    if (!db.transaction()) {
+        qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
+        db.close();
+        return QString();
+    }
+    QSqlQuery u(db);
+    // Same row as read above: still unlocked and with the same quantity.
+    u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
+              "AND COALESCE(edit_lock, 0) = 0 AND cantidad = :oldCant");
+    u.bindValue(":cant", QString::number(qty - nGarm));
+    u.bindValue(":imp",  money(total4 - split4));
+    u.bindValue(":n",    nRecibo);
+    u.bindValue(":h",    hash);
+    u.bindValue(":oldCant", QString::number(qty));
+    bool ok = u.exec() && u.numRowsAffected() == 1;
+    // Every other column is copied, verifactu_* included: the split-off garments stay
+    // in the invoice (and the estado) of the row they come from.
+    QSqlQuery i(db);
+    i.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+              "  importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, "
+              "  hash, verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, "
+              "  verifactu_url_qr, verifactu_xml, verifactu_hash, verifactu_rectifies_n_recibo, "
+              "  verifactu_rectification_type, verifactu_invoice_seq, verifactu_invoice_id, "
+              "  fecha_anulacion, verifactu_cancel_xml) "
+              "SELECT n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+              "  :imp, pagado, estado, :cant, prenda, size, servicio, observaciones, edit_lock, "
+              "  :newHash, verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, "
+              "  verifactu_url_qr, verifactu_xml, verifactu_hash, verifactu_rectifies_n_recibo, "
+              "  verifactu_rectification_type, verifactu_invoice_seq, verifactu_invoice_id, "
+              "  fecha_anulacion, verifactu_cancel_xml "
+              "FROM ingresos WHERE n_recibo = :n AND hash = :h");
+    i.bindValue(":imp",     money(split4));
+    i.bindValue(":cant",    QString::number(nGarm));
+    i.bindValue(":newHash", newHash);
+    i.bindValue(":n",       nRecibo);
+    i.bindValue(":h",       hash);
+    ok = ok && i.exec() && i.numRowsAffected() == 1;
+    if (ok) {
+        db.commit();
+    } else {
+        qWarning() << "splitGarmentRow: failed on" << nRecibo << hash << "-"
+                   << u.lastError().text() << i.lastError().text();
+        db.rollback();
+    }
+    db.close();
+    return ok ? newHash : QString();
 }
 
 bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                     const QString &servicio, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET servicio = :serv, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":serv", servicio);
-    q.bindValue(":imp",  importe);
+    q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    bool ok = q.exec();
-    if (!ok)
-        qWarning() << "updateGarmentServiceAndImporte: UPDATE failed -" << q.lastError().text();
+    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
     db.close();
     return ok;
 }
@@ -524,15 +733,20 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
     // accounting query ever counts it.
     q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest, "
               "fecha_anulacion = :fecha, fecha_pago = '', fecha_recogida = '' "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
     q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha", QDate::currentDate().toString("dd-MM-yyyy"));
     q.bindValue(":n",     nRecibo);
     q.bindValue(":h",     hash);
+    // Only an open garment is voided here: never a paid, sent, cancelled or locked one.
     bool ok = q.exec();
     if (!ok)
         qWarning() << "voidGarmentRow: UPDATE failed -" << q.lastError().text();
+    else if (q.numRowsAffected() != 1) {
+        qWarning() << "voidGarmentRow: refused for" << nRecibo << hash << "(paid, sent, voided or locked)";
+        ok = false;
+    }
     db.close();
     return ok;
 }
@@ -550,11 +764,9 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
     return paid;
 }
 
-bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
+// Runs the INSERT on an already open db; the callers open, close and own the transaction.
+static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
-    if (dbNotConfigured(db, __func__)) return false;
-
-    db.open();
     QSqlQuery q(db);
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
               "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
@@ -567,7 +779,7 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
     q.bindValue(":fecha_pago",       row.fechaPago);
     q.bindValue(":fecha_recogida",   row.fechaRecogida);
-    q.bindValue(":importe",          row.importe);
+    q.bindValue(":importe",          moneyText(row.importe));
     q.bindValue(":pagado",           row.pagado);
     q.bindValue(":estado",           row.estado);
     q.bindValue(":cantidad",         row.cantidad);
@@ -578,9 +790,46 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":edit_lock",        row.editLock);
     q.bindValue(":hash",             row.hash);
     q.bindValue(":verifactu_estado", row.verifactuEstado);
-    bool ok = q.exec();
+    const bool ok = q.exec();
     if (!ok)
-        qWarning() << "insertGarmentRow: INSERT failed -" << q.lastError().text();
+        qWarning() << "insertGarmentRow: INSERT failed for" << row.nRecibo << row.hash << "-" << q.lastError().text();
+    return ok;
+}
+
+bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    const bool ok = execGarmentInsert(db, row);
+    db.close();
+    return ok;
+}
+
+bool insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    // All the garments of a ticket or none: a partial ticket would be re-saved under
+    // the same number, or offered to AEAT for only part of its amount.
+    if (!db.transaction()) {
+        qWarning() << "insertGarmentRows: could not start a transaction -" << db.lastError().text();
+        db.close();
+        return false;
+    }
+    for (const IngresoGarmentRow &row : rows) {
+        if (!execGarmentInsert(db, row)) {
+            db.rollback();
+            db.close();
+            return false;
+        }
+    }
+    const bool ok = db.commit();
+    if (!ok) {
+        qWarning() << "insertGarmentRows: commit failed -" << db.lastError().text();
+        db.rollback();
+    }
     db.close();
     return ok;
 }
@@ -684,6 +933,8 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     // substr(col,4,2) is MM and substr(col,7,4) is yyyy). COUNT separates the
     // no-data case (2) from data-present; MAX(edit_lock) reports the quarter as
     // locked (1) if any row is locked, else open (0).
+    // An open connection stays open: Listado asks while its table model reads through it.
+    const bool wasOpen = db.isOpen();
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT COUNT(*), COALESCE(MAX(edit_lock), 0) FROM " + table + " WHERE "
@@ -699,7 +950,9 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     else
         qWarning() << "readLockForQuarter: query error for table" << table
                    << "quarter" << quarter << "year" << yStr << "-" << q.lastError().text();
-    db.close();
+    q.finish();
+    if (!wasOpen)
+        db.close();
     return editLock;
 }
 
@@ -725,11 +978,34 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
 double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
 {
     const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
-    double price = quantity * unitPrice;
+    // The price list is in cents; readGarmentPrice hands a float, so re-round first.
+    double price = quantity * roundToCents(unitPrice);
     if (price < 0.0)
         return 0.0;
     const double size = sizeText.trimmed().replace(',', '.').toDouble();
-    return (size != 0.0) ? size * price : price;
+    return roundToCents((size != 0.0) ? size * price : price);
+}
+
+bool garmentUnmeasured(const QString &garment, const QString &sizeText)
+{
+    return garment.contains(QLatin1String("m2"))
+           && QString(sizeText).trimmed().replace(',', '.').toDouble() <= 0.0;
+}
+
+double roundToCents(double value)
+{
+    const double cents = value * 100.0;
+    return std::round(cents + (cents >= 0.0 ? 1e-6 : -1e-6)) / 100.0;
+}
+
+QString moneyText(double value)
+{
+    return QString::number(roundToCents(value), 'f', 2);
+}
+
+QString moneyText(const QString &value)
+{
+    return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
 }
 
 void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
@@ -824,9 +1100,9 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
     return errorCnt;
 }
 
-void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
+bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
 {
-    if (dbNotConfigured(db, __func__)) return;
+    if (dbNotConfigured(db, __func__)) return false;
 
     // Build positional placeholders so values bind safely - never concatenate user input
     // into the SQL (a client named O'Brien would otherwise break the statement, and a
@@ -841,9 +1117,11 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
     for (const QString &item : items)
         q.addBindValue(item);
-    if (!q.exec())
+    const bool ok = q.exec();
+    if (!ok)
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     db.close();
+    return ok;
 }
 
 QString verifactuInvoiceId(const QString &nRecibo, int seq)
@@ -931,6 +1209,52 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
     return e;
 }
 
+bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
+                            QVector<SubmittedInvoiceEvent> &events)
+{
+    events.clear();
+    if (dbNotConfigured(db, __func__)) return false;
+    if (!db.open()) {
+        qWarning() << "submittedInvoiceEvents: db.open() failed -" << db.lastError().text();
+        return false;
+    }
+    // Rows of one event share its CSV, estado and invoice id, so MAX picks them. The
+    // date is over every paid row of the seq, as verifactuEventFor (retry, query) takes it.
+    QSqlQuery q(db);
+    q.prepare("SELECT verifactu_invoice_seq, COALESCE(MAX(verifactu_invoice_id), ''), SUM(importe), "
+              "       COALESCE(MAX(verifactu_csv), ''), COALESCE(MAX(verifactu_estado), ''), "
+              "       COALESCE((SELECT " + kEarliestFechaPago + " FROM ingresos s "
+              "                 WHERE s.n_recibo = ingresos.n_recibo AND s.pagado = 'SI' "
+              "                   AND s.verifactu_invoice_seq = ingresos.verifactu_invoice_seq), '') "
+              "FROM ingresos "
+              "WHERE n_recibo = :n AND pagado = 'SI' "
+              "  AND verifactu_estado IS NOT NULL AND verifactu_estado != '' "
+              "GROUP BY verifactu_invoice_seq "
+              "ORDER BY verifactu_invoice_seq");
+    q.bindValue(":n", nRecibo);
+    if (!q.exec()) {
+        qWarning() << "submittedInvoiceEvents: SELECT failed for ticket" << nRecibo
+                   << "-" << q.lastError().text();
+        db.close();
+        return false;
+    }
+    while (q.next()) {
+        SubmittedInvoiceEvent e;
+        e.seq       = q.value(0).toInt();
+        e.invoiceId = q.value(1).toString();
+        e.importe   = q.value(2).toDouble();
+        e.csv       = q.value(3).toString();
+        e.estado    = q.value(4).toString();
+        e.fechaPago = q.value(5).toString();
+        // Legacy 8.0-8.4 rows and pre-Phase-G PayDialog rows have no stored id.
+        if (e.invoiceId.isEmpty())
+            e.invoiceId = verifactuInvoiceId(nRecibo, e.seq);
+        events.append(e);
+    }
+    db.close();
+    return true;
+}
+
 QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QString &floorIso)
 {
     QVector<PendingVerifactuEvent> events;
@@ -1002,9 +1326,11 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
 }
 
 bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
-                       QVector<AeatExportRecord> &records)
+                       QVector<AeatExportRecord> &records, int *undatedEvents)
 {
     records.clear();
+    if (undatedEvents)
+        *undatedEvents = 0;
     if (dbNotConfigured(db, __func__)) return false;
     if (!db.open()) {
         qWarning() << "aeatExportRecords: db.open() failed -" << db.lastError().text();
@@ -1057,15 +1383,31 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
             r.invoiceId = verifactuInvoiceId(r.nRecibo, r.seq);
         records.append(r);
     }
+    if (undatedEvents) {
+        // No readable payment date puts an invoice in no period at all; no writer
+        // produces one, so it can only be damaged or hand-edited data.
+        if (q.exec("SELECT COUNT(*) FROM (SELECT 1 FROM ingresos "
+                   "  WHERE pagado = 'SI' "
+                   "    AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
+                   "         OR (verifactu_csv IS NOT NULL AND verifactu_csv != '')) "
+                   "  GROUP BY n_recibo, verifactu_invoice_seq, COALESCE(verifactu_csv, '') "
+                   "  HAVING MIN(" + kFechaPagoIso + ") IS NULL)") && q.first())
+            *undatedEvents = q.value(0).toInt();
+        else
+            qWarning() << "aeatExportRecords: undated count failed -" << q.lastError().text();
+        if (*undatedEvents > 0)
+            qWarning() << "aeatExportRecords:" << *undatedEvents
+                       << "AEAT invoice(s) without a readable fecha_pago left out of every period";
+    }
     db.close();
     return true;
 }
 
 
-void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
-                                 const VerifactuResult &result, int seq)
+int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
+                                const VerifactuResult &result, int seq)
 {
-    if (dbNotConfigured(db, __func__)) return;
+    if (dbNotConfigured(db, __func__)) return -1;
 
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const VerifactuEstado estadoEnum = verifactuEstadoForResult(result.status);
@@ -1120,10 +1462,15 @@ void updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     }
     q.bindValue(":n_recibo", ticketNum);
     q.bindValue(":seq",      seq);
+    int changed = -1;
     if (!q.exec())
         qWarning() << "updateTicketVerifactuFields UPDATE failed for ticket" << ticketNum
                    << "seq" << seq << "-" << q.lastError().text();
+    else if ((changed = q.numRowsAffected()) == 0)
+        qDebug() << "updateTicketVerifactuFields: no row changed for" << invoiceId
+                 << "- already settled (ENVIADA / ANULADA / RECTIFICADA) or not paid";
     db.close();
+    return changed;
 }
 
 int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)

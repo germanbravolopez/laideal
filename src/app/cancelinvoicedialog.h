@@ -43,7 +43,6 @@ private:
         QString csv;
         QString estado;
         QDate   invoiceDate; // fecha_pago: the date AEAT registered the invoice under
-        QDate   receptionDate; // fallback for old invoices registered under it (see onVerifactuRequestFinished)
     };
 
     QLineEdit    *m_leTicketNum;
@@ -52,6 +51,7 @@ private:
     QLabel       *m_lblResult;
 
     QString          m_loadedTicket;
+    QDate            m_receptionDate;       // fallback for old seq-0 invoices registered under it
     QVector<Event>   m_events;
     QString          m_pendingCancelId;
     QDate            m_pendingCancelDate;   // the date the closed-quarter guard checked

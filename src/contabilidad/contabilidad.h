@@ -2,10 +2,7 @@
 #define CONTABILIDAD_H
 
 #include <QDialog>
-#include <QMessageBox>
-#include <QSqlQueryModel>
 #include <QSqlDatabase>
-#include <QMessageBox>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDate>
@@ -14,9 +11,15 @@
 
 #include "sql_lite.h"
 
-namespace Ui {
-class Contabilidad;
-}
+class QCheckBox;
+class QComboBox;
+class QLabel;
+class QPushButton;
+class QSpinBox;
+namespace UiKit { class ResultPanel; }
+
+// Generar / Revertir contabilidad (built in code, no .ui): period and options,
+// the actions, and a result panel that reports every outcome in the window.
 
 class Contabilidad : public QDialog
 {
@@ -58,9 +61,15 @@ public:
     // with any other rate are flagged in the detail and kept out of its total.
     static bool expenseIvaIsSummarised(int iva);
 
-    // Test seam: when false, a generated report is written but not opened in the
-    // PDF viewer (the end-to-end bench generates reports headless). Default true.
-    static void setOpenGeneratedReports(bool open);
+    // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
+    // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";
+    // the version with the detail tables gets "_detalle" before ".pdf", so both are kept.
+    static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
+
+    // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
+    // contabilidad). A month reads its quarter; a year lists its four quarters.
+    static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
+
 
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
@@ -74,6 +83,9 @@ public:
         double gasNiImporte = 0.0;                 // gastos without IVA (base == importe)
         int ingTickets = 0, gasFacturas = 0;       // operation counts
 
+        // Gastos with IVA (10 % + 21 %), the subtotal the gastos table shows before sin IVA.
+        double gastosConIvaImporte() const { return gas10Importe + gas21Importe; }
+        double gastosConIvaBase()    const { return gas10Base + gas21Base; }
         double gastosImporteTotal() const { return gas10Importe + gas21Importe + gasNiImporte; }
         double gastosBaseTotal()    const { return gas10Base + gas21Base + gasNiImporte; }
         double gastosIvaTotal()     const { return gas10Iva + gas21Iva; }
@@ -102,6 +114,8 @@ public:
                                             const QVector<ExpenseDetail> &expenses,
                                             double ivaRate,
                                             const QDate &periodStart, const QDate &periodEnd);
+    // Gastos summary table: IVA 21 %, IVA 10 %, their subtotal, sin IVA, total.
+    static QString createHtmlTableGastos(const PeriodFigures &f);
     // Number of tickets the period [periodStart, periodEnd) counts. A regularisation
     // offsets a ticket's income only when the cancelled payment was itself made in
     // this period (paid and cancelled in the same period -> not counted). A payment
@@ -123,19 +137,29 @@ public:
                                                     double ivaRate);
 
 private slots:
-    void initialSettings();
-
-    void on_bb_ok_cancel_accepted();
-    void on_bb_ok_cancel_rejected();
-    void on_cb_config_currentTextChanged(const QString &arg1);
-
-    void generateContabilidad();
-    void updateLock();
-    void writeHtml(QString filename, QString html);
+    void onGenerateClicked();
+    void onCheckLockClicked();
+    void onConfigChanged();
 
 private:
-    Ui::Contabilidad *ui;
+    void buildUi();
+    void initialSettings();
+    // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
+    // comma-decimal amounts left out of the sums.
+    QString generateContabilidad(int &invalidAmounts);
+    void updateLock();
+
     QSqlDatabase db;
+    QLabel      *m_lblIntro = nullptr;
+    QComboBox   *m_cbConfig = nullptr;
+    QSpinBox    *m_sbYear = nullptr;
+    QLabel      *m_lblPeriod = nullptr;
+    QSpinBox    *m_sbPeriod = nullptr;
+    QCheckBox   *m_chkLock = nullptr;
+    QCheckBox   *m_chkDetail = nullptr;
+    QPushButton *m_btnCheckLock = nullptr;
+    QPushButton *m_btnGenerate = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
 
     // Current accounting mode, read from the combobox index (not its text).
     ConfigMode currentMode() const;
@@ -156,7 +180,6 @@ private:
                                       const QVector<ExpenseDetail> &expenses,
                                       double ivaRate);
     QString createHtmlTableIngresos(const PeriodFigures &f);
-    QString createHtmlTableGastos(const PeriodFigures &f);
     QString createHtmlSummary(const PeriodFigures &f, const QString &heading);
 };
 

@@ -25,6 +25,7 @@ docs/
     ├── listado.md                     (generic list viewer + PDF export)
     ├── recog_prendas.md               (garment pickup panel)
     ├── facturas.md                    (formal supplier invoice form)
+    ├── uikit.md                       (shared dialog style)
     ├── contabilidad.md                (accounting reports and period locking)
     ├── imprimir.md                    (receipt/invoice print orchestration — ESC/POS)
     ├── printing.md                    (ESC/POS core: builder, renderer, RAW spooler)
@@ -67,6 +68,7 @@ docs/
 | [modules/imprimir.md](./modules/imprimir.md) | Receipt/invoice print orchestration (ESC/POS) and layout modes |
 | [modules/printing.md](./modules/printing.md) | ESC/POS core: EscPosBuilder, TicketRenderer, ThermalPrinter (RAW spooler) |
 | [modules/add_garment.md](./modules/add_garment.md) | Add-garment workflow and validation |
+| [modules/uikit.md](./modules/uikit.md) | Shared dialog style: window setup, explanation / result panels, buttons, date field |
 | [modules/backup.md](./modules/backup.md) | Automated DB snapshots (Verifactu Req. 4): VACUUM INTO + integrity check + retention contract |
 
 ### Verifactu — AEAT digital invoicing

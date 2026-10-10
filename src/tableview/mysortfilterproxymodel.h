@@ -2,6 +2,7 @@
 #define MYSORTFILTERPROXYMODEL_H
 
 #include <QDate>
+#include <functional>
 #include <QSortFilterProxyModel>
 
 // INGRESOS_COL_* lives in sql_lite.h - this header used to also carry an
@@ -33,6 +34,17 @@ public:
     static QString removeDiacritics(const QString &text);
 
     QString table_name;
+
+    // A gastos row locked by Contabilidad (edit_lock = 1) is read-only.
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
+    bool rowLocked(int proxyRow) const;
+
+    // Checked before an edit is written: a non-empty message refuses it (editRefused).
+    std::function<QString(int column, const QVariant &value)> editValidator;
+    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+
+signals:
+    void editRefused(const QString &message);
 
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
