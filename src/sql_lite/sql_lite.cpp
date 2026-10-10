@@ -933,6 +933,8 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     // substr(col,4,2) is MM and substr(col,7,4) is yyyy). COUNT separates the
     // no-data case (2) from data-present; MAX(edit_lock) reports the quarter as
     // locked (1) if any row is locked, else open (0).
+    // An open connection stays open: Listado asks while its table model reads through it.
+    const bool wasOpen = db.isOpen();
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT COUNT(*), COALESCE(MAX(edit_lock), 0) FROM " + table + " WHERE "
@@ -948,7 +950,9 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     else
         qWarning() << "readLockForQuarter: query error for table" << table
                    << "quarter" << quarter << "year" << yStr << "-" << q.lastError().text();
-    db.close();
+    q.finish();
+    if (!wasOpen)
+        db.close();
     return editLock;
 }
 

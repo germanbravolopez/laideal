@@ -160,6 +160,24 @@ void Listado::populateTable()
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = tableName;
+        if (tableName == "gastos") {
+            // Same rule as Formulario facturas: an invoice never moves into a closed quarter.
+            proxyModel->editValidator = [this](int column, const QVariant &value) {
+                if (column != GASTOS_IDX_FECHA)
+                    return QString();
+                const QDate date = QDate::fromString(value.toString().trimmed(), "dd-MM-yyyy");
+                if (!date.isValid())
+                    return UiKit::errorHtml("Fecha no válida.") + "<br>Escríbala como dd-mm-aaaa, por ejemplo 05-03-2026.";
+                if (quarterIsClosed(db, date))
+                    return UiKit::errorHtml("Trimestre bloqueado.")
+                           + "<br>La fecha pertenece a un trimestre cerrado por la contabilidad: no se ha cambiado.";
+                return QString();
+            };
+            connect(proxyModel, &MySortFilterProxyModel::editRefused, this, [this](const QString &message) {
+                qWarning() << "Listado: gastos edit refused -" << message;
+                m_lblResult->setText(message);
+            });
+        }
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         if (tableName != "ingresos") {

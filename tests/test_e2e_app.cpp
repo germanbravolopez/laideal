@@ -1465,6 +1465,41 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
     }
 
+    // Listado de gastos: an open row's date cannot be typed into a closed quarter nor be
+    // badly written; a valid open date is stored and the table keeps reading the DB.
+    void test_listado_gastosDateNeverMovesIntoAClosedQuarter()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe, edit_lock) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
+                                "'21', '121.00', 1), (2, 'L-2', 'Agua', '', 'Beta', '10-05-2026', '10', '22.00', 0)"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
+        Listado *gastos = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->objectName() == "Gastos")
+                gastos = l;
+        QVERIFY(gastos);
+        QAbstractItemModel *model = gastos->table_listado->model();
+        int row = -1;
+        for (int r = 0; r < model->rowCount(); ++r)
+            if (model->index(r, GASTOS_IDX_ID).data().toInt() == 2)
+                row = r;
+        QVERIFY(row >= 0);
+        const QModelIndex date = model->index(row, GASTOS_IDX_FECHA);
+        const auto result = [gastos]() { return gastos->findChild<QLabel *>("lblResult")->text(); };
+
+        QVERIFY(!model->setData(date, "20-02-2026"));
+        QVERIFY2(result().contains("Trimestre bloqueado"), qPrintable(result()));
+        QVERIFY(!model->setData(date, "2026-05-11"));
+        QVERIFY2(result().contains("Fecha no válida"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT fecha FROM gastos WHERE id = 2"), QStringLiteral("10-05-2026"));
+
+        QVERIFY(model->setData(date, "11-05-2026"));
+        QCOMPARE(scalar("SELECT fecha FROM gastos WHERE id = 2"), QStringLiteral("11-05-2026"));
+        QCOMPARE(model->index(row, GASTOS_IDX_FECHA).data().toString(), QStringLiteral("11-05-2026"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+    }
+
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
     // the quarter's rows; Revertir contabilidad unlocks them again.
     void test_contabilidad_generateLockThenRevert()

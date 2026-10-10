@@ -37,6 +37,18 @@ Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
     return f;
 }
 
+bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if (role == Qt::EditRole && editValidator) {
+        const QString refusal = editValidator(index.column(), value);
+        if (!refusal.isEmpty()) {
+            emit editRefused(refusal);
+            return false;
+        }
+    }
+    return QSortFilterProxyModel::setData(index, value, role);
+}
+
 void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, int column)
 {
     m_normalizedFilterText = normalizedText;
