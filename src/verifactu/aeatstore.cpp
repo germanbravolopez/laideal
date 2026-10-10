@@ -16,6 +16,12 @@ const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
     "state, csv, error_code, error_description, attempts";
 
+// A null QString binds as SQL NULL, which the NOT NULL text columns refuse.
+QString text(const QString &value)
+{
+    return value.isNull() ? QStringLiteral("") : value;
+}
+
 QString kindText(AeatStore::Kind kind)
 {
     return kind == AeatStore::Kind::Registration ? QStringLiteral("alta") : QStringLiteral("anulacion");
@@ -137,11 +143,11 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":e", m_environment);
         q.bindValue(":k", kindText(kind));
         q.bindValue(":n", issuerNif);
-        q.bindValue(":num", built.invoiceNumber);
+        q.bindValue(":num", text(built.invoiceNumber));
         q.bindValue(":d", built.issueDate.toString(kDateFormat));
         q.bindValue(":t", built.total);
         q.bindValue(":h", built.hash);
-        q.bindValue(":x", built.xml);
+        q.bindValue(":x", text(built.xml));
         q.bindValue(":g", built.generatedAt.toString(Qt::ISODate));
         q.bindValue(":s", kPending);
         ok = q.exec();
@@ -254,9 +260,9 @@ bool AeatStore::markOutcome(qint64 id, const QString &state, const QString &csv,
     QSqlQuery q(m_db);
     q.prepare("UPDATE aeat_records SET state = :s, csv = :c, error_code = :ec, error_description = :ed WHERE id = :id");
     q.bindValue(":s", state);
-    q.bindValue(":c", csv);
-    q.bindValue(":ec", errorCode);
-    q.bindValue(":ed", errorDescription);
+    q.bindValue(":c", text(csv));
+    q.bindValue(":ec", text(errorCode));
+    q.bindValue(":ed", text(errorDescription));
     q.bindValue(":id", id);
     const bool ok = q.exec() && q.numRowsAffected() == 1;
     if (!ok)

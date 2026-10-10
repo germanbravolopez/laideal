@@ -135,6 +135,9 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "1").hash, QStringLiteral("CCC"));
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "2").errorCode, QStringLiteral("1100"));
         QVERIFY(!store.markOutcome(999, AeatStore::kAccepted, "", "", ""));
+        // Empty (null) texts are stored as empty, not refused by the NOT NULL columns.
+        QVERIFY(store.markOutcome(c.id, AeatStore::kAccepted, QString(), QString(), QString()));
+        QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "1").state, AeatStore::kAccepted);
     }
 
     // An open connection stays open (the app's models read through it); a closed one is closed again.

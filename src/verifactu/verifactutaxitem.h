@@ -22,6 +22,7 @@ public:
     void setTaxBase(double base) { m_taxBase = base; }
     void setTaxAmount(double amount) { m_taxAmount = amount; }
 
+    double getTaxRate() const { return m_taxRate; }
     double getTaxBase() const { return m_taxBase; }
     double getTaxAmount() const { return m_taxAmount; }
 

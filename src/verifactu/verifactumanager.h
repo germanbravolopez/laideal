@@ -8,11 +8,12 @@
 #include "verifactuconfig.h"
 #include "verifactuinvoice.h"
 #include "verifactutypes.h"
+#include "verifactubackend.h"
 
-// Async REST client for the Verifactu AEAT API. All invoice operations return
+// Async REST client for the IreneSolutions Verifactu gateway (one VerifactuBackend). All invoice operations return
 // immediately with a request ID; the result arrives via the requestFinished signal
 // so the UI never blocks on AEAT latency.
-class VerifactuManager : public QObject
+class VerifactuManager : public VerifactuBackend
 {
     Q_OBJECT
 
@@ -26,23 +27,21 @@ public:
     // the requestFinished signal to pick up its own result. Validation errors and
     // invalid-config cases also arrive via the signal (queued) so callers have a
     // uniform handling path.
-    QString submitInvoiceAsync(const VerifactuInvoice &invoice);
-    QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate);
-    QString generateQRAsync(const VerifactuInvoice &invoice);
+    QString submitInvoiceAsync(const VerifactuInvoice &invoice) override;
+    QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate) override;
+    QString generateQRAsync(const VerifactuInvoice &invoice) override;
     // Asks AEAT/Irene Solutions what it holds for an InvoiceID (GetFilteredList).
     // Result arrives via queryFinished, NOT requestFinished, so it can never be
     // mistaken for a submission reply by the existing handlers.
-    QString queryInvoiceAsync(const QString &invoiceNumber);
+    QString queryInvoiceAsync(const QString &invoiceNumber) override;
 
     QString getConfigurationInfo() const;
+    bool isConfigured() const override { return m_config->isValid(); }
+    QString configurationInfo() const override { return getConfigurationInfo(); }
 
     // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
     // /Create with a 10s setTransferTimeout - bounded wait, never blocks indefinitely.
     VerifactuResult testConnection();
-
-signals:
-    void requestFinished(const QString &requestId, const VerifactuResult &result);
-    void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
 
 private:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;

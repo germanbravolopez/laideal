@@ -186,6 +186,26 @@ add_test(NAME aeat_qr
 set_tests_properties(aeat_qr PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AEAT_XML_OUT=${CMAKE_BINARY_DIR}/aeat-xml")
 
+# AeatDirectBackend end to end against the fake AEAT SOAP service (support/fakeaeatserver),
+# plus the client-certificate loading with throwaway self-signed fixtures.
+add_executable(test_aeat_direct_backend test_aeat_direct_backend.cpp
+    support/fakeaeatserver.h
+    support/fakeaeatserver.cpp
+)
+target_include_directories(test_aeat_direct_backend PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(test_aeat_direct_backend PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::Sql
+    verifactu
+)
+target_compile_definitions(test_aeat_direct_backend PRIVATE
+    AEAT_CERT_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-cert")
+add_test(NAME aeat_direct_backend
+    COMMAND test_aeat_direct_backend -o ${CMAKE_BINARY_DIR}/test-results-aeat_direct_backend.xml,junitxml -o -,txt)
+set_tests_properties(aeat_direct_backend PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME aeat_xsd

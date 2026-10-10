@@ -25,6 +25,12 @@ set(PROJECT_SOURCES
     aeatstore.cpp
     aeatqr.h
     aeatqr.cpp
+    aeatcertificate.h
+    aeatcertificate.cpp
+    aeattransport.h
+    aeattransport.cpp
+    aeatdirectbackend.h
+    aeatdirectbackend.cpp
     ../third_party/qrcodegen/qrcodegen.hpp
     ../third_party/qrcodegen/qrcodegen.cpp
     verifactuconfig.h
@@ -38,6 +44,7 @@ set(PROJECT_SOURCES
     verifacturesponse.cpp
     verifactumanager.h
     verifactumanager.cpp
+    verifactubackend.h
     verifactuintegration.h
     verifactuintegration.cpp
 )
@@ -51,6 +58,10 @@ target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Sql
     appsettings
 )
+
+if(WIN32)
+    target_link_libraries(verifactu winhttp crypt32 ncrypt)
+endif()
 
 target_compile_definitions(verifactu PRIVATE
     PROJECT_VERSION="${PROJECT_VERSION}"
