@@ -493,8 +493,15 @@ void MainWindow::initializeVerifactu()
     connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this,
             [this](const QString &invoiceId, bool cancellation, const VerifactuResult &result) {
         if (cancellation) {
+            // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
+            const bool marked = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
             qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
-                       << (result.isSuccess() ? "accepted" : result.errorDescription);
+                       << (result.isSuccess() ? "accepted" : result.errorDescription) << "- marked" << marked;
+            m_result->setText(result.isSuccess()
+                ? UiKit::okHtml(tr("La AEAT ha registrado la anulación de la factura %1.").arg(invoiceId.toHtmlEscaped()))
+                      + (marked ? QString() : "<br>" + UiKit::errorHtml(tr("No se pudo marcar como anulada: revísela en Anular factura.")))
+                : UiKit::errorHtml(tr("La AEAT no ha aceptado la anulación de la factura %1: %2")
+                                       .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped())));
             return;
         }
         const int rows = applySettledVerifactuResult(db, invoiceId, result);

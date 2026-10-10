@@ -176,6 +176,23 @@ private slots:
         QVERIFY(other.recordXmls().isEmpty());
     }
 
+    // An aeat_chain created by an earlier build (no generated_at) is completed, not left unreadable.
+    void test_olderChainTableUpgraded()
+    {
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TABLE aeat_chain (environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, "
+                                     "invoice_number TEXT NOT NULL, issue_date TEXT NOT NULL, hash TEXT NOT NULL, "
+                                     "PRIMARY KEY (environment, issuer_nif))"));
+        QVERIFY(QSqlQuery(m_db).exec("INSERT INTO aeat_chain VALUES ('pruebas', '89890001K', '1', '10-10-2026', 'OLD')"));
+        m_db.close();
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        bool ok = false;
+        QCOMPARE(store.chainHead("89890001K", &ok).hash, QStringLiteral("OLD"));
+        QVERIFY(ok);
+        QVERIFY(store.append(AeatStore::Kind::Registration, "89890001K", builder("2", "NEW")).isValid());
+    }
+
     // An open connection stays open (the app's models read through it); a closed one is closed again.
     void test_connectionStateKept()
     {

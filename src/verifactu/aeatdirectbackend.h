@@ -136,7 +136,7 @@ private:
     void sendPending();
     void onSubmissionReply(const AeatTransport::Response &response);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord = true);
-    QList<AeatResponse::RecordSummary> localCandidates();
+    QList<AeatResponse::RecordSummary> localCandidates(const QList<AeatResponse::RecordSummary> &known);
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,

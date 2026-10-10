@@ -55,6 +55,7 @@
 #include "sql_lite.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
+#include "aeatdirectbackend.h"
 #include "voidgarmentsdialog.h"
 
 class TestE2eApp : public QObject
@@ -624,6 +625,32 @@ private slots:
         QCOMPARE(scalar("SELECT importe || '|' || verifactu_estado || '|' || verifactu_rectifies_n_recibo "
                         "FROM ingresos WHERE n_recibo='701'"),
                  QStringLiteral("8.00|ENVIADA|700"));
+    }
+
+    // Direct AEAT connection: a rectificativa other than R5 is refused before a number
+    // is claimed - no placeholder row is left (it would count as income).
+    void test_rectifyDirectOnlyR5_noRowLeft()
+    {
+        const QDate paid = QDate::currentDate();
+        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0710"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QVERIFY(direct.directBackend());
+
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("710");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(0);      // R1
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        AeatDirectBackend::setEndpointOverride(QString());
+        QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("R5"),
+                 qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
     }
 
     // Startup recovery: a payment left PENDIENTE by a previous session is offered by

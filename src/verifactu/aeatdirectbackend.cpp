@@ -120,14 +120,41 @@ int AeatDirectBackend::secondsUntilNextSend() const
 // Chain sync
 // ---------------------------------------------------------------------------
 
-QList<AeatResponse::RecordSummary> AeatDirectBackend::localCandidates()
+QList<AeatResponse::RecordSummary> AeatDirectBackend::localCandidates(const QList<AeatResponse::RecordSummary> &known)
 {
+    // Our own records and the head belong to this environment; a record the gateway
+    // stored only counts when it chains to one of them (or to one AEAT returned here),
+    // so a record from the gateway's test period never enters the production chain.
     QList<AeatResponse::RecordSummary> out;
-    const QStringList own = m_store.recordXmls();
-    for (const QString &xml : m_gatewayXmls + own) {
+    QSet<QString> reachable;
+    for (const AeatResponse::RecordSummary &k : known)
+        reachable.insert(k.hash);
+    bool read = false;
+    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
+    if (read && !head.isFirst())
+        reachable.insert(head.hash);
+    for (const QString &xml : m_store.recordXmls()) {
+        const AeatResponse::RecordSummary s = AeatResponse::summarizeRecord(xml);
+        if (s.valid && s.issuerNif == m_config.issuerNif) {
+            out << s;
+            reachable.insert(s.hash);
+        }
+    }
+    QList<AeatResponse::RecordSummary> gateway;
+    for (const QString &xml : m_gatewayXmls) {
         const AeatResponse::RecordSummary s = AeatResponse::summarizeRecord(xml);
         if (s.valid && s.issuerNif == m_config.issuerNif)
-            out << s;
+            gateway << s;
+    }
+    for (bool added = true; added;) {
+        added = false;
+        for (int i = 0; i < gateway.size(); ++i) {
+            if (reachable.contains(gateway[i].previousHash) && !reachable.contains(gateway[i].hash)) {
+                reachable.insert(gateway[i].hash);
+                out << gateway[i];
+                added = true;
+            }
+        }
     }
     return out;
 }
@@ -195,7 +222,7 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
     if (m_store.chainSynced(m_config.issuerNif)) {
         // Synced with AEAT before: the gateway's stored records and ours are enough.
         QString message;
-        const bool ok = adoptTip(localCandidates(), &message);
+        const bool ok = adoptTip(localCandidates({}), &message);
         syncFinished(ok, message);
         return;
     }
@@ -268,7 +295,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             return;
         }
         QString message;
-        const bool ok = adoptTip(found + localCandidates(), &message);
+        const bool ok = adoptTip(found + localCandidates(found), &message);
         syncFinished(ok, message);
     });
 }

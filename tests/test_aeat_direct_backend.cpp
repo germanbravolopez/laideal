@@ -510,6 +510,21 @@ private slots:
         QCOMPARE(consultas, 0);                                            // offline after the first sync
     }
 
+    // A record the gateway stored that does not chain to this environment's records
+    // (e.g. from its test period) never becomes the previous record, however new.
+    void test_resyncIgnoresUnrelatedGatewayRecords()
+    {
+        AeatDirectBackend first(config(), m_db);
+        const VerifactuResult ours = waitFor(first, first.submitInvoiceAsync(ticket("1", 10)));
+        QVERIFY(ours.isSuccess());
+        const AeatRecord::Registration elsewhere = AeatDirectBackend::registrationFrom(ticket("T-9", 5),
+            { { "89890001K", "T-8", QDate(2026, 10, 10) }, QString(64, 'E') }, QDateTime::currentDateTime().addSecs(60));
+        AeatDirectBackend next(config(), m_db);
+        next.setGatewayRecordXmls({ AeatRecord::registrationXml(elsewhere, config().system) });
+        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, ours.rawHash);
+    }
+
     // AEAT already holds another system's record for the invoice: accepted, without
     // claiming our record; answered from the store afterwards.
     void test_duplicateOfAnotherSystem()

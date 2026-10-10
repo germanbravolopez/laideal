@@ -80,6 +80,9 @@ bool AeatStore::ensureSchema()
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
+    } else {
+        // aeat_chain made by an earlier build of the research branch lacks it (fails once added).
+        QSqlQuery(m_db).exec("ALTER TABLE aeat_chain ADD COLUMN generated_at TEXT NOT NULL DEFAULT ''");
     }
     close(wasOpen);
     return ok;

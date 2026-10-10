@@ -1130,6 +1130,23 @@ private slots:
         QCOMPARE(applySettledVerifactuResult(m_db, "800-7", ok), -1);
     }
 
+    // An accepted cancellation that reached no dialog marks the event ANULADA; a
+    // refused one changes nothing.
+    void test_applySettledVerifactuCancellation()
+    {
+        insertIngreso("810", "10-10-2026", "10.00", "SI", "ENVIADA", 0, 0);
+        VerifactuResult refused;
+        refused.status = VerifactuResult::ERROR;
+        QVERIFY(!applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), refused));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='810'"), QStringLiteral("ENVIADA"));
+        VerifactuResult ok;
+        ok.status = VerifactuResult::SUCCESS;
+        ok.rawXml = "<sf:RegistroAnulacion/>";
+        QVERIFY(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), ok));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE n_recibo='810'"),
+                 QStringLiteral("ANULADA|12-10-2026"));
+    }
+
     // Unsent direct-client records; 0 when the direct connection was never used (no table).
     void test_aeatPendingRecordCount()
     {

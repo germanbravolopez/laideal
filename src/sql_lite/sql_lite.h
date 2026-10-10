@@ -59,6 +59,10 @@ int aeatPendingRecordCount(QSqlDatabase &db);
 // updateTicketVerifactuFields, which never rewrites a settled row. Returns the rows
 // updated, -1 when the id names no event.
 int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result);
+// The same for an accepted cancellation (the reply reached nobody, e.g. the dialog had
+// given up): markInvoiceSeqCancelled with `cancelDate`. False when nothing was marked.
+bool applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
+                                       const VerifactuResult &result);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

@@ -1001,22 +1001,41 @@ int aeatPendingRecordCount(QSqlDatabase &db)
     return count;
 }
 
-int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result)
+// "31277" -> (31277, 0), "31277-1" -> (31277, 1).
+static void splitInvoiceId(const QString &invoiceId, QString *nRecibo, int *seq)
 {
-    QString nRecibo = invoiceId.trimmed();
-    int seq = 0;
-    const int dash = nRecibo.lastIndexOf(QLatin1Char('-'));
+    *nRecibo = invoiceId.trimmed();
+    *seq = 0;
+    const int dash = nRecibo->lastIndexOf(QLatin1Char('-'));
     if (dash > 0) {
         bool numeric = false;
-        const int parsed = nRecibo.mid(dash + 1).toInt(&numeric);
+        const int parsed = nRecibo->mid(dash + 1).toInt(&numeric);
         if (numeric) {
-            seq = parsed;
-            nRecibo = nRecibo.left(dash);
+            *seq = parsed;
+            *nRecibo = nRecibo->left(dash);
         }
     }
+}
+
+int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result)
+{
+    QString nRecibo;
+    int seq = 0;
+    splitInvoiceId(invoiceId, &nRecibo, &seq);
     if (verifactuEventFor(db, nRecibo, seq).nRecibo.isEmpty())
         return -1;
     return updateTicketVerifactuFields(db, nRecibo, result, seq);
+}
+
+bool applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
+                                       const VerifactuResult &result)
+{
+    if (!result.isSuccess())
+        return false;
+    QString nRecibo;
+    int seq = 0;
+    splitInvoiceId(invoiceId, &nRecibo, &seq);
+    return markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, result.rawXml);
 }
 
 QStringList readClientPhones(QSqlDatabase &db, const QString &client)

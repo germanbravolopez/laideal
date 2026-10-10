@@ -127,6 +127,16 @@ Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_s
 
 The `verifactu-compliance-auditor` reviewed the branch and found nine should-fix points, all fixed and each guarded by a test that fails without the fix: no record is generated before the chain is synced with AEAT the first time (requests wait); later starts re-sync offline, so records the gateway generated while switched away are followed; an unreadable chain is an error; records are generated even when the certificate is unusable (only the sending waits); the direct client uses AEAT pre-production unless its own explicit setting says otherwise (the gateway's PRODUCCIÓN box no longer decides); switching back to the gateway is refused while direct records are unsent; a duplicate of another system's record is accepted without claiming our record, a duplicate of a cancelled invoice is reported and never re-registered; failed sends are retried on their own and outcomes nobody waited for settle their rows; the first sync always queries this month and the previous one and fails when AEAT returns records without their hash; Rectificar factura takes the corrected invoice from its stored record and only allows R5 on the direct connection; "Consultar en AEAT" passes the invoice date; the QR is drawn at exactly level M.
 
+A second review of those fixes found one more blocking point - Rectificar factura refused a non-R5 type only after claiming the number and inserting the placeholder row - now refused before (as is a missing configuration), plus: a cancellation AEAT accepts after its dialog gave up now marks the invoice ANULADA; an `aeat_chain` from an earlier build gets its new column; a record the gateway stored only counts for the chain when it links to this environment's records (never one from the gateway's test period).
+
+**Known limits** (noted, not fixed - to weigh before any production use):
+
+- Until the first sync with AEAT succeeds, invoices are issued without a record (requests wait and the rows stay PENDIENTE).
+- A gateway record whose reply was lost (no stored XML) is invisible to the offline re-sync; going back to the gateway after direct records forks IreneSolutions' chain (it keeps its own state).
+- Claiming a duplicate as ours relies on it being a resend (`attempts > 1`); comparing our huella with AEAT's through a query would be exact. For a duplicate of another system's record the QR is built from our data.
+- An invoice AEAT holds as cancelled leaves its rows ERROR (still counted until reviewed).
+- A record AEAT never reports on is resent every 60 s without limit.
+
 ### Findings while building
 
 - **Qt's Schannel backend cannot read PKCS#12** (`The backend "schannel" cannot read PKCS12 format`). The release ships no OpenSSL, so the certificate is handled with the Windows crypto API (`PFXImportCertStore` in memory, or the personal store by thumbprint) and the requests go through **WinHTTP**, which presents it in the TLS handshake. A certificate already installed in Windows (as the FNMT one usually is, for the AEAT website) can be used without storing any password. *Not yet proven against AEAT*: the TLS handshake with a real certificate is the first thing the PoC checks.

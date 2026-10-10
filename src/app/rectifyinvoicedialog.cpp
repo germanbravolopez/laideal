@@ -289,6 +289,20 @@ void RectifyInvoiceDialog::onRectifyClicked()
     const double origTaxBase   = m_loadedImporteTotal / divisor;
     const double origTaxAmount = m_loadedImporteTotal - origTaxBase;
 
+    // Refusals come before the number is claimed and the placeholder row inserted:
+    // that row is income and would be offered for resubmission as a plain invoice.
+    const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
+    // The shop only issues simplified invoices: the direct client corrects them with R5.
+    if (m_verifactu->directBackend() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
+        m_lblResult->setText(UiKit::errorHtml("Con la conexión directa con la AEAT la rectificativa de un ticket "
+                                              "(factura simplificada) es siempre R5."));
+        return;
+    }
+    if (!m_verifactu->isConfigured()) {
+        m_lblResult->setText(UiKit::errorHtml("Verifactu no está configurado: no se ha creado la rectificativa."));
+        return;
+    }
+
     setFormEnabled(false);
     m_lblResult->setText("Enviando rectificativa a AEAT...");
 
@@ -306,14 +320,6 @@ void RectifyInvoiceDialog::onRectifyClicked()
     m_submittedIsSubstitution = isSubstitution;
     insertPlaceholderRow();
 
-    const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
-    // The shop only issues simplified invoices: the direct client corrects them with R5.
-    if (m_verifactu->directBackend() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
-        m_lblResult->setText(UiKit::errorHtml("Con la conexión directa con la AEAT la rectificativa de un ticket "
-                                              "(factura simplificada) es siempre R5."));
-        setFormEnabled(true);
-        return;
-    }
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
                                             : VerifactuInvoice::BY_DIFFERENCES;
     const QString desc = m_leDescription->text().trimmed().isEmpty()
