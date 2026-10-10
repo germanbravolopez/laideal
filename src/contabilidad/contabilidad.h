@@ -16,6 +16,7 @@ class QComboBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
+namespace UiKit { class ResultPanel; }
 
 // Generar / Revertir contabilidad (built in code, no .ui): period and options,
 // the actions, and a result panel that reports every outcome in the window.
@@ -164,7 +165,7 @@ private:
     QCheckBox   *m_chkDetail = nullptr;
     QPushButton *m_btnCheckLock = nullptr;
     QPushButton *m_btnGenerate = nullptr;
-    QLabel      *m_lblResult = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
 
     // Current accounting mode, read from the combobox index (not its text).
     ConfigMode currentMode() const;

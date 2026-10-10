@@ -3,12 +3,12 @@
 #include "qprinter.h"
 #include "appsettings.h"
 #include "reporthtml.h"
+#include "uikit.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileInfo>
 #include <QFormLayout>
-#include <QFrame>
 #include <QGroupBox>
 #include <QHash>
 #include <QHBoxLayout>
@@ -19,20 +19,10 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace {
-
-// Result panel messages, coloured like the other Verifactu / accounting dialogs.
-QString okHtml(const QString &text)      { return "<b style='color:green'>" + text + "</b>"; }
-QString warnHtml(const QString &text)    { return "<b style='color:#b26a00'>" + text + "</b>"; }
-QString errorHtml(const QString &text)   { return "<b style='color:red'>" + text + "</b>"; }
-
-QString fileLinkHtml(const QString &file)
-{
-    return "PDF: <a href='" + QUrl::fromLocalFile(file).toString() + "'>"
-           + QFileInfo(file).fileName().toHtmlEscaped() + "</a>";
-}
-
-} // namespace
+using UiKit::okHtml;
+using UiKit::warnHtml;
+using UiKit::errorHtml;
+using UiKit::fileLinkHtml;
 
 Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
@@ -42,9 +32,7 @@ Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
     // Window-modal over MainWindow and kept open after each report: it can only be
     // closed (Cerrar / the title bar), not minimised or sent behind the main window.
     setWindowModality(Qt::WindowModal);
-    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    setWindowFlag(Qt::WindowMinimizeButtonHint, false);
-    setMinimumWidth(520);
+    UiKit::setUpDialog(this, "Generar contabilidad");
     buildUi();
     initialSettings();
 }
@@ -55,10 +43,7 @@ void Contabilidad::buildUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
 
-    m_lblIntro = new QLabel();
-    m_lblIntro->setWordWrap(true);
-    m_lblIntro->setFrameShape(QFrame::StyledPanel);
-    m_lblIntro->setContentsMargins(8, 8, 8, 8);
+    m_lblIntro = UiKit::introPanel(QString());
     layout->addWidget(m_lblIntro);
 
     // Period -------------------------------------------------------------
@@ -98,42 +83,20 @@ void Contabilidad::buildUi()
 
     // Actions + result ---------------------------------------------------
     QHBoxLayout *actions = new QHBoxLayout();
-    m_btnCheckLock = new QPushButton("Comprobar bloqueo");
-    m_btnCheckLock->setObjectName("btnCheckLock");
-    m_btnCheckLock->setAutoDefault(false);
+    m_btnCheckLock = UiKit::secondaryButton("Comprobar bloqueo", "btnCheckLock");
     actions->addWidget(m_btnCheckLock);
     actions->addStretch();
-    m_btnGenerate = new QPushButton();
-    m_btnGenerate->setObjectName("btnGenerate");
-    m_btnGenerate->setDefault(true);
-    m_btnGenerate->setMinimumWidth(220);
-    QFont primary = m_btnGenerate->font();
-    primary.setBold(true);
-    m_btnGenerate->setFont(primary);
+    m_btnGenerate = UiKit::primaryButton(QString(), "btnGenerate");
     actions->addWidget(m_btnGenerate);
     layout->addLayout(actions);
 
-    m_lblResult = new QLabel();
-    m_lblResult->setObjectName("lblResult");
-    m_lblResult->setWordWrap(true);
-    m_lblResult->setFrameShape(QFrame::StyledPanel);
-    m_lblResult->setContentsMargins(8, 8, 8, 8);
-    m_lblResult->setMinimumHeight(64);
-    m_lblResult->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    m_lblResult->setTextFormat(Qt::RichText);
-    m_lblResult->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    m_lblResult->setOpenExternalLinks(true);
+    m_lblResult = new UiKit::ResultPanel();
     layout->addWidget(m_lblResult);
-
-    QPushButton *btnClose = new QPushButton("Cerrar");
-    btnClose->setObjectName("btnClose");
-    btnClose->setAutoDefault(false);
-    layout->addWidget(btnClose, 0, Qt::AlignRight);
+    layout->addLayout(UiKit::closeRow(this));
 
     connect(m_cbConfig, qOverload<int>(&QComboBox::currentIndexChanged), this, &Contabilidad::onConfigChanged);
     connect(m_btnCheckLock, &QPushButton::clicked, this, &Contabilidad::onCheckLockClicked);
     connect(m_btnGenerate,  &QPushButton::clicked, this, &Contabilidad::onGenerateClicked);
-    connect(btnClose,       &QPushButton::clicked, this, &QDialog::close);
 }
 
 Contabilidad::ConfigMode Contabilidad::currentMode() const
@@ -243,7 +206,7 @@ void Contabilidad::onCheckLockClicked()
     const int unit = currentMode() == Anual ? 0 : m_sbPeriod->value();
     const QString message = lockStatusMessage(db, currentMode(), unit, m_sbYear->value());
     qDebug() << "Contabilidad::onCheckLockClicked:" << message;
-    m_lblResult->setText(message.toHtmlEscaped().replace('\n', "<br>"));
+    m_lblResult->showInfo(message);
 }
 
 void Contabilidad::onGenerateClicked()
