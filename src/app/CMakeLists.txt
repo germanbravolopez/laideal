@@ -21,8 +21,6 @@ add_library(laideal_app STATIC
     mainwindow.cpp
     cancelinvoicedialog.h
     cancelinvoicedialog.cpp
-    voidgarmentsdialog.h
-    voidgarmentsdialog.cpp
     rectifyinvoicedialog.h
     rectifyinvoicedialog.cpp
     pendingsubmitsdialog.h

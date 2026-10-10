@@ -8,6 +8,7 @@
 #include "numberformatdelegate.h"
 #include "verifactuintegration.h"
 #include "verifacturesponse.h"
+#include "voidgarmentsdialog.h"
 #include "uikit.h"
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -141,6 +142,9 @@ void RecogPrendas::buildUi()
     ui->pb_state->setToolTip(tr("Marca o desmarca la prenda seleccionada como recogida."));
     ui->lbl_payment_badge = new QLabel();
     ui->lbl_state_badge = new QLabel();
+    ui->de_date_anul = UiKit::dateEdit(QDate::currentDate(), "de_date_anul");
+    ui->de_date_anul->setToolTip(tr("Fecha en que la prenda se anuló (Anular prendas o Anular factura)."));
+    ui->lbl_anul_badge = new QLabel();
     s->addWidget(new QLabel(tr("Recepción:")), 0, 0);
     s->addWidget(ui->de_date_recep, 0, 1);
     s->addWidget(ui->pb_payment, 1, 0);
@@ -149,7 +153,10 @@ void RecogPrendas::buildUi()
     s->addWidget(ui->pb_state, 2, 0);
     s->addWidget(ui->de_date_pickup, 2, 1);
     s->addWidget(ui->lbl_state_badge, 2, 2);
-    s->setRowStretch(3, 1);
+    s->addWidget(new QLabel(tr("Anulación:")), 3, 0);
+    s->addWidget(ui->de_date_anul, 3, 1);
+    s->addWidget(ui->lbl_anul_badge, 3, 2);
+    s->setRowStretch(4, 1);
     details->addWidget(grpState, 2);
 
     // Ticket actions -------------------------------------------------------------
@@ -179,6 +186,10 @@ void RecogPrendas::buildUi()
     splitRow->addWidget(new QLabel(tr("prenda(s)")));
     splitRow->addStretch();
     t->addLayout(splitRow);
+    ui->pb_void = UiKit::secondaryButton(tr("Anular prendas…"), "pb_void");
+    ui->pb_void->setToolTip(tr("Anular prendas no cobradas ni entregadas del ticket seleccionado "
+                               "(recibo erróneo o cambio de opinión)."));
+    t->addWidget(ui->pb_void);
     ui->pb_print = UiKit::secondaryButton(tr("Imprimir factura"), "pb_print");
     ui->pb_print->setToolTip(tr("Reimprimir la factura del pago de la prenda seleccionada."));
     t->addWidget(ui->pb_print);
@@ -249,8 +260,11 @@ void RecogPrendas::resetAllContents()
     ui->sb_separ->setEnabled(false);
     ui->pb_print->setEnabled(false);
     ui->pb_verifactu->setEnabled(false);
+    ui->pb_void->setEnabled(false);
+    showOptionalDate(ui->de_date_anul, QString());
+    ui->lbl_anul_badge->clear();
     ui->de_date_recep->setDate(QDate::currentDate());
-    ui->de_date_paym->setDate(QDate::currentDate());
+    showOptionalDate(ui->de_date_paym, QString());
     ui->de_date_pickup->setDate(QDate::currentDate());
     // Payment date is display-only: it is written solely by PayDialog (Cobrar),
     // never from here. Editing it would be worse than useless - fecha_pago is part
@@ -267,6 +281,9 @@ void RecogPrendas::resetAllContents()
     // SEPARATE_GARM, which must inherit the original reception date anyway - a
     // hand-typed value there would also shift the row in or out of the Verifactu
     // startup-recovery window, which gates on fecha_recepcion.
+    // fecha_anulacion is written only by Anular prendas / Anular factura / Rectificar.
+    ui->de_date_anul->setReadOnly(true);
+    ui->de_date_anul->setButtonSymbols(QAbstractSpinBox::NoButtons);
     ui->de_date_recep->setReadOnly(true);
     ui->de_date_recep->setButtonSymbols(QAbstractSpinBox::NoButtons);
     ui->de_date_recep->setToolTip(tr("La fecha de recepción se fija al crear el "
@@ -399,7 +416,11 @@ void RecogPrendas::updateRowClickedToFields()
     ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI");
     ui->pb_state->setChecked(rowEstado == "Recogido");
     ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString(),"dd-MM-yyyy"));
-    ui->de_date_paym->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString(),"dd-MM-yyyy"));
+    showOptionalDate(ui->de_date_paym, sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString());
+    const QString anulDate = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_ANULACION)).toString();
+    showOptionalDate(ui->de_date_anul, anulDate);
+    ui->lbl_anul_badge->setText(QDate::fromString(anulDate, "dd-MM-yyyy").isValid()
+                                    ? UiKit::errorHtml(tr("Anulada")) : QString());
     ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString(),"dd-MM-yyyy"));
     // pb_payment kept disabled - per-garment payment would submit a Verifactu invoice
     // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
@@ -420,6 +441,7 @@ void RecogPrendas::updateRowClickedToFields()
     ui->cb_servic->setEnabled(priceEditable);
     QString verifactuEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
     ui->pb_verifactu->setEnabled(!verifactuEstado.isEmpty());
+    ui->pb_void->setEnabled(true);
 }
 
 double RecogPrendas::calculatePrice()
@@ -624,6 +646,30 @@ void RecogPrendas::on_pb_reset_clicked()
 void RecogPrendas::on_pb_payment_toggled(bool checked)
 {
     ui->lbl_payment_badge->setText(checked ? UiKit::okHtml(tr("SÍ")) : UiKit::errorHtml(tr("NO")));
+}
+
+void RecogPrendas::showOptionalDate(QDateEdit *edit, const QString &ddMMyyyy)
+{
+    // An empty date (unpaid, never voided) shows "-" instead of a misleading today.
+    const QDate date = QDate::fromString(ddMMyyyy, "dd-MM-yyyy");
+    edit->setMinimumDate(QDate(2000, 1, 1));
+    edit->setSpecialValueText(QStringLiteral("-"));
+    edit->setDate(date.isValid() ? date : edit->minimumDate());
+}
+
+void RecogPrendas::on_pb_void_clicked()
+{
+    const QString ticketNum = ui->le_nr_ticket->text();
+    if (ticketNum.isEmpty())
+        return;
+    VoidGarmentsDialog dlg(db, this);
+    dlg.loadTicket(ticketNum);
+    dlg.exec();
+    const int voided = dlg.voidedCount();
+    on_pb_search_clicked();
+    m_result->setText(voided > 0
+        ? UiKit::okHtml(tr("%1 prenda(s) del ticket %2 anuladas.").arg(voided).arg(ticketNum.toHtmlEscaped()))
+        : UiKit::warnHtml(tr("No se ha anulado ninguna prenda del ticket %1.").arg(ticketNum.toHtmlEscaped())));
 }
 
 void RecogPrendas::showPickupBadge(bool pickedUp)

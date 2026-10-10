@@ -271,6 +271,42 @@ private slots:
         QCOMPARE(table->item(0, 0)->flags() & Qt::ItemIsUserCheckable, Qt::ItemFlags());
     }
 
+    // Recogida -> Anular prendas…: opens the void dialog on the selected garment's
+    // ticket, the voided garment then shows its Anulación date in Recogida, and the
+    // Herramientas menu no longer carries the entry.
+    void test_recogida_voidGarmentsFromTheWindow()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "910", "h910a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "910", "h910b", "5.00", today()));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "910", "h910a"));
+        QCOMPARE(rp.findChild<QDateEdit *>("de_date_anul")->text(), QStringLiteral("-"));   // not voided
+        QString loadedTicket;
+        m_driver->expect(ModalDriver::ofType<VoidGarmentsDialog>(), [&loadedTicket](QWidget *w) {
+            loadedTicket = w->findChild<QLineEdit *>("leTicketNum")->text();
+            auto *table = w->findChild<QTableWidget *>("table");
+            for (int r = 0; r < table->rowCount(); ++r)
+                if (table->item(r, 4)->text() != QLatin1String("Anulado")
+                        && table->item(r, 3)->text().startsWith("10"))
+                    table->item(r, 0)->setCheckState(Qt::Checked);
+            w->findChild<QPushButton *>("btnVoid")->click();               // confirmation answered Yes
+            qobject_cast<QDialog *>(w)->accept();
+        });
+        rp.findChild<QPushButton *>("pb_void")->click();
+
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(loadedTicket, QStringLiteral("910"));
+        QCOMPARE(scalar("SELECT estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h910a'"),
+                 QStringLiteral("Anulado|%1").arg(today()));
+        QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("1 prenda(s) del ticket 910 anuladas"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+        QVERIFY(selectRow(rp, "910", "h910a"));
+        QCOMPARE(rp.findChild<QDateEdit *>("de_date_anul")->date(), QDate::currentDate());
+
+        MainWindow mw;
+        QVERIFY(!mw.findChild<QAction *>("actionAnular_prendas"));
+    }
+
     // Anular factura: AEAT accepts the cancellation -> ANULADA with today's date. The
     // cancellation names each invoice by the date it was issued under - its payment
     // date - not the ticket's reception date: here the first payment was made days

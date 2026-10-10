@@ -82,6 +82,7 @@ private slots:
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
     void showPickupBadge(bool pickedUp);
+    void on_pb_void_clicked();
     void on_pb_verifactu_clicked();
     // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
     // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
@@ -114,16 +115,18 @@ private:
         QLineEdit *le_nr_ticket = nullptr, *le_client = nullptr, *le_phone = nullptr, *le_mobile = nullptr;
         QLineEdit *le_garm = nullptr, *le_qty = nullptr, *le_size = nullptr, *le_price = nullptr, *le_obsv = nullptr;
         QComboBox *cb_servic = nullptr;
-        QDateEdit *de_date_recep = nullptr, *de_date_paym = nullptr, *de_date_pickup = nullptr;
+        QDateEdit *de_date_recep = nullptr, *de_date_paym = nullptr, *de_date_pickup = nullptr, *de_date_anul = nullptr;
         QCheckBox *pb_payment = nullptr;   // read-only: payment happens through Cobrar
         QCheckBox *pb_state = nullptr;     // Recogida
-        QLabel *lbl_payment_badge = nullptr, *lbl_state_badge = nullptr;
+        QLabel *lbl_payment_badge = nullptr, *lbl_state_badge = nullptr, *lbl_anul_badge = nullptr;
         QLabel *lbl_total = nullptr;
         QPushButton *pb_pay_all = nullptr, *pb_pku_all = nullptr, *pb_separ_garm = nullptr;
-        QPushButton *pb_print = nullptr, *pb_verifactu = nullptr;
+        QPushButton *pb_print = nullptr, *pb_verifactu = nullptr, *pb_void = nullptr;
         QSpinBox *sb_separ = nullptr;
     };
     void buildUi();
+    // Shows a dd-MM-yyyy date, or "-" when it is empty.
+    static void showOptionalDate(QDateEdit *edit, const QString &ddMMyyyy);
 
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;

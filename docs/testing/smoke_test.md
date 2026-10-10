@@ -120,7 +120,7 @@ A3 is the AEAT safety check: repeat it at the end.
 | B4 | Herramientas → Añadir nuevas prendas on ticket 1 (still unpaid), add one garment **unpaid** | The added garment reads `SIN COBRAR`; ticket 1 now has three garments |
 | B5 | Recogida → ticket 1 → **Cobrar…** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
 | B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused in the window's result panel: "El recibo Nº 1 ya tiene prendas pagadas…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
-| B6b | Herramientas → Anular prendas → ticket 2 → tick → confirm | In Recogida: `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
+| B6b | Recogida → search ticket 2 → select a garment → **Anular prendas…** (opens with ticket 2 loaded) → tick → confirm → Cerrar | Recogida reports the voided garment in its result panel; the row reads `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today (also in the Anulación date under Recogida, with a red "Anulada"); Herramientas no longer lists Anular prendas. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
 | B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
 | B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
 | B9 | Herramientas → Anular factura / Rectificar | Both show "Verifactu no configurado" (correct in smoke mode; their flows are in `test_e2e_app`) |

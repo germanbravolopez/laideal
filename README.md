@@ -258,4 +258,4 @@ Remove-Item $tmpNotes
 
 ## Version history
 
-See [`releases_notes.txt`](./releases_notes.txt).
+See [`releases_notes.txt`](./releases_notes.txt) for the english version or [`releases_notes_es.txt`](./releases_notes_es.txt) for the spanish one.

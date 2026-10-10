@@ -71,7 +71,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | UI language (Qt dialogs, release notes, installer choice) | `src/appsettings/applanguage.h` | `src/appsettings/applanguage.cpp` |
 | Main window | `src/app/mainwindow.h` | `src/app/mainwindow.cpp` |
 | Invoice cancellation dialog (paid/AEAT) | `src/app/cancelinvoicedialog.h` | `.cpp` |
-| Void unpaid garments dialog (local, issue #40) | `src/app/voidgarmentsdialog.h` | `.cpp` |
+| Void unpaid garments dialog (local, issue #40; opened from Recogida → Anular prendas…) | `src/recog_prendas/voidgarmentsdialog.h` | `.cpp` |
 | Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` | `.cpp` |
 | Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | AEAT records export (XML envelope writer) | `src/app/aeatexport.h` | `.cpp` |

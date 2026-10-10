@@ -3,6 +3,8 @@ add_library(recog_prendas STATIC
     recog_prendas.cpp
     pay_dialog.h
     pay_dialog.cpp
+    voidgarmentsdialog.h
+    voidgarmentsdialog.cpp
 )
 target_link_libraries(recog_prendas
     PRIVATE
