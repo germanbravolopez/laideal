@@ -772,6 +772,57 @@ private slots:
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);
     }
 
+    // Enter in a dialog's number field runs that field's action once and nothing else:
+    // it used to reach the default button too, so Imprimir printed twice, Añadir
+    // prendas also pressed Añadir prenda and Anular prendas also pressed Anular.
+    void test_enterInNumberFieldRunsOneAction()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "670", "h670a", "10.00", "10-02-2026", "A-670"));
+        Imprimir print(m_db);
+        print.verifactuIntegration = m_verifactu;
+        print.isRecibo = false;
+        print.isCompleteInvoice = false;
+        print.show();
+        print.le_n_ticket->setText("670");
+        QTest::keyClick(print.le_n_ticket, Qt::Key_Return);
+        QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);               // one factura, one QR request
+        QVERIFY2(print.findChild<QLabel *>("lblResult")->text().contains("Factura 670 impresa"),
+                 qPrintable(print.findChild<QLabel *>("lblResult")->text()));
+
+        QVERIFY(E2e::seedGarment(m_db, "2300", "h2300a", "10.00", today()));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
+        auto *add = mw.findChild<AddGarment *>();
+        QVERIFY(add);
+        add->show();
+        auto *number = add->findChild<QLineEdit *>("leNRecibo");
+        number->setText("2300");
+        QTest::keyClick(number, Qt::Key_Return);
+        QVERIFY(add->ticketFound);
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("1");
+        QTest::keyClick(number, Qt::Key_Return);                             // searches again, adds nothing
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='2300'"), QStringLiteral("1"));
+        const QString addText = add->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(addText.contains("Recibo Nº 2300 encontrado") && !addText.contains("Formulario incompleto"),
+                 qPrintable(addText));
+
+        QVERIFY(E2e::seedGarment(m_db, "930", "h930a", "10.00"));
+        VoidGarmentsDialog voidDlg(m_db);
+        voidDlg.show();
+        auto *voidNumber = voidDlg.findChild<QLineEdit *>("leTicketNum");
+        voidNumber->setText("930");
+        QTest::keyClick(voidNumber, Qt::Key_Return);
+        auto *table = voidDlg.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 1);
+        table->item(0, 0)->setCheckState(Qt::Checked);
+        QTest::keyClick(voidNumber, Qt::Key_Return);                         // searches again, voids nothing
+        const QString voidText = voidDlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(!voidText.contains("Marque al menos una"), qPrintable(voidText));
+        QVERIFY(!m_popups->sawMessageContaining("Anular prendas"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='h930a'"), QStringLiteral("En tienda"));
+    }
+
     // Recogida reports a refused write instead of a success, after its table refresh:
     // Separar on a row locked by Contabilidad, and a negative hand-typed price.
     void test_recogida_refusedWritesAreReported()

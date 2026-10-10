@@ -1,5 +1,6 @@
 #include "cancelinvoicedialog.h"
 #include "sql_lite.h"
+#include "uikit.h"
 
 #include <QDebug>
 #include <QFrame>
@@ -72,7 +73,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addWidget(btnClose, 0, Qt::AlignRight);
 
     connect(btnSearch,     &QPushButton::clicked,    this, &CancelInvoiceDialog::onSearchClicked);
-    connect(m_leTicketNum, &QLineEdit::returnPressed, this, &CancelInvoiceDialog::onSearchClicked);
+    UiKit::onEnter(m_leTicketNum, [this]() { onSearchClicked(); });
     connect(btnClose,      &QPushButton::clicked,    this, &QDialog::accept);
 }
 

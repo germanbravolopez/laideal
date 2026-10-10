@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QUrl>
 
@@ -18,6 +20,35 @@ const int kPanelMargin = 8;
 const int kPrimaryMinWidth = 220;
 const int kResultMinHeight = 64;
 const int kDateMinWidth = 140;
+
+// Consumes Return / Enter on its line edit after running the action.
+class EnterFilter : public QObject
+{
+public:
+    EnterFilter(QLineEdit *edit, std::function<void()> action)
+        : QObject(edit), m_action(std::move(action)) {}
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::KeyPress) {
+            const int key = static_cast<QKeyEvent *>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                m_action();
+                return true;
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_action;
+};
+}
+
+void onEnter(QLineEdit *edit, std::function<void()> action)
+{
+    edit->installEventFilter(new EnterFilter(edit, std::move(action)));
 }
 
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth)

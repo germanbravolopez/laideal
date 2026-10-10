@@ -15,6 +15,7 @@ The shared look of the application's windows, in one place. Every dialog is buil
 | `UiKit::introPanel(text)` | Framed explanation at the top: what the window does, in one or two sentences. Rich text allowed. |
 | `UiKit::primaryButton(text, objectName)` | The action the window exists for: bold, default (Enter), at least 220 px wide. One per window, at the right of its row. |
 | `UiKit::secondaryButton(text, objectName)` | Any other action; never takes Enter from the primary one. |
+| `UiKit::onEnter(lineEdit, action)` | Enter in a field runs `action` and stops there (an event filter consumes the key). Use it instead of `QLineEdit::returnPressed`, which lets the key go on to the dialog's default button: that button then ran too (Imprimir printed twice; a ticket search also pressed Añadir prenda / Anular seleccionadas). Used by Imprimir, Añadir prendas, Anular prendas, Anular factura and Rectificar factura. |
 | `UiKit::dateEdit(date, objectName)` | Calendar popup, `dd-MM-yyyy`, wide enough for the whole date. |
 | `UiKit::closeRow(dialog, text = "Cerrar")` | Right-aligned closing button (`btnClose`) that closes the dialog. |
 | `UiKit::ResultPanel` | Framed `QLabel` (`lblResult`) where the window reports **every** outcome instead of message boxes; rich text, links open the file or URL. `showInfo(plain)` for neutral text, `setText(html)` with the phrases below. |

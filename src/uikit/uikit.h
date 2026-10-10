@@ -11,10 +11,13 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 class QDate;
 class QDateEdit;
 class QDialog;
 class QHBoxLayout;
+class QLineEdit;
 class QPushButton;
 
 namespace UiKit {
@@ -35,6 +38,10 @@ QPushButton *primaryButton(const QString &text, const QString &objectName);
 QPushButton *secondaryButton(const QString &text, const QString &objectName);
 // Date field of every dialog: calendar popup, dd-MM-yyyy, wide enough for the date.
 QDateEdit *dateEdit(const QDate &date, const QString &objectName);
+// Enter in `edit` runs `action` and stops there. A plain returnPressed connection lets
+// the key go on to the dialog's default button too, which then ran a second time
+// (Imprimir printed twice) or ran another action (a search also pressed Añadir prenda).
+void onEnter(QLineEdit *edit, std::function<void()> action);
 // Right-aligned "Cerrar" (objectName btnClose) that closes the dialog.
 QHBoxLayout *closeRow(QDialog *dialog, const QString &text = QStringLiteral("Cerrar"));
 

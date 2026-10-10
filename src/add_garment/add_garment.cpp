@@ -125,7 +125,7 @@ void AddGarment::buildUi()
     layout->addLayout(UiKit::closeRow(this));
 
     connect(btnSearch,   &QPushButton::clicked, this, &AddGarment::onSearchClicked);
-    connect(m_leNRecibo, &QLineEdit::returnPressed, this, &AddGarment::onSearchClicked);
+    UiKit::onEnter(m_leNRecibo, [this]() { onSearchClicked(); });
     connect(btnSave,     &QPushButton::clicked, this, &AddGarment::onSaveClicked);
     connect(btnReset,    &QPushButton::clicked, this, [this]() {
         resetAllContents();
