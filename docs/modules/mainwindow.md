@@ -30,7 +30,7 @@ Every message is written in the result panel: the save summary (ticket, client, 
 | `checkClientData()` | Adds or updates the client row in `clientes` |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status-bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar |
-| `saveTicket()` | Inserts N garment rows into `ingresos` with `verifactu_estado = PENDIENTE`; async submit patches the rows when AEAT replies |
+| `saveTicket()` | Inserts the N garment rows into `ingresos` in one transaction (`insertGarmentRows`, all or none) with `verifactu_estado = PENDIENTE` (paid) / `SIN COBRAR`; returns the stored total; async submit patches the rows when AEAT replies |
 | `printRecibo()` / `printFra()` | Build the two copies through `Imprimir` (`verifactuIntegration = nullptr`: no QR fetch at save time) and print them when `AppSettings::enablePrinting()` is on; return whether both reached the printer (reported in the save summary). |
 | `cleanDatabase(print)` | Fixes comma decimal separators in DB |
 | `on_actionAnular_factura_verifactu_triggered()` | Opens `CancelInvoiceDialog` (paid/ENVIADA rows → AEAT anulación); shows warning if Verifactu not configured |

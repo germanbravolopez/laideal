@@ -743,11 +743,9 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
     return paid;
 }
 
-bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
+// Runs the INSERT on an already open db; the callers open, close and own the transaction.
+static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
-    if (dbNotConfigured(db, __func__)) return false;
-
-    db.open();
     QSqlQuery q(db);
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
               "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
@@ -771,9 +769,46 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":edit_lock",        row.editLock);
     q.bindValue(":hash",             row.hash);
     q.bindValue(":verifactu_estado", row.verifactuEstado);
-    bool ok = q.exec();
+    const bool ok = q.exec();
     if (!ok)
-        qWarning() << "insertGarmentRow: INSERT failed -" << q.lastError().text();
+        qWarning() << "insertGarmentRow: INSERT failed for" << row.nRecibo << row.hash << "-" << q.lastError().text();
+    return ok;
+}
+
+bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    const bool ok = execGarmentInsert(db, row);
+    db.close();
+    return ok;
+}
+
+bool insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    db.open();
+    // All the garments of a ticket or none: a partial ticket would be re-saved under
+    // the same number, or offered to AEAT for only part of its amount.
+    if (!db.transaction()) {
+        qWarning() << "insertGarmentRows: could not start a transaction -" << db.lastError().text();
+        db.close();
+        return false;
+    }
+    for (const IngresoGarmentRow &row : rows) {
+        if (!execGarmentInsert(db, row)) {
+            db.rollback();
+            db.close();
+            return false;
+        }
+    }
+    const bool ok = db.commit();
+    if (!ok) {
+        qWarning() << "insertGarmentRows: commit failed -" << db.lastError().text();
+        db.rollback();
+    }
     db.close();
     return ok;
 }

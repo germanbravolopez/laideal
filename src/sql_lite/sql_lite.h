@@ -146,6 +146,8 @@ struct IngresoGarmentRow {
     QString verifactuEstado;  // "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
+// Inserts the rows in one transaction: all of them, or none when one fails.
+bool        insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows);
 
 // Strip diacritics / non-Latin1 marks for accent-insensitive name matching:
 // NFD-normalise, narrow to Latin-1 (combining marks become '?'), drop every '?'.

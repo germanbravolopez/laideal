@@ -746,6 +746,31 @@ private slots:
         QTRY_VERIFY(factura.isNull());
     }
 
+    // The Imprimir window stays open between prints, so a QR fetched for one invoice
+    // must never be printed on the next one (here a voided ticket, which has none).
+    void test_imprimirDialog_qrNotReusedForTheNextTicket()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "660", "h660a", "10.00", "10-02-2026", "A-660"));
+        QVERIFY(E2e::seedSentGarment(m_db, "661", "h661a", "8.00", "10-02-2026", "A-661"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ANULADA' WHERE n_recibo='661'"));
+        Imprimir dlg(m_db);
+        dlg.verifactuIntegration = m_verifactu;
+        dlg.isRecibo = false;
+        dlg.isCompleteInvoice = false;
+        const auto press = [&dlg](const QString &ticket) {
+            dlg.le_n_ticket->setText(ticket);
+            dlg.findChild<QPushButton *>("btnPrint")->click();
+            return dlg.findChild<QLabel *>("lblResult")->text();
+        };
+        QString text = press("660");
+        QVERIFY2(!text.contains("Sin código QR"), qPrintable(text));
+        QVERIFY(!dlg.qrCode.isNull());
+        text = press("661");
+        QVERIFY2(text.contains("Sin código QR"), qPrintable(text));
+        QVERIFY(dlg.qrCode.isNull());
+        QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);
+    }
+
     // Recogida reports a refused write instead of a success, after its table refresh:
     // Separar on a row locked by Contabilidad, and a negative hand-typed price.
     void test_recogida_refusedWritesAreReported()
@@ -785,15 +810,22 @@ private slots:
         QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 12.35);
     }
 
-    // A ticket whose garments cannot be stored is not sent to AEAT nor printed, and the
+    // A ticket whose garments cannot all be stored keeps none of them (a retry would
+    // otherwise duplicate the first ones), is not sent to AEAT nor printed, and the
     // window says so instead of announcing it as saved.
     void test_mainWindow_failedInsertStopsTheSave()
     {
         MainWindow mw;
         mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Fallo");
         enterGarment(mw, "Camisa", "1");
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        table->setCurrentCell(1, 1);
+        table->setItem(1, 0, new QTableWidgetItem("1"));
+        qobject_cast<QComboBox *>(table->cellWidget(1, 1))->setCurrentText("Camisa");
         mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        // The first garment goes in, the second one is refused.
         QVERIFY(E2e::exec(m_db, "CREATE TRIGGER e2e_block BEFORE INSERT ON ingresos "
+                                "WHEN (SELECT COUNT(*) FROM ingresos) >= 1 "
                                 "BEGIN SELECT RAISE(ABORT, 'blocked by test'); END"));
         clickSave(mw);
         E2e::exec(m_db, "DROP TRIGGER e2e_block");

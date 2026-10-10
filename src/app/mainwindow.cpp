@@ -750,7 +750,7 @@ bool MainWindow::saveTicket(double &storedTotal)
     // an unpaid one starts SIN COBRAR - there is no invoice to send yet.
     // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
     // so log the count of garments actually inserted, not the slot count.
-    int savedGarments = 0;
+    QList<IngresoGarmentRow> rows;
     storedTotal = 0.0;
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
@@ -784,19 +784,20 @@ bool MainWindow::saveTicket(double &storedTotal)
                 r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                                 : VerifactuEstado::Unpaid);
 
-            if (!insertGarmentRow(db, r)) {
-                qWarning() << "saveTicket: INSERT failed for ticket" << r.nRecibo << "row" << row
-                           << "- stopping before any AEAT submission";
-                return false;
-            }
             storedTotal += roundToCents(moneyText(r.importe).toDouble());
-            ++savedGarments;
-            qDebug() << "saveTicket: saved garment" << savedGarments << "ticket=" << r.nRecibo
+            qDebug() << "saveTicket: garment" << rows.size() + 1 << "ticket=" << r.nRecibo
                      << "importe=" << r.importe << "hash=" << r.hash;
+            rows << r;
         }
     }
+    if (!insertGarmentRows(db, rows)) {
+        qWarning() << "saveTicket: ticket" << ui->le_nr_ticket->text()
+                   << "not stored (nothing kept) - stopping before any AEAT submission";
+        storedTotal = 0.0;
+        return false;
+    }
     qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
-             << "-" << savedGarments << "garment(s) saved, total" << storedTotal;
+             << "-" << rows.size() << "garment(s) saved, total" << storedTotal;
     return true;
 }
 
@@ -863,8 +864,8 @@ void MainWindow::on_pb_save_clicked()
             if (!saveTicket(totalAmount)) {
                 // Nothing is sent nor printed for a ticket that was not stored whole.
                 m_result->setText(UiKit::errorHtml(tr("No se pudo guardar el ticket %1 completo.").arg(ticketNum))
-                                  + "<br>" + tr("No se ha enviado a AEAT ni impreso. Revise el log (Archivo → Log de "
-                                                "depuración) y el ticket en Recogida antes de repetirlo."));
+                                  + "<br>" + tr("No se ha guardado ninguna prenda ni se ha enviado a AEAT o impreso. "
+                                                "Revise el log (Archivo → Log de depuración) antes de repetirlo."));
                 return;
             }
             if (isPaid) {

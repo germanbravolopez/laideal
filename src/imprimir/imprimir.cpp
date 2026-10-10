@@ -428,6 +428,8 @@ bool Imprimir::sendIfEnabled()
 void Imprimir::onPrintClicked()
 {
     m_printProblems.clear();
+    // The window stays open: a QR fetched for the previous print belongs to that invoice.
+    qrCode = QPixmap();
     const QString ticket = le_n_ticket->text().trimmed();
     if (ticket.isEmpty() || ticket != selectFromWhereLike(db, "n_recibo", "ingresos", "n_recibo", ticket, true, false)) {
         m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + ".")
@@ -500,6 +502,7 @@ void Imprimir::onPrintClicked()
         QStringList printed;
         for (const auto &ev : toPrint) {
             invoiceSeq = ev.first;
+            qrCode = QPixmap();
             getTicketInfo();
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
             sendIfEnabled();
