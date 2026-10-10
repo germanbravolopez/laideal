@@ -29,6 +29,7 @@
 | `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
 | `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
 | `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
+| `docs/modules/verifactu/aeat-direct-investigation.md` | Research (Oct 2026): submitting to AEAT directly instead of via IreneSolutions - services, mutual TLS, huella and chain, what to build, legal duties, timing, recommendation |
 | `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
 | `docs/modules/printer/README.md` | **Printer research dossier** (background for the shipped ESC/POS code): Epson TM-T20III model/specs, control methods, ESC/POS command subset, current-flow analysis, and the implementation plan (5 files + index). Runtime reference: `docs/modules/printing.md` |
 

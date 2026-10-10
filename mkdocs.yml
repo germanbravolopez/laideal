@@ -107,3 +107,4 @@ nav:
           - Overview: modules/verifactu/README.md
           - REST API reference: modules/verifactu/rest_api.md
           - Legal requirements: modules/verifactu/verifactu-requirements.md
+          - Direct AEAT client (research): modules/verifactu/aeat-direct-investigation.md
