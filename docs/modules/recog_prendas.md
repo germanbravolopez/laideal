@@ -2,6 +2,8 @@
 
 "Garment pickup" panel. Loads `ingresos` rows into a filterable table. Handles payment marking, pickup marking, observation editing, quantity/service/size/price editing, and garment row splitting.
 
+A `QMainWindow` built in code with the shared [UiKit](uikit.md) style (the `.ui` form was removed in October 2026): heading and explanation; a **Búsqueda** group (search box, *Fecha de* selector, Buscar, Limpiar); the results table (it takes the spare height); three groups underneath - **Prenda seleccionada** (Nº recibo, client and phones read-only, Prenda, Servicio, Cantidad, Tamaño m2, Importe, Observaciones), **Estado y fechas** (Recepción; a read-only **Pagada** checkbox with the payment date and a green SÍ / red NO label; the **Recogida** checkbox with the pickup date and a green Recogido / red En tienda label) and **Ticket** (bold Importe total, **Cobrar…**, Recoger todo, Separar + how many, Imprimir factura, Verifactu…) - and a result panel. Every message (search not recognised, no client with that phone, nothing pending to charge, unpaid row to reprint, split refused or done, AEAT query not possible, CSV adopted) is written in the result panel; AEAT replies, which arrive later, keep using the status bar. The widgets keep the former form's object names (`le_search`, `tableView`, `pb_pay_all`, `pb_state`, ...) so the `on_<name>_<signal>` slots still connect by name and the e2e bench finds them; they live in the `Widgets` struct the `ui` pointer refers to. The Verifactu details window and the AEAT comparison window take the same style and keep their object names.
+
 ## Source files
 
 - `src/recog_prendas/recog_prendas.h/cpp`
@@ -110,14 +112,14 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 | Button | Enabled when |
 |--------|-------------|
-| `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm` | A row is selected AND it is **not** `Anulado` (a voided garment is read-only) |
+| `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm` | A row is selected AND it is **not** `Anulado` (a voided garment is read-only); `sb_separ` (how many to split off, 1 .. cantidad − 1) only when the quantity is over 1 |
 | `pb_print` | A row is selected |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
 `resetAllContents()` (called on search and reset) disables all buttons. `on_tableView_clicked()` maps the proxy index to source via `proxyModel->mapToSource()` and then calls `selectSourceRow(sourceRow)` which stores `rowClickedCell` as a **source-model row** and calls `updateRowClickedToFields()` — the single source of truth for the per-row button enables: it enables the row-selection group (excluding `pb_payment`, and excluding all edit buttons for an `Anulado` row) and conditionally enables `pb_verifactu`.
 
-`pb_payment` is only the paid indicator: `on_pb_payment_toggled` sets its text (SI / NO) and colour and writes nothing. The old per-garment payment writes (`updateDb(PAY_YES / PAY_NO)`) were unreachable and were removed in the October 2026 dead-code pass; every payment goes through `PayDialog`.
+`pb_payment` is only the paid indicator (a disabled checkbox): `on_pb_payment_toggled` sets the SÍ / NO label beside it and writes nothing; the amount editors test `pb_payment->isChecked()`. `pb_state` (Recogida) writes `Recogido` / `En tienda` through `updateDb(PKU_YES / PKU_NO)`. The old per-garment payment writes (`updateDb(PAY_YES / PAY_NO)`) were unreachable and were removed in the October 2026 dead-code pass; every payment goes through `PayDialog`.
 
 ## Date fields: which ones actually write
 

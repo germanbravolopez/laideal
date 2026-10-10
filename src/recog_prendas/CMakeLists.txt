@@ -1,5 +1,4 @@
 add_library(recog_prendas STATIC
-    recog_prendas.ui
     recog_prendas.h
     recog_prendas.cpp
     pay_dialog.h

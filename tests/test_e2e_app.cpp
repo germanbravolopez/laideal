@@ -14,7 +14,6 @@
 #include <QDateEdit>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
-#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -655,7 +654,7 @@ private slots:
         QVERIFY(q.applyEnabled);
         QCOMPARE(m_server.requestsTo("Create").size(), 1);
         QCOMPARE(m_server.requestsTo("GetFilteredList").size(), 1);
-        QTRY_VERIFY(m_popups->sawMessageContaining("se ha actualizado con el CSV de AEAT"));
+        QTRY_VERIFY(rp.findChild<QLabel *>("lblResult")->text().contains("se ha actualizado con el CSV de AEAT"));
     }
 
     // Recogida, "Consultar en AEAT" when nothing can be adopted: AEAT does not hold
@@ -888,14 +887,12 @@ private slots:
                                 "verifactu_invoice_id = '2500-1' WHERE hash='h2500a'"));
         RecogPrendas rp(m_db);
         QVERIFY(selectRow(rp, "2500", "h2500a"));
-        m_driver->expect(ModalDriver::ofType<QInputDialog>(), [](QWidget *w) {
-            auto *dlg = qobject_cast<QInputDialog *>(w);
-            dlg->setIntValue(1);
-            dlg->accept();
-        });
+        auto *count = rp.findChild<QSpinBox *>("sb_separ");
+        QCOMPARE(count->maximum(), 2);                                      // 3 garments: up to 2 split off
+        count->setValue(1);
         rp.findChild<QPushButton *>("pb_separ_garm")->click();
-
-        QCOMPARE(m_driver->handled(), 1);
+        QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("1 prenda(s) separadas"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
         QCOMPARE(scalar("SELECT GROUP_CONCAT(cantidad || ':' || importe || ':' || verifactu_estado || ':' || "
                         "verifactu_csv || ':' || verifactu_invoice_seq || ':' || verifactu_invoice_id, ' ') "
                         "FROM (SELECT * FROM ingresos WHERE n_recibo = '2500' ORDER BY CAST(cantidad AS INTEGER))"),
