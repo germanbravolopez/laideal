@@ -143,10 +143,13 @@ void RecogPrendas::buildUi()
     ui->pb_state = new QCheckBox(tr("Recogida"));
     ui->pb_state->setToolTip(tr("Marca o desmarca la prenda seleccionada como recogida."));
     ui->lbl_payment_badge = new QLabel();
+    ui->lbl_payment_badge->setObjectName("lbl_payment_badge");
     ui->lbl_state_badge = new QLabel();
+    ui->lbl_state_badge->setObjectName("lbl_state_badge");
     ui->de_date_anul = UiKit::dateEdit(QDate::currentDate(), "de_date_anul");
     ui->de_date_anul->setToolTip(tr("Fecha en que la prenda se anuló (Anular prendas o Anular factura)."));
     ui->lbl_anul_badge = new QLabel();
+    ui->lbl_anul_badge->setObjectName("lbl_anul_badge");
     s->addWidget(new QLabel(tr("Recepción:")), 0, 0);
     s->addWidget(ui->de_date_recep, 0, 1);
     s->addWidget(ui->pb_payment, 1, 0);
@@ -425,9 +428,22 @@ void RecogPrendas::updateRowClickedToFields()
     showOptionalDate(ui->de_date_paym, sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString());
     const QString anulDate = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_ANULACION)).toString();
     showOptionalDate(ui->de_date_anul, anulDate);
+    // Green like the table: a cancelled garment is settled, not a debt.
     ui->lbl_anul_badge->setText(QDate::fromString(anulDate, "dd-MM-yyyy").isValid()
-                                    ? UiKit::errorHtml(tr("Anulada")) : QString());
-    ui->de_date_pickup->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString(),"dd-MM-yyyy"));
+                                    ? UiKit::okHtml(tr("Anulada")) : QString());
+    // setChecked() above only signals a change, so set the labels for every row.
+    on_pb_payment_toggled(isPaid);
+    showPickupBadge(rowEstado == "Recogido");
+    const QDate pickup = QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString(), "dd-MM-yyyy");
+    if (isAnulado) {
+        // Never paid nor collected: no NO / En tienda labels, no pickup date.
+        ui->lbl_payment_badge->clear();
+        ui->lbl_state_badge->clear();
+        showOptionalDate(ui->de_date_pickup, QString());
+    } else {
+        // Today when not collected yet: the date that Recogida / Recoger todo will store.
+        ui->de_date_pickup->setDate(pickup.isValid() ? pickup : QDate::currentDate());
+    }
     // pb_payment kept disabled - per-garment payment would submit a Verifactu invoice
     // for the full ticket per garment, causing duplicate InvoiceID at AEAT. Use pb_pay_all.
     ui->pb_state->setEnabled(!isAnulado);

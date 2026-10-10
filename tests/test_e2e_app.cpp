@@ -344,6 +344,17 @@ private slots:
                  qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
         QVERIFY(selectRow(rp, "910", "h910a"));
         QCOMPARE(rp.findChild<QDateEdit *>("de_date_anul")->date(), QDate::currentDate());
+        // A voided garment: "Anulada" in green, no NO / En tienda labels, no pickup date.
+        const QString anulBadge = rp.findChild<QLabel *>("lbl_anul_badge")->text();
+        QVERIFY2(anulBadge.contains("Anulada") && anulBadge.contains("green"), qPrintable(anulBadge));
+        QVERIFY(rp.findChild<QLabel *>("lbl_payment_badge")->text().isEmpty());
+        QVERIFY(rp.findChild<QLabel *>("lbl_state_badge")->text().isEmpty());
+        QCOMPARE(rp.findChild<QDateEdit *>("de_date_pickup")->text(), QStringLiteral("-"));
+        // The other garment of the ticket, unpaid and in the shop, shows both labels again.
+        QVERIFY(selectRow(rp, "910", "h910b"));
+        QVERIFY(rp.findChild<QLabel *>("lbl_payment_badge")->text().contains("NO"));
+        QVERIFY(rp.findChild<QLabel *>("lbl_state_badge")->text().contains("En tienda"));
+        QCOMPARE(rp.findChild<QDateEdit *>("de_date_pickup")->date(), QDate::currentDate());
 
         MainWindow mw;
         QVERIFY(!mw.findChild<QAction *>("actionAnular_prendas"));
