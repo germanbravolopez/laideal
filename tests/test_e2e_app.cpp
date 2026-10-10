@@ -13,6 +13,7 @@
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -810,6 +811,24 @@ private slots:
         QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 12.35);
     }
 
+    // A garment locked by Contabilidad while its invoice is on the way to AEAT is not
+    // stored as paid, and the dialog counts it so Recogida can report it.
+    void test_payDialog_reportsAGarmentLockedDuringTheSubmit()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "955", "h955a", "5.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "955", "h955b", "7.00", today()));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("955"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        // The lock check before submitting has passed; the reply has not arrived yet.
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 1 WHERE hash='h955b'"));
+        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
+        QCOMPARE(dlg.unstoredGarments(), 1);
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h955a'"), QStringLiteral("SI"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h955b'"), QStringLiteral("NO"));
+    }
+
     // A ticket whose garments cannot all be stored keeps none of them (a retry would
     // otherwise duplicate the first ones), is not sent to AEAT nor printed, and the
     // window says so instead of announcing it as saved.
@@ -1420,6 +1439,13 @@ private slots:
         QVERIFY2(result(gastos).contains("Formulario facturas"), qPrintable(result(gastos)));
         emit gastos->table_listado->doubleClick(gastos->table_listado->model()->index(0, 1));
         QTRY_VERIFY2(result(gastos).contains("Edición bloqueada"), qPrintable(result(gastos)));
+        // The locked row can be neither edited in place nor deleted.
+        const QModelIndex locked = gastos->table_listado->model()->index(0, 1);
+        QVERIFY(!(gastos->table_listado->model()->flags(locked) & Qt::ItemIsEditable));
+        gastos->table_listado->setCurrentIndex(locked);
+        gastos->actionEliminar_fila->trigger();
+        QVERIFY2(result(gastos).contains("Fila bloqueada"), qPrintable(result(gastos)));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM gastos"), QStringLiteral("1"));
 
         QMetaObject::invokeMethod(&mw, "on_actionListado_de_clientes_triggered");
         Listado *clientes = listado("Listado de clientes");
@@ -1502,6 +1528,28 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         revert->close();
         QTRY_VERIFY(revert.isNull());
+    }
+
+    // A report that cannot be written (here its path is taken by a folder) is shown as
+    // an error and the quarter is not closed without it.
+    void test_contabilidad_unwrittenReportDoesNotLock()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "410", "h410a", "12.10", "10-05-2026", "A-ORIG0410"));
+        const QString pdf = AppSettings::instance()->contabilidadPath() + "/contabilidad_trimestral_2026_2.pdf";
+        QFile::remove(pdf);
+        QVERIFY(QDir().mkpath(pdf));
+        QPointer<Contabilidad> form = new Contabilidad(m_db);
+        form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
+        form->findChild<QSpinBox *>("sbPeriod")->setValue(2);
+        form->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        form->findChild<QCheckBox *>("chkLock")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
+        const QString text = form->findChild<QLabel *>("lblResult")->text();
+        QDir(pdf).removeRecursively();
+        QVERIFY2(text.contains("No se pudo guardar el informe") && !text.contains("realizada"), qPrintable(text));
+        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h410a'"), QStringLiteral("0"));
+        form->close();
+        QTRY_VERIFY(form.isNull());
     }
 };
 

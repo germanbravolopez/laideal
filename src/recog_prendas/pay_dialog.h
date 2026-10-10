@@ -36,6 +36,8 @@ public:
     // the ticket is not found or every row is already paid (caller should
     // not show the dialog in that case).
     bool loadTicket(const QString &ticketNum);
+    // Garments charged (sent to AEAT) that could not be stored as paid afterwards.
+    int unstoredGarments() const { return m_unstoredHashes.size(); }
 
 signals:
     // Emitted when the bounded wait expires with the request still in flight.
@@ -76,6 +78,7 @@ private:
     int         m_pendingSeq = -1;
     QStringList m_pendingHashes;
     QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
+    QStringList             m_unstoredHashes;
     QDate       m_pendingFechaPago;
 };
 

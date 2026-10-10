@@ -202,7 +202,10 @@ void VoidGarmentsDialog::onVoidSelectedClicked()
              << "garment(s) for ticket" << m_loadedTicket;
 
     m_voidedTotal += voided;
-    const QString done = UiKit::okHtml(tr("%1 prenda(s) del recibo %2 anuladas.").arg(voided).arg(m_loadedTicket.toHtmlEscaped()));
+    QString done = UiKit::okHtml(tr("%1 prenda(s) del recibo %2 anuladas.").arg(voided).arg(m_loadedTicket.toHtmlEscaped()));
+    if (voided < rowsToVoid.size())
+        done += "<br>" + UiKit::errorHtml(tr("%1 prenda(s) no se han anulado: se han cobrado, enviado o bloqueado "
+                                             "mientras tanto.").arg(rowsToVoid.size() - voided));
     onSearchClicked(); // reload so the voided rows show as Anulado / non-selectable
     m_lblResult->setText(done);
 }

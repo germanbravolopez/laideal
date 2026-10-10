@@ -353,16 +353,20 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
     // decimals is invoiced and stored with the same figure.
     q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
               "verifactu_invoice_seq = :seq, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0");
+              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0 AND COALESCE(pagado, '') != 'SI'");
+    m_unstoredHashes.clear();
     for (const QString &h : m_pendingHashes) {
         q.bindValue(":imp", moneyText(m_pendingAmounts.value(h)));
         q.bindValue(":fp",  m_pendingFechaPago.toString("dd-MM-yyyy"));
         q.bindValue(":seq", seq);
         q.bindValue(":n",   m_ticketNum);
         q.bindValue(":h",   h);
-        if (!q.exec())
-            qWarning() << "PayDialog::persistPayment: UPDATE failed for hash" << h
-                       << "-" << q.lastError().text();
+        if (!q.exec() || q.numRowsAffected() != 1) {
+            // The invoice is already on its way to AEAT: the row must be reviewed by hand.
+            qCritical() << "PayDialog::persistPayment: garment" << h << "of ticket" << m_ticketNum
+                        << "not stored as paid (locked or already paid meanwhile) -" << q.lastError().text();
+            m_unstoredHashes << h;
+        }
     }
     db.close();
 

@@ -205,7 +205,9 @@ void Contabilidad::onGenerateClicked()
 
     if (currentMode() != Trimestral) {
         file = generateContabilidad(invalidAmounts);
-        message = okHtml("Informe generado.");
+        message = file.isEmpty() ? errorHtml("No se pudo guardar el informe.")
+                                       + "<br>Compruebe la carpeta de Contabilidad y que el PDF anterior no esté abierto."
+                                 : okHtml("Informe generado.");
     } else {
         // Read the lock across the whole quarter, not just its last month: a quarter
         // with income only in its first months would otherwise read as "no data".
@@ -218,6 +220,14 @@ void Contabilidad::onGenerateClicked()
                 message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
             } else {
                 file = generateContabilidad(invalidAmounts);
+                if (file.isEmpty()) {
+                    // Never close a quarter without its report.
+                    qWarning() << "Contabilidad: trim" << trim << "year" << year << "report not written, not locked";
+                    message = errorHtml("No se pudo guardar el informe " + quarterName + ".")
+                              + "<br>El trimestre no se ha bloqueado. Compruebe la carpeta de Contabilidad "
+                                "(Configuración) y que el PDF anterior no esté abierto.";
+                    break;
+                }
                 const bool lock = m_chkLock->isChecked();
                 if (lock)
                     updateLock();
@@ -237,7 +247,8 @@ void Contabilidad::onGenerateClicked()
                 file = generateContabilidad(invalidAmounts);
                 qDebug() << "Contabilidad: trim" << trim << "year" << year << "already locked, report regenerated";
                 message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
-                          + "<br>Documentación generada de nuevo.";
+                          + "<br>" + (file.isEmpty() ? errorHtml("No se pudo guardar el informe de nuevo.")
+                                                     : QString("Documentación generada de nuevo."));
             }
             break;
         default:

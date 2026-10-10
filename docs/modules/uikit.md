@@ -22,7 +22,7 @@ The shared look of the application's windows, in one place. Every dialog is buil
 | `UiKit::okHtml` / `warnHtml` / `errorHtml` | Green success, amber "nothing done / attention", red error. |
 | `UiKit::fileLinkHtml(file, label = "PDF")` | "PDF: name.pdf" linking to the file. |
 
-Generated PDFs go through `ReportHtml::writePdf` (`src/reporthtml/`), the one PDF writer, which also opens the file (switched off in the tests with `ReportHtml::setOpenGeneratedReports(false)`).
+Generated PDFs go through `ReportHtml::writePdf` (`src/reporthtml/`), the one PDF writer: it removes an earlier file of the same name first and reports success only for a non-empty file actually written, and it also opens the file (switched off in the tests with `ReportHtml::setOpenGeneratedReports(false)`).
 
 ## Layout of a window
 

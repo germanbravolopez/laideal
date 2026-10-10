@@ -22,6 +22,21 @@ QString MySortFilterProxyModel::removeDiacritics(const QString &text)
     return result;
 }
 
+bool MySortFilterProxyModel::rowLocked(int proxyRow) const
+{
+    if (table_name != QLatin1String("gastos"))
+        return false;
+    return index(proxyRow, GASTOS_IDX_CONTAB).data().toInt() == 1;
+}
+
+Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
+{
+    Qt::ItemFlags f = QSortFilterProxyModel::flags(index);
+    if (index.isValid() && rowLocked(index.row()))
+        f &= ~Qt::ItemIsEditable;
+    return f;
+}
+
 void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, int column)
 {
     m_normalizedFilterText = normalizedText;

@@ -132,10 +132,13 @@ bool writePdf(const QString &file, const QString &html)
     QPrinter printer(QPrinter::PrinterResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setPageSize(QPageSize::A4);
+    // A report left by an earlier run must not pass for this one.
+    QFile::remove(file);
     printer.setOutputFileName(file);
     printer.setPageMargins(QMarginsF(15, 15, 15, 15));
     document.print(&printer);
-    if (!QFileInfo::exists(file)) {
+    const QFileInfo written(file);
+    if (!written.isFile() || written.size() == 0) {
         qWarning() << "ReportHtml::writePdf: could not write" << file;
         return false;
     }

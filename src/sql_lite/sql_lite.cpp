@@ -142,34 +142,46 @@ void migrateDatabase(QSqlDatabase &db)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
                  << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
 
-    // 10.14 repair: Separar prendas used to insert the split-off garments with empty
-    // verifactu_* columns and seq 0, so a split of a paid row fell out of the
-    // invoice AEAT registered for it (export total, cancellation, reprint). Such a
-    // row is paid with an empty estado at seq 0 and has, on the same ticket, rows of exactly
-    // one AEAT invoice with the same fecha_pago, prenda and servicio: copy that
-    // invoice's columns. Only ENVIADA invoices are relinked, which leaves every
-    // Contabilidad figure as it was; a match with a cancelled or rectified invoice
-    // would move income into the cancellation's period, so it is only logged.
-    // The leading IN keeps the correlated subqueries to tickets known to AEAT.
+    // 11.0 repair: Separar prendas used to insert the split-off garments with empty
+    // verifactu_* columns and seq 0, so a split of a paid row fell out of the invoice
+    // AEAT registered for it (export total, cancellation, reprint). Such a row is paid
+    // with an empty estado at seq 0 and has, on the same ticket, rows of exactly one
+    // AEAT invoice with the same fecha_pago, prenda and servicio: copy that invoice's
+    // columns. Only ENVIADA invoices are relinked, which leaves every Contabilidad
+    // figure as it was; a match with a cancelled, rectified or second invoice would move
+    // income between periods, so it is only logged. One join (SQLite builds a temporary
+    // index for it) keeps this cheap enough to run at every start.
     {
-        const QString sameInvoice =
-            "FROM ingresos s WHERE s.n_recibo = ingresos.n_recibo AND s.pagado = 'SI' "
-            "  AND s.fecha_pago = ingresos.fecha_pago AND s.prenda = ingresos.prenda "
-            "  AND s.servicio = ingresos.servicio AND COALESCE(s.verifactu_csv, '') != ''";
-        const QString splitRow =
-            "n_recibo IN (SELECT n_recibo FROM ingresos WHERE verifactu_csv IS NOT NULL AND verifactu_csv != '') "
-            "  AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = '' "
-            "  AND COALESCE(verifactu_invoice_seq, 0) = 0 "
-            "  AND EXISTS (SELECT 1 " + sameInvoice + ") ";
-        QSqlQuery review(db);
-        if (review.exec("SELECT DISTINCT n_recibo FROM ingresos WHERE " + splitRow +
-                        "  AND (EXISTS (SELECT 1 " + sameInvoice + " AND s.verifactu_estado != 'ENVIADA') "
-                        "       OR (SELECT COUNT(DISTINCT s.verifactu_invoice_seq) " + sameInvoice + ") > 1)"))
-            while (review.next())
-                qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
+        QSqlQuery match(db);
+        QVector<QPair<qlonglong, qlonglong>> relinks;   // (split row, invoice row)
+        if (!match.exec("SELECT c.rowid, c.n_recibo, c.hash, c.importe, c.fecha_pago, "
+                        "  COUNT(DISTINCT s.verifactu_invoice_seq), SUM(s.verifactu_estado != 'ENVIADA'), MIN(s.rowid) "
+                        "FROM ingresos c JOIN ingresos s ON s.n_recibo = c.n_recibo AND s.pagado = 'SI' "
+                        "  AND s.fecha_pago = c.fecha_pago AND s.prenda = c.prenda AND s.servicio = c.servicio "
+                        "  AND COALESCE(s.verifactu_csv, '') != '' "
+                        "WHERE c.pagado = 'SI' AND COALESCE(c.verifactu_estado, '') = '' "
+                        "  AND COALESCE(c.verifactu_invoice_seq, 0) = 0 "
+                        "GROUP BY c.rowid"))
+            qWarning() << "migrateDatabase: split-row search failed -" << match.lastError().text();
+        while (match.next()) {
+            const QString ticket = match.value(1).toString();
+            if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
+                qWarning() << "migrateDatabase: ticket" << ticket
                            << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
                               " - review manually";
-        if (!q.exec("UPDATE ingresos SET (verifactu_csv, verifactu_timestamp, verifactu_estado, "
+                continue;
+            }
+            // A payment made with Verifactu off by a version before 8.5 on the same day,
+            // garment and service matches the same way, so every relink is logged.
+            qWarning() << "migrateDatabase: relinking paid garment" << match.value(2).toString()
+                       << "of ticket" << ticket << "(" << match.value(3).toString()
+                       << "paid" << match.value(4).toString()
+                       << ") to its AEAT invoice as a split-off part - check it if it was a separate payment";
+            relinks.append({ match.value(0).toLongLong(), match.value(7).toLongLong() });
+        }
+        match.finish();
+        QSqlQuery upd(db);
+        upd.prepare("UPDATE ingresos SET (verifactu_csv, verifactu_timestamp, verifactu_estado, "
                     "  verifactu_error, verifactu_url_qr, verifactu_xml, verifactu_hash, "
                     "  verifactu_rectifies_n_recibo, verifactu_rectification_type, "
                     "  verifactu_invoice_seq, verifactu_invoice_id, fecha_anulacion, verifactu_cancel_xml) = "
@@ -177,13 +189,16 @@ void migrateDatabase(QSqlDatabase &db)
                     "  s.verifactu_error, s.verifactu_url_qr, s.verifactu_xml, s.verifactu_hash, "
                     "  s.verifactu_rectifies_n_recibo, s.verifactu_rectification_type, "
                     "  s.verifactu_invoice_seq, s.verifactu_invoice_id, s.fecha_anulacion, "
-                    "  s.verifactu_cancel_xml " + sameInvoice + " LIMIT 1) "
-                    "WHERE " + splitRow +
-                    "  AND NOT EXISTS (SELECT 1 " + sameInvoice + " AND s.verifactu_estado != 'ENVIADA') "
-                    "  AND (SELECT COUNT(DISTINCT s.verifactu_invoice_seq) " + sameInvoice + ") = 1"))
-            qWarning() << "migrateDatabase: split-row relink failed -" << q.lastError().text();
-        else if (q.numRowsAffected() > 0)
-            qDebug() << "migrateDatabase: relinked" << q.numRowsAffected()
+                    "  s.verifactu_cancel_xml FROM ingresos s WHERE s.rowid = :src) "
+                    "WHERE rowid = :dst AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = ''");
+        for (const auto &r : relinks) {
+            upd.bindValue(":src", r.second);
+            upd.bindValue(":dst", r.first);
+            if (!upd.exec())
+                qWarning() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
+        }
+        if (!relinks.isEmpty())
+            qDebug() << "migrateDatabase: relinked" << relinks.size()
                      << "split-off paid garment(s) to their AEAT invoice";
     }
 
@@ -228,6 +243,7 @@ void migrateDatabase(QSqlDatabase &db)
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
                  << "verifactu_estado value(s)";
+
     db.close();
 }
 
@@ -717,15 +733,20 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
     // accounting query ever counts it.
     q.prepare("UPDATE ingresos SET estado = :est, verifactu_estado = :vest, "
               "fecha_anulacion = :fecha, fecha_pago = '', fecha_recogida = '' "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
     q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":fecha", QDate::currentDate().toString("dd-MM-yyyy"));
     q.bindValue(":n",     nRecibo);
     q.bindValue(":h",     hash);
+    // Only an open garment is voided here: never a paid, sent, cancelled or locked one.
     bool ok = q.exec();
     if (!ok)
         qWarning() << "voidGarmentRow: UPDATE failed -" << q.lastError().text();
+    else if (q.numRowsAffected() != 1) {
+        qWarning() << "voidGarmentRow: refused for" << nRecibo << hash << "(paid, sent, voided or locked)";
+        ok = false;
+    }
     db.close();
     return ok;
 }

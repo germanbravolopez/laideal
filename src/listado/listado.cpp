@@ -316,6 +316,11 @@ void Listado::on_actionEliminar_fila_triggered()
                                              "o Anular factura."));
     } else if (!table_listado->currentIndex().isValid()) {
         m_lblResult->setText(UiKit::warnHtml("Seleccione primero la fila que quiere eliminar."));
+    } else if (proxyModel->rowLocked(table_listado->currentIndex().row())) {
+        qWarning() << "Listado::on_actionEliminar_fila_triggered: refused deleting a locked" << tableName << "row";
+        m_lblResult->setText(UiKit::errorHtml("Fila bloqueada.")
+                             + "<br>Pertenece a un trimestre cerrado por la contabilidad; revierta la "
+                               "contabilidad para poder eliminarla.");
     } else {
         int ret = QMessageBox::question(this, "Eliminar fila",
                                         "¿Está seguro que desea eliminar la fila " +

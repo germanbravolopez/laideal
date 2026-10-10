@@ -32,7 +32,7 @@ Modes are the `Contabilidad::ConfigMode` enum (`Mensual=0`, `Trimestral=1`, `Anu
 
 In Trimestral mode the quarter's lock state is read first via `sql_lite::readLockForQuarter()` for **both** `ingresos` and `gastos` (all three months in one query each), merged by `Contabilidad::combinedLockState`. The quarter is "no data" only if both tables are empty, and locked if either is, so a quarter with only gastos can be closed and reverted too. The closed/open labels in the Mensual and Anual headers use the same merge. Then:
 
-1. `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF.
+1. `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF. If the PDF could not be written (`writePdf` false: a folder in its place, the old PDF open in a viewer, no permission) the result panel shows the error and **the quarter is not locked** - a quarter is never closed without its report.
 2. `updateLock()` sets `edit_lock` on all affected `ingresos` and `gastos` rows (via `updateLockForMonth`):
    - `revertirOn=false` → sets `edit_lock=1` (locks the period)
    - `revertirOn=true` → sets `edit_lock=0` (unlocks the period)

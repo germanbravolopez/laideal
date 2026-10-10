@@ -1092,6 +1092,8 @@ private slots:
                    // paid at seq 2 while Verifactu was off: its own event, never a split
                    "('500', '02-06-2026', '4.00',  'SI', 'Camisa', 'Limp.', 'ownEvent', '', '', 2, '', '')");
 
+        // Every relinked row is logged, so an old separate payment can be found and checked.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("relinking paid garment \"split\" of ticket \"500\""));
         migrateDatabase(m_db);
         migrateDatabase(m_db);   // idempotent
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv || '|' || verifactu_invoice_seq || '|' || "
@@ -1438,6 +1440,18 @@ private slots:
         // The sibling garment of the same ticket is keyed out by hash.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashB'"), QStringLiteral("NO"));
         QVERIFY(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='hashB'").isEmpty());
+
+        // The write itself refuses what the dialog would not offer: a paid, a sent,
+        // an already voided and a locked garment stay as they were.
+        insertRow("T9", "paid", "10.00", "SI", "ENVIADA");
+        insertRow("T9", "sent", "10.00", "NO", "ERROR");
+        insertRow("T9", "locked");
+        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        for (const char *h : { "paid", "sent", "hashA", "locked" })
+            QVERIFY2(!voidGarmentRow(m_db, "T9", h), h);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='T9' AND estado = 'Anulado'"),
+                 QStringLiteral("1"));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hashA'"), today);
     }
 
     // "Recoger todo" marks the whole ticket Recogido but must leave a voided

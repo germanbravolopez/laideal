@@ -34,6 +34,10 @@ public:
 
     QString table_name;
 
+    // A gastos row locked by Contabilidad (edit_lock = 1) is read-only.
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
+    bool rowLocked(int proxyRow) const;
+
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;

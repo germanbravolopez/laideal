@@ -15,7 +15,7 @@
 - Improvement: "Imprimir" asks the address and DNI of a complete invoice in the same window, lists the invoices of a ticket paid in parts to choose one, and the shop copy is a checkbox.
 - Improvement: in "Formulario facturas" suppliers and services are listed in alphabetical order, and an invoice dated in a closed quarter is refused even if that month has no expenses yet.
 - Improvement: the lists have buttons for adding and deleting rows and for the PDF, and the Herramientas menu is grouped by topic (Recogida, Verifactu, Gastos, Contabilidad, backup).
-- Bug fixes: prices in the main window are always recalculated on the row that was edited; split garments of a charged ticket now stay part of its AEAT invoice (existing ones are fixed automatically when this version starts); the gastos PDF list is always regenerated with current data.
+- Bug fixes: prices in the main window are always recalculated on the row that was edited; split garments of a charged ticket now stay part of its AEAT invoice (existing ones are fixed automatically when this version starts); the gastos PDF list is always regenerated with current data; a quarter is no longer closed when its Contabilidad PDF could not be saved (the error is shown instead); expenses of a closed quarter can no longer be edited or deleted in the list.
 
 10.13
 - Bug fix: cancelling an invoice now uses the date it was issued with
