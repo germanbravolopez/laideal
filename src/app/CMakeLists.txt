@@ -29,6 +29,8 @@ add_library(laideal_app STATIC
     pendingsubmitsdialog.cpp
     aeatexport.h
     aeatexport.cpp
+    aeatexportdialog.h
+    aeatexportdialog.cpp
 )
 
 target_include_directories(laideal_app PUBLIC
@@ -53,6 +55,7 @@ target_link_libraries(laideal_app
     verifactu
     updater
     backup
+    uikit
 )
 
 add_executable(laideal

@@ -31,6 +31,7 @@
 #include <QXmlStreamReader>
 
 #include "aeatexport.h"
+#include "aeatexportdialog.h"
 #include "appsettings.h"
 #include "cancelinvoicedialog.h"
 #include "contabilidad.h"
@@ -781,6 +782,33 @@ private slots:
         QCOMPARE(anulaciones, QStringList({ "1800|15-03-2026|" }));
         QCOMPARE(payloadIds, QStringList({ "IDFacturaAnulada:1800", "IDFactura:1600", "IDFactura:1900",
                                            "IDFactura:1600-1" }));
+    }
+
+    // Herramientas -> Exportar registros AEAT, as the operator uses it: the file name
+    // follows the dates, a reversed range is refused, the export is reported in the
+    // window with the record count and a link to the file. No pop-ups.
+    void test_aeatExportDialog_exportsAndReportsInWindow()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "2800", "h2800a", "10.00", "05-03-2026", "CSV-2800"));
+        QPointer<AeatExportDialog> dlg = new AeatExportDialog(m_db);
+        const auto result = [&dlg]() { return dlg->findChild<QLabel *>("lblResult")->text(); };
+        dlg->findChild<QDateEdit *>("deFrom")->setDate(QDate(2026, 3, 31));
+        dlg->findChild<QDateEdit *>("deTo")->setDate(QDate(2026, 3, 1));
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QVERIFY2(result().contains("anterior o igual"), qPrintable(result()));
+
+        dlg->findChild<QDateEdit *>("deFrom")->setDate(QDate(2026, 3, 1));
+        dlg->findChild<QDateEdit *>("deTo")->setDate(QDate(2026, 3, 31));
+        const QString file = dlg->findChild<QLineEdit *>("leFile")->text();
+        QVERIFY2(file.endsWith("AEAT/aeat_registros_20260301_20260331.xml"), qPrintable(file));
+        QFile::remove(file);
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QVERIFY2(result().contains("1 registros exportados"), qPrintable(result()));
+        QVERIFY(result().contains("aeat_registros_20260301_20260331.xml"));
+        QVERIFY(QFile::exists(file));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+        dlg->findChild<QPushButton *>("btnClose")->click();
+        QTRY_VERIFY(dlg.isNull());
     }
 
     // Exportar registros AEAT on awkward stored data: a payload that is not a

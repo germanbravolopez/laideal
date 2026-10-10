@@ -22,6 +22,7 @@
 #include "pendingsubmitsdialog.h"
 #include "version.h"
 #include "aeatexport.h"
+#include "aeatexportdialog.h"
 #include <QTimer>
 #include <QThread>
 #include <QEventLoop>
@@ -1056,89 +1057,7 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
 // that can be handed to Hacienda on request.
 void MainWindow::on_actionExportar_registros_aeat_triggered()
 {
-    // Step 1: date-range + output-path picker (small inline dialog)
-    QDialog dlg(this);
-    dlg.setWindowTitle("Exportar registros AEAT (XML)");
-    QFormLayout *form = new QFormLayout(&dlg);
-
-    QDateEdit *fromDate = new QDateEdit(QDate::currentDate().addMonths(-3), &dlg);
-    fromDate->setCalendarPopup(true);
-    fromDate->setDisplayFormat("dd-MM-yyyy");
-
-    QDateEdit *toDate = new QDateEdit(QDate::currentDate(), &dlg);
-    toDate->setCalendarPopup(true);
-    toDate->setDisplayFormat("dd-MM-yyyy");
-
-    form->addRow("Desde:", fromDate);
-    form->addRow("Hasta:", toDate);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    form->addRow(buttons);
-
-    if (dlg.exec() != QDialog::Accepted) return;
-
-    const QDate from = fromDate->date();
-    const QDate to   = toDate->date();
-    if (from > to) {
-        QMessageBox::warning(this, "Exportar registros AEAT",
-                             "La fecha 'Desde' debe ser anterior o igual a 'Hasta'.",
-                             QMessageBox::Ok);
-        return;
-    }
-
-    const QString suggestedName = QString("aeat_registros_%1_%2.xml")
-        .arg(from.toString("yyyyMMdd"), to.toString("yyyyMMdd"));
-    const QString filePath = QFileDialog::getSaveFileName(
-        this, "Guardar archivo de registros AEAT",
-        QDir::homePath() + "/" + suggestedName, "XML (*.xml)");
-    if (filePath.isEmpty()) return;
-
-    // One record per invoice submitted to AEAT (payment event), any current estado:
-    // Hacienda holds cancelled and rectified invoices too.
-    QVector<AeatExportRecord> records;
-    int undated = 0;
-    if (!aeatExportRecords(db, from, to, records, &undated)) {
-        QMessageBox::critical(this, "Exportar registros AEAT",
-                              "Error al consultar la base de datos. No se ha creado el archivo.",
-                              QMessageBox::Ok);
-        return;
-    }
-
-    QFile out(filePath);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        QMessageBox::critical(this, "Exportar registros AEAT",
-                              "No se pudo abrir el archivo de salida para escritura.",
-                              QMessageBox::Ok);
-        return;
-    }
-    const int count = writeAeatExportXml(&out, records, from, to,
-                                         AppSettings::instance()->verifactuNif(),
-                                         AppSettings::instance()->verifactuName());
-    out.close();
-    if (out.error() != QFileDevice::NoError) {
-        qWarning() << "Exportar registros AEAT: write failed -" << out.errorString();
-        QMessageBox::critical(this, "Exportar registros AEAT",
-                              "Error al escribir el archivo:\n" + out.errorString(),
-                              QMessageBox::Ok);
-        return;
-    }
-
-    QString message = count == 0
-        ? QString("No se encontraron registros enviados a AEAT entre %1 y %2.\n"
-                  "El archivo se ha creado vacío.")
-              .arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy"))
-        : QString("Se han exportado %1 registros al archivo:\n%2").arg(count).arg(filePath);
-    if (undated > 0) {
-        message += QString("\n\nAtención: %1 factura(s) enviadas a AEAT no tienen una fecha de pago "
-                           "válida y no aparecen en ningún periodo. Revise el log y contacte con "
-                           "soporte.").arg(undated);
-        QMessageBox::warning(this, "Exportar registros AEAT", message, QMessageBox::Ok);
-    } else {
-        QMessageBox::information(this, "Exportar registros AEAT", message, QMessageBox::Ok);
-    }
+    (new AeatExportDialog(db, this))->show();
 }
 
 void MainWindow::on_actionMostrar_log_triggered()
