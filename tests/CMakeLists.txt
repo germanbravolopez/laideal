@@ -174,6 +174,18 @@ target_link_libraries(test_aeat_store PRIVATE
 add_test(NAME aeat_store
     COMMAND test_aeat_store -o ${CMAKE_BINARY_DIR}/test-results-aeat_store.xml,junitxml -o -,txt)
 
+# AeatQr: the locally drawn Verifactu QR (offscreen; writes a sample PNG to build/aeat-xml).
+add_executable(test_aeat_qr test_aeat_qr.cpp)
+target_link_libraries(test_aeat_qr PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Gui
+    verifactu
+)
+add_test(NAME aeat_qr
+    COMMAND test_aeat_qr -o ${CMAKE_BINARY_DIR}/test-results-aeat_qr.xml,junitxml -o -,txt)
+set_tests_properties(aeat_qr PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AEAT_XML_OUT=${CMAKE_BINARY_DIR}/aeat-xml")
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME aeat_xsd

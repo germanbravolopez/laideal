@@ -23,6 +23,10 @@ set(PROJECT_SOURCES
     aeatresponse.cpp
     aeatstore.h
     aeatstore.cpp
+    aeatqr.h
+    aeatqr.cpp
+    ../third_party/qrcodegen/qrcodegen.hpp
+    ../third_party/qrcodegen/qrcodegen.cpp
     verifactuconfig.h
     verifactuconfig.cpp
     verifactutaxitem.h
@@ -55,4 +59,6 @@ target_compile_definitions(verifactu PRIVATE
 target_include_directories(verifactu
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/qrcodegen
 )
