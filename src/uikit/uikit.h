@@ -9,6 +9,7 @@
 
 #include <QLabel>
 #include <QString>
+#include <QStringList>
 
 class QDate;
 class QDateEdit;
@@ -36,6 +37,10 @@ QPushButton *secondaryButton(const QString &text, const QString &objectName);
 QDateEdit *dateEdit(const QDate &date, const QString &objectName);
 // Right-aligned "Cerrar" (objectName btnClose) that closes the dialog.
 QHBoxLayout *closeRow(QDialog *dialog, const QString &text = QStringLiteral("Cerrar"));
+
+// Names for a list or combo box in Spanish alphabetical order: case-insensitive, an
+// accented letter next to the plain one (Álvarez beside Alvarez, not after Z).
+QStringList sortedNames(QStringList names);
 
 // Result-panel phrases: green success, amber nothing done / attention, red error.
 QString okHtml(const QString &text);

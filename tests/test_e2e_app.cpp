@@ -1119,8 +1119,9 @@ private slots:
     // a closed quarter are refused there too, with nothing written. No pop-ups.
     void test_facturas_saveAndRefusals()
     {
-        QVERIFY(E2e::exec(m_db, "INSERT INTO proveedores VALUES ('Proveedor E2E', 'B1', '', '')"));
-        QVERIFY(E2e::exec(m_db, "INSERT INTO servicios VALUES ('Luz')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO proveedores VALUES ('Proveedor E2E', 'B1', '', ''), "
+                                "('Zurita', 'B2', '', ''), ('álvarez', 'B3', '', ''), ('Beta', 'B4', '', '')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO servicios VALUES ('Luz'), ('agua'), ('Gas')"));
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
                                 "importe, iva, edit_lock) VALUES (1, 'OLD', 'Luz', '', 'Proveedor E2E', "
                                 "'10-01-2026', '10.00', 21, 1)"));
@@ -1128,6 +1129,16 @@ private slots:
         form->populateEmpresas();
         form->populateServicios();
         const auto result = [&form]() { return form->findChild<QLabel *>("lblResult")->text(); };
+        // Both lists in Spanish alphabetical order: case-insensitive, accents in place.
+        const auto items = [](QComboBox *cb) {
+            QStringList l;
+            for (int i = 0; i < cb->count(); ++i)
+                l << cb->itemText(i);
+            return l;
+        };
+        QCOMPARE(items(form->findChild<QComboBox *>("cbEmpresa")),
+                 QStringList({ "álvarez", "Beta", "Proveedor E2E", "Zurita" }));
+        QCOMPARE(items(form->findChild<QComboBox *>("cbServicio")), QStringList({ "agua", "Gas", "Luz" }));
         const auto fill = [&form](const QString &empresa, const QDate &date) {
             form->findChild<QLineEdit *>("leFra")->setText("F-77");
             form->findChild<QDateEdit *>("deFecha")->setDate(date);

@@ -18,6 +18,7 @@ The shared look of the application's windows, in one place. Every dialog is buil
 | `UiKit::dateEdit(date, objectName)` | Calendar popup, `dd-MM-yyyy`, wide enough for the whole date. |
 | `UiKit::closeRow(dialog, text = "Cerrar")` | Right-aligned closing button (`btnClose`) that closes the dialog. |
 | `UiKit::ResultPanel` | Framed `QLabel` (`lblResult`) where the window reports **every** outcome instead of message boxes; rich text, links open the file or URL. `showInfo(plain)` for neutral text, `setText(html)` with the phrases below. |
+| `UiKit::sortedNames(list)` | Names for a list or combo box in Spanish alphabetical order: case-insensitive, accents in place (`QCollator`, es_ES) — a plain `ORDER BY` would put "Álvarez" after "Zurita". |
 | `UiKit::okHtml` / `warnHtml` / `errorHtml` | Green success, amber "nothing done / attention", red error. |
 | `UiKit::fileLinkHtml(file, label = "PDF")` | "PDF: name.pdf" linking to the file. |
 

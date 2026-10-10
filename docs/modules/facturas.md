@@ -23,9 +23,9 @@ ui->show();
 |-------|--------|-------|
 | n_factura | Free text | Invoice number |
 | fecha | Date picker | Defaults to today |
-| servicio | Combobox | From `servicios` table |
+| servicio | Combobox | From `servicios` table, in Spanish alphabetical order (`UiKit::sortedNames`) |
 | descripcion | Free text | Optional description |
-| empresa | Combobox | From `proveedores` table |
+| empresa | Combobox | From `proveedores` table, in Spanish alphabetical order (`UiKit::sortedNames`) |
 | iva | Combobox | 21 / 10 / 0 |
 | importe | Free text | Total amount; base and IVA auto-computed |
 

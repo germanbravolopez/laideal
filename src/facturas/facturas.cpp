@@ -119,13 +119,13 @@ void Facturas::resetAllContents()
 
 void Facturas::populateEmpresas()
 {
-    m_cbEmpresa->addItems(readColumnFromTable(db, "nombre", "proveedores", ""));
+    m_cbEmpresa->addItems(UiKit::sortedNames(readColumnFromTable(db, "nombre", "proveedores", "")));
     m_cbEmpresa->setCurrentText("");
 }
 
 void Facturas::populateServicios()
 {
-    m_cbServicio->addItems(readColumnFromTable(db, "nombre", "servicios", ""));
+    m_cbServicio->addItems(UiKit::sortedNames(readColumnFromTable(db, "nombre", "servicios", "")));
     m_cbServicio->setCurrentText("");
 }
 

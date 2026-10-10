@@ -1,5 +1,6 @@
 #include "uikit.h"
 
+#include <QCollator>
 #include <QDateEdit>
 #include <QDialog>
 #include <QFileInfo>
@@ -7,6 +8,8 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QUrl>
+
+#include <algorithm>
 
 namespace UiKit {
 
@@ -84,6 +87,14 @@ QHBoxLayout *closeRow(QDialog *dialog, const QString &text)
     QObject::connect(close, &QPushButton::clicked, dialog, &QDialog::close);
     row->addWidget(close);
     return row;
+}
+
+QStringList sortedNames(QStringList names)
+{
+    QCollator collator(QLocale(QLocale::Spanish, QLocale::Spain));
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::sort(names.begin(), names.end(), collator);
+    return names;
 }
 
 QString okHtml(const QString &text)    { return "<b style='color:green'>" + text + "</b>"; }
