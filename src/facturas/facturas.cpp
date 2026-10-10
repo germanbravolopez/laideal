@@ -1,137 +1,202 @@
 #include "facturas.h"
-#include "ui_facturas.h"
 #include "sql_lite.h"
+#include "uikit.h"
+
+#include <QComboBox>
+#include <QDateEdit>
+#include <QDebug>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QSqlError>
+#include <QSqlQuery>
+#include <QVBoxLayout>
 
 Facturas::Facturas(const QSqlDatabase &database, QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::Facturas),
+    QDialog(parent),
     db(database)
 {
-    ui->setupUi(this);
-    initialSettings();
-}
-
-Facturas::~Facturas()
-{
-    delete ui;
-}
-
-void Facturas::initialSettings()
-{
-    QStringList ivaList = {"21", "10", "0"};
-    ui->cb_iva->addItems(ivaList);
+    setAttribute(Qt::WA_DeleteOnClose);
+    UiKit::setUpDialog(this, "Formulario de facturas de gastos");
+    buildUi();
     resetAllContents();
+    m_lblResult->showInfo("Rellene la factura y pulse \"Guardar factura\".");
+}
+
+void Facturas::buildUi()
+{
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->addWidget(UiKit::introPanel(
+        "Registra una factura de gastos (compras a proveedores). El importe se introduce con el "
+        "IVA incluido; la base imponible y la cuota de IVA se calculan solas."));
+
+    QGroupBox *grpInvoice = new QGroupBox("Factura");
+    QFormLayout *invoiceForm = new QFormLayout(grpInvoice);
+    m_leFra = new QLineEdit();
+    m_leFra->setObjectName("leFra");     // stable names for the e2e test bench
+    m_leFra->setPlaceholderText("Número de la factura del proveedor");
+    invoiceForm->addRow("Nº factura:", m_leFra);
+    m_deFecha = new QDateEdit();
+    m_deFecha->setObjectName("deFecha");
+    m_deFecha->setCalendarPopup(true);
+    m_deFecha->setDisplayFormat("dd-MM-yyyy");
+    invoiceForm->addRow("Fecha:", m_deFecha);
+    m_cbEmpresa = new QComboBox();
+    m_cbEmpresa->setObjectName("cbEmpresa");
+    m_cbEmpresa->setEditable(true);
+    invoiceForm->addRow("Empresa:", m_cbEmpresa);
+    m_cbServicio = new QComboBox();
+    m_cbServicio->setObjectName("cbServicio");
+    m_cbServicio->setEditable(true);
+    invoiceForm->addRow("Servicio:", m_cbServicio);
+    m_leDescripcion = new QLineEdit();
+    m_leDescripcion->setObjectName("leDescripcion");
+    m_leDescripcion->setPlaceholderText("Opcional");
+    invoiceForm->addRow("Descripción:", m_leDescripcion);
+    layout->addWidget(grpInvoice);
+
+    QGroupBox *grpAmount = new QGroupBox("Importe");
+    QFormLayout *amountForm = new QFormLayout(grpAmount);
+    amountForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    m_cbIva = new QComboBox();
+    m_cbIva->setObjectName("cbIva");
+    for (const char *rate : { "21", "10", "0" })
+        m_cbIva->addItem(QString(rate) + " %", QString(rate));
+    amountForm->addRow("Tipo de IVA:", m_cbIva);
+    m_leImporte = new QLineEdit();
+    m_leImporte->setObjectName("leImporte");
+    m_leImporte->setPlaceholderText("0,00");
+    m_leImporte->setMinimumWidth(140);
+    amountForm->addRow("Importe total (IVA incl.):", m_leImporte);
+    m_leBase = new QLineEdit();
+    m_leBase->setObjectName("leBase");
+    m_leBase->setReadOnly(true);
+    m_leBase->setMinimumWidth(140);
+    amountForm->addRow("Base imponible:", m_leBase);
+    m_leIva = new QLineEdit();
+    m_leIva->setObjectName("leIva");
+    m_leIva->setReadOnly(true);
+    m_leIva->setMinimumWidth(140);
+    amountForm->addRow("Cuota de IVA:", m_leIva);
+    layout->addWidget(grpAmount);
+
+    QHBoxLayout *actions = new QHBoxLayout();
+    QPushButton *btnReset = UiKit::secondaryButton("Limpiar formulario", "btnReset");
+    actions->addWidget(btnReset);
+    actions->addStretch();
+    QPushButton *btnSave = UiKit::primaryButton("Guardar factura", "btnSave");
+    actions->addWidget(btnSave);
+    layout->addLayout(actions);
+
+    m_lblResult = new UiKit::ResultPanel();
+    layout->addWidget(m_lblResult);
+    layout->addLayout(UiKit::closeRow(this));
+
+    connect(btnSave,  &QPushButton::clicked, this, &Facturas::onSaveClicked);
+    connect(btnReset, &QPushButton::clicked, this, [this]() {
+        resetAllContents();
+        m_lblResult->showInfo("Formulario limpio.");
+    });
+    connect(m_leImporte, &QLineEdit::textEdited, this, &Facturas::updateTaxSplit);
+    connect(m_cbIva, qOverload<int>(&QComboBox::currentIndexChanged), this, &Facturas::updateTaxSplit);
 }
 
 void Facturas::resetAllContents()
 {
-    ui->le_fra->clear();
-    ui->de_fecha->setDate(QDate::currentDate());
-    ui->cb_servicio->setCurrentText("");
-    ui->le_producto->clear();
-    ui->cb_empresa->setCurrentText("");
-    ui->cb_iva->setCurrentText("21");
-    ui->le_importe->clear();
-    ui->le_base->clear();
-    ui->le_iva->clear();
+    m_leFra->clear();
+    m_deFecha->setDate(QDate::currentDate());
+    m_cbServicio->setCurrentText("");
+    m_leDescripcion->clear();
+    m_cbEmpresa->setCurrentText("");
+    m_cbIva->setCurrentIndex(0);   // 21 %
+    m_leImporte->clear();
+    m_leBase->clear();
+    m_leIva->clear();
+    m_leFra->setFocus();
 }
 
 void Facturas::populateEmpresas()
 {
-    QStringList empresasNames = readColumnFromTable(db, "nombre", "proveedores", "");
-    ui->cb_empresa->addItems(empresasNames);
-    ui->cb_empresa->setCurrentText("");
+    m_cbEmpresa->addItems(readColumnFromTable(db, "nombre", "proveedores", ""));
+    m_cbEmpresa->setCurrentText("");
 }
 
 void Facturas::populateServicios()
 {
-    QStringList serviciosNames = readColumnFromTable(db, "nombre", "servicios", "");
-    ui->cb_servicio->addItems(serviciosNames);
-    ui->cb_servicio->setCurrentText("");
+    m_cbServicio->addItems(readColumnFromTable(db, "nombre", "servicios", ""));
+    m_cbServicio->setCurrentText("");
 }
 
-bool Facturas::validateForm()
+QString Facturas::validationError()
 {
-    bool ok = 0;
-    // Avoid n_fra, service, company and cost to be empty
-    if (ui->le_fra->text() != "" &&
-            ui->cb_servicio->currentText() != "" &&
-            ui->cb_empresa->currentText() != "" &&
-            ui->le_importe->text() != "") {
-        // Check current company as part of the company list
-        if (ui->cb_empresa->findText(ui->cb_empresa->currentText(),Qt::MatchExactly) != -1) {
-            if (readLockForMonthAndYear(db, "gastos", ui->de_fecha->date().month(), ui->de_fecha->date().year()) == 0)
-                ok = 1;
-            else {
-                QMessageBox::warning(this, tr("Trimestre bloqueado"),
-                                     tr("La fecha de la factura pertenece a un trimestre que se encuentra bloqueado por la contabilidad."),
-                                     QMessageBox::Ok, QMessageBox::Ok);
-            }
-        }
-        else {
-            QMessageBox::warning(this, "Formulario factura",
-                                 "El nombre de la empresa introducida no se encuentra en la lista de empresas.\n"
-                                 "Añadirla en el listado de empresas antes de introducir esta factura.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-        }
-    }
-    else {
-        QMessageBox::warning(this, "Formulario factura",
-                             "Formulario incompleto.\n"
-                             "Para poder guardar la factura, al menos es necesario rellenar los siguientes campos: Nº Fra., Servicio, Empresa e Importe.",
-                             QMessageBox::Ok, QMessageBox::Ok);
-    }
-
-    return ok;
+    if (m_leFra->text().trimmed().isEmpty() || m_cbServicio->currentText().isEmpty()
+            || m_cbEmpresa->currentText().isEmpty() || m_leImporte->text().trimmed().isEmpty())
+        return UiKit::errorHtml("Formulario incompleto.")
+               + "<br>Para guardar la factura rellene al menos: Nº factura, Empresa, Servicio e Importe total.";
+    bool isNumber = false;
+    m_leImporte->text().trimmed().replace(',', '.').toDouble(&isNumber);
+    if (!isNumber)
+        return UiKit::errorHtml("El importe total no es un número válido.");
+    if (m_cbEmpresa->findText(m_cbEmpresa->currentText(), Qt::MatchExactly) == -1)
+        return UiKit::errorHtml("La empresa no está en la lista de proveedores.")
+               + "<br>Añádala en Listado de proveedores antes de introducir esta factura.";
+    // The whole quarter, both tables: a month without gastos in a closed quarter is closed too.
+    if (quarterIsClosed(db, m_deFecha->date()))
+        return UiKit::errorHtml("Trimestre bloqueado.")
+               + "<br>La fecha de la factura pertenece a un trimestre cerrado por la contabilidad.";
+    return QString();
 }
 
-void Facturas::saveFactura()
+void Facturas::onSaveClicked()
 {
-    int idMax = readMaxValueInColumnFromTable(db, "id", "gastos");
+    const QString error = validationError();
+    if (!error.isEmpty()) {
+        m_lblResult->setText(error);
+        return;
+    }
+    const QString summary = QString("Factura %1 de %2 guardada (%3 €, IVA %4 %).")
+                                .arg(m_leFra->text().trimmed().toHtmlEscaped(),
+                                     m_cbEmpresa->currentText().toHtmlEscaped(),
+                                     moneyText(m_leImporte->text()).replace('.', ','),
+                                     m_cbIva->currentData().toString());
+    if (!saveFactura()) {
+        m_lblResult->setText(UiKit::errorHtml("No se pudo guardar la factura.")
+                             + "<br>Consulte el log (Ayuda → Mostrar log).");
+        return;
+    }
+    resetAllContents();
+    m_lblResult->setText(UiKit::okHtml(summary) + "<br>El formulario está listo para la siguiente.");
+}
+
+bool Facturas::saveFactura()
+{
+    const int idMax = readMaxValueInColumnFromTable(db, "id", "gastos");
     qDebug() << "saveFactura: INSERT INTO gastos id=" << (idMax + 1)
-             << "n_factura=" << ui->le_fra->text()
-             << "empresa=" << ui->cb_empresa->currentText()
-             << "fecha=" << ui->de_fecha->date().toString("dd-MM-yyyy")
-             << "iva=" << ui->cb_iva->currentText()
-             << "importe=" << ui->le_importe->text();
+             << "n_factura=" << m_leFra->text()
+             << "empresa=" << m_cbEmpresa->currentText()
+             << "fecha=" << m_deFecha->date().toString("dd-MM-yyyy")
+             << "iva=" << m_cbIva->currentData().toString()
+             << "importe=" << m_leImporte->text();
     db.open();
-    QSqlQuery q;
+    QSqlQuery q(db);
     q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe, edit_lock) "
               "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe, :edit_lock);");
     q.bindValue(":id", QString::number(idMax + 1));
-    q.bindValue(":n_factura", ui->le_fra->text());
-    q.bindValue(":servicio", ui->cb_servicio->currentText());
-    q.bindValue(":descripcion", ui->le_producto->text());
-    q.bindValue(":empresa", ui->cb_empresa->currentText());
-    q.bindValue(":fecha", ui->de_fecha->date().toString("dd-MM-yyyy"));
-    q.bindValue(":iva", ui->cb_iva->currentText());
-    q.bindValue(":importe", ui->le_importe->text().replace(",","."));
+    q.bindValue(":n_factura", m_leFra->text().trimmed());
+    q.bindValue(":servicio", m_cbServicio->currentText());
+    q.bindValue(":descripcion", m_leDescripcion->text());
+    q.bindValue(":empresa", m_cbEmpresa->currentText());
+    q.bindValue(":fecha", m_deFecha->date().toString("dd-MM-yyyy"));
+    q.bindValue(":iva", m_cbIva->currentData().toString());
+    q.bindValue(":importe", moneyText(m_leImporte->text()));
     q.bindValue(":edit_lock", "0");
-    if (!q.exec())
-        qWarning() << "saveFactura INSERT failed for" << ui->le_fra->text() << "-" << q.lastError().text();
-    q.clear();
+    const bool ok = q.exec();
+    if (!ok)
+        qWarning() << "saveFactura INSERT failed for" << m_leFra->text() << "-" << q.lastError().text();
     db.close();
-}
-
-void Facturas::on_buttonBox_clicked(QAbstractButton *button)
-{
-    if (button == ui->buttonBox->button(QDialogButtonBox::Cancel))
-        this->close();
-    else if (button == ui->buttonBox->button(QDialogButtonBox::Reset))
-        resetAllContents();
-    else if (button == ui->buttonBox->button(QDialogButtonBox::Save)) {
-        if (validateForm()) {
-            saveFactura();
-            resetAllContents();
-        }
-    }
-    else {
-        qCritical() << "Facturas::on_buttonBox_clicked: button not defined";
-        QMessageBox::critical(this, "Error en formulario factura",
-                              "Botón no definido.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
+    return ok;
 }
 
 double Facturas::taxBaseFromGross(double gross, double ivaRate)
@@ -144,19 +209,16 @@ double Facturas::taxAmountFromGross(double gross, double ivaRate)
     return gross * (1.0 - 1.0 / (1.0 + ivaRate / 100.0));
 }
 
-void Facturas::on_le_importe_textEdited(const QString &arg1)
+void Facturas::updateTaxSplit()
 {
-    if (arg1.left(1) == "0"  || arg1.left(1) == "1" || arg1.left(1) == "2" || arg1.left(1) == "3"
-             || arg1.left(1) == "4" || arg1.left(1) == "5" || arg1.left(1) == "6"
-             || arg1.left(1) == "7" || arg1.left(1) == "8" || arg1.left(1) == "9") {
-        const double gross = arg1.toDouble();
-        const double iva   = ui->cb_iva->currentText().toDouble();
-        ui->le_base->setText(QString::number(taxBaseFromGross(gross, iva), 'f', 2));
-        ui->le_iva->setText(QString::number(taxAmountFromGross(gross, iva), 'f', 2));
+    bool isNumber = false;
+    const double gross = m_leImporte->text().trimmed().replace(',', '.').toDouble(&isNumber);
+    if (!isNumber) {
+        m_leBase->clear();
+        m_leIva->clear();
+        return;
     }
-}
-
-void Facturas::on_cb_iva_currentTextChanged(const QString &arg1)
-{
-    on_le_importe_textEdited(ui->le_importe->text());
+    const double iva = m_cbIva->currentData().toDouble();
+    m_leBase->setText(QString::number(taxBaseFromGross(gross, iva), 'f', 2));
+    m_leIva->setText(QString::number(taxAmountFromGross(gross, iva), 'f', 2));
 }

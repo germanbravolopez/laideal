@@ -34,6 +34,7 @@
 #include "cancelinvoicedialog.h"
 #include "contabilidad.h"
 #include "e2efixture.h"
+#include "facturas.h"
 #include "add_garment.h"
 #include "fakeverifactuserver.h"
 #include "imprimir.h"
@@ -929,6 +930,54 @@ private slots:
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
     // the quarter's rows; Revertir contabilidad unlocks them again.
+    // Formulario de facturas de gastos: the IVA split follows the amount; a complete
+    // invoice is saved and reported in the window; an unknown supplier and a date in
+    // a closed quarter are refused there too, with nothing written. No pop-ups.
+    void test_facturas_saveAndRefusals()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO proveedores VALUES ('Proveedor E2E', 'B1', '', '')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO servicios VALUES ('Luz')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "importe, iva, edit_lock) VALUES (1, 'OLD', 'Luz', '', 'Proveedor E2E', "
+                                "'10-01-2026', '10.00', 21, 1)"));
+        QPointer<Facturas> form = new Facturas(m_db);
+        form->populateEmpresas();
+        form->populateServicios();
+        const auto result = [&form]() { return form->findChild<QLabel *>("lblResult")->text(); };
+        const auto fill = [&form](const QString &empresa, const QDate &date) {
+            form->findChild<QLineEdit *>("leFra")->setText("F-77");
+            form->findChild<QDateEdit *>("deFecha")->setDate(date);
+            form->findChild<QComboBox *>("cbEmpresa")->setCurrentText(empresa);
+            form->findChild<QComboBox *>("cbServicio")->setCurrentText("Luz");
+            auto *importe = form->findChild<QLineEdit *>("leImporte");
+            importe->setText("121,00");
+            emit importe->textEdited(importe->text());
+        };
+
+        fill("Proveedor E2E", QDate::currentDate());
+        QCOMPARE(form->findChild<QLineEdit *>("leBase")->text(), QStringLiteral("100.00"));
+        QCOMPARE(form->findChild<QLineEdit *>("leIva")->text(), QStringLiteral("21.00"));
+        form->findChild<QPushButton *>("btnSave")->click();
+        QVERIFY2(result().contains("Factura F-77 de Proveedor E2E guardada"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT importe || '|' || iva || '|' || edit_lock FROM gastos WHERE n_factura = 'F-77'"),
+                 QStringLiteral("121.00|21|0"));
+        QVERIFY(form->findChild<QLineEdit *>("leFra")->text().isEmpty());          // ready for the next one
+
+        fill("Otro", QDate::currentDate());
+        form->findChild<QPushButton *>("btnSave")->click();
+        QVERIFY2(result().contains("no está en la lista de proveedores"), qPrintable(result()));
+        fill("Proveedor E2E", QDate(2026, 1, 20));
+        form->findChild<QPushButton *>("btnSave")->click();
+        QVERIFY2(result().contains("Trimestre bloqueado"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM gastos WHERE n_factura = 'F-77'"), QStringLiteral("1"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+
+        form->findChild<QPushButton *>("btnClose")->click();
+        QTRY_VERIFY(form.isNull());
+        E2e::exec(m_db, "DELETE FROM proveedores");
+        E2e::exec(m_db, "DELETE FROM servicios");
+    }
+
     void test_contabilidad_generateLockThenRevert()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "400", "h400a", "12.10", "10-02-2026", "A-ORIG0400"));

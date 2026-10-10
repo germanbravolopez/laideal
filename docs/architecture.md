@@ -77,8 +77,8 @@ Search modes: by ticket number, by phone, by date, or by client name.
 Name search loads all `ingresos` and filters client-side via `MySortFilterProxyModel::setNormalizedFilter` (diacritic-insensitive — handles García, Jiménez, etc.).
 
 ### Facturas (`src/facturas/`)
-Formal supplier invoice entry form. Distinct from receipts.
-Writes to the `facturas` table. Populated from `empresas` and `servicios` tables.
+Formal supplier invoice entry form (code-built dialog, UiKit style). Distinct from receipts.
+Writes to the `gastos` table. Populated from the `proveedores` and `servicios` tables.
 
 ### Contabilidad (`src/contabilidad/`)
 Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.

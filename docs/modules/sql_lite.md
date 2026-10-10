@@ -88,4 +88,4 @@ Always use named parameters (`:param`). Never build SQL by string concatenation 
 
 ## Accounting lock logic
 
-`readLockForMonthAndYear()` maps a month+year to its quarter and checks `edit_lock` in `ingresos`. Returns `1` if that quarter is locked. Called by `MainWindow`, `RecogPrendas`, `AddGarment`, and `Facturas` before any write.
+`readLockForMonthAndYear()` maps a month+year to its quarter and checks `edit_lock` in `ingresos`. Returns `1` if that quarter is locked. Called by `MainWindow`, `RecogPrendas` and `AddGarment` before any write (`Facturas` uses `quarterIsClosed`).

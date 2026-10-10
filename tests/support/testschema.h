@@ -28,6 +28,8 @@ inline bool create(QSqlDatabase &db)
         "edit_lock INTEGER DEFAULT 0)",
         "CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)",
         "CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)",
+        "CREATE TABLE proveedores (nombre TEXT, cif TEXT, direccion TEXT, telefono TEXT)",
+        "CREATE TABLE servicios (nombre TEXT)",
     };
     if (!db.open())
         return false;

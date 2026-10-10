@@ -1,22 +1,24 @@
 #ifndef FACTURAS_H
 #define FACTURAS_H
 
-#include <QMainWindow>
-#include <QMessageBox>
-#include <QSqlQueryModel>
-#include <QPushButton>
+#include <QDialog>
+#include <QSqlDatabase>
 
-namespace Ui {
-class Facturas;
-}
+class QComboBox;
+class QDateEdit;
+class QLineEdit;
+class QPushButton;
+namespace UiKit { class ResultPanel; }
 
-class Facturas : public QMainWindow
+// Herramientas -> Formulario facturas: records one expense invoice (gastos) per
+// save, IVA included; base and cuota are derived as the amount is typed. Built in
+// code with the shared UiKit style; every outcome is shown in the result panel.
+class Facturas : public QDialog
 {
     Q_OBJECT
 
 public:
     explicit Facturas(const QSqlDatabase &database, QWidget *parent = nullptr);
-    ~Facturas();
     void populateEmpresas();
     void populateServicios();
 
@@ -27,18 +29,27 @@ public:
     static double taxAmountFromGross(double gross, double ivaRate);
 
 private slots:
-    void initialSettings();
+    void onSaveClicked();
     void resetAllContents();
-    bool validateForm();
-    void saveFactura();
-
-    void on_buttonBox_clicked(QAbstractButton *button);
-    void on_le_importe_textEdited(const QString &arg1);
-    void on_cb_iva_currentTextChanged(const QString &arg1);
+    void updateTaxSplit();
 
 private:
-    Ui::Facturas *ui;
+    void buildUi();
+    // Empty when the form can be saved, else the reason (rich text for the panel).
+    QString validationError();
+    bool saveFactura();
+
     QSqlDatabase db;
+    QLineEdit   *m_leFra = nullptr;
+    QDateEdit   *m_deFecha = nullptr;
+    QComboBox   *m_cbEmpresa = nullptr;
+    QComboBox   *m_cbServicio = nullptr;
+    QLineEdit   *m_leDescripcion = nullptr;
+    QComboBox   *m_cbIva = nullptr;
+    QLineEdit   *m_leImporte = nullptr;
+    QLineEdit   *m_leBase = nullptr;
+    QLineEdit   *m_leIva = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
 };
 
 #endif // FACTURAS_H
