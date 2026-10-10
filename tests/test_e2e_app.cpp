@@ -881,13 +881,18 @@ private slots:
         QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
         auto *add = mw.findChild<AddGarment *>();
         QVERIFY(add);
-        add->findChild<QLineEdit *>("le_n_recibo")->setText("2000");
-        QMetaObject::invokeMethod(add, "on_pb_search_pressed");
+        add->findChild<QLineEdit *>("leNRecibo")->setText("2000");
+        add->findChild<QPushButton *>("btnSearch")->click();
         QVERIFY(add->ticketFound);
-        add->findChild<QComboBox *>("cb_prenda")->setCurrentText("Camisa");
-        add->findChild<QLineEdit *>("le_cantidad")->setText("2");
-        add->findChild<QPushButton *>("pb_pagado")->setChecked(true);
-        add->findChild<QDialogButtonBox *>("buttonBox")->button(QDialogButtonBox::Save)->click();
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("2");
+        add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
+        add->findChild<QPushButton *>("btnSave")->click();
+        const QString result = add->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(result.contains("Prenda añadida al recibo Nº 2000") && result.contains("se envía a AEAT"),
+                 qPrintable(result));
+        QVERIFY(!add->ticketFound);                                        // ready for another receipt
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
 
         QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='2000' AND pagado='SI'"),
                                   QStringLiteral("ENVIADA"), 10000);
@@ -911,16 +916,20 @@ private slots:
         MainWindow mw;
         QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
         auto *add = mw.findChild<AddGarment *>();
-        add->findChild<QLineEdit *>("le_n_recibo")->setText("2100");
-        QMetaObject::invokeMethod(add, "on_pb_search_pressed");
+        add->findChild<QLineEdit *>("leNRecibo")->setText("2100");
+        add->findChild<QPushButton *>("btnSearch")->click();
         QVERIFY(add->ticketFound);
-        add->findChild<QLineEdit *>("le_n_recibo")->setText("2200");
-        add->findChild<QComboBox *>("cb_prenda")->setCurrentText("Camisa");
-        add->findChild<QLineEdit *>("le_cantidad")->setText("1");
-        add->findChild<QPushButton *>("pb_pagado")->setChecked(true);
-        add->findChild<QDialogButtonBox *>("buttonBox")->button(QDialogButtonBox::Save)->click();
+        add->findChild<QLineEdit *>("leNRecibo")->setText("2200");
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("1");
+        add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
+        add->findChild<QPushButton *>("btnSave")->click();
 
-        QTRY_VERIFY(m_popups->sawMessageContaining("No se ha buscado"));
+        QVERIFY(add->findChild<QLabel *>("lblResult")->text().contains("No se ha buscado"));
+        // Searching the sent ticket itself is refused before the form opens.
+        add->findChild<QPushButton *>("btnSearch")->click();
+        QVERIFY(!add->ticketFound);
+        QVERIFY(add->findChild<QLabel *>("lblResult")->text().contains("ya tiene prendas pagadas"));
         QTest::qWait(300);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='2200'"), QStringLiteral("1"));
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash='h2200a'"),
@@ -928,8 +937,6 @@ private slots:
         QVERIFY(m_server.requestsTo("Create").isEmpty());
     }
 
-    // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
-    // the quarter's rows; Revertir contabilidad unlocks them again.
     // Formulario de facturas de gastos: the IVA split follows the amount; a complete
     // invoice is saved and reported in the window; an unknown supplier and a date in
     // a closed quarter are refused there too, with nothing written. No pop-ups.
@@ -978,6 +985,8 @@ private slots:
         E2e::exec(m_db, "DELETE FROM servicios");
     }
 
+    // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
+    // the quarter's rows; Revertir contabilidad unlocks them again.
     void test_contabilidad_generateLockThenRevert()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "400", "h400a", "12.10", "10-02-2026", "A-ORIG0400"));

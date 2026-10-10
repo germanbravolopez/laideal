@@ -119,7 +119,7 @@ A3 is the AEAT safety check: repeat it at the end.
 | B3 | Recogida → search ticket 1 by number | Importe total shows 20.00 (what is owed, not 0) |
 | B4 | Herramientas → Añadir nuevas prendas on ticket 1 (still unpaid), add one garment **unpaid** | The added garment reads `SIN COBRAR`; ticket 1 now has three garments |
 | B5 | Recogida → ticket 1 → **pay-all button** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
-| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused: "El recibo Nº 1 ya tiene prendas pagadas (enviado a la AEAT)…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
+| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused in the window's result panel: "El recibo Nº 1 ya tiene prendas pagadas…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
 | B6b | Herramientas → Anular prendas → ticket 2 → tick → confirm | In Recogida: `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
 | B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
 | B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
