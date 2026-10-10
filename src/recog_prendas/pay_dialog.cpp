@@ -208,6 +208,13 @@ void PayDialog::onCobrarClicked()
     for (int r = 0; r < m_table->rowCount(); ++r) {
         auto *chk = m_table->item(r, COL_CHECK);
         if (chk && chk->checkState() == Qt::Checked) {
+            // Once charged its amount is frozen: measure it first.
+            if (garmentUnmeasured(m_table->item(r, COL_GARMENT)->text(), m_table->item(r, COL_SIZE)->text())) {
+                m_lblStatus->setText(UiKit::errorHtml(tr("La prenda \"%1\" se cobra por m2 y no tiene tamaño.")
+                                                          .arg(m_table->item(r, COL_GARMENT)->text().toHtmlEscaped()))
+                                     + "<br>" + tr("Introduzca su tamaño en Recogida o desmárquela para cobrar el resto."));
+                return;
+            }
             hashes << m_table->item(r, COL_HASH)->text();
             total += m_table->item(r, COL_AMOUNT)->text().toDouble();
         }

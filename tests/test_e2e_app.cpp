@@ -282,6 +282,27 @@ private slots:
         QVERIFY2(result.contains(QStringLiteral("Ticket %1 guardado: Cliente Jarapa, 1 prenda(s)").arg(ticket))
                  && result.contains("sin cobrar"), qPrintable(result));
 
+        // Paid with the m2 garment still unmeasured: refused (it would be invoiced at 0).
+        const QString paidTry = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Jarapa");
+        qobject_cast<QComboBox *>(table->cellWidget(0, 1))->setCurrentText("Jarapa (m2)");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        clickSave(mw);
+        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("sin medir"),
+                 qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar(QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE n_recibo='%1'").arg(paidTry)), QStringLiteral("0"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+        mw.findChild<QPushButton *>("pb_reset")->click();
+
+        // A quantity typed in a slot without a garment is not saved as a garment row.
+        const QString withSlot = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Jarapa");
+        enterGarment(mw, "Camisa", "1");
+        table->setItem(3, 0, new QTableWidgetItem("2"));
+        clickSave(mw);
+        QCOMPARE(scalar(QStringLiteral("SELECT COUNT(*) || '|' || SUM(importe) FROM ingresos WHERE n_recibo='%1'").arg(withSlot)),
+                 QStringLiteral("1|3.5"));
+
         // Closed quarter: refused in the panel, nothing saved.
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, "
                                 "importe, edit_lock) VALUES (9, 'X', '', '', '', '05-01-2026', '21', '1.00', 1)"));
@@ -723,6 +744,22 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         factura->close();
         QTRY_VERIFY(factura.isNull());
+    }
+
+    // Cobrar never charges an m2 garment that has no size: its invoice amount would be
+    // 0 and frozen. Refused in the dialog; nothing paid, nothing sent.
+    void test_payDialog_refusesUnmeasuredM2Garment()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "930", "h930a", "0.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET prenda = 'Jarapa (m2)', size = '' WHERE hash='h930a'"));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("930"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("no tiene tamaño"),
+                 qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h930a'"), QStringLiteral("NO"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
     }
 
     // Recogida, Cobrar: AEAT answers after PayDialog's 5 s wait. The payment is kept

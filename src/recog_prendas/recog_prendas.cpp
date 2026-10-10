@@ -348,9 +348,9 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             const int newQty = ui->le_qty->text().toInt();
             if (newQty < 1)
                 break;
-            const double importe = garmentImporte(
-                ui->le_qty->text(), ui->le_size->text(),
-                readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
+            const double importe = garmentUnmeasured(ui->le_garm->text(), ui->le_size->text()) ? 0.0
+                : garmentImporte(ui->le_qty->text(), ui->le_size->text(),
+                                 readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
             updateGarmentQtyAndImporte(db, ticketNum, rowHash,
                                        QString::number(newQty),
                                        QString::number(importe, 'f', 2));
@@ -359,9 +359,9 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
     case SERVICE:
         // A service change re-prices the row against the new service's unit price.
         if (!editLock && !ui->pb_payment->isChecked()) {
-            const double importe = garmentImporte(
-                ui->le_qty->text(), ui->le_size->text(),
-                readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
+            const double importe = garmentUnmeasured(ui->le_garm->text(), ui->le_size->text()) ? 0.0
+                : garmentImporte(ui->le_qty->text(), ui->le_size->text(),
+                                 readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
             updateGarmentServiceAndImporte(db, ticketNum, rowHash,
                                            ui->cb_servic->currentText(),
                                            QString::number(importe, 'f', 2));

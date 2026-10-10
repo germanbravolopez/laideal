@@ -905,6 +905,12 @@ double garmentImporte(const QString &quantityText, const QString &sizeText, doub
     return roundToCents((size != 0.0) ? size * price : price);
 }
 
+bool garmentUnmeasured(const QString &garment, const QString &sizeText)
+{
+    return garment.contains(QLatin1String("m2"))
+           && QString(sizeText).trimmed().replace(',', '.').toDouble() <= 0.0;
+}
+
 double roundToCents(double value)
 {
     const double cents = value * 100.0;

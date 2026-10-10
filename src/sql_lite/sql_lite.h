@@ -30,6 +30,9 @@ float       readGarmentPrice(QSqlDatabase &db, const QString &garment, const QSt
 // comma->dot normalisation (Spanish input), matching how both are stored at save
 // time - so a size like "2,6" is not silently read as 0 (the 9.0 comma-decimal bug).
 double      garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice);
+// A garment priced by its size (name contains "m2") whose size is not entered yet
+// (empty, 0 or unreadable): it is priced 0,00 and cannot be charged until measured.
+bool        garmentUnmeasured(const QString &garment, const QString &sizeText);
 // Money is stored and sent to AEAT in cents, rounded half away from zero (28.405 ->
 // 28.41): the tolerance absorbs binary error, so 28.405 (28.40499...) still rounds up.
 double      roundToCents(double value);

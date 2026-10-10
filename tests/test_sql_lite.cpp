@@ -495,6 +495,16 @@ private slots:
         QCOMPARE(moneyText(garmentImporte("1", "1.25", double(3.3f))), QStringLiteral("4.13"));
     }
 
+    // Unmeasured = priced by size (name with "m2") and no usable size yet.
+    void test_garmentUnmeasured()
+    {
+        QVERIFY(garmentUnmeasured("Jarapa (m2)", ""));
+        QVERIFY(garmentUnmeasured("Alfombra (m2)", "0"));
+        QVERIFY(garmentUnmeasured("Kilim (m2)", " 0,0 "));
+        QVERIFY(!garmentUnmeasured("Alfombra (m2)", "2,5"));
+        QVERIFY(!garmentUnmeasured("Camisa", ""));
+    }
+
     // Money is stored in cents, half away from zero, whatever binary error the
     // double carries (28.405 is 28.40499... as a double).
     void test_moneyText_roundsHalfAwayFromZero()

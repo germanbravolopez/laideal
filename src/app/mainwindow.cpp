@@ -562,8 +562,7 @@ void MainWindow::setGarmentPrice(int garmentRow, QString garmentText, QString se
     QTableWidgetItem *sizeItem = ui->table_ticket->item(garmentRow, TABLE_TICKET_SIZE);
     const QString size = sizeItem ? sizeItem->text() : QString();
     // An m2 garment is priced by its size; until it is measured it is 0, not one m2.
-    const bool unmeasured = garmentText.contains("m2") && size.trimmed().replace(',', '.').toDouble() <= 0;
-    const double importe = unmeasured ? 0.0
+    const double importe = garmentUnmeasured(garmentText, size) ? 0.0
         : garmentImporte(qntyItem->text(), size, readGarmentPrice(db, garmentText, serviceText));
     auto *amount = new QTableWidgetItem(QString::number(importe, 'f', 2));
     amount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -613,7 +612,7 @@ bool MainWindow::validateTicket()
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
     double totalCost = 0.0;
-    bool sizePending = false;   // an m2 garment can be saved before it is measured
+    bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC))
             continue;
@@ -626,13 +625,22 @@ bool MainWindow::validateTicket()
             return refuse(tr("La prenda de la fila %1 no tiene cantidad.").arg(row + 1));
         if (garment.isEmpty())
             return refuse(tr("La fila %1 tiene importe pero no prenda.").arg(row + 1));
-        if (garment.contains("m2") || garment.startsWith("Alfombra"))
-            sizePending = sizePending || !ui->table_ticket->item(row, TABLE_TICKET_SIZE)
-                                      || ui->table_ticket->item(row, TABLE_TICKET_SIZE)->text().trimmed().isEmpty();
-        totalCost += ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
+        QTableWidgetItem *size = ui->table_ticket->item(row, TABLE_TICKET_SIZE);
+        if (garmentUnmeasured(garment, size ? size->text() : QString()))
+            sizePending = true;
+        const double price = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
+        if (price < 0.0)
+            return refuse(tr("La prenda de la fila %1 tiene un importe negativo; las correcciones se hacen "
+                             "con Rectificar factura.").arg(row + 1));
+        totalCost += price;
     }
     if (totalCost == 0.0 && !sizePending)
         return refuse(tr("El ticket no tiene ninguna prenda con importe."));
+    // Once paid the invoice goes to AEAT and its amounts are frozen: an unmeasured m2
+    // garment would be invoiced at 0 and could never be charged.
+    if (sizePending && ui->pb_payment->isChecked())
+        return refuse(tr("Hay una prenda por m2 sin medir: introduzca su tamaño o guarde el ticket sin "
+                         "cobrar y cóbrelo en Recogida cuando esté medida."));
     // The whole quarter: a month without rows inside a closed quarter is closed too.
     if (quarterIsClosed(db, ui->de_date_recep->date()))
         return refuse(tr("La fecha de recepción pertenece a un trimestre con la contabilidad cerrada."));
@@ -735,7 +743,7 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
     }
 }
 
-void MainWindow::saveTicket()
+double MainWindow::saveTicket()
 {
     // A paid garment starts PENDIENTE and the async submit handler patches
     // CSV/timestamp/estado once AEAT replies (see onVerifactuRequestFinished());
@@ -743,10 +751,12 @@ void MainWindow::saveTicket()
     // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
     // so log the count of garments actually inserted, not the slot count.
     int savedGarments = 0;
+    double storedTotal = 0.0;
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
-        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
-            QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+        QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+        // A slot with no garment (e.g. a quantity typed and left) is not a garment.
+        if (ui->table_ticket->item(row, TABLE_TICKET_PRIC) && cbGarment && !cbGarment->currentText().isEmpty()) {
             QComboBox *cbService = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_SERV));
 
             IngresoGarmentRow r;
@@ -774,14 +784,16 @@ void MainWindow::saveTicket()
                 r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                                 : VerifactuEstado::Unpaid);
 
-            insertGarmentRow(db, r);
+            if (insertGarmentRow(db, r))
+                storedTotal += roundToCents(moneyText(r.importe).toDouble());
             ++savedGarments;
             qDebug() << "saveTicket: saved garment" << savedGarments << "ticket=" << r.nRecibo
                      << "importe=" << r.importe << "hash=" << r.hash;
         }
     }
     qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
-             << "-" << savedGarments << "garment(s) saved";
+             << "-" << savedGarments << "garment(s) saved, total" << storedTotal;
+    return storedTotal;
 }
 
 bool MainWindow::printRecibo()
@@ -840,10 +852,10 @@ void MainWindow::on_pb_save_clicked()
             const QString ticketNum   = ui->le_nr_ticket->text();
             const QDate   invoiceDate = ui->de_date_recep->date();
             const bool    isPaid      = ui->pb_payment->isChecked();
-            const double  totalAmount = ui->le_cost_total->text().toDouble();
             QString printedWhat;
 
-            saveTicket();
+            // The invoice amount is what was stored, row by row, not the on-screen total.
+            const double  totalAmount = saveTicket();
             if (isPaid) {
                 const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
 
@@ -889,10 +901,11 @@ void MainWindow::on_pb_save_clicked()
             }
             const int garments = [this]() {
                 int n = 0;
-                for (int row = 0; row < ui->table_ticket->rowCount(); ++row)
-                    if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)
-                            && !ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
+                for (int row = 0; row < ui->table_ticket->rowCount(); ++row) {
+                    auto *garment = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
+                    if (ui->table_ticket->item(row, TABLE_TICKET_PRIC) && garment && !garment->currentText().isEmpty())
                         ++n;
+                }
                 return n;
             }();
             const QString client = ui->cb_client->currentText();
