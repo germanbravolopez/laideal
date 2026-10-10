@@ -20,6 +20,9 @@ namespace UiKit {
 // is never sent behind its window). Sets the title and a minimum width.
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth = 520);
 
+// Window heading (bold, larger than the app font), for windows that list data.
+QLabel *heading(const QString &text);
+
 // Framed explanation at the top of a dialog: what it does, in one or two sentences.
 QLabel *introPanel(const QString &text);
 

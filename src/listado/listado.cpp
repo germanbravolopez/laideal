@@ -5,12 +5,17 @@
 #include "numberformatdelegate.h"
 #include "textcolordelegate.h"
 #include "ingresoscolumns.h"
+#include "uikit.h"
+
+#include <QHash>
+#include <QPushButton>
+#include <QVBoxLayout>
 
 Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
     db(database)
 {
-    setupUi(this);
+    setupUi();
     connect(table_listado->action1, &QAction::triggered,
             this, &Listado::on_actionAnadir_fila_triggered);
     connect(table_listado->action2, &QAction::triggered,
@@ -30,60 +35,61 @@ Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
     });
 }
 
-void Listado::setupUi(QMainWindow *Listado)
+void Listado::setupUi()
 {
-    if (Listado->objectName().isEmpty())
-        Listado->setObjectName("Listado");
-    Listado->resize(520, 698);
-    Listado->setMinimumSize(QSize(0, 0));
-    QFont font;
-    font.setPointSize(10);
-    Listado->setFont(font);
-    // task bar
-    actionActualizar = new QAction(Listado);
+    setObjectName("Listado");
+    setWindowTitle("Listado");
+    resize(720, 700);
+    // The actions keep their menu entries and shortcuts; the buttons below trigger them too.
+    actionActualizar = new QAction("Actualizar", this);
     actionActualizar->setObjectName("actionActualizar");
-    actionAnadir_fila = new QAction(Listado);
+    actionActualizar->setShortcut(QKeySequence("Ctrl+A"));
+    actionAnadir_fila = new QAction("Añadir fila", this);
     actionAnadir_fila->setObjectName("actionAnadir_fila");
-    actionEliminar_fila = new QAction(Listado);
+    actionAnadir_fila->setShortcut(QKeySequence("Ctrl+N"));
+    actionEliminar_fila = new QAction("Eliminar fila", this);
     actionEliminar_fila->setObjectName("actionEliminar_fila");
-    actionGenerar_pdf_con_el_listado = new QAction(Listado);
+    actionEliminar_fila->setShortcut(QKeySequence("Ctrl+D"));
+    actionGenerar_pdf_con_el_listado = new QAction("Generar listado en PDF", this);
     actionGenerar_pdf_con_el_listado->setObjectName("actionGenerar_pdf_con_el_listado");
-    // central widget
-    centralwidget = new QWidget(Listado);
-    centralwidget->setObjectName("centralwidget");
-    gridLayout = new QGridLayout(centralwidget);
-    gridLayout->setObjectName("gridLayout");
-    // search bar
-    horizontalLayout = new QHBoxLayout();
-    horizontalLayout->setObjectName("horizontalLayout");
-    lbl_search = new QLabel(centralwidget);
-    lbl_search->setObjectName("lbl_search");
-    lbl_search->setMaximumSize(QSize(65, 16777215));
-    horizontalLayout->addWidget(lbl_search);
+    actionGenerar_pdf_con_el_listado->setShortcut(QKeySequence("Ctrl+P"));
 
-    filter_widget = new FilterWidget(centralwidget);
-    filter_widget->setObjectName("filter_widget");
-    horizontalLayout->addWidget(filter_widget);
-    gridLayout->addLayout(horizontalLayout, 6, 0, 1, 1);
-    // main title
-    lbl_title = new QLabel(centralwidget);
+    QMenu *menuArchivo = menuBar()->addMenu("Archivo");
+    menuArchivo->addAction(actionActualizar);
+    QMenu *menuHerramientas = menuBar()->addMenu("Herramientas");
+    menuHerramientas->addAction(actionAnadir_fila);
+    menuHerramientas->addAction(actionEliminar_fila);
+    menuHerramientas->addSeparator();
+    menuHerramientas->addAction(actionGenerar_pdf_con_el_listado);
+
+    QWidget *central = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(central);
+    lbl_title = UiKit::heading("Listado");
     lbl_title->setObjectName("lbl_title");
-    QFont font1;
-    font1.setFamilies({QString::fromUtf8("Arial")});
-    font1.setPointSize(26);
-    font1.setBold(false);
-    lbl_title->setFont(font1);
-    lbl_title->setCursor(QCursor(Qt::ArrowCursor));
-    lbl_title->setAutoFillBackground(true);
-    lbl_title->setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
-    lbl_title->setAlignment(Qt::AlignCenter);
-    gridLayout->addWidget(lbl_title, 0, 0, 1, 2);
-    // table widget
-    table_listado = new TableView(centralwidget);
+    layout->addWidget(lbl_title);
+    m_lblIntro = UiKit::introPanel(QString());
+    layout->addWidget(m_lblIntro);
+
+    QHBoxLayout *actions = new QHBoxLayout();
+    m_btnAdd = UiKit::secondaryButton("Añadir fila", "btnAdd");
+    m_btnDelete = UiKit::secondaryButton("Eliminar fila", "btnDelete");
+    m_btnPdf = UiKit::secondaryButton("Generar PDF", "btnPdf");
+    QPushButton *btnRefresh = UiKit::secondaryButton("Actualizar", "btnRefresh");
+    actions->addWidget(m_btnAdd);
+    actions->addWidget(m_btnDelete);
+    actions->addWidget(m_btnPdf);
+    actions->addStretch();
+    actions->addWidget(new QLabel("Buscar:"));
+    filter_widget = new FilterWidget(central);
+    filter_widget->setObjectName("filter_widget");
+    filter_widget->setMinimumWidth(220);
+    actions->addWidget(filter_widget);
+    actions->addWidget(btnRefresh);
+    layout->addLayout(actions);
+
+    table_listado = new TableView(central);
     table_listado->setObjectName("table_listado");
     table_listado->setMinimumSize(QSize(500, 300));
-    table_listado->setMaximumSize(QSize(16777215, 16777215));
-    table_listado->setLayoutDirection(Qt::LeftToRight);
     table_listado->setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
     table_listado->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
     table_listado->setAlternatingRowColors(true);
@@ -91,57 +97,53 @@ void Listado::setupUi(QMainWindow *Listado)
     table_listado->setSortingEnabled(true);
     table_listado->horizontalHeader()->setProperty("showSortIndicator", QVariant(true));
     table_listado->verticalHeader()->setVisible(false);
-    gridLayout->addWidget(table_listado, 8, 0, 1, 1);
-    // set menu bar
-    Listado->setCentralWidget(centralwidget);
-    menubar = new QMenuBar(Listado);
-    menubar->setObjectName("menubar");
-    menubar->setGeometry(QRect(0, 0, 520, 23));
-    menuArchivo = new QMenu(menubar);
-    menuArchivo->setObjectName("menuArchivo");
-    menuHerramientas = new QMenu(menubar);
-    menuHerramientas->setObjectName("menuHerramientas");
-    Listado->setMenuBar(menubar);
-    menubar->addAction(menuArchivo->menuAction());
-    menubar->addAction(menuHerramientas->menuAction());
-    menuArchivo->addAction(actionActualizar);
-    menuHerramientas->addAction(actionAnadir_fila);
-    menuHerramientas->addAction(actionEliminar_fila);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionGenerar_pdf_con_el_listado);
+    // One point under the app font: the tables are wide (ingresos has ~20 columns).
+    QFont tableFont = table_listado->font();
+    tableFont.setPointSizeF(tableFont.pointSizeF() - 1);
+    table_listado->setFont(tableFont);
+    layout->addWidget(table_listado, 1);
 
-    retranslateUi(Listado);
+    m_lblResult = new UiKit::ResultPanel();
+    m_lblResult->setMinimumHeight(40);
+    layout->addWidget(m_lblResult);
+    setCentralWidget(central);
 
-    QMetaObject::connectSlotsByName(Listado);
-} // setupUi
+    connect(m_btnAdd,    &QPushButton::clicked, actionAnadir_fila, &QAction::trigger);
+    connect(m_btnDelete, &QPushButton::clicked, actionEliminar_fila, &QAction::trigger);
+    connect(m_btnPdf,    &QPushButton::clicked, actionGenerar_pdf_con_el_listado, &QAction::trigger);
+    connect(btnRefresh,  &QPushButton::clicked, actionActualizar, &QAction::trigger);
+    QMetaObject::connectSlotsByName(this);
+}
 
-void Listado::retranslateUi(QMainWindow *Listado)
+void Listado::configureForTable()
 {
-    Listado->setWindowTitle(QCoreApplication::translate("Listado", "Listado", nullptr));
-    actionActualizar->setText(QCoreApplication::translate("Listado", "Actualizar", nullptr));
-#if QT_CONFIG(shortcut)
-    actionActualizar->setShortcut(QCoreApplication::translate("Listado", "Ctrl+A", nullptr));
-#endif // QT_CONFIG(shortcut)
-    actionAnadir_fila->setText(QCoreApplication::translate("Listado", "A\303\261adir fila", nullptr));
-#if QT_CONFIG(shortcut)
-    actionAnadir_fila->setShortcut(QCoreApplication::translate("Listado", "Ctrl+N", nullptr));
-#endif // QT_CONFIG(shortcut)
-    actionEliminar_fila->setText(QCoreApplication::translate("Listado", "Eliminar fila", nullptr));
-#if QT_CONFIG(shortcut)
-    actionEliminar_fila->setShortcut(QCoreApplication::translate("Listado", "Ctrl+D", nullptr));
-#endif // QT_CONFIG(shortcut)
-    actionGenerar_pdf_con_el_listado->setText(QCoreApplication::translate("Gastos", "Generar listado en pdf", nullptr));
-#if QT_CONFIG(shortcut)
-    actionGenerar_pdf_con_el_listado->setShortcut(QCoreApplication::translate("Gastos", "Ctrl+P", nullptr));
-#endif // QT_CONFIG(shortcut)
-    lbl_search->setText(QCoreApplication::translate("Listado", "B\303\272squeda:", nullptr));
-    lbl_title->setText(QCoreApplication::translate("Listado", "Listado", nullptr));
-    menuArchivo->setTitle(QCoreApplication::translate("Listado", "Archivo", nullptr));
-    menuHerramientas->setTitle(QCoreApplication::translate("Listado", "Herramientas", nullptr));
-} // retranslateUi
+    struct Config { const char *intro; bool add, del, pdf; };
+    static const QHash<QString, Config> configs = {
+        { "ingresos",    { "Todas las prendas cobradas y pendientes, ticket a ticket. Es de solo lectura: los cambios "
+                           "se hacen en Recogida de prendas, Anular factura y Rectificar factura. Clic en el enlace "
+                           "de AEAT para ver la factura registrada.", false, false, false } },
+        { "gastos",      { "Facturas de gastos. Doble clic en una celda para corregirla; las de un trimestre cerrado "
+                           "por la contabilidad no se pueden editar. Las facturas nuevas se añaden con Formulario "
+                           "facturas.", false, true, true } },
+        { "prendas",     { "Prendas y sus precios de limpieza y plancha. Doble clic en una celda para cambiarla.",
+                           true, true, true } },
+        { "clientes",    { "Clientes de la tintorería. Doble clic en una celda para cambiarla.", true, true, false } },
+        { "proveedores", { "Proveedores de las facturas de gastos. Doble clic en una celda para cambiarla.",
+                           true, true, false } },
+        { "servicios",   { "Servicios de las facturas de gastos. Doble clic en una celda para cambiarla.",
+                           true, true, false } },
+    };
+    const Config c = configs.value(tableName, { "", false, false, false });
+    m_lblIntro->setText(QString::fromUtf8(c.intro));
+    m_lblIntro->setVisible(*c.intro != '\0');
+    m_btnAdd->setVisible(c.add);
+    m_btnDelete->setVisible(c.del);
+    m_btnPdf->setVisible(c.pdf);
+}
 
 void Listado::populateTable()
 {
+    configureForTable();
     // Change the cursor to a loading icon
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
@@ -182,7 +184,6 @@ void Listado::populateTable()
         else if (tableName == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
         }
-        table_listado->setFont(QFont(table_listado->font().family(), 8));
         if (tableName == "ingresos") {
             table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
             table_listado->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
@@ -278,9 +279,9 @@ void Listado::on_actionActualizar_triggered()
 void Listado::on_actionAnadir_fila_triggered()
 {
     if (tableName == "clientes") {
-        InsertNewItem *ui_insert_new;
-        ui_insert_new = new InsertNewItem(db, this);
-        ui_insert_new->exec();
+        InsertNewItem form(db, this);
+        if (form.exec() != QDialog::Accepted)
+            return;
         populateTable();
     } else if (tableName == "prendas") {
         table_listado->model()->insertRow(table_listado->currentIndex().row() + 1);
@@ -295,26 +296,26 @@ void Listado::on_actionAnadir_fila_triggered()
         insertNewItemToTable(db, {""}, "servicios");
         populateTable();
     } else if (tableName == "gastos") {
-        QMessageBox::information(this, "Añadir fila",
-                                 "Para introducir nuevos gastos, hay que usar la herramienta de introducir "
-                                 "facturas en la ventana principal.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
-        populateTable();
+        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Herramientas → Formulario facturas "
+                                             "en la ventana principal."));
+        return;
     } else {
-        qCritical() << "Listado::on_actionAnadir_fila_triggered: '" << tableName << "' table does not support adding new rows directly and is not handled in the code";
-        QMessageBox::critical(this, "Añadir fila",
-                              "Esta tabla no soporta añadir nuevas filas directamente.",
-                              QMessageBox::Ok, QMessageBox::Ok);
+        qWarning() << "Listado::on_actionAnadir_fila_triggered: '" << tableName << "' does not support adding rows";
+        m_lblResult->setText(UiKit::warnHtml("Este listado no admite añadir filas directamente."));
+        return;
     }
+    m_lblResult->setText(tableName == "clientes" ? UiKit::okHtml("Cliente añadido.")
+                         : UiKit::okHtml("Fila añadida.") + " Rellénela con doble clic en cada celda.");
 }
 
 void Listado::on_actionEliminar_fila_triggered()
 {
     if (tableName == "ingresos") {
-        qCritical() << "Listado::on_actionEliminar_fila_triggered: '" << tableName << "' table does not support deleting rows directly and is not handled in the code";
-        QMessageBox::critical(this, "Eliminar fila",
-                              "Esta tabla no soporta eliminar filas directamente.",
-                              QMessageBox::Ok, QMessageBox::Ok);
+        qWarning() << "Listado::on_actionEliminar_fila_triggered: ingresos rows cannot be deleted here";
+        m_lblResult->setText(UiKit::warnHtml("Los ingresos no se eliminan desde el listado: use Anular prendas "
+                                             "o Anular factura."));
+    } else if (!table_listado->currentIndex().isValid()) {
+        m_lblResult->setText(UiKit::warnHtml("Seleccione primero la fila que quiere eliminar."));
     } else {
         int ret = QMessageBox::question(this, "Eliminar fila",
                                         "¿Está seguro que desea eliminar la fila " +
@@ -324,6 +325,7 @@ void Listado::on_actionEliminar_fila_triggered()
         if (ret == QMessageBox::Yes) {
             table_listado->model()->removeRow(table_listado->currentIndex().row());
             populateTable();
+            m_lblResult->setText(UiKit::okHtml("Fila eliminada."));
         }
     }
 }
@@ -342,12 +344,10 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
             ui_generar_listado->model = table_listado->model();
             ui_generar_listado->table_name = tableName;
             ui_generar_listado->print_table();
+            m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF."));
     } else {
-        qDebug() << "Listado::on_actionGenerar_pdf_con_el_listado_triggered: '" << tableName
-                 << "' table does not support generating pdf list directly and is not handled in the code";
-        QMessageBox::information(this, "Generar listado",
-                                 "Herramienta para generar listado no está implementada para este tipo de listado.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
+        qDebug() << "Listado::on_actionGenerar_pdf_con_el_listado_triggered: no PDF listing for" << tableName;
+        m_lblResult->setText(UiKit::warnHtml("Este listado no tiene versión en PDF."));
     }
 }
 
@@ -370,10 +370,9 @@ void Listado::handleDoubleClick(const QModelIndex &index)
         if (headerName == "edit_lock") {
             QVariant value = table_listado->model()->data(table_listado->model()->index(index.row(), lastColumn));
             if (value.toInt() == 1 && index.column() != lastColumn) {
-                QMessageBox::warning(this, "Edición bloqueada",
-                                     "No es posible editar el contenido porque se encuentra cerrado por contabilidad.\n"
-                                     "Desbloquear la fila para poder editarlo.",
-                                     QMessageBox::Ok, QMessageBox::Ok);
+                m_lblResult->setText(UiKit::errorHtml("Edición bloqueada.")
+                                     + "<br>La fila pertenece a un trimestre cerrado por la contabilidad; "
+                                       "revierta la contabilidad para poder editarla.");
                 // Deselect the current cell
                 QItemSelectionModel *selectionModel = table_listado->selectionModel();
                 selectionModel->clearSelection();

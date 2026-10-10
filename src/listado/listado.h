@@ -24,6 +24,13 @@
 #include "mysortfilterproxymodel.h"
 #include "linkdelegate.h"
 
+class QPushButton;
+namespace UiKit { class ResultPanel; }
+
+// One table of the database to browse and edit (ingresos, gastos, prendas,
+// clientes, proveedores, servicios): heading, explanation, the actions as buttons
+// (also in the menus, with their shortcuts), search, the table and a result panel
+// where every message appears. Built in code with the shared UiKit style.
 class Listado : public QMainWindow
 {
     Q_OBJECT
@@ -33,19 +40,10 @@ public:
     QAction *actionAnadir_fila;
     QAction *actionEliminar_fila;
     QAction *actionGenerar_pdf_con_el_listado;
-    QWidget *centralwidget;
-    QGridLayout *gridLayout;
-    QHBoxLayout *horizontalLayout;
-    QLabel *lbl_search;
     FilterWidget *filter_widget;
     QLabel *lbl_title;
     TableView *table_listado;
-    QMenuBar *menubar;
-    QMenu *menuArchivo;
-    QMenu *menuHerramientas;
 
-    void setupUi(QMainWindow *Listado);
-    void retranslateUi(QMainWindow *Listado);
     void populateTable();
 
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
@@ -64,7 +62,16 @@ private slots:
     void handleDoubleClick(const QModelIndex &index);
 
 private:
+    void setupUi();
+    // Explanation and available buttons for tableName.
+    void configureForTable();
+
     QSqlDatabase db;
+    QLabel *m_lblIntro = nullptr;
+    QPushButton *m_btnAdd = nullptr;
+    QPushButton *m_btnDelete = nullptr;
+    QPushButton *m_btnPdf = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
 
 signals:
     void populateClientes();

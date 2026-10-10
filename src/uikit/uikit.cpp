@@ -23,6 +23,17 @@ void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth)
     dialog->setMinimumWidth(minimumWidth);
 }
 
+QLabel *heading(const QString &text)
+{
+    QLabel *label = new QLabel(text);
+    label->setObjectName(QStringLiteral("lblHeading"));
+    QFont font = label->font();
+    font.setPointSizeF(font.pointSizeF() + 5);
+    font.setBold(true);
+    label->setFont(font);
+    return label;
+}
+
 QLabel *introPanel(const QString &text)
 {
     QLabel *label = new QLabel(text);

@@ -57,7 +57,7 @@ int         readLockForQuarter(QSqlDatabase &db, const QString &table, int quart
 // given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
 void        updateLockForMonth(QSqlDatabase &db, int value, int month, int year);
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
-void        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
+bool        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
 // RecogPrendas DB-write seams. Each performs one parameterised UPDATE/INSERT on

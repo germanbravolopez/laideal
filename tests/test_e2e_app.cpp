@@ -37,6 +37,8 @@
 #include "e2efixture.h"
 #include "facturas.h"
 #include "genlistado.h"
+#include "insertnewitem.h"
+#include "listado.h"
 #include "add_garment.h"
 #include "fakeverifactuserver.h"
 #include "imprimir.h"
@@ -1086,6 +1088,51 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         dlg->close();
         delete dlg;
+    }
+
+    // Listado windows: the buttons each table offers, and every message in the result
+    // panel - a new gasto points to Formulario facturas, a row of a closed quarter is
+    // not editable, a new client is entered in the Nuevo cliente form. No pop-ups.
+    void test_listado_buttonsAndMessagesInWindow()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe, edit_lock) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
+                                "'21', '121.00', 1)"));
+        MainWindow mw;
+        const auto listado = [&mw](const QString &name) {
+            for (Listado *l : mw.findChildren<Listado *>())
+                if (l->objectName() == name)
+                    return l;
+            return static_cast<Listado *>(nullptr);
+        };
+        const auto result = [](Listado *l) { return l->findChild<QLabel *>("lblResult")->text(); };
+
+        QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
+        Listado *gastos = listado("Gastos");
+        QVERIFY(gastos);
+        QVERIFY(!gastos->findChild<QPushButton *>("btnAdd")->isVisibleTo(gastos));
+        QVERIFY(gastos->findChild<QPushButton *>("btnPdf")->isVisibleTo(gastos));
+        gastos->actionAnadir_fila->trigger();                               // the menu entry still works
+        QVERIFY2(result(gastos).contains("Formulario facturas"), qPrintable(result(gastos)));
+        emit gastos->table_listado->doubleClick(gastos->table_listado->model()->index(0, 1));
+        QTRY_VERIFY2(result(gastos).contains("Edición bloqueada"), qPrintable(result(gastos)));
+
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_clientes_triggered");
+        Listado *clientes = listado("Listado de clientes");
+        QVERIFY(clientes);
+        QVERIFY(!clientes->findChild<QPushButton *>("btnPdf")->isVisibleTo(clientes));
+        m_driver->expect(ModalDriver::ofType<InsertNewItem>(), [](QWidget *w) {
+            w->findChild<QPushButton *>("btnSave")->click();             // no name: refused in the form
+            QVERIFY(w->findChild<QLabel *>("lblResult")->text().contains("nombre"));
+            w->findChild<QLineEdit *>("leName")->setText("Ana E2E");
+            w->findChild<QLineEdit *>("leMobile")->setText("600000000");
+            w->findChild<QPushButton *>("btnSave")->click();
+        });
+        clientes->findChild<QPushButton *>("btnAdd")->click();
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(scalar("SELECT movil FROM clientes WHERE nombre = 'Ana E2E'"), QStringLiteral("600000000"));
+        QVERIFY2(result(clientes).contains("Cliente añadido"), qPrintable(result(clientes)));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
     }
 
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks

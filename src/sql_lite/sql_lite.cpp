@@ -1013,9 +1013,9 @@ int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QStri
     return errorCnt;
 }
 
-void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
+bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
 {
-    if (dbNotConfigured(db, __func__)) return;
+    if (dbNotConfigured(db, __func__)) return false;
 
     // Build positional placeholders so values bind safely - never concatenate user input
     // into the SQL (a client named O'Brien would otherwise break the statement, and a
@@ -1030,9 +1030,11 @@ void insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
     for (const QString &item : items)
         q.addBindValue(item);
-    if (!q.exec())
+    const bool ok = q.exec();
+    if (!ok)
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     db.close();
+    return ok;
 }
 
 QString verifactuInvoiceId(const QString &nRecibo, int seq)
