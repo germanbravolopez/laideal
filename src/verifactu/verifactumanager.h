@@ -33,7 +33,7 @@ public:
     // Asks AEAT/Irene Solutions what it holds for an InvoiceID (GetFilteredList).
     // Result arrives via queryFinished, NOT requestFinished, so it can never be
     // mistaken for a submission reply by the existing handlers.
-    QString queryInvoiceAsync(const QString &invoiceNumber) override;
+    QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
     QString getConfigurationInfo() const;
     bool isConfigured() const override { return m_config->isValid(); }

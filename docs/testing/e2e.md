@@ -128,4 +128,5 @@ Each scenario was checked against a mutated build (quarter guard removed, date r
 |---|---|---|
 | `test_paymentRegistered` | Cobrar on two garments | One record (InvoiceID, payment date, total 25.00); both rows ENVIADA with AEAT's CSV, the record's huella, its XML and the pre-production QR URL |
 | `test_partialPaymentChained` | Two payment events | The second is `200-1`, chained after the first record |
+| `test_productionOnlyOnPurpose` | The gateway's PRODUCCIÓN box on; then the direct client's own production setting | Pre-production with the box alone; production only with its own setting |
 | `test_rejection` | AEAT refuses the record | The row is ERROR with AEAT's description |

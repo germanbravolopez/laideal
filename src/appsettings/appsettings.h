@@ -119,6 +119,10 @@ public:
     // (research, see docs/modules/verifactu/aeat-direct-investigation.md).
     bool    verifactuDirectAeat() const;
     void    setVerifactuDirectAeat(bool v);
+    // The direct client uses AEAT pre-production unless this is set on purpose (no
+    // control in Configuración while it is research: settings file only).
+    bool    aeatDirectProduction() const;
+    void    setAeatDirectProduction(bool v);
     // The owner's certificate for the direct connection: a Windows personal-store
     // thumbprint, or else a .pfx file and its password (stored DPAPI-encrypted).
     QString aeatCertificateThumbprint() const;

@@ -13,6 +13,7 @@
 #include <QList>
 #include <QSqlDatabase>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
@@ -29,6 +30,11 @@ public:
     static const QString kPending;    // generated, AEAT has not confirmed it (not sent, or no reply)
     static const QString kAccepted;   // Correcto / AceptadoConErrores / duplicate of an accepted one
     static const QString kRejected;   // Incorrecto, or the request was refused
+    // AEAT already holds another record for this invoice (e.g. the gateway's): ours
+    // was refused as a duplicate, the invoice is registered; never sent again.
+    static const QString kDuplicate;
+    // AEAT holds this invoice as cancelled: never registered again.
+    static const QString kCancelledAtAeat;
 
     struct Record {
         qint64    id = 0;
@@ -62,11 +68,22 @@ public:
 
     bool ensureSchema();
 
-    // The issuer's last record (empty hash: the chain has not started).
-    AeatRecord::PreviousRecord chainHead(const QString &issuerNif);
+    // The issuer's last record (empty hash: the chain has not started). `ok` is false
+    // when the table could not be read - never to be taken as "no chain".
+    AeatRecord::PreviousRecord chainHead(const QString &issuerNif, bool *ok = nullptr);
     // Starts the chain at a record generated elsewhere (the last one the gateway sent),
     // only while this chain is still empty. Returns false if it already had a head.
     bool seedChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
+    // Moves the head to `head` (the chain tip found by a sync), whatever it was.
+    bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
+
+    // Whether the chain of this issuer and environment was synced with AEAT once
+    // (the hand-over from the gateway). Until then no record may be generated.
+    bool chainSynced(const QString &issuerNif);
+    bool markChainSynced(const QString &issuerNif);
+
+    // The XML of every record of this environment, for the chain sync.
+    QStringList recordXmls();
 
     // Builds and stores the next record of the issuer's chain in one transaction:
     // reads the head, calls `build` with it, inserts the record and moves the head to

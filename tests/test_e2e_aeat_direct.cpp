@@ -151,6 +151,24 @@ private slots:
                      QStringLiteral("2"));
     }
 
+    // The gateway's PRODUCCIÓN box never sends the direct client to production: only
+    // its own explicit setting does.
+    void test_productionOnlyOnPurpose()
+    {
+        AppSettings *s = AppSettings::instance();
+        s->setVerifactuProduction(true);
+        VerifactuIntegration gatewayProduction;
+        QVERIFY(gatewayProduction.initialize(m_db));
+        QVERIFY2(gatewayProduction.directBackend()->configurationInfo().contains("PRUEBAS"),
+                 qPrintable(gatewayProduction.directBackend()->configurationInfo()));
+        s->setAeatDirectProduction(true);
+        VerifactuIntegration explicitProduction;
+        explicitProduction.initialize(m_db);
+        QVERIFY(explicitProduction.directBackend()->configurationInfo().contains("PRODUCCION"));
+        s->setAeatDirectProduction(false);
+        s->setVerifactuProduction(false);
+    }
+
     // AEAT refuses the record: the rows are ERROR with AEAT's code.
     void test_rejection()
     {

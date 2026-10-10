@@ -76,7 +76,7 @@ public:
 
     // Asks AEAT what it holds for an InvoiceID. Answers on queryFinished.
     // Read-only: it never changes anything at AEAT. Empty return = not configured.
-    QString queryInvoiceAsync(const QString &invoiceNumber);
+    QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate());
 
     bool isConfigured() const;
     QString getLastError() const { return m_lastError; }
@@ -86,6 +86,7 @@ public:
 signals:
     void requestFinished(const QString &requestId, const VerifactuResult &result);
     void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
+    void recordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result);
 
 private:
     VerifactuBackend  *m_backend = nullptr;

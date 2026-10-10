@@ -10,6 +10,9 @@
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTabWidget>
+#include <QMessageBox>
+#include <QTimer>
+#include <QApplication>
 #include <QLineEdit>
 #include <QTemporaryDir>
 
@@ -119,6 +122,32 @@ private slots:
         QCOMPARE(reopened.findChild<QComboBox *>("cbConnection")->currentData().toString(), QStringLiteral("aeat"));
         QCOMPARE(reopened.findChild<QComboBox *>("cbCertificate")->currentData().toString(), thumbprint);
         s->setVerifactuDirectAeat(false);
+    }
+
+    // Leaving the direct connection is refused while it has unsent records.
+    void test_leavingDirectRefusedWithPendingRecords()
+    {
+        AppSettings *s = AppSettings::instance();
+        s->setVerifactuDirectAeat(true);
+        {
+            SettingsDialog dlg;
+            dlg.setDirectPendingCount(3);
+            auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+            connection->setCurrentIndex(connection->findData("irenesolutions"));
+            QTimer::singleShot(0, [] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        box->accept();
+            });
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->verifactuDirectAeat());                           // not saved
+        }
+        SettingsDialog none;
+        none.setDirectPendingCount(0);
+        auto *connection = none.findChild<QComboBox *>("cbConnection");
+        connection->setCurrentIndex(connection->findData("irenesolutions"));
+        QMetaObject::invokeMethod(&none, "accept");
+        QVERIFY(!s->verifactuDirectAeat());
     }
 };
 

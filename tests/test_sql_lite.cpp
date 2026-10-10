@@ -1110,6 +1110,36 @@ private slots:
                         "FROM ingresos WHERE hash = 'ownEvent'"), QStringLiteral("|2"));
     }
 
+    // Direct AEAT client: an outcome nobody waited for settles the payment event its
+    // InvoiceID names (bare = seq 0, "-N" = seq N), never a settled row; unknown ids are -1.
+    void test_applySettledVerifactuResult()
+    {
+        insertIngreso("800", "10-10-2026", "10.00", "SI", "PENDIENTE", 0, 0);
+        insertIngreso("800", "11-10-2026", "5.00", "SI", "PENDIENTE", 0, 1);
+        insertIngreso("801", "10-10-2026", "7.00", "SI", "ENVIADA", 0, 0);
+        VerifactuResult ok;
+        ok.status = VerifactuResult::SUCCESS;
+        ok.csv = "A-SETTLED";
+        QCOMPARE(applySettledVerifactuResult(m_db, "800-1", ok), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE n_recibo='800' AND verifactu_invoice_seq=1"),
+                 QStringLiteral("ENVIADA|A-SETTLED"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='800' AND verifactu_invoice_seq=0"),
+                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(applySettledVerifactuResult(m_db, "801", ok), 0);           // settled: untouched
+        QCOMPARE(applySettledVerifactuResult(m_db, "999", ok), -1);
+        QCOMPARE(applySettledVerifactuResult(m_db, "800-7", ok), -1);
+    }
+
+    // Unsent direct-client records; 0 when the direct connection was never used (no table).
+    void test_aeatPendingRecordCount()
+    {
+        QCOMPARE(aeatPendingRecordCount(m_db), 0);
+        exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY, state TEXT)");
+        exec("INSERT INTO aeat_records (state) VALUES ('PENDIENTE'), ('ACEPTADO'), ('PENDIENTE')");
+        QCOMPARE(aeatPendingRecordCount(m_db), 2);
+        exec("DROP TABLE aeat_records");
+    }
+
     // Open amounts an older Recogida m2 edit stored with three or four decimals are
     // rounded to cents, the way they will be charged; a paid amount stays as stored.
     void test_migrateDatabase_roundsOpenAmountsToCents()

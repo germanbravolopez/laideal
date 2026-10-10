@@ -140,6 +140,42 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "1").state, AeatStore::kAccepted);
     }
 
+    // An unreadable chain is an error, never "no chain": nothing is appended.
+    void test_unreadableChainRefused()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(m_db.open());
+        QSqlQuery(m_db).exec("ALTER TABLE aeat_chain RENAME TO aeat_chain_gone");
+        bool ok = true;
+        store.chainHead("89890001K", &ok);
+        QVERIFY(!ok);
+        bool built = false;
+        const AeatStore::Record r = store.append(AeatStore::Kind::Registration, "89890001K",
+            [&](const AeatRecord::PreviousRecord &p) { built = true; return builder("2", "BBB")(p); });
+        QVERIFY(!r.isValid());
+        QVERIFY(!built);
+        m_db.close();
+    }
+
+    // The head can be moved (a sync); the sync flag and the records' XML are kept per environment.
+    void test_moveHeadAndSyncFlag()
+    {
+        AeatStore store(m_db, "pruebas"), other(m_db, "produccion");
+        QVERIFY(store.ensureSchema());
+        store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(store.setChainHead("89890001K", { { "89890001K", "9", QDate(2026, 10, 11) }, "ZZZ", "2026-10-11T10:00:00+02:00" }));
+        const AeatRecord::PreviousRecord head = store.chainHead("89890001K");
+        QCOMPARE(head.hash, QStringLiteral("ZZZ"));
+        QCOMPARE(head.generatedAt, QStringLiteral("2026-10-11T10:00:00+02:00"));
+        QVERIFY(!store.chainSynced("89890001K"));
+        QVERIFY(store.markChainSynced("89890001K"));
+        QVERIFY(store.chainSynced("89890001K") && !other.chainSynced("89890001K"));
+        QCOMPARE(store.recordXmls(), QStringList{ "<sf:RegistroAlta>1</sf:RegistroAlta>" });
+        QVERIFY(other.recordXmls().isEmpty());
+    }
+
     // An open connection stays open (the app's models read through it); a closed one is closed again.
     void test_connectionStateKept()
     {

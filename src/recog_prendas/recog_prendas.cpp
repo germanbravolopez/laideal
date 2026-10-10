@@ -1036,7 +1036,7 @@ void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
         return;
     }
 
-    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId);
+    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId, QDate::fromString(ev.fechaPago, "dd-MM-yyyy"));
     if (reqId.isEmpty()) return;
 
     statusBar()->showMessage(tr("Consultando %1 en AEAT...").arg(invoiceId));

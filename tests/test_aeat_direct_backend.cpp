@@ -71,6 +71,15 @@ private:
         return out;
     }
 
+    // Syncs the backend's chain (the first sync queries AEAT), so that a reply scripted
+    // afterwards goes to the submission.
+    static bool sync(AeatDirectBackend &backend)
+    {
+        bool done = false, ok = false;
+        backend.syncChain([&](bool o, const QString &) { done = true; ok = o; });
+        return QTest::qWaitFor([&done]() { return done; }, 30000) && ok;
+    }
+
 private slots:
     void initTestCase()
     {
@@ -82,6 +91,7 @@ private slots:
         m_server = new FakeAeatServer(this);
         QVERIFY(m_server->start());
         AeatDirectBackend::setEndpointOverride(m_server->url());
+        AeatDirectBackend::setRetryDelaySeconds(3600);     // no automatic retry unless a test asks
         m_db = QSqlDatabase::addDatabase("QSQLITE", "aeat_backend_test");
         m_db.setDatabaseName(m_dir.filePath(QString("backend_%1.db").arg(++m_dbCounter)));
     }
@@ -150,8 +160,9 @@ private slots:
     // sends the same record, which AEAT reports as a duplicate of an accepted one.
     void test_lostReplyResendsSameRecord()
     {
-        m_server->enqueue({ QByteArray(), 200, 0, false, true });
         AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ QByteArray(), 200, 0, false, true });
         const VerifactuResult lost = waitFor(backend, backend.submitInvoiceAsync(ticket("30837", 24.79)));
         QCOMPARE(lost.status, VerifactuResult::NETWORK_ERROR);
         AeatStore store(m_db, "pruebas");
@@ -220,8 +231,9 @@ private slots:
     // A fault from AEAT's side leaves the record pending; one about the request rejects it.
     void test_faults()
     {
-        m_server->enqueue({ FakeAeatServer::faultReply("env:Server", "Servicio no disponible"), 500 });
         AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ FakeAeatServer::faultReply("env:Server", "Servicio no disponible"), 500 });
         const VerifactuResult server = waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10)));
         QCOMPARE(server.status, VerifactuResult::NETWORK_ERROR);
         AeatStore store(m_db, "pruebas");
@@ -238,9 +250,10 @@ private slots:
     // Records left unsent when the app closed are sent at the next start, unasked.
     void test_outboxSentAtNextStart()
     {
-        m_server->enqueue({ QByteArray(), 200, 0, true });
         {
             AeatDirectBackend backend(config(), m_db);
+            QVERIFY(sync(backend));
+            m_server->enqueue({ QByteArray(), 200, 0, true });
             QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("30837", 24.79))).status,
                      VerifactuResult::NETWORK_ERROR);
         }
@@ -320,7 +333,7 @@ private slots:
         message.clear();
         backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
         QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
-        QVERIFY2(ok && message.contains("ya continúa"), qPrintable(message));
+        QVERIFY2(ok && message.contains("tras el registro 3"), qPrintable(message));
     }
 
     // A cancellation the gateway generated after the newest registration is the head
@@ -427,16 +440,164 @@ private slots:
         QCOMPARE(r.taxLines[0].rate, 21.0);
     }
 
-    // Without the test server, the backend needs a readable certificate.
-    void test_certificateRequired()
+    // An unusable certificate stops the sending, not the records: before the first
+    // sync nothing can be generated (the chain needs AEAT), afterwards records are
+    // generated and kept pending.
+    void test_certificateUnusable()
     {
-        AeatDirectBackend::setEndpointOverride(QString());
+        AeatDirectBackend::setEndpointOverride("https://127.0.0.1:9/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
         AeatDirectBackend::Config c = config();
         c.certificatePath = m_dir.filePath("missing.p12");
-        AeatDirectBackend backend(c, m_db);
-        QVERIFY(!backend.isConfigured());
-        QVERIFY(backend.configurationError().contains("certificado"));
-        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).status, VerifactuResult::INVALID_CONFIG);
+        {
+            AeatDirectBackend fresh(c, m_db);
+            QVERIFY(fresh.isConfigured());
+            QVERIFY(fresh.sendingError().contains("certificado"));
+            const VerifactuResult held = waitFor(fresh, fresh.submitInvoiceAsync(ticket("1", 10)));
+            QCOMPARE(held.status, VerifactuResult::NETWORK_ERROR);
+            QVERIFY2(held.errorDescription.contains("cadena"), qPrintable(held.errorDescription));
+        }
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(!store.latest(AeatStore::Kind::Registration, "1").isValid());     // nothing generated
+        QVERIFY(store.markChainSynced("89890001K"));
+        AeatDirectBackend synced(c, m_db);
+        const VerifactuResult kept = waitFor(synced, synced.submitInvoiceAsync(ticket("1", 10)));
+        QCOMPARE(kept.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY2(kept.errorDescription.contains("pendiente de envío"), qPrintable(kept.errorDescription));
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kPending);
+    }
+
+    // Requests made before the first sync wait for it: the first record follows AEAT's tip.
+    void test_heldUntilFirstSync()
+    {
+        QString tipHash;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
+            AeatDirectBackend gateway(config(), other);
+            tipHash = waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).rawHash;
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(!backend.chainReady());
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20)));
+        QVERIFY2(r.isSuccess(), qPrintable(r.errorDescription));
+        QVERIFY(backend.chainReady());
+        QCOMPARE(m_server->sentRecords().last().previousHash, tipHash);
+        QCOMPARE(m_server->requests().first().kind, QStringLiteral("Consulta"));   // asked before generating
+    }
+
+    // Records the gateway generated while the connection was switched away are followed
+    // at the next start (offline, from the stored XML).
+    void test_resyncAfterGatewayRecords()
+    {
+        AeatDirectBackend first(config(), m_db);
+        const VerifactuResult ours = waitFor(first, first.submitInvoiceAsync(ticket("1", 10)));
+        QVERIFY(ours.isSuccess());
+
+        AeatRecord::Registration gateway = AeatDirectBackend::registrationFrom(ticket("2", 20),
+            { { "89890001K", "1", QDate(2026, 10, 10) }, ours.rawHash }, QDateTime::currentDateTime().addSecs(30));
+        const QString gatewayXml = AeatRecord::registrationXml(gateway, config().system);
+
+        AeatDirectBackend next(config(), m_db);
+        next.setGatewayRecordXmls({ gatewayXml });
+        const int consultasBefore = m_server->requests().size();
+        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, AeatRecord::hashOf(gateway));
+        int consultas = 0;
+        for (int i = consultasBefore; i < m_server->requests().size(); ++i)
+            consultas += m_server->requests()[i].kind == QLatin1String("Consulta");
+        QCOMPARE(consultas, 0);                                            // offline after the first sync
+    }
+
+    // AEAT already holds another system's record for the invoice: accepted, without
+    // claiming our record; answered from the store afterwards.
+    void test_duplicateOfAnotherSystem()
+    {
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
+            AeatDirectBackend gateway(config(), other);
+            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("500", 10))).isSuccess());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        AeatDirectBackend backend(config(), m_db);
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("500", 10)));
+        QVERIFY2(r.isSuccess(), qPrintable(r.errorDescription));
+        QVERIFY(r.rawXml.isEmpty() && r.rawHash.isEmpty());
+        QVERIFY(r.csv.startsWith("IdPeticion "));
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "500").state, AeatStore::kDuplicate);
+        const int sends = m_server->submissions().size();
+        const VerifactuResult again = waitFor(backend, backend.submitInvoiceAsync(ticket("500", 10)));
+        QVERIFY(again.isSuccess() && again.rawXml.isEmpty());
+        QCOMPARE(m_server->submissions().size(), sends);
+    }
+
+    // AEAT holds the invoice as cancelled: reported, never registered again.
+    void test_duplicateOfCancelledInvoice()
+    {
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
+            AeatDirectBackend gateway(config(), other);
+            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("600", 10))).isSuccess());
+            QVERIFY(waitFor(gateway, gateway.cancelInvoiceAsync("600", QDate(2026, 10, 10))).isSuccess());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        AeatDirectBackend backend(config(), m_db);
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("600", 10)));
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("anulada"), qPrintable(r.errorDescription));
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "600").state, AeatStore::kCancelledAtAeat);
+        const int sends = m_server->submissions().size();
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("600", 10))).status, VerifactuResult::ERROR);
+        QCOMPARE(m_server->submissions().size(), sends);                  // no new record, no Subsanacion
+    }
+
+    // After a failed send the records are retried on their own; an outcome nobody
+    // waited for is reported on recordSettled.
+    void test_automaticRetry()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        QSignalSpy settled(&backend, &VerifactuBackend::recordSettled);
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("700", 10))).status, VerifactuResult::NETWORK_ERROR);
+        AeatStore store(m_db, "pruebas");
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "700").state, AeatStore::kAccepted, 10000);
+        QTRY_COMPARE(settled.size(), 1);
+        QCOMPARE(settled[0][0].toString(), QStringLiteral("700"));
+        QVERIFY(!settled[0][1].toBool());
+        QVERIFY(settled[0][2].value<VerifactuResult>().isSuccess());
+    }
+
+    // AEAT returns records without their hash: the sync fails instead of starting a new chain.
+    void test_syncRefusesRecordsWithoutHash()
+    {
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
+            AeatDirectBackend gateway(config(), other);
+            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        m_server->setQueryWithoutHashes(true);
+        AeatDirectBackend backend(config(), m_db);
+        bool done = false, ok = true;
+        QString message;
+        backend.syncChain([&](bool o, const QString &m) { done = true; ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY2(!ok && message.contains("sin su huella"), qPrintable(message));
+        QVERIFY(!backend.chainReady());
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20)));
+        QCOMPARE(r.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY(!AeatStore(m_db, "pruebas").latest(AeatStore::Kind::Registration, "2").isValid());
     }
 
     // The client certificate, through Windows' crypto API: a .pfx with its password

@@ -26,7 +26,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 
     if (settings->verifactuDirectAeat()) {
         AeatDirectBackend::Config c;
-        c.testEnvironment = !settings->verifactuProduction();
+        // Pre-production unless explicitly enabled on its own (never the gateway's PRODUCCIÓN box).
+        c.testEnvironment = !settings->aeatDirectProduction();
         c.issuerNif  = m_emitterNif;
         c.issuerName = m_emitterName;
         // The producer is the one named in the declaración responsable (Acerca de Verifactu).
@@ -51,6 +52,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
             this, &VerifactuIntegration::requestFinished);
     connect(m_backend, &VerifactuBackend::queryFinished,
             this, &VerifactuIntegration::queryFinished);
+    connect(m_backend, &VerifactuBackend::recordSettled,
+            this, &VerifactuIntegration::recordSettled);
 
     qDebug().noquote() << m_backend->configurationInfo();
     if (!m_backend->isConfigured()) {
@@ -190,14 +193,14 @@ QString VerifactuIntegration::generateQRAsync(
     return m_backend->generateQRAsync(invoice);
 }
 
-QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber)
+QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
         qWarning() << m_lastError;
         return QString();
     }
-    return m_backend->queryInvoiceAsync(invoiceNumber);
+    return m_backend->queryInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
 bool VerifactuIntegration::isConfigured() const

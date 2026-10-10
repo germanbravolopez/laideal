@@ -417,6 +417,7 @@ void MainWindow::mainwindowInitialSettings()
         for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
             certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, c.expiry.toString("dd-MM-yyyy")), c.thumbprint);
         dlg.setCertificateChoices(certificates);
+        dlg.setDirectPendingCount(aeatPendingRecordCount(db));
         connect(&dlg, &SettingsDialog::aeatSelfTestRequested, &dlg,
                 [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
                              const QString &file, const QString &password) {
@@ -487,8 +488,25 @@ void MainWindow::initializeVerifactu()
 
     connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
             this, &MainWindow::onVerifactuRequestFinished);
-    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured())
+    // Direct client: outcomes nobody waited for (records sent at start or retried on
+    // their own) still settle their rows.
+    connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this,
+            [this](const QString &invoiceId, bool cancellation, const VerifactuResult &result) {
+        if (cancellation) {
+            qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
+                       << (result.isSuccess() ? "accepted" : result.errorDescription);
+            return;
+        }
+        const int rows = applySettledVerifactuResult(db, invoiceId, result);
+        qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
+    });
+    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
+        if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
+            m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
+                                                 "pueden enviar: %1")
+                                                  .arg(m_verifactuIntegration->directBackend()->sendingError().toHtmlEscaped())));
         continueDirectChain();
+    }
 }
 
 void MainWindow::continueDirectChain()

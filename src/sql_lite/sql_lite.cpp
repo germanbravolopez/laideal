@@ -972,6 +972,53 @@ QStringList verifactuStoredRecordXmls(QSqlDatabase &db)
     return out;
 }
 
+QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq)
+{
+    if (dbNotConfigured(db, __func__)) return {};
+    QString xml;
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT verifactu_xml FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :s "
+              "AND pagado = 'SI' AND COALESCE(verifactu_xml, '') != '' LIMIT 1");
+    q.bindValue(":n", nRecibo);
+    q.bindValue(":s", seq);
+    if (q.exec() && q.next())
+        xml = q.value(0).toString();
+    db.close();
+    return xml;
+}
+
+int aeatPendingRecordCount(QSqlDatabase &db)
+{
+    if (dbNotConfigured(db, __func__)) return 0;
+    int count = 0;
+    db.open();
+    QSqlQuery q(db);
+    // The table is the direct client's; a failed query just means it was never used.
+    if (q.exec("SELECT COUNT(*) FROM aeat_records WHERE state = 'PENDIENTE'") && q.next())
+        count = q.value(0).toInt();
+    db.close();
+    return count;
+}
+
+int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result)
+{
+    QString nRecibo = invoiceId.trimmed();
+    int seq = 0;
+    const int dash = nRecibo.lastIndexOf(QLatin1Char('-'));
+    if (dash > 0) {
+        bool numeric = false;
+        const int parsed = nRecibo.mid(dash + 1).toInt(&numeric);
+        if (numeric) {
+            seq = parsed;
+            nRecibo = nRecibo.left(dash);
+        }
+    }
+    if (verifactuEventFor(db, nRecibo, seq).nRecibo.isEmpty())
+        return -1;
+    return updateTicketVerifactuFields(db, nRecibo, result, seq);
+}
+
 QStringList readClientPhones(QSqlDatabase &db, const QString &client)
 {
     QStringList phones = { QString(), QString() }; // {tel_fijo, movil}

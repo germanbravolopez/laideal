@@ -294,6 +294,15 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
 
 void SettingsDialog::accept()
 {
+    // The gateway keeps its own chain and would neither send nor follow these records.
+    const bool leavingDirect = AppSettings::instance()->verifactuDirectAeat()
+                               && m_vConnection->currentData().toString() != QLatin1String("aeat");
+    if (leavingDirect && m_directPending > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 registro(s) de la conexión directa sin confirmar por la AEAT. "
+                                "Espere a que se envíen antes de volver a IreneSolutions.").arg(m_directPending));
+        return;
+    }
     AppSettings *s = AppSettings::instance();
 
     s->setLanguage(m_language->currentData().toString());

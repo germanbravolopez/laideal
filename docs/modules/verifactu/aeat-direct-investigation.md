@@ -123,6 +123,10 @@ Everything of phases 1-3 that can be done without the owner's certificate and wi
 
 Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_store`, `aeat_qr`, `aeat_direct_backend`, `aeat_xsd`, `e2e_aeat_direct`) plus a settings-dialog case; 25 in all, green locally and in CI. The key rules were mutation-checked (removing each one fails its test).
 
+### Changes after the compliance review
+
+The `verifactu-compliance-auditor` reviewed the branch and found nine should-fix points, all fixed and each guarded by a test that fails without the fix: no record is generated before the chain is synced with AEAT the first time (requests wait); later starts re-sync offline, so records the gateway generated while switched away are followed; an unreadable chain is an error; records are generated even when the certificate is unusable (only the sending waits); the direct client uses AEAT pre-production unless its own explicit setting says otherwise (the gateway's PRODUCCIÓN box no longer decides); switching back to the gateway is refused while direct records are unsent; a duplicate of another system's record is accepted without claiming our record, a duplicate of a cancelled invoice is reported and never re-registered; failed sends are retried on their own and outcomes nobody waited for settle their rows; the first sync always queries this month and the previous one and fails when AEAT returns records without their hash; Rectificar factura takes the corrected invoice from its stored record and only allows R5 on the direct connection; "Consultar en AEAT" passes the invoice date; the QR is drawn at exactly level M.
+
 ### Findings while building
 
 - **Qt's Schannel backend cannot read PKCS#12** (`The backend "schannel" cannot read PKCS12 format`). The release ships no OpenSSL, so the certificate is handled with the Windows crypto API (`PFXImportCertStore` in memory, or the personal store by thumbprint) and the requests go through **WinHTTP**, which presents it in the TLS handshake. A certificate already installed in Windows (as the FNMT one usually is, for the AEAT website) can be used without storing any password. *Not yet proven against AEAT*: the TLS handshake with a real certificate is the first thing the PoC checks.
@@ -132,10 +136,12 @@ Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_s
 
 ### To confirm in the proof of concept
 
+0. **Whether a new system should continue IreneSolutions' chain at all.** The whole hand-over assumes one chain per issuer across systems. If AEAT expects each system / installation (a different `SistemaInformatico`) to start its own chain with `PrimerRegistro`, the sync must change. This is the first question for AEAT. Related: switching back to the gateway after direct records forks IreneSolutions' chain (it keeps its own state), so going back should be treated as exceptional.
 1. The WinHTTP + certificate handshake with `prewww1.aeat.es`.
 2. That `Subsanacion = S` + `RechazoPrevio = S` is the right flag pair to resend a corrected record after a rejection (the spec allows `S` and `X`).
 3. The real `TiempoEsperaEnvio` and that a query is not subject to it.
-4. That the chain hand-over from the gateway is accepted (the first direct record chains to a record IreneSolutions generated).
+4. That the chain hand-over from the gateway is accepted (the first direct record chains to a record IreneSolutions generated), and that the query returns `Huella`, `Encadenamiento` and `IdPeticion` for records IreneSolutions submitted.
+6. Whether an unchanged record resent days later is accepted (any limit on the age of `FechaHoraHusoGenRegistro`) and whether `RemisionVoluntaria / Incidencia` is expected after an outage; what `RechazoPrevio = S` means on a `RegistroAnulacion`; AEAT's fault codes.
 5. The text of the declaración responsable once our system builds the records itself.
 
 ### How to run the proof of concept

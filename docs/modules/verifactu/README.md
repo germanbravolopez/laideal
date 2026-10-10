@@ -165,7 +165,15 @@ The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CS
 | `aeatdirectbackend.*` | Builds, chains, stores and sends the records; flow control (`TiempoEsperaEnvio`); resend of a stored record; replacement of a rejected one; `continueChainFromAeat` (hand-over from the gateway) |
 | `aeatselftest.*` | The proof of concept run from Configuración, always against AEAT pre-production |
 
-Behaviour the app relies on: a submit or cancel stores the record at once and answers when AEAT replies; a retry of the same invoice resends the stored record unchanged (an accepted one answers from the store, AEAT's duplicate reply to a lost one is adopted as accepted); records wait for AEAT's `TiempoEsperaEnvio` and go together; records left unsent are sent at the next start; the QR is computed locally. The `ingresos.verifactu_*` columns are filled exactly as with the gateway (`verifactu_xml` / `verifactu_hash` = the record the app built), and the estados and every caller are unchanged. When the app starts on the direct connection, `MainWindow::continueDirectChain` chains the first direct record after the issuer's newest record at AEAT (or a newer cancellation stored by the gateway, `sql_lite::verifactuStoredRecordXmls`).
+Tables of the direct client (created by `AeatStore`, in the shop DB, covered by the backups):
+
+| Table | Content |
+|---|---|
+| `aeat_chain` | Head of each issuer's chain per environment (`pruebas` / `produccion`): invoice, date, hash, generation time |
+| `aeat_chain_sync` | When each issuer's chain was first synced with AEAT; until then no record is generated |
+| `aeat_records` | Every generated record: kind, invoice, total, hash, exact XML, outcome (`PENDIENTE`, `ACEPTADO`, `RECHAZADO`, `DUPLICADO` = AEAT holds another system's record, `ANULADA_EN_AEAT`), CSV, error, attempts |
+
+Behaviour the app relies on: the first time the direct connection is used for an issuer (per environment) its chain is synced with AEAT - the first record follows the issuer's newest record (AEAT's registrations of the current and previous month and further back while none is found, the gateway's stored records, our own) - and requests wait for it; later starts re-sync offline, which also follows records the gateway generated while the connection was switched away (switching back to the gateway, though, is refused while direct records are unsent, and the gateway keeps its own chain). A submit or cancel stores the record at once and answers when AEAT replies; a retry of the same invoice resends the stored record unchanged (an accepted one answers from the store, AEAT's duplicate reply to a lost one is adopted as accepted); records wait for AEAT's `TiempoEsperaEnvio` and go together; records left unsent are sent at the next start, and after a failed send they are retried on their own; an outcome nobody waited for settles its rows (`recordSettled` -> `sql_lite::applySettledVerifactuResult`); an unusable certificate stops the sending, not the records; a duplicate of another system's record is accepted without claiming our XML, a duplicate of a cancelled invoice is reported and never registered again; the QR is computed locally at exactly level M. The `ingresos.verifactu_*` columns are filled exactly as with the gateway (`verifactu_xml` / `verifactu_hash` = the record the app built), and the estados and every caller are unchanged. When the app starts on the direct connection, `MainWindow::continueDirectChain` chains the first direct record after the issuer's newest record at AEAT (or a newer cancellation stored by the gateway, `sql_lite::verifactuStoredRecordXmls`).
 
 ## Configuration
 
@@ -176,7 +184,12 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | `verifactu.nif` | Emitter NIF |
 | `verifactu.name` | Emitter name (`CompanyName` sent to AEAT) |
 | `verifactu.serviceKey` | API ServiceKey — obtain at https://facturae.irenesolutions.com/verifactu/go |
-| `verifactu.production` | `false` = TESTING, `true` = PRODUCTION |
+| `verifactu.production` | `false` = TESTING, `true` = PRODUCTION (the gateway's environment) |
+| `verifactu.connection` | `irenesolutions` (default) or `aeat` - the direct client (research branch) |
+| `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Settings file only - never the PRODUCCIÓN box |
+| `verifactu.aeat_certificate_thumbprint` | Direct client: the owner's certificate in the Windows personal store (SHA-1 thumbprint) |
+| `verifactu.aeat_certificate_file` / `aeat_certificate_password` | Direct client, else: a .pfx file and its password (DPAPI-encrypted) |
+| `verifactu.aeat_installation` | `NumeroInstalacion` of the direct client's records, created once |
 
 `VerifactuIntegration::loadEmitterConfiguration()` reads these on `initialize()` and pushes them into `VerifactuConfig`. `initialize()` is non-fatal — it only warns if NIF or name is empty, and the rest of the app remains usable (tickets save without an AEAT submission, with `verifactu_estado = "PENDIENTE"`).
 

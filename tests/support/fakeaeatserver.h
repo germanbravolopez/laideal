@@ -57,6 +57,8 @@ public:
     QString url() const;
 
     void setWaitSeconds(int seconds) { m_waitSeconds = seconds; }
+    // Query replies without the records' Huella / chain block (both optional in the schema).
+    void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
     // The next request gets `reply` instead of the default answer.
@@ -83,6 +85,7 @@ private:
     QHash<QString, QString> m_registeredRequestId;
     QHash<QString, QPair<QString, QString>> m_rejectNext;
     int m_waitSeconds = 0;
+    bool m_queryWithoutHashes = false;
     int m_counter = 0;
 };
 

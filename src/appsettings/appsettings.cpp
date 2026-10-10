@@ -366,6 +366,8 @@ void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environ
 
 bool    AppSettings::verifactuDirectAeat() const { return str({"verifactu", "connection"}) == QLatin1String("aeat"); }
 void    AppSettings::setVerifactuDirectAeat(bool v) { setStr({"verifactu", "connection"}, v ? "aeat" : "irenesolutions"); }
+bool    AppSettings::aeatDirectProduction() const { return bln({"verifactu", "aeat_direct_production"}, false); }
+void    AppSettings::setAeatDirectProduction(bool v) { setBln({"verifactu", "aeat_direct_production"}, v); }
 QString AppSettings::aeatCertificateThumbprint() const { return str({"verifactu", "aeat_certificate_thumbprint"}); }
 void    AppSettings::setAeatCertificateThumbprint(const QString &v) { setStr({"verifactu", "aeat_certificate_thumbprint"}, v); }
 QString AppSettings::aeatCertificateFile() const { return str({"verifactu", "aeat_certificate_file"}); }

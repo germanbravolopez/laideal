@@ -198,17 +198,19 @@ QByteArray FakeAeatServer::answer(const Request &request)
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>89890001K</tik:IDEmisorFactura>"
                 "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
                 "<tikLRRC:DatosRegistroFacturacion><tikLRRC:ImporteTotal>%3</tikLRRC:ImporteTotal>%8"
-                "<tikLRRC:FechaHoraHusoGenRegistro>%7</tikLRRC:FechaHoraHusoGenRegistro><tikLRRC:TipoHuella>01</tikLRRC:TipoHuella>"
-                "<tikLRRC:Huella>%4</tikLRRC:Huella>"
+                "<tikLRRC:FechaHoraHusoGenRegistro>%7</tikLRRC:FechaHoraHusoGenRegistro>%4"
                 "</tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>89890001K</tik:NIFPresentador>"
                 "<tik:TimestampPresentacion>2026-10-10T10:00:05+02:00</tik:TimestampPresentacion><tik:IdPeticion>%5</tik:IdPeticion>"
                 "</tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-10T10:00:05+02:00"
                 "</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>%6</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro>"
                 "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
-                .arg(h.invoiceNumber, h.issueDate, h.total, h.hash,
+                .arg(h.invoiceNumber, h.issueDate, h.total,
+                     m_queryWithoutHashes ? QString()
+                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>").arg(h.hash),
                      m_registeredRequestId.value(QStringLiteral("Alta:") + h.invoiceNumber),
                      cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), h.generatedAt,
-                     h.previousHash.isEmpty()
+                     m_queryWithoutHashes ? QString()
+                     : h.previousHash.isEmpty()
                          ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
                          : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"
                                           "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash));
@@ -239,8 +241,12 @@ QByteArray FakeAeatServer::answer(const Request &request)
             extra = QStringLiteral("<tikR:CodigoErrorRegistro>3000</tikR:CodigoErrorRegistro>"
                                    "<tikR:DescripcionErrorRegistro>Registro de facturación duplicado.</tikR:DescripcionErrorRegistro>"
                                    "<tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>%1</tik:IdPeticionRegistroDuplicado>"
-                                   "<tik:EstadoRegistroDuplicado>Correcta</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado>")
-                        .arg(m_registeredRequestId.value(key));
+                                   "<tik:EstadoRegistroDuplicado>%2</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado>")
+                        .arg(m_registeredRequestId.value(key),
+                             // An alta of an invoice AEAT holds as cancelled.
+                             record.operation == QLatin1String("Alta")
+                                     && m_registered.contains(QStringLiteral("Anulacion:") + record.invoiceNumber)
+                                 ? QStringLiteral("Anulada") : QStringLiteral("Correcta"));
         } else {
             m_registered.insert(key, record);
             m_registeredRequestId.insert(key, requestId);

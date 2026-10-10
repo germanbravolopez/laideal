@@ -37,6 +37,7 @@ struct InvoiceRef {
 struct PreviousRecord {
     InvoiceRef invoice;
     QString    hash;
+    QString    generatedAt;    // its FechaHoraHusoGenRegistro when known (not part of the XML)
     bool isFirst() const { return hash.isEmpty(); }
 };
 

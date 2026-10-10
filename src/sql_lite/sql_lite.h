@@ -49,6 +49,16 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 // Every record XML the gateway stored (verifactu_xml, verifactu_cancel_xml): the direct
 // AEAT client looks among them for cancellations newer than AEAT's newest registration.
 QStringList verifactuStoredRecordXmls(QSqlDatabase &db);
+// The stored AEAT record XML of one payment event (its paid rows), or empty.
+QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq);
+// Records the direct AEAT client generated and has not had confirmed (table
+// aeat_records, which only exists once the direct connection was used): 0 without it.
+int aeatPendingRecordCount(QSqlDatabase &db);
+// An AEAT outcome nobody waited for (direct client, recordSettled): applied to the
+// paid rows of the payment event `invoiceId` names ("31277" or "31277-1") through
+// updateTicketVerifactuFields, which never rewrites a settled row. Returns the rows
+// updated, -1 when the id names no event.
+int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

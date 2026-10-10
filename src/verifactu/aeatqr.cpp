@@ -12,7 +12,10 @@ const int kQuietZone = 4;
 
 qrcodegen::QrCode encode(const QString &text)
 {
-    return qrcodegen::QrCode::encodeText(text.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+    // Exactly level M, as the AEAT QR specification asks (no automatic boost).
+    const std::vector<qrcodegen::QrSegment> segments = qrcodegen::QrSegment::makeSegments(text.toUtf8().constData());
+    return qrcodegen::QrCode::encodeSegments(segments, qrcodegen::QrCode::Ecc::MEDIUM, qrcodegen::QrCode::MIN_VERSION,
+                                             qrcodegen::QrCode::MAX_VERSION, -1, false);
 }
 
 } // namespace

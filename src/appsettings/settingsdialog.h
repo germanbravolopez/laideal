@@ -21,6 +21,9 @@ public:
     // The owner's certificates in the Windows store, as (label, thumbprint), for the
     // direct AEAT connection. Given by MainWindow: this module does not read the store.
     void setCertificateChoices(const QList<QPair<QString, QString>> &choices);
+    // Records the direct connection generated and AEAT has not confirmed: while there
+    // are any, the connection cannot be switched back to the gateway.
+    void setDirectPendingCount(int count) { m_directPending = count; }
 
 signals:
     // Emitted when the user clicks "Probar conexión" in the Verifactu tab.
@@ -70,6 +73,7 @@ private:
     QLineEdit *m_vCertPassword;
     QWidget   *m_vCertFileRow;
     QWidget   *m_vDirectGroup;
+    int        m_directPending = 0;
 
     QString selectedThumbprint() const;
     void updateDirectRows();

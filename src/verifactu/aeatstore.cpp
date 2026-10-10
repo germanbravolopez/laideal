@@ -1,5 +1,7 @@
 #include "aeatstore.h"
 
+#include "aeathash.h"
+
 #include <QDebug>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -8,6 +10,8 @@
 const QString AeatStore::kPending  = QStringLiteral("PENDIENTE");
 const QString AeatStore::kAccepted = QStringLiteral("ACEPTADO");
 const QString AeatStore::kRejected = QStringLiteral("RECHAZADO");
+const QString AeatStore::kDuplicate = QStringLiteral("DUPLICADO");
+const QString AeatStore::kCancelledAtAeat = QStringLiteral("ANULADA_EN_AEAT");
 
 namespace {
 
@@ -60,7 +64,8 @@ bool AeatStore::ensureSchema()
     const bool ok =
         q.exec("CREATE TABLE IF NOT EXISTS aeat_chain ("
                " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, invoice_number TEXT NOT NULL,"
-               " issue_date TEXT NOT NULL, hash TEXT NOT NULL, PRIMARY KEY (environment, issuer_nif))")
+               " issue_date TEXT NOT NULL, hash TEXT NOT NULL, generated_at TEXT NOT NULL DEFAULT '',"
+               " PRIMARY KEY (environment, issuer_nif))")
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_records ("
                   " id INTEGER PRIMARY KEY AUTOINCREMENT, environment TEXT NOT NULL, kind TEXT NOT NULL,"
                   " issuer_nif TEXT NOT NULL, invoice_number TEXT NOT NULL, issue_date TEXT NOT NULL,"
@@ -68,7 +73,10 @@ bool AeatStore::ensureSchema()
                   " state TEXT NOT NULL, csv TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT '',"
                   " error_description TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0,"
                   " last_attempt TEXT NOT NULL DEFAULT '')")
-        && q.exec("CREATE INDEX IF NOT EXISTS aeat_records_invoice ON aeat_records (environment, invoice_number, kind)");
+        && q.exec("CREATE INDEX IF NOT EXISTS aeat_records_invoice ON aeat_records (environment, invoice_number, kind)")
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_sync ("
+                  " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, synced_at TEXT NOT NULL,"
+                  " PRIMARY KEY (environment, issuer_nif))");
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
@@ -77,23 +85,108 @@ bool AeatStore::ensureSchema()
     return ok;
 }
 
-AeatRecord::PreviousRecord AeatStore::chainHead(const QString &issuerNif)
+AeatRecord::PreviousRecord AeatStore::chainHead(const QString &issuerNif, bool *ok)
 {
     AeatRecord::PreviousRecord head;
+    if (ok)
+        *ok = false;
     bool wasOpen = false;
     if (!open(&wasOpen))
         return head;
     QSqlQuery q(m_db);
-    q.prepare("SELECT invoice_number, issue_date, hash FROM aeat_chain WHERE environment = :e AND issuer_nif = :n");
+    q.prepare("SELECT invoice_number, issue_date, hash, generated_at FROM aeat_chain WHERE environment = :e AND issuer_nif = :n");
     q.bindValue(":e", m_environment);
     q.bindValue(":n", issuerNif);
-    if (q.exec() && q.next()) {
+    const bool read = q.exec();
+    if (read && q.next()) {
         head.invoice = { issuerNif, q.value(0).toString(), QDate::fromString(q.value(1).toString(), kDateFormat) };
         head.hash = q.value(2).toString();
+        head.generatedAt = q.value(3).toString();
     }
+    if (!read) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::chainHead: cannot read the chain -" << m_lastError;
+    }
+    if (ok)
+        *ok = read;
     q.finish();
     close(wasOpen);
     return head;
+}
+
+bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    if (head.isFirst()) {
+        q.prepare("DELETE FROM aeat_chain WHERE environment = :e AND issuer_nif = :n");
+    } else {
+        q.prepare("INSERT OR REPLACE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
+                  "VALUES (:e, :n, :num, :d, :h, :g)");
+        q.bindValue(":num", head.invoice.invoiceNumber);
+        q.bindValue(":d", head.invoice.issueDate.toString(kDateFormat));
+        q.bindValue(":h", head.hash);
+        q.bindValue(":g", text(head.generatedAt));
+    }
+    q.bindValue(":e", m_environment);
+    q.bindValue(":n", issuerNif);
+    const bool ok = q.exec();
+    if (ok)
+        qDebug() << "AeatStore: chain of" << issuerNif << "(" << m_environment << ") now continues after"
+                 << head.invoice.invoiceNumber << head.hash;
+    else
+        qWarning() << "AeatStore::setChainHead failed -" << q.lastError().text();
+    close(wasOpen);
+    return ok;
+}
+
+bool AeatStore::chainSynced(const QString &issuerNif)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT 1 FROM aeat_chain_sync WHERE environment = :e AND issuer_nif = :n");
+    q.bindValue(":e", m_environment);
+    q.bindValue(":n", issuerNif);
+    const bool synced = q.exec() && q.next();
+    q.finish();
+    close(wasOpen);
+    return synced;
+}
+
+bool AeatStore::markChainSynced(const QString &issuerNif)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("INSERT OR REPLACE INTO aeat_chain_sync (environment, issuer_nif, synced_at) VALUES (:e, :n, :t)");
+    q.bindValue(":e", m_environment);
+    q.bindValue(":n", issuerNif);
+    q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+    const bool ok = q.exec();
+    close(wasOpen);
+    return ok;
+}
+
+QStringList AeatStore::recordXmls()
+{
+    QStringList out;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT xml FROM aeat_records WHERE environment = :e ORDER BY id");
+    q.bindValue(":e", m_environment);
+    if (q.exec())
+        while (q.next())
+            out << q.value(0).toString();
+    q.finish();
+    close(wasOpen);
+    return out;
 }
 
 bool AeatStore::seedChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head)
@@ -104,8 +197,9 @@ bool AeatStore::seedChainHead(const QString &issuerNif, const AeatRecord::Previo
     if (!open(&wasOpen))
         return false;
     QSqlQuery q(m_db);
-    q.prepare("INSERT OR IGNORE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash) "
-              "VALUES (:e, :n, :num, :d, :h)");
+    q.prepare("INSERT OR IGNORE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
+              "VALUES (:e, :n, :num, :d, :h, :g)");
+    q.bindValue(":g", text(head.generatedAt));
     q.bindValue(":e", m_environment);
     q.bindValue(":n", issuerNif);
     q.bindValue(":num", head.invoice.invoiceNumber);
@@ -133,8 +227,10 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         close(wasOpen);
         return stored;
     }
-    const AeatRecord::PreviousRecord head = chainHead(issuerNif);
-    const Built built = build(head);
+    bool headRead = false;
+    const AeatRecord::PreviousRecord head = chainHead(issuerNif, &headRead);
+    // An unreadable chain must never become "the first record".
+    const Built built = headRead ? build(head) : Built();
     QSqlQuery q(m_db);
     bool ok = !built.hash.isEmpty();
     if (ok) {
@@ -154,13 +250,14 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
     }
     const qint64 id = ok ? q.lastInsertId().toLongLong() : 0;
     if (ok) {
-        q.prepare("INSERT OR REPLACE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash) "
-                  "VALUES (:e, :n, :num, :d, :h)");
+        q.prepare("INSERT OR REPLACE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
+                  "VALUES (:e, :n, :num, :d, :h, :g)");
         q.bindValue(":e", m_environment);
         q.bindValue(":n", issuerNif);
         q.bindValue(":num", built.invoiceNumber);
         q.bindValue(":d", built.issueDate.toString(kDateFormat));
         q.bindValue(":h", built.hash);
+        q.bindValue(":g", AeatHash::timestampText(built.generatedAt));
         ok = q.exec();
     }
     if (ok)

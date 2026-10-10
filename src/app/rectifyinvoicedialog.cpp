@@ -19,6 +19,8 @@
 #include "appsettings.h"
 #include "sql_lite.h"
 #include "uikit.h"
+#include "aeatresponse.h"
+#include "aeatdirectbackend.h"
 
 namespace {
 
@@ -305,6 +307,13 @@ void RectifyInvoiceDialog::onRectifyClicked()
     insertPlaceholderRow();
 
     const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
+    // The shop only issues simplified invoices: the direct client corrects them with R5.
+    if (m_verifactu->directBackend() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
+        m_lblResult->setText(UiKit::errorHtml("Con la conexión directa con la AEAT la rectificativa de un ticket "
+                                              "(factura simplificada) es siempre R5."));
+        setFormEnabled(true);
+        return;
+    }
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
                                             : VerifactuInvoice::BY_DIFFERENCES;
     const QString desc = m_leDescription->text().trimmed().isEmpty()
@@ -317,13 +326,19 @@ void RectifyInvoiceDialog::onRectifyClicked()
              << "mode=" << (isSubstitution ? "S" : "I")
              << "amount=" << amountWithIva;
 
+    // The corrected invoice as AEAT holds it: from its stored record, else the event's
+    // own InvoiceID and earliest payment date.
+    QString rectifiedNumber = verifactuInvoiceId(m_loadedTicket, 0);
+    QDate rectifiedDate = QDate::fromString(verifactuEventFor(db, m_loadedTicket, 0).fechaPago, "dd-MM-yyyy");
+    const AeatResponse::RecordSummary stored = AeatResponse::summarizeRecord(verifactuEventRecordXml(db, m_loadedTicket, 0));
+    if (stored.valid) {
+        rectifiedNumber = stored.invoiceNumber;
+        rectifiedDate = QDate::fromString(stored.issueDate, "dd-MM-yyyy");
+    }
     m_pendingRectifyId = m_verifactu->submitRectificationAsync(
         m_newInvoiceNumber, m_newInvoiceDate, invoiceType, rectType,
         newTaxBase, newTaxAmount, origTaxBase, origTaxAmount,
-        ivaRate, desc,
-        // The corrected invoice as AEAT holds it: a single payment event, so the bare
-        // ticket number, dated with its payment date.
-        m_loadedTicket, lastPayment);
+        ivaRate, desc, rectifiedNumber, rectifiedDate);
 
     if (m_pendingRectifyId.isEmpty()) {
         m_lblResult->setText(

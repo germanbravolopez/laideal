@@ -94,8 +94,9 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     return reqId;
 }
 
-QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber)
+QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
+    Q_UNUSED(invoiceDate)   // the gateway finds the invoice by its ID alone
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration() || invoiceNumber.isEmpty()) {
