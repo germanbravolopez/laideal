@@ -44,6 +44,11 @@ jobs:
           & "$bin\g++.exe" --version | Select-Object -First 1
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      # The aeat_xsd test validates the direct AEAT client's XML against the official
+      # AEAT schemas with Python + lxml (it is skipped where lxml is missing).
+      - name: Install lxml for the AEAT schema check
+        run: python -m pip install --quiet lxml
+
       - name: Configure CMake
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
 

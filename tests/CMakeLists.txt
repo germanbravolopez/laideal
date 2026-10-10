@@ -138,6 +138,28 @@ target_link_libraries(test_aeat_hash PRIVATE
 add_test(NAME aeat_hash
     COMMAND test_aeat_hash -o ${CMAKE_BINARY_DIR}/test-results-aeat_hash.xml,junitxml -o -,txt)
 
+# AeatRecord: the direct client's records and SOAP envelopes. It also writes sample
+# envelopes into build/aeat-xml, which aeat_xsd validates against the official AEAT
+# schemas (tests/fixtures/aeat-xsd, unchanged) with Python + lxml - skipped when
+# lxml is missing locally; CI installs it.
+add_executable(test_aeat_record test_aeat_record.cpp)
+target_link_libraries(test_aeat_record PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME aeat_record
+    COMMAND test_aeat_record -o ${CMAKE_BINARY_DIR}/test-results-aeat_record.xml,junitxml -o -,txt)
+set_tests_properties(aeat_record PROPERTIES
+    ENVIRONMENT "AEAT_XML_OUT=${CMAKE_BINARY_DIR}/aeat-xml"
+    FIXTURES_SETUP aeat_xml)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME aeat_xsd
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/aeat/validate_aeat_xml.py
+                ${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-xsd ${CMAKE_BINARY_DIR}/aeat-xml)
+    set_tests_properties(aeat_xsd PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED aeat_xml)
+endif()
+
 # verifactu model classes (config / tax item / invoice / estado), all pure.
 add_executable(test_verifactu_models test_verifactu_models.cpp)
 target_link_libraries(test_verifactu_models PRIVATE
