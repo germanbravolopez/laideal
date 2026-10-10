@@ -32,6 +32,7 @@ public:
         QString total;            // ImporteTotal (Alta)
         QString hash;             // the record's own Huella
         QString previousHash;     // Huella in its chain block (empty for the first)
+        QString generatedAt;      // FechaHoraHusoGenRegistro
         bool    afterRejection = false;
     };
     struct Request {

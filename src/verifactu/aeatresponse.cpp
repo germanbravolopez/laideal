@@ -1,5 +1,7 @@
 #include "aeatresponse.h"
 
+#include <QDateTime>
+#include <QSet>
 #include <QStringList>
 #include <QXmlStreamReader>
 
@@ -123,9 +125,12 @@ Query parseQuery(const QByteArray &body)
                 return;
             }
             // The chain block repeats IDEmisorFactura / NumSerieFactura / Huella of the
-            // previous record: only the record's own values are kept.
-            if (under(path, QStringLiteral("Encadenamiento")))
+            // previous record: only its hash is kept, as the link.
+            if (under(path, QStringLiteral("Encadenamiento"))) {
+                if (name == QLatin1String("Huella"))
+                    record.previousHash = text;
                 return;
+            }
             const bool inId = path.size() >= 2 && path.at(path.size() - 2) == QLatin1String("IDFactura");
             if (inId && name == QLatin1String("IDEmisorFactura"))        record.issuerNif = text;
             else if (inId && name == QLatin1String("NumSerieFactura"))   record.invoiceNumber = text;
@@ -133,6 +138,7 @@ Query parseQuery(const QByteArray &body)
             else if (name == QLatin1String("TipoFactura"))               record.invoiceType = text;
             else if (name == QLatin1String("ImporteTotal"))              record.totalAmount = text;
             else if (name == QLatin1String("Huella"))                    record.hash = text;
+            else if (name == QLatin1String("FechaHoraHusoGenRegistro"))  record.generatedAt = text;
             else if (name == QLatin1String("IdPeticion"))                record.requestId = text;
             else if (name == QLatin1String("TimestampPresentacion"))     record.presentedAt = text;
             else if (name == QLatin1String("EstadoRegistro"))            record.state = text;
@@ -145,6 +151,66 @@ Query parseQuery(const QByteArray &body)
         });
     reply.parsed = wellFormed && (sawReply || reply.fault);
     return reply;
+}
+
+RecordSummary summarizeRecord(const QString &xml)
+{
+    RecordSummary out;
+    walk(xml.toUtf8(),
+        [&](const QStringList &path) {
+            const QString &name = path.last();
+            if (out.operation.isEmpty() && name == QLatin1String("RegistroAlta"))
+                out.operation = QStringLiteral("Alta");
+            else if (out.operation.isEmpty() && name == QLatin1String("RegistroAnulacion"))
+                out.operation = QStringLiteral("Anulacion");
+        },
+        [&](const QStringList &path, const QString &text) {
+            if (out.operation.isEmpty())
+                return;
+            const QString &name = path.last();
+            if (path.contains(QStringLiteral("Encadenamiento"))) {
+                if (name == QLatin1String("Huella") && out.previousHash.isEmpty())
+                    out.previousHash = text;
+                return;
+            }
+            if (path.contains(QStringLiteral("SistemaInformatico")) || path.contains(QStringLiteral("FacturasRectificadas")))
+                return;
+            if ((name == QLatin1String("IDEmisorFactura") || name == QLatin1String("IDEmisorFacturaAnulada")) && out.issuerNif.isEmpty())
+                out.issuerNif = text;
+            else if ((name == QLatin1String("NumSerieFactura") || name == QLatin1String("NumSerieFacturaAnulada")) && out.invoiceNumber.isEmpty())
+                out.invoiceNumber = text;
+            else if ((name == QLatin1String("FechaExpedicionFactura") || name == QLatin1String("FechaExpedicionFacturaAnulada")) && out.issueDate.isEmpty())
+                out.issueDate = text;
+            else if (name == QLatin1String("Huella") && out.hash.isEmpty())
+                out.hash = text;
+            else if (name == QLatin1String("FechaHoraHusoGenRegistro") && out.generatedAt.isEmpty())
+                out.generatedAt = text;
+        },
+        [](const QStringList &) {});
+    out.valid = !out.operation.isEmpty() && !out.invoiceNumber.isEmpty() && out.hash.size() == 64 && !out.generatedAt.isEmpty();
+    return out;
+}
+
+const RecordSummary *chainTip(const QList<RecordSummary> &records)
+{
+    QSet<QString> linked;
+    for (const RecordSummary &r : records)
+        linked.insert(r.previousHash);
+    const RecordSummary *tip = nullptr;
+    for (const RecordSummary &r : records) {
+        if (linked.contains(r.hash))
+            continue;
+        if (!tip || QDateTime::fromString(r.generatedAt, Qt::ISODate) > QDateTime::fromString(tip->generatedAt, Qt::ISODate))
+            tip = &r;
+    }
+    // A loop or a broken chain leaves no unlinked record: fall back to the latest generated.
+    if (!tip) {
+        for (const RecordSummary &r : records) {
+            if (!tip || QDateTime::fromString(r.generatedAt, Qt::ISODate) > QDateTime::fromString(tip->generatedAt, Qt::ISODate))
+                tip = &r;
+        }
+    }
+    return tip;
 }
 
 VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber, const QString &operation)

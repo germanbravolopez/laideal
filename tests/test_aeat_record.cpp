@@ -240,6 +240,11 @@ private slots:
         QVERIFY(one.contains("<sfLRC:NumSerieFactura>30837</sfLRC:NumSerieFactura>"));
         QVERIFY(!queryEnvelope("Tintorería La Ideal", "89890001K", 2026, 11).contains("NumSerieFactura"));
         writeSample("consulta.xml", one);
+        const QString page = queryEnvelope("Tintorería La Ideal", "89890001K", 2026, 3, QString(),
+                                           { "89890001K", "30837", QDate(2026, 3, 9) });
+        QVERIFY(page.contains("<sfLRC:ClavePaginacion><sf:IDEmisorFactura>89890001K</sf:IDEmisorFactura>"
+                              "<sf:NumSerieFactura>30837</sf:NumSerieFactura><sf:FechaExpedicionFactura>09-03-2026"));
+        writeSample("consulta_pagina.xml", page);
     }
 };
 

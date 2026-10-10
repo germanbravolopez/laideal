@@ -98,6 +98,81 @@ qint64 AeatDirectBackend::msecsUntilNextSend() const
     return qMax<qint64>(0, QDateTime::currentDateTime().msecsTo(m_nextSendAllowed));
 }
 
+void AeatDirectBackend::continueChainFromAeat(const QStringList &localRecordXmls, const ChainDone &done)
+{
+    if (!isConfigured()) {
+        done(false, m_configError);
+        return;
+    }
+    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif);
+    if (!head.isFirst()) {
+        done(true, tr("La cadena ya continúa tras el registro %1.").arg(head.invoice.invoiceNumber));
+        return;
+    }
+    QList<AeatResponse::RecordSummary> local;
+    for (const QString &xml : localRecordXmls) {
+        const AeatResponse::RecordSummary s = AeatResponse::summarizeRecord(xml);
+        if (s.valid && s.issuerNif == m_config.issuerNif)
+            local << s;
+    }
+    const QDate today = QDate::currentDate();
+    queryMonth(QDate(today.year(), today.month(), 1), 24, {}, local, done);
+}
+
+void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, AeatRecord::InvoiceRef pageAfter,
+                                   QList<AeatResponse::RecordSummary> found, const ChainDone &done)
+{
+    const QString envelope = AeatRecord::queryEnvelope(m_config.issuerName, m_config.issuerNif, month.year(),
+                                                       month.month(), QString(), pageAfter);
+    m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
+                      [=](const AeatTransport::Response &response) mutable {
+        const AeatResponse::Query reply = AeatResponse::parseQuery(response.body);
+        if (!reply.parsed || reply.fault) {
+            done(false, tr("No se pudo consultar la AEAT: %1")
+                            .arg(reply.fault ? reply.faultText : (response.error.isEmpty() ? tr("respuesta no reconocida") : response.error)));
+            return;
+        }
+        for (const AeatResponse::QueryRecord &r : reply.records) {
+            AeatResponse::RecordSummary s;
+            s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
+            s.operation = QStringLiteral("Alta");
+            s.issuerNif = r.issuerNif;
+            s.invoiceNumber = r.invoiceNumber;
+            s.issueDate = r.issueDate;
+            s.hash = r.hash;
+            s.generatedAt = r.generatedAt;
+            s.previousHash = r.previousHash;
+            if (s.valid)
+                found << s;
+        }
+        if (reply.morePages && !reply.records.isEmpty()) {
+            const AeatResponse::QueryRecord &last = reply.records.last();
+            queryMonth(month, monthsLeft,
+                       { last.issuerNif, last.invoiceNumber, QDate::fromString(last.issueDate, "dd-MM-yyyy") }, found, done);
+            return;
+        }
+        // Keep looking back until a month has records at AEAT.
+        if (!reply.hasData && monthsLeft > 1) {
+            queryMonth(month.addMonths(-1), monthsLeft - 1, {}, found, done);
+            return;
+        }
+        const AeatResponse::RecordSummary *newest = AeatResponse::chainTip(found);
+        if (!newest) {
+            done(true, tr("La AEAT no tiene registros de este emisor: la cadena empezará con el primer registro."));
+            return;
+        }
+        const AeatRecord::PreviousRecord head{
+            { m_config.issuerNif, newest->invoiceNumber, QDate::fromString(newest->issueDate, "dd-MM-yyyy") }, newest->hash };
+        if (!seedChain(head)) {
+            done(false, tr("No se pudo guardar el inicio de la cadena."));
+            return;
+        }
+        done(true, tr("La cadena continúa tras el registro %1 (%2, %3).")
+                       .arg(newest->invoiceNumber, newest->operation == QLatin1String("Alta") ? tr("alta") : tr("anulación"),
+                            newest->generatedAt));
+    });
+}
+
 int AeatDirectBackend::secondsUntilNextSend() const
 {
     return int((msecsUntilNextSend() + 999) / 1000);    // rounded up: never earlier than AEAT allows

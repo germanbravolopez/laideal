@@ -91,7 +91,7 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
 
 // SOAP 1.1 envelope of a query for the issuer's records of one month, optionally one invoice.
 QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int year, int month,
-                      const QString &invoiceNumber = QString());
+                      const QString &invoiceNumber = QString(), const InvoiceRef &pageAfter = {});
 
 // Namespaces of the AEAT schemas (exposed for the response parser and the tests).
 extern const char *const kSuministroInformacionNs;

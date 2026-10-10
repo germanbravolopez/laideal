@@ -235,11 +235,17 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
 }
 
 QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int year, int month,
-                      const QString &invoiceNumber)
+                      const QString &invoiceNumber, const InvoiceRef &pageAfter)
 {
-    const QString number = invoiceNumber.trimmed().isEmpty()
+    QString number = invoiceNumber.trimmed().isEmpty()
         ? QString()
         : QStringLiteral("<sfLRC:NumSerieFactura>%1</sfLRC:NumSerieFactura>").arg(escaped(invoiceNumber));
+    // Next page: the last record of the previous one (ClavePaginacion).
+    if (!pageAfter.invoiceNumber.isEmpty())
+        number += QStringLiteral("<sfLRC:ClavePaginacion><sf:IDEmisorFactura>%1</sf:IDEmisorFactura>"
+                                 "<sf:NumSerieFactura>%2</sf:NumSerieFactura><sf:FechaExpedicionFactura>%3"
+                                 "</sf:FechaExpedicionFactura></sfLRC:ClavePaginacion>")
+                      .arg(escaped(pageAfter.issuerNif), escaped(pageAfter.invoiceNumber), dateText(pageAfter.issueDate));
     return QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                           "<soapenv:Envelope xmlns:soapenv=\"%1\" xmlns:sfLRC=\"%2\" xmlns:sf=\"%3\">"
                           "<soapenv:Header/><soapenv:Body><sfLRC:ConsultaFactuSistemaFacturacion>"

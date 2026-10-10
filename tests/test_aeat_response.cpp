@@ -140,6 +140,48 @@ private slots:
         QVERIFY(!remote.hasUsableCsv());
     }
 
+    // The chain tip is the record nothing chains to, even with equal timestamps;
+    // a broken chain falls back to the latest generated.
+    void test_chainTip()
+    {
+        const QString h1(64, 'A'), h2(64, 'B'), h3(64, 'C');
+        RecordSummary a{ true, "Alta", "89890001K", "1", "10-10-2026", h1, "2026-10-10T10:00:00+02:00", "" };
+        RecordSummary b{ true, "Alta", "89890001K", "2", "10-10-2026", h2, "2026-10-10T10:00:00+02:00", h1 };
+        RecordSummary c{ true, "Anulacion", "89890001K", "1", "10-10-2026", h3, "2026-10-10T10:00:00+02:00", h2 };
+        QCOMPARE(chainTip({ c, a, b })->hash, h3);
+        QCOMPARE(chainTip({ b, a })->invoiceNumber, QStringLiteral("2"));
+        QVERIFY(!chainTip({}));
+        RecordSummary loop1 = a, loop2 = b;
+        loop1.previousHash = h2;                                          // each chains to the other
+        loop2.generatedAt = "2026-10-10T11:00:00+02:00";
+        QCOMPARE(chainTip({ loop1, loop2 })->invoiceNumber, QStringLiteral("2"));
+    }
+
+    // A stored record gives its identity, hash, generation time and link.
+    void test_summarizeRecord()
+    {
+        const QByteArray query = fixture("query_found.xml");
+        const RecordSummary none = summarizeRecord("<x/>");
+        QVERIFY(!none.valid);
+        const QString cancellation =
+            "<sf:RegistroAnulacion xmlns:sf=\"urn:x\"><sf:IDVersion>1.0</sf:IDVersion><sf:IDFactura>"
+            "<sf:IDEmisorFacturaAnulada>89890001K</sf:IDEmisorFacturaAnulada><sf:NumSerieFacturaAnulada>30837</sf:NumSerieFacturaAnulada>"
+            "<sf:FechaExpedicionFacturaAnulada>10-10-2026</sf:FechaExpedicionFacturaAnulada></sf:IDFactura><sf:Encadenamiento>"
+            "<sf:RegistroAnterior><sf:IDEmisorFactura>89890001K</sf:IDEmisorFactura><sf:NumSerieFactura>30836</sf:NumSerieFactura>"
+            "<sf:FechaExpedicionFactura>09-10-2026</sf:FechaExpedicionFactura><sf:Huella>" + QString(64, 'P') + "</sf:Huella>"
+            "</sf:RegistroAnterior></sf:Encadenamiento><sf:FechaHoraHusoGenRegistro>2026-10-10T11:00:00+02:00</sf:FechaHoraHusoGenRegistro>"
+            "<sf:TipoHuella>01</sf:TipoHuella><sf:Huella>" + QString(64, 'Q') + "</sf:Huella></sf:RegistroAnulacion>";
+        const RecordSummary r = summarizeRecord(cancellation);
+        QVERIFY(r.valid);
+        QCOMPARE(r.operation, QStringLiteral("Anulacion"));
+        QCOMPARE(r.invoiceNumber, QStringLiteral("30837"));
+        QCOMPARE(r.issueDate, QStringLiteral("10-10-2026"));
+        QCOMPARE(r.hash, QString(64, 'Q'));
+        QCOMPARE(r.previousHash, QString(64, 'P'));
+        QCOMPARE(r.generatedAt, QStringLiteral("2026-10-10T11:00:00+02:00"));
+        QVERIFY(!query.isEmpty());
+    }
+
     void test_queryEmpty()
     {
         const Query q = parseQuery(fixture("query_empty.xml"));

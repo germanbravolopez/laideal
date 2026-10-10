@@ -28,6 +28,7 @@
 
 #include "aeatcertificate.h"
 #include "aeatrecord.h"
+#include "aeatresponse.h"
 #include "aeattransport.h"
 #include "aeatstore.h"
 #include "verifactubackend.h"
@@ -63,6 +64,15 @@ public:
     // Starts the chain after the last record sent by the gateway (only while empty).
     bool seedChain(const AeatRecord::PreviousRecord &lastGatewayRecord);
 
+    // Before the first direct record: finds the issuer's newest record - the newest
+    // registration AEAT returns, looking back month by month (up to 24), or a newer
+    // cancellation among `localRecordXmls` (the query does not return cancellations;
+    // the gateway's stored record XML has them) - and starts the chain after it.
+    // `done(ok, message)`; ok with nothing found means the chain starts with
+    // PrimerRegistro. Does nothing when the chain already has a head.
+    using ChainDone = std::function<void(bool ok, const QString &message)>;
+    void continueChainFromAeat(const QStringList &localRecordXmls, const ChainDone &done);
+
     // The registration record of an invoice for the chain, from the app's invoice.
     static AeatRecord::Registration registrationFrom(const VerifactuInvoice &invoice,
                                                      const AeatRecord::PreviousRecord &previous,
@@ -97,6 +107,8 @@ private:
     void scheduleSend();
     void sendPending();
     void onSubmissionReply(const AeatTransport::Response &response);
+    void queryMonth(QDate month, int monthsLeft, AeatRecord::InvoiceRef pageAfter,
+                    QList<AeatResponse::RecordSummary> found, const ChainDone &done);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result);
 };
 

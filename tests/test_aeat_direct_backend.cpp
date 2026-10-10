@@ -11,6 +11,7 @@
 #include <QTemporaryDir>
 
 #include "aeatcertificate.h"
+#include "aeatrecord.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
 #include "fakeaeatserver.h"
@@ -286,6 +287,88 @@ private slots:
         QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("30837", 24.79))).isSuccess());
         QCOMPARE(m_server->sentRecords()[0].previousHash, QStringLiteral("GATEWAYHASH"));
         QVERIFY(m_server->submissions()[0].body.contains("<sf:NumSerieFactura>30836</sf:NumSerieFactura>"));
+    }
+
+    // Switching from the gateway: the chain continues after the issuer's newest record
+    // AEAT holds (here registered by another installation, as the gateway did).
+    void test_continueChainFromAeat()
+    {
+        QString gatewayHash;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_gateway_db");
+            other.setDatabaseName(m_dir.filePath(QString("gateway_%1.db").arg(m_dbCounter)));
+            AeatDirectBackend gateway(config(), other);
+            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+            const VerifactuResult second = waitFor(gateway, gateway.submitInvoiceAsync(ticket("2", 20)));
+            QVERIFY(second.isSuccess());
+            gatewayHash = second.rawHash;
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_gateway_db");
+
+        AeatDirectBackend backend(config(), m_db);
+        bool ok = false;
+        QString message;
+        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
+        QVERIFY2(ok && message.contains("tras el registro 2"), qPrintable(message));
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, gatewayHash);
+
+        // Once started, it is left alone.
+        message.clear();
+        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
+        QVERIFY2(ok && message.contains("ya continúa"), qPrintable(message));
+    }
+
+    // A cancellation the gateway generated after the newest registration is the head
+    // (the query does not return cancellations; the stored record XML has it).
+    void test_continueChainAfterLocalCancellation()
+    {
+        AeatDirectBackend registering(config(), m_db);
+        const VerifactuResult alta = waitFor(registering, registering.submitInvoiceAsync(ticket("1", 10)));
+        QVERIFY(alta.isSuccess());
+
+        AeatRecord::Cancellation c;
+        c.invoice = { "89890001K", "1", QDate(2026, 10, 10) };
+        c.previous = { c.invoice, alta.rawHash };
+        c.generatedAt = QDateTime::currentDateTime().addSecs(60);
+        const QString cancellationXml = AeatRecord::cancellationXml(c, config().system);
+
+        QSqlDatabase fresh = QSqlDatabase::addDatabase("QSQLITE", "aeat_fresh_db");
+        fresh.setDatabaseName(m_dir.filePath(QString("fresh_%1.db").arg(m_dbCounter)));
+        {
+            AeatDirectBackend backend(config(), fresh);
+            QString message;
+            bool ok = false;
+            backend.continueChainFromAeat({ cancellationXml, "<not a record/>" }, [&](bool o, const QString &m) { ok = o; message = m; });
+            QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
+            QVERIFY2(ok && message.contains("anulación"), qPrintable(message));
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+            QCOMPARE(m_server->sentRecords().last().previousHash, AeatRecord::hashOf(c));
+        }
+        fresh.close();
+        fresh = QSqlDatabase();
+        QSqlDatabase::removeDatabase("aeat_fresh_db");
+    }
+
+    // AEAT holds nothing for the issuer: the chain starts with PrimerRegistro. An empty
+    // month is skipped (looking back to the previous one).
+    void test_continueChainLooksBack()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QString message;
+        bool ok = false;
+        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(ok && message.contains("primer registro"), qPrintable(message));
+        int queries = 0;
+        for (const FakeAeatServer::Request &r : m_server->requests())
+            queries += r.kind == QLatin1String("Consulta");
+        QCOMPARE(queries, 24);                                           // two years back
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
     }
 
     // A rectificativa R5 by substitution carries the rectified invoice and its former amounts.

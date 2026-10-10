@@ -53,6 +53,8 @@ struct QueryRecord {
     QString invoiceType;
     QString totalAmount;          // ImporteTotal as written
     QString hash;                 // the record's own Huella
+    QString generatedAt;          // its FechaHoraHusoGenRegistro
+    QString previousHash;         // Huella of the record it chains to (empty: the first)
     QString state;                // Correcto / AceptadoConErrores / Anulado
     QString errorCode;
     QString errorDescription;
@@ -71,6 +73,24 @@ struct Query {
 
 Submission parseSubmission(const QByteArray &body);
 Query parseQuery(const QByteArray &body);
+
+// The identity and hash of one stored record (a RegistroAlta / RegistroAnulacion,
+// alone or inside a reply), e.g. the gateway's verifactu_xml / verifactu_cancel_xml.
+struct RecordSummary {
+    bool    valid = false;
+    QString operation;            // Alta / Anulacion
+    QString issuerNif;
+    QString invoiceNumber;
+    QString issueDate;            // dd-MM-yyyy
+    QString hash;
+    QString generatedAt;          // FechaHoraHusoGenRegistro
+    QString previousHash;         // Huella of the record it chains to
+};
+
+// The newest record of a chain: the one no other record chains to; among several
+// such (or a broken chain), the latest generated. nullptr for an empty list.
+const RecordSummary *chainTip(const QList<RecordSummary> &records);
+RecordSummary summarizeRecord(const QString &xml);
 
 // The app's result for one record of a submission. Correcto and AceptadoConErrores
 // are accepted (the warning text is kept in errorDescription); a duplicate whose
