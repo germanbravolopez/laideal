@@ -5,15 +5,23 @@
 #include "appsettings.h"
 #include "reporthtml.h"
 
+#include <QFileInfo>
 #include <QHash>
+#include <QPushButton>
 
 Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
     ui(new Ui::Contabilidad),
     db(database)
 {
-    setAttribute(Qt::WA_DeleteOnClose); // self-delete on close: callers show() non-modally and drop the pointer
+    setAttribute(Qt::WA_DeleteOnClose); // self-delete on close: callers show() it and drop the pointer
     ui->setupUi(this);
+    // Window-modal over MainWindow (contabilidad.ui) and kept open after each report:
+    // it can only be closed, not minimised or sent behind the main window.
+    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    setWindowFlag(Qt::WindowMinimizeButtonHint, false);
+    ui->bb_ok_cancel->button(QDialogButtonBox::Ok)->setText("Generar");
+    ui->bb_ok_cancel->button(QDialogButtonBox::Cancel)->setText("Cerrar");
     initialSettings();
 }
 
@@ -49,6 +57,55 @@ void Contabilidad::resetAllContents()
     ui->sb_year->setValue(QDate::currentDate().year());
     ui->checkBox_lock->setChecked(false);
     ui->checkBox_lock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
+    // Reverting writes no report.
+    ui->checkBox_detail->setChecked(false);
+    ui->checkBox_detail->setEnabled(!revertirOn);
+    ui->bb_ok_cancel->button(QDialogButtonBox::Ok)->setText(revertirOn ? "Revertir" : "Generar");
+}
+
+QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail)
+{
+    const QString suffix = withDetail ? QStringLiteral("_detalle.pdf") : QStringLiteral(".pdf");
+    const QString y = QString::number(year), u = QString::number(unit);
+    switch (mode) {
+    case Mensual:    return "/Mensual/reporte_mensual_" + y + "_" + u + suffix;
+    case Trimestral: return "/contabilidad_trimestral_" + y + "_" + u + suffix;
+    case Anual:      return "/Anual/reporte_anual_" + y + suffix;
+    }
+    return QString();
+}
+
+QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year)
+{
+    const auto quarterLine = [&db, year](int q) {
+        const QString name = "El trimestre " + QString::number(q) + " de " + QString::number(year);
+        switch (combinedLockState(readLockForQuarter(db, "ingresos", q, year),
+                                  readLockForQuarter(db, "gastos", q, year))) {
+        case 1:  return name + " está bloqueado (contabilidad realizada).";
+        case 0:  return name + " no está bloqueado.";
+        default: return name + " no tiene registros de ingresos ni de gastos.";
+        }
+    };
+    if (mode == Trimestral)
+        return quarterLine(unit);
+    if (mode == Mensual) {
+        const int q = (unit - 1) / 3 + 1;
+        return "El mes " + QString::number(unit) + " de " + QString::number(year)
+               + " pertenece al trimestre " + QString::number(q) + ", que "
+               + (quarterIsClosed(db, QDate(year, unit, 1)) ? "está bloqueado." : "no está bloqueado.");
+    }
+    QStringList lines;
+    for (int q = 1; q <= 4; ++q)
+        lines << quarterLine(q);
+    return lines.join('\n');
+}
+
+void Contabilidad::on_pb_check_lock_clicked()
+{
+    const int unit = currentMode() == Anual ? 0 : ui->sb_trim->value();
+    const QString message = lockStatusMessage(db, currentMode(), unit, ui->sb_year->value());
+    qDebug() << "Contabilidad::on_pb_check_lock_clicked:" << message;
+    QMessageBox::information(this, "Comprobar bloqueo", message, QMessageBox::Ok, QMessageBox::Ok);
 }
 
 static bool s_openGeneratedReports = true;
@@ -56,6 +113,13 @@ static bool s_openGeneratedReports = true;
 void Contabilidad::setOpenGeneratedReports(bool open)
 {
     s_openGeneratedReports = open;
+}
+
+static QString s_lastReportHtml;
+
+QString Contabilidad::lastReportHtml()
+{
+    return s_lastReportHtml;
 }
 
 bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
@@ -72,9 +136,8 @@ int Contabilidad::combinedLockState(int ingresosLock, int gastosLock)
 
 void Contabilidad::on_bb_ok_cancel_accepted()
 {
-    // Stays false except when reverting a quarter that was never done: there we
-    // keep the dialog open so the operator can act on the info message.
-    bool keepDialogOpen = false;
+    // The dialog stays open afterwards (another period, the other report, a lock
+    // check); only Cerrar closes it.
     if (currentMode() == Trimestral) {
         // Read the lock across the whole quarter, not just its last month: a
         // quarter with income only in its first months would otherwise read as
@@ -91,7 +154,6 @@ void Contabilidad::on_bb_ok_cancel_accepted()
                 QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
                                          + " para el año " + QString::number(ui->sb_year->value()) + " no estaba aun realizada.",
                                          QMessageBox::Ok, QMessageBox::Ok);
-                keepDialogOpen = true;
             }
             else {
                 generateContabilidad();
@@ -140,10 +202,6 @@ void Contabilidad::on_bb_ok_cancel_accepted()
     else {
         generateContabilidad();
     }
-
-    if (!keepDialogOpen) {
-        this->close();
-    }
 }
 
 void Contabilidad::on_bb_ok_cancel_rejected()
@@ -186,7 +244,9 @@ void Contabilidad::generateContabilidad()
 {
     const int year = ui->sb_year->value();
     const double ivaRate = AppSettings::ivaRate();
-    QString contabilidadHtml, path, filename;
+    const bool withDetail = ui->checkBox_detail->isChecked();
+    const QString detailTitle = withDetail ? QStringLiteral(" · Detalle") : QString();
+    QString contabilidadHtml;
     int invalidAmounts = 0;
 
     if (currentMode() == Trimestral || currentMode() == Mensual) {
@@ -201,8 +261,6 @@ void Contabilidad::generateContabilidad()
         QString title, subtitle = periodSubtitle(0);
         if (currentMode() == Trimestral) {
             title = "Contabilidad - Trimestre " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
-            path = AppSettings::instance()->contabilidadPath();
-            filename = "/contabilidad_trimestral_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
         }
         else {
             // Closing is quarterly: the month reads closed when its quarter is (even a
@@ -210,17 +268,15 @@ void Contabilidad::generateContabilidad()
             const bool cerrada = quarterIsClosed(db, QDate(year, ui->sb_trim->value(), 1));
             title = "Reporte Mensual - Mes " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
             subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
-            path = AppSettings::instance()->contabilidadPath() + "/Mensual";
-            filename = "/reporte_mensual_" + QString::number(year) + "_" + QString::number(ui->sb_trim->value()) + ".pdf";
         }
-        contabilidadHtml = ReportHtml::documentOpen(title, subtitle)
+        contabilidadHtml = ReportHtml::documentOpen(title + detailTitle, subtitle)
                 + renderSection(figuresFromDetails(income, regs, expenses, ivaRate, start, endExclusive),
                                 "Resumen del periodo")
-                + renderDetailTables("Detalle del periodo", income, regs, expenses, ivaRate)
+                + (withDetail ? renderDetailTables("Detalle del periodo", income, regs, expenses, ivaRate) : QString())
                 + ReportHtml::documentClose();
     }
     else {
-        contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year));
+        contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year) + detailTitle);
         // One scan per table for the whole year, bucketed by quarter; each quarter's
         // figures and detail tables come from the same rows.
         const QuarterlyDetails details = annualDetailsByQuarter(db, year);
@@ -242,13 +298,11 @@ void Contabilidad::generateContabilidad()
         annual.ingTickets = yearTicketCount(details, year);   // distinct over the year, not the quarterly sum
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
-        for (int trim = 1; trim < 5; trim++)
+        for (int trim = 1; withDetail && trim < 5; trim++)
             contabilidadHtml += renderDetailTables("Detalle del trimestre " + QString::number(trim),
                                                    details.income[trim - 1], details.regularizations[trim - 1],
                                                    details.expenses[trim - 1], ivaRate);
         contabilidadHtml += ReportHtml::documentClose();
-        path = AppSettings::instance()->contabilidadPath() + "/Anual";
-        filename = "/reporte_anual_" + QString::number(year) + ".pdf";
     }
     if (invalidAmounts > 0) {
         qCritical() << "Contabilidad::generateContabilidad:" << invalidAmounts << "comma-decimal importe(s) not summed";
@@ -258,10 +312,10 @@ void Contabilidad::generateContabilidad()
                                       "de limpiado de importes decimales.").arg(invalidAmounts),
                               QMessageBox::Ok, QMessageBox::Ok);
     }
-    // create directory in case it does not exists
-    if (!QFile::exists(path))
-        QDir().mkpath(path);
-    writeHtml(path + filename, contabilidadHtml);
+    const QString file = AppSettings::instance()->contabilidadPath()
+            + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : ui->sb_trim->value(), year, withDetail);
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    writeHtml(file, contabilidadHtml);
 }
 
 void Contabilidad::periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive)
@@ -438,6 +492,7 @@ void Contabilidad::updateLock()
 void Contabilidad::writeHtml(QString filename,
                              QString html)
 {
+    s_lastReportHtml = html;
     QTextDocument document;
     document.setHtml(html);
 
@@ -488,22 +543,26 @@ QString Contabilidad::createHtmlTableGastos(const PeriodFigures &f)
     + ReportHtml::tableOpen(true) +
         "<tr>"
             "<th>Concepto</th>"
-            "<th style='text-align:right;'>IVA 10%</th>"
             "<th style='text-align:right;'>IVA 21%</th>"
+            "<th style='text-align:right;'>IVA 10%</th>"
+            "<th style='text-align:right;'>Subtotal con IVA</th>"
             "<th style='text-align:right;'>Sin IVA</th>"
             "<th style='text-align:right;'>Total</th>"
         "</tr>"
         "<tr>"
             "<td>Importe</td>"
-            + euroCell(f.gas10Importe) + euroCell(f.gas21Importe) + euroCell(f.gasNiImporte) + euroCell(f.gastosImporteTotal()) +
+            + euroCell(f.gas21Importe) + euroCell(f.gas10Importe) + euroCell(f.gastosConIvaImporte())
+            + euroCell(f.gasNiImporte) + euroCell(f.gastosImporteTotal()) +
         "</tr>"
         "<tr style='background-color:#f6f7f9;'>"
             "<td>Base imponible</td>"
-            + euroCell(f.gas10Base) + euroCell(f.gas21Base) + euroCell(f.gasNiImporte) + euroCell(f.gastosBaseTotal()) +
+            + euroCell(f.gas21Base) + euroCell(f.gas10Base) + euroCell(f.gastosConIvaBase())
+            + euroCell(f.gasNiImporte) + euroCell(f.gastosBaseTotal()) +
         "</tr>"
         "<tr>"
             "<td>IVA soportado</td>"
-            + euroCell(f.gas10Iva) + euroCell(f.gas21Iva) + "<td style='text-align:right;'>-</td>" + euroCell(f.gastosIvaTotal()) +
+            + euroCell(f.gas21Iva) + euroCell(f.gas10Iva) + euroCell(f.gastosIvaTotal())
+            + "<td style='text-align:right;'>-</td>" + euroCell(f.gastosIvaTotal()) +
         "</tr>"
     "</table>";
 }

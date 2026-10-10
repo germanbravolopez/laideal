@@ -14,7 +14,7 @@ ui->revertirOn = false;  // set true to unlock instead of lock
 ui->show();
 ```
 
-`Contabilidad` is a `QDialog` (window-modal) created with `WA_DeleteOnClose`, so each instance self-deletes when closed — callers `show()` it non-modally and drop the pointer. The `db` handle is a private member set through the constructor.
+`Contabilidad` is a `QDialog`, window-modal over MainWindow, created with `WA_DeleteOnClose`, so each instance self-deletes when closed — callers `show()` it and drop the pointer. It **stays open** after a report is generated (or a quarter reverted) and its message is closed, so the operator can produce another period, the detailed version or check a lock; it has no minimise / help button and only **Cerrar** (or the window's close) dismisses it. The accept button reads **Generar** (**Revertir** in revert mode). The `db` handle is a private member set through the constructor.
 
 `MainWindow` opens this dialog twice: once with `revertirOn=false` for normal accounting generation, and once with `revertirOn=true` for the "revert accounting" action. In revert mode the mode combobox is forced to Trimestral and disabled.
 
@@ -39,12 +39,16 @@ In Trimestral mode the quarter's lock state is read first via `sql_lite::readLoc
 
 The **Bloquear datos** checkbox is enabled only in Trimestral mode and never while reverting (`Contabilidad::lockOptionAvailable`). Switching to Mensual or Anual unticks and greys it out, because only the quarterly flow closes the books.
 
+**Incluir detalle de tickets** (unticked by default, disabled while reverting) adds the [detail tables](#detail-tables-audit-annex) to the report; without it the PDF has only the summary blocks. The two versions are separate files (`Contabilidad::reportRelativePath`): `contabilidad_trimestral_<year>_<q>.pdf`, `Mensual/reporte_mensual_<year>_<m>.pdf`, `Anual/reporte_anual_<year>.pdf`, and the same names ending in `_detalle.pdf` for the detailed one, whose title also ends in "· Detalle".
+
+**Comprobar bloqueo** shows whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
+
 ## Report content
 
 Every figure comes from the **detail rows** of the period, the same rows the report lists at the end. `sql_lite::incomeTicketsBetweenDates()` and `sql_lite::expensesBetweenDates()` are fetched once per period (annual: `sql_lite::annualDetailsByQuarter()`, one scan per table bucketed by quarter), and the pure static `Contabilidad::figuresFromDetails(income, expenses, ivaRate)` turns them into one `PeriodFigures`. The summary therefore cannot disagree with its detail tables. Per period the report renders three summary blocks plus the [detail tables](#detail-tables-audit-annex):
 
 - **Ingresos** — importe (IVA incl.), base imponible, IVA repercutido at the fixed 21 % (`AppSettings::ivaRate()`, not configurable).
-- **Gastos** — importe / base / IVA across the 10%, 21% and sin-IVA columns plus a Total column. Rows with another or NULL rate are counted but summed in no column.
+- **Gastos** — importe / base / IVA in the columns IVA 21 %, IVA 10 %, **Subtotal con IVA** (21 % + 10 %), Sin IVA and Total, in that order (`PeriodFigures::gastosConIvaImporte` / `gastosConIvaBase`). Rows with another or NULL rate are counted but summed in no column.
 - **Resumen** — the figures added in the report-visualisation pass:
   - **Liquidación de IVA**: IVA repercutido − IVA soportado = **Resultado IVA**, labelled "a ingresar" / "a compensar" by sign (the modelo-303 figure).
   - **Resultado del periodo**: base ingresos − base gastos (beneficio / pérdida).
@@ -56,7 +60,7 @@ The page header (business name / address / city / NIF / phone + issue date), the
 
 ### Detail tables (audit annex)
 
-After the summary, each period gets a **Detalle** block listing the rows behind its figures, so every number can be audited:
+When **Incluir detalle de tickets** is ticked, each period gets a **Detalle** block after the summary, listing the rows behind its figures, so every number can be audited:
 
 - **Detalle de ingresos**: one line per paid ticket (`n_recibo`, fecha de pago, cliente, number of garments, base, IVA, importe) and a total row. Garment rows are aggregated by `n_recibo`. A ticket with a comma-decimal garment is marked `*` and that garment is not summed.
 - **Detalle de gastos**: one line per `gastos` row (fecha, nº factura, empresa, servicio, IVA %, base, cuota, importe) and a total row. A row with an unrecognised or NULL IVA is marked `*`, a comma-decimal amount `**`, and neither enters the total, with a note under the table.

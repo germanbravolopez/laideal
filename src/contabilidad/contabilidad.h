@@ -58,9 +58,20 @@ public:
     // with any other rate are flagged in the detail and kept out of its total.
     static bool expenseIvaIsSummarised(int iva);
 
+    // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
+    // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";
+    // the version with the detail tables gets "_detalle" before ".pdf", so both are kept.
+    static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
+
+    // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
+    // contabilidad). A month reads its quarter; a year lists its four quarters.
+    static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
+
     // Test seam: when false, a generated report is written but not opened in the
     // PDF viewer (the end-to-end bench generates reports headless). Default true.
     static void setOpenGeneratedReports(bool open);
+    // Test seam: the HTML of the last report written (PDFs are compressed).
+    static QString lastReportHtml();
 
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per
@@ -74,6 +85,9 @@ public:
         double gasNiImporte = 0.0;                 // gastos without IVA (base == importe)
         int ingTickets = 0, gasFacturas = 0;       // operation counts
 
+        // Gastos with IVA (10 % + 21 %), the subtotal the gastos table shows before sin IVA.
+        double gastosConIvaImporte() const { return gas10Importe + gas21Importe; }
+        double gastosConIvaBase()    const { return gas10Base + gas21Base; }
         double gastosImporteTotal() const { return gas10Importe + gas21Importe + gasNiImporte; }
         double gastosBaseTotal()    const { return gas10Base + gas21Base + gasNiImporte; }
         double gastosIvaTotal()     const { return gas10Iva + gas21Iva; }
@@ -102,6 +116,8 @@ public:
                                             const QVector<ExpenseDetail> &expenses,
                                             double ivaRate,
                                             const QDate &periodStart, const QDate &periodEnd);
+    // Gastos summary table: IVA 21 %, IVA 10 %, their subtotal, sin IVA, total.
+    static QString createHtmlTableGastos(const PeriodFigures &f);
     // Number of tickets the period [periodStart, periodEnd) counts. A regularisation
     // offsets a ticket's income only when the cancelled payment was itself made in
     // this period (paid and cancelled in the same period -> not counted). A payment
@@ -128,6 +144,7 @@ private slots:
     void on_bb_ok_cancel_accepted();
     void on_bb_ok_cancel_rejected();
     void on_cb_config_currentTextChanged(const QString &arg1);
+    void on_pb_check_lock_clicked();
 
     void generateContabilidad();
     void updateLock();
@@ -156,7 +173,6 @@ private:
                                       const QVector<ExpenseDetail> &expenses,
                                       double ivaRate);
     QString createHtmlTableIngresos(const PeriodFigures &f);
-    QString createHtmlTableGastos(const PeriodFigures &f);
     QString createHtmlSummary(const PeriodFigures &f, const QString &heading);
 };
 

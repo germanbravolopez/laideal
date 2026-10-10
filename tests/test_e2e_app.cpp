@@ -934,7 +934,10 @@ private slots:
         QVERIFY(E2e::seedSentGarment(m_db, "400", "h400a", "12.10", "10-02-2026", "A-ORIG0400"));
         const QString pdf = AppSettings::instance()->contabilidadPath()
                             + "/contabilidad_trimestral_2026_1.pdf";
+        const QString detailedPdf = AppSettings::instance()->contabilidadPath()
+                                    + "/contabilidad_trimestral_2026_1_detalle.pdf";
         QFile::remove(pdf);
+        QFile::remove(detailedPdf);
 
         QPointer<Contabilidad> form = new Contabilidad(m_db);
         form->findChild<QComboBox *>("cb_config")->setCurrentIndex(1);   // Trimestral
@@ -945,9 +948,24 @@ private slots:
 
         QVERIFY(QFile::exists(pdf));
         QVERIFY(QFileInfo(pdf).size() > 0);
+        QVERIFY(!QFile::exists(detailedPdf));                             // the detail is opt-in
+        QVERIFY(!Contabilidad::lastReportHtml().contains("Detalle del periodo"));
         QVERIFY(m_popups->sawMessageContaining("se ha bloqueado"));
         QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("1"));
-        QTRY_VERIFY(form.isNull());                                       // closed (WA_DeleteOnClose)
+
+        // The dialog stays open: check the lock, then the detailed report, kept apart.
+        QTest::qWait(50);
+        QVERIFY(!form.isNull());
+        form->findChild<QPushButton *>("pb_check_lock")->click();
+        QVERIFY(m_popups->sawMessageContaining("El trimestre 1 de 2026 está bloqueado"));
+        form->findChild<QCheckBox *>("checkBox_detail")->setChecked(true);
+        QMetaObject::invokeMethod(form, "on_bb_ok_cancel_accepted");
+        QVERIFY(QFile::exists(detailedPdf));
+        QVERIFY(Contabilidad::lastReportHtml().contains("Detalle del periodo"));
+        QVERIFY(Contabilidad::lastReportHtml().contains("Trimestre 1 · 2026 · Detalle"));
+        QVERIFY(m_popups->sawMessageContaining("ya estaba realizada"));
+        form->findChild<QDialogButtonBox *>("bb_ok_cancel")->button(QDialogButtonBox::Cancel)->click();
+        QTRY_VERIFY(form.isNull());                                       // Cerrar closes it (WA_DeleteOnClose)
 
         QPointer<Contabilidad> revert = new Contabilidad(m_db);
         revert->revertirOn = true;
@@ -958,6 +976,9 @@ private slots:
 
         QVERIFY(m_popups->sawMessageContaining("se ha revertido"));
         QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("0"));
+        revert->findChild<QPushButton *>("pb_check_lock")->click();
+        QVERIFY(m_popups->sawMessageContaining("El trimestre 1 de 2026 no está bloqueado"));
+        revert->close();
         QTRY_VERIFY(revert.isNull());
     }
 };

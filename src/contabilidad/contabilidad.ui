@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>314</width>
-    <height>200</height>
+    <height>280</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -143,13 +143,36 @@
      </layout>
     </item>
     <item row="6" column="1" colspan="2">
+     <widget class="QCheckBox" name="checkBox_detail">
+      <property name="toolTip">
+       <string>Añade al PDF la lista de tickets y facturas de cada importe (archivo aparte, terminado en _detalle)</string>
+      </property>
+      <property name="text">
+       <string>Incluir detalle de tickets</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="1" colspan="2">
+     <widget class="QPushButton" name="pb_check_lock">
+      <property name="toolTip">
+       <string>Indica si el periodo seleccionado ya está bloqueado por una contabilidad realizada</string>
+      </property>
+      <property name="text">
+       <string>Comprobar bloqueo</string>
+      </property>
+      <property name="autoDefault">
+       <bool>false</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="1" colspan="2">
      <widget class="QDialogButtonBox" name="bb_ok_cancel">
       <property name="standardButtons">
        <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
       </property>
      </widget>
     </item>
-    <item row="5" column="1">
+    <item row="5" column="1" colspan="2">
      <widget class="QCheckBox" name="checkBox_lock">
       <property name="text">
        <string>Bloquear datos</string>

@@ -139,10 +139,10 @@ The QR itself is checked by `test_e2e_app` (when it is requested) and `test_tick
 
 | # | Step | Expected |
 |---|------|----------|
-| D1 | Contabilidad → Trimestral, Q3 2026 (no lock) | PDF opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 €; IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows |
+| D1 | Contabilidad → Trimestral, Q3 2026 (no lock), **Incluir detalle de tickets** ticked | PDF `..._detalle.pdf` opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 € (columns IVA 21 %, IVA 10 %, Subtotal con IVA, Sin IVA, Total); IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows. Closing the message leaves the dialog open over the main window, which cannot be used until Cerrar |
 | D2 | Contabilidad → Trimestral, Q4 2026 | "Anulaciones / rectificaciones del periodo" shows ticket 5 at −12.10 € with its annex table; Q3 regenerated is unchanged. (Ticket 5 was paid in Q3, so Q3 counted it as income; Q4, where it was cancelled, takes it back. Paid and cancelled in the same quarter, the two lines net to 0.) |
 | D3 | Contabilidad → Anual 2026 | PDF renders and ends with the tickets / gastos tables |
-| D4 | Lock box | "Bloquear datos" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad |
+| D4 | Lock box; same Q3 without the detail box; Comprobar bloqueo | "Bloquear datos" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad. Without the detail box the PDF (no `_detalle`) has only the summary. Comprobar bloqueo says Q3 2026 is not locked (after D5: locked) |
 | D5 | Contabilidad → Trimestral Q3 2026 with **Bloquear datos**. Then (a) Listado → Gastos: double-click the SMOKE-G1 expense; (b) Añadir factura de gastos dated 20-09-2026; (c) the same form dated today | (a) "Edición bloqueada"; (b) refused with "Trimestre bloqueado"; (c) saved. (The ingresos list is read-only for every row, locked or not: invoices change only through Recogida / Anular / Rectificar, so there is nothing to try there. Closed-quarter refusals of Cobrar, Anular factura and Rectificar are covered by the e2e suites.) |
 | D6 | Revertir contabilidad Q3 2026, then Listado → Gastos: double-click SMOKE-G1 | Editable again |
 

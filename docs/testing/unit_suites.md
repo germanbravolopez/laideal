@@ -45,7 +45,7 @@ Links `contabilidad` (and `reporthtml` for amount formatting). All pure statics,
 - **Locks**: `lockOptionAvailable` ("Bloquear datos" only in Trimestral, never while reverting); `combinedLockState` (ingresos + gastos; gastos-only quarter).
 - **Figures**: `figuresFromDetails` (income, IVA split at 21 %, gastos by rate, unrecognised / NULL rates counted not summed, regularisations netted out of income).
 - **Ticket counts**: `netTicketCount` (paid and cancelled in the same period not counted; partial cancellation still counts; credit notes not counted; an earlier period's cancelled payment does not offset a new sale), `yearTicketCount` (distinct over the year, netted).
-- **Report tables**: detail ingresos / gastos / regularisation tables (rows, HTML escaping, base / IVA by rate, flagged comma amounts and odd rates, NULL rate shown as `?`, totals, rounding note, empty period).
+- **Report tables**: the gastos summary (columns IVA 21 % / IVA 10 % / Subtotal con IVA / Sin IVA / Total, each row adding up), `reportRelativePath` (summary and `_detalle` files per mode), detail ingresos / gastos / regularisation tables (rows, HTML escaping, base / IVA by rate, flagged comma amounts and odd rates, NULL rate shown as `?`, totals, rounding note, empty period).
 
 ---
 
