@@ -304,6 +304,7 @@ void RecogPrendas::resetAllContents()
 
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
+    QString failure;   // a write that was refused or failed, reported after the refresh
     bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
     static const char *const opNames[] = {
         "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
@@ -337,10 +338,9 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         updateTicketObservations(db, ticketNum, rowHash, ui->le_obsv->text());
         break;
     case SIZE_AND_PRICE:
-        if (!editLock && !ui->pb_payment->isChecked()) {
-            updateTicketSizeAndPrice(db, ticketNum, rowHash,
-                                     ui->le_size->text(), ui->le_price->text());
-        }
+        if (!editLock && !ui->pb_payment->isChecked()
+                && !updateTicketSizeAndPrice(db, ticketNum, rowHash, ui->le_size->text(), ui->le_price->text()))
+            failure = tr("No se ha guardado el tamaño ni el importe.");
         break;
     case QTY:
         // Editing quantity re-prices the row: importe = qty * unitPrice * size.
@@ -351,9 +351,9 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             const double importe = garmentUnmeasured(ui->le_garm->text(), ui->le_size->text()) ? 0.0
                 : garmentImporte(ui->le_qty->text(), ui->le_size->text(),
                                  readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
-            updateGarmentQtyAndImporte(db, ticketNum, rowHash,
-                                       QString::number(newQty),
-                                       QString::number(importe, 'f', 2));
+            if (!updateGarmentQtyAndImporte(db, ticketNum, rowHash, QString::number(newQty),
+                                            QString::number(importe, 'f', 2)))
+                failure = tr("No se ha guardado la cantidad.");
         }
         break;
     case SERVICE:
@@ -362,17 +362,21 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             const double importe = garmentUnmeasured(ui->le_garm->text(), ui->le_size->text()) ? 0.0
                 : garmentImporte(ui->le_qty->text(), ui->le_size->text(),
                                  readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
-            updateGarmentServiceAndImporte(db, ticketNum, rowHash,
-                                           ui->cb_servic->currentText(),
-                                           QString::number(importe, 'f', 2));
+            if (!updateGarmentServiceAndImporte(db, ticketNum, rowHash, ui->cb_servic->currentText(),
+                                                QString::number(importe, 'f', 2)))
+                failure = tr("No se ha guardado el servicio.");
         }
         break;
     case PRICE:
         // Manual importe override (comma-normalised); size is left as-is.
         if (!editLock && !ui->pb_payment->isChecked()) {
-            updateTicketSizeAndPrice(db, ticketNum, rowHash,
-                                     ui->le_size->text().replace(",", "."),
-                                     ui->le_price->text().replace(",", "."));
+            // Negative amounts are corrections, made with Rectificar factura once charged.
+            if (QString(ui->le_price->text()).replace(',', '.').toDouble() < 0.0)
+                failure = tr("El importe no puede ser negativo.");
+            else if (!updateTicketSizeAndPrice(db, ticketNum, rowHash,
+                                               ui->le_size->text().replace(",", "."),
+                                               ui->le_price->text().replace(",", ".")))
+                failure = tr("No se ha guardado el importe.");
         }
         break;
     case SEPARATE_GARM:
@@ -380,11 +384,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         if (!editLock) {
             // The split-off row keeps the original's invoice (seq, estado, CSV): on a
             // paid row those garments are part of the invoice AEAT registered.
-            splitGarmentRow(db, ticketNum, rowHash, nGarm);
+            if (splitGarmentRow(db, ticketNum, rowHash, nGarm).isEmpty())
+                failure = tr("No se han podido separar las prendas.");
         }
         else {
-            m_result->setText(UiKit::errorHtml(tr("Ticket bloqueado por la contabilidad."))
-                              + "<br>" + tr("No se pueden separar prendas de un trimestre cerrado."));
+            failure = tr("Ticket bloqueado por la contabilidad: no se pueden separar prendas de un trimestre cerrado.");
         }
         break;
     default:
@@ -395,6 +399,11 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
     // Load again data from table
     updateRowClickedToFields();
     isCellClicked = true;
+    // After the refresh, which rewrites the panel: a refused or failed write is said.
+    m_lastWriteOk = failure.isEmpty();
+    if (!m_lastWriteOk)
+        m_result->setText(UiKit::errorHtml(failure)
+                          + "<br>" + tr("La fila puede estar pagada o en un trimestre cerrado; se muestran sus datos guardados."));
 }
 
 void RecogPrendas::updateRowClickedToFields()
@@ -761,7 +770,7 @@ void RecogPrendas::on_le_size_editingFinished()
 {
     // No size yet: nothing to price (garmentImporte reads size 0 as "no size factor").
     if (isCellClicked && ui->le_garm->text().contains("m2")
-            && ui->le_size->text().replace(',', '.').toDouble() > 0) {
+            && !garmentUnmeasured(ui->le_garm->text(), ui->le_size->text())) {
         const double price = calculatePrice();
         if (price > 0) {
             ui->le_price->setText(moneyText(price));
@@ -1236,7 +1245,7 @@ void RecogPrendas::on_pb_separ_garm_clicked()
     const int number = ui->sb_separ->value();
     const QString ticketNum = ui->le_nr_ticket->text();
     updateDb(SEPARATE_GARM, number);
-    if (!m_result->text().contains(QLatin1String("bloqueado")))
+    if (m_lastWriteOk)
         m_result->setText(UiKit::okHtml(tr("%1 prenda(s) separadas en una fila aparte del ticket %2.")
                                             .arg(number).arg(ticketNum.toHtmlEscaped())));
 }

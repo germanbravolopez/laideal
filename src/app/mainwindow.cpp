@@ -743,7 +743,7 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
     }
 }
 
-double MainWindow::saveTicket()
+bool MainWindow::saveTicket(double &storedTotal)
 {
     // A paid garment starts PENDIENTE and the async submit handler patches
     // CSV/timestamp/estado once AEAT replies (see onVerifactuRequestFinished());
@@ -751,7 +751,7 @@ double MainWindow::saveTicket()
     // table_ticket has a fixed set of empty row slots - only rows with a price are saved,
     // so log the count of garments actually inserted, not the slot count.
     int savedGarments = 0;
-    double storedTotal = 0.0;
+    storedTotal = 0.0;
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
         // If there is any content in price of that row then save
         QComboBox *cbGarment = qobject_cast<QComboBox*>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
@@ -784,8 +784,12 @@ double MainWindow::saveTicket()
                 r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                                 : VerifactuEstado::Unpaid);
 
-            if (insertGarmentRow(db, r))
-                storedTotal += roundToCents(moneyText(r.importe).toDouble());
+            if (!insertGarmentRow(db, r)) {
+                qWarning() << "saveTicket: INSERT failed for ticket" << r.nRecibo << "row" << row
+                           << "- stopping before any AEAT submission";
+                return false;
+            }
+            storedTotal += roundToCents(moneyText(r.importe).toDouble());
             ++savedGarments;
             qDebug() << "saveTicket: saved garment" << savedGarments << "ticket=" << r.nRecibo
                      << "importe=" << r.importe << "hash=" << r.hash;
@@ -793,7 +797,7 @@ double MainWindow::saveTicket()
     }
     qDebug() << "saveTicket: ticket" << ui->le_nr_ticket->text()
              << "-" << savedGarments << "garment(s) saved, total" << storedTotal;
-    return storedTotal;
+    return true;
 }
 
 bool MainWindow::printRecibo()
@@ -855,7 +859,14 @@ void MainWindow::on_pb_save_clicked()
             QString printedWhat;
 
             // The invoice amount is what was stored, row by row, not the on-screen total.
-            const double  totalAmount = saveTicket();
+            double totalAmount = 0.0;
+            if (!saveTicket(totalAmount)) {
+                // Nothing is sent nor printed for a ticket that was not stored whole.
+                m_result->setText(UiKit::errorHtml(tr("No se pudo guardar el ticket %1 completo.").arg(ticketNum))
+                                  + "<br>" + tr("No se ha enviado a AEAT ni impreso. Revise el log (Archivo → Log de "
+                                                "depuración) y el ticket en Recogida antes de repetirlo."));
+                return;
+            }
             if (isPaid) {
                 const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
 

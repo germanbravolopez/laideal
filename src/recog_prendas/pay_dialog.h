@@ -3,6 +3,7 @@
 
 #include <QDate>
 #include <QDialog>
+#include <QHash>
 #include <QSqlDatabase>
 #include <QStringList>
 
@@ -74,6 +75,7 @@ private:
     QString     m_pendingReqId;
     int         m_pendingSeq = -1;
     QStringList m_pendingHashes;
+    QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
     QDate       m_pendingFechaPago;
 };
 

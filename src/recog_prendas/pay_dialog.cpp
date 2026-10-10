@@ -204,6 +204,7 @@ void PayDialog::setFormEnabled(bool enabled)
 void PayDialog::onCobrarClicked()
 {
     QStringList hashes;
+    QHash<QString, QString> amounts;   // hash -> the amount shown, in cents
     double total = 0.0;
     for (int r = 0; r < m_table->rowCount(); ++r) {
         auto *chk = m_table->item(r, COL_CHECK);
@@ -216,6 +217,7 @@ void PayDialog::onCobrarClicked()
                 return;
             }
             hashes << m_table->item(r, COL_HASH)->text();
+            amounts.insert(m_table->item(r, COL_HASH)->text(), m_table->item(r, COL_AMOUNT)->text());
             total += m_table->item(r, COL_AMOUNT)->text().toDouble();
         }
     }
@@ -271,6 +273,7 @@ void PayDialog::onCobrarClicked()
 
     m_pendingSeq        = seq;
     m_pendingHashes     = hashes;
+    m_pendingAmounts    = amounts;
     m_pendingFechaPago  = fechaPago;
 
     if (!m_verifactu || !m_verifactu->isConfigured()) {
@@ -346,10 +349,13 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
     // AND edit_lock = 0: defensive against a row whose quarter was closed
     // between loadTicket and persistPayment (very narrow race window, but
     // free to guard - keeps accounting lock authoritative).
+    // importe = the amount shown and sent (cents), so an older row stored with more
+    // decimals is invoiced and stored with the same figure.
     q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
-              "verifactu_invoice_seq = :seq "
+              "verifactu_invoice_seq = :seq, importe = :imp "
               "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0");
     for (const QString &h : m_pendingHashes) {
+        q.bindValue(":imp", moneyText(m_pendingAmounts.value(h)));
         q.bindValue(":fp",  m_pendingFechaPago.toString("dd-MM-yyyy"));
         q.bindValue(":seq", seq);
         q.bindValue(":n",   m_ticketNum);

@@ -516,6 +516,10 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
                               const QString &size, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);
@@ -534,6 +538,10 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
                                 const QString &cantidad, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);
@@ -588,14 +596,23 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     const QString newHash = genHash16();
     q.finish();
 
-    db.transaction();
+    // Both writes or none: without a transaction a failed INSERT would leave the
+    // original row reduced and the split-off garments lost.
+    if (!db.transaction()) {
+        qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
+        db.close();
+        return QString();
+    }
     QSqlQuery u(db);
-    u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h");
+    // Same row as read above: still unlocked and with the same quantity.
+    u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
+              "AND COALESCE(edit_lock, 0) = 0 AND cantidad = :oldCant");
     u.bindValue(":cant", QString::number(qty - nGarm));
     u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);
     u.bindValue(":h",    hash);
-    bool ok = u.exec();
+    u.bindValue(":oldCant", QString::number(qty));
+    bool ok = u.exec() && u.numRowsAffected() == 1;
     // Every other column is copied, verifactu_* included: the split-off garments stay
     // in the invoice (and the estado) of the row they come from.
     QSqlQuery i(db);
@@ -633,6 +650,10 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
                                     const QString &servicio, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
+    if (moneyText(importe).toDouble() < 0.0) {
+        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+        return false;
+    }
 
     db.open();
     QSqlQuery q(db);

@@ -75,8 +75,9 @@ private slots:
     // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
     QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
                                    double totalAmount, int seq = 0);
-    // Inserts the ticket's garments; returns the sum of the stored amounts.
-    double saveTicket();
+    // Inserts the ticket's garments; storedTotal = the sum of the stored amounts.
+    // False (stops at the first failed insert) when the ticket was not stored whole.
+    bool saveTicket(double &storedTotal);
     // Each returns whether both copies reached the printer.
     bool printRecibo();
     bool printFra(const QPixmap &qrCode = QPixmap());

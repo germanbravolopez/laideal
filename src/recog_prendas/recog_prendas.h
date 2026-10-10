@@ -131,6 +131,7 @@ private:
 
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;
+    bool m_lastWriteOk = true;   // the last updateDb() write was stored
     QSqlDatabase db;
     // Async submit tracking: reqId -> the payment event it belongs to.
     struct PendingSubmit {

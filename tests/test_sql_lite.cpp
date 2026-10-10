@@ -545,6 +545,12 @@ private slots:
         QCOMPARE(scalar("SELECT GROUP_CONCAT(importe || ':' || cantidad || ':' || servicio || ':' || size, ' ') "
                         "FROM ingresos WHERE n_recibo = 'T2'"),
                  QStringLiteral("30.00:1:Lavar:0 30.00:1:Lavar:0 30.00:1:Lavar:0"));
+        // A negative amount is a correction (Rectificar factura), never a price.
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "T1", "open", "", "-5,00"));
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "T1", "open", "1", "-1"));
+        QVERIFY(!updateGarmentServiceAndImporte(m_db, "T1", "open", "Limp.", "-0.50"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='open'"), QStringLiteral("16.63"));
+
         // A voided garment is frozen too, and so is a row locked by Contabilidad.
         insertRow("T3", "void", "5.00", "NO", "ANULADA");
         QVERIFY(!updateTicketSizeAndPrice(m_db, "T3", "void", "1", "6.00"));

@@ -746,6 +746,63 @@ private slots:
         QTRY_VERIFY(factura.isNull());
     }
 
+    // Recogida reports a refused write instead of a success, after its table refresh:
+    // Separar on a row locked by Contabilidad, and a negative hand-typed price.
+    void test_recogida_refusedWritesAreReported()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "940", "h940a", "9.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cantidad = '3', edit_lock = 1 WHERE hash='h940a'"));
+        QVERIFY(E2e::seedGarment(m_db, "941", "h941a", "7.00", today()));
+        RecogPrendas rp(m_db);
+        const auto result = [&rp]() { return rp.findChild<QLabel *>("lblResult")->text(); };
+
+        QVERIFY(selectRow(rp, "940", "h940a"));
+        rp.findChild<QPushButton *>("pb_separ_garm")->click();
+        QVERIFY2(result().contains("bloqueado") && !result().contains("separadas"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo='940'"),
+                 QStringLiteral("1|3"));
+
+        QVERIFY(selectRow(rp, "941", "h941a"));
+        rp.findChild<QLineEdit *>("le_price")->setText("-5");
+        QMetaObject::invokeMethod(&rp, "on_le_price_editingFinished");
+        QVERIFY2(result().contains("negativo"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h941a'"), QStringLiteral("7.00"));
+    }
+
+    // Cobrar stores the amount it shows and sends: an older row stored with three
+    // decimals is charged, sent and kept as the same two-decimal figure.
+    void test_payDialog_storesTheAmountItSends()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "950", "h950a", "12.345", today()));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("950"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT pagado FROM ingresos WHERE hash='h950a'"), QStringLiteral("SI"), 10000);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h950a'"), QStringLiteral("12.35"));
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 12.35);
+    }
+
+    // A ticket whose garments cannot be stored is not sent to AEAT nor printed, and the
+    // window says so instead of announcing it as saved.
+    void test_mainWindow_failedInsertStopsTheSave()
+    {
+        MainWindow mw;
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Fallo");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        QVERIFY(E2e::exec(m_db, "CREATE TRIGGER e2e_block BEFORE INSERT ON ingresos "
+                                "BEGIN SELECT RAISE(ABORT, 'blocked by test'); END"));
+        clickSave(mw);
+        E2e::exec(m_db, "DROP TRIGGER e2e_block");
+        const QString result = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(result.contains("No se pudo guardar el ticket") && !result.contains("guardado:"), qPrintable(result));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("0"));
+    }
+
     // Cobrar never charges an m2 garment that has no size: its invoice amount would be
     // 0 and frozen. Refused in the dialog; nothing paid, nothing sent.
     void test_payDialog_refusesUnmeasuredM2Garment()

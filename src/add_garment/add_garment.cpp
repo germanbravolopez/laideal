@@ -257,7 +257,7 @@ QString AddGarment::validationError()
     if (m_leCliente->text().isEmpty() || m_cbPrenda->currentText().isEmpty() || m_leCantidad->text().isEmpty())
         return UiKit::errorHtml("Formulario incompleto.")
                + "<br>Rellene al menos la prenda y la cantidad.";
-    if (m_cbPrenda->currentText().contains("m2") && m_leSize->text().replace(',', '.').toDouble() <= 0)
+    if (garmentUnmeasured(m_cbPrenda->currentText(), m_leSize->text()))
         return UiKit::errorHtml("La prenda se cobra por m2: introduzca su tamaño.");
     if (m_chkPagado->isChecked() && quarterIsClosed(db, m_deFechaPago->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
