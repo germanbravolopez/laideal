@@ -78,9 +78,8 @@ void PayDialog::buildUi()
     root->addWidget(m_lblTotal);
 
     auto *form = new QFormLayout;
-    m_dePago = new QDateEdit(QDate::currentDate(), this);
-    m_dePago->setCalendarPopup(true);
-    m_dePago->setDisplayFormat("dd-MM-yyyy");
+    form->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    m_dePago = UiKit::dateEdit(QDate::currentDate(), "dePago");
     form->addRow(tr("Fecha de pago:"), m_dePago);
     root->addLayout(form);
 

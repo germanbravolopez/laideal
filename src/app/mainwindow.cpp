@@ -23,11 +23,11 @@
 #include "version.h"
 #include "aeatexport.h"
 #include "aeatexportdialog.h"
+#include "uikit.h"
 #include <QTimer>
 #include <QThread>
 #include <QEventLoop>
 #include <QTextEdit>
-#include <QFontDatabase>
 #include <QTextCursor>
 #include <QFile>
 #include <QStatusBar>
@@ -1091,14 +1091,12 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
     const QString software = QStringLiteral("La Ideal");
 
     QDialog dlg(this);
-    dlg.setWindowTitle("Acerca de Verifactu");
-    dlg.setMinimumWidth(600);
+    UiKit::setUpDialog(&dlg, "Acerca de Verifactu", 600);
 
     QVBoxLayout *layout = new QVBoxLayout(&dlg);
 
-    QLabel *body = new QLabel(&dlg);
+    QLabel *body = UiKit::introPanel(QString());
     body->setTextFormat(Qt::RichText);
-    body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
     body->setText(
         QString("<h3 align=\"center\">DECLARACIÓN RESPONSABLE</h3>"
@@ -1124,10 +1122,7 @@ void MainWindow::on_actionAcerca_de_Verifactu_triggered()
                  address.toHtmlEscaped(), city.toHtmlEscaped(),
                  software, version));
     layout->addWidget(body);
-
-    QPushButton *btnClose = new QPushButton("Cerrar", &dlg);
-    layout->addWidget(btnClose, 0, Qt::AlignRight);
-    connect(btnClose, &QPushButton::clicked, &dlg, &QDialog::accept);
+    layout->addLayout(UiKit::closeRow(&dlg));
 
     dlg.exec();
 }
@@ -1154,23 +1149,21 @@ void MainWindow::on_actionNotas_de_la_version_triggered()
         notes.remove(0, 1);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(title);
+    UiKit::setUpDialog(&dlg, title, 680);
     dlg.resize(680, 560);
 
     auto *layout = new QVBoxLayout(&dlg);
+    layout->addWidget(UiKit::introPanel(english
+        ? QStringLiteral("What changed in each version of La Ideal, newest first.")
+        : tr("Qué ha cambiado en cada versión de La Ideal, la más reciente primero.")));
     auto *view = new QTextEdit(&dlg);
     view->setReadOnly(true);
     view->setLineWrapMode(QTextEdit::WidgetWidth);
-    QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    view->setFont(mono);
     view->setPlainText(notes);
     // Land at the top so the newest release shows first.
     view->moveCursor(QTextCursor::Start);
-    layout->addWidget(view);
-
-    auto *btn = new QPushButton(english ? QStringLiteral("Close") : tr("Cerrar"), &dlg);
-    layout->addWidget(btn, 0, Qt::AlignRight);
-    connect(btn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    layout->addWidget(view, 1);
+    layout->addLayout(UiKit::closeRow(&dlg, english ? QStringLiteral("Close") : tr("Cerrar")));
 
     dlg.exec();
 }

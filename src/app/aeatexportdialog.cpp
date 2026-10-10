@@ -17,15 +17,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-static QDateEdit *dateEdit(const QDate &date, const QString &objectName)
-{
-    QDateEdit *edit = new QDateEdit(date);
-    edit->setObjectName(objectName);
-    edit->setCalendarPopup(true);
-    edit->setDisplayFormat("dd-MM-yyyy");
-    return edit;
-}
-
 AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
@@ -41,8 +32,8 @@ AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent
     QGroupBox *grpPeriod = new QGroupBox("Periodo");
     QFormLayout *periodForm = new QFormLayout(grpPeriod);
     periodForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
-    m_deFrom = dateEdit(QDate::currentDate().addMonths(-3), "deFrom");   // stable names for the e2e bench
-    m_deTo   = dateEdit(QDate::currentDate(), "deTo");
+    m_deFrom = UiKit::dateEdit(QDate::currentDate().addMonths(-3), "deFrom");   // stable names for the e2e bench
+    m_deTo   = UiKit::dateEdit(QDate::currentDate(), "deTo");
     periodForm->addRow("Desde:", m_deFrom);
     periodForm->addRow("Hasta:", m_deTo);
     layout->addWidget(grpPeriod);

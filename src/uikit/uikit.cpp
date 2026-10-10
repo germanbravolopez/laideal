@@ -1,5 +1,6 @@
 #include "uikit.h"
 
+#include <QDateEdit>
 #include <QDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -13,6 +14,7 @@ namespace {
 const int kPanelMargin = 8;
 const int kPrimaryMinWidth = 220;
 const int kResultMinHeight = 64;
+const int kDateMinWidth = 140;
 }
 
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth)
@@ -62,6 +64,16 @@ QPushButton *secondaryButton(const QString &text, const QString &objectName)
     button->setObjectName(objectName);
     button->setAutoDefault(false);
     return button;
+}
+
+QDateEdit *dateEdit(const QDate &date, const QString &objectName)
+{
+    QDateEdit *edit = new QDateEdit(date);
+    edit->setObjectName(objectName);
+    edit->setCalendarPopup(true);
+    edit->setDisplayFormat(QStringLiteral("dd-MM-yyyy"));
+    edit->setMinimumWidth(kDateMinWidth);
+    return edit;
 }
 
 QHBoxLayout *closeRow(QDialog *dialog, const QString &text)

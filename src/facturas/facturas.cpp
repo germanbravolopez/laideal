@@ -38,11 +38,11 @@ void Facturas::buildUi()
     m_leFra->setObjectName("leFra");     // stable names for the e2e test bench
     m_leFra->setPlaceholderText("Número de la factura del proveedor");
     invoiceForm->addRow("Nº factura:", m_leFra);
-    m_deFecha = new QDateEdit();
-    m_deFecha->setObjectName("deFecha");
-    m_deFecha->setCalendarPopup(true);
-    m_deFecha->setDisplayFormat("dd-MM-yyyy");
-    invoiceForm->addRow("Fecha:", m_deFecha);
+    m_deFecha = UiKit::dateEdit(QDate::currentDate(), "deFecha");
+    QHBoxLayout *dateRow = new QHBoxLayout();
+    dateRow->addWidget(m_deFecha);
+    dateRow->addStretch();
+    invoiceForm->addRow("Fecha:", dateRow);
     m_cbEmpresa = new QComboBox();
     m_cbEmpresa->setObjectName("cbEmpresa");
     m_cbEmpresa->setEditable(true);

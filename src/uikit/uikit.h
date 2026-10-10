@@ -10,6 +10,8 @@
 #include <QLabel>
 #include <QString>
 
+class QDate;
+class QDateEdit;
 class QDialog;
 class QHBoxLayout;
 class QPushButton;
@@ -30,6 +32,8 @@ QLabel *introPanel(const QString &text);
 QPushButton *primaryButton(const QString &text, const QString &objectName);
 // Any other action: never takes Enter from the primary one.
 QPushButton *secondaryButton(const QString &text, const QString &objectName);
+// Date field of every dialog: calendar popup, dd-MM-yyyy, wide enough for the date.
+QDateEdit *dateEdit(const QDate &date, const QString &objectName);
 // Right-aligned "Cerrar" (objectName btnClose) that closes the dialog.
 QHBoxLayout *closeRow(QDialog *dialog, const QString &text = QStringLiteral("Cerrar"));
 

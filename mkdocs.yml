@@ -95,6 +95,7 @@ nav:
       - Printing (ESC/POS core): modules/printing.md
       - Add garment: modules/add_garment.md
       - Backup: modules/backup.md
+      - UiKit (dialog style): modules/uikit.md
       - Printer dossier:
           - Overview: modules/printer/README.md
           - Model & specs: modules/printer/01_printer_model_and_specs.md

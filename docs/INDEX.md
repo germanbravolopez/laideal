@@ -99,7 +99,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Updater dialog | `src/updater/updaterdialog.h` | `.cpp` |
 | Automated DB backup (Verifactu Req. 4) | `src/backup/backup_manager.h` | `.cpp` |
 | Shared PDF report scaffolding (style + header + euro format) and the PDF writer `writePdf` (opens the file; `setOpenGeneratedReports(false)` in tests) | `src/reporthtml/reporthtml.h` | `.cpp` |
-| Shared dialog style: `UiKit::setUpDialog`, `introPanel`, `ResultPanel`, `primaryButton` / `secondaryButton`, `closeRow`, `okHtml` / `warnHtml` / `errorHtml`, `fileLinkHtml` | `src/uikit/uikit.h` | `.cpp` |
+| Shared dialog style ([modules/uikit.md](modules/uikit.md)): `UiKit::setUpDialog`, `heading`, `introPanel`, `ResultPanel`, `primaryButton` / `secondaryButton`, `dateEdit`, `closeRow`, `okHtml` / `warnHtml` / `errorHtml`, `fileLinkHtml` | `src/uikit/uikit.h` | `.cpp` |
 | Sort/filter proxy (+ diacritic search) | `src/tableview/mysortfilterproxymodel.h` | `.cpp` |
 | Filter widget | `src/tableview/filterwidget.h` | `.cpp` |
 | Custom table view | `src/tableview/tableview.h` | `.cpp` |

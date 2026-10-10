@@ -69,6 +69,8 @@ void GenListado::set_cb_fechas()
 {
     int max_year = readMaxNMinYearInColumnFromTable(db, true, "fecha", "gastos");
     int min_year = readMaxNMinYearInColumnFromTable(db, false, "fecha", "gastos");
+    if (max_year <= 0 || min_year <= 0)   // no gastos yet
+        max_year = min_year = QDate::currentDate().year();
     QStringList fechas_list;
     int mid_year = max_year;
     while (mid_year >= min_year) {

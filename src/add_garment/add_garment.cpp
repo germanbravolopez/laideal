@@ -29,15 +29,6 @@ AddGarment::AddGarment(const QSqlDatabase &database, QWidget *parent) :
     resetAllContents();
 }
 
-static QDateEdit *dateEdit(const QString &objectName)
-{
-    QDateEdit *edit = new QDateEdit(QDate::currentDate());
-    edit->setObjectName(objectName);
-    edit->setCalendarPopup(true);
-    edit->setDisplayFormat("dd-MM-yyyy");
-    return edit;
-}
-
 void AddGarment::buildUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -63,7 +54,7 @@ void AddGarment::buildUi()
     m_leCliente->setObjectName("leCliente");
     m_leCliente->setReadOnly(true);
     ticketForm->addRow("Cliente:", m_leCliente);
-    m_deFechaRecepcion = dateEdit("deFechaRecepcion");
+    m_deFechaRecepcion = UiKit::dateEdit(QDate::currentDate(), "deFechaRecepcion");
     m_deFechaRecepcion->setReadOnly(true);
     m_deFechaRecepcion->setButtonSymbols(QAbstractSpinBox::NoButtons);
     ticketForm->addRow("Fecha recepción:", m_deFechaRecepcion);
@@ -103,7 +94,7 @@ void AddGarment::buildUi()
     QFormLayout *stateForm = new QFormLayout(m_grpState);
     m_chkPagado = new QCheckBox("Pagada");
     m_chkPagado->setObjectName("chkPagado");
-    m_deFechaPago = dateEdit("deFechaPago");
+    m_deFechaPago = UiKit::dateEdit(QDate::currentDate(), "deFechaPago");
     QHBoxLayout *payRow = new QHBoxLayout();
     payRow->addWidget(m_chkPagado);
     payRow->addWidget(new QLabel("el"));
@@ -112,7 +103,7 @@ void AddGarment::buildUi()
     stateForm->addRow(payRow);
     m_chkRecogido = new QCheckBox("Recogida");
     m_chkRecogido->setObjectName("chkRecogido");
-    m_deFechaRecogida = dateEdit("deFechaRecogida");
+    m_deFechaRecogida = UiKit::dateEdit(QDate::currentDate(), "deFechaRecogida");
     QHBoxLayout *pickupRow = new QHBoxLayout();
     pickupRow->addWidget(m_chkRecogido);
     pickupRow->addWidget(new QLabel("el"));
