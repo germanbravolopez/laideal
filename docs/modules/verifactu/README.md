@@ -149,6 +149,24 @@ The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CS
 
 ---
 
+## Direct AEAT connection (research branch)
+
+`VerifactuIntegration` talks to AEAT through a `VerifactuBackend` (`verifactubackend.h`): the IreneSolutions gateway (`VerifactuManager`, the default) or, when Configuración → Verifactu → *Conexión con la AEAT* is *Directa con la AEAT (en pruebas)*, the direct client `AeatDirectBackend`. Both answer on the same `requestFinished` / `queryFinished` signals, so the rest of the app does not change. The research behind it, its status and the open points are in [aeat-direct-investigation.md](aeat-direct-investigation.md).
+
+| File | Role |
+|---|---|
+| `aeathash.*` | Huella of alta / anulación records, amount and timestamp formats, QR verification URL |
+| `aeatrecord.*` | `RegistroAlta` / `RegistroAnulacion` XML, submission and query SOAP envelopes |
+| `aeatresponse.*` | AEAT replies and SOAP faults -> `VerifactuResult` / `VerifactuRemoteRecord`; `summarizeRecord`, `chainTip` |
+| `aeatstore.*` | Tables `aeat_chain` (chain head per issuer and environment) and `aeat_records` (every generated record, exact XML, outcome) |
+| `aeatqr.*` | The QR drawn locally (vendored Nayuki qrcodegen) |
+| `aeatcertificate.*` | The owner's certificate from the Windows personal store (thumbprint) or a .pfx imported in memory (Windows crypto API) |
+| `aeattransport.*` | SOAP POST through WinHTTP presenting the certificate (Qt's Schannel backend cannot read PKCS#12) |
+| `aeatdirectbackend.*` | Builds, chains, stores and sends the records; flow control (`TiempoEsperaEnvio`); resend of a stored record; replacement of a rejected one; `continueChainFromAeat` (hand-over from the gateway) |
+| `aeatselftest.*` | The proof of concept run from Configuración, always against AEAT pre-production |
+
+Behaviour the app relies on: a submit or cancel stores the record at once and answers when AEAT replies; a retry of the same invoice resends the stored record unchanged (an accepted one answers from the store, AEAT's duplicate reply to a lost one is adopted as accepted); records wait for AEAT's `TiempoEsperaEnvio` and go together; records left unsent are sent at the next start; the QR is computed locally. The `ingresos.verifactu_*` columns are filled exactly as with the gateway (`verifactu_xml` / `verifactu_hash` = the record the app built), and the estados and every caller are unchanged. When the app starts on the direct connection, `MainWindow::continueDirectChain` chains the first direct record after the issuer's newest record at AEAT (or a newer cancellation stored by the gateway, `sql_lite::verifactuStoredRecordXmls`).
+
 ## Configuration
 
 Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via **Archivo → Configuración… → Verifactu tab**.
@@ -250,6 +268,9 @@ Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pix
 ---
 
 ## Security
+
+Direct connection: the owner's certificate is either read from the Windows personal store by thumbprint (nothing secret stored; the key stays protected by Windows) or imported in memory from a .pfx whose password is stored DPAPI-encrypted like the service key (`AppSettings::aeatCertificatePassword`). The certificate is only presented in the TLS handshake with AEAT; tests use throwaway self-signed fixtures and a local fake server, never a real certificate or AEAT.
+
 
 - ServiceKey is encrypted at rest in `~/.laideal_settings.json` with Windows DPAPI (per-user `CryptProtectData`, `dpapi:v1:` marker); `AppSettings` decrypts transparently on read and legacy plaintext is auto-migrated on load. Note DPAPI binds the ciphertext to the Windows user+machine, so the key must be re-entered after a reinstall or migration to another account.
 - Never mix real data into TESTING.

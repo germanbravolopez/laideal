@@ -94,7 +94,16 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Verifactu facade | `src/verifactu/verifactuintegration.h` | `.cpp` |
 | Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
-| AEAT record hash (huella) + QR URL, direct-client research | `src/verifactu/aeathash.h` | `.cpp` |
+| Verifactu backend interface (gateway / direct AEAT) | `src/verifactu/verifactubackend.h` | - |
+| AEAT record hash (huella) + QR URL, direct client | `src/verifactu/aeathash.h` | `.cpp` |
+| AEAT records + SOAP envelopes, direct client | `src/verifactu/aeatrecord.h` | `.cpp` |
+| AEAT replies, record summary, chain tip | `src/verifactu/aeatresponse.h` | `.cpp` |
+| AEAT chain head + record outbox (tables aeat_chain / aeat_records) | `src/verifactu/aeatstore.h` | `.cpp` |
+| Verifactu QR drawn locally (vendored qrcodegen) | `src/verifactu/aeatqr.h` | `.cpp` |
+| Owner's certificate (Windows store / .pfx) | `src/verifactu/aeatcertificate.h` | `.cpp` |
+| WinHTTP SOAP transport with client certificate | `src/verifactu/aeattransport.h` | `.cpp` |
+| Direct AEAT backend | `src/verifactu/aeatdirectbackend.h` | `.cpp` |
+| Direct AEAT proof of concept (self-test) | `src/verifactu/aeatselftest.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
 | Verifactu tax-item model | `src/verifactu/verifactutaxitem.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
@@ -119,7 +128,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate, LinkDelegate) |
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
-| `tests/` (18 Qt Test + CTest suites, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture + `testschema.h`, the shop schema built through `migrateDatabase`) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_aeat_hash` (official AEAT huella / QR vectors), `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
+| `tests/` (24 Qt Test suites + the `aeat_xsd` schema check, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture + `testschema.h`, the shop schema built through `migrateDatabase`) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_aeat_hash` (official AEAT huella / QR vectors), `test_aeat_record` + `aeat_xsd` (records against the official XSDs), `test_aeat_response`, `test_aeat_store`, `test_aeat_qr`, `test_aeat_direct_backend` + `test_e2e_aeat_direct` (against `support/fakeaeatserver`), `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`. Run `ctest --test-dir build` |
 | `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and appends the `test_ticket_preview` ASCII receipt in a fenced block (GitHub strips inline images from summaries; the graphical PNG renders live in `docs/modules/printer/` + the `ticket-previews` artifact). Called by the `ci.yml` build job; also runnable locally. |
 | `mkdocs.yml` | MkDocs Material config for the documentation site: theme (light/dark toggle, search), `docs/` tree as nav, and `validation:` settings that demote cross-repo links (to `src/` + root files) to build warnings so a non-strict `mkdocs build` stays green |
 | `pyproject.toml` | Hosts the docs build tooling only (no Python package shipped): the `docs` optional-dependency group (`pip install ".[docs]"` → `mkdocs-material`) |

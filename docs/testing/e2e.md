@@ -119,3 +119,13 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`, the Anular button enabled for every estado, Recogida not taking over PayDialog's request, no query after a duplicate, Actualizar enabled on any found record, Consultar shown on unpaid rows); each mutation made its scenario fail.
 
 **Not automated**: the real printer, PDF and screen rendering, menu wiring and the Listado lock are in [smoke_test.md](smoke_test.md), which never contacts AEAT. The real AEAT itself is checked once, with a single real ticket after the production switch.
+
+## Direct AEAT connection - `test_e2e_aeat_direct`
+
+`VerifactuIntegration` initialised with *Directa con la AEAT* (research branch), the real Cobrar window and the fake AEAT SOAP service (`tests/support/fakeaeatserver`, plain HTTP on 127.0.0.1; a safety check aborts unless the endpoint is local).
+
+| Test | Scenario | Asserts |
+|---|---|---|
+| `test_paymentRegistered` | Cobrar on two garments | One record (InvoiceID, payment date, total 25.00); both rows ENVIADA with AEAT's CSV, the record's huella, its XML and the pre-production QR URL |
+| `test_partialPaymentChained` | Two payment events | The second is `200-1`, chained after the first record |
+| `test_rejection` | AEAT refuses the record | The row is ERROR with AEAT's description |

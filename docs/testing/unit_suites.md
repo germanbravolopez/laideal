@@ -9,6 +9,12 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_verifactu_models` | `verifactu` | guiless | Invoice / tax-item / config models |
 | `test_verifactu_response` | `verifactu` | offscreen | AEAT reply parsing, query records, QR decode |
 | `test_aeat_hash` | `verifactu` | - | Direct-client huella and QR URL against the official AEAT vectors |
+| `test_aeat_record` | `verifactu` | - | Records and SOAP envelopes; writes samples for `aeat_xsd` |
+| `aeat_xsd` | Python + lxml | - | The samples and reply fixtures against the official AEAT XSDs (skipped without lxml) |
+| `test_aeat_response` | `verifactu` | - | AEAT replies / faults and their mapping; record summary; chain tip |
+| `test_aeat_store` | `verifactu` | - | Chain head and record outbox on a throwaway SQLite DB |
+| `test_aeat_qr` | `verifactu` | offscreen | The locally drawn QR (structure; a sample PNG) |
+| `test_aeat_direct_backend` | `verifactu` | offscreen | The direct backend against the fake AEAT SOAP service; certificates; self-test |
 | `test_appsettings` | `appsettings` | guiless | DPAPI secret, settings getters, language, fixed IVA |
 | `test_settingsdialog` | `appsettings` | offscreen | Configuración dialog behaviour |
 | `test_mysortfilterproxymodel` | `tableview` | guiless | Search and sort in the grids |
@@ -55,6 +61,11 @@ Links `contabilidad` (and `reporthtml` for amount formatting). All pure statics,
 - **`test_verifactu_models`**: `VerifactuConfig` validation and environment URLs; `VerifactuTaxItem` JSON and operation type; `VerifactuInvoice` JSON, totals, validation and rectificativa fields; the `verifactu_estado` string round-trip.
 - **`test_verifactu_response`** (offscreen, because `QPixmap` needs a `QGuiApplication`): `parseVerifactuResponse` error and success shapes, `Huella` extraction, base64 → `QPixmap` QR decode; `parseVerifactuQueryResponse` against captured real replies (empty list, a populated record, several stored attempts where the accepted one must win); `verifactuRemoteMatches`; `verifactuErrorIsDuplicate`.
 - **`test_aeat_hash`** (pure; the direct AEAT client researched in `docs/modules/verifactu/aeat-direct-investigation.md`, not used by the app yet): `AeatHash` against the three official huella vectors (first alta with an empty `Huella=`, chained alta, chained anulación) and the official QR URLs; value trimming, two-decimal amounts, the timestamp always with its `+hh:mm` offset (never `Z`), percent-encoded QR values. Each rule fails the suite when broken.
+- **`test_aeat_record`** / **`aeat_xsd`**: element order and values of `RegistroAlta` (F2, R5 S / I, after a rejection), `RegistroAnulacion`, the envelopes (escaping, query paging); every sample and the reply fixtures (`tests/fixtures/aeat-responses`) validated against AEAT's own XSDs (`tests/fixtures/aeat-xsd`, unchanged).
+- **`test_aeat_response`**: accepted, accepted with errors, partly correct, duplicate of an accepted / cancelled record, cancellation, SOAP fault, garbage; query found / cancelled / empty; `summarizeRecord`; `chainTip` (links first, whatever the list order; time as tie-break).
+- **`test_aeat_store`**: chain progression, failed build stores nothing, environments apart, seeding only while empty, outcomes / pending / latest, null texts, connection state kept.
+- **`test_aeat_qr`**: size, quiet zone and finder patterns of the QR of a verification URL (a sample was decoded back with zxing-cpp).
+- **`test_aeat_direct_backend`** (fake AEAT over plain HTTP, throwaway certificates in `tests/fixtures/aeat-cert`): accepted submit, wait time and batching, lost reply resent unchanged, rejection then a flagged new record, already accepted answered locally, cancellation, server / client faults, outbox sent at the next start, query, seeded chain, hand-over from AEAT (after a registration, after a local cancellation, looking back two years), self-test, R5 mapping, certificate required / loaded from a .pfx via the Windows crypto API (wrong password, expired, unknown thumbprint).
 
 ---
 

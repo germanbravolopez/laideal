@@ -1,6 +1,6 @@
 # Investigation: talking to AEAT directly instead of through IreneSolutions
 
-Status: **research report, October 2026** (branch `feature/aeat-direct-investigation`). Nothing here is implemented; nothing reaches AEAT production.
+Status: **research report and implementation, October 2026** (branch `feature/aeat-direct-investigation`, not merged). The direct client is built and tested against a fake AEAT; it has not talked to AEAT yet - see [Status on this branch](#status-on-this-branch-october-2026). Nothing reaches AEAT production.
 
 ## 1. Question
 
@@ -97,10 +97,50 @@ So there is no deadline pressure: the shop can stay on IreneSolutions (or not su
 3. **Phase 2 - proof of concept against pre-production**: with the owner's consent and certificate, one alta, one anulación and one query against `prewww1`, checking the mutual-TLS setup on the shop's Windows build and the response mapping.
 4. **Phase 3 - decide**: with the fee, the PoC result and the final legal date, choose whether to switch. If yes, migrate the chain from the last AEAT record, run a smoke test in pre-production, and keep the gateway backend available for one release as a fallback.
 
-## Progress on this branch
+## Status on this branch (October 2026)
 
-- **Phase 2, step 1 - huella and QR URL** (October 2026): `src/verifactu/aeathash.h/.cpp` (namespace `AeatHash`): the hash input text and SHA-256 huella of alta and anulación records, the amount (`123.40`) and timestamp (`+hh:mm`) formats they need, and the QR verification URL for the test and production hosts. Pure functions, not wired into the app. `tests/test_aeat_hash.cpp` checks the three official huella vectors and the official QR URLs; breaking any format rule (trimming, upper-case hex, two decimals, the offset, URL encoding) fails it.
-- Next: the record builder (RegistroAlta F2 / R5, RegistroAnulacion, SistemaInformatico) with XSD validation in CI, the chain state, then the `VerifactuBackend` interface.
+Everything of phases 1-3 that can be done without the owner's certificate and without contacting AEAT is built and tested on `feature/aeat-direct-investigation`. The app still uses IreneSolutions unless Configuración → Verifactu → *Conexión con la AEAT* is set to *Directa con la AEAT (en pruebas)*.
+
+| Phase | Status |
+|---|---|
+| 1. Ask IreneSolutions the fee and whether `verifactu_hash` is AEAT's huella | **Pending (owner / technical contact)** - an email draft is ready; nothing sent. The second question is now partly answered by the data: the gateway's stored `verifactu_xml` carries the AEAT record with its `Huella`. |
+| 2. Offline parts | **Done** - see the steps below. |
+| 3. Proof of concept against AEAT pre-production | **Built, not run** - *Prueba con la AEAT (entorno de pruebas)* in Configuración runs it; it needs the owner's certificate and her consent. |
+| 4. Decide | Open: cost, the PoC result and the final legal date. |
+
+### What was built
+
+| Step | Files | What it does |
+|---|---|---|
+| 1 | `aeathash.*` | Huella of alta / anulación records, the amount (`123.40`) and timestamp (`+hh:mm`) formats, the QR verification URL. Checked against the three official AEAT hash vectors and the official QR URLs. |
+| 2 | `aeatrecord.*` | `RegistroAlta` (F2, R5 by substitution / differences with `FacturasRectificadas` and `ImporteRectificacion`), `RegistroAnulacion`, `SistemaInformatico`, the submission and query SOAP envelopes (with paging). Every sample is validated against the **official AEAT XSDs** (`tests/fixtures/aeat-xsd`, downloaded from AEAT unchanged) by the `aeat_xsd` ctest entry (Python + lxml; CI installs lxml). |
+| 3 | `aeatresponse.*` | AEAT's submission and query replies and SOAP faults, mapped onto the app's `VerifactuResult` / `VerifactuRemoteRecord` (Correcto and AceptadoConErrores accepted, a duplicate of an accepted record accepted, Incorrecto rejected, a cancelled registration never adopted as sent). Reply fixtures validated against the official response XSDs. |
+| 4 | `aeatstore.*` | Two tables in the shop DB: `aeat_chain` (head of each issuer's chain) and `aeat_records` (every generated record: exact XML, hash, outcome, attempts). A record is appended and the head moved in one transaction; test and production apart. |
+| 5 | `aeatqr.*`, `src/third_party/qrcodegen` | The QR drawn locally (Nayuki qrcodegen, MIT, level M). A sample was decoded back to the exact URL by an independent reader. |
+| 6 | `verifactubackend.h`, `aeatdirectbackend.*`, `aeatcertificate.*`, `aeattransport.*` | The direct backend behind the same interface as the gateway: records stored and chained, sent together (up to 1000), never before `TiempoEsperaEnvio` has passed, a stored record resent unchanged after a lost reply (AEAT's duplicate answer adopted), a rejected one replaced by a new record flagged `Subsanacion` / `RechazoPrevio`, an accepted one answered from the store, unsent records sent at the next start. Tested end to end against a fake AEAT SOAP service (`tests/support/fakeaeatserver`). |
+| 7 | `aeatdirectbackend.*` (`continueChainFromAeat`), `aeatresponse.*` (`chainTip`) | Hand-over from the gateway: the first direct record chains to the issuer's newest record - the one no other record chains to - among AEAT's registrations (queried month by month, up to 24 back) and the gateway's stored cancellations (the query does not return them). |
+| 8 | `verifactuintegration.*`, `appsettings.*`, `settingsdialog.*`, `mainwindow.*`, `rectifyinvoicedialog.cpp`, `aeatselftest.*` | In the app: the connection and the certificate are chosen in Configuración (a Windows-store certificate, or a .pfx whose password is stored DPAPI-encrypted); `VerifactuIntegration` picks the backend; the chain continues from AEAT when the app starts; Rectificar factura sends the corrected invoice; the self-test is the proof of concept. |
+
+Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_store`, `aeat_qr`, `aeat_direct_backend`, `aeat_xsd`, `e2e_aeat_direct`) plus a settings-dialog case; 25 in all, green locally and in CI. The key rules were mutation-checked (removing each one fails its test).
+
+### Findings while building
+
+- **Qt's Schannel backend cannot read PKCS#12** (`The backend "schannel" cannot read PKCS12 format`). The release ships no OpenSSL, so the certificate is handled with the Windows crypto API (`PFXImportCertStore` in memory, or the personal store by thumbprint) and the requests go through **WinHTTP**, which presents it in the TLS handshake. A certificate already installed in Windows (as the FNMT one usually is, for the AEAT website) can be used without storing any password. *Not yet proven against AEAT*: the TLS handshake with a real certificate is the first thing the PoC checks.
+- **The gateway's chain does not follow the local ticket order**: in the shop DB ticket 31277 chains to 31110, not to the previous local ticket 31273 - IreneSolutions' shared test environment holds other records (e.g. earlier test runs) in between. The hand-over therefore asks AEAT for the chain tip instead of trusting local data.
+- **The official schemas differ from the public mirrors** (e.g. the query's `EstadoRegistro` is `Correcto / AceptadoConErrores / Anulado`, not `Correcta...`): the vendored XSDs are AEAT's own files.
+- **Flow control**: the first submission goes at once; the next waits `TiempoEsperaEnvio` (60 s in production). A second paid ticket within a minute is therefore printed as a recibo without QR and patched when AEAT replies, exactly as with a slow gateway today. Printing the QR before the reply (it is computed locally) would remove the wait, but changes the rule "factura verificable only once ENVIADA" and needs a decision.
+
+### To confirm in the proof of concept
+
+1. The WinHTTP + certificate handshake with `prewww1.aeat.es`.
+2. That `Subsanacion = S` + `RechazoPrevio = S` is the right flag pair to resend a corrected record after a rejection (the spec allows `S` and `X`).
+3. The real `TiempoEsperaEnvio` and that a query is not subject to it.
+4. That the chain hand-over from the gateway is accepted (the first direct record chains to a record IreneSolutions generated).
+5. The text of the declaración responsable once our system builds the records itself.
+
+### How to run the proof of concept
+
+On the shop PC (or any PC with the owner's certificate), with her consent: Configuración → Verifactu → *Conexión con la AEAT*: *Directa con la AEAT (en pruebas)*, choose her certificate in the list (or a .pfx file and its password), then **Prueba con la AEAT (entorno de pruebas)**. It always uses AEAT pre-production (no tax effect, whatever the PRODUCCIÓN box says): it shows the certificate, continues the test chain, registers `PRUEBA-<date and time>` for 1,21 €, queries it back, waits the time AEAT asks and cancels it. Nothing is saved as configuration unless *Aceptar* is pressed; leave the connection on IreneSolutions afterwards until the decision.
 
 ## Sources
 
