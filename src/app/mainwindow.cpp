@@ -844,7 +844,6 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
     ui_rev_cont = new Contabilidad(db, this);
-    ui_rev_cont->setWindowTitle("Revertir Contabilidad");
     ui_rev_cont->revertirOn = true;
     ui_rev_cont->resetAllContents();
     ui_rev_cont->show();

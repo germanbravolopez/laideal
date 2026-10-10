@@ -1,38 +1,144 @@
 #include "contabilidad.h"
-#include "ui_contabilidad.h"
 #include "sql_lite.h"
 #include "qprinter.h"
 #include "appsettings.h"
 #include "reporthtml.h"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFileInfo>
+#include <QFormLayout>
+#include <QFrame>
+#include <QGroupBox>
 #include <QHash>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QPushButton>
+#include <QSpinBox>
+#include <QTextDocument>
+#include <QUrl>
+#include <QVBoxLayout>
+
+namespace {
+
+// Result panel messages, coloured like the other Verifactu / accounting dialogs.
+QString okHtml(const QString &text)      { return "<b style='color:green'>" + text + "</b>"; }
+QString warnHtml(const QString &text)    { return "<b style='color:#b26a00'>" + text + "</b>"; }
+QString errorHtml(const QString &text)   { return "<b style='color:red'>" + text + "</b>"; }
+
+QString fileLinkHtml(const QString &file)
+{
+    return "PDF: <a href='" + QUrl::fromLocalFile(file).toString() + "'>"
+           + QFileInfo(file).fileName().toHtmlEscaped() + "</a>";
+}
+
+} // namespace
 
 Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::Contabilidad),
     db(database)
 {
     setAttribute(Qt::WA_DeleteOnClose); // self-delete on close: callers show() it and drop the pointer
-    ui->setupUi(this);
-    // Window-modal over MainWindow (contabilidad.ui) and kept open after each report:
-    // it can only be closed, not minimised or sent behind the main window.
+    // Window-modal over MainWindow and kept open after each report: it can only be
+    // closed (Cerrar / the title bar), not minimised or sent behind the main window.
+    setWindowModality(Qt::WindowModal);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     setWindowFlag(Qt::WindowMinimizeButtonHint, false);
-    ui->bb_ok_cancel->button(QDialogButtonBox::Ok)->setText("Generar");
-    ui->bb_ok_cancel->button(QDialogButtonBox::Cancel)->setText("Cerrar");
+    setMinimumWidth(520);
+    buildUi();
     initialSettings();
 }
 
-Contabilidad::~Contabilidad()
+Contabilidad::~Contabilidad() = default;
+
+void Contabilidad::buildUi()
 {
-    delete ui;
+    QVBoxLayout *layout = new QVBoxLayout(this);
+
+    m_lblIntro = new QLabel();
+    m_lblIntro->setWordWrap(true);
+    m_lblIntro->setFrameShape(QFrame::StyledPanel);
+    m_lblIntro->setContentsMargins(8, 8, 8, 8);
+    layout->addWidget(m_lblIntro);
+
+    // Period -------------------------------------------------------------
+    QGroupBox *grpPeriod = new QGroupBox("Periodo");
+    QFormLayout *periodForm = new QFormLayout(grpPeriod);
+    periodForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    m_cbConfig = new QComboBox();
+    m_cbConfig->setMinimumWidth(180);
+    m_cbConfig->setObjectName("cbConfig");   // stable names for the e2e test bench
+    m_cbConfig->addItems({ "Mensual", "Trimestral", "Anual" });   // ConfigMode order
+    periodForm->addRow("Tipo de informe:", m_cbConfig);
+    m_sbYear = new QSpinBox();
+    m_sbYear->setObjectName("sbYear");
+    m_sbYear->setMinimumWidth(110);
+    periodForm->addRow("Año:", m_sbYear);
+    m_lblPeriod = new QLabel("Trimestre:");
+    m_sbPeriod = new QSpinBox();
+    m_sbPeriod->setObjectName("sbPeriod");
+    m_sbPeriod->setMinimumWidth(110);
+    periodForm->addRow(m_lblPeriod, m_sbPeriod);
+    layout->addWidget(grpPeriod);
+
+    // Options ------------------------------------------------------------
+    QGroupBox *grpOptions = new QGroupBox("Opciones");
+    QVBoxLayout *optionsLayout = new QVBoxLayout(grpOptions);
+    m_chkLock = new QCheckBox("Bloquear el trimestre al generar la contabilidad");
+    m_chkLock->setObjectName("chkLock");
+    m_chkLock->setToolTip("Una vez bloqueado, los ingresos y gastos del trimestre no se pueden modificar "
+                          "hasta revertir la contabilidad. Solo en el informe trimestral.");
+    optionsLayout->addWidget(m_chkLock);
+    m_chkDetail = new QCheckBox("Incluir el detalle de tickets y facturas");
+    m_chkDetail->setObjectName("chkDetail");
+    m_chkDetail->setToolTip("Añade la lista de tickets y facturas de cada importe. Se guarda en un "
+                            "PDF aparte, terminado en \"_detalle\".");
+    optionsLayout->addWidget(m_chkDetail);
+    layout->addWidget(grpOptions);
+
+    // Actions + result ---------------------------------------------------
+    QHBoxLayout *actions = new QHBoxLayout();
+    m_btnCheckLock = new QPushButton("Comprobar bloqueo");
+    m_btnCheckLock->setObjectName("btnCheckLock");
+    m_btnCheckLock->setAutoDefault(false);
+    actions->addWidget(m_btnCheckLock);
+    actions->addStretch();
+    m_btnGenerate = new QPushButton();
+    m_btnGenerate->setObjectName("btnGenerate");
+    m_btnGenerate->setDefault(true);
+    m_btnGenerate->setMinimumWidth(220);
+    QFont primary = m_btnGenerate->font();
+    primary.setBold(true);
+    m_btnGenerate->setFont(primary);
+    actions->addWidget(m_btnGenerate);
+    layout->addLayout(actions);
+
+    m_lblResult = new QLabel();
+    m_lblResult->setObjectName("lblResult");
+    m_lblResult->setWordWrap(true);
+    m_lblResult->setFrameShape(QFrame::StyledPanel);
+    m_lblResult->setContentsMargins(8, 8, 8, 8);
+    m_lblResult->setMinimumHeight(64);
+    m_lblResult->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    m_lblResult->setTextFormat(Qt::RichText);
+    m_lblResult->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    m_lblResult->setOpenExternalLinks(true);
+    layout->addWidget(m_lblResult);
+
+    QPushButton *btnClose = new QPushButton("Cerrar");
+    btnClose->setObjectName("btnClose");
+    btnClose->setAutoDefault(false);
+    layout->addWidget(btnClose, 0, Qt::AlignRight);
+
+    connect(m_cbConfig, qOverload<int>(&QComboBox::currentIndexChanged), this, &Contabilidad::onConfigChanged);
+    connect(m_btnCheckLock, &QPushButton::clicked, this, &Contabilidad::onCheckLockClicked);
+    connect(m_btnGenerate,  &QPushButton::clicked, this, &Contabilidad::onGenerateClicked);
+    connect(btnClose,       &QPushButton::clicked, this, &QDialog::close);
 }
 
 Contabilidad::ConfigMode Contabilidad::currentMode() const
 {
-    return static_cast<ConfigMode>(ui->cb_config->currentIndex());
+    return static_cast<ConfigMode>(m_cbConfig->currentIndex());
 }
 
 void Contabilidad::initialSettings()
@@ -45,22 +151,54 @@ void Contabilidad::initialSettings()
     // to the current year and block selecting/reverting prior-year accounting.
     const int firstYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_recepcion", "ingresos");
     const int currentYear = QDate::currentDate().year();
-    ui->sb_year->setRange(firstYear > 0 ? firstYear : currentYear, currentYear);
-    ui->sb_trim->setRange(1, 4);
+    m_sbYear->setRange(firstYear > 0 ? firstYear : currentYear, currentYear);
+    m_sbPeriod->setRange(1, 4);
     resetAllContents();
 }
 
 void Contabilidad::resetAllContents()
 {
-    ui->cb_config->setCurrentIndex(Trimestral);
-    ui->cb_config->setDisabled(revertirOn); // disable configuration combobox when reverting contabilidad mode
-    ui->sb_year->setValue(QDate::currentDate().year());
-    ui->checkBox_lock->setChecked(false);
-    ui->checkBox_lock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
-    // Reverting writes no report.
-    ui->checkBox_detail->setChecked(false);
-    ui->checkBox_detail->setEnabled(!revertirOn);
-    ui->bb_ok_cancel->button(QDialogButtonBox::Ok)->setText(revertirOn ? "Revertir" : "Generar");
+    setWindowTitle(revertirOn ? "Revertir contabilidad" : "Generar contabilidad");
+    m_lblIntro->setText(revertirOn
+        ? "Desbloquea un trimestre ya contabilizado para que sus ingresos y gastos se puedan "
+          "volver a modificar. No se genera ningún informe."
+        : "Genera el informe de contabilidad del periodo en PDF. El informe trimestral puede "
+          "además bloquear el trimestre, como cierre tras la declaración de impuestos.");
+    m_cbConfig->setCurrentIndex(Trimestral);
+    m_cbConfig->setDisabled(revertirOn);   // reverting is always quarterly
+    m_sbYear->setValue(QDate::currentDate().year());
+    m_chkLock->setChecked(false);
+    m_chkLock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
+    m_chkDetail->setChecked(false);
+    m_chkDetail->setEnabled(!revertirOn);  // reverting writes no report
+    m_btnGenerate->setText(revertirOn ? "Revertir contabilidad" : "Generar contabilidad");
+    m_lblResult->setText("Seleccione el periodo y pulse \"" + m_btnGenerate->text() + "\".");
+}
+
+static bool s_openGeneratedReports = true;
+
+void Contabilidad::setOpenGeneratedReports(bool open)
+{
+    s_openGeneratedReports = open;
+}
+
+static QString s_lastReportHtml;
+
+QString Contabilidad::lastReportHtml()
+{
+    return s_lastReportHtml;
+}
+
+bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
+{
+    return mode == Trimestral && !reverting;
+}
+
+int Contabilidad::combinedLockState(int ingresosLock, int gastosLock)
+{
+    if (ingresosLock == 2 && gastosLock == 2)
+        return 2;
+    return (ingresosLock == 1 || gastosLock == 1) ? 1 : 0;
 }
 
 QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail)
@@ -100,154 +238,98 @@ QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int u
     return lines.join('\n');
 }
 
-void Contabilidad::on_pb_check_lock_clicked()
+void Contabilidad::onCheckLockClicked()
 {
-    const int unit = currentMode() == Anual ? 0 : ui->sb_trim->value();
-    const QString message = lockStatusMessage(db, currentMode(), unit, ui->sb_year->value());
-    qDebug() << "Contabilidad::on_pb_check_lock_clicked:" << message;
-    QMessageBox::information(this, "Comprobar bloqueo", message, QMessageBox::Ok, QMessageBox::Ok);
+    const int unit = currentMode() == Anual ? 0 : m_sbPeriod->value();
+    const QString message = lockStatusMessage(db, currentMode(), unit, m_sbYear->value());
+    qDebug() << "Contabilidad::onCheckLockClicked:" << message;
+    m_lblResult->setText(message.toHtmlEscaped().replace('\n', "<br>"));
 }
 
-static bool s_openGeneratedReports = true;
-
-void Contabilidad::setOpenGeneratedReports(bool open)
+void Contabilidad::onGenerateClicked()
 {
-    s_openGeneratedReports = open;
-}
+    const int trim = m_sbPeriod->value();
+    const int year = m_sbYear->value();
+    const QString quarterName = "del trimestre " + QString::number(trim) + " de " + QString::number(year);
+    m_lblResult->setText(revertirOn ? "Revirtiendo..." : "Generando el informe...");
+    QString message;
+    int invalidAmounts = 0;
+    QString file;
 
-static QString s_lastReportHtml;
-
-QString Contabilidad::lastReportHtml()
-{
-    return s_lastReportHtml;
-}
-
-bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
-{
-    return mode == Trimestral && !reverting;
-}
-
-int Contabilidad::combinedLockState(int ingresosLock, int gastosLock)
-{
-    if (ingresosLock == 2 && gastosLock == 2)
-        return 2;
-    return (ingresosLock == 1 || gastosLock == 1) ? 1 : 0;
-}
-
-void Contabilidad::on_bb_ok_cancel_accepted()
-{
-    // The dialog stays open afterwards (another period, the other report, a lock
-    // check); only Cerrar closes it.
-    if (currentMode() == Trimestral) {
-        // Read the lock across the whole quarter, not just its last month: a
-        // quarter with income only in its first months would otherwise read as
-        // "no data" and never get locked.
-        int editLock = combinedLockState(readLockForQuarter(db, "ingresos", ui->sb_trim->value(), ui->sb_year->value()),
-                                         readLockForQuarter(db, "gastos", ui->sb_trim->value(), ui->sb_year->value()));
+    if (currentMode() != Trimestral) {
+        file = generateContabilidad(invalidAmounts);
+        message = okHtml("Informe generado.");
+    } else {
+        // Read the lock across the whole quarter, not just its last month: a quarter
+        // with income only in its first months would otherwise read as "no data".
+        const int editLock = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
+                                               readLockForQuarter(db, "gastos", trim, year));
         switch (editLock) {
-        case 0:
-            // contabilidad not done
+        case 0:     // not done yet
             if (revertirOn) {
-                // revert contabilidad mode
-                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad was not done for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << " (editLock = 0). Just showing information message without generating the report or updating the lock.";
-                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value()) + " no estaba aun realizada.",
-                                         QMessageBox::Ok, QMessageBox::Ok);
-            }
-            else {
-                generateContabilidad();
-                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad is done for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << ". Proceeding with report generation + editLock = " << ui->checkBox_lock->isChecked() << ".";
-                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha realizado."
-                                         + (ui->checkBox_lock->isChecked() ?
-                                                " El trimestre se ha bloqueado para evitar modificaciones posteriores." :
-                                                " El trimestre no se ha bloqueado, por lo que se pueden realizar modificaciones posteriores."),
-                                         QMessageBox::Ok, QMessageBox::Ok);
-            }
-            if (ui->checkBox_lock->isChecked()) {
-                updateLock();
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not done (editLock = 0)";
+                message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
+            } else {
+                file = generateContabilidad(invalidAmounts);
+                const bool lock = m_chkLock->isChecked();
+                if (lock)
+                    updateLock();
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated, lock =" << lock;
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          + (lock ? "El trimestre se ha bloqueado: sus ingresos y gastos ya no se pueden modificar."
+                                  : "El trimestre no se ha bloqueado: se pueden realizar modificaciones posteriores.");
             }
             break;
-        case 1:
-            // contabilidad done
+        case 1:     // done (locked)
             if (revertirOn) {
-                // revert contabilidad mode
                 updateLock();
-                qDebug() << "(Revertir) Contabilidad::on_bb_ok_cancel_accepted: contabilidad reverted for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << " (editLock = 0).";
-                QMessageBox::information(this, "Revertir contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value()) + " se ha revertido.",
-                                         QMessageBox::Ok, QMessageBox::Ok);
-            }
-            else {
-                generateContabilidad();
-                qDebug() << "Contabilidad::on_bb_ok_cancel_accepted: contabilidad already done for trim" << ui->sb_trim->value()
-                         << "year" << ui->sb_year->value() << "and editLock was already set, so just generating the report.";
-                QMessageBox::information(this, "Contabilidad", "La contabilidad del trimestre " + QString::number(ui->sb_trim->value())
-                                         + " para el año " + QString::number(ui->sb_year->value()) + " ya estaba realizada."
-                                         + " Documentacion generada de nuevo.",
-                                         QMessageBox::Ok, QMessageBox::Ok);
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "reverted (editLock = 0)";
+                message = okHtml("Contabilidad " + quarterName + " revertida.") + "<br>"
+                          + "El trimestre vuelve a estar abierto.";
+            } else {
+                file = generateContabilidad(invalidAmounts);
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "already locked, report regenerated";
+                message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
+                          + "<br>Documentación generada de nuevo.";
             }
             break;
         default:
-            qWarning() << "Contabilidad::on_bb_ok_cancel_accepted: invalid lock value read from database:" << editLock;
-            QMessageBox::warning(this, "Contabilidad",
-                                 "No hay registros de ingresos ni de gastos para realizar la contabilidad en el periodo indicado.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
+            qWarning() << "Contabilidad: no ingresos nor gastos for trim" << trim << "year" << year;
+            message = warnHtml("No hay registros de ingresos ni de gastos " + quarterName + ".");
             break;
         }
     }
-    else {
-        generateContabilidad();
-    }
+    if (!file.isEmpty())
+        message += "<br>" + fileLinkHtml(file);
+    if (invalidAmounts > 0)
+        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal: "
+                                              "no se han sumado y aparecen marcados en el detalle. Utilice la "
+                                              "herramienta de limpiado de importes decimales.").arg(invalidAmounts));
+    m_lblResult->setText(message);
 }
 
-void Contabilidad::on_bb_ok_cancel_rejected()
-{
-    this->close();
-}
-
-void Contabilidad::on_cb_config_currentTextChanged(const QString &arg1)
+void Contabilidad::onConfigChanged()
 {
     // Only a quarterly report can close the books; untick so a hidden choice never applies.
     const bool lockAvailable = lockOptionAvailable(currentMode(), revertirOn);
     if (!lockAvailable)
-        ui->checkBox_lock->setChecked(false);
-    ui->checkBox_lock->setEnabled(lockAvailable);
-    if (currentMode() == Mensual) {
-        ui->lbl_trim->setVisible(true);
-        ui->sb_trim->setVisible(true);
-        ui->lbl_trim->setText("Mes:");
-        ui->sb_trim->setRange(1, 12);
-    }
-    else if (currentMode() == Trimestral) {
-        ui->lbl_trim->setVisible(true);
-        ui->sb_trim->setVisible(true);
-        ui->lbl_trim->setText("Trimestre:");
-        ui->sb_trim->setRange(1, 4);
-    }
-    else if (currentMode() == Anual) {
-        ui->lbl_trim->setVisible(false);
-        ui->sb_trim->setVisible(false);
-    }
-    else {
-        qCritical() << "Contabilidad::on_cb_config_currentTextChanged: unsupported configuration option" << arg1;
-        QMessageBox::critical(this, "Contabilidad",
-                              "No se puede configurar de la forma indicada.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
+        m_chkLock->setChecked(false);
+    m_chkLock->setEnabled(lockAvailable);
+    const bool monthly = currentMode() == Mensual;
+    m_lblPeriod->setText(monthly ? "Mes:" : "Trimestre:");
+    m_sbPeriod->setRange(1, monthly ? 12 : 4);
+    m_lblPeriod->setVisible(currentMode() != Anual);
+    m_sbPeriod->setVisible(currentMode() != Anual);
 }
 
-void Contabilidad::generateContabilidad()
+QString Contabilidad::generateContabilidad(int &invalidAmounts)
 {
-    const int year = ui->sb_year->value();
+    const int year = m_sbYear->value();
     const double ivaRate = AppSettings::ivaRate();
-    const bool withDetail = ui->checkBox_detail->isChecked();
+    const bool withDetail = m_chkDetail->isChecked();
     const QString detailTitle = withDetail ? QStringLiteral(" · Detalle") : QString();
     QString contabilidadHtml;
-    int invalidAmounts = 0;
+    invalidAmounts = 0;
 
     if (currentMode() == Trimestral || currentMode() == Mensual) {
         QDate start, endExclusive;
@@ -260,13 +342,13 @@ void Contabilidad::generateContabilidad()
 
         QString title, subtitle = periodSubtitle(0);
         if (currentMode() == Trimestral) {
-            title = "Contabilidad - Trimestre " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
+            title = "Contabilidad - Trimestre " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
         }
         else {
             // Closing is quarterly: the month reads closed when its quarter is (even a
             // month without rows, which readLockForMonthAndYear would report as open).
-            const bool cerrada = quarterIsClosed(db, QDate(year, ui->sb_trim->value(), 1));
-            title = "Reporte Mensual - Mes " + QString::number(ui->sb_trim->value()) + " · " + QString::number(year);
+            const bool cerrada = quarterIsClosed(db, QDate(year, m_sbPeriod->value(), 1));
+            title = "Reporte Mensual - Mes " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
             subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
         }
         contabilidadHtml = ReportHtml::documentOpen(title + detailTitle, subtitle)
@@ -304,18 +386,13 @@ void Contabilidad::generateContabilidad()
                                                    details.expenses[trim - 1], ivaRate);
         contabilidadHtml += ReportHtml::documentClose();
     }
-    if (invalidAmounts > 0) {
+    if (invalidAmounts > 0)
         qCritical() << "Contabilidad::generateContabilidad:" << invalidAmounts << "comma-decimal importe(s) not summed";
-        QMessageBox::critical(this, "Error en la base de datos",
-                              QString("Hay %1 importe(s) guardados con ',' como separador decimal: no se han sumado "
-                                      "en la contabilidad y aparecen marcados en el detalle. Utilizar herramienta "
-                                      "de limpiado de importes decimales.").arg(invalidAmounts),
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
     const QString file = AppSettings::instance()->contabilidadPath()
-            + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : ui->sb_trim->value(), year, withDetail);
+            + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : m_sbPeriod->value(), year, withDetail);
     QDir().mkpath(QFileInfo(file).absolutePath());
     writeHtml(file, contabilidadHtml);
+    return file;
 }
 
 void Contabilidad::periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive)
@@ -344,8 +421,8 @@ void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endEx
     const ConfigMode mode = currentMode();
     // Mensual reads the month from sb_trim; Trimestral the quarter from sb_trim;
     // Anual iterates quarters, so the caller passes the quarter in trimForYearConfig.
-    const int unit = (mode == Anual) ? trimForYearConfig : ui->sb_trim->value();
-    periodRangeFor(mode, unit, ui->sb_year->value(), start, endExclusive);
+    const int unit = (mode == Anual) ? trimForYearConfig : m_sbPeriod->value();
+    periodRangeFor(mode, unit, m_sbYear->value(), start, endExclusive);
 }
 
 QString Contabilidad::periodSubtitle(int trimForYearConfig)
@@ -460,8 +537,8 @@ void Contabilidad::updateLock()
 {
     // Doing the contabilidad locks the period (edit_lock = 1); reverting unlocks it (0).
     const int lockValue = revertirOn ? 0 : 1;
-    const int year = ui->sb_year->value();
-    switch (ui->sb_trim->value()) {
+    const int year = m_sbYear->value();
+    switch (m_sbPeriod->value()) {
     case 1:
         updateLockForMonth(db, lockValue, 1, year);
         updateLockForMonth(db, lockValue, 2, year);
@@ -486,7 +563,7 @@ void Contabilidad::updateLock()
         break;
     }
     qDebug() << "Contabilidad::updateLock: edit_lock set to" << lockValue
-             << "for trim" << ui->sb_trim->value() << "year" << year;
+             << "for trim" << m_sbPeriod->value() << "year" << year;
 }
 
 void Contabilidad::writeHtml(QString filename,

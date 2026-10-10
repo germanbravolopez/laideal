@@ -2,10 +2,7 @@
 #define CONTABILIDAD_H
 
 #include <QDialog>
-#include <QMessageBox>
-#include <QSqlQueryModel>
 #include <QSqlDatabase>
-#include <QMessageBox>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDate>
@@ -14,9 +11,14 @@
 
 #include "sql_lite.h"
 
-namespace Ui {
-class Contabilidad;
-}
+class QCheckBox;
+class QComboBox;
+class QLabel;
+class QPushButton;
+class QSpinBox;
+
+// Generar / Revertir contabilidad (built in code, no .ui): period and options,
+// the actions, and a result panel that reports every outcome in the window.
 
 class Contabilidad : public QDialog
 {
@@ -139,20 +141,30 @@ public:
                                                     double ivaRate);
 
 private slots:
+    void onGenerateClicked();
+    void onCheckLockClicked();
+    void onConfigChanged();
+
+private:
+    void buildUi();
     void initialSettings();
-
-    void on_bb_ok_cancel_accepted();
-    void on_bb_ok_cancel_rejected();
-    void on_cb_config_currentTextChanged(const QString &arg1);
-    void on_pb_check_lock_clicked();
-
-    void generateContabilidad();
+    // Writes the selected report; returns its file. invalidAmounts receives the
+    // comma-decimal amounts left out of the sums.
+    QString generateContabilidad(int &invalidAmounts);
     void updateLock();
     void writeHtml(QString filename, QString html);
 
-private:
-    Ui::Contabilidad *ui;
     QSqlDatabase db;
+    QLabel      *m_lblIntro = nullptr;
+    QComboBox   *m_cbConfig = nullptr;
+    QSpinBox    *m_sbYear = nullptr;
+    QLabel      *m_lblPeriod = nullptr;
+    QSpinBox    *m_sbPeriod = nullptr;
+    QCheckBox   *m_chkLock = nullptr;
+    QCheckBox   *m_chkDetail = nullptr;
+    QPushButton *m_btnCheckLock = nullptr;
+    QPushButton *m_btnGenerate = nullptr;
+    QLabel      *m_lblResult = nullptr;
 
     // Current accounting mode, read from the combobox index (not its text).
     ConfigMode currentMode() const;

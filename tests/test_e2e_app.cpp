@@ -940,44 +940,54 @@ private slots:
         QFile::remove(detailedPdf);
 
         QPointer<Contabilidad> form = new Contabilidad(m_db);
-        form->findChild<QComboBox *>("cb_config")->setCurrentIndex(1);   // Trimestral
-        form->findChild<QSpinBox *>("sb_trim")->setValue(1);
-        form->findChild<QSpinBox *>("sb_year")->setValue(2026);
-        form->findChild<QCheckBox *>("checkBox_lock")->setChecked(true);
-        QMetaObject::invokeMethod(form, "on_bb_ok_cancel_accepted");
+        const auto result = [](Contabilidad *c) { return c->findChild<QLabel *>("lblResult")->text(); };
+        form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
+        form->findChild<QSpinBox *>("sbPeriod")->setValue(1);
+        form->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        form->findChild<QCheckBox *>("chkLock")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
 
         QVERIFY(QFile::exists(pdf));
         QVERIFY(QFileInfo(pdf).size() > 0);
         QVERIFY(!QFile::exists(detailedPdf));                             // the detail is opt-in
         QVERIFY(!Contabilidad::lastReportHtml().contains("Detalle del periodo"));
-        QVERIFY(m_popups->sawMessageContaining("se ha bloqueado"));
+        // Every outcome is shown in the window, never in a pop-up.
+        QVERIFY2(result(form).contains("El trimestre se ha bloqueado"), qPrintable(result(form)));
+        QVERIFY(result(form).contains("contabilidad_trimestral_2026_1.pdf"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("1"));
 
         // The dialog stays open: check the lock, then the detailed report, kept apart.
         QTest::qWait(50);
         QVERIFY(!form.isNull());
-        form->findChild<QPushButton *>("pb_check_lock")->click();
-        QVERIFY(m_popups->sawMessageContaining("El trimestre 1 de 2026 está bloqueado"));
-        form->findChild<QCheckBox *>("checkBox_detail")->setChecked(true);
-        QMetaObject::invokeMethod(form, "on_bb_ok_cancel_accepted");
+        form->findChild<QPushButton *>("btnCheckLock")->click();
+        QVERIFY2(result(form).contains("El trimestre 1 de 2026 está bloqueado"), qPrintable(result(form)));
+        form->findChild<QCheckBox *>("chkDetail")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
         QVERIFY(QFile::exists(detailedPdf));
         QVERIFY(Contabilidad::lastReportHtml().contains("Detalle del periodo"));
         QVERIFY(Contabilidad::lastReportHtml().contains("Trimestre 1 · 2026 · Detalle"));
-        QVERIFY(m_popups->sawMessageContaining("ya estaba realizada"));
-        form->findChild<QDialogButtonBox *>("bb_ok_cancel")->button(QDialogButtonBox::Cancel)->click();
+        QVERIFY(result(form).contains("ya estaba realizada"));
+        QVERIFY(result(form).contains("contabilidad_trimestral_2026_1_detalle.pdf"));
+        form->findChild<QPushButton *>("btnClose")->click();
         QTRY_VERIFY(form.isNull());                                       // Cerrar closes it (WA_DeleteOnClose)
 
         QPointer<Contabilidad> revert = new Contabilidad(m_db);
         revert->revertirOn = true;
         revert->resetAllContents();
-        revert->findChild<QSpinBox *>("sb_trim")->setValue(1);
-        revert->findChild<QSpinBox *>("sb_year")->setValue(2026);
-        QMetaObject::invokeMethod(revert, "on_bb_ok_cancel_accepted");
+        QCOMPARE(revert->windowTitle(), QStringLiteral("Revertir contabilidad"));
+        QVERIFY(!revert->findChild<QCheckBox *>("chkDetail")->isEnabled());
+        revert->findChild<QSpinBox *>("sbPeriod")->setValue(1);
+        revert->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        revert->findChild<QPushButton *>("btnGenerate")->click();
 
-        QVERIFY(m_popups->sawMessageContaining("se ha revertido"));
+        QVERIFY2(result(revert).contains("revertida"), qPrintable(result(revert)));
         QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("0"));
-        revert->findChild<QPushButton *>("pb_check_lock")->click();
-        QVERIFY(m_popups->sawMessageContaining("El trimestre 1 de 2026 no está bloqueado"));
+        revert->findChild<QPushButton *>("btnCheckLock")->click();
+        QVERIFY(result(revert).contains("El trimestre 1 de 2026 no está bloqueado"));
+        revert->findChild<QPushButton *>("btnGenerate")->click();        // nothing left to revert
+        QVERIFY(result(revert).contains("no hay nada que revertir"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         revert->close();
         QTRY_VERIFY(revert.isNull());
     }

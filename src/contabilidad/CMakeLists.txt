@@ -1,5 +1,4 @@
 add_library(contabilidad STATIC
-    contabilidad.ui
     contabilidad.h
     contabilidad.cpp
 )

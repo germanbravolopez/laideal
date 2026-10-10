@@ -14,9 +14,9 @@ ui->revertirOn = false;  // set true to unlock instead of lock
 ui->show();
 ```
 
-`Contabilidad` is a `QDialog`, window-modal over MainWindow, created with `WA_DeleteOnClose`, so each instance self-deletes when closed — callers `show()` it and drop the pointer. It **stays open** after a report is generated (or a quarter reverted) and its message is closed, so the operator can produce another period, the detailed version or check a lock; it has no minimise / help button and only **Cerrar** (or the window's close) dismisses it. The accept button reads **Generar** (**Revertir** in revert mode). The `db` handle is a private member set through the constructor.
+`Contabilidad` is a `QDialog` built in code (no `.ui` file, like `RectifyInvoiceDialog`), window-modal over MainWindow, created with `WA_DeleteOnClose`, so each instance self-deletes when closed — callers `show()` it and drop the pointer. Layout, top to bottom: an explanation panel (generate / revert); a **Periodo** group (Tipo de informe, Año, Trimestre / Mes); an **Opciones** group (Bloquear el trimestre, Incluir el detalle); the actions, **Comprobar bloqueo** on the left and the primary **Generar contabilidad** (**Revertir contabilidad** in revert mode) on the right; a **result panel** (`lblResult`) where every outcome is written - success in green, nothing to do in amber, comma-decimal amounts in red, with a link that opens the PDF - instead of pop-up message boxes; and **Cerrar**. The dialog **stays open** after each report or revert, so the operator can produce another period, the detailed version or check a lock; it has no minimise / help button and only Cerrar (or the window's close) dismisses it. Widgets carry object names (`cbConfig`, `sbYear`, `sbPeriod`, `chkLock`, `chkDetail`, `btnCheckLock`, `btnGenerate`, `lblResult`, `btnClose`) for the e2e bench. The `db` handle is a private member set through the constructor.
 
-`MainWindow` opens this dialog twice: once with `revertirOn=false` for normal accounting generation, and once with `revertirOn=true` for the "revert accounting" action. In revert mode the mode combobox is forced to Trimestral and disabled.
+`MainWindow` opens this dialog twice: once with `revertirOn=false` for normal accounting generation, and once with `revertirOn=true` for the "revert accounting" action. In revert mode (`resetAllContents()` after `revertirOn = true`) the title, explanation and primary button switch to "Revertir contabilidad", the report type is forced to Trimestral and disabled, and the detail option is disabled (no report is written).
 
 ## Report modes
 
@@ -37,11 +37,11 @@ In Trimestral mode the quarter's lock state is read first via `sql_lite::readLoc
    - `revertirOn=false` → sets `edit_lock=1` (locks the period)
    - `revertirOn=true` → sets `edit_lock=0` (unlocks the period)
 
-The **Bloquear datos** checkbox is enabled only in Trimestral mode and never while reverting (`Contabilidad::lockOptionAvailable`). Switching to Mensual or Anual unticks and greys it out, because only the quarterly flow closes the books.
+The **Bloquear el trimestre** checkbox is enabled only in Trimestral mode and never while reverting (`Contabilidad::lockOptionAvailable`). Switching to Mensual or Anual unticks and greys it out, because only the quarterly flow closes the books.
 
-**Incluir detalle de tickets** (unticked by default, disabled while reverting) adds the [detail tables](#detail-tables-audit-annex) to the report; without it the PDF has only the summary blocks. The two versions are separate files (`Contabilidad::reportRelativePath`): `contabilidad_trimestral_<year>_<q>.pdf`, `Mensual/reporte_mensual_<year>_<m>.pdf`, `Anual/reporte_anual_<year>.pdf`, and the same names ending in `_detalle.pdf` for the detailed one, whose title also ends in "· Detalle".
+**Incluir el detalle de tickets y facturas** (unticked by default, disabled while reverting) adds the [detail tables](#detail-tables-audit-annex) to the report; without it the PDF has only the summary blocks. The two versions are separate files (`Contabilidad::reportRelativePath`): `contabilidad_trimestral_<year>_<q>.pdf`, `Mensual/reporte_mensual_<year>_<m>.pdf`, `Anual/reporte_anual_<year>.pdf`, and the same names ending in `_detalle.pdf` for the detailed one, whose title also ends in "· Detalle".
 
-**Comprobar bloqueo** shows whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
+**Comprobar bloqueo** shows in the result panel whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
 
 ## Report content
 
@@ -60,7 +60,7 @@ The page header (business name / address / city / NIF / phone + issue date), the
 
 ### Detail tables (audit annex)
 
-When **Incluir detalle de tickets** is ticked, each period gets a **Detalle** block after the summary, listing the rows behind its figures, so every number can be audited:
+When **Incluir el detalle** is ticked, each period gets a **Detalle** block after the summary, listing the rows behind its figures, so every number can be audited:
 
 - **Detalle de ingresos**: one line per paid ticket (`n_recibo`, fecha de pago, cliente, number of garments, base, IVA, importe) and a total row. Garment rows are aggregated by `n_recibo`. A ticket with a comma-decimal garment is marked `*` and that garment is not summed.
 - **Detalle de gastos**: one line per `gastos` row (fecha, nº factura, empresa, servicio, IVA %, base, cuota, importe) and a total row. A row with an unrecognised or NULL IVA is marked `*`, a comma-decimal amount `**`, and neither enters the total, with a note under the table.
