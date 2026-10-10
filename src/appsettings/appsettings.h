@@ -115,6 +115,21 @@ public:
     QString verifactuPendingRecoveryFloorDate() const;
     void    setVerifactuPendingRecoveryFloorDate(const QString &v);
 
+    // How the app reaches AEAT: the IreneSolutions gateway (default) or directly
+    // (research, see docs/modules/verifactu/aeat-direct-investigation.md).
+    bool    verifactuDirectAeat() const;
+    void    setVerifactuDirectAeat(bool v);
+    // The owner's certificate for the direct connection: a Windows personal-store
+    // thumbprint, or else a .pfx file and its password (stored DPAPI-encrypted).
+    QString aeatCertificateThumbprint() const;
+    void    setAeatCertificateThumbprint(const QString &v);
+    QString aeatCertificateFile() const;
+    void    setAeatCertificateFile(const QString &v);
+    QString aeatCertificatePassword() const;
+    void    setAeatCertificatePassword(const QString &v);
+    // NumeroInstalacion of the records: created once per installation.
+    QString aeatInstallationNumber();
+
     // --- Updater ---
     bool checkUpdatesOnStartup() const;
     void setCheckUpdatesOnStartup(bool v);

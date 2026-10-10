@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
+#include <QUuid>
 #include <QJsonDocument>
 #include <QDebug>
 
@@ -282,12 +283,16 @@ void AppSettings::migrateFromLegacyFiles()
 
 bool AppSettings::encryptSecretsAtRest()
 {
-    const QString stored = str({"verifactu", "service_key"});
-    if (stored.isEmpty() || isEncrypted(stored))
-        return false;
-    setStr({"verifactu", "service_key"}, encryptSecret(stored));
-    qDebug() << "AppSettings: encrypted plaintext Verifactu service key at rest (DPAPI)";
-    return true;
+    bool changed = false;
+    for (const char *key : { "service_key", "aeat_certificate_password" }) {
+        const QString stored = str({"verifactu", key});
+        if (stored.isEmpty() || isEncrypted(stored))
+            continue;
+        setStr({"verifactu", key}, encryptSecret(stored));
+        qDebug() << "AppSettings: encrypted plaintext secret" << key << "at rest (DPAPI)";
+        changed = true;
+    }
+    return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +363,25 @@ void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifac
 
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
+
+bool    AppSettings::verifactuDirectAeat() const { return str({"verifactu", "connection"}) == QLatin1String("aeat"); }
+void    AppSettings::setVerifactuDirectAeat(bool v) { setStr({"verifactu", "connection"}, v ? "aeat" : "irenesolutions"); }
+QString AppSettings::aeatCertificateThumbprint() const { return str({"verifactu", "aeat_certificate_thumbprint"}); }
+void    AppSettings::setAeatCertificateThumbprint(const QString &v) { setStr({"verifactu", "aeat_certificate_thumbprint"}, v); }
+QString AppSettings::aeatCertificateFile() const { return str({"verifactu", "aeat_certificate_file"}); }
+void    AppSettings::setAeatCertificateFile(const QString &v) { setStr({"verifactu", "aeat_certificate_file"}, v); }
+QString AppSettings::aeatCertificatePassword() const { return decryptSecret(str({"verifactu", "aeat_certificate_password"})); }
+void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"verifactu", "aeat_certificate_password"}, encryptSecret(v)); }
+
+QString AppSettings::aeatInstallationNumber()
+{
+    QString number = str({"verifactu", "aeat_installation"});
+    if (number.isEmpty()) {
+        number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
+        setStr({"verifactu", "aeat_installation"}, number);
+    }
+    return number;
+}
 
 bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, true); }
 void    AppSettings::setVerifactuPendingRecoveryEnabled(bool v) { setBln({"verifactu", "pending_recovery_enabled"}, v); }

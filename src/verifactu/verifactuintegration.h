@@ -3,10 +3,15 @@
 
 #include <QString>
 #include <QDate>
+#include <QSqlDatabase>
 #include "verifactumanager.h"
 
-// High-level async facade over VerifactuManager: submit/cancel/QR operations return
-// a request ID immediately; results arrive via the requestFinished signal.
+class AeatDirectBackend;
+
+// High-level async facade over the VerifactuBackend chosen in Configuración - the
+// IreneSolutions gateway (VerifactuManager) or the direct AEAT client
+// (AeatDirectBackend): submit/cancel/QR operations return a request ID immediately;
+// results arrive via the requestFinished signal.
 class VerifactuIntegration : public QObject
 {
     Q_OBJECT
@@ -15,7 +20,8 @@ public:
     explicit VerifactuIntegration(QObject *parent = nullptr);
     ~VerifactuIntegration();
 
-    bool initialize();
+    // `db` holds the direct client's records; the app's default connection when not given.
+    bool initialize(const QSqlDatabase &db = QSqlDatabase());
 
     // Async API. Returns a unique request ID; the caller correlates it with the
     // requestFinished signal to pick up its own result. Empty string means the
@@ -54,7 +60,10 @@ public:
         double originalTaxBase,
         double originalTaxAmount,
         double taxRate,
-        const QString &description = QString()
+        const QString &description = QString(),
+        // The invoice it corrects (FacturasRectificadas); the direct client sends it.
+        const QString &rectifiedInvoiceNumber = QString(),
+        const QDate &rectifiedInvoiceDate = QDate()
     );
 
     QString generateQRAsync(
@@ -71,13 +80,19 @@ public:
 
     bool isConfigured() const;
     QString getLastError() const { return m_lastError; }
+    // The direct AEAT client when it is the chosen connection, else nullptr.
+    AeatDirectBackend *directBackend() const { return m_direct; }
 
 signals:
     void requestFinished(const QString &requestId, const VerifactuResult &result);
     void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
 
 private:
-    VerifactuManager *m_manager;
+    VerifactuBackend  *m_backend = nullptr;
+    VerifactuManager  *m_manager = nullptr;   // when the gateway is the connection
+    AeatDirectBackend *m_direct = nullptr;    // when AEAT is reached directly
+    QString m_emitterNif;
+    QString m_emitterName;
     QString m_lastError;
 
     bool loadEmitterConfiguration();

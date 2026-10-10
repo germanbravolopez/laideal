@@ -206,6 +206,34 @@ add_test(NAME aeat_direct_backend
     COMMAND test_aeat_direct_backend -o ${CMAKE_BINARY_DIR}/test-results-aeat_direct_backend.xml,junitxml -o -,txt)
 set_tests_properties(aeat_direct_backend PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# End to end over the direct AEAT connection: VerifactuIntegration in direct mode,
+# the real Cobrar window, the fake AEAT SOAP service.
+add_executable(test_e2e_aeat_direct test_e2e_aeat_direct.cpp
+    support/fakeaeatserver.h
+    support/fakeaeatserver.cpp
+    support/modalautocloser.h
+    support/testschema.h
+)
+target_include_directories(test_e2e_aeat_direct PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/support
+    ${CMAKE_SOURCE_DIR}/src/recog_prendas
+)
+target_link_libraries(test_e2e_aeat_direct PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    Qt${QT_VERSION_MAJOR}::Network
+    recog_prendas
+    verifactu
+    sql_lite
+    appsettings
+    imprimir
+    contabilidad
+)
+add_test(NAME e2e_aeat_direct
+    COMMAND test_e2e_aeat_direct -o ${CMAKE_BINARY_DIR}/test-results-e2e_aeat_direct.xml,junitxml -o -,txt)
+set_tests_properties(e2e_aeat_direct PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME aeat_xsd

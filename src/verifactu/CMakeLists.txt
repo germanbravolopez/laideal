@@ -31,6 +31,8 @@ set(PROJECT_SOURCES
     aeattransport.cpp
     aeatdirectbackend.h
     aeatdirectbackend.cpp
+    aeatselftest.h
+    aeatselftest.cpp
     ../third_party/qrcodegen/qrcodegen.hpp
     ../third_party/qrcodegen/qrcodegen.cpp
     verifactuconfig.h

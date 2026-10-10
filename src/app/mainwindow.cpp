@@ -22,6 +22,8 @@
 #include "version.h"
 #include "aeatexport.h"
 #include "aeatexportdialog.h"
+#include "aeatcertificate.h"
+#include "aeatselftest.h"
 #include "uikit.h"
 #include <QTimer>
 #include <QThread>
@@ -411,6 +413,15 @@ void MainWindow::mainwindowInitialSettings()
     QAction *actionConfig = new QAction(tr("Configuración..."), this);
     connect(actionConfig, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
+        QList<QPair<QString, QString>> certificates;
+        for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
+            certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, c.expiry.toString("dd-MM-yyyy")), c.thumbprint);
+        dlg.setCertificateChoices(certificates);
+        connect(&dlg, &SettingsDialog::aeatSelfTestRequested, &dlg,
+                [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
+                             const QString &file, const QString &password) {
+            runAeatSelfTest(&dlg, nif, name, thumbprint, file, password);
+        });
         connect(&dlg, &SettingsDialog::testConnectionRequested,
                 &dlg, [&dlg](const QString &nif, const QString &name,
                              const QString &serviceKey, bool production) {
@@ -476,6 +487,58 @@ void MainWindow::initializeVerifactu()
 
     connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
             this, &MainWindow::onVerifactuRequestFinished);
+    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured())
+        continueDirectChain();
+}
+
+void MainWindow::continueDirectChain()
+{
+    // Before the first direct record: continue the issuer's chain after the last record
+    // the gateway sent (AEAT's newest registration, or a newer stored cancellation).
+    m_verifactuIntegration->directBackend()->continueChainFromAeat(
+        verifactuStoredRecordXmls(db), [this](bool ok, const QString &message) {
+            qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
+            if (!ok)
+                m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
+            statusBar()->showMessage(tr("Conexión directa con la AEAT: %1").arg(message), 10000);
+        });
+}
+
+void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
+                                 const QString &certificateFile, const QString &certificatePassword)
+{
+    if (nif.isEmpty() || name.isEmpty()) {
+        QMessageBox::warning(parent, tr("Datos incompletos"), tr("Introduce el NIF y el nombre del emisor antes de la prueba."));
+        return;
+    }
+    QDialog dlg(parent);
+    UiKit::setUpDialog(&dlg, tr("Prueba con la AEAT"), 620);
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->addWidget(UiKit::introPanel(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas "
+                                           "de la AEAT, sin efectos tributarios, con el certificado elegido.")));
+    auto *panel = new UiKit::ResultPanel(tr("Conectando con la AEAT..."));
+    panel->setObjectName("lblSelfTest");
+    layout->addWidget(panel);
+    layout->addLayout(UiKit::closeRow(&dlg));
+
+    AeatDirectBackend::Config c;
+    c.testEnvironment = true;
+    c.issuerNif = nif;
+    c.issuerName = name;
+    c.system = { name, nif, QStringLiteral("LAIDEAL"), QStringLiteral("LI"),
+                 QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR),
+                 AppSettings::instance()->aeatInstallationNumber() };
+    c.certificateThumbprint = thumbprint;
+    c.certificatePath = certificateFile;
+    c.certificatePassword = certificatePassword;
+    AeatSelfTest selfTest(c, db);
+    QStringList lines;
+    connect(&selfTest, &AeatSelfTest::progress, &dlg, [&lines, panel](bool ok, const QString &text) {
+        lines << (ok ? UiKit::okHtml(text.toHtmlEscaped()) : UiKit::errorHtml(text.toHtmlEscaped()));
+        panel->setText(lines.join("<br>"));
+    });
+    QTimer::singleShot(0, &selfTest, &AeatSelfTest::run);
+    dlg.exec();
 }
 
 void MainWindow::resetAllContents()

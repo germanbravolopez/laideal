@@ -46,6 +46,9 @@ QString     searchItemFromClient(QSqlDatabase &db, const QString &item, const QS
 // {tel_fijo, movil} for an exact client name, fetched in one query (both empty
 // if the client is not found). Avoids two separate single-column lookups.
 QStringList readClientPhones(QSqlDatabase &db, const QString &client);
+// Every record XML the gateway stored (verifactu_xml, verifactu_cancel_xml): the direct
+// AEAT client looks among them for cancellations newer than AEAT's newest registration.
+QStringList verifactuStoredRecordXmls(QSqlDatabase &db);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

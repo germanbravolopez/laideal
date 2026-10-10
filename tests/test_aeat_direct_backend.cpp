@@ -12,6 +12,7 @@
 
 #include "aeatcertificate.h"
 #include "aeatrecord.h"
+#include "aeatselftest.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
 #include "fakeaeatserver.h"
@@ -369,6 +370,41 @@ private slots:
         QCOMPARE(queries, 24);                                           // two years back
         QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
         QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+    }
+
+    // The proof-of-concept run: test invoice registered, queried back and cancelled,
+    // after AEAT's wait time; every step reported; a refusal stops it.
+    void test_selfTest()
+    {
+        m_server->setWaitSeconds(1);
+        AeatDirectBackend::Config c = config();
+        c.testEnvironment = false;                       // ignored: the self-test never uses production
+        AeatSelfTest selfTest(c, m_db);
+        QStringList steps;
+        bool finished = false, ok = false;
+        connect(&selfTest, &AeatSelfTest::progress, [&](bool, const QString &t) { steps << t; });
+        connect(&selfTest, &AeatSelfTest::finished, [&](bool o) { finished = true; ok = o; });
+        selfTest.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
+        QVERIFY2(ok, qPrintable(steps.join(" | ")));
+        QVERIFY(selfTest.invoiceNumber().startsWith("PRUEBA-"));
+        QVERIFY(m_server->registered().contains("Alta:" + selfTest.invoiceNumber()));
+        QVERIFY(m_server->registered().contains("Anulacion:" + selfTest.invoiceNumber()));
+        QVERIFY2(steps.join(" ").contains("Esperando"), qPrintable(steps.join(" | ")));
+        QVERIFY(steps.last().contains("La conexión directa funciona"));
+        AeatStore production(m_db, "produccion");
+        QVERIFY(production.pending().isEmpty() && production.chainHead("89890001K").isFirst());
+
+        AeatSelfTest refused(config(), m_db);
+        m_server->rejectNext(refused.invoiceNumber(), "1100", "Valor o tipo incorrecto");
+        steps.clear();
+        finished = false;
+        connect(&refused, &AeatSelfTest::progress, [&](bool, const QString &t) { steps << t; });
+        connect(&refused, &AeatSelfTest::finished, [&](bool o) { finished = true; ok = o; });
+        refused.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
+        QVERIFY(!ok);
+        QVERIFY2(steps.last().contains("Alta de") && steps.last().contains("1100"), qPrintable(steps.last()));
     }
 
     // A rectificativa R5 by substitution carries the rectified invoice and its former amounts.

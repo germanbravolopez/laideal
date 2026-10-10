@@ -320,7 +320,10 @@ void RectifyInvoiceDialog::onRectifyClicked()
     m_pendingRectifyId = m_verifactu->submitRectificationAsync(
         m_newInvoiceNumber, m_newInvoiceDate, invoiceType, rectType,
         newTaxBase, newTaxAmount, origTaxBase, origTaxAmount,
-        ivaRate, desc);
+        ivaRate, desc,
+        // The corrected invoice as AEAT holds it: a single payment event, so the bare
+        // ticket number, dated with its payment date.
+        m_loadedTicket, lastPayment);
 
     if (m_pendingRectifyId.isEmpty()) {
         m_lblResult->setText(

@@ -18,6 +18,9 @@ public:
 
 public:
     void browsePath(QLineEdit *target, bool directory);
+    // The owner's certificates in the Windows store, as (label, thumbprint), for the
+    // direct AEAT connection. Given by MainWindow: this module does not read the store.
+    void setCertificateChoices(const QList<QPair<QString, QString>> &choices);
 
 signals:
     // Emitted when the user clicks "Probar conexión" in the Verifactu tab.
@@ -27,6 +30,9 @@ signals:
                                  const QString &name,
                                  const QString &serviceKey,
                                  bool production);
+    // "Prueba con la AEAT": the direct connection's self-test with the form's values.
+    void aeatSelfTestRequested(const QString &nif, const QString &name, const QString &thumbprint,
+                               const QString &certificateFile, const QString &certificatePassword);
 
 private slots:
     void accept() override;
@@ -58,6 +64,15 @@ private:
     QCheckBox *m_vProduction;
     QCheckBox *m_vPendingRecoveryEnabled;
     class QDateEdit *m_vPendingRecoveryFloor;
+    class QComboBox *m_vConnection;       // gateway / direct AEAT
+    class QComboBox *m_vCertificate;      // a store thumbprint, or "" for a .pfx file
+    QLineEdit *m_vCertFile;
+    QLineEdit *m_vCertPassword;
+    QWidget   *m_vCertFileRow;
+    QWidget   *m_vDirectGroup;
+
+    QString selectedThumbprint() const;
+    void updateDirectRows();
 };
 
 #endif // SETTINGSDIALOG_H

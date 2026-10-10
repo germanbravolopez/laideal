@@ -243,6 +243,42 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     note->setWordWrap(true);
     fl->addRow(note);
 
+    // Direct connection with AEAT (research, docs/modules/verifactu/aeat-direct-investigation.md).
+    m_vConnection = new QComboBox;
+    m_vConnection->setObjectName("cbConnection");
+    m_vConnection->addItem(tr("IreneSolutions (pasarela)"), QStringLiteral("irenesolutions"));
+    m_vConnection->addItem(tr("Directa con la AEAT (en pruebas)"), QStringLiteral("aeat"));
+    m_vConnection->setCurrentIndex(s->verifactuDirectAeat() ? 1 : 0);
+    fl->addRow(tr("Conexión con la AEAT:"), m_vConnection);
+
+    m_vDirectGroup = new QWidget;
+    auto *direct = new QFormLayout(m_vDirectGroup);
+    direct->setContentsMargins(0, 0, 0, 0);
+    m_vCertificate = new QComboBox;
+    m_vCertificate->setObjectName("cbCertificate");
+    m_vCertificate->addItem(tr("Archivo .pfx / .p12..."), QString());
+    m_vCertFile = new QLineEdit(s->aeatCertificateFile());
+    m_vCertFile->setObjectName("leCertificateFile");
+    m_vCertFileRow = browseRow(m_vCertFile, false, this);
+    m_vCertPassword = new QLineEdit(s->aeatCertificatePassword());
+    m_vCertPassword->setObjectName("leCertificatePassword");
+    m_vCertPassword->setEchoMode(QLineEdit::Password);
+    auto *btnSelfTest = new QPushButton(tr("Prueba con la AEAT (entorno de pruebas)"));
+    btnSelfTest->setObjectName("btnAeatSelfTest");
+    btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
+    connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
+        emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
+                                   m_vCertFile->text().trimmed(), m_vCertPassword->text());
+    });
+    direct->addRow(tr("Certificado electrónico:"), m_vCertificate);
+    direct->addRow(tr("Archivo del certificado:"), m_vCertFileRow);
+    direct->addRow(tr("Contraseña del archivo:"), m_vCertPassword);
+    direct->addRow(btnSelfTest);
+    fl->addRow(m_vDirectGroup);
+    connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
+    connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
+    updateDirectRows();
+
     auto *btnTest = new QPushButton(tr("Probar conexión"));
     btnTest->setToolTip(tr("Comprueba que el servidor Verifactu es accesible con los valores actuales del formulario"));
     connect(btnTest, &QPushButton::clicked, this, [this]() {
@@ -279,6 +315,10 @@ void SettingsDialog::accept()
     s->setVerifactuName(m_vName->text().trimmed());
     s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
+    s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
+    s->setAeatCertificateThumbprint(selectedThumbprint());
+    s->setAeatCertificateFile(m_vCertFile->text().trimmed());
+    s->setAeatCertificatePassword(m_vCertPassword->text());
     s->setVerifactuPendingRecoveryEnabled(m_vPendingRecoveryEnabled->isChecked());
     s->setVerifactuPendingRecoveryFloorDate(
         m_vPendingRecoveryFloor->date().toString(Qt::ISODate));
@@ -291,6 +331,31 @@ void SettingsDialog::accept()
 
     AppLanguage::applyQtTranslations(s->language());   // live, for every caller
     QDialog::accept();
+}
+
+QString SettingsDialog::selectedThumbprint() const
+{
+    return m_vCertificate->currentData().toString();
+}
+
+void SettingsDialog::updateDirectRows()
+{
+    const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
+    m_vDirectGroup->setVisible(directAeat);
+    const bool file = selectedThumbprint().isEmpty();
+    m_vCertFileRow->setEnabled(file);
+    m_vCertPassword->setEnabled(file);
+}
+
+void SettingsDialog::setCertificateChoices(const QList<QPair<QString, QString>> &choices)
+{
+    const QString stored = AppSettings::instance()->aeatCertificateThumbprint();
+    for (const auto &choice : choices) {
+        m_vCertificate->insertItem(m_vCertificate->count() - 1, choice.first, choice.second);
+        if (choice.second == stored)
+            m_vCertificate->setCurrentIndex(m_vCertificate->count() - 2);
+    }
+    updateDirectRows();
 }
 
 void SettingsDialog::browsePath(QLineEdit *target, bool directory)

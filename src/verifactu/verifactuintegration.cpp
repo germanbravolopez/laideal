@@ -1,9 +1,11 @@
 #include "verifactuintegration.h"
+#include "aeatdirectbackend.h"
 #include "appsettings.h"
 #include <QDebug>
+#include <QSqlDatabase>
 
 VerifactuIntegration::VerifactuIntegration(QObject *parent)
-    : QObject(parent), m_manager(nullptr)
+    : QObject(parent)
 {
 }
 
@@ -11,22 +13,50 @@ VerifactuIntegration::~VerifactuIntegration()
 {
 }
 
-bool VerifactuIntegration::initialize()
+bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 {
-    m_manager = new VerifactuManager(this);
-
-    if (!loadEmitterConfiguration()) {
+    AppSettings *settings = AppSettings::instance();
+    m_emitterNif  = settings->verifactuNif();
+    m_emitterName = settings->verifactuName();
+    if (m_emitterNif.isEmpty() || m_emitterName.isEmpty()) {
         m_lastError = "No se pudo cargar la configuración del emisor";
-        qWarning() << "Verifactu emitter configuration failed to load";
+        qCritical() << "Emitter NIF or name not configured in AppSettings";
         return false;
     }
 
-    connect(m_manager, &VerifactuManager::requestFinished,
+    if (settings->verifactuDirectAeat()) {
+        AeatDirectBackend::Config c;
+        c.testEnvironment = !settings->verifactuProduction();
+        c.issuerNif  = m_emitterNif;
+        c.issuerName = m_emitterName;
+        // The producer is the one named in the declaración responsable (Acerca de Verifactu).
+        c.system = { m_emitterName, m_emitterNif, QStringLiteral("LAIDEAL"), QStringLiteral("LI"),
+                     QString(PROJECT_VERSION), settings->aeatInstallationNumber() };
+        c.certificateThumbprint = settings->aeatCertificateThumbprint();
+        c.certificatePath       = settings->aeatCertificateFile();
+        c.certificatePassword   = settings->aeatCertificatePassword();
+        m_direct = new AeatDirectBackend(c, db.isValid() ? db : QSqlDatabase::database(QSqlDatabase::defaultConnection, false), this);
+        m_backend = m_direct;
+    } else {
+        m_manager = new VerifactuManager(this);
+        if (!loadEmitterConfiguration()) {
+            m_lastError = "No se pudo cargar la configuración del emisor";
+            qWarning() << "Verifactu emitter configuration failed to load";
+            return false;
+        }
+        m_backend = m_manager;
+    }
+
+    connect(m_backend, &VerifactuBackend::requestFinished,
             this, &VerifactuIntegration::requestFinished);
-    connect(m_manager, &VerifactuManager::queryFinished,
+    connect(m_backend, &VerifactuBackend::queryFinished,
             this, &VerifactuIntegration::queryFinished);
 
-    qDebug().noquote() << m_manager->getConfigurationInfo();
+    qDebug().noquote() << m_backend->configurationInfo();
+    if (!m_backend->isConfigured()) {
+        m_lastError = m_direct ? m_direct->configurationError() : QStringLiteral("Verifactu no está configurado correctamente");
+        return false;
+    }
     return true;
 }
 
@@ -47,8 +77,8 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
     invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
-    invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
-    invoice.setSellerName(m_manager->getConfig()->getEmitterName());
+    invoice.setSellerNIF(m_emitterNif);
+    invoice.setSellerName(m_emitterName);
     invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
 
     VerifactuTaxItem taxItem;
@@ -59,7 +89,7 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
     invoice.addTaxItem(taxItem);
     invoice.calculateTotals();
 
-    return m_manager->submitInvoiceAsync(invoice);
+    return m_backend->submitInvoiceAsync(invoice);
 }
 
 QString VerifactuIntegration::cancelInvoiceAsync(
@@ -71,7 +101,7 @@ QString VerifactuIntegration::cancelInvoiceAsync(
         qWarning() << m_lastError;
         return QString();
     }
-    return m_manager->cancelInvoiceAsync(invoiceNumber, invoiceDate);
+    return m_backend->cancelInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
 QString VerifactuIntegration::submitRectificationAsync(
@@ -84,7 +114,9 @@ QString VerifactuIntegration::submitRectificationAsync(
     double originalTaxBase,
     double originalTaxAmount,
     double taxRate,
-    const QString &description)
+    const QString &description,
+    const QString &rectifiedInvoiceNumber,
+    const QDate &rectifiedInvoiceDate)
 {
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
@@ -101,8 +133,8 @@ QString VerifactuIntegration::submitRectificationAsync(
     invoice.setInvoiceNumber(newInvoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
     invoice.setInvoiceType(invoiceType);
-    invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
-    invoice.setSellerName(m_manager->getConfig()->getEmitterName());
+    invoice.setSellerNIF(m_emitterNif);
+    invoice.setSellerName(m_emitterName);
     invoice.setDescription(description.isEmpty()
         ? "Rectificativa de servicios de lavanderia"
         : description);
@@ -115,13 +147,15 @@ QString VerifactuIntegration::submitRectificationAsync(
     invoice.addTaxItem(taxItem);
 
     invoice.setRectificationType(rectificationType);
+    if (!rectifiedInvoiceNumber.isEmpty())
+        invoice.addRectifiedInvoice(rectifiedInvoiceNumber, rectifiedInvoiceDate);
     if (rectificationType == VerifactuInvoice::BY_SUBSTITUTION) {
         invoice.setRectificationTaxBase(originalTaxBase);
         invoice.setRectificationTaxAmount(originalTaxAmount);
     }
 
     invoice.calculateTotals();
-    return m_manager->submitInvoiceAsync(invoice);
+    return m_backend->submitInvoiceAsync(invoice);
 }
 
 QString VerifactuIntegration::generateQRAsync(
@@ -141,8 +175,8 @@ QString VerifactuIntegration::generateQRAsync(
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
     invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
-    invoice.setSellerNIF(m_manager->getConfig()->getEmitterNIF());
-    invoice.setSellerName(m_manager->getConfig()->getEmitterName());
+    invoice.setSellerNIF(m_emitterNif);
+    invoice.setSellerName(m_emitterName);
     invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
 
     VerifactuTaxItem taxItem;
@@ -153,7 +187,7 @@ QString VerifactuIntegration::generateQRAsync(
     invoice.addTaxItem(taxItem);
     invoice.calculateTotals();
 
-    return m_manager->generateQRAsync(invoice);
+    return m_backend->generateQRAsync(invoice);
 }
 
 QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber)
@@ -163,13 +197,12 @@ QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber)
         qWarning() << m_lastError;
         return QString();
     }
-    return m_manager->queryInvoiceAsync(invoiceNumber);
+    return m_backend->queryInvoiceAsync(invoiceNumber);
 }
 
 bool VerifactuIntegration::isConfigured() const
 {
-    if (!m_manager) return false;
-    return m_manager->getConfig()->isValid();
+    return m_backend && m_backend->isConfigured();
 }
 
 bool VerifactuIntegration::loadEmitterConfiguration()

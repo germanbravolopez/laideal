@@ -60,6 +60,9 @@ public:
     bool isConfigured() const override { return m_configError.isEmpty(); }
     QString configurationInfo() const override;
     QString configurationError() const { return m_configError; }
+    AeatCertificate::Info certificateInfo() const { return m_certificate.info(); }
+    QString issuerNif() const { return m_config.issuerNif; }
+    QString issuerName() const { return m_config.issuerName; }
 
     // Starts the chain after the last record sent by the gateway (only while empty).
     bool seedChain(const AeatRecord::PreviousRecord &lastGatewayRecord);
