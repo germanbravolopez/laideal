@@ -7,7 +7,6 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <wincrypt.h>
-#include <ncrypt.h>
 #endif
 
 namespace {
@@ -42,18 +41,22 @@ AeatCertificate::Info infoOf(PCCERT_CONTEXT ctx)
     if (CertGetCertificateContextProperty(ctx, CERT_HASH_PROP_ID, hash, &size))
         info.thumbprint = QString::fromLatin1(QByteArray(reinterpret_cast<const char *>(hash), int(size)).toHex()).toUpper();
     info.expiry = fromFileTime(ctx->pCertInfo->NotAfter);
-    DWORD keySpec = 0;
-    BOOL mustFree = FALSE;
-    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE key = 0;
-    info.hasPrivateKey = CryptAcquireCertificatePrivateKey(ctx, CRYPT_ACQUIRE_SILENT_FLAG | CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG
-                                                                    | CRYPT_ACQUIRE_CACHE_FLAG,
-                                                           nullptr, &key, &keySpec, &mustFree);
-    if (info.hasPrivateKey && mustFree) {
-        if (keySpec == CERT_NCRYPT_KEY_SPEC)
-            NCryptFreeObject(key);
-        else
-            CryptReleaseContext(key, 0);
-    }
+    // The holder's NIF: the subject's serialNumber, "IDCES-75929840D".
+    wchar_t serial[128] = {};
+    CertGetNameStringW(ctx, CERT_NAME_ATTR_TYPE, 0, const_cast<char *>(szOID_DEVICE_SERIAL_NUMBER), serial, 128);
+    info.nif = QString::fromWCharArray(serial).trimmed();
+    if (info.nif.startsWith(QLatin1String("IDCES-")))
+        info.nif = info.nif.mid(6);
+    // Whether a key comes with it, from its properties only: a stored key's reference, or
+    // the handle of a key imported in memory. Acquiring the key here (CryptAcquire-
+    // CertificatePrivateKey with its cache flag) left a handle on a store certificate
+    // that made WinHTTP's TLS handshake fail with error 12175 for CryptoAPI keys such
+    // as the FNMT ones.
+    const auto has = [ctx](DWORD property) {
+        DWORD size = 0;
+        return CertGetCertificateContextProperty(ctx, property, nullptr, &size) != FALSE;
+    };
+    info.hasPrivateKey = has(CERT_KEY_PROV_INFO_PROP_ID) || has(CERT_NCRYPT_KEY_HANDLE_PROP_ID) || has(CERT_KEY_CONTEXT_PROP_ID);
     return info;
 }
 #endif

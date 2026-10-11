@@ -22,6 +22,7 @@ public:
         QString   subject;          // e.g. "LOPEZ DOMINGUEZ ROCIO - 00000000T"
         QString   issuer;
         QString   thumbprint;       // SHA-1, upper-case hex
+        QString   nif;              // the holder's NIF (subject serialNumber without "IDCES-")
         QDateTime expiry;
         bool      hasPrivateKey = false;
     };

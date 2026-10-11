@@ -630,6 +630,7 @@ private slots:
         QVERIFY(info.hasPrivateKey);
         QCOMPARE(info.thumbprint.size(), 40);
         QVERIFY(info.expiry > QDateTime::currentDateTime().addYears(10));
+        QCOMPARE(info.nif, QStringLiteral("00000000T"));                 // from serialNumber IDCES-00000000T
 
         AeatCertificate wrong;
         QVERIFY(!wrong.loadFromFile(dir + "/test-client.p12", "wrong", &error));

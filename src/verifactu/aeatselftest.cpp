@@ -29,6 +29,11 @@ void AeatSelfTest::run()
     emit progress(true, cert.subject.isEmpty()
                             ? tr("Configuración correcta (servidor de pruebas local).")
                             : tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
+    // AEAT accepts records presented by the issuer, or by someone it holds as her representative.
+    if (!cert.nif.isEmpty() && cert.nif.compare(m_backend->issuerNif(), Qt::CaseInsensitive) != 0)
+        emit progress(false, tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
+                                "consta como representante de %2 (apoderamiento o colaboración social).")
+                                 .arg(cert.nif, m_backend->issuerNif()));
     m_backend->continueChainFromAeat({}, [this](bool ok, const QString &message) {
         if (!ok) {
             fail(tr("Cadena de registros: %1").arg(message));

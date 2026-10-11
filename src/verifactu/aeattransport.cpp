@@ -26,6 +26,8 @@ QString lastErrorText(const QString &step)
     QString text = QString::fromWCharArray(buffer).trimmed();
     if (code == ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED)
         text = QCoreApplication::translate("AeatTransport", "la AEAT pide un certificado electrónico y no hay ninguno configurado");
+    else if (code == ERROR_WINHTTP_SECURE_FAILURE)
+        text = QCoreApplication::translate("AeatTransport", "fallo en la conexión segura con la AEAT (certificado o TLS)");
     return QStringLiteral("%1: %2 (%3)").arg(step, text.isEmpty() ? QStringLiteral("error") : text).arg(code);
 }
 
