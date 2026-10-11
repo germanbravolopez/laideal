@@ -19,7 +19,17 @@ int main(int argc, char *argv[])
     AppLogger::install();
 
     AppSettings *settings = AppSettings::instance();
-    settings->load();
+    // `--settings <file>`: run with another settings file (a test run on the shop PC,
+    // e.g. the direct AEAT client against a copy of the database), never touching the
+    // shop's own ~/.laideal_settings.json.
+    const QStringList args = a.arguments();
+    const int settingsArg = args.indexOf(QStringLiteral("--settings"));
+    if (settingsArg > 0 && settingsArg + 1 < args.size()) {
+        settings->loadFrom(args.at(settingsArg + 1));
+        qWarning() << "main: using the settings file" << args.at(settingsArg + 1);
+    } else {
+        settings->load();
+    }
 
     // Localize Qt's built-in strings (standard dialog buttons, etc.) to the configured
     // language; Configuracion re-applies it live when the setting changes.
@@ -47,6 +57,8 @@ int main(int argc, char *argv[])
 
     MainWindow w;
     w.setWindowState(Qt::WindowMaximized);
+    if (settingsArg > 0)
+        w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(args.value(settingsArg + 1)));
 
     QIcon icon(":/icons/laideal.ico");
     a.setWindowIcon(icon);
