@@ -1,5 +1,6 @@
 #include "cancelinvoicedialog.h"
 #include "sql_lite.h"
+#include "uikit.h"
 
 #include <QDebug>
 #include <QFrame>
@@ -26,7 +27,7 @@ constexpr int COL_COUNT      = 6;
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setWindowTitle(tr("Anular Factura Verifactu"));
+    UiKit::setUpDialog(this, tr("Anular Factura Verifactu"));
     setMinimumSize(620, 360);
     buildUi();
 }
@@ -72,7 +73,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addWidget(btnClose, 0, Qt::AlignRight);
 
     connect(btnSearch,     &QPushButton::clicked,    this, &CancelInvoiceDialog::onSearchClicked);
-    connect(m_leTicketNum, &QLineEdit::returnPressed, this, &CancelInvoiceDialog::onSearchClicked);
+    UiKit::onEnter(m_leTicketNum, [this]() { onSearchClicked(); });
     connect(btnClose,      &QPushButton::clicked,    this, &QDialog::accept);
 }
 
