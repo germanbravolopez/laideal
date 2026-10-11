@@ -38,7 +38,8 @@ QPushButton *primaryButton(const QString &text, const QString &objectName);
 QPushButton *secondaryButton(const QString &text, const QString &objectName);
 // Date field of every dialog: calendar popup, dd-MM-yyyy, wide enough for the date.
 QDateEdit *dateEdit(const QDate &date, const QString &objectName);
-// Enter in `edit` runs `action` and stops there. A plain returnPressed connection lets
+// Enter in `edit` runs `action` and stops there (once per press, and only while the
+// field's input is acceptable). A plain returnPressed connection lets
 // the key go on to the dialog's default button too, which then ran a second time
 // (Imprimir printed twice) or ran another action (a search also pressed Añadir prenda).
 void onEnter(QLineEdit *edit, std::function<void()> action);

@@ -53,6 +53,9 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_leTicketNum->setPlaceholderText("Ej: 24417");
     searchRow->addWidget(m_leTicketNum);
     QPushButton *btnSearch = new QPushButton("Buscar");
+    // No button takes Enter: in a field it would also press one - Buscar resetting the
+    // form, or Enviar rectificativa sending to AEAT.
+    btnSearch->setAutoDefault(false);
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
@@ -126,6 +129,8 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
 
     // Submit + result ------------------------------------------------------
     m_btnRectify = new QPushButton("Enviar rectificativa a AEAT");
+    m_btnRectify->setAutoDefault(false);
+    m_btnRectify->setObjectName("btnRectify");
     m_btnRectify->setEnabled(false);
     layout->addWidget(m_btnRectify);
 
@@ -135,6 +140,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     layout->addWidget(m_lblResult);
 
     QPushButton *btnClose = new QPushButton("Cerrar");
+    btnClose->setAutoDefault(false);
     layout->addWidget(btnClose, 0, Qt::AlignRight);
 
     // Wiring ---------------------------------------------------------------

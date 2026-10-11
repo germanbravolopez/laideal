@@ -32,9 +32,13 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
         if (event->type() == QEvent::KeyPress) {
-            const int key = static_cast<QKeyEvent *>(event)->key();
-            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-                m_action();
+            const auto *key = static_cast<QKeyEvent *>(event);
+            if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+                // Once per press (holding the key must not print twice), and only for
+                // input the field accepts, as QLineEdit's own returnPressed.
+                auto *edit = qobject_cast<QLineEdit *>(watched);
+                if (!key->isAutoRepeat() && (!edit || edit->hasAcceptableInput()))
+                    m_action();
                 return true;
             }
         }
