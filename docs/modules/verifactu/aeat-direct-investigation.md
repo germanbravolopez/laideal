@@ -150,6 +150,14 @@ A second review of those fixes found one more blocking point - Rectificar factur
 - **Full cycle accepted with the certificate holder as issuer (NIF 75929840D):** alta `PRUEBA-20261011221155` *Correcto* (CSV `A-R9MFP3RG3B2MVU`), the query returned it, the anulación chained to it *Correcto* (CSV `A-8ASZ4YM4LEGY92`) after AEAT's 60 s wait; a second run chained after that anulación. Certificate handshake, record XML and huella, reply parsing, query, chain and flow control work against AEAT.
 - **Requirement - the issuer's NIF and name must match AEAT's register:** NIF 24215141M with the name "German Bravo Lopez" gave `Codigo[4104] ... el valor del campo NIF del bloque ObligadoEmision no está identificado`. For an individual, use the name as AEAT holds it, surnames first (e.g. `LOPEZ DOMINGUEZ ROCIO`) - also for production.
 - **Requirement - who may present:** with the name matching, a certificate of another person gave `Codigo[4112] El titular del certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor` - already at the read-only query. The shop needs Rocío's certificate, or a representative registered at AEAT for this procedure. The client stops cleanly at the first query: nothing is generated for an issuer it cannot query.
+- **The app flows, end to end (issuer and certificate 75929840D, test kit with a copy of the shop DB, tickets from 90000001):** all accepted by AEAT and settled in `ingresos`:
+  - paid ticket → F2 *Correcto*, the invoice printed with the local QR; a ticket with two payments (`90000002`, `90000002-1`);
+  - cancellation of `90000002` → `RegistroAnulacion` *Correcto*, the rows ANULADA (AEAT's QR page then says "not found", as for any cancelled invoice);
+  - rectifications of `90000001` by difference (R5 I, `90000003`) and by substitution (R5 S, `90000004`) → *Correcto*, the original RECTIFICADA in `verifactu_estado`;
+  - a ticket inside AEAT's wait (60 s, `TiempoEsperaEnvio`) left PENDIENTE and sent on its own when the wait ended;
+  - no network (12007) → PENDIENTE, retried automatically after 60 s, accepted and the rows updated; a record left pending at exit was sent at the next start after the offline chain sync;
+  - the export (Herramientas) holds every record; the huella of each one recomputes and each links to the previous one.
+  The certificate-failure case (no certificate / wrong password) was not seen in the log of this run.
 - **Still to run:** the self-test and the app flows with Rocío's certificate (the hand-over from IreneSolutions' chain is untested until then).
 
 ### To confirm in the proof of concept
