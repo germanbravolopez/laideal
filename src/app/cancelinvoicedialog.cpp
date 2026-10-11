@@ -27,7 +27,7 @@ constexpr int COL_COUNT      = 6;
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setWindowTitle(tr("Anular Factura Verifactu"));
+    UiKit::setUpDialog(this, tr("Anular Factura Verifactu"));
     setMinimumSize(620, 360);
     buildUi();
 }
@@ -43,8 +43,6 @@ void CancelInvoiceDialog::buildUi()
     m_leTicketNum->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leTicketNum);
     auto *btnSearch = new QPushButton(tr("Buscar"));
-    // No button takes Enter: in a field it would also press one (Buscar resetting the form).
-    btnSearch->setAutoDefault(false);
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
@@ -72,7 +70,6 @@ void CancelInvoiceDialog::buildUi()
     layout->addWidget(m_lblResult);
 
     auto *btnClose = new QPushButton(tr("Cerrar"));
-    btnClose->setAutoDefault(false);
     layout->addWidget(btnClose, 0, Qt::AlignRight);
 
     connect(btnSearch,     &QPushButton::clicked,    this, &CancelInvoiceDialog::onSearchClicked);
@@ -157,7 +154,6 @@ void CancelInvoiceDialog::rebuildTable()
 
         const VerifactuEstado st = verifactuEstadoFromString(e.estado);
         auto *btn = new QPushButton(tr("Anular"));
-        btn->setAutoDefault(false);
         // Only ENVIADA events are AEAT-cancellable. ANULADA / RECTIFICADA /
         // ERROR / PENDIENTE all have no AEAT-side cancel to issue.
         btn->setEnabled(st == VerifactuEstado::Enviada);

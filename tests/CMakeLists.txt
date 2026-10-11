@@ -128,6 +128,17 @@ add_test(NAME verifactu_response
     COMMAND test_verifactu_response -o ${CMAKE_BINARY_DIR}/test-results-verifactu_response.xml,junitxml -o -,txt)
 set_tests_properties(verifactu_response PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# UiKit's Enter rules (setUpDialog's dialog-wide rule, onEnter), offscreen.
+add_executable(test_uikit test_uikit.cpp)
+target_link_libraries(test_uikit PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    uikit
+)
+add_test(NAME uikit
+    COMMAND test_uikit -o ${CMAKE_BINARY_DIR}/test-results-uikit.xml,junitxml -o -,txt)
+set_tests_properties(uikit PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # verifactu model classes (config / tax item / invoice / estado), all pure.
 add_executable(test_verifactu_models test_verifactu_models.cpp)
 target_link_libraries(test_verifactu_models PRIVATE

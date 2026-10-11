@@ -10,7 +10,7 @@ The shared look of the application's windows, in one place. Every dialog is buil
 
 | Function / class | What it gives |
 |---|---|
-| `UiKit::setUpDialog(dialog, title, minimumWidth = 520)` | Title, minimum width, no "?" help button, no minimise button (a dialog is never sent behind its window). Modality stays with the caller (`setWindowModality`). |
+| `UiKit::setUpDialog(dialog, title, minimumWidth = 520)` | Title, minimum width, no "?" help button, no minimise button (a dialog is never sent behind its window). Modality stays with the caller (`setWindowModality`). Also the dialog's **Enter rule**: Enter in a field presses the enabled primary button, or nothing when the dialog has none (Qt would press whichever button it made the default - a Buscar resetting the form, a Reintentar sending to AEAT); a focused button still presses itself; a held key never repeats. |
 | `UiKit::heading(text)` | Bold title, five points over the app font — for windows that list data (Listado). |
 | `UiKit::introPanel(text)` | Framed explanation at the top: what the window does, in one or two sentences. Rich text allowed. |
 | `UiKit::primaryButton(text, objectName)` | The action the window exists for: bold, default (Enter), at least 220 px wide. One per window, at the right of its row. |
