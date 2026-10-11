@@ -42,8 +42,7 @@ VerifactuInvoice::InvoiceType invoiceTypeFromIndex(int idx)
 RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setWindowTitle("Factura rectificativa Verifactu");
-    setMinimumWidth(520);
+    UiKit::setUpDialog(this, "Factura rectificativa Verifactu");
 
     QVBoxLayout *layout = new QVBoxLayout(this);
 
@@ -128,6 +127,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
 
     // Submit + result ------------------------------------------------------
     m_btnRectify = new QPushButton("Enviar rectificativa a AEAT");
+    m_btnRectify->setObjectName("btnRectify");
     m_btnRectify->setEnabled(false);
     layout->addWidget(m_btnRectify);
 

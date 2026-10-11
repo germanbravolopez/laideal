@@ -23,7 +23,11 @@ class QPushButton;
 namespace UiKit {
 
 // Window flags shared by every dialog: no "?" help button, no minimise (a dialog
-// is never sent behind its window). Sets the title and a minimum width.
+// is never sent behind its window). Sets the title and a minimum width. Also the
+// dialog's Enter rule: Enter in a field presses the primary button, or nothing when
+// the dialog has none (Qt would press whichever button it made the default, e.g. a
+// Buscar that resets the form); Enter on a focused button presses that button; a
+// held key is not repeated. A field whose Enter means something else uses onEnter.
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth = 520);
 
 // Window heading (bold, larger than the app font), for windows that list data.
@@ -32,13 +36,14 @@ QLabel *heading(const QString &text);
 // Framed explanation at the top of a dialog: what it does, in one or two sentences.
 QLabel *introPanel(const QString &text);
 
-// The action the dialog exists for: bold, default (Enter), wide.
+// The action the dialog exists for: bold, default (Enter in a field), wide.
 QPushButton *primaryButton(const QString &text, const QString &objectName);
 // Any other action: never takes Enter from the primary one.
 QPushButton *secondaryButton(const QString &text, const QString &objectName);
 // Date field of every dialog: calendar popup, dd-MM-yyyy, wide enough for the date.
 QDateEdit *dateEdit(const QDate &date, const QString &objectName);
-// Enter in `edit` runs `action` and stops there. A plain returnPressed connection lets
+// Enter in `edit` runs `action` and stops there (once per press, and only while the
+// field's input is acceptable). A plain returnPressed connection lets
 // the key go on to the dialog's default button too, which then ran a second time
 // (Imprimir printed twice) or ran another action (a search also pressed Añadir prenda).
 void onEnter(QLineEdit *edit, std::function<void()> action);

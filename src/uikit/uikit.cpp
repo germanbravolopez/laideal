@@ -20,6 +20,7 @@ const int kPanelMargin = 8;
 const int kPrimaryMinWidth = 220;
 const int kResultMinHeight = 64;
 const int kDateMinWidth = 140;
+const char *const kPrimaryProperty = "uikitPrimary";
 
 // Consumes Return / Enter on its line edit after running the action.
 class EnterFilter : public QObject
@@ -32,9 +33,13 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
         if (event->type() == QEvent::KeyPress) {
-            const int key = static_cast<QKeyEvent *>(event)->key();
-            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-                m_action();
+            const auto *key = static_cast<QKeyEvent *>(event);
+            if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+                // Once per press (holding the key must not print twice), and only for
+                // input the field accepts, as QLineEdit's own returnPressed.
+                auto *edit = qobject_cast<QLineEdit *>(watched);
+                if (!key->isAutoRepeat() && (!edit || edit->hasAcceptableInput()))
+                    m_action();
                 return true;
             }
         }
@@ -51,12 +56,48 @@ void onEnter(QLineEdit *edit, std::function<void()> action)
     edit->installEventFilter(new EnterFilter(edit, std::move(action)));
 }
 
+namespace {
+
+// The dialog-wide Enter rule of setUpDialog (see uikit.h). A key reaches the dialog
+// only when the focused widget did not use it: a line edit or spin box does not, a
+// focused auto-default button presses itself and never gets here.
+class DialogEnterFilter : public QObject
+{
+public:
+    explicit DialogEnterFilter(QDialog *dialog) : QObject(dialog), m_dialog(dialog) {}
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched != m_dialog || event->type() != QEvent::KeyPress)
+            return QObject::eventFilter(watched, event);
+        const auto *key = static_cast<QKeyEvent *>(event);
+        if (key->key() != Qt::Key_Return && key->key() != Qt::Key_Enter)
+            return QObject::eventFilter(watched, event);
+        if (key->isAutoRepeat())
+            return true;
+        for (QPushButton *button : m_dialog->findChildren<QPushButton *>()) {
+            if (button->property(kPrimaryProperty).toBool() && button->isVisible() && button->isEnabled()) {
+                button->click();
+                return true;
+            }
+        }
+        return true;                            // no primary action: Enter in a field does nothing
+    }
+
+private:
+    QDialog *m_dialog;
+};
+
+} // namespace
+
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth)
 {
     dialog->setWindowTitle(title);
     dialog->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     dialog->setWindowFlag(Qt::WindowMinimizeButtonHint, false);
     dialog->setMinimumWidth(minimumWidth);
+    dialog->installEventFilter(new DialogEnterFilter(dialog));
 }
 
 QLabel *heading(const QString &text)
@@ -85,6 +126,7 @@ QPushButton *primaryButton(const QString &text, const QString &objectName)
     QPushButton *button = new QPushButton(text);
     button->setObjectName(objectName);
     button->setDefault(true);
+    button->setProperty(kPrimaryProperty, true);
     button->setMinimumWidth(kPrimaryMinWidth);
     QFont font = button->font();
     font.setBold(true);

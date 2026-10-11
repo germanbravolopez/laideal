@@ -14,6 +14,7 @@
 #include <QDateEdit>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QKeyEvent>
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -848,6 +849,51 @@ private slots:
         QVERIFY2(!voidText.contains("Marque al menos una"), qPrintable(voidText));
         QVERIFY(!m_popups->sawMessageContaining("Anular prendas"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='h930a'"), QStringLiteral("En tienda"));
+
+        // The numeric keypad's Enter is the same key: in Añadir prendas it only searches.
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("1");
+        QTest::keyClick(number, Qt::Key_Enter);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='2300'"), QStringLiteral("1"));
+        QVERIFY(add->findChild<QLabel *>("lblResult")->text().contains("Recibo Nº 2300 encontrado"));
+
+        // Holding the key does not repeat the action.
+        print.le_n_ticket->setText("670");
+        QKeyEvent repeat(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QString("\r"), true);
+        QApplication::sendEvent(print.le_n_ticket, &repeat);
+        QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);               // an auto-repeat prints nothing
+    }
+
+    // Anular / Rectificar factura: Enter in the ticket field only searches, and Enter in
+    // another field presses no button (it used to press Buscar, resetting the form, or
+    // Enviar rectificativa).
+    void test_enterInCancelAndRectifyDialogs()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "720", "h720a", "10.00", today(), "A-ORIG0720"));
+        CancelInvoiceDialog cancel(m_db);
+        cancel.show();
+        auto *cancelNumber = cancel.findChild<QLineEdit *>("leTicketNum");
+        cancelNumber->setText("720");
+        QTest::keyClick(cancelNumber, Qt::Key_Return);
+        QCOMPARE(cancel.findChild<QTableWidget *>()->rowCount(), 1);
+        QVERIFY(m_server.requestsTo("Cancel").isEmpty());
+
+        RectifyInvoiceDialog rectify(m_db);
+        rectify.m_verifactu = m_verifactu;
+        rectify.show();
+        auto *number = rectify.findChild<QLineEdit *>("leTicketNum");
+        number->setText("720");
+        QTest::keyClick(number, Qt::Key_Return);
+        auto *amount = rectify.findChild<QDoubleSpinBox *>("sbAmount");
+        QVERIFY(amount->isEnabled());                                     // ticket loaded
+        amount->setValue(8.00);
+        rectify.findChild<QPushButton *>("btnRectify")->setFocus();       // the send button had the focus last
+        amount->setFocus();
+        QTest::keyClick(amount, Qt::Key_Return);
+        QVERIFY(amount->isEnabled());
+        QCOMPARE(amount->value(), 8.00);                                  // not reset by a search
+        QVERIFY(m_server.requestsTo("Create").isEmpty());                 // nothing sent
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
     }
 
     // Recogida reports a refused write instead of a success, after its table refresh:

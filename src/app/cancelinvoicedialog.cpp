@@ -27,7 +27,7 @@ constexpr int COL_COUNT      = 6;
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    setWindowTitle(tr("Anular Factura Verifactu"));
+    UiKit::setUpDialog(this, tr("Anular Factura Verifactu"));
     setMinimumSize(620, 360);
     buildUi();
 }

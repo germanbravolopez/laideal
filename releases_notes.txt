@@ -1,5 +1,8 @@
 ﻿Releases:
 
+11.1
+- Bug fix: pressing Enter in the ticket number of "Imprimir recibo" / "Imprimir factura" printed everything twice; it now prints once. In "Añadir prendas", "Anular prendas", "Anular factura" and "Rectificar factura" Enter now only searches the ticket. In every window, Enter in a field presses only the window's main button (or nothing), never another one such as "Buscar" or "Reintentar".
+
 11.0
 - New: every window has a new, clearer design
   - Same fonts and buttons everywhere, with the main action in bold. Messages no longer pop up: they appear in a panel at the bottom of each window (green when done, orange as a notice, red for an error). Only actions that cannot be undone still ask for confirmation.

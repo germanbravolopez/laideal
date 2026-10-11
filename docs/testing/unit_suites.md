@@ -25,6 +25,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_genlistado` | `listado` | guiless | Listado helpers |
 | `test_backup_manager` | `backup` | guiless | Backup retention |
 | `test_reporthtml` | `reporthtml` | guiless | Report HTML scaffolding |
+| `test_uikit` | `uikit` | offscreen | Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
 | `test_versioncompare` | `updater` | guiless | Version comparison |
 
 ---
