@@ -317,17 +317,19 @@ AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber)
     return r;
 }
 
-QList<AeatStore::Record> AeatStore::pending(int limit)
+QList<AeatStore::Record> AeatStore::pending(int limit, const QString &issuerNif)
 {
     QList<Record> out;
     bool wasOpen = false;
     if (!open(&wasOpen))
         return out;
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE environment = :e AND state = :s ORDER BY id LIMIT :l")
+    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE environment = :e AND state = :s"
+                             " AND (:n = '' OR issuer_nif = :n) ORDER BY id LIMIT :l")
                   .arg(QLatin1String(kRecordColumns)));
     q.bindValue(":e", m_environment);
     q.bindValue(":s", kPending);
+    q.bindValue(":n", text(issuerNif));
     q.bindValue(":l", limit);
     if (q.exec())
         while (q.next())

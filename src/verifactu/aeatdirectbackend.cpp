@@ -62,7 +62,7 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
     if (!m_sendError.isEmpty())
         qWarning() << "AeatDirectBackend: records will be generated but not sent -" << m_sendError;
     // Records left unsent when the app closed go first.
-    if (!m_store.pending(1).isEmpty())
+    if (!m_store.pending(1, m_config.issuerNif).isEmpty())
         scheduleSend();
 }
 
@@ -542,7 +542,7 @@ void AeatDirectBackend::sendPending()
 {
     if (m_inFlight)
         return;
-    const QList<AeatStore::Record> records = m_store.pending(1000);
+    const QList<AeatStore::Record> records = m_store.pending(1000, m_config.issuerNif);
     if (records.isEmpty())
         return;
     if (!m_sendError.isEmpty()) {
@@ -619,7 +619,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     qDebug() << "AeatDirectBackend: reply" << (parsed.fault ? QStringLiteral("SOAP fault ") + parsed.faultText : parsed.sendState)
              << "CSV" << parsed.csv << "- next submission in" << secondsUntilNextSend() << "s";
     QHash<qint64, AeatStore::Record> pendingById;
-    for (const AeatStore::Record &r : m_store.pending(1000))
+    for (const AeatStore::Record &r : m_store.pending(1000, m_config.issuerNif))
         pendingById.insert(r.id, r);
     bool unanswered = false;
     for (qint64 id : sent) {
@@ -660,6 +660,6 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     if (unanswered)
         m_nextSendAllowed = qMax(m_nextSendAllowed, QDateTime::currentDateTime().addSecs(s_retryDelaySeconds));
     // Records created meanwhile, or left unanswered, go next.
-    if (!m_store.pending(1).isEmpty())
+    if (!m_store.pending(1, m_config.issuerNif).isEmpty())
         scheduleSend();
 }

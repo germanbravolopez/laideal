@@ -525,6 +525,38 @@ private slots:
         QCOMPARE(m_server->sentRecords().last().previousHash, ours.rawHash);
     }
 
+    // A submission carries one issuer in its header: records left pending under one
+    // issuer are never sent by a backend configured for another (found in the AEAT
+    // test runs: AEAT refused them with 4104), and go out once their issuer is back.
+    void test_outboxPerIssuer()
+    {
+        {
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(sync(first));
+            m_server->enqueue({ QByteArray(), 200, 0, true });
+            QCOMPARE(waitFor(first, first.submitInvoiceAsync(ticket("800", 10))).status, VerifactuResult::NETWORK_ERROR);
+        }
+        const auto sends800 = [this] {
+            int n = 0;
+            for (const FakeAeatServer::SentRecord &r : m_server->sentRecords())
+                n += r.invoiceNumber == QLatin1String("800");
+            return n;
+        };
+        QCOMPARE(sends800(), 1);
+        AeatDirectBackend::Config other = config();
+        other.issuerNif = "B00000000";
+        other.issuerName = "OTRO EMISOR";
+        {
+            AeatDirectBackend second(other, m_db);
+            // Its own submission would carry every pending record of the environment.
+            QVERIFY(waitFor(second, second.submitInvoiceAsync(ticket("801", 10))).isSuccess());
+            QCOMPARE(sends800(), 1);
+        }
+        AeatDirectBackend again(config(), m_db);
+        AeatStore store(m_db, "pruebas");
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "800").state, AeatStore::kAccepted, 10000);
+    }
+
     // AEAT already holds another system's record for the invoice: accepted, without
     // claiming our record; answered from the store afterwards.
     void test_duplicateOfAnotherSystem()

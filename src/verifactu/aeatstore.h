@@ -93,8 +93,9 @@ public:
 
     // The newest record of an invoice and kind, or an invalid Record.
     Record latest(Kind kind, const QString &invoiceNumber);
-    // Records AEAT has not confirmed yet, oldest first.
-    QList<Record> pending(int limit = 1000);
+    // Records AEAT has not confirmed yet, oldest first; only `issuerNif`'s when given
+    // (a submission carries one issuer in its header).
+    QList<Record> pending(int limit = 1000, const QString &issuerNif = QString());
 
     bool markAttempt(qint64 id);
     bool markOutcome(qint64 id, const QString &state, const QString &csv,
