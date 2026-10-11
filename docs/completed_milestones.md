@@ -11,7 +11,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 
 ## Completed Milestones
 
-### Post-11.0 development — October 2026
+### Post-11.0 development — October 2026 (shipped in 11.1)
 - [x] **Imprimir printed twice on Enter** (reported by the shop on 11.0): Herramientas → Imprimir recibo / factura ran the whole print again for the same ticket when the number was confirmed with Enter. The redesign connected the field's `returnPressed` to the print *and* made Imprimir the dialog's default button; `QLineEdit` emits `returnPressed` and leaves the key to the dialog, which pressed the default button as well. The same pattern hit the other ticket fields: in Añadir prendas Enter searched and then pressed Añadir prenda (the search had just cleared the garment, so it only showed "Formulario incompleto" over the search result), in Anular prendas it also pressed Anular seleccionadas, and Anular / Rectificar factura searched twice. New `UiKit::onEnter(lineEdit, action)` runs the action and consumes the key; the five fields use it. Test: `test_enterInNumberFieldRunsOneAction` (fails for each dialog with the old wiring, and when the key is not consumed).
 
 ### Post-10.13 development — October 2026 (shipped in 11.0)

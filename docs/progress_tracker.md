@@ -15,7 +15,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `develop`
 
-**Latest release**: [11.0](https://github.com/germanbravolopez/laideal/releases/tag/11.0) — every window redesigned with the shared UiKit style (no `.ui` forms left): messages in each window's result panel instead of pop-ups, the main window and Recogida de prendas rebuilt (quick buttons, Cobrar…, Añadir / Anular prendas from Recogida, Anulación date), Generar contabilidad kept open with an optional detail PDF, a Subtotal con IVA column and a lock check, and Herramientas grouped by topic. Amounts of charged garments are frozen and stored in cents; an m2 garment must be measured before it is charged; split garments stay in their AEAT invoice (old ones relinked at start-up). Also in this cycle: the Verifactu review follow-ups (export robustness, one-query cancel events, settled-reply handling, tests on the migrated schema).
+**Latest release**: [11.1](https://github.com/germanbravolopez/laideal/releases/tag/11.1) — bug-fix release: Enter in the ticket number of Imprimir recibo / factura no longer prints everything twice (it also pressed the window's default button), and Enter in Añadir prendas, Anular prendas, Anular factura and Rectificar factura now only searches the ticket (new `UiKit::onEnter`).
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->
