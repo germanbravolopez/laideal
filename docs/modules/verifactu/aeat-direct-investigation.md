@@ -157,7 +157,8 @@ A second review of those fixes found one more blocking point - Rectificar factur
   - a ticket inside AEAT's wait (60 s, `TiempoEsperaEnvio`) left PENDIENTE and sent on its own when the wait ended;
   - no network (12007) → PENDIENTE, retried automatically after 60 s, accepted and the rows updated; a record left pending at exit was sent at the next start after the offline chain sync;
   - the export (Herramientas) holds every record; the huella of each one recomputes and each links to the previous one.
-  The certificate-failure case (no certificate / wrong password) was not seen in the log of this run.
+  - an expired certificate → the app warns that records are saved but not sent; ticket `90000009` was saved, chained and left PENDIENTE with the reason; with the valid certificate back, it went out at the next start together with the self-test record left pending, both *Correcto*.
+  Minor, not fixed: a self-test anulación left pending (network lost between its alta and anulación) would later show "No se pudo marcar como anulada" in the main window, since `PRUEBA-…` has no ticket row.
 - **Still to run:** the self-test and the app flows with Rocío's certificate (the hand-over from IreneSolutions' chain is untested until then).
 
 ### To confirm in the proof of concept
