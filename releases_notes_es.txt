@@ -1,7 +1,7 @@
 ﻿Versiones:
 
 11.1
-- Corrección: al pulsar Intro en el número de ticket de "Imprimir recibo" / "Imprimir factura" se imprimía todo dos veces; ahora se imprime una sola vez. En "Añadir prendas", "Anular prendas", "Anular factura" y "Rectificar factura" Intro solo busca el ticket.
+- Corrección: al pulsar Intro en el número de ticket de "Imprimir recibo" / "Imprimir factura" se imprimía todo dos veces; ahora se imprime una sola vez. En "Añadir prendas", "Anular prendas", "Anular factura" y "Rectificar factura" Intro solo busca el ticket. En todas las ventanas, Intro en un campo pulsa solo el botón principal de la ventana (o nada), nunca otro como "Buscar" o "Reintentar".
 
 11.0
 - Nuevo: todas las ventanas tienen un diseño nuevo y más claro
