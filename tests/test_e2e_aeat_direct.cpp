@@ -59,11 +59,25 @@ private:
                  .arg(nRecibo, hash, importe));
     }
 
-    // Charges through the real PayDialog; garments in `skip` are left unticked.
+    // Charges through the real PayDialog; garments in `skip` are left unticked. Once
+    // the chain is ready the dialog prints the factura at once and hands AEAT's answer
+    // over (submitAdopted): settled here as Recogida does.
     bool pay(const QString &nRecibo, const QDate &date, const QStringList &skip = {})
     {
         PayDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
+        connect(&dlg, &PayDialog::submitAdopted, this,
+                [this](const QString &reqId, const QString &ticketNum, int seq, bool) {
+            auto *conn = new QMetaObject::Connection;
+            *conn = connect(m_verifactu, &VerifactuIntegration::requestFinished, this,
+                            [this, reqId, ticketNum, seq, conn](const QString &id, const VerifactuResult &result) {
+                if (id != reqId)
+                    return;
+                updateTicketVerifactuFields(m_db, ticketNum, result, seq);
+                disconnect(*conn);
+                delete conn;
+            });
+        });
         if (!dlg.loadTicket(nRecibo))
             return false;
         dlg.findChild<QDateEdit *>()->setDate(date);
@@ -143,6 +157,7 @@ private slots:
         seedGarment("200", "h200b", "5.00");
         QVERIFY(pay("200", QDate(2026, 2, 11), { "h200b" }));
         QVERIFY(pay("200", QDate(2026, 2, 12)));
+        QTRY_COMPARE(m_server.sentRecords().last().invoiceNumber, QStringLiteral("200-1"));
         const QList<FakeAeatServer::SentRecord> sent = m_server.sentRecords();
         QCOMPARE(sent.last().invoiceNumber, QStringLiteral("200-1"));
         QCOMPARE(sent.last().total, QStringLiteral("5.00"));

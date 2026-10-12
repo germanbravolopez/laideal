@@ -75,12 +75,19 @@ private slots:
     // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
     QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
                                    double totalAmount, int seq = 0);
+    // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
+    // answers (direct client); null with the gateway.
+    // An AEAT refusal shown in the result panel (it can come after the factura was printed).
+    void showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result);
+    QPixmap verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
+                                   int seq = 0) const;
     // Inserts the ticket's garments; storedTotal = the sum of the stored amounts.
     // False (stops at the first failed insert) when the ticket was not stored whole.
     bool saveTicket(double &storedTotal);
     // Each returns whether both copies reached the printer.
     bool printRecibo();
-    bool printFra(const QPixmap &qrCode = QPixmap());
+    // Paid at reception: the factura with the QR for the client, the paid recibo for the shop.
+    bool printFra(const QPixmap &qrCode, bool verifactuIssued);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
     // Widgets

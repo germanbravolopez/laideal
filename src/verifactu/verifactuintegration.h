@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QDate>
+#include <QPixmap>
 #include <QSqlDatabase>
 #include "verifactumanager.h"
 
@@ -74,6 +75,12 @@ public:
         const QString &description = QString()
     );
 
+    // The QR of a simplified invoice when it can be printed before AEAT answers: the
+    // direct client has generated its record (call it right after the submit) and draws
+    // the QR from the invoice's data, as VERI*FACTU defines it. Null otherwise, and with
+    // the gateway, whose QR comes in its reply. Same inputs as the submit.
+    QPixmap qrBeforeReply(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase, double taxRate) const;
+
     // Asks AEAT what it holds for an InvoiceID. Answers on queryFinished.
     // Read-only: it never changes anything at AEAT. Empty return = not configured.
     QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate());
@@ -97,6 +104,8 @@ private:
     QString m_lastError;
 
     bool loadEmitterConfiguration();
+    VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,
+                                       double taxRate, const QString &description) const;
 };
 
 #endif // VERIFACTUINTEGRATION_H

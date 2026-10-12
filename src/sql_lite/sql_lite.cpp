@@ -1027,15 +1027,29 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
     return updateTicketVerifactuFields(db, nRecibo, result, seq);
 }
 
-bool applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
-                                       const VerifactuResult &result)
+int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
+                                      const VerifactuResult &result)
 {
-    if (!result.isSuccess())
-        return false;
     QString nRecibo;
     int seq = 0;
     splitInvoiceId(invoiceId, &nRecibo, &seq);
-    return markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, result.rawXml);
+    // -1 only when the database answers that no paid row carries the InvoiceID: a read
+    // failure is 0, so an accepted cancellation of a real ticket is never passed over.
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return 0;
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":seq", seq);
+    if (!q.exec() || !q.next()) {
+        qWarning() << "applySettledVerifactuCancellation: lookup failed for" << invoiceId << "-" << q.lastError().text();
+        return 0;
+    }
+    if (q.value(0).toInt() == 0)
+        return -1;
+    if (!result.isSuccess())
+        return 0;
+    return markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, result.rawXml) ? 1 : 0;
 }
 
 QStringList readClientPhones(QSqlDatabase &db, const QString &client)

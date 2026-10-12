@@ -44,7 +44,8 @@ signals:
     // This dialog dies with exec(), so RecogPrendas adopts the reqId and applies
     // the reply if it still arrives - otherwise a late SUCCESS (and its CSV) is
     // lost and the row stays falsely PENDIENTE.
-    void submitAdopted(const QString &requestId, const QString &ticketNum, int seq);
+    // facturaPrinted: the customer already has the factura with the QR (direct client).
+    void submitAdopted(const QString &requestId, const QString &ticketNum, int seq, bool facturaPrinted);
 
 private slots:
     void onCobrarClicked();
@@ -59,7 +60,7 @@ private:
     // Stamp the just-paid rows of this seq as PENDIENTE (used when AEAT did not
     // confirm in time - the submission outcome is unknown, not a failure).
     void markPendingVerifactu(int seq);
-    void printPartialFactura(int seq, const QPixmap &qrCode);
+    void printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued = false);
 
     QString m_ticketNum;
     QString m_cliente;

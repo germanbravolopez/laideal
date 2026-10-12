@@ -64,6 +64,12 @@ public:
     QString submitInvoiceAsync(const VerifactuInvoice &invoice) override;
     QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate) override;
     QString generateQRAsync(const VerifactuInvoice &invoice) override;
+    // The invoice's QR, drawn from its own data.
+    QPixmap qrFor(const VerifactuInvoice &invoice) const;
+    // The QR of the registration record generated for `invoice` and not yet confirmed
+    // (this issuer, same date and amount), drawn from the stored record so it matches
+    // what AEAT receives: printable before AEAT answers. Null when there is none.
+    QPixmap queuedRecordQr(const VerifactuInvoice &invoice);
     QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
     // Records can be generated (issuer and database ready). Sending may still fail:
@@ -108,6 +114,7 @@ public:
     qint64 msecsUntilNextSend() const;
 
 private:
+    QString qrUrlFor(const VerifactuInvoice &invoice) const;
     Config                     m_config;
     QString                    m_configError;
     QString                    m_sendError;

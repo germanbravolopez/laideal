@@ -40,6 +40,9 @@ public:
     bool isRecibo = true, isCompleteInvoice = false;
     VerifactuIntegration *verifactuIntegration = nullptr;
     QPixmap qrCode;
+    // The direct AEAT client generated and queued the invoice's record: a VERI*FACTU
+    // invoice, legend printed although AEAT has not answered yet (row still PENDIENTE).
+    bool verifactuIssued = false;
     // -1 (default): print every row of n_recibo (legacy / full-ticket flow).
     // >=0: scope getTicketInfo to rows with verifactu_invoice_seq = invoiceSeq,
     // so partial-payment events (8.5+) print only the garments charged that time.

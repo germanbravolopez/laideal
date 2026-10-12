@@ -481,11 +481,34 @@ QString AeatDirectBackend::generateQRAsync(const VerifactuInvoice &invoice)
     const QString requestId = nextRequestId();
     VerifactuResult r;
     r.status = VerifactuResult::SUCCESS;
-    r.validationUrl = AeatHash::qrValidationUrl(invoice.getSellerNIF(), invoice.getInvoiceNumber(), invoice.getInvoiceDate(),
-                                                AeatHash::amountText(invoice.getTotalAmount()), m_config.testEnvironment);
-    r.qrCode = QPixmap::fromImage(AeatQr::image(r.validationUrl, kQrPixelsPerModule));
+    r.validationUrl = qrUrlFor(invoice);
+    r.qrCode = qrFor(invoice);
     answerLater(requestId, r);
     return requestId;
+}
+
+QString AeatDirectBackend::qrUrlFor(const VerifactuInvoice &invoice) const
+{
+    return AeatHash::qrValidationUrl(invoice.getSellerNIF(), invoice.getInvoiceNumber(), invoice.getInvoiceDate(),
+                                     AeatHash::amountText(invoice.getTotalAmount()), m_config.testEnvironment);
+}
+
+QPixmap AeatDirectBackend::qrFor(const VerifactuInvoice &invoice) const
+{
+    return QPixmap::fromImage(AeatQr::image(qrUrlFor(invoice), kQrPixelsPerModule));
+}
+
+QPixmap AeatDirectBackend::queuedRecordQr(const VerifactuInvoice &invoice)
+{
+    const AeatStore::Record r = m_store.latest(AeatStore::Kind::Registration, invoice.getInvoiceNumber());
+    // A stale record under a reused number, or another issuer's, never gets a QR printed.
+    if (!r.isValid() || r.state != AeatStore::kPending || r.issuerNif != m_config.issuerNif
+        || r.issueDate != invoice.getInvoiceDate()
+        || AeatHash::amountText(r.total) != AeatHash::amountText(invoice.getTotalAmount()))
+        return QPixmap();
+    return QPixmap::fromImage(AeatQr::image(AeatHash::qrValidationUrl(r.issuerNif, r.invoiceNumber, r.issueDate,
+                                                                     AeatHash::amountText(r.total), m_config.testEnvironment),
+                                            kQrPixelsPerModule));
 }
 
 // ---------------------------------------------------------------------------

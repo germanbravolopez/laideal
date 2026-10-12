@@ -17,6 +17,7 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include "verifacturesponse.h"
 #include "updaterdialog.h"
 #include "pendingsubmitsdialog.h"
 #include "version.h"
@@ -494,7 +495,14 @@ void MainWindow::initializeVerifactu()
             [this](const QString &invoiceId, bool cancellation, const VerifactuResult &result) {
         if (cancellation) {
             // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
-            const bool marked = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
+            const int applied = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
+            if (applied < 0) {
+                // No ticket behind it: the self-test's record, whose dialog had closed.
+                qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "(no ticket) -"
+                         << (result.isSuccess() ? "accepted" : result.errorDescription);
+                return;
+            }
+            const bool marked = applied > 0;
             qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
                        << (result.isSuccess() ? "accepted" : result.errorDescription) << "- marked" << marked;
             m_result->setText(result.isSuccess()
@@ -506,6 +514,8 @@ void MainWindow::initializeVerifactu()
         }
         const int rows = applySettledVerifactuResult(db, invoiceId, result);
         qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
+        if (rows > 0)
+            showVerifactuRejection(invoiceId, result);
     });
     if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
         if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
@@ -799,6 +809,28 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     return reqId;
 }
 
+void MainWindow::showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result)
+{
+    // A definitive refusal can come after the customer got the factura with its QR:
+    // it stays in the panel, not only in the status bar, until someone resends it.
+    if (result.status != VerifactuResult::ERROR
+        || verifactuErrorIsDuplicate(result.errorCode, result.errorDescription))
+        return;
+    m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
+                                           .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
+                      + "<br>" + tr("Reenvíela desde Recogida de Prendas (botón Verifactu…) después de corregir la causa."));
+}
+
+QPixmap MainWindow::verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
+                                           int seq) const
+{
+    if (!m_verifactuIntegration)
+        return QPixmap();
+    const double ivaRate = AppSettings::instance()->ivaRate();
+    return m_verifactuIntegration->qrBeforeReply(verifactuInvoiceId(ticketNum, seq), invoiceDate,
+                                                 Facturas::taxBaseFromGross(totalAmount, ivaRate), ivaRate);
+}
+
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
@@ -828,6 +860,7 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
         qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
+        showVerifactuRejection(verifactuInvoiceId(ticketNum, seq), result);
     }
 }
 
@@ -909,7 +942,7 @@ bool MainWindow::printRecibo()
     return ui_impr->printTicket() && printed;
 }
 
-bool MainWindow::printFra(const QPixmap &qrCode)
+bool MainWindow::printFra(const QPixmap &qrCode, bool verifactuIssued)
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
@@ -917,13 +950,15 @@ bool MainWindow::printFra(const QPixmap &qrCode)
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
     ui_impr->qrCode = qrCode;
+    ui_impr->verifactuIssued = verifactuIssued;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(true, false);
     if (!AppSettings::instance()->enablePrinting())
         return false;
     const bool printed = ui_impr->printTicket();
-    ui_impr->buildTicket(false, false);
+    ui_impr->isRecibo = true;
+    ui_impr->buildTicket(false, true);
     return ui_impr->printTicket() && printed;
 }
 
@@ -959,10 +994,13 @@ void MainWindow::on_pb_save_clicked()
             if (isPaid) {
                 const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
 
-                QPixmap qrCode;
+                // The direct client's QR needs no answer from AEAT (which may make the
+                // next submission wait up to TiempoEsperaEnvio): print at once.
+                QPixmap qrCode = reqId.isEmpty() ? QPixmap() : verifactuQrBeforeReply(ticketNum, invoiceDate, totalAmount);
+                const bool qrBeforeReply = !qrCode.isNull();
                 bool gotSuccessfulReply = false;
 
-                if (!reqId.isEmpty()) {
+                if (!reqId.isEmpty() && !qrBeforeReply) {
                     QEventLoop loop;
                     QTimer timeout;
                     timeout.setSingleShot(true);
@@ -981,10 +1019,11 @@ void MainWindow::on_pb_save_clicked()
                 }
 
                 qDebug() << "saveTicket: ticket" << ticketNum
-                         << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
-                         << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
-                if (gotSuccessfulReply) {
-                    printedWhat = printFra(qrCode) ? tr("Factura con QR impresa.") : QString();
+                         << "isPaid=true qrBeforeReply=" << qrBeforeReply << "gotSuccessfulReply=" << gotSuccessfulReply
+                         << "(either -> factura with QR + paid recibo, neither -> paid recibo)";
+                if (qrBeforeReply || gotSuccessfulReply) {
+                    printedWhat = printFra(qrCode, qrBeforeReply)
+                                      ? tr("Factura con QR (cliente) y recibo pagado (establecimiento) impresos.") : QString();
                 } else {
                     // AEAT has not confirmed within the bounded wait, but the request
                     // may still be in flight (the transport timeout is longer). Print

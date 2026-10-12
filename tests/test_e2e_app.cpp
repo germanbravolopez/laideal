@@ -57,6 +57,7 @@
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
+#include "aeatstore.h"
 #include "voidgarmentsdialog.h"
 
 class TestE2eApp : public QObject
@@ -654,6 +655,65 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
     }
 
+    // Direct AEAT connection: Cobrar prints the factura at once, with the QR drawn from
+    // the invoice and the VERI*FACTU legend, instead of waiting for AEAT (which may hold
+    // the next submission up to 60 s). The rows are paid and PENDIENTE and the answer
+    // is left to Recogida. No QR before the record exists (chain not synced), nor with
+    // the gateway, whose QR comes in its reply.
+    void test_payDialog_directPrintsFacturaBeforeAeatAnswers()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "720", "h720a", "12.10", today()));
+        QVERIFY(m_verifactu->qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0).isNull());
+
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QVERIFY(direct.directBackend());
+        QVERIFY(direct.qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0).isNull());   // no record yet
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        bool synced = false;
+        direct.directBackend()->continueChainFromAeat({}, [&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        int adopted = 0;
+        bool facturaPrinted = false;
+        connect(&dlg, &PayDialog::submitAdopted, this, [&](const QString &, const QString &, int, bool printed) {
+            ++adopted;
+            facturaPrinted = printed;
+        });
+        QVERIFY(dlg.loadTicket("720"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        AeatDirectBackend::setEndpointOverride(QString());
+        QCOMPARE(dlg.result(), int(QDialog::Accepted));                     // no wait for AEAT
+        QCOMPARE(adopted, 1);
+        QVERIFY(facturaPrinted);
+        QCOMPARE(scalar("SELECT pagado || '|' || verifactu_estado FROM ingresos WHERE hash='h720a'"),
+                 QStringLiteral("SI|PENDIENTE"));
+        QVERIFY(!direct.qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0).isNull());
+        // Only for the record's own data: never a QR for another date or amount.
+        QVERIFY(direct.qrBeforeReply("720", QDate::currentDate().addDays(-1), 10.0, 21.0).isNull());
+        QVERIFY(direct.qrBeforeReply("720", QDate::currentDate(), 9.0, 21.0).isNull());
+
+        // The factura printed then: QR and legend although AEAT has not answered yet;
+        // a reprint of the same pending row (not at issue) keeps the legend off.
+        Imprimir fra(m_db);
+        fra.isRecibo = false;
+        fra.qrCode = direct.qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0);
+        fra.le_n_ticket->setText("720");
+        fra.verifactuIssued = true;
+        fra.getTicketInfo();
+        fra.buildTicket(true, false);
+        QVERIFY(fra.ticketBytes().contains("Factura verificable"));
+        fra.verifactuIssued = false;
+        fra.buildTicket(true, false);
+        QVERIFY(!fra.ticketBytes().contains("Factura verificable"));
+    }
+
     // Startup recovery: a payment left PENDIENTE by a previous session is offered by
     // the Envíos pendientes dialog about 4 s after MainWindow opens; Reintentar
     // re-submits it under the same InvoiceID and the reply makes it ENVIADA.
@@ -1021,6 +1081,30 @@ private slots:
         QVERIFY2(rp.statusBar()->currentMessage().contains("ya se puede imprimir la factura con QR"),
                  qPrintable(rp.statusBar()->currentMessage()));
         QCOMPARE(m_server.requestsTo("Create").size(), 1);
+    }
+
+    // A refusal that arrives after the customer has left with the ticket stays in the
+    // result panel (not only 15 s in the status bar) and says how to resend it.
+    void test_recogida_lateRejectionShownInThePanel()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "1110", "h1110a", "10.00", today()));
+        FakeVerifactuServer::Reply refused;
+        refused.delayMs = 7000;
+        refused.body = FakeVerifactuServer::rejectedReply("1100", "Valor o tipo incorrecto del campo: ImporteTotal");
+        m_server.enqueue("Create", refused);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "1110", "h1110a"));
+        m_driver->expect(ModalDriver::ofType<PayDialog>(), [](QWidget *w) {
+            QMetaObject::invokeMethod(w, "onCobrarClicked");
+        });
+        rp.findChild<QPushButton *>("pb_pay_all")->click();     // returns when PayDialog gives up (5 s)
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h1110a'"),
+                                  QStringLiteral("ERROR"), 10000);
+        const QString text = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("AEAT ha rechazado la factura 1110") && text.contains("ImporteTotal")
+                 && text.contains("Verifactu"), qPrintable(text));
     }
 
     // Recogida, Verifactu dialog on an ERROR row: Reintentar is answered "duplicate",

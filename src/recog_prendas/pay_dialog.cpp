@@ -307,6 +307,22 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
+    // The direct client's QR needs no answer from AEAT (which may make the next
+    // submission wait up to TiempoEsperaEnvio): book the payment as pending, print
+    // the factura now and leave the answer to RecogPrendas, as after the timeout.
+    const QPixmap qrNow = m_verifactu->qrBeforeReply(invoiceId, fechaPago, taxBase, ivaRate);
+    if (!qrNow.isNull()) {
+        qDebug() << "PayDialog: factura printed before AEAT answers" << m_pendingReqId;
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq, true);
+        m_pendingReqId.clear();
+        VerifactuResult res;
+        res.status = VerifactuResult::PENDING;
+        persistPayment(m_pendingSeq, res);
+        printPartialFactura(m_pendingSeq, qrNow, true);
+        accept();
+        return;
+    }
+
     setFormEnabled(false);
     m_lblStatus->showInfo(tr("Enviando %1 a AEAT...").arg(invoiceId));
 
@@ -322,7 +338,7 @@ void PayDialog::onCobrarClicked()
         // is 10 s) was dropped on the floor - including a SUCCESS carrying the CSV,
         // which left the row falsely PENDIENTE and its later retry answering
         // "already exists".
-        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq);
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq, false);
         m_pendingReqId.clear();
         VerifactuResult res;
         res.status = VerifactuResult::NETWORK_ERROR;
@@ -413,13 +429,14 @@ void PayDialog::markPendingVerifactu(int seq)
     db.close();
 }
 
-void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
+void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued)
 {
     auto *ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo            = qrCode.isNull(); // recibo (no QR) when AEAT didn't reply
     ui_impr->isCompleteInvoice   = false;
     ui_impr->verifactuIntegration = nullptr;
     ui_impr->qrCode              = qrCode;
+    ui_impr->verifactuIssued     = verifactuIssued;
     ui_impr->invoiceSeq          = seq;
     ui_impr->le_n_ticket->setText(m_ticketNum);
     ui_impr->getTicketInfo();

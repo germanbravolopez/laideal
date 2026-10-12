@@ -1131,20 +1131,23 @@ private slots:
     }
 
     // An accepted cancellation that reached no dialog marks the event ANULADA; a
-    // refused one changes nothing.
+    // refused one changes nothing; an id with no ticket (the self-test's record) is
+    // -1, so no "could not mark it" message is shown for it.
     void test_applySettledVerifactuCancellation()
     {
         insertIngreso("810", "10-10-2026", "10.00", "SI", "ENVIADA", 0, 0);
         VerifactuResult refused;
         refused.status = VerifactuResult::ERROR;
-        QVERIFY(!applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), refused));
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), refused), 0);
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='810'"), QStringLiteral("ENVIADA"));
         VerifactuResult ok;
         ok.status = VerifactuResult::SUCCESS;
         ok.rawXml = "<sf:RegistroAnulacion/>";
-        QVERIFY(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), ok));
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), ok), 1);
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE n_recibo='810'"),
                  QStringLiteral("ANULADA|12-10-2026"));
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "PRUEBA-20261012142926", QDate(2026, 10, 12), ok), -1);
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "810-3", QDate(2026, 10, 12), ok), -1);
     }
 
     // Unsent direct-client records; 0 when the direct connection was never used (no table).

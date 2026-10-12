@@ -76,23 +76,7 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
         return QString();
     }
 
-    VerifactuInvoice invoice;
-    invoice.setInvoiceNumber(invoiceNumber);
-    invoice.setInvoiceDate(invoiceDate);
-    invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
-    invoice.setSellerNIF(m_emitterNif);
-    invoice.setSellerName(m_emitterName);
-    invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
-
-    VerifactuTaxItem taxItem;
-    taxItem.setTaxBase(taxBase);
-    taxItem.setTaxRate(taxRate);
-    taxItem.setTaxAmount(taxBase * taxRate / 100.0);
-
-    invoice.addTaxItem(taxItem);
-    invoice.calculateTotals();
-
-    return m_backend->submitInvoiceAsync(invoice);
+    return m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
 }
 
 QString VerifactuIntegration::cancelInvoiceAsync(
@@ -174,6 +158,22 @@ QString VerifactuIntegration::generateQRAsync(
         return QString();
     }
 
+    return m_backend->generateQRAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
+}
+
+QPixmap VerifactuIntegration::qrBeforeReply(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,
+                                            double taxRate) const
+{
+    // Only once the record exists: before the first chain sync it is generated later, or not at all.
+    if (!m_direct || !isConfigured())
+        return QPixmap();
+    return m_direct->queuedRecordQr(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, QString()));
+}
+
+VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate,
+                                                         double taxBase, double taxRate,
+                                                         const QString &description) const
+{
     VerifactuInvoice invoice;
     invoice.setInvoiceNumber(invoiceNumber);
     invoice.setInvoiceDate(invoiceDate);
@@ -189,8 +189,7 @@ QString VerifactuIntegration::generateQRAsync(
 
     invoice.addTaxItem(taxItem);
     invoice.calculateTotals();
-
-    return m_backend->generateQRAsync(invoice);
+    return invoice;
 }
 
 QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)

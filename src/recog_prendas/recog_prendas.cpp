@@ -814,9 +814,9 @@ void RecogPrendas::on_pb_pay_all_clicked()
     // Adopt a submission the dialog gave up waiting on, so a late reply still
     // patches the row instead of dying with the dialog.
     connect(&dlg, &PayDialog::submitAdopted, this,
-            [this](const QString &reqId, const QString &ticketNum, int seq) {
+            [this](const QString &reqId, const QString &ticketNum, int seq, bool facturaPrinted) {
         ensureVerifactuConnected();
-        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/true });
+        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/!facturaPrinted });
         qDebug() << "RecogPrendas: adopted in-flight submit" << reqId
                  << "for" << verifactuInvoiceId(ticketNum, seq);
     });
@@ -1217,6 +1217,14 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        // A definitive refusal can come after the customer got the factura with its QR:
+        // it stays in the panel until someone resends it.
+        if (result.status == VerifactuResult::ERROR
+            && !verifactuErrorIsDuplicate(result.errorCode, result.errorDescription))
+            m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
+                                                   .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped(),
+                                                        result.errorDescription.toHtmlEscaped()))
+                              + "<br>" + tr("Reenvíela con el botón Verifactu… después de corregir la causa."));
         // "Already exists" means AEAT HAS the invoice and we lost the reply, so a
         // further retry can only fail the same way. Close the loop here: ask AEAT
         // what it holds and offer to adopt its CSV.
