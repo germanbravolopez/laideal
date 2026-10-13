@@ -551,6 +551,34 @@ private slots:
         QCOMPARE(m_server->sentRecords().last().previousHash, ours);
     }
 
+    // An invoice number is unique per issuer only: after the NIF changes, the same number
+    // is a new invoice of the new issuer - never answered with the old issuer's outcome,
+    // never flagged as a resend of the old one's refused record.
+    void test_sameNumberUnderAnotherIssuer()
+    {
+        {
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(sync(first));
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("900", 10))).isSuccess());
+        }
+        const int sentBefore = m_server->sentRecords().size();
+        AeatDirectBackend::Config other = config();
+        other.issuerNif = "B11111111";
+        other.issuerName = "Otra empresa";
+        AeatDirectBackend second(other, m_db);
+        QVERIFY(sync(second));
+        VerifactuInvoice inv = ticket("900", 20);
+        inv.setSellerNIF("B11111111");
+        const VerifactuResult r = waitFor(second, second.submitInvoiceAsync(inv));
+        QVERIFY2(r.isSuccess(), qPrintable(r.errorDescription));
+        QCOMPARE(m_server->sentRecords().size(), sentBefore + 1);              // a new record was sent
+        QVERIFY(!m_server->sentRecords().last().afterRejection);
+        QVERIFY(m_server->submissions().last().body.contains("<sf:IDEmisorFactura>B11111111</sf:IDEmisorFactura>"));
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "900", "B11111111").issuerNif, QStringLiteral("B11111111"));
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "900", config().issuerNif).issuerNif, config().issuerNif);
+    }
+
     // A submission carries one issuer in its header: records left pending under one
     // issuer are never sent by a backend configured for another (found in the AEAT
     // test runs: AEAT refused them with 4104), and go out once their issuer is back.

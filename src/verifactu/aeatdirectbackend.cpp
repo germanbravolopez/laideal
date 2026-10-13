@@ -382,7 +382,7 @@ void AeatDirectBackend::storeAndQueueNow(
     const QString &requestId, AeatStore::Kind kind, const QString &invoiceNumber,
     const std::function<AeatStore::Built(const AeatRecord::PreviousRecord &, bool afterRejection)> &build)
 {
-    AeatStore::Record record = m_store.latest(kind, invoiceNumber);
+    AeatStore::Record record = m_store.latest(kind, invoiceNumber, m_config.issuerNif);
     if (record.isValid() && (record.state == AeatStore::kAccepted || record.state == AeatStore::kDuplicate
                              || record.state == AeatStore::kCancelledAtAeat)) {
         // AEAT's answer about this invoice is known (e.g. the reply to an earlier send was lost).
@@ -483,7 +483,7 @@ QPixmap AeatDirectBackend::qrFor(const VerifactuInvoice &invoice) const
 
 QPixmap AeatDirectBackend::queuedRecordQr(const VerifactuInvoice &invoice)
 {
-    const AeatStore::Record r = m_store.latest(AeatStore::Kind::Registration, invoice.getInvoiceNumber());
+    const AeatStore::Record r = m_store.latest(AeatStore::Kind::Registration, invoice.getInvoiceNumber(), m_config.issuerNif);
     // A stale record under a reused number, or another issuer's, never gets a QR printed.
     if (!r.isValid() || r.state != AeatStore::kPending || r.issuerNif != m_config.issuerNif
         || r.issueDate != invoice.getInvoiceDate()
@@ -509,7 +509,7 @@ QString AeatDirectBackend::queryInvoiceAsync(const QString &invoiceNumber, const
     }
     // AEAT files the record under the month of its issue date: the caller's, else the
     // stored record's; without either, this month and then the previous one.
-    const AeatStore::Record stored = m_store.latest(AeatStore::Kind::Registration, invoiceNumber);
+    const AeatStore::Record stored = m_store.latest(AeatStore::Kind::Registration, invoiceNumber, m_config.issuerNif);
     const QDate known = invoiceDate.isValid() ? invoiceDate : (stored.isValid() ? stored.issueDate : QDate());
     queryInvoiceMonth(requestId, invoiceNumber, known.isValid() ? known : QDate::currentDate(), !known.isValid());
     return requestId;

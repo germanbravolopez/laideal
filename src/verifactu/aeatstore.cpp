@@ -274,7 +274,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     return r;
 }
 
-AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber)
+AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber, const QString &issuerNif)
 {
     Record r;
     bool wasOpen = false;
@@ -282,9 +282,11 @@ AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber)
         return r;
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE environment = :e AND invoice_number = :num"
-                             " AND kind = :k ORDER BY id DESC LIMIT 1").arg(QLatin1String(kRecordColumns)));
+                             " AND kind = :k AND (:n = '' OR issuer_nif = :n) ORDER BY id DESC LIMIT 1")
+                  .arg(QLatin1String(kRecordColumns)));
     q.bindValue(":e", m_environment);
     q.bindValue(":num", invoiceNumber);
+    q.bindValue(":n", issuerNif.isNull() ? QStringLiteral("") : issuerNif);
     q.bindValue(":k", kindText(kind));
     if (q.exec() && q.next())
         r = readRecord(q);

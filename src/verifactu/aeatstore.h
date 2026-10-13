@@ -89,7 +89,8 @@ public:
                   const std::function<Built(const AeatRecord::PreviousRecord &)> &build);
 
     // The newest record of an invoice and kind, or an invalid Record.
-    Record latest(Kind kind, const QString &invoiceNumber);
+    // `issuerNif` empty: any issuer (an invoice number is only unique per issuer).
+    Record latest(Kind kind, const QString &invoiceNumber, const QString &issuerNif = QString());
     // Records AEAT has not confirmed yet, oldest first; only `issuerNif`'s when given
     // (a submission carries one issuer in its header).
     QList<Record> pending(int limit = 1000, const QString &issuerNif = QString());
