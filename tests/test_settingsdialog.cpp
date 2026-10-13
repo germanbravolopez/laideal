@@ -126,7 +126,8 @@ private slots:
     }
 
     // The direct connection's own production switch: off by default (pre-production);
-    // turning it on asks for confirmation, and only a "Sí" saves it.
+    // turning it on or off asks for confirmation, and leaving production is refused
+    // while production records are unsent.
     void test_directProductionNeedsConfirmation()
     {
         AppSettings *s = AppSettings::instance();
@@ -155,10 +156,29 @@ private slots:
             QMetaObject::invokeMethod(&dlg, "accept");
             QVERIFY(s->aeatDirectProduction());
         }
+        // Leaving production: refused while production records are unsent, then confirmed.
+        {
+            SettingsDialog pending;
+            pending.setDirectPendingCount(2);
+            QVERIFY(pending.findChild<QCheckBox *>("chkDirectProduction")->isChecked());
+            pending.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&pending, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
+        {
+            SettingsDialog leaving;
+            leaving.setDirectPendingCount(0);
+            leaving.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&leaving, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
         SettingsDialog reopened;
-        QVERIFY(reopened.findChild<QCheckBox *>("chkDirectProduction")->isChecked());
+        reopened.setDirectPendingCount(0);
         reopened.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
-        QMetaObject::invokeMethod(&reopened, "accept");                   // back to pre-production: no question
+        answer(QMessageBox::Yes);
+        QMetaObject::invokeMethod(&reopened, "accept");
         QVERIFY(!s->aeatDirectProduction());
         s->setVerifactuDirectAeat(false);
     }

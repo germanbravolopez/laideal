@@ -316,6 +316,21 @@ void SettingsDialog::accept()
                                     "con el certificado elegido. ¿Pasar a PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
+    // Leaving production: its unsent records would stay behind (the outbox is per
+    // environment) and the rows be resent to pre-production.
+    const bool leavingProduction = AppSettings::instance()->verifactuDirectAeat() && AppSettings::instance()->aeatDirectProduction()
+                                   && !directProduction;
+    if (leavingProduction && m_directPending > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 registro(s) de PRODUCCIÓN sin confirmar por la AEAT. Espere a que se envíen "
+                                "antes de dejar la AEAT real.").arg(m_directPending));
+        return;
+    }
+    if (leavingProduction
+        && QMessageBox::question(this, tr("Conexión con la AEAT"),
+                                 tr("Las facturas dejarán de registrarse en la AEAT real. ¿Salir de PRODUCCIÓN?"),
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
     AppSettings *s = AppSettings::instance();
 
     s->setLanguage(m_language->currentData().toString());
