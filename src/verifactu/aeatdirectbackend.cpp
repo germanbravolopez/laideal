@@ -604,6 +604,13 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     m_inFlightIds.clear();
 
     const AeatResponse::Submission parsed = AeatResponse::parseSubmission(body);
+    // Which records AEAT may hold: decided before this send is counted (see the duplicate case).
+    QHash<qint64, bool> reachedBefore;
+    for (const AeatStore::Record &r : m_store.pending(1000, m_config.issuerNif))
+        reachedBefore.insert(r.id, r.reached);
+    if (response.requestSent || parsed.parsed)
+        for (qint64 id : sent)
+            m_store.markReached(id);
     // No AEAT answer, or AEAT's own service failed: the outcome is unknown, so the
     // records stay pending and are sent unchanged again on their own.
     const bool transient = !parsed.parsed || (parsed.fault && parsed.faultCode.contains(QLatin1String("Server")));
@@ -652,9 +659,9 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
             m_store.markOutcome(record.id, AeatStore::kCancelledAtAeat, QString(), result.errorCode, result.errorDescription);
             finishRecord(record, result, false);
         } else if (line && line->duplicate && result.isSuccess()) {
-            // A resend of our own record (sent before, the reply lost) is ours; on a
-            // first send AEAT already held another system's record for the invoice.
-            const bool ours = record.attempts > 1;
+            // Ours only when an earlier send of it got to AEAT (the reply lost); if none
+            // did (no connection, TLS), AEAT already held another system's record.
+            const bool ours = reachedBefore.value(record.id, false);
             m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
                                 result.csv, result.errorCode, result.errorDescription);
             finishRecord(record, result, ours);

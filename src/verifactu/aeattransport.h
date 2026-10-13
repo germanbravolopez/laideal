@@ -24,6 +24,7 @@ public:
         QByteArray body;
         int        httpStatus = 0;
         QString    error;        // transport failure (no connection, TLS, timeout); empty when AEAT answered
+        bool       requestSent = false;   // the request went out (AEAT may hold it even without a reply)
     };
     using Done = std::function<void(const Response &)>;
 

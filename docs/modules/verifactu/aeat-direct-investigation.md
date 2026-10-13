@@ -133,7 +133,7 @@ A second review of those fixes found one more blocking point - Rectificar factur
 
 - Until the first sync with AEAT succeeds, invoices are issued without a record (requests wait and the rows stay PENDIENTE).
 - *(Obsolete since 13-10-2026: the gateway's records are no longer part of our chain, and each system keeps its own, so switching between them forks nothing.)*
-- Claiming a duplicate as ours relies on it being a resend (`attempts > 1`); comparing our huella with AEAT's through a query would be exact. For a duplicate of another system's record the QR is built from our data.
+- Claiming a duplicate as ours relies on an earlier send of it having reached AEAT (the request went out: `AeatTransport::Response::requestSent`, stored as `aeat_records.reached`; a send that failed to connect never counts); comparing our huella with AEAT's through a query would be exact. For a duplicate of another system's record the QR is built from our data.
 - An invoice AEAT holds as cancelled leaves its rows ERROR (still counted until reviewed).
 - A record AEAT never reports on is resent every 60 s without limit.
 

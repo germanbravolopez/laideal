@@ -4,6 +4,7 @@
 // client certificate (throwaway self-signed fixtures, never a real certificate).
 
 #include <QtTest>
+#include <QTcpServer>
 #include <QSignalSpy>
 #include <QSslKey>
 #include <QSslSocket>
@@ -550,6 +551,30 @@ private slots:
         QVERIFY2(ok && message.contains("sin consultar la AEAT"), qPrintable(message));
         QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("2", 20))).isSuccess());
         QCOMPARE(m_server->sentRecords().last().previousHash, ours);
+    }
+
+    // AEAT holds the invoice from another system and our first send never got there (no
+    // connection): AEAT's duplicate answer to the resend is not ours - only a send that
+    // reached AEAT (the reply lost) makes a duplicate ours (test_lostReplyResendsSameRecord).
+    void test_duplicateOfAnotherSystemAfterAFailedSend()
+    {
+        registerElsewhere({ "510" }, { "IreneSolutions", "B11111111", "VERIFACTU-API", "IR", "1.0", "GW-1" });
+        {
+            QTcpServer closed;
+            QVERIFY(closed.listen(QHostAddress::LocalHost));
+            const quint16 port = closed.serverPort();
+            closed.close();
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(sync(backend));
+            AeatDirectBackend::setEndpointOverride(QStringLiteral("http://127.0.0.1:%1/never-used").arg(port));
+            QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("510", 10))).status, VerifactuResult::NETWORK_ERROR);
+            AeatDirectBackend::setEndpointOverride(m_server->url());
+        }
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(!store.latest(AeatStore::Kind::Registration, "510").reached);
+        AeatDirectBackend again(config(), m_db);                              // sends it at start
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "510").state, AeatStore::kDuplicate, 15000);
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "510").reached);
     }
 
     // The QR printed before AEAT answers comes only from this issuer's record still

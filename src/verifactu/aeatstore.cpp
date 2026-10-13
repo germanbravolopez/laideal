@@ -18,7 +18,7 @@ namespace {
 const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
-    "state, csv, error_code, error_description, attempts";
+    "state, csv, error_code, error_description, attempts, reached";
 
 // A null QString binds as SQL NULL, which the NOT NULL text columns refuse.
 QString text(const QString &value)
@@ -72,7 +72,7 @@ bool AeatStore::ensureSchema()
                   " total REAL NOT NULL DEFAULT 0, hash TEXT NOT NULL, xml TEXT NOT NULL, generated_at TEXT NOT NULL,"
                   " state TEXT NOT NULL, csv TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT '',"
                   " error_description TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0,"
-                  " last_attempt TEXT NOT NULL DEFAULT '')")
+                  " last_attempt TEXT NOT NULL DEFAULT '', reached INTEGER NOT NULL DEFAULT 0)")
         && q.exec("CREATE INDEX IF NOT EXISTS aeat_records_invoice ON aeat_records (environment, invoice_number, kind)")
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_sync ("
                   " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, synced_at TEXT NOT NULL,"
@@ -81,8 +81,9 @@ bool AeatStore::ensureSchema()
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
     } else {
-        // aeat_chain made by an earlier build of the research branch lacks it (fails once added).
+        // Tables made by an earlier build of the research branch lack them (fails once added).
         QSqlQuery(m_db).exec("ALTER TABLE aeat_chain ADD COLUMN generated_at TEXT NOT NULL DEFAULT ''");
+        QSqlQuery(m_db).exec("ALTER TABLE aeat_records ADD COLUMN reached INTEGER NOT NULL DEFAULT 0");
     }
     close(wasOpen);
     return ok;
@@ -271,6 +272,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     r.errorCode        = q.value(11).toString();
     r.errorDescription = q.value(12).toString();
     r.attempts         = q.value(13).toInt();
+    r.reached          = q.value(14).toInt() != 0;
     return r;
 }
 
@@ -315,6 +317,19 @@ QList<AeatStore::Record> AeatStore::pending(int limit, const QString &issuerNif)
     q.finish();
     close(wasOpen);
     return out;
+}
+
+bool AeatStore::markReached(qint64 id)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE aeat_records SET reached = 1 WHERE id = :id");
+    q.bindValue(":id", id);
+    const bool ok = q.exec() && q.numRowsAffected() == 1;
+    close(wasOpen);
+    return ok;
 }
 
 bool AeatStore::markAttempt(qint64 id)

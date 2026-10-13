@@ -86,8 +86,13 @@ AeatTransport::Response AeatTransport::postBlocking(const QString &url, const QB
     }
     const wchar_t *headers = L"Content-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\n";
     if (!WinHttpSendRequest(request.h, headers, DWORD(-1L), const_cast<char *>(body.constData()), DWORD(body.size()),
-                            DWORD(body.size()), 0)
-        || !WinHttpReceiveResponse(request.h, nullptr)) {
+                            DWORD(body.size()), 0)) {
+        // No connection, DNS or TLS: the request never reached AEAT.
+        response.error = lastErrorText(QStringLiteral("envío"));
+        return response;
+    }
+    response.requestSent = true;
+    if (!WinHttpReceiveResponse(request.h, nullptr)) {
         response.error = lastErrorText(QStringLiteral("envío"));
         return response;
     }
