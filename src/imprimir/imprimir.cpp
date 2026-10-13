@@ -169,6 +169,7 @@ bool Imprimir::checkAnyItemPaid()
 
 QPixmap Imprimir::resolveQrCode()
 {
+    m_qrFromQueuedRecord = false;
     if (!qrCode.isNull())
         return qrCode;
 
@@ -197,7 +198,7 @@ QPixmap Imprimir::resolveQrCode()
             break;
         }
     }
-    if (!hasCsv || anyBlocking)
+    if (anyBlocking)
         return QPixmap();
 
     // Prefer the literal AEAT InvoiceID stored at submit time so the QR matches
@@ -228,6 +229,17 @@ QPixmap Imprimir::resolveQrCode()
 
     double ivaRate = AppSettings::instance()->ivaRate();
     double taxBase = total / (1.0 + ivaRate / 100.0);
+
+    if (!hasCsv) {
+        // Not confirmed by AEAT yet: only the direct client, whose record is generated,
+        // chained and queued, has a QR (the one printed at issue), with its leyenda.
+        const QPixmap queued = verifactuIntegration->qrBeforeReply(invoiceNumber, invoiceDate, taxBase, ivaRate);
+        if (queued.isNull())
+            return QPixmap();
+        m_qrFromQueuedRecord = true;
+        qrCode = queued;
+        return qrCode;
+    }
 
     // Reprint path: fire async QR fetch and wait up to 5s in a local event loop.
     // If AEAT does not reply in time, print without QR (logged warning).
@@ -336,7 +348,8 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         const QString verifactuState = sqlQueryModel->data(
             sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
         d.verifactuVerifiable = verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)
-                                || (verifactuIssued && verifactuState == verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+                                || ((verifactuIssued || m_qrFromQueuedRecord)
+                                    && verifactuState == verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     }
 
     d.timestamp = QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss");

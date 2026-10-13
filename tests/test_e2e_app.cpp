@@ -167,6 +167,9 @@ private slots:
         QVERIFY(m_dir.isValid());
         QVERIFY(m_server.start());
         VerifactuConfig::setEndpointOverride(m_server.baseUrl());
+        // The direct client never reaches a real endpoint here: a dead local port for the
+        // whole suite, cleared only after every backend is gone.
+        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
         // Safety net: refuse to run unless every Verifactu endpoint is the local fake.
         QVERIFY2(VerifactuConfig().getEndpointUrl().startsWith(QLatin1String("http://127.0.0.1:")),
                  "Verifactu endpoint is not the local fake server - aborting before any request");
@@ -192,6 +195,7 @@ private slots:
     void cleanupTestCase()
     {
         VerifactuConfig::setEndpointOverride(QString());
+        AeatDirectBackend::setEndpointOverride(QString());
     }
 
     void init()
@@ -639,7 +643,6 @@ private slots:
         const QDate paid = QDate::currentDate();
         QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0710"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
-        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
         AppSettings::instance()->setVerifactuDirectAeat(false);
@@ -652,7 +655,6 @@ private slots:
         dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(0);      // R1
         dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
         QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
-        AeatDirectBackend::setEndpointOverride(QString());
         QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("R5"),
                  qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
@@ -669,7 +671,6 @@ private slots:
         QVERIFY(m_verifactu->qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0).isNull());
 
         AppSettings::instance()->setVerifactuDirectAeat(true);
-        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
         AppSettings::instance()->setVerifactuDirectAeat(false);
@@ -691,7 +692,6 @@ private slots:
         });
         QVERIFY(dlg.loadTicket("720"));
         QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
-        AeatDirectBackend::setEndpointOverride(QString());
         QCOMPARE(dlg.result(), int(QDialog::Accepted));                     // no wait for AEAT
         QCOMPARE(adopted, 1);
         QVERIFY(facturaPrinted);
@@ -715,6 +715,24 @@ private slots:
         fra.verifactuIssued = false;
         fra.buildTicket(true, false);
         QVERIFY(!fra.ticketBytes().contains("Factura verificable"));
+
+        // A reprint (Imprimir factura) while AEAT has not answered: the queued record's QR
+        // and the leyenda, as at issue - the gateway would have none before its CSV.
+        Imprimir reprint(m_db);
+        reprint.isRecibo = false;
+        reprint.verifactuIntegration = &direct;
+        reprint.le_n_ticket->setText("720");
+        reprint.getTicketInfo();
+        reprint.buildTicket(true, false);
+        QVERIFY(reprint.ticketBytes().contains("\x1dv0"));                    // the QR raster
+        QVERIFY(reprint.ticketBytes().contains("Factura verificable"));
+        Imprimir gatewayReprint(m_db);
+        gatewayReprint.isRecibo = false;
+        gatewayReprint.verifactuIntegration = m_verifactu;
+        gatewayReprint.le_n_ticket->setText("720");
+        gatewayReprint.getTicketInfo();
+        gatewayReprint.buildTicket(true, false);
+        QVERIFY(!gatewayReprint.ticketBytes().contains("\x1dv0"));
     }
 
     // A real VERI*FACTU QR (the direct client's encoder, level M, an AEAT URL) as it is
@@ -1027,6 +1045,8 @@ private slots:
         PayDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
         QVERIFY(dlg.loadTicket("955"));
+        // Its factura would list fewer garments than the invoice sent: not printed.
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("factura of \"955\" not printed"));
         QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
         // The lock check before submitting has passed; the reply has not arrived yet.
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 1 WHERE hash='h955b'"));

@@ -73,6 +73,8 @@ private slots:
     void onPrintClicked();
 
 private:
+    // The last resolveQrCode() drew the QR of the direct client's queued record.
+    bool m_qrFromQueuedRecord = false;
     void buildUi();
     bool checkTicketPaid(int row);
     bool checkAnyItemPaid();

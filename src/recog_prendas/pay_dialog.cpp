@@ -431,6 +431,13 @@ void PayDialog::markPendingVerifactu(int seq)
 
 void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued)
 {
+    // A garment the invoice covers was not stored as paid: the factura would list fewer
+    // garments than its QR's amount. Nothing is printed; Recogida reports it in red.
+    if (!m_unstoredHashes.isEmpty()) {
+        qCritical() << "PayDialog: factura of" << m_ticketNum << "not printed -" << m_unstoredHashes.size()
+                    << "garment(s) not stored as paid";
+        return;
+    }
     auto *ui_impr = new Imprimir(db, this);
     ui_impr->isRecibo            = qrCode.isNull(); // recibo (no QR) when AEAT didn't reply
     ui_impr->isCompleteInvoice   = false;

@@ -831,7 +831,7 @@ void RecogPrendas::on_pb_pay_all_clicked()
         m_result->setText(UiKit::errorHtml(tr("%1 prenda(s) del ticket %2 no se han guardado como cobradas.")
                                                .arg(dlg.unstoredGarments()).arg(ticketNum.toHtmlEscaped()))
                           + "<br>" + tr("La factura ya se ha enviado a AEAT con ellas (se han bloqueado o cobrado "
-                                        "mientras tanto). Revise el ticket antes de seguir."));
+                                        "mientras tanto) y no se ha impreso. Revise el ticket antes de seguir."));
     else if (charged)
         m_result->setText(UiKit::okHtml(tr("Ticket %1 cobrado.").arg(ticketNum.toHtmlEscaped()))
                           + "<br>" + tr("El envío a AEAT se confirma en la barra de estado."));
