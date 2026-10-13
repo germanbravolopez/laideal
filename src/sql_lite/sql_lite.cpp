@@ -41,13 +41,16 @@ static QString monthStr(int month)
     return month < 10 ? QStringLiteral("0%1").arg(month) : QString::number(month);
 }
 
+// Not locked by Contabilidad. The shop DB stores edit_lock as TEXT '0' / '1', and
+// COALESCE drops the column's affinity ('0' = 0 is false): only an explicit 0 is
+// unlocked, so a blank or odd value stays locked.
+static const QString kUnlockedWhere = QStringLiteral(" AND COALESCE(edit_lock, 0) IN (0, '0')");
+
 // The row's amount is still open: unpaid, never sent to AEAT, not locked by Contabilidad.
 static const QString kAmountEditableWhere =
     QStringLiteral(" AND COALESCE(pagado, '') != 'SI' "
-                   " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') "
-                   // CAST: the shop DB stores edit_lock as TEXT '0'; COALESCE drops the column's
-                   // affinity, so '0' = 0 would be false and every open garment refused.
-                   " AND CAST(COALESCE(edit_lock, 0) AS INTEGER) = 0");
+                   " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') ")
+    + kUnlockedWhere;
 
 // ---------------------------------------------------------------------------
 // Public functions
@@ -626,7 +629,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     QSqlQuery u(db);
     // Same row as read above: still unlocked and with the same quantity.
     u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
-              "AND CAST(COALESCE(edit_lock, 0) AS INTEGER) = 0 AND cantidad = :oldCant");
+              "AND cantidad = :oldCant" + kUnlockedWhere);
     u.bindValue(":cant", QString::number(qty - nGarm));
     u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);

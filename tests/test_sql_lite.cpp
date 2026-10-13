@@ -1068,6 +1068,12 @@ private slots:
         QVERIFY(splitGarmentRow(m_db, "401", "locked", 1).isEmpty());
         QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '401'"),
                  QStringLiteral("1|3"));
+        // A blank lock passes the C++ read (toInt() = 0) but not the UPDATE's own guard.
+        exec("INSERT INTO ingresos (n_recibo, importe, pagado, cantidad, edit_lock, hash, verifactu_estado) "
+             "VALUES ('402', '10.00', 'NO', '3', '', 'blank', 'SIN COBRAR')");
+        QVERIFY(splitGarmentRow(m_db, "402", "blank", 1).isEmpty());
+        QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '402'"),
+                 QStringLiteral("1|3"));
 
         // An older paid row stored with three decimals is never re-rounded: the part
         // split off is in cents, the original keeps the exact remainder.
@@ -1425,6 +1431,24 @@ private slots:
         QVERIFY(!garmentExcludedFromTotals("PENDIENTE"));
         QVERIFY(!garmentExcludedFromTotals("ENVIADA"));
         QVERIFY(!garmentExcludedFromTotals("ERROR"));
+    }
+
+    // The Contabilidad lock as the shop DB stores it (TEXT '0' / '1'): only an explicit
+    // 0 is unlocked. Before 11.2 the guard compared COALESCE(edit_lock, 0) = 0, which is
+    // false for the TEXT '0', so no garment could be voided or edited in the shop.
+    void test_voidGarmentRow_editLockAsStoredInTheShop()
+    {
+        const QList<QPair<QVariant, bool>> cases = {
+            { QStringLiteral("0"), true }, { 0, true }, { QVariant(), true },
+            { QStringLiteral("1"), false }, { 1, false }, { QString(""), false }, { QStringLiteral("SI"), false } };
+        int n = 0;
+        for (const auto &c : cases) {
+            const QString hash = QStringLiteral("lock%1").arg(++n);
+            exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, edit_lock) "
+                 "VALUES ('L1', :h, 'NO', 'En tienda', 'SIN COBRAR', :lock)", { {":h", hash}, {":lock", c.first} });
+            QVERIFY2(voidGarmentRow(m_db, "L1", hash) == c.second,
+                     qPrintable(QString("edit_lock %1").arg(c.first.isNull() ? "NULL" : "'" + c.first.toString() + "'")));
+        }
     }
 
     void test_voidGarmentRow_setsAnuladoAndScopesByHash()
