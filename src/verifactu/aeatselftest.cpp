@@ -34,7 +34,7 @@ void AeatSelfTest::run()
         emit progress(false, tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
                                 "consta como representante de %2 (apoderamiento o colaboración social).")
                                  .arg(cert.nif, m_backend->issuerNif()));
-    m_backend->continueChainFromAeat({}, [this](bool ok, const QString &message) {
+    m_backend->syncChain([this](bool ok, const QString &message) {
         if (!ok) {
             fail(tr("Cadena de registros: %1").arg(message));
             return;

@@ -99,11 +99,6 @@ QString AeatDirectBackend::nextRequestId()
     return QStringLiteral("aeat-%1").arg(++m_requestCounter);
 }
 
-bool AeatDirectBackend::seedChain(const AeatRecord::PreviousRecord &lastGatewayRecord)
-{
-    return m_store.seedChainHead(m_config.issuerNif, lastGatewayRecord);
-}
-
 qint64 AeatDirectBackend::msecsUntilNextSend() const
 {
     if (!m_nextSendAllowed.isValid())
@@ -120,41 +115,15 @@ int AeatDirectBackend::secondsUntilNextSend() const
 // Chain sync
 // ---------------------------------------------------------------------------
 
-QList<AeatResponse::RecordSummary> AeatDirectBackend::localCandidates(const QList<AeatResponse::RecordSummary> &known)
+QList<AeatResponse::RecordSummary> AeatDirectBackend::localCandidates()
 {
-    // Our own records and the head belong to this environment; a record the gateway
-    // stored only counts when it chains to one of them (or to one AEAT returned here),
-    // so a record from the gateway's test period never enters the production chain.
+    // Our own records only: one chain per system and issuer, never another system's
+    // (the gateway's records stay in its own chain).
     QList<AeatResponse::RecordSummary> out;
-    QSet<QString> reachable;
-    for (const AeatResponse::RecordSummary &k : known)
-        reachable.insert(k.hash);
-    bool read = false;
-    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
-    if (read && !head.isFirst())
-        reachable.insert(head.hash);
     for (const QString &xml : m_store.recordXmls()) {
         const AeatResponse::RecordSummary s = AeatResponse::summarizeRecord(xml);
-        if (s.valid && s.issuerNif == m_config.issuerNif) {
-            out << s;
-            reachable.insert(s.hash);
-        }
-    }
-    QList<AeatResponse::RecordSummary> gateway;
-    for (const QString &xml : m_gatewayXmls) {
-        const AeatResponse::RecordSummary s = AeatResponse::summarizeRecord(xml);
         if (s.valid && s.issuerNif == m_config.issuerNif)
-            gateway << s;
-    }
-    for (bool added = true; added;) {
-        added = false;
-        for (int i = 0; i < gateway.size(); ++i) {
-            if (reachable.contains(gateway[i].previousHash) && !reachable.contains(gateway[i].hash)) {
-                reachable.insert(gateway[i].hash);
-                out << gateway[i];
-                added = true;
-            }
-        }
+            out << s;
     }
     return out;
 }
@@ -184,7 +153,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     }
     const AeatResponse::RecordSummary *tip = AeatResponse::chainTip(candidates);
     if (!tip) {
-        *message = tr("No hay registros anteriores de este emisor: la cadena empezará con el primer registro.");
+        *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
     }
     if (tip->hash != head.hash) {
@@ -201,12 +170,6 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     return true;
 }
 
-void AeatDirectBackend::continueChainFromAeat(const QStringList &localRecordXmls, const ChainDone &done)
-{
-    setGatewayRecordXmls(localRecordXmls);
-    syncChain(done);
-}
-
 void AeatDirectBackend::syncChain(const ChainDone &done)
 {
     if (!isConfigured()) {
@@ -219,19 +182,23 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
     if (m_syncRunning)
         return;
     m_syncRunning = true;
-    if (m_store.chainSynced(m_config.issuerNif)) {
-        // Synced with AEAT before: the gateway's stored records and ours are enough.
+    // The first time, AEAT must be asked (the database may be new for a system that
+    // already sent records); afterwards it is asked too - a database restored from an
+    // older backup continues the same chain - but the local chain is enough without it.
+    m_firstSync = !m_store.chainSynced(m_config.issuerNif);
+    if (!m_sendError.isEmpty()) {
+        if (m_firstSync) {
+            syncFinished(false, tr("Antes del primer registro hay que consultar la AEAT, y no se puede: %1").arg(m_sendError));
+            return;
+        }
         QString message;
-        const bool ok = adoptTip(localCandidates({}), &message);
+        const bool ok = adoptTip(localCandidates(), &message);
         syncFinished(ok, message);
         return;
     }
-    if (!m_sendError.isEmpty()) {
-        syncFinished(false, tr("Antes del primer registro hay que consultar la AEAT, y no se puede: %1").arg(m_sendError));
-        return;
-    }
     const QDate today = QDate::currentDate();
-    queryMonth(QDate(today.year(), today.month(), 1), kMonthsBack, kMonthsAlwaysQueried, {}, {}, false);
+    queryMonth(QDate(today.year(), today.month(), 1), m_firstSync ? kMonthsBack : kMonthsAlwaysQueried,
+               kMonthsAlwaysQueried, {}, {}, false);
 }
 
 void AeatDirectBackend::syncFinished(bool ok, const QString &message)
@@ -252,16 +219,25 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
                                    QList<AeatResponse::RecordSummary> found, bool sawUnusable)
 {
     const QString envelope = AeatRecord::queryEnvelope(m_config.issuerName, m_config.issuerNif, month.year(),
-                                                       month.month(), QString(), pageAfter);
+                                                       month.month(), QString(), pageAfter, true);
     m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
                       [=](const AeatTransport::Response &response) mutable {
         const AeatResponse::Query reply = AeatResponse::parseQuery(response.body);
         if (!reply.parsed || reply.fault) {
-            syncFinished(false, tr("No se pudo consultar la AEAT: %1")
-                                    .arg(reply.fault ? reply.faultText : (response.error.isEmpty() ? tr("respuesta no reconocida") : response.error)));
+            const QString why = reply.fault ? reply.faultText : (response.error.isEmpty() ? tr("respuesta no reconocida") : response.error);
+            if (m_firstSync) {
+                syncFinished(false, tr("No se pudo consultar la AEAT: %1").arg(why));
+                return;
+            }
+            QString message;
+            const bool ok = adoptTip(localCandidates(), &message);
+            syncFinished(ok, message + QLatin1Char(' ') + tr("(sin consultar la AEAT: %1)").arg(why));
             return;
         }
         for (const AeatResponse::QueryRecord &r : reply.records) {
+            // Another system's records (e.g. the gateway's) belong to its own chain.
+            if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
+                continue;
             AeatResponse::RecordSummary s;
             s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
             s.operation = kRegistration;
@@ -295,7 +271,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             return;
         }
         QString message;
-        const bool ok = adoptTip(found + localCandidates(found), &message);
+        const bool ok = adoptTip(found + localCandidates(), &message);
         syncFinished(ok, message);
     });
 }

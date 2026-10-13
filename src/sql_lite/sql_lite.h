@@ -46,9 +46,6 @@ QString     searchItemFromClient(QSqlDatabase &db, const QString &item, const QS
 // {tel_fijo, movil} for an exact client name, fetched in one query (both empty
 // if the client is not found). Avoids two separate single-column lookups.
 QStringList readClientPhones(QSqlDatabase &db, const QString &client);
-// Every record XML the gateway stored (verifactu_xml, verifactu_cancel_xml): the direct
-// AEAT client looks among them for cancellations newer than AEAT's newest registration.
-QStringList verifactuStoredRecordXmls(QSqlDatabase &db);
 // The stored AEAT record XML of one payment event (its paid rows), or empty.
 QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq);
 // Records the direct AEAT client generated and has not had confirmed (table

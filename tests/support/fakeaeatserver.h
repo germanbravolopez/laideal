@@ -33,6 +33,8 @@ public:
         QString hash;             // the record's own Huella
         QString previousHash;     // Huella in its chain block (empty for the first)
         QString generatedAt;      // FechaHoraHusoGenRegistro
+        QString systemId;         // IdSistemaInformatico / producer NIF of the system that
+        QString producerNif;      //   generated it (SistemaInformatico block)
         bool    afterRejection = false;
     };
     struct Request {
@@ -40,6 +42,7 @@ public:
         QByteArray        body;
         QList<SentRecord> records;
         QString           queriedNumber;
+        bool              showSystem = false;   // query asked for MostrarSistemaInformatico
         QDateTime         receivedAt;
     };
     struct Reply {

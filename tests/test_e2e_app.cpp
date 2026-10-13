@@ -675,7 +675,7 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
         bool synced = false;
-        direct.directBackend()->continueChainFromAeat({}, [&synced](bool ok, const QString &) { synced = ok; });
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
         QTRY_VERIFY(synced);
 
         PayDialog dlg(m_db);

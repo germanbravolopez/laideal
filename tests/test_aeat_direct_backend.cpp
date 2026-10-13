@@ -27,6 +27,7 @@ private:
     QSqlDatabase    m_db;
     FakeAeatServer *m_server = nullptr;
     int             m_dbCounter = 0;
+    int             m_otherCounter = 0;
 
     static AeatDirectBackend::Config config()
     {
@@ -78,6 +79,33 @@ private:
         bool done = false, ok = false;
         backend.syncChain([&](bool o, const QString &) { done = true; ok = o; });
         return QTest::qWaitFor([&done]() { return done; }, 30000) && ok;
+    }
+
+    // Registers `numbers` at the fake AEAT from another database, as `system` (by
+    // default ours: a new or restored database of the same system).
+    QString registerElsewhere(const QStringList &numbers, const AeatRecord::SystemInfo &system = config().system)
+    {
+        QString lastHash;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_%2.db").arg(m_dbCounter).arg(++m_otherCounter)));
+            AeatDirectBackend::Config c = config();
+            c.system = system;
+            AeatDirectBackend elsewhere(c, other);
+            for (const QString &n : numbers)
+                lastHash = waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket(n, 10))).rawHash;
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        return lastHash;
+    }
+
+    int queriesSince(int index) const
+    {
+        int n = 0;
+        for (int i = index; i < m_server->requests().size(); ++i)
+            n += m_server->requests()[i].kind == QLatin1String("Consulta");
+        return n;
     }
 
 private slots:
@@ -239,12 +267,13 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kPending);
 
+        // The pending record goes out at the next start, before any request (and before
+        // the chain is synced with AEAT): a client fault rejects it.
         m_server->enqueue({ FakeAeatServer::faultReply("env:Client", "Codigo[4102].El XML no cumple el esquema"), 500 });
         AeatDirectBackend later(config(), m_db);
-        const VerifactuResult client = waitFor(later, later.submitInvoiceAsync(ticket("1", 10)));
-        QCOMPARE(client.status, VerifactuResult::ERROR);
-        QVERIFY(client.errorDescription.contains("4102"));
-        QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kRejected);
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kRejected, 10000);
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "1").errorDescription.contains("4102"));
+        QCOMPARE(m_server->requests().last().kind, QStringLiteral("RegFactu"));
     }
 
     // Records left unsent when the app closed are sent at the next start, unasked.
@@ -293,78 +322,53 @@ private slots:
         QVERIFY(missing.parsed && !missing.found);
     }
 
-    // The chain can continue from the last record the gateway sent.
-    void test_seededChain()
+    // One chain per system and issuer (AEAT, 13-10-2026): what another system (the
+    // gateway) registered for the issuer is never continued - our first record starts
+    // a chain of its own with PrimerRegistro.
+    void test_chainIgnoresOtherSystems()
     {
-        AeatDirectBackend backend(config(), m_db);
-        QVERIFY(backend.seedChain({ { "89890001K", "30836", QDate(2026, 10, 9) }, "GATEWAYHASH" }));
-        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("30837", 24.79))).isSuccess());
-        QCOMPARE(m_server->sentRecords()[0].previousHash, QStringLiteral("GATEWAYHASH"));
-        QVERIFY(m_server->submissions()[0].body.contains("<sf:NumSerieFactura>30836</sf:NumSerieFactura>"));
-    }
-
-    // Switching from the gateway: the chain continues after the issuer's newest record
-    // AEAT holds (here registered by another installation, as the gateway did).
-    void test_continueChainFromAeat()
-    {
-        QString gatewayHash;
-        {
-            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_gateway_db");
-            other.setDatabaseName(m_dir.filePath(QString("gateway_%1.db").arg(m_dbCounter)));
-            AeatDirectBackend gateway(config(), other);
-            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).isSuccess());
-            const VerifactuResult second = waitFor(gateway, gateway.submitInvoiceAsync(ticket("2", 20)));
-            QVERIFY(second.isSuccess());
-            gatewayHash = second.rawHash;
-            other.close();
-        }
-        QSqlDatabase::removeDatabase("aeat_gateway_db");
-
+        const AeatRecord::SystemInfo gateway{ "IreneSolutions", "B11111111", "VERIFACTU-API", "IR", "1.0", "GW-1" };
+        registerElsewhere({ "1", "2" }, gateway);
         AeatDirectBackend backend(config(), m_db);
         bool ok = false;
         QString message;
-        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
-        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
-        QVERIFY2(ok && message.contains("tras el registro 2"), qPrintable(message));
+        backend.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(ok && message.contains("primer registro"), qPrintable(message));
+        QVERIFY(m_server->requests().last().body.contains("<sfLRC:MostrarSistemaInformatico>S</sfLRC:MostrarSistemaInformatico>"));
         QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("3", 30))).isSuccess());
-        QCOMPARE(m_server->sentRecords().last().previousHash, gatewayHash);
-
-        // Once started, it is left alone.
-        message.clear();
-        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
-        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
-        QVERIFY2(ok && message.contains("tras el registro 3"), qPrintable(message));
+        QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+        QVERIFY(m_server->submissions().last().body.contains("PrimerRegistro>S<"));
+        // Our records name La Ideal's producer, not the issuer.
+        QCOMPARE(m_server->sentRecords().last().producerNif, config().system.producerNif);
     }
 
-    // A cancellation the gateway generated after the newest registration is the head
-    // (the query does not return cancellations; the stored record XML has it).
-    void test_continueChainAfterLocalCancellation()
+    // The producer of every record is La Ideal's, whoever the issuer is.
+    void test_laIdealSystem()
     {
-        AeatDirectBackend registering(config(), m_db);
-        const VerifactuResult alta = waitFor(registering, registering.submitInvoiceAsync(ticket("1", 10)));
-        QVERIFY(alta.isSuccess());
+        const AeatRecord::SystemInfo s = AeatRecord::laIdealSystem("12.0", "LAIDEAL-1");
+        QCOMPARE(s.producerNif, QStringLiteral("75929840D"));
+        QCOMPARE(s.systemId, QStringLiteral("LI"));
+        QCOMPARE(s.version, QStringLiteral("12.0"));
+        QCOMPARE(s.installationNumber, QStringLiteral("LAIDEAL-1"));
+    }
 
-        AeatRecord::Cancellation c;
-        c.invoice = { "89890001K", "1", QDate(2026, 10, 10) };
-        c.previous = { c.invoice, alta.rawHash };
-        c.generatedAt = QDateTime::currentDateTime().addSecs(60);
-        const QString cancellationXml = AeatRecord::cancellationXml(c, config().system);
-
-        QSqlDatabase fresh = QSqlDatabase::addDatabase("QSQLITE", "aeat_fresh_db");
-        fresh.setDatabaseName(m_dir.filePath(QString("fresh_%1.db").arg(m_dbCounter)));
+    // Our own cancellation can be the head: the next record chains to it, also after a
+    // restart (AEAT's query returns registrations only; the local store has it).
+    void test_ownCancellationIsTheHead()
+    {
+        m_server->setWaitSeconds(0);
+        QString cancellationHash;
         {
-            AeatDirectBackend backend(config(), fresh);
-            QString message;
-            bool ok = false;
-            backend.continueChainFromAeat({ cancellationXml, "<not a record/>" }, [&](bool o, const QString &m) { ok = o; message = m; });
-            QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 10000);
-            QVERIFY2(ok && message.contains("anulación"), qPrintable(message));
-            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20))).isSuccess());
-            QCOMPARE(m_server->sentRecords().last().previousHash, AeatRecord::hashOf(c));
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+            const VerifactuResult cancelled = waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10)));
+            QVERIFY2(cancelled.isSuccess(), qPrintable(cancelled.errorDescription));
+            cancellationHash = m_server->sentRecords().last().hash;
         }
-        fresh.close();
-        fresh = QSqlDatabase();
-        QSqlDatabase::removeDatabase("aeat_fresh_db");
+        AeatDirectBackend restarted(config(), m_db);
+        QVERIFY(waitFor(restarted, restarted.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, cancellationHash);
     }
 
     // AEAT holds nothing for the issuer: the chain starts with PrimerRegistro. An empty
@@ -374,13 +378,10 @@ private slots:
         AeatDirectBackend backend(config(), m_db);
         QString message;
         bool ok = false;
-        backend.continueChainFromAeat({}, [&](bool o, const QString &m) { ok = o; message = m; });
+        backend.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
         QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
         QVERIFY2(ok && message.contains("primer registro"), qPrintable(message));
-        int queries = 0;
-        for (const FakeAeatServer::Request &r : m_server->requests())
-            queries += r.kind == QLatin1String("Consulta");
-        QCOMPARE(queries, 24);                                           // two years back
+        QCOMPARE(queriesSince(0), 24);                                   // two years back
         QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
         QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
     }
@@ -466,18 +467,11 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kPending);
     }
 
-    // Requests made before the first sync wait for it: the first record follows AEAT's tip.
+    // A new database of the same system (a new PC): requests made before the first sync
+    // wait for it, and the first record follows our system's newest record at AEAT.
     void test_heldUntilFirstSync()
     {
-        QString tipHash;
-        {
-            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
-            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
-            AeatDirectBackend gateway(config(), other);
-            tipHash = waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).rawHash;
-            other.close();
-        }
-        QSqlDatabase::removeDatabase("aeat_other_db");
+        const QString tipHash = registerElsewhere({ "1" });
         AeatDirectBackend backend(config(), m_db);
         QVERIFY(!backend.chainReady());
         const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20)));
@@ -487,42 +481,41 @@ private slots:
         QCOMPARE(m_server->requests().first().kind, QStringLiteral("Consulta"));   // asked before generating
     }
 
-    // Records the gateway generated while the connection was switched away are followed
-    // at the next start (offline, from the stored XML).
-    void test_resyncAfterGatewayRecords()
+    // A database restored from an older backup (AEAT: the same SIF, the same chain):
+    // records sent after the backup are only at AEAT, and the next start continues
+    // after them, asking for this month and the previous one only.
+    void test_restoredBackupContinuesFromAeat()
     {
-        AeatDirectBackend first(config(), m_db);
-        const VerifactuResult ours = waitFor(first, first.submitInvoiceAsync(ticket("1", 10)));
-        QVERIFY(ours.isSuccess());
-
-        AeatRecord::Registration gateway = AeatDirectBackend::registrationFrom(ticket("2", 20),
-            { { "89890001K", "1", QDate(2026, 10, 10) }, ours.rawHash }, QDateTime::currentDateTime().addSecs(30));
-        const QString gatewayXml = AeatRecord::registrationXml(gateway, config().system);
-
-        AeatDirectBackend next(config(), m_db);
-        next.setGatewayRecordXmls({ gatewayXml });
-        const int consultasBefore = m_server->requests().size();
-        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("3", 30))).isSuccess());
-        QCOMPARE(m_server->sentRecords().last().previousHash, AeatRecord::hashOf(gateway));
-        int consultas = 0;
-        for (int i = consultasBefore; i < m_server->requests().size(); ++i)
-            consultas += m_server->requests()[i].kind == QLatin1String("Consulta");
-        QCOMPARE(consultas, 0);                                            // offline after the first sync
+        {
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString afterBackup = registerElsewhere({ "2" });
+        const int before = m_server->requests().size();
+        AeatDirectBackend restored(config(), m_db);
+        QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, afterBackup);
+        QCOMPARE(queriesSince(before), 2);
     }
 
-    // A record the gateway stored that does not chain to this environment's records
-    // (e.g. from its test period) never becomes the previous record, however new.
-    void test_resyncIgnoresUnrelatedGatewayRecords()
+    // After the first sync, AEAT out of reach does not stop the shop: the local chain
+    // is used and the message says AEAT was not asked.
+    void test_laterSyncFallsBackToLocalChain()
     {
-        AeatDirectBackend first(config(), m_db);
-        const VerifactuResult ours = waitFor(first, first.submitInvoiceAsync(ticket("1", 10)));
-        QVERIFY(ours.isSuccess());
-        const AeatRecord::Registration elsewhere = AeatDirectBackend::registrationFrom(ticket("T-9", 5),
-            { { "89890001K", "T-8", QDate(2026, 10, 10) }, QString(64, 'E') }, QDateTime::currentDateTime().addSecs(60));
+        QString ours;
+        {
+            AeatDirectBackend first(config(), m_db);
+            ours = waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).rawHash;
+        }
+        m_server->enqueue({ QByteArray(), 200, 0, true });
         AeatDirectBackend next(config(), m_db);
-        next.setGatewayRecordXmls({ AeatRecord::registrationXml(elsewhere, config().system) });
+        bool ok = false;
+        QString message;
+        next.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(ok && message.contains("sin consultar la AEAT"), qPrintable(message));
         QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("2", 20))).isSuccess());
-        QCOMPARE(m_server->sentRecords().last().previousHash, ours.rawHash);
+        QCOMPARE(m_server->sentRecords().last().previousHash, ours);
     }
 
     // A submission carries one issuer in its header: records left pending under one
@@ -626,14 +619,7 @@ private slots:
     // AEAT returns records without their hash: the sync fails instead of starting a new chain.
     void test_syncRefusesRecordsWithoutHash()
     {
-        {
-            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
-            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(m_dbCounter)));
-            AeatDirectBackend gateway(config(), other);
-            QVERIFY(waitFor(gateway, gateway.submitInvoiceAsync(ticket("1", 10))).isSuccess());
-            other.close();
-        }
-        QSqlDatabase::removeDatabase("aeat_other_db");
+        QVERIFY(!registerElsewhere({ "1" }).isEmpty());
         m_server->setQueryWithoutHashes(true);
         AeatDirectBackend backend(config(), m_db);
         bool done = false, ok = true;

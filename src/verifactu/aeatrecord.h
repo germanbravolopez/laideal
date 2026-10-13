@@ -26,6 +26,11 @@ struct SystemInfo {
     QString installationNumber;    // NumeroInstalacion, max 100, one per installation
 };
 
+// La Ideal as AEAT identifies it: its producer (who signs the declaración
+// responsable, never the issuer) and its system code, the same for every issuer
+// and installation. A chain only ever continues records of this system.
+SystemInfo laIdealSystem(const QString &version, const QString &installationNumber);
+
 // One invoice as AEAT identifies it.
 struct InvoiceRef {
     QString issuerNif;
@@ -90,9 +95,11 @@ QString cancellationXml(const Cancellation &record, const SystemInfo &system);
 // SOAP 1.1 envelope of a submission: header (the issuer) and 1-1000 records.
 QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, const QStringList &recordXmls);
 
-// SOAP 1.1 envelope of a query for the issuer's records of one month, optionally one invoice.
+// SOAP 1.1 envelope of a query for the issuer's records of one month, optionally one
+// invoice; `showSystem` asks for each record's SistemaInformatico block.
 QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int year, int month,
-                      const QString &invoiceNumber = QString(), const InvoiceRef &pageAfter = {});
+                      const QString &invoiceNumber = QString(), const InvoiceRef &pageAfter = {},
+                      bool showSystem = false);
 
 // Namespaces of the AEAT schemas (exposed for the response parser and the tests).
 extern const char *const kSuministroInformacionNs;

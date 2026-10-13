@@ -97,21 +97,6 @@ private slots:
         QCOMPARE(test.pending().size(), 1);
     }
 
-    // The chain can start after the last record sent by the gateway, only while empty.
-    void test_seedChainHead()
-    {
-        AeatStore store(m_db, "produccion");
-        QVERIFY(store.ensureSchema());
-        const AeatRecord::PreviousRecord gateway{ { "89890001K", "30836", QDate(2026, 10, 9) }, "GATEWAYHASH" };
-        QVERIFY(!store.seedChainHead("89890001K", {}));                  // nothing to seed
-        QVERIFY(store.seedChainHead("89890001K", gateway));
-        QVERIFY(!store.seedChainHead("89890001K", { gateway.invoice, "OTHER" }));
-        AeatRecord::PreviousRecord seen;
-        store.append(AeatStore::Kind::Registration, "89890001K", builder("30837", "NEW", &seen));
-        QCOMPARE(seen.hash, QStringLiteral("GATEWAYHASH"));
-        QCOMPARE(seen.invoice.invoiceNumber, QStringLiteral("30836"));
-    }
-
     // Outcomes and attempts; pending lists only unconfirmed records, oldest first;
     // latest is per invoice and kind.
     void test_outcomes()

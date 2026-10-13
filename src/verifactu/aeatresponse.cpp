@@ -131,6 +131,11 @@ Query parseQuery(const QByteArray &body)
                     record.previousHash = text;
                 return;
             }
+            if (under(path, QStringLiteral("SistemaInformatico"))) {
+                if (name == QLatin1String("IdSistemaInformatico")) record.systemId = text;
+                else if (name == QLatin1String("NIF"))         record.producerNif = text;
+                return;
+            }
             const bool inId = path.size() >= 2 && path.at(path.size() - 2) == QLatin1String("IDFactura");
             if (inId && name == QLatin1String("IDEmisorFactura"))        record.issuerNif = text;
             else if (inId && name == QLatin1String("NumSerieFactura"))   record.invoiceNumber = text;

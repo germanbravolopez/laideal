@@ -71,9 +71,6 @@ public:
     // The issuer's last record (empty hash: the chain has not started). `ok` is false
     // when the table could not be read - never to be taken as "no chain".
     AeatRecord::PreviousRecord chainHead(const QString &issuerNif, bool *ok = nullptr);
-    // Starts the chain at a record generated elsewhere (the last one the gateway sent),
-    // only while this chain is still empty. Returns false if it already had a head.
-    bool seedChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
     // Moves the head to `head` (the chain tip found by a sync), whatever it was.
     bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
 

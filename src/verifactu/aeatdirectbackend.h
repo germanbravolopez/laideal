@@ -9,13 +9,13 @@
 // docs/modules/verifactu/aeat-direct-investigation.md.
 //
 // Behaviour the app relies on:
-//  - the chain: the first time an issuer uses the direct connection (per
-//    environment), its chain is synced with AEAT - the first direct record follows
-//    the issuer's newest record anywhere (AEAT's registrations, the gateway's
-//    stored records, our own) - and no record is generated before that; requests
-//    made meanwhile wait. Every later start syncs offline against the gateway's
-//    stored records and our own, so records the gateway generated while the
-//    connection was switched away are followed too;
+//  - the chain: one per system and issuer (AEAT, 13-10-2026), so it only ever
+//    continues records La Ideal itself generated - never the gateway's - and starts
+//    with PrimerRegistro when there are none. At each start it is synced with AEAT
+//    (records of our system, this month and the previous; up to two years the first
+//    time), so a database restored from an older backup continues where AEAT is; no
+//    record is generated before that and requests made meanwhile wait. The first sync
+//    needs AEAT; later ones fall back to the local chain when AEAT cannot be reached;
 //  - submit / cancel store the record at once (even when the certificate or the
 //    network fails: only the sending waits) and answer when AEAT replies; a record
 //    already stored for that invoice is resent unchanged, an accepted one answers
@@ -84,19 +84,9 @@ public:
     QString issuerName() const { return m_config.issuerName; }
     bool chainReady() const { return m_chainReady; }
 
-    // The record XML the gateway stored (ingresos.verifactu_xml / verifactu_cancel_xml),
-    // given by the app: part of every chain sync.
-    void setGatewayRecordXmls(const QStringList &xmls) { m_gatewayXmls = xmls; }
-
-    // Syncs the chain now (see above): with AEAT the first time for this issuer and
-    // environment, offline afterwards. `done(ok, message)`.
+    // Syncs the chain now (see above). `done(ok, message)`.
     using ChainDone = std::function<void(bool ok, const QString &message)>;
     void syncChain(const ChainDone &done);
-    // As syncChain, after setGatewayRecordXmls(localRecordXmls).
-    void continueChainFromAeat(const QStringList &localRecordXmls, const ChainDone &done);
-
-    // Starts the chain after a given record (only while empty) - for tests and seeding.
-    bool seedChain(const AeatRecord::PreviousRecord &lastGatewayRecord);
 
     // The registration record of an invoice for the chain, from the app's invoice.
     static AeatRecord::Registration registrationFrom(const VerifactuInvoice &invoice,
@@ -127,9 +117,9 @@ private:
     QList<qint64>              m_inFlightIds;
     QHash<qint64, QStringList> m_waiters;      // record id -> request ids to answer
     int                        m_requestCounter = 0;
-    QStringList                m_gatewayXmls;
     bool                       m_chainReady = false;
     bool                       m_syncRunning = false;
+    bool                       m_firstSync = false;      // no sync with AEAT stored yet
     QList<ChainDone>           m_syncWaiters;   // held requests, resumed when the sync ends
 
     QString nextRequestId();
@@ -143,7 +133,7 @@ private:
     void sendPending();
     void onSubmissionReply(const AeatTransport::Response &response);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord = true);
-    QList<AeatResponse::RecordSummary> localCandidates(const QList<AeatResponse::RecordSummary> &known);
+    QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,

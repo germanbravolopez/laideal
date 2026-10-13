@@ -55,6 +55,8 @@ struct QueryRecord {
     QString hash;                 // the record's own Huella
     QString generatedAt;          // its FechaHoraHusoGenRegistro
     QString previousHash;         // Huella of the record it chains to (empty: the first)
+    QString systemId;             // IdSistemaInformatico / producer NIF of the system that
+    QString producerNif;          //   generated it (only when the query asked for them)
     QString state;                // Correcto / AceptadoConErrores / Anulado
     QString errorCode;
     QString errorDescription;

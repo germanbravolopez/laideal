@@ -192,30 +192,6 @@ QStringList AeatStore::recordXmls()
     return out;
 }
 
-bool AeatStore::seedChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head)
-{
-    if (head.isFirst())
-        return false;
-    bool wasOpen = false;
-    if (!open(&wasOpen))
-        return false;
-    QSqlQuery q(m_db);
-    q.prepare("INSERT OR IGNORE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
-              "VALUES (:e, :n, :num, :d, :h, :g)");
-    q.bindValue(":g", text(head.generatedAt));
-    q.bindValue(":e", m_environment);
-    q.bindValue(":n", issuerNif);
-    q.bindValue(":num", head.invoice.invoiceNumber);
-    q.bindValue(":d", head.invoice.issueDate.toString(kDateFormat));
-    q.bindValue(":h", head.hash);
-    const bool seeded = q.exec() && q.numRowsAffected() == 1;
-    if (seeded)
-        qDebug() << "AeatStore: chain of" << issuerNif << "(" << m_environment << ") starts after"
-                 << head.invoice.invoiceNumber << head.hash;
-    close(wasOpen);
-    return seeded;
-}
-
 AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
                                     const std::function<Built(const AeatRecord::PreviousRecord &)> &build)
 {

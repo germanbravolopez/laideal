@@ -30,9 +30,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.testEnvironment = !settings->aeatDirectProduction();
         c.issuerNif  = m_emitterNif;
         c.issuerName = m_emitterName;
-        // The producer is the one named in the declaración responsable (Acerca de Verifactu).
-        c.system = { m_emitterName, m_emitterNif, QStringLiteral("LAIDEAL"), QStringLiteral("LI"),
-                     QString(PROJECT_VERSION), settings->aeatInstallationNumber() };
+        c.system = AeatRecord::laIdealSystem(QString(PROJECT_VERSION), settings->aeatInstallationNumber());
         c.certificateThumbprint = settings->aeatCertificateThumbprint();
         c.certificatePath       = settings->aeatCertificateFile();
         c.certificatePassword   = settings->aeatCertificatePassword();

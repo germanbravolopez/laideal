@@ -963,22 +963,6 @@ int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int 
     return editLock;
 }
 
-QStringList verifactuStoredRecordXmls(QSqlDatabase &db)
-{
-    if (dbNotConfigured(db, __func__)) return {};
-    QStringList out;
-    db.open();
-    QSqlQuery q(db);
-    if (q.exec("SELECT verifactu_xml FROM ingresos WHERE COALESCE(verifactu_xml, '') != '' "
-               "UNION ALL SELECT verifactu_cancel_xml FROM ingresos WHERE COALESCE(verifactu_cancel_xml, '') != ''"))
-        while (q.next())
-            out << q.value(0).toString();
-    else
-        qWarning() << "verifactuStoredRecordXmls: query failed -" << q.lastError().text();
-    db.close();
-    return out;
-}
-
 QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq)
 {
     if (dbNotConfigured(db, __func__)) return {};

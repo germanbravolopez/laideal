@@ -49,6 +49,8 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
             if (request.kind == QLatin1String("Consulta")) {
                 if (name == QLatin1String("NumSerieFactura"))
                     request.queriedNumber = text;
+                else if (name == QLatin1String("MostrarSistemaInformatico"))
+                    request.showSystem = (text == QLatin1String("S"));
                 continue;
             }
             const bool inChain = path.contains(QStringLiteral("Encadenamiento"));
@@ -57,7 +59,14 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                     record.previousHash = text;
                 continue;
             }
-            if (path.contains(QStringLiteral("SistemaInformatico")) || path.contains(QStringLiteral("FacturasRectificadas")))
+            if (path.contains(QStringLiteral("SistemaInformatico"))) {
+                if (name == QLatin1String("IdSistemaInformatico"))
+                    record.systemId = text;
+                else if (name == QLatin1String("NIF"))
+                    record.producerNif = text;
+                continue;
+            }
+            if (path.contains(QStringLiteral("FacturasRectificadas")))
                 continue;
             if (name == QLatin1String("NumSerieFactura") || name == QLatin1String("NumSerieFacturaAnulada"))
                 record.invoiceNumber = text;
@@ -197,7 +206,7 @@ QByteArray FakeAeatServer::answer(const Request &request)
             records += QStringLiteral(
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>89890001K</tik:IDEmisorFactura>"
                 "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
-                "<tikLRRC:DatosRegistroFacturacion><tikLRRC:ImporteTotal>%3</tikLRRC:ImporteTotal>%8"
+                "<tikLRRC:DatosRegistroFacturacion><tikLRRC:ImporteTotal>%3</tikLRRC:ImporteTotal>%8%9"
                 "<tikLRRC:FechaHoraHusoGenRegistro>%7</tikLRRC:FechaHoraHusoGenRegistro>%4"
                 "</tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>89890001K</tik:NIFPresentador>"
                 "<tik:TimestampPresentacion>2026-10-10T10:00:05+02:00</tik:TimestampPresentacion><tik:IdPeticion>%5</tik:IdPeticion>"
@@ -213,7 +222,12 @@ QByteArray FakeAeatServer::answer(const Request &request)
                      : h.previousHash.isEmpty()
                          ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
                          : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"
-                                          "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash));
+                                          "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash),
+                     !request.showSystem ? QString()
+                     : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
+                                      "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
+                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>1</tik:NumeroInstalacion>"
+                                      "</tikLRRC:SistemaInformatico>").arg(h.producerNif, h.systemId));
         }
         return envelope(QStringLiteral(
             "<tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tikLRRC=\"%1RespuestaConsultaLR.xsd\" xmlns:tik=\"%1SuministroInformacion.xsd\">"

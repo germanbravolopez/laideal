@@ -528,10 +528,9 @@ void MainWindow::initializeVerifactu()
 
 void MainWindow::continueDirectChain()
 {
-    // Before the first direct record: continue the issuer's chain after the last record
-    // the gateway sent (AEAT's newest registration, or a newer stored cancellation).
-    m_verifactuIntegration->directBackend()->continueChainFromAeat(
-        verifactuStoredRecordXmls(db), [this](bool ok, const QString &message) {
+    // Our system's own chain, synced with AEAT before the first record (never the gateway's).
+    m_verifactuIntegration->directBackend()->syncChain(
+        [this](bool ok, const QString &message) {
             qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
             if (!ok)
                 m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
@@ -560,9 +559,8 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     c.testEnvironment = true;
     c.issuerNif = nif;
     c.issuerName = name;
-    c.system = { name, nif, QStringLiteral("LAIDEAL"), QStringLiteral("LI"),
-                 QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR),
-                 AppSettings::instance()->aeatInstallationNumber() };
+    c.system = AeatRecord::laIdealSystem(QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR),
+                                         AppSettings::instance()->aeatInstallationNumber());
     c.certificateThumbprint = thumbprint;
     c.certificatePath = certificateFile;
     c.certificatePassword = certificatePassword;

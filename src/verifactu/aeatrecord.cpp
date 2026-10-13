@@ -234,8 +234,14 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
              QString::fromLatin1(kSuministroInformacionNs), escaped(issuerName), escaped(issuerNif), body);
 }
 
+SystemInfo laIdealSystem(const QString &version, const QString &installationNumber)
+{
+    return { QString::fromUtf8("Germán Bravo López"), QStringLiteral("75929840D"), QStringLiteral("LAIDEAL"),
+             QStringLiteral("LI"), version, installationNumber };
+}
+
 QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int year, int month,
-                      const QString &invoiceNumber, const InvoiceRef &pageAfter)
+                      const QString &invoiceNumber, const InvoiceRef &pageAfter, bool showSystem)
 {
     QString number = invoiceNumber.trimmed().isEmpty()
         ? QString()
@@ -253,11 +259,14 @@ QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int y
                           "<sf:NombreRazon>%4</sf:NombreRazon><sf:NIF>%5</sf:NIF></sf:ObligadoEmision>"
                           "</sfLRC:Cabecera><sfLRC:FiltroConsulta><sfLRC:PeriodoImputacion>"
                           "<sf:Ejercicio>%6</sf:Ejercicio><sf:Periodo>%7</sf:Periodo>"
-                          "</sfLRC:PeriodoImputacion>%8</sfLRC:FiltroConsulta>"
+                          "</sfLRC:PeriodoImputacion>%8</sfLRC:FiltroConsulta>%9"
                           "</sfLRC:ConsultaFactuSistemaFacturacion></soapenv:Body></soapenv:Envelope>")
         .arg(QString::fromLatin1(kSoapNs), QString::fromLatin1(kConsultaLRNs),
              QString::fromLatin1(kSuministroInformacionNs), escaped(issuerName), escaped(issuerNif),
-             QString::number(year), QStringLiteral("%1").arg(month, 2, 10, QLatin1Char('0')), number);
+             QString::number(year), QStringLiteral("%1").arg(month, 2, 10, QLatin1Char('0')), number,
+             showSystem ? QStringLiteral("<sfLRC:DatosAdicionalesRespuesta><sfLRC:MostrarSistemaInformatico>S"
+                                         "</sfLRC:MostrarSistemaInformatico></sfLRC:DatosAdicionalesRespuesta>")
+                        : QString());
 }
 
 } // namespace AeatRecord
