@@ -56,9 +56,13 @@ int aeatPendingRecordCount(QSqlDatabase &db);
 // updateTicketVerifactuFields, which never rewrites a settled row. Returns the rows
 // updated, -1 when the id names no event.
 int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result);
+// An accepted substitution rectificativa also marks its original RECTIFICADA.
+// The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
+QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
 // The same for an accepted cancellation (the reply reached nobody, e.g. the dialog had
-// given up): markInvoiceSeqCancelled with `cancelDate`. 1 marked, 0 not marked (refused
-// or the update failed), -1 when the id names no event (the self-test's PRUEBA-...).
+// given up): markInvoiceSeqCancelled with `cancelDate`. 1 marked, 2 already marked (its
+// dialog did), 0 not marked (refused or the update failed), -1 when the id names no
+// event (the self-test's PRUEBA-...).
 int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
                                        const VerifactuResult &result);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);

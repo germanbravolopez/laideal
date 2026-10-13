@@ -1126,6 +1126,39 @@ private slots:
                  QStringLiteral("ANULADA|12-10-2026"));
         QCOMPARE(applySettledVerifactuCancellation(m_db, "PRUEBA-20261012142926", QDate(2026, 10, 12), ok), -1);
         QCOMPARE(applySettledVerifactuCancellation(m_db, "810-3", QDate(2026, 10, 12), ok), -1);
+        // Reported again after its dialog marked it (every outcome is reported): 2, nothing changes.
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 20), ok), 2);
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='810'"), QStringLiteral("12-10-2026"));
+    }
+
+    // A substitution rectificativa AEAT accepted after its dialog closed marks the
+    // original RECTIFICADA (it stops counting as income); one by differences does not.
+    // A rectificativa is never offered to the startup recovery (it would go as an F2).
+    void test_settledRectificativa()
+    {
+        insertIngreso("850", "01-10-2026", "20.00", "SI", "ENVIADA", 0, 0);
+        insertIngreso("851", "01-10-2026", "20.00", "SI", "ENVIADA", 0, 0);
+        const auto rectificativa = [this](const QString &number, const QString &original, const QString &type) {
+            exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+                 "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+                 "VALUES (:n, '05-10-2026', '05-10-2026', '15.00', 'SI', 'Rectificativa', '0', :n, 'PENDIENTE', 0, :o, :t)",
+                 { {":n", number}, {":o", original}, {":t", type} });
+        };
+        rectificativa("860", "850", "S");
+        rectificativa("861", "851", "I");
+        QCOMPARE(rectifiedTicketOf(m_db, "860"), QStringLiteral("850"));
+        QVERIFY(rectifiedTicketOf(m_db, "850").isEmpty());
+        for (const PendingVerifactuEvent &e : pendingVerifactuEvents(m_db, "2000-01-01"))
+            QVERIFY2(e.nRecibo != "860" && e.nRecibo != "861", qPrintable(e.nRecibo));
+
+        VerifactuResult ok;
+        ok.status = VerifactuResult::SUCCESS;
+        ok.csv = "A-R5";
+        QCOMPARE(applySettledVerifactuResult(m_db, "860", ok), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE n_recibo='850'"),
+                 QStringLiteral("RECTIFICADA|05-10-2026"));
+        QCOMPARE(applySettledVerifactuResult(m_db, "861", ok), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='851'"), QStringLiteral("ENVIADA"));
     }
 
     // Unsent direct-client records; 0 when the direct connection was never used (no table).

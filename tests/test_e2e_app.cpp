@@ -670,6 +670,39 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
     }
 
+    // Direct AEAT connection, no answer yet (certificate missing, network down, or AEAT's
+    // wait): the rectificativa is stored and chained, so its row is PENDIENTE - not ERROR -
+    // and the dialog never offers to rectify the same ticket a second time.
+    void test_rectifyDirectQueuedWithoutAnswer()
+    {
+        const QDate paid = QDate::currentDate();
+        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0711"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("711");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);      // R5, the only one with the direct client
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(dlg.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"), 20000);
+        const QString number = scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = '711'");
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + number + "'"), QStringLiteral("PENDIENTE"));
+        QVERIFY(dlg.findChild<QLineEdit *>("leTicketNum")->text().isEmpty());
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");                   // nothing loaded: no second R5
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '711'"), QStringLiteral("1"));
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kPending);
+    }
+
     // Direct AEAT connection: Cobrar prints the factura at once, with the QR drawn from
     // the invoice and the VERI*FACTU legend, instead of waiting for AEAT (which may hold
     // the next submission up to 60 s). The rows are paid and PENDIENTE and the answer

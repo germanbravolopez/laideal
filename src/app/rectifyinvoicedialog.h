@@ -36,6 +36,8 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
+    // The direct client stored the rectificativa and sends it later: no answer yet, not a failure.
+    bool queuedWithoutAnswer(const VerifactuResult &result) const;
     void setFormEnabled(bool enabled);
     // Inserts the rectificativa row at submit time with estado=PENDIENTE so the
     // n_recibo is claimed locally before the AEAT round-trip - prevents a regular

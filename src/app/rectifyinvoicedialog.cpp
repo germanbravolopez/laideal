@@ -379,12 +379,26 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
         // applyRectificationResult, and do not offer to rectify the same ticket again.
         m_loadedTicket.clear();
         m_leTicketNum->clear();
+    } else if (queuedWithoutAnswer(result)) {
+        // The direct client stored and chained it: it goes out on its own (and the
+        // original is marked when AEAT accepts it). Never rectified a second time.
+        m_lblResult->setText(UiKit::warnHtml(tr("Rectificativa %1 guardada, pendiente de envío a la AEAT: %2")
+                                                 .arg(m_newInvoiceNumber.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
+                             + "<br>" + tr("Se enviará sola; no la repita."));
+        m_loadedTicket.clear();
+        m_leTicketNum->clear();
     } else {
         m_lblResult->setText(
             QString("<b style='color:red'>Error al rectificar:</b> %1")
             .arg(result.errorDescription));
         setFormEnabled(true);
     }
+}
+
+bool RectifyInvoiceDialog::queuedWithoutAnswer(const VerifactuResult &result) const
+{
+    return m_verifactu && m_verifactu->directBackend()
+           && (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING);
 }
 
 void RectifyInvoiceDialog::insertPlaceholderRow()
@@ -459,8 +473,9 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
 {
     bool localOk = true;
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-    const VerifactuEstado estado = result.isSuccess() ? VerifactuEstado::Enviada
-                                                      : VerifactuEstado::Error;
+    const VerifactuEstado estado = result.isSuccess()         ? VerifactuEstado::Enviada
+                                 : queuedWithoutAnswer(result) ? VerifactuEstado::NotSubmitted
+                                                               : VerifactuEstado::Error;
 
     qDebug() << "RectifyInvoiceDialog::applyRectificationResult:"
              << "newTicket=" << m_newInvoiceNumber
@@ -489,7 +504,7 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
-        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
+        q.bindValue(":estado", verifactuEstadoToString(estado));
         q.bindValue(":error",  result.errorDescription);
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");

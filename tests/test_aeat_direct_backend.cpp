@@ -614,6 +614,10 @@ private slots:
         QCOMPARE(settled[0][0].toString(), QStringLiteral("700"));
         QVERIFY(!settled[0][1].toBool());
         QVERIFY(settled[0][2].value<VerifactuResult>().isSuccess());
+        // Reported also when a request waited for it: the dialog may have closed meanwhile.
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("701", 10))).isSuccess());
+        QTRY_COMPARE(settled.size(), 2);
+        QCOMPARE(settled[1][0].toString(), QStringLiteral("701"));
     }
 
     // AEAT returns records without their hash: the sync fails instead of starting a new chain.

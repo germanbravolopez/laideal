@@ -501,9 +501,10 @@ void MainWindow::initializeVerifactu()
         if (cancellation) {
             // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
             const int applied = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
-            if (applied < 0) {
-                // No ticket behind it: the self-test's record, whose dialog had closed.
-                qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "(no ticket) -"
+            if (applied < 0 || applied == 2) {
+                // No ticket behind it (the self-test's record), or its dialog already marked it.
+                qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId
+                         << (applied < 0 ? "(no ticket)" : "(already marked)") << "-"
                          << (result.isSuccess() ? "accepted" : result.errorDescription);
                 return;
             }

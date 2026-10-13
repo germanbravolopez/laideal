@@ -582,8 +582,9 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
     const QStringList waiters = m_waiters.take(record.id);
     for (const QString &requestId : waiters)
         emit requestFinished(requestId, answer);
-    // Nobody asked (e.g. sent at start): the app still records a definitive outcome.
-    if (waiters.isEmpty() && (answer.status == VerifactuResult::SUCCESS || answer.status == VerifactuResult::ERROR))
+    // Every definitive outcome, also when a dialog waited: it may have closed meanwhile
+    // (the app never rewrites a settled row, so a second application changes nothing).
+    if (answer.status == VerifactuResult::SUCCESS || answer.status == VerifactuResult::ERROR)
         emit recordSettled(record.invoiceNumber, record.kind == AeatStore::Kind::Cancellation, answer);
 }
 

@@ -971,7 +971,42 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
     splitInvoiceId(invoiceId, &nRecibo, &seq);
     if (verifactuEventFor(db, nRecibo, seq).nRecibo.isEmpty())
         return -1;
-    return updateTicketVerifactuFields(db, nRecibo, result, seq);
+    const int changed = updateTicketVerifactuFields(db, nRecibo, result, seq);
+    // A substitution rectificativa AEAT accepted after its dialog closed: the original
+    // stops counting as income, as the dialog does when the reply reaches it.
+    if (changed > 0 && result.isSuccess()) {
+        const QString original = rectifiedTicketOf(db, nRecibo);
+        if (!original.isEmpty()) {
+            db.open();
+            QSqlQuery q(db);
+            q.prepare("SELECT MIN(verifactu_rectification_type), MIN(fecha_pago) FROM ingresos "
+                      "WHERE n_recibo = :n AND pagado = 'SI'");
+            q.bindValue(":n", nRecibo);
+            const bool read = q.exec() && q.next();
+            const QString type = read ? q.value(0).toString() : QString();
+            const QDate date = read ? QDate::fromString(q.value(1).toString(), "dd-MM-yyyy") : QDate();
+            q.finish();
+            db.close();
+            if (type == QLatin1String("S") && !markTicketRectified(db, original, date.isValid() ? date : QDate::currentDate()))
+                qWarning() << "applySettledVerifactuResult: rectificativa" << nRecibo << "accepted, original" << original
+                           << "not marked RECTIFICADA";
+        }
+    }
+    return changed;
+}
+
+QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return QString();
+    QSqlQuery q(db);
+    q.prepare("SELECT MIN(verifactu_rectifies_n_recibo) FROM ingresos "
+              "WHERE n_recibo = :n AND COALESCE(verifactu_rectifies_n_recibo, '') != ''");
+    q.bindValue(":n", nRecibo);
+    const QString original = q.exec() && q.next() ? q.value(0).toString() : QString();
+    q.finish();
+    db.close();
+    return original;
 }
 
 int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
@@ -994,6 +1029,12 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
     }
     if (q.value(0).toInt() == 0)
         return -1;
+    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
+              "AND pagado = 'SI' AND COALESCE(verifactu_estado, '') != 'ANULADA'");
+    q.bindValue(":n",   nRecibo);
+    q.bindValue(":seq", seq);
+    if (result.isSuccess() && q.exec() && q.next() && q.value(0).toInt() == 0)
+        return 2;                                                   // already marked (its dialog did)
     if (!result.isSuccess())
         return 0;
     return markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, result.rawXml) ? 1 : 0;
@@ -1344,6 +1385,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "       OR verifactu_estado = 'PENDIENTE') "
         "  AND pagado = 'SI' "
         "  AND fecha_pago IS NOT NULL AND fecha_pago != '' "
+        "  AND COALESCE(verifactu_rectifies_n_recibo, '') = '' "      // never resent as a plain invoice
         "  AND substr(fecha_recepcion, 7, 4) || '-' "
         "      || substr(fecha_recepcion, 4, 2) || '-' "
         "      || substr(fecha_recepcion, 1, 2) >= :floor "

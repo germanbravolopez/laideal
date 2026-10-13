@@ -993,8 +993,17 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
     // its original fecha_pago. The old version sent the bare n_recibo with the
     // whole ticket's importe on the reception date, which for a partial-pay event
     // meant a wrong amount under an ID belonging to a different event.
-    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
     const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+    if (!rectifiedTicketOf(db, ticketNum).isEmpty()) {
+        // Its record is an R5 with the corrected invoice: a retry would send a plain F2.
+        qWarning() << "retryVerifactuSubmit: refused for rectificativa" << invoiceId;
+        m_result->setText(UiKit::errorHtml(tr("El ticket %1 es una rectificativa: no se reenvía como factura.")
+                                               .arg(invoiceId.toHtmlEscaped()))
+                          + "<br>" + tr("Con la conexión directa se envía sola; si la AEAT la rechazó, hágala de nuevo "
+                                        "en Rectificar factura."));
+        return;
+    }
+    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
     const QDate invoiceDate = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
     if (ev.nRecibo.isEmpty() || !invoiceDate.isValid()) {
         qWarning() << "retryVerifactuSubmit: no paid event" << invoiceId
