@@ -104,6 +104,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | WinHTTP SOAP transport with client certificate | `src/verifactu/aeattransport.h` | `.cpp` |
 | Direct AEAT backend | `src/verifactu/aeatdirectbackend.h` | `.cpp` |
 | Direct AEAT proof of concept (self-test) | `src/verifactu/aeatselftest.h` | `.cpp` |
+| Declaración responsable (art. 15 Orden HAC/1177/2024) | `src/verifactu/producerdeclaration.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
 | Verifactu tax-item model | `src/verifactu/verifactutaxitem.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |

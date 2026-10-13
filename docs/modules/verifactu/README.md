@@ -166,6 +166,7 @@ The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CS
 | `aeattransport.*` | SOAP POST through WinHTTP presenting the certificate (Qt's Schannel backend cannot read PKCS#12) |
 | `aeatdirectbackend.*` | Builds, chains, stores and sends the records; flow control (`TiempoEsperaEnvio`); resend of a stored record; replacement of a rejected one; `syncChain` (our system's own chain, synced with AEAT) |
 | `aeatselftest.*` | The proof of concept run from Configuración, always against AEAT pre-production |
+| `producerdeclaration.*` | The declaración responsable (art. 15 of the Orden): items a) to l) from `AeatRecord::laIdealSystem`, shown in Acerca de Verifactu and saved as PDF |
 
 Tables of the direct client (created by `AeatStore`, in the shop DB, covered by the backups):
 
