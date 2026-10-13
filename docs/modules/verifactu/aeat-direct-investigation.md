@@ -163,7 +163,7 @@ A second review of those fixes found one more blocking point - Rectificar factur
 
 ### To confirm in the proof of concept
 
-0. **Whether a new system should continue IreneSolutions' chain at all.** The whole hand-over assumes one chain per issuer across systems. If AEAT expects each system / installation (a different `SistemaInformatico`) to start its own chain with `PrimerRegistro`, the sync must change. This is the first question for AEAT. Related: switching back to the gateway after direct records forks IreneSolutions' chain (it keeps its own state), so going back should be treated as exceptional.
+0. **Answered by AEAT (13-10-2026): a new system does NOT continue IreneSolutions' chain.** "Los registros de facturación se deben encadenar de forma independiente dentro de cada SIF, y para cada Obligado Tributario [...] debe existir una única cadena de RF por cada par de valores distintos de (SIF; OT)." Each TPV that issues invoices on its own is a SIF with its own chain. So the direct client must start its own chain with `PrimerRegistro = S` and never adopt the gateway's records; the chain is local to the installation (`NumeroInstalacion`), and the first sync with AEAT (adopting the newest record AEAT holds for the NIF) has to go. The pre-production runs of 11/12-10-2026 chained to IreneSolutions' records: harmless there, wrong for production. Going back to the gateway no longer forks anything: each system keeps its own chain.
 1. The WinHTTP + certificate handshake with `prewww1.aeat.es`.
 2. That `Subsanacion = S` + `RechazoPrevio = S` is the right flag pair to resend a corrected record after a rejection (the spec allows `S` and `X`).
 3. The real `TiempoEsperaEnvio` and that a query is not subject to it.
