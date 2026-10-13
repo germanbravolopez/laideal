@@ -935,14 +935,16 @@ QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int se
     return xml;
 }
 
-int aeatPendingRecordCount(QSqlDatabase &db)
+int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment)
 {
     if (dbNotConfigured(db, __func__)) return 0;
     int count = 0;
     db.open();
     QSqlQuery q(db);
     // The table is the direct client's; a failed query just means it was never used.
-    if (q.exec("SELECT COUNT(*) FROM aeat_records WHERE state = 'PENDIENTE'") && q.next())
+    q.prepare("SELECT COUNT(*) FROM aeat_records WHERE state = 'PENDIENTE' AND environment = :e");
+    q.bindValue(":e", environment);
+    if (q.exec() && q.next())
         count = q.value(0).toInt();
     db.close();
     return count;

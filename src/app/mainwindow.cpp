@@ -433,7 +433,8 @@ void MainWindow::mainwindowInitialSettings()
         for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
             certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, c.expiry.toString("dd-MM-yyyy")), c.thumbprint);
         dlg.setCertificateChoices(certificates);
-        dlg.setDirectPendingCount(aeatPendingRecordCount(db));
+        dlg.setDirectPendingCount(aeatPendingRecordCount(db, AppSettings::instance()->aeatDirectProduction()
+                                                                  ? QStringLiteral("produccion") : QStringLiteral("pruebas")));
         connect(&dlg, &SettingsDialog::aeatSelfTestRequested, &dlg,
                 [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
                              const QString &file, const QString &password) {

@@ -1165,13 +1165,17 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='851'"), QStringLiteral("ENVIADA"));
     }
 
-    // Unsent direct-client records; 0 when the direct connection was never used (no table).
+    // Unsent direct-client records of one environment; 0 when the direct connection was
+    // never used (no table). A pre-production self-test record left pending never
+    // counts for production (it would block leaving the direct connection for good).
     void test_aeatPendingRecordCount()
     {
-        QCOMPARE(aeatPendingRecordCount(m_db), 0);
-        exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY, state TEXT)");
-        exec("INSERT INTO aeat_records (state) VALUES ('PENDIENTE'), ('ACEPTADO'), ('PENDIENTE')");
-        QCOMPARE(aeatPendingRecordCount(m_db), 2);
+        QCOMPARE(aeatPendingRecordCount(m_db, "produccion"), 0);
+        exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY, environment TEXT, state TEXT)");
+        exec("INSERT INTO aeat_records (environment, state) VALUES ('produccion', 'PENDIENTE'), "
+             "('produccion', 'ACEPTADO'), ('produccion', 'PENDIENTE'), ('pruebas', 'PENDIENTE')");
+        QCOMPARE(aeatPendingRecordCount(m_db, "produccion"), 2);
+        QCOMPARE(aeatPendingRecordCount(m_db, "pruebas"), 1);
         exec("DROP TABLE aeat_records");
     }
 

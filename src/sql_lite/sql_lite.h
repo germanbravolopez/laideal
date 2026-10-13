@@ -48,9 +48,11 @@ QString     searchItemFromClient(QSqlDatabase &db, const QString &item, const QS
 QStringList readClientPhones(QSqlDatabase &db, const QString &client);
 // The stored AEAT record XML of one payment event (its paid rows), or empty.
 QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq);
-// Records the direct AEAT client generated and has not had confirmed (table
-// aeat_records, which only exists once the direct connection was used): 0 without it.
-int aeatPendingRecordCount(QSqlDatabase &db);
+// Records the direct AEAT client generated in `environment` ("pruebas" / "produccion")
+// and has not had confirmed (table aeat_records, which only exists once the direct
+// connection was used): 0 without it. The self-test's pre-production records never
+// count for production.
+int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment);
 // An AEAT outcome nobody waited for (direct client, recordSettled): applied to the
 // paid rows of the payment event `invoiceId` names ("31277" or "31277-1") through
 // updateTicketVerifactuFields, which never rewrites a settled row. Returns the rows
