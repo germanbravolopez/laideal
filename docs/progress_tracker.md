@@ -15,7 +15,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `develop`
 
-**Latest release**: [11.1](https://github.com/germanbravolopez/laideal/releases/tag/11.1) — bug-fix release: Enter in the ticket number of Imprimir recibo / factura no longer prints everything twice (it also pressed the window's default button), and Enter in Añadir prendas, Anular prendas, Anular factura and Rectificar factura now only searches the ticket (new `UiKit::onEnter`); every dialog follows one Enter rule (`UiKit::setUpDialog`: Enter in a field presses the main button or nothing, never another one).
+**Latest release**: [11.2](https://github.com/germanbravolopez/laideal/releases/tag/11.2) — bug-fix release: since 11.0 "Anular prendas" refused to void unpaid garments, and the size / price, quantity and service edits and the split in Recogida were refused too (the guard compared the shop DB's TEXT `edit_lock` '0' with the integer 0 through `COALESCE`, which never matched); now cast to INTEGER, and the test schema stores `edit_lock` as TEXT like the shop. The next ticket number now comes from a numeric `MAX(n_recibo)` (a text maximum would repeat numbers past 99999).
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->

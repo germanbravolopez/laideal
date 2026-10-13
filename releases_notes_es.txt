@@ -1,5 +1,9 @@
 ﻿Versiones:
 
+11.2
+- Corrección: desde la 11.0, "Anular prendas" no anulaba prendas sin cobrar ("0 prenda(s) anuladas... se han cobrado, enviado o bloqueado"), y en "Recogida de Prendas" tampoco se podía cambiar el tamaño, el precio, la cantidad o el servicio de una prenda sin cobrar, ni separarla. Todo vuelve a funcionar; las prendas cobradas, enviadas a la AEAT o cerradas en la contabilidad siguen protegidas.
+- Seguridad: el número del siguiente ticket se calcula como número, para que siga contando bien a partir del 99999.
+
 11.1
 - Corrección: al pulsar Intro en el número de ticket de "Imprimir recibo" / "Imprimir factura" se imprimía todo dos veces; ahora se imprime una sola vez. En "Añadir prendas", "Anular prendas", "Anular factura" y "Rectificar factura" Intro solo busca el ticket. En todas las ventanas, Intro en un campo pulsa solo el botón principal de la ventana (o nada), nunca otro como "Buscar" o "Reintentar".
 
