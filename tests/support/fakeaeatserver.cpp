@@ -1,5 +1,7 @@
 #include "fakeaeatserver.h"
 
+#include <algorithm>
+
 #include <QPointer>
 #include <QStringList>
 #include <QTcpServer>
@@ -47,7 +49,9 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
             const QString name = path.last();
             const QString text = r.text().toString();
             if (request.kind == QLatin1String("Consulta")) {
-                if (name == QLatin1String("NumSerieFactura"))
+                if (name == QLatin1String("NumSerieFactura") && path.contains(QStringLiteral("ClavePaginacion")))
+                    request.pageAfter = text;
+                else if (name == QLatin1String("NumSerieFactura"))
                     request.queriedNumber = text;
                 else if (name == QLatin1String("MostrarSistemaInformatico"))
                     request.showSystem = (text == QLatin1String("S"));
@@ -200,6 +204,22 @@ QByteArray FakeAeatServer::answer(const Request &request)
                 && (request.queriedNumber.isEmpty() || it.value().invoiceNumber == request.queriedNumber))
                 held << it.value();
         }
+        // A stable order (as generated) for paging: after ClavePaginacion, at most a page.
+        std::sort(held.begin(), held.end(), [](const SentRecord &a, const SentRecord &b) {
+            return a.generatedAt != b.generatedAt ? a.generatedAt < b.generatedAt : a.invoiceNumber < b.invoiceNumber;
+        });
+        if (!request.pageAfter.isEmpty()) {
+            int after = -1;
+            for (int i = 0; i < held.size(); ++i)
+                if (held[i].invoiceNumber == request.pageAfter)
+                    after = i;
+            held = held.mid(after + 1);
+        }
+        bool morePages = false;
+        if (m_pageSize > 0 && held.size() > m_pageSize) {
+            held = held.mid(0, m_pageSize);
+            morePages = true;
+        }
         QString records;
         for (const SentRecord &h : held) {
             const bool cancelled = m_registered.contains(QStringLiteral("Anulacion:") + h.invoiceNumber);
@@ -233,9 +253,10 @@ QByteArray FakeAeatServer::answer(const Request &request)
             "<tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tikLRRC=\"%1RespuestaConsultaLR.xsd\" xmlns:tik=\"%1SuministroInformacion.xsd\">"
             "<tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>X</tik:NombreRazon><tik:NIF>89890001K</tik:NIF>"
             "</tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio>"
-            "<tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>N</tikLRRC:IndicadorPaginacion>"
+            "<tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>%4</tikLRRC:IndicadorPaginacion>"
             "<tikLRRC:ResultadoConsulta>%2</tikLRRC:ResultadoConsulta>%3</tikLRRC:RespuestaConsultaFactuSistemaFacturacion>")
-            .arg(kNs, records.isEmpty() ? QStringLiteral("SinDatos") : QStringLiteral("ConDatos"), records)).toUtf8();
+            .arg(kNs, records.isEmpty() ? QStringLiteral("SinDatos") : QStringLiteral("ConDatos"), records,
+                 morePages ? QStringLiteral("S") : QStringLiteral("N"))).toUtf8();
     }
 
     const QString requestId = QStringLiteral("2026101000%1").arg(++m_counter, 5, 10, QLatin1Char('0'));

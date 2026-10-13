@@ -605,6 +605,21 @@ private slots:
         QCOMPARE(settled971, 1);
     }
 
+    // AEAT answers a query in pages: the sync follows ClavePaginacion to the last page,
+    // so the chain continues after a record that is not on the first one.
+    void test_syncFollowsQueryPages()
+    {
+        const QString tip = registerElsewhere({ "1", "2", "3" });
+        m_server->setQueryPageSize(1);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("4", 40))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, tip);
+        int paged = 0;
+        for (const FakeAeatServer::Request &r : m_server->requests())
+            paged += r.kind == QLatin1String("Consulta") && !r.pageAfter.isEmpty();
+        QVERIFY2(paged >= 2, qPrintable(QString::number(paged)));
+    }
+
     // The QR printed before AEAT answers comes only from this issuer's record still
     // pending, with the invoice's date and amount: none once AEAT accepted or refused it.
     void test_queuedRecordQrOnlyForItsPendingRecord()

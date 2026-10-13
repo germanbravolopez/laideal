@@ -44,6 +44,7 @@ public:
         QList<SentRecord> records;
         QString           queriedNumber;
         bool              showSystem = false;   // query asked for MostrarSistemaInformatico
+        QString           pageAfter;            // ClavePaginacion: the last number of the previous page
         QDateTime         receivedAt;
     };
     struct Reply {
@@ -67,6 +68,8 @@ public:
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
     // The next reply that includes this record has no line for it (AEAT did not report on it).
     void omitLineFor(const QString &invoiceNumber) { m_omitLine.insert(invoiceNumber); }
+    // Query replies hold at most `records` (0: all), with IndicadorPaginacion S when more follow.
+    void setQueryPageSize(int records) { m_pageSize = records; }
     // The next request gets `reply` instead of the default answer.
     void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
 
@@ -91,6 +94,7 @@ private:
     QHash<QString, QString> m_registeredRequestId;
     QHash<QString, QPair<QString, QString>> m_rejectNext;
     QSet<QString> m_omitLine;
+    int m_pageSize = 0;
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     int m_counter = 0;
