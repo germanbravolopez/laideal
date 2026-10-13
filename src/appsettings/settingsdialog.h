@@ -73,6 +73,7 @@ private:
     QLineEdit *m_vCertPassword;
     QWidget   *m_vCertFileRow;
     QWidget   *m_vDirectGroup;
+    QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;
 
     QString selectedThumbprint() const;

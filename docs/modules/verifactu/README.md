@@ -153,7 +153,7 @@ The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CS
 
 ## Direct AEAT connection (research branch)
 
-`VerifactuIntegration` talks to AEAT through a `VerifactuBackend` (`verifactubackend.h`): the IreneSolutions gateway (`VerifactuManager`, the default) or, when Configuración → Verifactu → *Conexión con la AEAT* is *Directa con la AEAT (en pruebas)*, the direct client `AeatDirectBackend`. Both answer on the same `requestFinished` / `queryFinished` signals, so the rest of the app does not change. The research behind it, its status and the open points are in [aeat-direct-investigation.md](aeat-direct-investigation.md).
+`VerifactuIntegration` talks to AEAT through a `VerifactuBackend` (`verifactubackend.h`): the IreneSolutions gateway (`VerifactuManager`, the default) or, when Configuración → Verifactu → *Conexión con la AEAT* is *Directa con la AEAT*, the direct client `AeatDirectBackend`. Both answer on the same `requestFinished` / `queryFinished` signals, so the rest of the app does not change. The research behind it, its status and the open points are in [aeat-direct-investigation.md](aeat-direct-investigation.md).
 
 | File | Role |
 |---|---|
@@ -189,7 +189,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | `verifactu.serviceKey` | API ServiceKey — obtain at https://facturae.irenesolutions.com/verifactu/go |
 | `verifactu.production` | `false` = TESTING, `true` = PRODUCTION (the gateway's environment) |
 | `verifactu.connection` | `irenesolutions` (default) or `aeat` - the direct client (research branch) |
-| `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Settings file only - never the PRODUCCIÓN box |
+| `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Set in Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)*, which asks for confirmation; never the gateway's PRODUCCIÓN box |
 | `verifactu.aeat_certificate_thumbprint` | Direct client: the owner's certificate in the Windows personal store (SHA-1 thumbprint) |
 | `verifactu.aeat_certificate_file` / `aeat_certificate_password` | Direct client, else: a .pfx file and its password (DPAPI-encrypted) |
 | `verifactu.aeat_installation` | `NumeroInstalacion` of the direct client's records, created once |

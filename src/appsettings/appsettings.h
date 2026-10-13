@@ -116,11 +116,11 @@ public:
     void    setVerifactuPendingRecoveryFloorDate(const QString &v);
 
     // How the app reaches AEAT: the IreneSolutions gateway (default) or directly
-    // (research, see docs/modules/verifactu/aeat-direct-investigation.md).
+    // (docs/modules/verifactu/aeat-direct-investigation.md).
     bool    verifactuDirectAeat() const;
     void    setVerifactuDirectAeat(bool v);
-    // The direct client uses AEAT pre-production unless this is set on purpose (no
-    // control in Configuración while it is research: settings file only).
+    // The direct client uses AEAT pre-production unless this is set on purpose
+    // (Configuración, confirmed; never the gateway's PRODUCCIÓN box).
     bool    aeatDirectProduction() const;
     void    setAeatDirectProduction(bool v);
     // The owner's certificate for the direct connection: a Windows personal-store

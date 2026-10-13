@@ -247,7 +247,7 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vConnection = new QComboBox;
     m_vConnection->setObjectName("cbConnection");
     m_vConnection->addItem(tr("IreneSolutions (pasarela)"), QStringLiteral("irenesolutions"));
-    m_vConnection->addItem(tr("Directa con la AEAT (en pruebas)"), QStringLiteral("aeat"));
+    m_vConnection->addItem(tr("Directa con la AEAT"), QStringLiteral("aeat"));
     m_vConnection->setCurrentIndex(s->verifactuDirectAeat() ? 1 : 0);
     fl->addRow(tr("Conexión con la AEAT:"), m_vConnection);
 
@@ -270,6 +270,11 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
         emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
                                    m_vCertFile->text().trimmed(), m_vCertPassword->text());
     });
+    // Its own switch, never the gateway's PRODUCCIÓN box: real invoices only when chosen here.
+    m_vDirectProduction = new QCheckBox(tr("Enviar a la AEAT real (PRODUCCIÓN, con efectos tributarios)"));
+    m_vDirectProduction->setObjectName("chkDirectProduction");
+    m_vDirectProduction->setChecked(s->aeatDirectProduction());
+    direct->addRow(m_vDirectProduction);
     direct->addRow(tr("Certificado electrónico:"), m_vCertificate);
     direct->addRow(tr("Archivo del certificado:"), m_vCertFileRow);
     direct->addRow(tr("Contraseña del archivo:"), m_vCertPassword);
@@ -303,6 +308,14 @@ void SettingsDialog::accept()
                                 "Espere a que se envíen antes de volver a IreneSolutions.").arg(m_directPending));
         return;
     }
+    const bool directProduction = m_vConnection->currentData().toString() == QLatin1String("aeat")
+                                  && m_vDirectProduction->isChecked();
+    if (directProduction && !AppSettings::instance()->aeatDirectProduction()
+        && QMessageBox::question(this, tr("Conexión con la AEAT"),
+                                 tr("Las facturas se registrarán en la AEAT real, con efectos tributarios, "
+                                    "con el certificado elegido. ¿Pasar a PRODUCCIÓN?"),
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
     AppSettings *s = AppSettings::instance();
 
     s->setLanguage(m_language->currentData().toString());
@@ -325,6 +338,7 @@ void SettingsDialog::accept()
     s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
     s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
+    s->setAeatDirectProduction(m_vDirectProduction->isChecked());
     s->setAeatCertificateThumbprint(selectedThumbprint());
     s->setAeatCertificateFile(m_vCertFile->text().trimmed());
     s->setAeatCertificatePassword(m_vCertPassword->text());

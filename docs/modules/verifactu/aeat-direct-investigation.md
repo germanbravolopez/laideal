@@ -99,7 +99,7 @@ So there is no deadline pressure: the shop can stay on IreneSolutions (or not su
 
 ## Status on this branch (October 2026)
 
-Everything of phases 1-3 that can be done without the owner's certificate and without contacting AEAT is built and tested on `feature/aeat-direct-investigation`. The app still uses IreneSolutions unless Configuración → Verifactu → *Conexión con la AEAT* is set to *Directa con la AEAT (en pruebas)*; making the direct connection the shop's is the decision of release 12.0.
+Everything of phases 1-3 that can be done without the owner's certificate and without contacting AEAT is built and tested on `feature/aeat-direct-investigation`. The app still uses IreneSolutions unless Configuración → Verifactu → *Conexión con la AEAT* is set to *Directa con la AEAT* (pre-production unless *Enviar a la AEAT real (PRODUCCIÓN)* is ticked and confirmed); making the direct connection the shop's is the decision of release 12.0.
 
 | Phase | Status |
 |---|---|
@@ -213,7 +213,7 @@ l) Fecha y lugar de la firma: <día> de <mes> de <año>, <localidad>, España
 
 ### How to run the proof of concept
 
-On the shop PC (or any PC with the owner's certificate), with her consent: Configuración → Verifactu → *Conexión con la AEAT*: *Directa con la AEAT (en pruebas)*, choose her certificate in the list (or a .pfx file and its password), then **Prueba con la AEAT (entorno de pruebas)**. It always uses AEAT pre-production (no tax effect, whatever the PRODUCCIÓN box says): it shows the certificate, continues the test chain, registers `PRUEBA-<date and time>` for 1,21 €, queries it back, waits the time AEAT asks and cancels it. Nothing is saved as configuration unless *Aceptar* is pressed; leave the connection on IreneSolutions afterwards until the decision.
+On the shop PC (or any PC with the owner's certificate), with her consent: Configuración → Verifactu → *Conexión con la AEAT*: *Directa con la AEAT* (pre-production unless *Enviar a la AEAT real (PRODUCCIÓN)* is ticked and confirmed), choose her certificate in the list (or a .pfx file and its password), then **Prueba con la AEAT (entorno de pruebas)**. It always uses AEAT pre-production (no tax effect, whatever the PRODUCCIÓN box says): it shows the certificate, continues the test chain, registers `PRUEBA-<date and time>` for 1,21 €, queries it back, waits the time AEAT asks and cancels it. Nothing is saved as configuration unless *Aceptar* is pressed; leave the connection on IreneSolutions afterwards until the decision.
 
 ## Sources
 

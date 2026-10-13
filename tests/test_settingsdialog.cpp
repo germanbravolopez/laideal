@@ -11,6 +11,7 @@
 #include <QSignalSpy>
 #include <QTabWidget>
 #include <QMessageBox>
+#include <QCheckBox>
 #include <QTimer>
 #include <QApplication>
 #include <QLineEdit>
@@ -121,6 +122,44 @@ private slots:
         reopened.setCertificateChoices({ qMakePair(QStringLiteral("PRUEBA"), thumbprint) });
         QCOMPARE(reopened.findChild<QComboBox *>("cbConnection")->currentData().toString(), QStringLiteral("aeat"));
         QCOMPARE(reopened.findChild<QComboBox *>("cbCertificate")->currentData().toString(), thumbprint);
+        s->setVerifactuDirectAeat(false);
+    }
+
+    // The direct connection's own production switch: off by default (pre-production);
+    // turning it on asks for confirmation, and only a "Sí" saves it.
+    void test_directProductionNeedsConfirmation()
+    {
+        AppSettings *s = AppSettings::instance();
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        const auto answer = [](QMessageBox::StandardButton button) {
+            QTimer::singleShot(0, [button] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        box->button(button)->click();
+            });
+        };
+        {
+            SettingsDialog dlg;
+            auto *production = dlg.findChild<QCheckBox *>("chkDirectProduction");
+            QVERIFY(production && !production->isChecked());
+            production->setChecked(true);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+        }
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
+        SettingsDialog reopened;
+        QVERIFY(reopened.findChild<QCheckBox *>("chkDirectProduction")->isChecked());
+        reopened.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+        QMetaObject::invokeMethod(&reopened, "accept");                   // back to pre-production: no question
+        QVERIFY(!s->aeatDirectProduction());
         s->setVerifactuDirectAeat(false);
     }
 
