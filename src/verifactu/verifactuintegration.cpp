@@ -15,6 +15,13 @@ VerifactuIntegration::~VerifactuIntegration()
 
 bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 {
+    // Again after Configuración: one backend at a time (two direct clients would both
+    // send the outbox and ignore each other's AEAT wait time).
+    delete m_direct;
+    delete m_manager;
+    m_direct = nullptr;
+    m_manager = nullptr;
+    m_backend = nullptr;
     AppSettings *settings = AppSettings::instance();
     m_emitterNif  = settings->verifactuNif();
     m_emitterName = settings->verifactuName();

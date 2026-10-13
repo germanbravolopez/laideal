@@ -494,7 +494,11 @@ void MainWindow::mainwindowInitialSettings()
 
 void MainWindow::initializeVerifactu()
 {
-    m_verifactuIntegration = new VerifactuIntegration(this);
+    // One integration for the window's life, re-initialised after Configuración: the
+    // windows that hold it keep working, and its connections are made once.
+    const bool first = !m_verifactuIntegration;
+    if (first)
+        m_verifactuIntegration = new VerifactuIntegration(this);
 
     if (!m_verifactuIntegration->initialize()) {
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
@@ -503,6 +507,19 @@ void MainWindow::initializeVerifactu()
                           + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
+    if (first)
+        connectVerifactu();
+    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
+        if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
+            m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
+                                                 "pueden enviar: %1")
+                                                  .arg(m_verifactuIntegration->directBackend()->sendingError().toHtmlEscaped())));
+        continueDirectChain();
+    }
+}
+
+void MainWindow::connectVerifactu()
+{
     connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
             this, &MainWindow::onVerifactuRequestFinished);
     // Direct client: outcomes nobody waited for (records sent at start or retried on
@@ -535,13 +552,6 @@ void MainWindow::initializeVerifactu()
         if (rows > 0)
             showVerifactuRejection(invoiceId, result);
     });
-    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
-        if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
-            m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
-                                                 "pueden enviar: %1")
-                                                  .arg(m_verifactuIntegration->directBackend()->sendingError().toHtmlEscaped())));
-        continueDirectChain();
-    }
 }
 
 void MainWindow::continueDirectChain()

@@ -476,6 +476,23 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "778").state, AeatStore::kPending);
     }
 
+    // Aceptar in Configuración re-initialises Verifactu: one integration (the windows that
+    // hold it keep working) with one backend - two direct clients would both send the
+    // outbox and ignore each other's AEAT wait time.
+    void test_mainWindow_reinitialisesOneBackend()
+    {
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        auto *integration = mw.findChild<VerifactuIntegration *>();
+        QVERIFY(integration && integration->directBackend());
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QCOMPARE(mw.findChildren<VerifactuIntegration *>().size(), 1);
+        QCOMPARE(mw.findChild<VerifactuIntegration *>(), integration);
+        QCOMPARE(mw.findChildren<AeatDirectBackend *>().size(), 1);
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

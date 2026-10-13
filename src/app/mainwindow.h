@@ -143,6 +143,8 @@ private:
     void runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
                          const QString &certificateFile, const QString &certificatePassword);
     void continueDirectChain();
+    // The window's handlers of AEAT outcomes, connected once to its integration.
+    void connectVerifactu();
 
     // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
     // slots connect by name and the e2e bench finds them by it).
