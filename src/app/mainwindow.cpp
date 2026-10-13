@@ -821,7 +821,7 @@ void MainWindow::showVerifactuRejection(const QString &invoiceId, const Verifact
         return;
     m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
                                            .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
-                      + "<br>" + tr("Reenvíela desde Recogida de Prendas (botón Verifactu…) después de corregir la causa."));
+                      + "<br>" + tr("Reenvíela desde Recogida de Prendas (botón Verifactu\u2026) después de corregir la causa."));
 }
 
 QPixmap MainWindow::verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,

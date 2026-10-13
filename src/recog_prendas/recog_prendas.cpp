@@ -174,7 +174,7 @@ void RecogPrendas::buildUi()
     ui->lbl_total->setFont(totalFont);
     ui->lbl_total->setToolTip(tr("Suma de las prendas listadas (sin anuladas ni rectificadas)."));
     t->addWidget(ui->lbl_total);
-    ui->pb_pay_all = UiKit::primaryButton(tr("Cobrar…"), "pb_pay_all");
+    ui->pb_pay_all = UiKit::primaryButton(tr("Cobrar\u2026"), "pb_pay_all");
     ui->pb_pay_all->setToolTip(tr("Cobrar las prendas pendientes del ticket seleccionado."));
     t->addWidget(ui->pb_pay_all);
     ui->pb_pku_all = UiKit::secondaryButton(tr("Recoger todo"), "pb_pku_all");
@@ -191,17 +191,17 @@ void RecogPrendas::buildUi()
     splitRow->addWidget(new QLabel(tr("prenda(s)")));
     splitRow->addStretch();
     t->addLayout(splitRow);
-    ui->pb_add = UiKit::secondaryButton(tr("Añadir prendas…"), "pb_add");
+    ui->pb_add = UiKit::secondaryButton(tr("Añadir prendas\u2026"), "pb_add");
     ui->pb_add->setToolTip(tr("Añadir prendas al ticket seleccionado (solo si aún no tiene prendas pagadas)."));
     t->addWidget(ui->pb_add);
-    ui->pb_void = UiKit::secondaryButton(tr("Anular prendas…"), "pb_void");
+    ui->pb_void = UiKit::secondaryButton(tr("Anular prendas\u2026"), "pb_void");
     ui->pb_void->setToolTip(tr("Anular prendas no cobradas ni entregadas del ticket seleccionado "
                                "(recibo erróneo o cambio de opinión)."));
     t->addWidget(ui->pb_void);
     ui->pb_print = UiKit::secondaryButton(tr("Imprimir factura"), "pb_print");
     ui->pb_print->setToolTip(tr("Reimprimir la factura del pago de la prenda seleccionada."));
     t->addWidget(ui->pb_print);
-    ui->pb_verifactu = UiKit::secondaryButton(tr("Verifactu…"), "pb_verifactu");
+    ui->pb_verifactu = UiKit::secondaryButton(tr("Verifactu\u2026"), "pb_verifactu");
     ui->pb_verifactu->setToolTip(tr("Ver información de Verifactu para el ticket seleccionado."));
     t->addWidget(ui->pb_verifactu);
     t->addStretch();
@@ -1224,7 +1224,7 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
             m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
                                                    .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped(),
                                                         result.errorDescription.toHtmlEscaped()))
-                              + "<br>" + tr("Reenvíela con el botón Verifactu… después de corregir la causa."));
+                              + "<br>" + tr("Reenvíela con el botón Verifactu\u2026 después de corregir la causa."));
         // "Already exists" means AEAT HAS the invoice and we lost the reply, so a
         // further retry can only fail the same way. Close the loop here: ask AEAT
         // what it holds and offer to adopt its CSV.

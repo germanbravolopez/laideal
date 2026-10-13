@@ -75,10 +75,8 @@ public:
         const QString &description = QString()
     );
 
-    // The QR of a simplified invoice when it can be printed before AEAT answers: the
-    // direct client has generated its record (call it right after the submit) and draws
-    // the QR from the invoice's data, as VERI*FACTU defines it. Null otherwise, and with
-    // the gateway, whose QR comes in its reply. Same inputs as the submit.
+    // The QR of the direct client's queued record for this invoice (call it after the submit,
+    // same inputs), printable before AEAT answers; null otherwise and with the gateway.
     QPixmap qrBeforeReply(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase, double taxRate) const;
 
     // Asks AEAT what it holds for an InvoiceID. Answers on queryFinished.

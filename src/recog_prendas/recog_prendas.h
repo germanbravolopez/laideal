@@ -42,7 +42,7 @@ public:
     ~RecogPrendas();
 
     VerifactuIntegration *m_verifactuIntegration = nullptr;
-    QSqlQueryModel *sqlQueryModel = new QSqlQueryModel;
+    QSqlQueryModel *sqlQueryModel = new QSqlQueryModel(this);
     MySortFilterProxyModel *proxyModel = nullptr;
     bool isCellClicked = false;
     int rowClickedCell = -1;

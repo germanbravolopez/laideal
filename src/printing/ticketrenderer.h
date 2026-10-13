@@ -56,11 +56,8 @@ public:
     // paperDots = printable width in dots (576 @80mm, 420 @58mm).
     static QByteArray render(const TicketData &d, int paperDots = 576);
 
-    // A QR image (any resolution, the gateway's pixmap or the direct client's) as it is
-    // printed: its module grid read back and redrawn at a whole number of dots per
-    // module, so the symbol measures 30-40 mm (Orden HAC/1177/2024 art. 21.1; 8 dots/mm
-    // at 203 dpi) with crisp modules, plus the 4-module quiet zone. Null when no QR
-    // symbol can be read from it.
+    // Any QR image redrawn module by module at whole dots per module: 30-40 mm (art. 21.1
+    // of the Orden), plus the quiet zone. Null when no QR symbol can be read from it.
     static QImage printableQr(const QImage &qr);
 };
 

@@ -357,7 +357,7 @@ private slots:
         QCOMPARE(table->item(0, 0)->flags() & Qt::ItemIsUserCheckable, Qt::ItemFlags());
     }
 
-    // Recogida -> Añadir prendas…: the Añadir nuevas prendas window opens on the
+    // Recogida -> Añadir prendas...: the Añadir nuevas prendas window opens on the
     // selected ticket; a garment added as paid is sent to AEAT as the ticket's first
     // invoice; closing it refreshes Recogida, which reports the addition. Herramientas
     // keeps the entry, now grouped by function.
@@ -398,7 +398,7 @@ private slots:
         QVERIFY(order.indexOf("actionFormulario_facturas") < order.indexOf("actionGenerar_contabilidad"));
     }
 
-    // Recogida -> Anular prendas…: opens the void dialog on the selected garment's
+    // Recogida -> Anular prendas...: opens the void dialog on the selected garment's
     // ticket, the voided garment then shows its Anulación date in Recogida, and the
     // Herramientas menu no longer carries the entry.
     void test_recogida_voidGarmentsFromTheWindow()

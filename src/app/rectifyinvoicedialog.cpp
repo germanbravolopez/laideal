@@ -244,7 +244,7 @@ void RectifyInvoiceDialog::onSearchClicked()
                              // AEAT, 13-10-2026: a refused record still exists in the system; it is resent
                              // corrected (same number), and a rectificativa follows if the amount or date change.
                              : (estadoEnum == VerifactuEstado::Error)       ? "La AEAT rechazó esta factura. Reenvíela primero (Recogida de Prendas, "
-                                                                              "botón Verifactu…, Reintentar); cuando la AEAT la acepte, si hay que "
+                                                                              "botón Verifactu\u2026, Reintentar); cuando la AEAT la acepte, si hay que "
                                                                               "cambiar el importe o la fecha, rectifíquela aquí."
                                                                             : "Este ticket no fue enviado a AEAT - no hay nada que rectificar.";
         m_lblResult->setText(reason);

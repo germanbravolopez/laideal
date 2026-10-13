@@ -136,8 +136,8 @@ private slots:
     void onUpdaterCheckFailed(const QString &error);
 
 private:
-    // Direct AEAT connection (research): the self-test window from Configuración, and
-    // the chain hand-over after the gateway when the connection starts.
+    // Direct AEAT connection: the self-test window from Configuración, and the sync of
+    // our own chain when the connection starts.
     void runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
                          const QString &certificateFile, const QString &certificatePassword);
     void continueDirectChain();

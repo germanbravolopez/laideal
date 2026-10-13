@@ -70,10 +70,11 @@ These were reviewed and deliberately kept. Report one only if it **grows** (a ne
 
 **Tier 2**
 - **Identifier interpolation in generic SQL helpers**: `sql_lite.cpp` helpers taking `table` / `column` arguments, and Recogida's date search (`dateType` from a fixed combo). All callers pass internal constants; values are always bound.
-- **Widgets created without a parent and then added to a layout or table cell** in the next lines (e.g. `CancelInvoiceDialog`, `MainWindow` combo cells): no leak, ownership transfers.
+- **`abort()` in `AppLogger`'s message handler** for `QtFatalMsg`: Qt expects a custom handler to end the program on a fatal message.
+- **Widgets created without a parent and then added to a layout or table cell** in the next lines (e.g. `MainWindow` combo cells): no leak, ownership transfers.
 - **Public mutable members** set by the parent after construction (`qrCode`, `isRecibo`, `revertirOn`, `pbAddedRows`, `isCellClicked`, `m_verifactu`, `invoiceSeq`...) on the older dialogs (`Imprimir`, `Contabilidad`, `Facturas`, `AddGarment`, `Listado`, `GenListado`, `InsertNewItem`, `CancelInvoiceDialog`, `RectifyInvoiceDialog`, `PayDialog`, `RecogPrendas`, `MainWindow`). The DB handle is already private and constructor-injected everywhere; moving the rest behind accessors is a separate refactor.
 
 **Tier 3**
-- snake_case methods in `src/listado/genlistado.h` (`print_table`, `initial_settings`, `set_cb_fechas`, `generate_html_*`, `write_html`, `check_years_invoice_type_for_row`, `add_suffix_to_filename`) and in `src/app/` / `src/add_garment/`.
+- snake_case methods in `src/listado/genlistado.h` (`print_table`, `set_cb_fechas`, `generate_html_*`, `check_years_invoice_type_for_row`, `add_suffix_to_filename`).
 - Spanish identifier `revertirOn` in `src/contabilidad/contabilidad.h`.
 - File name vs class name: `add_garment.h` (`AddGarment`), `recog_prendas.h` (`RecogPrendas`), `pay_dialog.h` (`PayDialog`).

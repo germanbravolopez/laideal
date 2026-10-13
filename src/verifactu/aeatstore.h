@@ -74,8 +74,8 @@ public:
     // Moves the head to `head` (the chain tip found by a sync), whatever it was.
     bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
 
-    // Whether the chain of this issuer and environment was synced with AEAT once
-    // (the hand-over from the gateway). Until then no record may be generated.
+    // Whether the chain of this issuer and environment was synced with AEAT once (the
+    // first sync, which must reach AEAT). Until then no record may be generated.
     bool chainSynced(const QString &issuerNif);
     bool markChainSynced(const QString &issuerNif);
 
