@@ -200,20 +200,20 @@ Notable items:
 
 | Column | Type | Notes |
 |--------|------|-------|
-| n_recibo | INTEGER | Receipt number — shared across all garment rows of one ticket |
+| n_recibo | TEXT | Receipt number — shared across all garment rows of one ticket (numeric text; compare / MAX it as `CAST(n_recibo AS INTEGER)`) |
 | cliente | TEXT | Client name (free text) |
 | fecha_recepcion | TEXT | Reception date, format `DD-MM-YYYY` |
 | fecha_pago | TEXT | Payment date `DD-MM-YYYY`; blank if unpaid |
 | fecha_recogida | TEXT | Pickup date `DD-MM-YYYY`; blank until picked up |
-| importe | REAL | Price for this garment row |
+| importe | TEXT | Price for this garment row (cents, `"12.50"`) |
 | pagado | TEXT | `"SI"` or `"NO"` |
 | estado | TEXT | `"En tienda"` or similar |
-| cantidad | INTEGER | Number of garments in this row |
+| cantidad | TEXT | Number of garments in this row |
 | prenda | TEXT | Garment name (FK → `prendas.nombre`) |
-| size | REAL | Size multiplier (m² for rugs, etc.) |
+| size | TEXT | Size multiplier (m² for rugs, etc.) |
 | servicio | TEXT | `"Limp."` (cleaning) or `"Plan."` (ironing) |
 | observaciones | TEXT | Free-text notes |
-| edit_lock | INTEGER | `0` = editable, `1` = locked by accounting close |
+| edit_lock | TEXT | `'0'` = editable, `'1'` = locked by accounting close. Stored as TEXT: compare it on the column itself (`edit_lock = 0`, the column's affinity converts) or with `COALESCE(edit_lock, 0) IN (0, '0')` - never `COALESCE(edit_lock, 0) = 0`, which is false for `'0'` (the 11.0 bug fixed in 11.2) |
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
@@ -247,7 +247,7 @@ Notable items:
 | direccion | Address |
 
 ### `gastos` (expenses)
-Columns include `importe` (REAL) and supplier/date/description fields. Managed via Listado.
+Columns include `importe` (TEXT) and `edit_lock` (TEXT `'0'` / `'1'`, as in `ingresos`) and supplier/date/description fields. Managed via Listado.
 
 ### Other tables
 `proveedores`, `servicios`, `facturas`, `empresas` — managed via Listado or Facturas windows.

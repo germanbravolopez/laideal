@@ -4,7 +4,8 @@
 // The shop database's tables for a throwaway test DB. `ingresos` is created with
 // its original (pre-Verifactu) columns and then brought up to date by the app's
 // own migrateDatabase(), so every column a migration adds reaches the suites
-// without being copied here by hand.
+// without being copied here by hand. edit_lock is TEXT, as in the shop DB (its
+// values are '0' / '1'), so a comparison that only works on integers fails here too.
 
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -22,11 +23,11 @@ inline bool create(QSqlDatabase &db)
         " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
         " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
         " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-        " observaciones TEXT, edit_lock INTEGER DEFAULT 0, hash TEXT)",
+        " observaciones TEXT, edit_lock TEXT DEFAULT '0', hash TEXT)",
         // Column order as in the shop DB (GASTOS_IDX_* read rows by position).
         "CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
         "descripcion TEXT, empresa TEXT, fecha TEXT, iva TEXT, importe TEXT, "
-        "edit_lock INTEGER DEFAULT 0)",
+        "edit_lock TEXT DEFAULT '0')",
         "CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)",
         "CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)",
         "CREATE TABLE proveedores (nombre TEXT, cif TEXT, direccion TEXT, telefono TEXT)",
