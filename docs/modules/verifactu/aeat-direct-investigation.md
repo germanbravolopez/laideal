@@ -171,6 +171,36 @@ A second review of those fixes found one more blocking point - Rectificar factur
 6. Whether an unchanged record resent days later is accepted (any limit on the age of `FechaHoraHusoGenRegistro`) and whether `RemisionVoluntaria / Incidencia` is expected after an outage; what `RechazoPrevio = S` means on a `RegistroAnulacion`; AEAT's fault codes.
 5. **Answered by AEAT (13-10-2026): the declaración responsable.** The producer signs it even for own use, since he developed the SIF; its content is art. 15 of Orden HAC/1177/2024: the title "DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN", then, in this order and each preceded by its description, a) system name, b) system code (`IdSistemaInformatico`), c) full version, d) components (hardware, software) and a short description of what it does, e) whether it can only work as VERI*FACTU, f) whether it serves several obligados tributarios, g) signature types (only when not VERI*FACTU), h) producer's name, i) producer's NIF, j) producer's full postal address, k) the statement that this version complies with art. 29.2.j LGT, RD 1007/2023, the Orden and the AEAT sede specifications, l) date (day, month, year) and place (town, country) of signature. It must be readable inside the system itself, quick to reach, and given to the client on paper or in a free, common format (15.3). The app's current text (Ayuda, `MainWindow`) names the issuer as producer and lacks most items: to rewrite.
 
+### Draft declaración responsable (art. 15, not yet in the app)
+
+```text
+DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN
+
+a) Nombre del sistema informático: La Ideal
+b) Código identificador del sistema informático: LI
+c) Identificador completo de la versión: <versión del programa>
+d) Componentes, hardware y software, y descripción: programa La Ideal para Windows
+   (C++/Qt, base de datos SQLite local), ordenador personal con Windows, impresora
+   térmica de tickets y certificado electrónico del obligado tributario. Gestiona la
+   recepción y recogida de prendas de una tintorería; expide facturas simplificadas y
+   rectificativas; genera los registros de facturación de alta y anulación con su
+   huella encadenada, los remite a la AEAT y los conserva; imprime el código QR y
+   permite exportar los registros.
+e) Solo puede funcionar exclusivamente como «VERI*FACTU»: Sí
+f) Permite su uso por varios obligados tributarios: No
+g) Tipos de firma: No aplica (funciona exclusivamente como VERI*FACTU)
+h) Nombre y apellidos del productor: Germán Bravo López
+i) NIF del productor: 75929840D
+j) Dirección postal completa del productor: <pendiente>
+k) Germán Bravo López hace constar que este sistema informático, en la versión
+   indicada, cumple con lo dispuesto en el artículo 29.2.j) de la Ley 58/2003, de 17
+   de diciembre, General Tributaria, en el Reglamento aprobado por el Real Decreto
+   1007/2023, de 5 de diciembre, en la Orden HAC/1177/2024, de 17 de octubre, y en la
+   sede electrónica de la AEAT para todo aquello que complete las especificaciones de
+   dicha orden.
+l) Fecha y lugar de la firma: <día> de <mes> de <año>, <localidad>, España
+```
+
 ### How to run the proof of concept
 
 On the shop PC (or any PC with the owner's certificate), with her consent: Configuración → Verifactu → *Conexión con la AEAT*: *Directa con la AEAT (en pruebas)*, choose her certificate in the list (or a .pfx file and its password), then **Prueba con la AEAT (entorno de pruebas)**. It always uses AEAT pre-production (no tax effect, whatever the PRODUCCIÓN box says): it shows the certificate, continues the test chain, registers `PRUEBA-<date and time>` for 1,21 €, queries it back, waits the time AEAT asks and cancels it. Nothing is saved as configuration unless *Aceptar* is pressed; leave the connection on IreneSolutions afterwards until the decision.
