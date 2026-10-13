@@ -441,6 +441,14 @@ private slots:
     void test_nextVerifactuInvoiceSeq()
     {
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 0); // no paid rows
+        // A number the direct client already used (its payment left no paid row) is
+        // never handed out again: AEAT would get two invoices under one InvoiceID.
+        exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY, kind TEXT, invoice_number TEXT)");
+        exec("INSERT INTO aeat_records (kind, invoice_number) VALUES ('alta', 'U1'), ('alta', 'U1-1'), "
+             "('anulacion', 'U1-2'), ('alta', 'U10')");
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "U1"), 2);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "U2"), 0);
+        exec("DROP TABLE aeat_records");
         insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 1);
         insertIngreso("T1", "11-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/1);

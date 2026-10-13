@@ -1595,6 +1595,23 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
     else if (q.lastError().isValid())
         qWarning() << "nextVerifactuInvoiceSeq: SELECT failed for" << ticketNum
                    << "-" << q.lastError().text();
+    // Nor a number the direct client already generated a record for (a payment whose
+    // garments could not be stored as paid left no paid row behind): an InvoiceID names
+    // one invoice. The table exists only once the direct connection was used.
+    QSqlQuery used(db);
+    used.prepare("SELECT invoice_number FROM aeat_records WHERE kind = 'alta' "
+                 "AND (invoice_number = :n OR invoice_number LIKE :prefix)");
+    used.bindValue(":n", ticketNum);
+    used.bindValue(":prefix", ticketNum + QStringLiteral("-%"));
+    if (used.exec()) {
+        while (used.next()) {
+            const QString id = used.value(0).toString();
+            bool numeric = true;
+            const int seq = id == ticketNum ? 0 : id.mid(ticketNum.size() + 1).toInt(&numeric);
+            if (numeric)
+                next = qMax(next, seq + 1);
+        }
+    }
     db.close();
     return next;
 }
