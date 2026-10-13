@@ -123,6 +123,12 @@ private slots:
         exec("INSERT INTO gastos (id, fecha, importe, iva) VALUES (5, '', '0', 21)");
         exec("INSERT INTO gastos (id, fecha, importe, iva) VALUES (3, '', '0', 21)");
         QCOMPARE(readMaxValueInColumnFromTable(m_db, "id", "gastos"), 5);
+        // n_recibo is TEXT in the shop DB: the maximum is numeric, never alphabetical
+        // ("9999" and "99999" rank above "100000" as text, so a number would repeat).
+        insertIngreso("9999", "", "10.00", "NO", "SIN COBRAR", 0, 0);
+        insertIngreso("100000", "", "10.00", "NO", "SIN COBRAR", 0, 0);
+        insertIngreso("99999", "", "10.00", "NO", "SIN COBRAR", 0, 0);
+        QCOMPARE(readMaxValueInColumnFromTable(m_db, "n_recibo", "ingresos"), 100000);
     }
 
     // incomeTicketsBetweenDates: only pagado='SI', excludes ANULADA and

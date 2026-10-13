@@ -45,7 +45,9 @@ static QString monthStr(int month)
 static const QString kAmountEditableWhere =
     QStringLiteral(" AND COALESCE(pagado, '') != 'SI' "
                    " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') "
-                   " AND COALESCE(edit_lock, 0) = 0");
+                   // CAST: the shop DB stores edit_lock as TEXT '0'; COALESCE drops the column's
+                   // affinity, so '0' = 0 would be false and every open garment refused.
+                   " AND CAST(COALESCE(edit_lock, 0) AS INTEGER) = 0");
 
 // ---------------------------------------------------------------------------
 // Public functions
@@ -254,7 +256,9 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
     int maxValue = 0;
     db.open();
     QSqlQuery q(db);
-    q.exec("SELECT MAX(" + column + ") FROM " + table);
+    // Numeric MAX: n_recibo is TEXT, and a text MAX would rank "99999" above "100000"
+    // (the next ticket would repeat a number) or "9999" above "31163".
+    q.exec("SELECT MAX(CAST(" + column + " AS INTEGER)) FROM " + table);
     if (q.isSelect()) {
         if (q.first())
             maxValue = q.value(0).toInt();
@@ -622,7 +626,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     QSqlQuery u(db);
     // Same row as read above: still unlocked and with the same quantity.
     u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
-              "AND COALESCE(edit_lock, 0) = 0 AND cantidad = :oldCant");
+              "AND CAST(COALESCE(edit_lock, 0) AS INTEGER) = 0 AND cantidad = :oldCant");
     u.bindValue(":cant", QString::number(qty - nGarm));
     u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);
@@ -1305,7 +1309,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "      || substr(fecha_recepcion, 4, 2) || '-' "
         "      || substr(fecha_recepcion, 1, 2) >= :floor "
         "GROUP BY n_recibo, verifactu_invoice_seq "
-        "ORDER BY n_recibo DESC, verifactu_invoice_seq");
+        "ORDER BY CAST(n_recibo AS INTEGER) DESC, verifactu_invoice_seq");
     q.bindValue(":floor", floorIso);
     if (!q.exec()) {
         qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
