@@ -356,6 +356,8 @@ add_executable(test_e2e_app
     support/e2efixture.h
     support/fakeverifactuserver.h
     support/fakeverifactuserver.cpp
+    support/fakeaeatserver.h
+    support/fakeaeatserver.cpp
     support/modalautocloser.h
     support/modaldriver.h
     support/testschema.h

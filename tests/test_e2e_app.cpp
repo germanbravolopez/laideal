@@ -47,6 +47,7 @@
 #include "listado.h"
 #include "add_garment.h"
 #include "fakeverifactuserver.h"
+#include "fakeaeatserver.h"
 #include "imprimir.h"
 #include "mainwindow.h"
 #include "modalautocloser.h"
@@ -165,6 +166,23 @@ class TestE2eApp : public QObject
         return q;
     }
 
+    // For a case that needs AEAT's answers: a fake AEAT for the direct client, put back to
+    // the suite's closing endpoint when the case ends.
+    struct LiveAeat {
+        FakeAeatServer server;
+        QString restore;
+        explicit LiveAeat(const QString &suiteEndpoint) : restore(suiteEndpoint)
+        {
+            if (server.start())
+                AeatDirectBackend::setEndpointOverride(server.url());
+        }
+        ~LiveAeat() { AeatDirectBackend::setEndpointOverride(restore); }
+    };
+    QString suiteAeatEndpoint() const
+    {
+        return QStringLiteral("http://127.0.0.1:%1/never-used").arg(m_deadAeat.serverPort());
+    }
+
 private slots:
     void initTestCase()
     {
@@ -269,6 +287,66 @@ private slots:
                             .arg(ticket)), QStringLiteral("SI|PENDIENTE"));
         QCOMPARE(store.latest(AeatStore::Kind::Registration, ticket).state, AeatStore::kPending);
         QVERIFY(m_server.requestsTo("Create").isEmpty());                      // never through the gateway
+    }
+
+    // The main window settles an AEAT outcome nobody waited for: a record an earlier
+    // session left unanswered goes out when the window starts, and its rows become ENVIADA.
+    void test_mainWindow_settlesAnOutcomeNobodyWaitedFor()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(E2e::seedSentGarment(m_db, "890", "h890a", "12.10", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h890a'"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        {
+            VerifactuIntegration earlier;
+            QVERIFY(earlier.initialize(m_db));
+            bool synced = false;
+            earlier.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+            QTRY_VERIFY(synced);
+            aeat.server.enqueue({ QByteArray(), 200, 0, true });               // the send: reply lost
+            QVERIFY(!earlier.submitSimplifiedInvoiceAsync("890", QDate::currentDate(), 10.0, 21.0).isEmpty());
+            QTRY_VERIFY_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "890").reached, 10000);
+        }
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "890").state, AeatStore::kPending);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h890a'"),
+                                  QStringLiteral("ENVIADA"), 15000);
+        QVERIFY(scalar("SELECT verifactu_csv FROM ingresos WHERE hash='h890a'").startsWith("A-FAKE"));
+    }
+
+    // Recogida's Cobrar over the direct connection: the factura goes out at once, the
+    // answer is handed to Recogida, which settles the rows when AEAT accepts - and does
+    // not ask for a reprint (the customer already has the factura with its QR).
+    void test_recogida_directCobrarSettledByRecogida()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(E2e::seedGarment(m_db, "895", "h895a", "12.10", today()));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = &direct;
+        QVERIFY(selectRow(rp, "895", "h895a"));
+        m_driver->expect(ModalDriver::ofType<PayDialog>(), [](QWidget *w) {
+            QMetaObject::invokeMethod(w, "onCobrarClicked");
+        });
+        rp.findChild<QPushButton *>("pb_pay_all")->click();
+        QCOMPARE(m_driver->handled(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h895a'"),
+                                  QStringLiteral("ENVIADA"), 15000);
+        QVERIFY(scalar("SELECT verifactu_csv FROM ingresos WHERE hash='h895a'").startsWith("A-FAKE"));
+        QVERIFY2(!rp.statusBar()->currentMessage().contains("ya se puede imprimir"),
+                 qPrintable(rp.statusBar()->currentMessage()));
     }
 
     void test_mainWindow_saveUnpaidThenPaidTicket()
