@@ -99,14 +99,14 @@ So there is no deadline pressure: the shop can stay on IreneSolutions (or not su
 
 ## Status on this branch (October 2026)
 
-Everything of phases 1-3 that can be done without the owner's certificate and without contacting AEAT is built and tested on `feature/aeat-direct-investigation`. The app still uses IreneSolutions unless Configuración → Verifactu → *Conexión con la AEAT* is set to *Directa con la AEAT (en pruebas)*.
+Everything of phases 1-3 that can be done without the owner's certificate and without contacting AEAT is built and tested on `feature/aeat-direct-investigation`. The app still uses IreneSolutions unless Configuración → Verifactu → *Conexión con la AEAT* is set to *Directa con la AEAT (en pruebas)*; making the direct connection the shop's is the decision of release 12.0.
 
 | Phase | Status |
 |---|---|
 | 1. Ask IreneSolutions the fee and whether `verifactu_hash` is AEAT's huella | **Pending (owner / technical contact)** - an email draft is ready; nothing sent. The second question is now partly answered by the data: the gateway's stored `verifactu_xml` carries the AEAT record with its `Huella`. |
 | 2. Offline parts | **Done** - see the steps below. |
-| 3. Proof of concept against AEAT pre-production | **Built, not run** - *Prueba con la AEAT (entorno de pruebas)* in Configuración runs it; it needs the owner's certificate and her consent. |
-| 4. Decide | Open: cost, the PoC result and the final legal date. |
+| 3. Proof of concept against AEAT pre-production | **Done (11/12-10-2026)** - every app flow accepted by AEAT with Germán's and Rocío's certificates; see *First runs against AEAT pre-production*. |
+| 4. Decide | **Ready for the decision (release 12.0)** - AEAT's answers of 13-10-2026 are applied (own chain per system, print at issue, refusals, declaración responsable per art. 15, QR 30-40 mm). Still open: the producer's signature data for the declaración, AEAT's written answer on production (GZ44, by 13-01-2027) and the IreneSolutions fee question. |
 
 ### What was built
 
@@ -121,7 +121,7 @@ Everything of phases 1-3 that can be done without the owner's certificate and wi
 | 7 | `aeatdirectbackend.*` (`syncChain`), `aeatresponse.*` (`chainTip`) | The chain (changed on 13-10-2026 after AEAT's answer): one per system and issuer, so it continues only La Ideal's own records - the local store and AEAT's registrations of our `SistemaInformatico` - and starts with `PrimerRegistro` when there are none; never the gateway's records. First sync up to 24 months back, later ones this month and the previous (a restored DB continues where AEAT is). The first version handed over from the gateway's chain, which AEAT ruled out. |
 | 8 | `verifactuintegration.*`, `appsettings.*`, `settingsdialog.*`, `mainwindow.*`, `rectifyinvoicedialog.cpp`, `aeatselftest.*` | In the app: the connection and the certificate are chosen in Configuración (a Windows-store certificate, or a .pfx whose password is stored DPAPI-encrypted); `VerifactuIntegration` picks the backend; the chain continues from AEAT when the app starts; Rectificar factura sends the corrected invoice; the self-test is the proof of concept. |
 
-Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_store`, `aeat_qr`, `aeat_direct_backend`, `aeat_xsd`, `e2e_aeat_direct`) plus a settings-dialog case; 25 in all, green locally and in CI. The key rules were mutation-checked (removing each one fails its test).
+Tests: 8 new ctest entries (`aeat_hash`, `aeat_record`, `aeat_response`, `aeat_store`, `aeat_qr`, `aeat_direct_backend`, `aeat_xsd`, `e2e_aeat_direct`) plus settings-dialog and e2e cases; 26 in all, green locally and in CI. The key rules were mutation-checked (removing each one fails its test).
 
 ### Changes after the compliance review
 
@@ -132,7 +132,7 @@ A second review of those fixes found one more blocking point - Rectificar factur
 **Known limits** (noted, not fixed - to weigh before any production use):
 
 - Until the first sync with AEAT succeeds, invoices are issued without a record (requests wait and the rows stay PENDIENTE).
-- A gateway record whose reply was lost (no stored XML) is invisible to the offline re-sync; going back to the gateway after direct records forks IreneSolutions' chain (it keeps its own state).
+- *(Obsolete since 13-10-2026: the gateway's records are no longer part of our chain, and each system keeps its own, so switching between them forks nothing.)*
 - Claiming a duplicate as ours relies on it being a resend (`attempts > 1`); comparing our huella with AEAT's through a query would be exact. For a duplicate of another system's record the QR is built from our data.
 - An invoice AEAT holds as cancelled leaves its rows ERROR (still counted until reviewed).
 - A record AEAT never reports on is resent every 60 s without limit.
@@ -142,7 +142,7 @@ A second review of those fixes found one more blocking point - Rectificar factur
 - **Qt's Schannel backend cannot read PKCS#12** (`The backend "schannel" cannot read PKCS12 format`). The release ships no OpenSSL, so the certificate is handled with the Windows crypto API (`PFXImportCertStore` in memory, or the personal store by thumbprint) and the requests go through **WinHTTP**, which presents it in the TLS handshake. A certificate already installed in Windows (as the FNMT one usually is, for the AEAT website) can be used without storing any password. *Not yet proven against AEAT*: the TLS handshake with a real certificate is the first thing the PoC checks.
 - **The gateway's chain does not follow the local ticket order**: in the shop DB ticket 31277 chains to 31110, not to the previous local ticket 31273 - IreneSolutions' shared test environment holds other records (e.g. earlier test runs) in between. The hand-over therefore asks AEAT for the chain tip instead of trusting local data.
 - **The official schemas differ from the public mirrors** (e.g. the query's `EstadoRegistro` is `Correcto / AceptadoConErrores / Anulado`, not `Correcta...`): the vendored XSDs are AEAT's own files.
-- **Flow control**: the first submission goes at once; the next waits `TiempoEsperaEnvio` (60 s in production). A second paid ticket within a minute is therefore printed as a recibo without QR and patched when AEAT replies, exactly as with a slow gateway today. Printing the QR before the reply (it is computed locally) would remove the wait, but changes the rule "factura verificable only once ENVIADA" and needs a decision.
+- **Flow control**: the first submission goes at once; the next waits `TiempoEsperaEnvio` (60 s in pre-production). Since the print-at-issue change (confirmed correct by AEAT on 13-10-2026) the factura prints at once with the QR of the queued record, so the wait no longer reaches the counter.
 
 ### First runs against AEAT pre-production (11-10-2026, Germán's FNMT certificate)
 
@@ -174,14 +174,14 @@ A second review of those fixes found one more blocking point - Rectificar factur
 ### To confirm in the proof of concept
 
 0. **Answered by AEAT (13-10-2026): a new system does NOT continue IreneSolutions' chain.** "Los registros de facturación se deben encadenar de forma independiente dentro de cada SIF, y para cada Obligado Tributario [...] debe existir una única cadena de RF por cada par de valores distintos de (SIF; OT)." Each TPV that issues invoices on its own is a SIF with its own chain. So the direct client must start its own chain with `PrimerRegistro = S` and never adopt the gateway's records; the chain travels with the database. **Done (13-10-2026):** the sync now keeps only records of our own `SistemaInformatico` (asked with `MostrarSistemaInformatico`) and our local ones, the gateway hand-over is gone, every record names La Ideal's producer (it named the issuer), and `NumeroInstalacion` stays per settings file until the written question to AEAT is answered. The pre-production runs of 11/12-10-2026 chained to IreneSolutions' records: harmless there, wrong for production. Going back to the gateway no longer forks anything: each system keeps its own chain. **Follow-up answer (13-10-2026):** nothing prevents our system from cancelling or rectifying an invoice issued and registered through IreneSolutions. The anulación or rectificativa is a record of our own chain and refers to the original invoice. AEAT pointed to its FAQ: traceability covers only the chaining and dating of the records each SIF generates, not what happens to them outside it. After the switch the gateway is therefore not needed for older invoices either.
-1. The WinHTTP + certificate handshake with `prewww1.aeat.es`.
-2. That `Subsanacion = S` + `RechazoPrevio = S` is the right flag pair to resend a corrected record after a rejection (the spec allows `S` and `X`).
-3. The real `TiempoEsperaEnvio` and that a query is not subject to it.
-4. That the chain hand-over from the gateway is accepted (the first direct record chains to a record IreneSolutions generated), and that the query returns `Huella`, `Encadenamiento` and `IdPeticion` for records IreneSolutions submitted.
-6. Whether an unchanged record resent days later is accepted (any limit on the age of `FechaHoraHusoGenRegistro`) and whether `RemisionVoluntaria / Incidencia` is expected after an outage; what `RechazoPrevio = S` means on a `RegistroAnulacion`; AEAT's fault codes.
+1. *Done (11-10-2026):* the WinHTTP + certificate handshake with `prewww1.aeat.es`.
+2. *Answered by AEAT (13-10-2026):* `Subsanacion = S` + `RechazoPrevio = S` with the same number resends a refused record; a rectificativa follows if the amount or date change.
+3. The real `TiempoEsperaEnvio` in production and whether a query is subject to it - asked in the written request (GZ44).
+4. *Obsolete (13-10-2026):* the hand-over from the gateway's chain - AEAT requires a chain of our own.
+6. Whether an unchanged record resent days later is accepted (any limit on the age of `FechaHoraHusoGenRegistro`) and whether `Incidencia` / `RemisionVoluntaria` is expected after an outage; what `RechazoPrevio = S` means on a `RegistroAnulacion` - asked in the written request (GZ44).
 5. **Answered by AEAT (13-10-2026): the declaración responsable.** The producer signs it even for own use, since he developed the SIF; its content is art. 15 of Orden HAC/1177/2024: the title "DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN", then, in this order and each preceded by its description, a) system name, b) system code (`IdSistemaInformatico`), c) full version, d) components (hardware, software) and a short description of what it does, e) whether it can only work as VERI*FACTU, f) whether it serves several obligados tributarios, g) signature types (only when not VERI*FACTU), h) producer's name, i) producer's NIF, j) producer's full postal address, k) the statement that this version complies with art. 29.2.j LGT, RD 1007/2023, the Orden and the AEAT sede specifications, l) date (day, month, year) and place (town, country) of signature. It must be readable inside the system itself, quick to reach, and given to the client on paper or in a free, common format (15.3). The app's current text (Ayuda, `MainWindow`) names the issuer as producer and lacks most items: to rewrite.
 
-### Draft declaración responsable (art. 15, not yet in the app)
+### Draft declaración responsable (art. 15 - now in the app as `ProducerDeclaration`, Ayuda -> Acerca de Verifactu)
 
 ```text
 DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN
