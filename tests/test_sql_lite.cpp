@@ -1143,6 +1143,18 @@ private slots:
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='810'"), QStringLiteral("12-10-2026"));
     }
 
+    // The stored record XML of one payment event: from its paid rows only, never a
+    // blank one or another seq's.
+    void test_verifactuEventRecordXml()
+    {
+        exec("INSERT INTO ingresos (n_recibo, pagado, verifactu_invoice_seq, verifactu_xml, hash) VALUES "
+             "('870', 'NO', 0, '<unpaid/>', 'a'), ('870', 'SI', 0, '', 'b'), ('870', 'SI', 0, '<seq0/>', 'c'), "
+             "('870', 'SI', 1, '<seq1/>', 'd')");
+        QCOMPARE(verifactuEventRecordXml(m_db, "870", 0), QStringLiteral("<seq0/>"));
+        QCOMPARE(verifactuEventRecordXml(m_db, "870", 1), QStringLiteral("<seq1/>"));
+        QVERIFY(verifactuEventRecordXml(m_db, "870", 2).isEmpty());
+    }
+
     // A substitution rectificativa AEAT accepted after its dialog closed marks the
     // original RECTIFICADA (it stops counting as income); one by differences does not.
     // A rectificativa is never offered to the startup recovery (it would go as an F2).

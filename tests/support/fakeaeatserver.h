@@ -12,6 +12,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <QObject>
 #include <QQueue>
@@ -64,6 +65,8 @@ public:
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
+    // The next reply that includes this record has no line for it (AEAT did not report on it).
+    void omitLineFor(const QString &invoiceNumber) { m_omitLine.insert(invoiceNumber); }
     // The next request gets `reply` instead of the default answer.
     void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
 
@@ -87,6 +90,7 @@ private:
     QHash<QString, SentRecord> m_registered;
     QHash<QString, QString> m_registeredRequestId;
     QHash<QString, QPair<QString, QString>> m_rejectNext;
+    QSet<QString> m_omitLine;
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     int m_counter = 0;

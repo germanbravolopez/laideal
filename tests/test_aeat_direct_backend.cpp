@@ -577,6 +577,34 @@ private slots:
         QVERIFY(store.latest(AeatStore::Kind::Registration, "510").reached);
     }
 
+    // A reply with no line for a record it carried: that record stays pending (never
+    // taken as refused, which would bring a Subsanacion, nor as accepted without a CSV),
+    // its request hears PENDING, and it goes out again on its own and settles once.
+    void test_replyWithoutALineForARecord()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        QSignalSpy settled(&backend, &VerifactuBackend::recordSettled);
+        m_server->omitLineFor("971");
+        QHash<QString, VerifactuResult> answers;
+        connect(&backend, &VerifactuBackend::requestFinished, this,
+                [&answers](const QString &id, const VerifactuResult &r) { answers.insert(id, r); });
+        const QString first = backend.submitInvoiceAsync(ticket("970", 10));
+        const QString second = backend.submitInvoiceAsync(ticket("971", 20));    // same batch
+        QTRY_VERIFY_WITH_TIMEOUT(answers.contains(first) && answers.contains(second), 10000);
+        QVERIFY(answers[first].isSuccess());
+        QCOMPARE(answers[second].status, VerifactuResult::PENDING);
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "971").state, AeatStore::kPending);
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "971").state, AeatStore::kAccepted, 10000);
+        QVERIFY(!m_server->sentRecords().last().afterRejection);
+        int settled971 = 0;
+        for (const QList<QVariant> &s : settled)
+            settled971 += s[0].toString() == QLatin1String("971");
+        QCOMPARE(settled971, 1);
+    }
+
     // The QR printed before AEAT answers comes only from this issuer's record still
     // pending, with the invoice's date and amount: none once AEAT accepted or refused it.
     void test_queuedRecordQrOnlyForItsPendingRecord()

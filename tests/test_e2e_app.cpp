@@ -763,6 +763,15 @@ private slots:
         QMetaObject::invokeMethod(&dlg, "onRectifyClicked");                   // nothing loaded: no second R5
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '711'"), QStringLiteral("1"));
         QCOMPARE(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kPending);
+        // The R5 names the invoice it corrects as AEAT holds it: the original's InvoiceID
+        // and its payment date (no stored record XML here, so the fallback).
+        const QString xml = store.latest(AeatStore::Kind::Registration, number).xml;
+        QVERIFY2(xml.contains("<sf:TipoFactura>R5</sf:TipoFactura>"), qPrintable(xml));
+        const int rectified = xml.indexOf("FacturasRectificadas>");
+        QVERIFY(rectified > 0);
+        QVERIFY(xml.indexOf("<sf:NumSerieFactura>711</sf:NumSerieFactura>", rectified) > rectified);
+        QVERIFY(xml.indexOf(QStringLiteral("<sf:FechaExpedicionFactura>%1</sf:FechaExpedicionFactura>")
+                                .arg(paid.toString("dd-MM-yyyy")), rectified) > rectified);
     }
 
     // Direct AEAT connection: Cobrar prints the factura at once, with the QR drawn from

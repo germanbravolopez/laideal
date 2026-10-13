@@ -242,6 +242,8 @@ QByteArray FakeAeatServer::answer(const Request &request)
     QString lines;
     int accepted = 0;
     for (const SentRecord &record : request.records) {
+        if (m_omitLine.remove(record.invoiceNumber))
+            continue;                                   // not registered, not reported
         const QString key = record.operation + QLatin1Char(':') + record.invoiceNumber;
         QString state = QStringLiteral("Correcto");
         QString extra;
