@@ -995,6 +995,11 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
     return changed;
 }
 
+int nextTicketNumber(QSqlDatabase &db, int highestAtAeat)
+{
+    return qMax(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos"), highestAtAeat) + 1;
+}
+
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__) || !db.open())

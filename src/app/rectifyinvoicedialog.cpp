@@ -318,7 +318,7 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // number is claimed locally before the AEAT round-trip. Otherwise a regular
     // MainWindow::saveTicket happening during the seconds-long AEAT call could pick the
     // same number. Same pattern as MainWindow::saveTicket -> updateTicketVerifactuFields.
-    m_newInvoiceNumber = QString::number(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos") + 1);
+    m_newInvoiceNumber = QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat()));
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;

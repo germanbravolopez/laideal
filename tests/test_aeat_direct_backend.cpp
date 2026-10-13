@@ -498,6 +498,39 @@ private slots:
         QCOMPARE(queriesSince(before), 2);
     }
 
+    // A later sync whose second month fails keeps what AEAT already answered for the
+    // first: the restored database still continues after the record only AEAT has.
+    void test_laterSyncKeepsWhatAeatAlreadyAnswered()
+    {
+        {
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString afterBackup = registerElsewhere({ "2" });
+        m_server->enqueue({});                                             // this month: answered
+        m_server->enqueue({ QByteArray(), 200, 0, true });                 // previous month: lost
+        AeatDirectBackend restored(config(), m_db);
+        QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, afterBackup);
+        QCOMPARE(restored.highestNumberAtAeat(), 2);
+    }
+
+    // The first sync must reach AEAT: when it cannot, nothing is generated (a new chain
+    // could fork our system's chain at AEAT) and the next attempt follows AEAT's tip.
+    void test_firstSyncNetworkFailureGeneratesNothing()
+    {
+        const QString tip = registerElsewhere({ "1" });
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        AeatDirectBackend backend(config(), m_db);
+        const VerifactuResult held = waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20)));
+        QCOMPARE(held.status, VerifactuResult::NETWORK_ERROR);
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(!store.latest(AeatStore::Kind::Registration, "2").isValid());
+        QVERIFY(!store.chainSynced(config().issuerNif));
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, tip);
+    }
+
     // After the first sync, AEAT out of reach does not stop the shop: the local chain
     // is used and the message says AEAT was not asked.
     void test_laterSyncFallsBackToLocalChain()

@@ -129,6 +129,10 @@ private slots:
         insertIngreso("100000", "", "10.00", "NO", "SIN COBRAR", 0, 0);
         insertIngreso("99999", "", "10.00", "NO", "SIN COBRAR", 0, 0);
         QCOMPARE(readMaxValueInColumnFromTable(m_db, "n_recibo", "ingresos"), 100000);
+        // The next ticket: above the database and above our highest number at AEAT.
+        QCOMPARE(nextTicketNumber(m_db, 0), 100001);
+        QCOMPARE(nextTicketNumber(m_db, 100500), 100501);
+        QCOMPARE(nextTicketNumber(m_db, 7), 100001);
     }
 
     // incomeTicketsBetweenDates: only pagado='SI', excludes ANULADA and

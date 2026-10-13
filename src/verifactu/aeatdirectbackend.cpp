@@ -229,8 +229,9 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
                 syncFinished(false, tr("No se pudo consultar la AEAT: %1").arg(why));
                 return;
             }
+            // What AEAT already answered (e.g. this month's records) still counts.
             QString message;
-            const bool ok = adoptTip(localCandidates(), &message);
+            const bool ok = adoptTip(found + localCandidates(), &message);
             syncFinished(ok, message + QLatin1Char(' ') + tr("(sin consultar la AEAT: %1)").arg(why));
             return;
         }
@@ -238,6 +239,12 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             // Another system's records (e.g. the gateway's) belong to its own chain.
             if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
                 continue;
+            // Our highest ticket number at AEAT ("31277", "31277-1"; not the self-test's):
+            // a database older than AEAT must not issue those numbers again.
+            bool numeric = false;
+            const int number = r.invoiceNumber.section(QLatin1Char('-'), 0, 0).toInt(&numeric);
+            if (numeric)
+                m_highestNumberAtAeat = qMax(m_highestNumberAtAeat, number);
             AeatResponse::RecordSummary s;
             s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
             s.operation = kRegistration;

@@ -85,6 +85,8 @@ public:
 
     bool isConfigured() const;
     QString getLastError() const { return m_lastError; }
+    // Our system's highest ticket number at AEAT (direct client, after its sync), else 0.
+    int highestNumberAtAeat() const;
     // The direct AEAT client when it is the chosen connection, else nullptr.
     AeatDirectBackend *directBackend() const { return m_direct; }
 

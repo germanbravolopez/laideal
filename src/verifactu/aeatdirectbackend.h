@@ -82,6 +82,8 @@ public:
     QString issuerNif() const { return m_config.issuerNif; }
     QString issuerName() const { return m_config.issuerName; }
     bool chainReady() const { return m_chainReady; }
+    // The highest ticket number of our system AEAT returned in a sync (0: none seen).
+    int highestNumberAtAeat() const { return m_highestNumberAtAeat; }
 
     // Syncs the chain now (see above). `done(ok, message)`.
     using ChainDone = std::function<void(bool ok, const QString &message)>;
@@ -119,6 +121,7 @@ private:
     bool                       m_chainReady = false;
     bool                       m_syncRunning = false;
     bool                       m_firstSync = false;      // no sync with AEAT stored yet
+    int                        m_highestNumberAtAeat = 0;
     QList<ChainDone>           m_syncWaiters;   // held requests, resumed when the sync ends
 
     QString nextRequestId();

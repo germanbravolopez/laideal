@@ -200,6 +200,11 @@ QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, co
     return m_backend->queryInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
+int VerifactuIntegration::highestNumberAtAeat() const
+{
+    return m_direct ? m_direct->highestNumberAtAeat() : 0;
+}
+
 bool VerifactuIntegration::isConfigured() const
 {
     return m_backend && m_backend->isConfigured();

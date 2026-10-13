@@ -163,7 +163,7 @@ private:
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;
     QString m_clientNote;   // set by checkClientData, shown with the save result
-    VerifactuIntegration *m_verifactuIntegration;
+    VerifactuIntegration *m_verifactuIntegration = nullptr;
     // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
     // the requestFinished handler can patch exactly the rows of that submission
     // event (a save-time submit and a recovered partial-pay event of the same
@@ -173,8 +173,8 @@ private:
     // printable rather than just reporting the CSV.
     struct PendingSubmit { QString ticketNum; int seq = 0; bool printedWithoutQr = false; };
     QHash<QString, PendingSubmit> m_pendingSubmits;
-    Updater *m_updater;
-    BackupManager *m_backupManager;
+    Updater *m_updater = nullptr;
+    BackupManager *m_backupManager = nullptr;
 };
 
 #endif // MAINWINDOW_H

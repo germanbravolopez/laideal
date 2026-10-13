@@ -538,6 +538,16 @@ void MainWindow::continueDirectChain()
     m_verifactuIntegration->directBackend()->syncChain(
         [this](bool ok, const QString &message) {
             qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
+            const int atAeat = m_verifactuIntegration->highestNumberAtAeat();
+            const int local = readMaxValueInColumnFromTable(db, "n_recibo", "ingresos");
+            if (atAeat > local) {
+                // Restored from an older backup: AEAT already holds later numbers.
+                qWarning() << "MainWindow: AEAT holds ticket numbers up to" << atAeat << "- the database only" << local;
+                m_result->setText(UiKit::warnHtml(tr("La AEAT ya tiene facturas de este sistema hasta el nº %1 y esta base "
+                                                     "de datos llega al %2 (¿restaurada de una copia anterior?). El "
+                                                     "siguiente ticket será el %3.").arg(atAeat).arg(local).arg(atAeat + 1)));
+                setNextTicketNumber();
+            }
             if (!ok)
                 m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
             statusBar()->showMessage(tr("Conexión directa con la AEAT: %1").arg(message), 10000);
@@ -604,7 +614,8 @@ void MainWindow::resetAllContents()
 
 void MainWindow::setNextTicketNumber()
 {
-    ui->le_nr_ticket->setText(QString::number(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos") + 1));
+    ui->le_nr_ticket->setText(QString::number(
+        nextTicketNumber(db, m_verifactuIntegration ? m_verifactuIntegration->highestNumberAtAeat() : 0)));
 }
 
 void MainWindow::populateCbClient()
