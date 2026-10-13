@@ -1,5 +1,9 @@
 ﻿Releases:
 
+11.2
+- Bug fix: since 11.0, "Anular prendas" did not void unpaid garments ("0 prenda(s) anuladas... se han cobrado, enviado o bloqueado"), and "Recogida de Prendas" could not change the size, price, quantity or service of an unpaid garment, nor split it. Everything works again; garments that are paid, sent to the AEAT or closed in the accounts stay protected.
+- Safety: the next ticket number is calculated as a number, so it keeps counting correctly past 99999.
+
 11.1
 - Bug fix: pressing Enter in the ticket number of "Imprimir recibo" / "Imprimir factura" printed everything twice; it now prints once. In "Añadir prendas", "Anular prendas", "Anular factura" and "Rectificar factura" Enter now only searches the ticket. In every window, Enter in a field presses only the window's main button (or nothing), never another one such as "Buscar" or "Reintentar".
 
