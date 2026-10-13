@@ -875,50 +875,6 @@ static const QString kGastosPeriodWhere =
 
 
 
-int readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year)
-{
-    if (dbNotConfigured(db, __func__)) return 0;
-
-    const QString mStr = monthStr(month);
-    const QString yStr = QString::number(year);
-
-    const QString pattern = "%-" + mStr + "-" + yStr;
-    db.open();
-    QSqlQuery q(db);
-    int editLock = 2; // 2 = no data found for period
-    // COALESCE(MAX(edit_lock), 0): the month reads locked (1) if ANY row in it is
-    // locked, regardless of row order, and 0 when it is open or has no rows. MAX
-    // (not "first row wins") matters because a row added after the close (e.g. a
-    // split-off garment) carries edit_lock 0 - it must not mask a locked sibling and
-    // report an already-locked month as open. Callers only branch on == 1 / == 0,
-    // so keeping the empty-month result at 0 preserves existing behaviour.
-    if (table == "ingresos") {
-        q.prepare("SELECT COALESCE(MAX(edit_lock), 0) FROM ingresos WHERE fecha_pago LIKE :pat");
-        q.bindValue(":pat", pattern);
-        q.exec();
-    } else if (table == "gastos") {
-        q.prepare("SELECT COALESCE(MAX(edit_lock), 0) FROM gastos WHERE fecha LIKE :pat");
-        q.bindValue(":pat", pattern);
-        q.exec();
-    } else {
-        qCritical() << "readLockForMonthAndYear: unsupported table:" << table;
-        QMessageBox::critical(nullptr, "Error leyendo el bloqueo de contabilidad",
-                              "Tabla solicitada no está soportada por la función 'readLockForMonthAndYear'.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
-
-    if (q.isSelect())
-        editLock = q.first() ? q.value(0).toInt() : 0;
-    else {
-        qCritical() << "readLockForMonthAndYear: query error for table" << table << "month" << mStr << "year" << yStr;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar readLockForMonthAndYear.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
-    db.close();
-    return editLock;
-}
-
 int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year)
 {
     if (dbNotConfigured(db, __func__)) return 0;

@@ -418,40 +418,6 @@ private slots:
     }
 
 
-    void test_readLockForMonthAndYear()
-    {
-        // Note: unlike readLockForQuarter, this function returns 0 (not 2) for an
-        // empty month - a valid-but-empty SELECT falls to `q.first() ? ... : 0`,
-        // so "no data" and "open" are conflated here. Its only caller checks ==1,
-        // so this is harmless; the contract is asserted as-is.
-        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // no data -> 0
-        insertIngreso("T1", "15-06-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
-        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 0); // open
-        exec("UPDATE ingresos SET edit_lock = 1 WHERE n_recibo = 'T1'");
-        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 6, 2026), 1); // locked
-
-        // A locked month must read as locked even when an unlocked row sorts first.
-        // Rows come back in rowid (insertion) order, so insert the unlocked row -
-        // e.g. a garment voided into the month with edit_lock 0, see voidGarmentRow
-        // stamping fecha_pago with the cancellation date - BEFORE the locked one:
-        // a "first row wins" read would return 0 and let the locked month be edited.
-        // COALESCE(MAX(edit_lock),0) is order-independent and reports the lock.
-        insertIngreso("V1", "02-07-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
-        insertIngreso("V2", "10-07-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
-        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 7, 2026), 1); // locked despite order
-
-        // The mirror corner case: the locked row sorts FIRST, an unlocked sibling
-        // after it. Also must read locked - MAX is order-independent both ways, so
-        // a single locked row is enough to report the month as locked (the safe
-        // direction: a false-lock only blocks an edit, a false-open would let a
-        // closed accounting period be modified). Not reachable through the app
-        // (updateLockForMonth locks a whole month uniformly), but pinned so the
-        // conservative contract can't silently regress.
-        insertIngreso("W1", "05-08-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
-        insertIngreso("W2", "12-08-2026", "0.00", "NO", "ANULADA", /*editLock=*/0);
-        QCOMPARE(readLockForMonthAndYear(m_db, "ingresos", 8, 2026), 1); // locked despite order
-    }
-
     // The 9.1 regression guard: a quarter with income only in its first month
     // (nothing in the last month) must still report its real lock state, not 2.
     void test_readLockForQuarter_firstMonthOnly()

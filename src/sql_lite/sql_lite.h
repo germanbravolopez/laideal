@@ -64,12 +64,10 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-int         readLockForMonthAndYear(QSqlDatabase &db, const QString &table, int month, int year);
 // Quarter-wide edit_lock state (quarter 1-4). Returns 1 if any row of the quarter
 // is accounting-locked, 0 if the quarter has data but is open, 2 if it has no rows.
 // Reads all three months of the quarter, so a quarter is not mistaken for empty
-// when only its last month lacks data (which readLockForMonthAndYear, reading a
-// single month, would do).
+// when only its last month lacks data.
 int         readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year);
 // Set edit_lock = value on both ingresos and gastos rows whose date falls in the
 // given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
@@ -321,8 +319,8 @@ QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDa
 QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 
 // True when Contabilidad has closed the quarter containing date: any ingresos or
-// gastos row of that quarter is locked. Unlike readLockForMonthAndYear, a month
-// with no rows inside a closed quarter still reads as closed.
+// gastos row of that quarter is locked; a month with no rows inside a closed quarter
+// still reads as closed.
 bool quarterIsClosed(QSqlDatabase &db, QDate date);
 
 // Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.

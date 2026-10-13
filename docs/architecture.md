@@ -188,7 +188,7 @@ Notable items:
 - `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type), then backfills unpaid `'PENDIENTE'` rows to `'SIN COBRAR'` (10.9); idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
-- `readLockForMonthAndYear()` → returns 1 if quarter is locked
+- `quarterIsClosed()` / `readLockForQuarter()` → whether Contabilidad closed the quarter
 - `updateLockForMonth()` → locks/unlocks a month+year in both `ingresos` and `gastos`
 - `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
 

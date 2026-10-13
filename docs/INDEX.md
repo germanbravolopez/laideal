@@ -167,7 +167,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
 | Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`) — pixmap from save flow or REST `/GetQrCode`, rastered into the ESC/POS stream (`EscPosBuilder::rasterImage`); the legal verification leyenda prints below the QR when `verifactu_estado == ENVIADA` |
-| Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
+| Accounting lock check | `src/sql_lite/sql_lite.h` (`quarterIsClosed`, `readLockForQuarter`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print flow (ESC/POS) | `docs/modules/imprimir.md` (orchestration) + `docs/modules/printing.md` (ESC/POS core) + `src/imprimir/imprimir.h` |
 | ESC/POS command subset / code page (PC858) | `docs/modules/printer/03_escpos_command_reference.md` + `src/printing/escposbuilder.cpp` (`toCp858`) |

@@ -303,8 +303,8 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
             title = "Contabilidad - Trimestre " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
         }
         else {
-            // Closing is quarterly: the month reads closed when its quarter is (even a
-            // month without rows, which readLockForMonthAndYear would report as open).
+            // Closing is quarterly: the month reads closed when its quarter is, even a
+            // month without rows.
             const bool cerrada = quarterIsClosed(db, QDate(year, m_sbPeriod->value(), 1));
             title = "Reporte Mensual - Mes " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
             subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
