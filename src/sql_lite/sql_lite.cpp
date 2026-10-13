@@ -989,7 +989,9 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
             const QDate date = read ? QDate::fromString(q.value(1).toString(), "dd-MM-yyyy") : QDate();
             q.finish();
             db.close();
-            if (type == QLatin1String("S") && !markTicketRectified(db, original, date.isValid() ? date : QDate::currentDate()))
+            // Into an open period: a quarter closed meanwhile must not change.
+            const QDate when = date.isValid() && !quarterIsClosed(db, date) ? date : QDate::currentDate();
+            if (type == QLatin1String("S") && !markTicketRectified(db, original, when))
                 qWarning() << "applySettledVerifactuResult: rectificativa" << nRecibo << "accepted, original" << original
                            << "not marked RECTIFICADA";
         }
@@ -1013,6 +1015,20 @@ int refusedInvoiceCount(QSqlDatabase &db)
     q.finish();
     db.close();
     return count;
+}
+
+QString pendingRectificationOf(QSqlDatabase &db, const QString &original)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return QString();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :o AND pagado = 'SI' "
+              "AND verifactu_estado = 'PENDIENTE' LIMIT 1");
+    q.bindValue(":o", original);
+    const QString number = q.exec() && q.next() ? q.value(0).toString() : QString();
+    q.finish();
+    db.close();
+    return number;
 }
 
 QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
@@ -1876,9 +1892,11 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
 
     db.open();
     QSqlQuery q(db);
+    // Never over a cancelled or already rectified invoice (a late acceptance).
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
               "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha) "
-              "WHERE n_recibo = :num AND pagado = 'SI'");
+              "WHERE n_recibo = :num AND pagado = 'SI' "
+              "AND COALESCE(verifactu_estado, '') NOT IN ('ANULADA', 'RECTIFICADA')");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
     q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
     q.bindValue(":num",    nRecibo);

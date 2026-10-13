@@ -481,6 +481,11 @@ QPixmap AeatDirectBackend::qrFor(const VerifactuInvoice &invoice) const
     return QPixmap::fromImage(AeatQr::image(qrUrlFor(invoice), kQrPixelsPerModule));
 }
 
+bool AeatDirectBackend::holdsRecord(AeatStore::Kind kind, const QString &invoiceNumber)
+{
+    return m_store.latest(kind, invoiceNumber, m_config.issuerNif).isValid();
+}
+
 QPixmap AeatDirectBackend::queuedRecordQr(const VerifactuInvoice &invoice)
 {
     const AeatStore::Record r = m_store.latest(AeatStore::Kind::Registration, invoice.getInvoiceNumber(), m_config.issuerNif);

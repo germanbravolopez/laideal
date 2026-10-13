@@ -400,6 +400,82 @@ private slots:
         QCOMPARE(refusedInvoiceCount(m_db), 0);
     }
 
+    // While a rectificativa of a ticket waits for AEAT, the ticket can be neither rectified
+    // nor cancelled again (a second R5, or a cancellation the late R5 would overwrite).
+    void test_pendingRectificativaBlocksTheTicket()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "770", "h770a", "10.00", today(), "A-ORIG0770"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+                                "verifactu_rectification_type) VALUES ('771', 'Cliente E2E', '" + today() + "', '" + today()
+                                + "', '', '8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '0', 'h771a', "
+                                "'PENDIENTE', 0, '770', 'S')"));
+        RectifyInvoiceDialog rectify(m_db);
+        rectify.m_verifactu = m_verifactu;
+        rectify.findChild<QLineEdit *>("leTicketNum")->setText("770");
+        QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        QVERIFY2(rectify.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"),
+                 qPrintable(rectify.findChild<QLabel *>("lblResult")->text()));
+        QVERIFY(!rectify.findChild<QDoubleSpinBox *>("sbAmount")->isEnabled());
+
+        CancelInvoiceDialog cancel(m_db);
+        cancel.m_verifactu = m_verifactu;
+        cancel.findChild<QLineEdit *>("leTicketNum")->setText("770");
+        QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+        auto *table = cancel.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 1);
+        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
+        QVERIFY(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty() && m_server.requestsTo("Cancel").isEmpty());
+    }
+
+    // With the direct client, a rectificativa is "pending" only when its record was
+    // generated: before the first chain sync (AEAT unreachable) none is, so the row is an
+    // error to redo, never a PENDIENTE row nothing would ever send.
+    void test_rectifyDirectWithoutRecordIsAnError()
+    {
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));               // never synced here
+        QVERIFY(E2e::seedSentGarment(m_db, "775", "h775a", "10.00", today(), "A-ORIG0775"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("775");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(dlg.findChild<QLabel *>("lblResult")->text().contains("Error al rectificar"), 20000);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE verifactu_rectifies_n_recibo = '775'"),
+                 QStringLiteral("ERROR"));
+    }
+
+    // A cancellation the direct client stored but could not send yet is pending, not an
+    // error, and the button stays off (it is sent on its own).
+    void test_cancelDirectQueuedIsPending()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(E2e::seedSentGarment(m_db, "778", "h778a", "10.00", today(), "A-ORIG0778"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        CancelInvoiceDialog cancel(m_db);
+        cancel.m_verifactu = &direct;
+        cancel.findChild<QLineEdit *>("leTicketNum")->setText("778");
+        QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+        auto *table = cancel.findChild<QTableWidget *>("table");
+        qobject_cast<QPushButton *>(table->cellWidget(0, 5))->click();
+        QTRY_VERIFY_WITH_TIMEOUT(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"), 20000);
+        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
+        QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "778").state, AeatStore::kPending);
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

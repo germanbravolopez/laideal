@@ -1,4 +1,5 @@
 #include "rectifyinvoicedialog.h"
+#include "aeatstore.h"
 
 #include <QComboBox>
 #include <QDateEdit>
@@ -230,7 +231,12 @@ void RectifyInvoiceDialog::onSearchClicked()
              verifactuEstadoToString(verifactuEstadoFromString(estado))));
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
-    if (estadoEnum == VerifactuEstado::Enviada) {
+    const QString pending = pendingRectificationOf(db, ticketNum);
+    if (estadoEnum == VerifactuEstado::Enviada && !pending.isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
+                                                "espere a que se registre antes de rectificarlo de nuevo.")
+                                                 .arg(pending.toHtmlEscaped())));
+    } else if (estadoEnum == VerifactuEstado::Enviada) {
         m_loadedTicket        = ticketNum;
         m_loadedCliente       = cliente;
         m_loadedImporteTotal  = importe;
@@ -404,8 +410,11 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
 
 bool RectifyInvoiceDialog::queuedWithoutAnswer(const VerifactuResult &result) const
 {
+    // Only when the record was generated: before the first chain sync none is, and the
+    // row is an error to redo (under its number), not something that sends itself.
     return m_verifactu && m_verifactu->directBackend()
-           && (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING);
+           && (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING)
+           && m_verifactu->directBackend()->holdsRecord(AeatStore::Kind::Registration, m_newInvoiceNumber);
 }
 
 void RectifyInvoiceDialog::insertPlaceholderRow()

@@ -1155,6 +1155,32 @@ private slots:
         QVERIFY(verifactuEventRecordXml(m_db, "870", 2).isEmpty());
     }
 
+    // A rectificativa still waiting for AEAT blocks the ticket; a late acceptance never
+    // turns a cancelled invoice RECTIFICADA, and lands in an open period when the R5's
+    // quarter was closed meanwhile.
+    void test_pendingRectificativaGuards()
+    {
+        insertIngreso("880", "01-07-2026", "20.00", "SI", "ANULADA", 1, 0);         // Q3, closed
+        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+             "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+             "VALUES ('881', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', '1', 'r881', 'PENDIENTE', 0, '880', 'S')");
+        QCOMPARE(pendingRectificationOf(m_db, "880"), QStringLiteral("881"));
+        QVERIFY(pendingRectificationOf(m_db, "999").isEmpty());
+        VerifactuResult ok;
+        ok.status = VerifactuResult::SUCCESS;
+        QCOMPARE(applySettledVerifactuResult(m_db, "881", ok), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='880'"), QStringLiteral("ANULADA"));
+        QVERIFY(pendingRectificationOf(m_db, "880").isEmpty());
+
+        insertIngreso("882", "01-07-2026", "20.00", "SI", "ENVIADA", 1, 0);         // Q3, closed
+        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+             "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+             "VALUES ('883', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', '1', 'r883', 'PENDIENTE', 0, '882', 'S')");
+        QCOMPARE(applySettledVerifactuResult(m_db, "883", ok), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE n_recibo='882'"),
+                 QStringLiteral("RECTIFICADA|") + QDate::currentDate().toString("dd-MM-yyyy"));
+    }
+
     // A substitution rectificativa AEAT accepted after its dialog closed marks the
     // original RECTIFICADA (it stops counting as income); one by differences does not.
     // A rectificativa is never offered to the startup recovery (it would go as an F2).
