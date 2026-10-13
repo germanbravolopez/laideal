@@ -90,11 +90,11 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 > Art. 13 RD 1007/2023. The producer must include "una declaración responsable" by which they certify compliance with the regulation. It must be "por escrito y de modo visible en el propio sistema informático en cada una de sus versiones" and include the producer's identifying and location data.
 
-**[COVERED]**
-- `MainWindow → Ayuda → Acerca de Verifactu...` opens a dialog (`on_actionAcerca_de_Verifactu_triggered()` in `mainwindow.cpp`) with the fixed-text declaración responsable.
-- Producer NIF, name and address come from `AppSettings::verifactuNif()`, `verifactuName()` (falling back to `businessName()`), `businessAddress()` and `businessCity()` — the user-business doubles as producer for this bespoke deployment.
-- Software name (`La Ideal`) and version are interpolated from `PROJECT_VERSION_MAJOR/MINOR` (generated `version.h`), so the declaration is automatically per-version as required by Art. 13.
-- The body cites RD 1007/2023 and Orden HAC/1177/2024 explicitly, states VERI*FACTU mode, and (since 8.5) declares the **monoperador** scope that closes Req. 5 (Art. 8.1 trazabilidad) under the current deployment.
+**[COVERED, pending the producer's signature data]** (rewritten for 12.0 after AEAT confirmed on 13-10-2026 that the producer signs it even for own use)
+- Content per art. 15 of Orden HAC/1177/2024, built by `ProducerDeclaration::html` (`src/verifactu/producerdeclaration.*`): the title "DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN", then items a) to l) in order, each preceded by its description - name La Ideal, code LI, the version (`PROJECT_VERSION`), components and description, only VERI\*FACTU = Sí, several obligados tributarios = No, signature types = not applicable, producer Germán Bravo López and NIF 75929840D (the same `AeatRecord::laIdealSystem` the records carry), his postal address, the compliance statement of 15.1.k, and the date and place of signature - plus an annex (15.2.d) with the single-operator scope that closes Req. 5 (art. 8.1).
+- Items j) and l) come from `ProducerDeclaration::currentSignature()`, filled in when the producer signs each version; until then they read "(pendiente)" and the window says the declaración is pending.
+- `MainWindow → Ayuda → Acerca de Verifactu...` shows it inside the program (15.3) and saves it as PDF for the client ("Guardar como PDF..."). With the IreneSolutions connection the window notes that their service is another producer's component with its own declaración (15.4).
+- Until 11.2 the dialog named the issuer (the shop) as producer and missed most items.
 
 ## 9. QR y texto obligatorio en el ticket
 

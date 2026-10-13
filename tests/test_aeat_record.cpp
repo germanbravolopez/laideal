@@ -8,6 +8,7 @@
 
 #include "aeathash.h"
 #include "aeatrecord.h"
+#include "producerdeclaration.h"
 
 using namespace AeatRecord;
 
@@ -245,6 +246,33 @@ private slots:
         QVERIFY(page.contains("<sfLRC:ClavePaginacion><sf:IDEmisorFactura>89890001K</sf:IDEmisorFactura>"
                               "<sf:NumSerieFactura>30837</sf:NumSerieFactura><sf:FechaExpedicionFactura>09-03-2026"));
         writeSample("consulta_pagina.xml", page);
+    }
+
+    // Art. 15 of the Orden: the title, then items a) to l) in that order, each with its
+    // description; the producer is La Ideal's, never the issuer; what the producer has
+    // not filled in yet is shown as pending.
+    void test_producerDeclaration()
+    {
+        const QString pending = ProducerDeclaration::html("12.0", {});
+        QVERIFY(pending.contains(QString::fromUtf8("DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN")));
+        int at = 0;
+        for (const char *letter : { "a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)" }) {
+            const int next = pending.indexOf(QStringLiteral("<b>%1 ").arg(QLatin1String(letter)), at);
+            QVERIFY2(next > at, letter);
+            at = next;
+        }
+        QVERIFY(pending.contains("75929840D") && pending.contains(QString::fromUtf8("Germán Bravo López")));
+        QVERIFY(pending.contains(":</b> LI</p>"));
+        QVERIFY(pending.contains(QString::fromUtf8("versión 12.0")));
+        QVERIFY(pending.contains("(pendiente)"));
+        QVERIFY(!ProducerDeclaration::isComplete({}));
+
+        const ProducerDeclaration::Signature signed_{ "Calle Mayor 1, 18001 Granada", QDate(2026, 10, 14), QString::fromUtf8("Granada, España") };
+        QVERIFY(ProducerDeclaration::isComplete(signed_));
+        const QString done = ProducerDeclaration::html("12.0", signed_);
+        QVERIFY(!done.contains("(pendiente)"));
+        QVERIFY(done.contains(QString::fromUtf8("14 de octubre de 2026, Granada, España")));
+        QVERIFY(done.contains("Calle Mayor 1, 18001 Granada"));
     }
 };
 

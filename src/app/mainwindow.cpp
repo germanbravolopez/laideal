@@ -25,6 +25,8 @@
 #include "aeatexportdialog.h"
 #include "aeatcertificate.h"
 #include "aeatselftest.h"
+#include "producerdeclaration.h"
+#include "reporthtml.h"
 #include "uikit.h"
 #include <QTimer>
 #include <QThread>
@@ -38,6 +40,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QDateEdit>
+#include <QDir>
+#include <QFileDialog>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -213,7 +217,8 @@ void MainWindow::buildUi()
     actionMostrar_log->setToolTip(tr("Muestra la ubicación del archivo de log para enviar al soporte técnico"));
     QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu..."), this);
     actionAcerca_de_Verifactu->setObjectName("actionAcerca_de_Verifactu");
-    actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)"));
+    actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático "
+                                              "(art. 13 RD 1007/2023, art. 15 Orden HAC/1177/2024)"));
     QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora..."), this);
     actionHacer_copia_de_seguridad->setObjectName("actionHacer_copia_de_seguridad");
     actionHacer_copia_de_seguridad->setToolTip(tr("Crea una copia íntegra de la base de datos en la carpeta de copias (Art. 8.2.c RD 1007/2023)"));
@@ -1466,48 +1471,57 @@ void MainWindow::on_actionMostrar_log_triggered()
 // and the software version vary across installations.
 void MainWindow::on_actionAcerca_de_Verifactu_triggered()
 {
-    AppSettings *s = AppSettings::instance();
-    const QString nif     = s->verifactuNif().isEmpty()    ? QStringLiteral("-") : s->verifactuNif();
-    const QString name    = !s->verifactuName().isEmpty()  ? s->verifactuName()
-                          : (!s->businessName().isEmpty() ? s->businessName() : QStringLiteral("-"));
-    const QString address = s->businessAddress().isEmpty() ? QStringLiteral("-") : s->businessAddress();
-    const QString city    = s->businessCity().isEmpty()    ? QStringLiteral("-") : s->businessCity();
     const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);
-    const QString software = QStringLiteral("La Ideal");
+    const QString declaration = ProducerDeclaration::html(version);
 
     QDialog dlg(this);
-    UiKit::setUpDialog(&dlg, "Acerca de Verifactu", 600);
+    UiKit::setUpDialog(&dlg, tr("Acerca de Verifactu"), 640);
+    auto *layout = new QVBoxLayout(&dlg);
 
-    QVBoxLayout *layout = new QVBoxLayout(&dlg);
-
-    QLabel *body = UiKit::introPanel(QString());
-    body->setTextFormat(Qt::RichText);
-    body->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    body->setText(
-        QString("<h3 align=\"center\">DECLARACIÓN RESPONSABLE</h3>"
-                "<p align=\"center\"><i>Artículo 13 del Real Decreto 1007/2023, de 5 de diciembre</i></p>"
-                "<p><b>%1</b>, con NIF <b>%2</b> y domicilio en %3, %4, "
-                "en calidad de productor del sistema informático de facturación denominado "
-                "<b>%5</b> versión <b>%6</b>,</p>"
-                "<p><b>DECLARA</b> bajo su responsabilidad:</p>"
-                "<p>Que el sistema informático arriba identificado cumple con todos los requisitos "
-                "establecidos en el Real Decreto 1007/2023, de 5 de diciembre, por el que se aprueba "
-                "el Reglamento que establece los requisitos que deben adoptar los sistemas informáticos "
-                "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
-                "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
-                "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
-                "en el momento de su generación.</p>"
-                "<p>Que el sistema se utiliza en una instalación <b>monoperador</b>: existe un único "
-                "usuario operativo, identificado de forma implícita por la sesión de Windows del puesto "
-                "en el que se ejecuta. Bajo este alcance se da por cumplido el requisito de trazabilidad "
-                "por usuario establecido en el artículo 8.1 del Real Decreto 1007/2023. La incorporación "
-                "de un segundo operador exigirá habilitar previamente la identificación individual por "
-                "evento de facturación.</p>")
-            .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
-                 address.toHtmlEscaped(), city.toHtmlEscaped(),
-                 software, version));
+    auto *body = new QTextEdit(&dlg);
+    body->setObjectName("txtDeclaration");
+    body->setReadOnly(true);
+    body->setHtml(declaration);
+    body->setMinimumHeight(420);
     layout->addWidget(body);
-    layout->addLayout(UiKit::closeRow(&dlg));
+
+    auto *panel = new UiKit::ResultPanel(QString(), &dlg);
+    panel->setObjectName("lblResult");
+    QStringList notes;
+    if (!ProducerDeclaration::isComplete())
+        notes << UiKit::warnHtml(tr("Faltan datos del productor (dirección, fecha y lugar de la firma): "
+                                    "la declaración está pendiente de firmar."));
+    // Art. 15.4: another producer's component brings its own declaración.
+    if (!AppSettings::instance()->verifactuDirectAeat())
+        notes << UiKit::warnHtml(tr("Con la conexión a través de IreneSolutions, su servicio es un componente de otro "
+                                    "productor y necesita su propia declaración responsable (art. 15.4 de la Orden "
+                                    "HAC/1177/2024)."));
+    panel->setText(notes.join("<br>"));
+    panel->setVisible(!notes.isEmpty());
+    layout->addWidget(panel);
+
+    auto *row = new QHBoxLayout;
+    auto *save = UiKit::secondaryButton(tr("Guardar como PDF..."), "btnSavePdf");
+    row->addWidget(save);
+    row->addStretch();
+    auto *close = UiKit::primaryButton(tr("Cerrar"), "btnClose");
+    row->addWidget(close);
+    layout->addLayout(row);
+    connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
+    // Art. 15.3: the client can have it in a free, common format.
+    connect(save, &QPushButton::clicked, &dlg, [&dlg, panel, declaration, version]() {
+        const QString suggested = QDir(AppSettings::instance()->reportsRoot())
+                                      .filePath(QStringLiteral("declaracion_responsable_La_Ideal_%1.pdf").arg(version));
+        const QString file = QFileDialog::getSaveFileName(&dlg, tr("Guardar la declaración responsable"), suggested,
+                                                          tr("PDF (*.pdf)"));
+        if (file.isEmpty())
+            return;
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        const bool written = ReportHtml::writePdf(file, QStringLiteral("<html><body>%1</body></html>").arg(declaration));
+        panel->setVisible(true);
+        panel->setText(written ? UiKit::okHtml(tr("Declaración guardada en %1").arg(file.toHtmlEscaped()))
+                               : UiKit::errorHtml(tr("No se pudo guardar %1").arg(file.toHtmlEscaped())));
+    });
 
     dlg.exec();
 }

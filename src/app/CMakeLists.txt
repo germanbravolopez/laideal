@@ -48,6 +48,7 @@ target_link_libraries(laideal_app
     tableview
     contabilidad
     facturas
+    reporthtml
     add_garment
     verifactu
     updater
