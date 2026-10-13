@@ -368,6 +368,7 @@ target_link_libraries(test_e2e_app PRIVATE
     Qt${QT_VERSION_MAJOR}::Network
     laideal_app
     reporthtml
+    printing        # TicketRenderer::printableQr (a real QR's printed size)
 )
 add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)

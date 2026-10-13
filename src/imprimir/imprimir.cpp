@@ -320,11 +320,15 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 
     // Verifactu QR - facturas only. Recibos are claim tickets, not tax documents:
     // they carry no Verifactu metadata, so a QR would mislead the customer into
-    // thinking the receipt was submitted to AEAT. Raster the AEAT-issued pixmap
-    // verbatim so the printed QR is byte-exact with what AEAT registered.
+    // thinking the receipt was submitted to AEAT. The symbol is the one issued (the
+    // same modules), redrawn at the size the Orden requires.
     const QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
-        d.qr = qr.scaled(192, 192, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
+        d.qr = TicketRenderer::printableQr(qr.toImage());
+        if (d.qr.isNull()) {
+            qWarning() << "Imprimir: QR not readable, printed as received";
+            d.qr = qr.toImage();
+        }
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a

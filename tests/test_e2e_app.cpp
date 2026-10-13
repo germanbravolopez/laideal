@@ -58,6 +58,9 @@
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
+#include "aeatqr.h"
+#include "aeathash.h"
+#include "ticketrenderer.h"
 #include "voidgarmentsdialog.h"
 
 class TestE2eApp : public QObject
@@ -712,6 +715,26 @@ private slots:
         fra.verifactuIssued = false;
         fra.buildTicket(true, false);
         QVERIFY(!fra.ticketBytes().contains("Factura verificable"));
+    }
+
+    // A real VERI*FACTU QR (the direct client's encoder, level M, an AEAT URL) as it is
+    // printed: 30-40 mm (art. 21.1 of the Orden), whole dots per module, quiet zone.
+    void test_printedQrSizeOfARealQr()
+    {
+        const QString url = AeatHash::qrValidationUrl("24215141M", "31163-12", QDate(2026, 10, 13), "1234.56", false);
+        const int modules = AeatQr::moduleCount(url);
+        const QImage out = TicketRenderer::printableQr(AeatQr::image(url, 5));
+        QVERIFY(!out.isNull());
+        const int dots = out.width() / (modules + 8);
+        QCOMPARE(out.width(), (modules + 8) * dots);
+        QVERIFY2(modules * dots >= 240 && modules * dots <= 320, qPrintable(QString::number(modules * dots)));
+        QVERIFY(out.width() <= 420);                                           // fits the 58 mm roll
+        // The same modules as the encoder's one-pixel image.
+        const QImage reference = AeatQr::image(url, 1);
+        for (int y = 0; y < modules; ++y)
+            for (int x = 0; x < modules; ++x)
+                QCOMPARE(qGray(out.pixel((x + 4) * dots + dots / 2, (y + 4) * dots + dots / 2)) < 128,
+                         qGray(reference.pixel(x + 4, y + 4)) < 128);
     }
 
     // Startup recovery: a payment left PENDIENTE by a previous session is offered by

@@ -207,9 +207,9 @@ QString toAscii(const QVector<PreviewBlock> &blocks, int paperDots)
     return lines.join('\n');
 }
 
-// A QR-like placeholder image (three finder squares + a checker field), scaled
-// up - stands in for the real AEAT pixmap in the sample factura.
-QImage fakeQr()
+// A QR-like placeholder image (three finder squares + a checker field), one pixel
+// per module, no quiet zone; fakeQr() scales it up as a stand-in for the AEAT pixmap.
+QImage fakeQrModules()
 {
     const int mods = 25;
     QImage q(mods, mods, QImage::Format_RGB32);
@@ -227,7 +227,26 @@ QImage fakeQr()
             }
     };
     finder(0, 0); finder(mods - 7, 0); finder(0, mods - 7);
-    return q.scaled(192, 192);
+    return q;
+}
+
+QImage fakeQr()
+{
+    return fakeQrModules().scaled(192, 192);
+}
+
+// `modules` with a 4-module quiet zone, `pixels` per module.
+QImage withQuietZone(const QImage &modules, int pixels)
+{
+    QImage q((modules.width() + 8) * pixels, (modules.height() + 8) * pixels, QImage::Format_RGB32);
+    q.fill(qRgb(255, 255, 255));
+    for (int y = 0; y < modules.height(); ++y)
+        for (int x = 0; x < modules.width(); ++x)
+            if (qGray(modules.pixel(x, y)) < 128)
+                for (int dy = 0; dy < pixels; ++dy)
+                    for (int dx = 0; dx < pixels; ++dx)
+                        q.setPixel((x + 4) * pixels + dx, (y + 4) * pixels + dy, qRgb(0, 0, 0));
+    return q;
 }
 
 TicketData sampleHeader()
@@ -343,6 +362,45 @@ private slots:
         for (const auto &b : blocks) if (b.kind == PreviewBlock::Raster) hasRaster = true;
         QVERIFY(hasRaster);
         QVERIFY(QFile(m_outDir + "/preview_factura.png").size() > 0);
+    }
+
+    // Art. 21.1 of the Orden: the printed QR measures 30-40 mm (240-320 dots at 8
+    // dots/mm), every module the same whole number of dots, the same modules as the
+    // source - a crisp one (direct client) or a smoothly scaled one (gateway pixmap) -
+    // and a 4-module quiet zone; it fits the 58 mm roll too.
+    void test_printableQr()
+    {
+        const QImage grid = fakeQrModules();
+        const int n = grid.width();
+        for (const QImage &source : { withQuietZone(grid, 5),
+                                      withQuietZone(grid, 1).scaled(192, 192, Qt::KeepAspectRatio, Qt::SmoothTransformation) }) {
+            const QImage out = TicketRenderer::printableQr(source);
+            QVERIFY2(!out.isNull(), qPrintable(QString("source %1x%2").arg(source.width()).arg(source.height())));
+            const int dots = (out.width() / (n + 8));
+            QCOMPARE(out.width(), (n + 8) * dots);
+            QVERIFY2(n * dots >= 240 && n * dots <= 320, qPrintable(QString::number(n * dots)));
+            QVERIFY(out.width() <= 420);
+            for (int y = 0; y < n; ++y)
+                for (int x = 0; x < n; ++x)
+                    QCOMPARE(qGray(out.pixel((x + 4) * dots + dots / 2, (y + 4) * dots + dots / 2)) < 128,
+                             qGray(grid.pixel(x, y)) < 128);
+        }
+        QVERIFY(TicketRenderer::printableQr(QImage()).isNull());
+        QImage blank(100, 100, QImage::Format_RGB32);
+        blank.fill(qRgb(255, 255, 255));
+        QVERIFY(TicketRenderer::printableQr(blank).isNull());
+    }
+
+    // Art. 20.1.b: the leyenda in a well-visible font like the rest (Font A, not B),
+    // on two lines that fit both paper widths.
+    void test_leyendaInBodyFont()
+    {
+        const QByteArray bytes = TicketRenderer::render(sampleFactura(), 420);
+        const int at = bytes.indexOf("Factura verificable en la sede");
+        QVERIFY(at > 0);
+        const int font = bytes.lastIndexOf("\x1bM", at);
+        QVERIFY(font < 0 || bytes.at(font + 2) == 0);                          // Font A (the default)
+        QVERIFY(bytes.indexOf("de la AEAT", at) > at);
     }
 };
 
