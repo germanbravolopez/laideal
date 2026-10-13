@@ -263,6 +263,8 @@ private slots:
         }
         QVERIFY(pending.contains("75929840D") && pending.contains(QString::fromUtf8("Germán Bravo López")));
         QVERIFY(pending.contains(":</b> LI</p>"));
+        // a) is the NombreSistemaInformatico every record sends.
+        QVERIFY(pending.contains(":</b> " + AeatRecord::laIdealSystem("12.0", QString()).systemName + "</p>"));
         QVERIFY(pending.contains(QString::fromUtf8("versión 12.0")));
         QVERIFY(pending.contains("(pendiente)"));
         QVERIFY(!ProducerDeclaration::isComplete({}));

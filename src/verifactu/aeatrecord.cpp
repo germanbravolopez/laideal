@@ -236,7 +236,7 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
 
 SystemInfo laIdealSystem(const QString &version, const QString &installationNumber)
 {
-    return { QString::fromUtf8("Germán Bravo López"), QStringLiteral("75929840D"), QStringLiteral("LAIDEAL"),
+    return { QString::fromUtf8("Germán Bravo López"), QStringLiteral("75929840D"), QStringLiteral("La Ideal"),
              QStringLiteral("LI"), version, installationNumber };
 }
 

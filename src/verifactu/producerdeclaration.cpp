@@ -46,7 +46,7 @@ QString html(const QString &version, const Signature &signature)
 
     QStringList out;
     out << QString::fromUtf8("<h3 align=\"center\">DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN</h3>")
-        << item("a", QString::fromUtf8("Nombre del sistema informático"), QStringLiteral("La Ideal"))
+        << item("a", QString::fromUtf8("Nombre del sistema informático"), system.systemName.toHtmlEscaped())
         << item("b", QString::fromUtf8("Código identificador del sistema informático"), system.systemId)
         << item("c", QString::fromUtf8("Identificador completo de la versión"), version.toHtmlEscaped())
         << item("d", QString::fromUtf8("Componentes, hardware y software, y descripción de lo que hace y de sus principales funcionalidades"),

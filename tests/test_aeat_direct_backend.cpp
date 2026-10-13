@@ -349,6 +349,7 @@ private slots:
         const AeatRecord::SystemInfo s = AeatRecord::laIdealSystem("12.0", "LAIDEAL-1");
         QCOMPARE(s.producerNif, QStringLiteral("75929840D"));
         QCOMPARE(s.systemId, QStringLiteral("LI"));
+        QCOMPARE(s.systemName, QStringLiteral("La Ideal"));                    // as in the declaración's a)
         QCOMPARE(s.version, QStringLiteral("12.0"));
         QCOMPARE(s.installationNumber, QStringLiteral("LAIDEAL-1"));
     }
