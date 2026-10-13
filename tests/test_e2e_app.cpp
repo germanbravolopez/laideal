@@ -29,6 +29,9 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QBuffer>
+#include <QElapsedTimer>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QSqlTableModel>
 #include <QXmlStreamReader>
 
@@ -70,6 +73,7 @@ class TestE2eApp : public QObject
     QTemporaryDir m_dir;
     QSqlDatabase m_db;
     FakeVerifactuServer m_server;
+    QTcpServer m_deadAeat;          // closes every connection: the direct client's endpoint here
     VerifactuIntegration *m_verifactu = nullptr;
     ModalAutoCloser *m_popups = nullptr;
     ModalDriver *m_driver = nullptr;
@@ -167,9 +171,18 @@ private slots:
         QVERIFY(m_dir.isValid());
         QVERIFY(m_server.start());
         VerifactuConfig::setEndpointOverride(m_server.baseUrl());
-        // The direct client never reaches a real endpoint here: a dead local port for the
+        // The direct client never reaches a real endpoint here: a local port that closes
+        // every connection at once (a closed port is slow to fail on Windows), for the
         // whole suite, cleared only after every backend is gone.
-        AeatDirectBackend::setEndpointOverride("http://127.0.0.1:9/never-used");
+        QVERIFY(m_deadAeat.listen(QHostAddress::LocalHost));
+        connect(&m_deadAeat, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket *socket = m_deadAeat.nextPendingConnection())
+                socket->abort();
+        });
+        AeatDirectBackend::setEndpointOverride(QStringLiteral("http://127.0.0.1:%1/never-used").arg(m_deadAeat.serverPort()));
+        // Records earlier cases left unsent fail at once there: retry them quickly, so a
+        // case's own record is not held behind the 60 s retry delay.
+        AeatDirectBackend::setRetryDelaySeconds(1);
         // Safety net: refuse to run unless every Verifactu endpoint is the local fake.
         QVERIFY2(VerifactuConfig().getEndpointUrl().startsWith(QLatin1String("http://127.0.0.1:")),
                  "Verifactu endpoint is not the local fake server - aborting before any request");
@@ -196,6 +209,7 @@ private slots:
     {
         VerifactuConfig::setEndpointOverride(QString());
         AeatDirectBackend::setEndpointOverride(QString());
+        AeatDirectBackend::setRetryDelaySeconds(60);
     }
 
     void init()
@@ -227,6 +241,34 @@ private slots:
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE hash='h880a'"));
         QMetaObject::invokeMethod(&mw, "updateRefusedInvoices");
         QVERIFY(!refused->isVisibleTo(&mw));
+    }
+
+    // The main window over the direct connection: a paid ticket's record is generated
+    // and chained at once, so the factura with the QR goes out without waiting for AEAT
+    // (the gateway path waits up to 3 s); the rows stay PENDIENTE until AEAT answers.
+    void test_mainWindow_directSavePrintsAtOnce()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *direct = mw.findChild<VerifactuIntegration *>();
+        QVERIFY(direct && direct->directBackend());
+        QTRY_VERIFY_WITH_TIMEOUT(direct->directBackend()->chainReady(), 15000);   // the start-up chain sync
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Directo");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        QTest::ignoreMessage(QtDebugMsg, QRegularExpression("isPaid=true qrBeforeReply= true"));
+        QElapsedTimer t;
+        t.start();
+        clickSave(mw);
+        QVERIFY2(t.elapsed() < 2500, qPrintable(QString::number(t.elapsed())));   // no 3 s wait
+        QCOMPARE(scalar(QStringLiteral("SELECT pagado || '|' || verifactu_estado FROM ingresos WHERE n_recibo='%1'")
+                            .arg(ticket)), QStringLiteral("SI|PENDIENTE"));
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, ticket).state, AeatStore::kPending);
+        QVERIFY(m_server.requestsTo("Create").isEmpty());                      // never through the gateway
     }
 
     void test_mainWindow_saveUnpaidThenPaidTicket()

@@ -552,6 +552,31 @@ private slots:
         QCOMPARE(m_server->sentRecords().last().previousHash, ours);
     }
 
+    // The QR printed before AEAT answers comes only from this issuer's record still
+    // pending, with the invoice's date and amount: none once AEAT accepted or refused it.
+    void test_queuedRecordQrOnlyForItsPendingRecord()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("960", 10))).status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY(!backend.queuedRecordQr(ticket("960", 10)).isNull());          // pending: its QR
+        QVERIFY(backend.queuedRecordQr(ticket("960", 11)).isNull());           // another amount
+        AeatDirectBackend::Config other = config();
+        other.issuerNif = "B11111111";
+        AeatDirectBackend otherIssuer(other, m_db);
+        VerifactuInvoice theirs = ticket("960", 10);
+        theirs.setSellerNIF("B11111111");
+        QVERIFY(otherIssuer.queuedRecordQr(theirs).isNull());                  // not this issuer's record
+
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("961", 10))).isSuccess());
+        QVERIFY(backend.queuedRecordQr(ticket("961", 10)).isNull());           // accepted: no longer queued
+        m_server->rejectNext("962", "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("962", 10))).status, VerifactuResult::ERROR);
+        QVERIFY(backend.queuedRecordQr(ticket("962", 10)).isNull());           // refused
+    }
+
     // An invoice number is unique per issuer only: after the NIF changes, the same number
     // is a new invoice of the new issuer - never answered with the old issuer's outcome,
     // never flagged as a resend of the old one's refused record.
