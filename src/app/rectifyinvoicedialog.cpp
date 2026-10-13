@@ -318,11 +318,18 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // number is claimed locally before the AEAT round-trip. Otherwise a regular
     // MainWindow::saveTicket happening during the seconds-long AEAT call could pick the
     // same number. Same pattern as MainWindow::saveTicket -> updateTicketVerifactuFields.
-    m_newInvoiceNumber = QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat()));
+    // A rectificativa of this ticket AEAT refused is resent corrected under its own
+    // number (AEAT, 13-10-2026), its row reused: never a second rectificativa beside it.
+    const QString refused = refusedRectificationOf(db, m_loadedTicket);
+    m_newInvoiceNumber = refused.isEmpty() ? QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat()))
+                                           : refused;
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
-    insertPlaceholderRow();
+    if (refused.isEmpty())
+        insertPlaceholderRow();
+    else
+        reusePlaceholderRow();
 
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
                                             : VerifactuInvoice::BY_DIFFERENCES;
@@ -466,6 +473,28 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     if (!q.exec())
         qWarning() << "RectifyInvoiceDialog: INSERT placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
+    db.close();
+}
+
+void RectifyInvoiceDialog::reusePlaceholderRow()
+{
+    qDebug() << "RectifyInvoiceDialog: resending refused rectificativa" << m_newInvoiceNumber << "of" << m_loadedTicket;
+    const QString fechaStr = m_newInvoiceDate.toString("dd-MM-yyyy");
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_recepcion = :f, fecha_pago = :f, importe = :imp, "
+              "verifactu_rectification_type = :t, verifactu_estado = :e, verifactu_error = '' "
+              "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
+    q.bindValue(":f",   fechaStr);
+    q.bindValue(":imp", QString::number(m_submittedAmount, 'f', 2));
+    q.bindValue(":t",   VerifactuInvoice::rectificationTypeToString(
+                            m_submittedIsSubstitution ? VerifactuInvoice::BY_SUBSTITUTION : VerifactuInvoice::BY_DIFFERENCES));
+    q.bindValue(":e",   verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    q.bindValue(":n",   m_newInvoiceNumber);
+    q.bindValue(":o",   m_loadedTicket);
+    if (!q.exec())
+        qWarning() << "RectifyInvoiceDialog: UPDATE refused rectificativa row failed for" << m_newInvoiceNumber
+                   << "-" << q.lastError().text();
     db.close();
 }
 

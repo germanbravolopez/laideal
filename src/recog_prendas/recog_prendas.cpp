@@ -999,8 +999,8 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
         qWarning() << "retryVerifactuSubmit: refused for rectificativa" << invoiceId;
         m_result->setText(UiKit::errorHtml(tr("El ticket %1 es una rectificativa: no se reenvía como factura.")
                                                .arg(invoiceId.toHtmlEscaped()))
-                          + "<br>" + tr("Con la conexión directa se envía sola; si la AEAT la rechazó, hágala de nuevo "
-                                        "en Rectificar factura."));
+                          + "<br>" + tr("Si la AEAT la rechazó, hágala de nuevo en Rectificar factura: se reenvía "
+                                        "corregida con el mismo número."));
         return;
     }
     const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);

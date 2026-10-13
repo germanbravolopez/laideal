@@ -61,6 +61,9 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
 // An accepted substitution rectificativa also marks its original RECTIFICADA.
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
+// The number of a rectificativa of `original` AEAT refused (paid row in ERROR), or empty:
+// redone, it is resent corrected under that same number (AEAT, 13-10-2026).
+QString refusedRectificationOf(QSqlDatabase &db, const QString &original);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);

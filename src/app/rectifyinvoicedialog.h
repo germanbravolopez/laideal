@@ -43,6 +43,8 @@ private:
     // n_recibo is claimed locally before the AEAT round-trip - prevents a regular
     // MainWindow::saveTicket from re-using the same number while we wait.
     void insertPlaceholderRow();
+    // The refused rectificativa's own row, updated for its corrected resend.
+    void reusePlaceholderRow();
     // Patches the row inserted by insertPlaceholderRow with the AEAT reply: csv /
     // xml / hash / url + estado=ENVIADA on success, or estado=ERROR + description
     // on failure. For substitution-mode success it also marks the original rows

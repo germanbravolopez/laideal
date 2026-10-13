@@ -349,6 +349,57 @@ private slots:
                  qPrintable(rp.statusBar()->currentMessage()));
     }
 
+    // A rectificativa AEAT refused is redone in Rectificar factura under its own number
+    // (AEAT: resent corrected, Subsanacion + RechazoPrevio), its row reused - no second
+    // rectificativa beside it - and once accepted it no longer counts as refused.
+    // Recogida's Reintentar refuses it (it would go as a plain invoice).
+    void test_refusedRectificativaRedoneUnderItsNumber()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        const QDate paid = QDate::currentDate();
+        QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0760"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        const QString number = QString::number(nextTicketNumber(m_db, direct.highestNumberAtAeat()));
+        aeat.server.rejectNext(number, "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
+
+        const auto rectify = [this, &direct](double amount) -> QString {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = &direct;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("760");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);      // R5
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(amount);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+            QTest::qWaitFor([&dlg] { return !dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"); }, 15000);
+            return dlg.findChild<QLabel *>("lblResult")->text();
+        };
+        rectify(8.00);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + number + "'"), QStringLiteral("ERROR"));
+        QCOMPARE(refusedInvoiceCount(m_db), 1);
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = &direct;
+        QMetaObject::invokeMethod(&rp, "retryVerifactuSubmit", Q_ARG(QString, number), Q_ARG(int, 0));
+        QVERIFY(rp.findChild<QLabel *>("lblResult")->text().contains("es una rectificativa"));
+
+        const QString text = rectify(7.00);
+        QVERIFY2(text.contains("Rectificativa enviada"), qPrintable(text));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '760'"), QStringLiteral("1"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || importe FROM ingresos WHERE n_recibo = '" + number + "'"),
+                 QStringLiteral("ENVIADA|7.00"));
+        QVERIFY(aeat.server.sentRecords().last().afterRejection);              // Subsanacion + RechazoPrevio
+        QCOMPARE(aeat.server.sentRecords().last().invoiceNumber, number);
+        QCOMPARE(refusedInvoiceCount(m_db), 0);
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

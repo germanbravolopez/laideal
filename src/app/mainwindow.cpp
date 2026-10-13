@@ -840,7 +840,8 @@ void MainWindow::updateRefusedInvoices()
 {
     const int refused = refusedInvoiceCount(db);
     m_refusedInvoices->setText(UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: reenvíelas desde Recogida "
-                                                   "de Prendas (Verifactu\u2026)", "", refused)));
+                                                   "de Prendas (Verifactu\u2026); una rectificativa, desde Rectificar factura",
+                                                   "", refused)));
     m_refusedInvoices->setVisible(refused > 0);
 }
 

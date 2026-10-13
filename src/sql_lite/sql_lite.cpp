@@ -1015,6 +1015,20 @@ int refusedInvoiceCount(QSqlDatabase &db)
     return count;
 }
 
+QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return QString();
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :o AND pagado = 'SI' "
+              "AND verifactu_estado = 'ERROR' ORDER BY CAST(n_recibo AS INTEGER) DESC LIMIT 1");
+    q.bindValue(":o", original);
+    const QString number = q.exec() && q.next() ? q.value(0).toString() : QString();
+    q.finish();
+    db.close();
+    return number;
+}
+
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__) || !db.open())
