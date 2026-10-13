@@ -592,6 +592,16 @@ private slots:
         QMetaObject::invokeMethod(&rectify, "onSearchClicked");
         QVERIFY(rectify.findChild<QLabel *>("lblResult")->text().contains("no fue enviado"));
         QVERIFY(!rectify.findChild<QDoubleSpinBox *>("sbAmount")->isEnabled());
+
+        // A refused invoice: resent first (Reintentar), rectified once AEAT accepts it.
+        QVERIFY(E2e::seedSentGarment(m_db, "840", "h840a", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR' WHERE hash='h840a'"));
+        rectify.findChild<QLineEdit *>("leTicketNum")->setText("840");
+        QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        const QString refused = rectify.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(refused.contains("rechazó") && refused.contains("Reintentar") && refused.contains("rectifíquela"),
+                 qPrintable(refused));
+        QVERIFY(!rectify.findChild<QDoubleSpinBox *>("sbAmount")->isEnabled());
         QVERIFY(m_server.requests().isEmpty());
     }
 
