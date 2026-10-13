@@ -66,6 +66,16 @@ MainWindow::MainWindow(QWidget *parent)
     mainwindowInitialSettings();
     initializeVerifactu();
 
+    // Refused invoices stay in view until resent (the customer may hold their factura):
+    // refreshed on every AEAT outcome, and regularly for those settled in other windows.
+    m_refusedInvoices = new QLabel(this);
+    m_refusedInvoices->setObjectName("lblRefusedInvoices");
+    statusBar()->addPermanentWidget(m_refusedInvoices);
+    updateRefusedInvoices();
+    auto *refusedTimer = new QTimer(this);
+    connect(refusedTimer, &QTimer::timeout, this, &MainWindow::updateRefusedInvoices);
+    refusedTimer->start(30000);
+
     m_updater = new Updater(this);
     connect(m_updater, &Updater::updateAvailable,    this, &MainWindow::onUpdateAvailable);
     connect(m_updater, &Updater::noUpdateAvailable,  this, &MainWindow::onUpdaterNoUpdateAvailable);
@@ -520,6 +530,7 @@ void MainWindow::initializeVerifactu()
         }
         const int rows = applySettledVerifactuResult(db, invoiceId, result);
         qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
+        updateRefusedInvoices();
         if (rows > 0)
             showVerifactuRejection(invoiceId, result);
     });
@@ -824,6 +835,14 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     return reqId;
 }
 
+void MainWindow::updateRefusedInvoices()
+{
+    const int refused = refusedInvoiceCount(db);
+    m_refusedInvoices->setText(UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: reenvíelas desde Recogida "
+                                                   "de Prendas (Verifactu\u2026)", "", refused)));
+    m_refusedInvoices->setVisible(refused > 0);
+}
+
 void MainWindow::showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result)
 {
     // A definitive refusal can come after the customer got the factura with its QR:
@@ -877,6 +896,7 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
         qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
         showVerifactuRejection(verifactuInvoiceId(ticketNum, seq), result);
     }
+    updateRefusedInvoices();
 }
 
 bool MainWindow::saveTicket(double &storedTotal)

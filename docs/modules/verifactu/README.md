@@ -117,7 +117,7 @@ Never hardcode the string values — always go through the helpers, and map an A
 
 Do not "fix" this by raising the waits to 10 s without weighing the counter freeze — the adoption path already prevents data loss.
 
-With the **direct AEAT client** there is no wait at all once the record is generated: the QR comes from the stored record (`VerifactuIntegration::qrBeforeReply`), the factura prints at once with the leyenda, the rows stay `PENDIENTE` and the answer is adopted as above (`submitAdopted(..., facturaPrinted = true)`, so a late success does not ask for a reprint). AEAT's `TiempoEsperaEnvio` (60 s) made the bounded wait miss almost every second ticket. A definitive refusal is shown in the result panel (MainWindow and Recogida), since the customer may already have the factura.
+With the **direct AEAT client** there is no wait at all once the record is generated: the QR comes from the stored record (`VerifactuIntegration::qrBeforeReply`), the factura prints at once with the leyenda, the rows stay `PENDIENTE` and the answer is adopted as above (`submitAdopted(..., facturaPrinted = true)`, so a late success does not ask for a reprint). AEAT's `TiempoEsperaEnvio` (60 s) made the bounded wait miss almost every second ticket. A definitive refusal is shown in the result panel (MainWindow and Recogida), and the main window's status bar keeps the count of refused invoices until they are resent (`MainWindow::updateRefusedInvoices`), since the customer may already have the factura.
 
 ### Reconciling with AEAT (`GetFilteredList`)
 

@@ -209,6 +209,26 @@ private slots:
 
     // MainWindow: an unpaid ticket is stored SIN COBRAR and nothing is sent; a paid
     // one is submitted at save time and ends ENVIADA with the CSV of the reply.
+    // Invoices AEAT refused stay in view in the main window's status bar until they are
+    // resent (a refusal may come after the customer took the factura), not only as a
+    // message the next save overwrites.
+    void test_mainWindow_refusedInvoicesStayInView()
+    {
+        {
+            MainWindow mw;
+            QVERIFY(!mw.findChild<QLabel *>("lblRefusedInvoices")->isVisibleTo(&mw));
+        }
+        QVERIFY(E2e::seedSentGarment(m_db, "880", "h880a", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR' WHERE hash='h880a'"));
+        MainWindow mw;
+        auto *refused = mw.findChild<QLabel *>("lblRefusedInvoices");
+        QVERIFY(refused->isVisibleTo(&mw));
+        QVERIFY2(refused->text().contains("1 factura(s) rechazada(s)"), qPrintable(refused->text()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE hash='h880a'"));
+        QMetaObject::invokeMethod(&mw, "updateRefusedInvoices");
+        QVERIFY(!refused->isVisibleTo(&mw));
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

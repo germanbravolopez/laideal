@@ -1000,6 +1000,19 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat)
     return qMax(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos"), highestAtAeat) + 1;
 }
 
+int refusedInvoiceCount(QSqlDatabase &db)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return 0;
+    QSqlQuery q(db);
+    const int count = q.exec("SELECT COUNT(DISTINCT n_recibo || '-' || verifactu_invoice_seq) FROM ingresos "
+                             "WHERE pagado = 'SI' AND verifactu_estado = 'ERROR'") && q.next()
+                          ? q.value(0).toInt() : 0;
+    q.finish();
+    db.close();
+    return count;
+}
+
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__) || !db.open())

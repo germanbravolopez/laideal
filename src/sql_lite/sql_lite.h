@@ -62,6 +62,8 @@ QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);
+// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR.
+int refusedInvoiceCount(QSqlDatabase &db);
 // The same for an accepted cancellation (the reply reached nobody, e.g. the dialog had
 // given up): markInvoiceSeqCancelled with `cancelDate`. 1 marked, 2 already marked (its
 // dialog did), 0 not marked (refused or the update failed), -1 when the id names no
