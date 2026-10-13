@@ -22,6 +22,7 @@ VerifactuManager::VerifactuManager(QObject *parent)
 
 VerifactuManager::~VerifactuManager()
 {
+    delete m_config;    // not a QObject: owned here
 }
 
 QString VerifactuManager::nextRequestId()

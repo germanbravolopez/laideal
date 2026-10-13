@@ -49,8 +49,8 @@ public:
     //   originalTaxBase/Amount are emitted as RectificationTaxBase/RectificationTaxAmount.
     //
     // The new invoice gets its own unique InvoiceID (newInvoiceNumber). The original
-    // is identified for local audit only; AEAT links the two via RectificationItems
-    // (not yet implemented - reserved for a future regulation-tightening if needed).
+    // (rectifiedInvoiceNumber / Date) is sent as FacturasRectificadas by the direct
+    // client; the gateway request does not carry it (no RectificationItems are sent).
     QString submitRectificationAsync(
         const QString &newInvoiceNumber,
         const QDate &invoiceDate,

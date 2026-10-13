@@ -77,4 +77,4 @@ These were reviewed and deliberately kept. Report one only if it **grows** (a ne
 **Tier 3**
 - snake_case methods in `src/listado/genlistado.h` (`print_table`, `set_cb_fechas`, `generate_html_*`, `check_years_invoice_type_for_row`, `add_suffix_to_filename`).
 - Spanish identifier `revertirOn` in `src/contabilidad/contabilidad.h`.
-- File name vs class name: `add_garment.h` (`AddGarment`), `recog_prendas.h` (`RecogPrendas`), `pay_dialog.h` (`PayDialog`).
+- File name vs class name: `add_garment.h` (`AddGarment`), `recog_prendas.h` (`RecogPrendas`), `pay_dialog.h` (`PayDialog`), `backup_manager.h` (`BackupManager`); the last two also name their header guard after the file.

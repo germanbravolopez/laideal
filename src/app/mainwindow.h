@@ -75,12 +75,12 @@ private slots:
     // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
     QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
                                    double totalAmount, int seq = 0);
-    // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
-    // answers (direct client); null with the gateway.
     // The status bar's count of invoices AEAT refused, until they are resent (hidden at 0).
     void updateRefusedInvoices();
     // An AEAT refusal shown in the result panel (it can come after the factura was printed).
     void showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result);
+    // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
+    // answers (direct client); null with the gateway.
     QPixmap verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
                                    int seq = 0) const;
     // Inserts the ticket's garments; storedTotal = the sum of the stored amounts.

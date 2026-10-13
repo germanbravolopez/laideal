@@ -64,8 +64,6 @@ public:
     QString submitInvoiceAsync(const VerifactuInvoice &invoice) override;
     QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate) override;
     QString generateQRAsync(const VerifactuInvoice &invoice) override;
-    // The invoice's QR, drawn from its own data.
-    QPixmap qrFor(const VerifactuInvoice &invoice) const;
     // The QR of the pending registration stored for `invoice` (this issuer, same date and
     // amount), drawn from that record; null when there is none.
     QPixmap queuedRecordQr(const VerifactuInvoice &invoice);
@@ -106,6 +104,8 @@ public:
 
 private:
     QString qrUrlFor(const VerifactuInvoice &invoice) const;
+    // The invoice's QR, drawn from its own data.
+    QPixmap qrFor(const VerifactuInvoice &invoice) const;
     Config                     m_config;
     QString                    m_configError;
     QString                    m_sendError;
