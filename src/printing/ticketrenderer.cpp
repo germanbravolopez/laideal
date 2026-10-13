@@ -1,6 +1,8 @@
 #include "ticketrenderer.h"
 #include "escposbuilder.h"
 
+#include <QPainter>
+
 namespace {
 QString money(double v) { return QString::number(v, 'f', 2); }
 } // namespace
@@ -130,7 +132,11 @@ QImage TicketRenderer::printableQr(const QImage &qr)
 {
     if (qr.isNull())
         return QImage();
-    const QImage g = qr.convertToFormat(QImage::Format_Grayscale8);
+    // Flattened onto white: a transparent pixel would otherwise read as black.
+    QImage flat(qr.size(), QImage::Format_RGB32);
+    flat.fill(Qt::white);
+    QPainter(&flat).drawImage(0, 0, qr);
+    const QImage g = flat.convertToFormat(QImage::Format_Grayscale8);
     const auto dark = [&g](int x, int y) { return qGray(g.pixel(x, y)) < 128; };
     int left = g.width(), top = g.height(), right = -1, bottom = -1;
     for (int y = 0; y < g.height(); ++y)

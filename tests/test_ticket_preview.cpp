@@ -385,6 +385,19 @@ private slots:
                     QCOMPARE(qGray(out.pixel((x + 4) * dots + dots / 2, (y + 4) * dots + dots / 2)) < 128,
                              qGray(grid.pixel(x, y)) < 128);
         }
+        // A pixmap whose light modules are transparent (some PNGs): the same grid.
+        QImage transparent = withQuietZone(grid, 4).convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < transparent.height(); ++y)
+            for (int x = 0; x < transparent.width(); ++x)
+                if (qGray(transparent.pixel(x, y)) >= 128)
+                    transparent.setPixel(x, y, qRgba(0, 0, 0, 0));
+        const QImage fromTransparent = TicketRenderer::printableQr(transparent);
+        QVERIFY(!fromTransparent.isNull());
+        const int tdots = fromTransparent.width() / (n + 8);
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                QCOMPARE(qGray(fromTransparent.pixel((x + 4) * tdots + tdots / 2, (y + 4) * tdots + tdots / 2)) < 128,
+                         qGray(grid.pixel(x, y)) < 128);
         QVERIFY(TicketRenderer::printableQr(QImage()).isNull());
         QImage blank(100, 100, QImage::Format_RGB32);
         blank.fill(qRgb(255, 255, 255));
