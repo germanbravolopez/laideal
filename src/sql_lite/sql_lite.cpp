@@ -990,7 +990,7 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
             q.finish();
             db.close();
             // Into an open period: a quarter closed meanwhile must not change.
-            const QDate when = date.isValid() && !quarterIsClosed(db, date) ? date : QDate::currentDate();
+            const QDate when = openPeriodDate(db, date);
             if (type == QLatin1String("S") && !markTicketRectified(db, original, when))
                 qWarning() << "applySettledVerifactuResult: rectificativa" << nRecibo << "accepted, original" << original
                            << "not marked RECTIFICADA";
@@ -1040,6 +1040,19 @@ bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QStr
     q.prepare("UPDATE ingresos SET verifactu_estado = 'ERROR', verifactu_error = :r WHERE n_recibo = :n "
               "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'PENDIENTE'");
     q.bindValue(":r", reason);
+    q.bindValue(":n", number);
+    const bool ok = q.exec() && q.numRowsAffected() > 0;
+    db.close();
+    return ok;
+}
+
+bool markRectificationResent(QSqlDatabase &db, const QString &number)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return false;
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = 'PENDIENTE', verifactu_error = '' WHERE n_recibo = :n "
+              "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'ERROR'");
     q.bindValue(":n", number);
     const bool ok = q.exec() && q.numRowsAffected() > 0;
     db.close();
@@ -1873,6 +1886,16 @@ bool quarterIsClosed(QSqlDatabase &db, QDate date)
     const int quarter = (date.month() + 2) / 3;
     return readLockForQuarter(db, "ingresos", quarter, date.year()) == 1
         || readLockForQuarter(db, "gastos", quarter, date.year()) == 1;
+}
+
+QDate openPeriodDate(QSqlDatabase &db, QDate preferred)
+{
+    if (preferred.isValid() && !quarterIsClosed(db, preferred))
+        return preferred;
+    QDate day = QDate::currentDate();
+    for (int quarters = 0; quarters < 8 && quarterIsClosed(db, day); ++quarters)
+        day = QDate(day.year(), ((day.month() - 1) / 3) * 3 + 1, 1).addMonths(3);
+    return day;
 }
 
 QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)

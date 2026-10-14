@@ -71,6 +71,8 @@ QString pendingRectificationOf(QSqlDatabase &db, const QString &original);
 QStringList pendingRectificationNumbers(QSqlDatabase &db);
 // A PENDIENTE rectificativa nothing will send (no pending record): an ERROR to redo.
 bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QString &reason);
+// A refused rectificativa resent as it was: PENDIENTE again, nothing else changed.
+bool markRectificationResent(QSqlDatabase &db, const QString &number);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);
@@ -344,6 +346,9 @@ QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDat
 // gastos row of that quarter is locked; a month with no rows inside a closed quarter
 // still reads as closed.
 bool quarterIsClosed(QSqlDatabase &db, QDate date);
+// `preferred` when its quarter is open, else today, else the first day of the next
+// open quarter: where a late change (a subtraction) may still be counted.
+QDate openPeriodDate(QSqlDatabase &db, QDate preferred);
 
 // Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.
 // A rectificativa may not be dated before it.

@@ -1183,6 +1183,30 @@ private slots:
                  QStringLiteral("RECTIFICADA|") + QDate::currentDate().toString("dd-MM-yyyy"));
     }
 
+    // A late change lands in an open period: the date asked for, else today, else the
+    // first day of the next open quarter. A refused rectificativa resent as it was goes
+    // back to PENDIENTE with nothing else changed.
+    void test_openPeriodDateAndResentRectificativa()
+    {
+        const QDate today = QDate::currentDate();
+        const QDate quarterStart(today.year(), ((today.month() - 1) / 3) * 3 + 1, 1);
+        QCOMPARE(openPeriodDate(m_db, today.addDays(-1)), today.addDays(-1));
+        insertIngreso("890", "15-01-2020", "10.00", "SI", "ENVIADA", 1, 0);         // a closed quarter
+        QCOMPARE(openPeriodDate(m_db, QDate(2020, 1, 20)), today);
+        insertIngreso("891", today.toString("dd-MM-yyyy"), "10.00", "SI", "ENVIADA", 1, 0);   // today's closed too
+        QCOMPARE(openPeriodDate(m_db, QDate(2020, 1, 20)), quarterStart.addMonths(3));
+
+        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+             "verifactu_estado, verifactu_error, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+             "verifactu_rectification_type) VALUES ('892', '15-01-2020', '15-01-2020', '8.00', 'SI', 'Rectificativa', "
+             "'1', 'r892', 'ERROR', 'refused', 0, '890', 'S')");
+        QVERIFY(markRectificationResent(m_db, "892"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_error || '|' || fecha_pago || '|' || importe "
+                        "FROM ingresos WHERE n_recibo='892'"), QStringLiteral("PENDIENTE||15-01-2020|8.00"));
+        QCOMPARE(pendingRectificationOf(m_db, "890"), QStringLiteral("892"));
+        QVERIFY(!markRectificationResent(m_db, "890"));                             // not a rectificativa
+    }
+
     // A substitution rectificativa AEAT accepted after its dialog closed marks the
     // original RECTIFICADA (it stops counting as income); one by differences does not.
     // A rectificativa is never offered to the startup recovery (it would go as an F2).

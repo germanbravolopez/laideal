@@ -513,12 +513,19 @@ void MainWindow::initializeVerifactu()
         connectVerifactu();
     else
         updateAeatEnvironment();
-    // A rectificativa left PENDIENTE with nothing to send it (closed before its answer by
-    // an earlier version, or never generated): an error to redo, counted as refused.
+    // A rectificativa left PENDIENTE: AEAT's stored answer settles it; with nothing to send
+    // it (closed before its answer by an earlier version, or never generated) it is an
+    // error to redo, counted as refused.
     for (const QString &number : pendingRectificationNumbers(db)) {
         AeatDirectBackend *direct = m_verifactuIntegration->directBackend();
         if (direct && direct->holdsPendingRecord(AeatStore::Kind::Registration, number))
             continue;
+        VerifactuResult stored;
+        if (direct && direct->storedOutcome(AeatStore::Kind::Registration, number, &stored)) {
+            qDebug() << "MainWindow: rectificativa" << number << "settled from its stored AEAT answer";
+            applySettledVerifactuResult(db, number, stored);
+            continue;
+        }
         qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
         markRectificationUnsent(db, number, tr("Sin envío pendiente: rehágala en Rectificar factura."));
     }

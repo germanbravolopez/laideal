@@ -87,6 +87,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_rbDifferences  = new QRadioButton("Por diferencias (I)");
     m_rbSubstitution = new QRadioButton("Por sustitución (S)");
     m_rbSubstitution->setObjectName("rbSubstitution");
+    m_rbDifferences->setObjectName("rbDifferences");
     m_rbDifferences->setChecked(true);
     rowMode->addWidget(m_rbDifferences);
     rowMode->addWidget(m_rbSubstitution);
@@ -336,6 +337,13 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // A rectificativa of this ticket AEAT refused is resent corrected under its own
     // number (AEAT, 13-10-2026), its row reused: never a second rectificativa beside it.
     const QString refused = refusedRectificationOf(db, m_loadedTicket);
+    if (!refused.isEmpty() && m_verifactu->directBackend()
+        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, refused)) {
+        m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
+                                                "se enviará sola.").arg(refused.toHtmlEscaped())));
+        setFormEnabled(true);
+        return;
+    }
     m_newInvoiceNumber = refused.isEmpty() ? QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat()))
                                            : refused;
     m_newInvoiceDate   = m_deRectifyDate->date();
@@ -348,23 +356,28 @@ void RectifyInvoiceDialog::onRectifyClicked()
         // (its date, its amount), the closed figures untouched.
         db.open();
         QSqlQuery old(db);
-        old.prepare("SELECT MIN(fecha_pago), SUM(importe) FROM ingresos WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
+        old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
+                    "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
         old.bindValue(":n", refused);
         old.bindValue(":o", m_loadedTicket);
         const bool read = old.exec() && old.next();
         const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
         const double oldAmount = read ? old.value(1).toDouble() : 0.0;
+        const bool oldSubstitution = read && old.value(2).toString() == QLatin1String("S");
         old.finish();
         db.close();
         if (oldDate.isValid() && quarterIsClosed(db, oldDate)) {
-            if (qAbs(oldAmount - amountWithIva) > 0.005) {
+            if (qAbs(oldAmount - amountWithIva) > 0.005 || oldSubstitution != isSubstitution) {
                 m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa rechazada %1 es de un trimestre cerrado: solo "
-                                                         "puede reenviarse con su importe (%2).")
-                                                          .arg(refused.toHtmlEscaped(), moneyText(oldAmount))));
+                                                         "puede reenviarse como se registró (%2, %3).")
+                                                          .arg(refused.toHtmlEscaped(), moneyText(oldAmount),
+                                                               oldSubstitution ? tr("por sustitución")
+                                                                               : tr("por diferencias"))));
                 setFormEnabled(true);
                 return;
             }
             m_newInvoiceDate = oldDate;
+            markRectificationResent(db, refused);                   // PENDIENTE while sent, figures as filed
         } else {
             reusePlaceholderRow();
         }
@@ -625,7 +638,7 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     if (result.isSuccess() && m_submittedIsSubstitution) {
         qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
         // Into an open period (a refused one from a closed quarter is resent with its date).
-        const QDate rectifiedOn = quarterIsClosed(db, m_newInvoiceDate) ? QDate::currentDate() : m_newInvoiceDate;
+        const QDate rectifiedOn = openPeriodDate(db, m_newInvoiceDate);
         if (!markTicketRectified(db, m_loadedTicket, rectifiedOn)) {
             localOk = false;
             m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "

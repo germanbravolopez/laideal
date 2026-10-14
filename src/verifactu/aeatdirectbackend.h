@@ -77,6 +77,9 @@ public:
     // A record of this kind for the invoice is pending at AEAT (generated, not answered:
     // it goes out on its own). A refused or settled one is not.
     bool holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber);
+    // AEAT's stored answer to the invoice's latest record of this kind (accepted or
+    // refused); false while none exists or it is pending.
+    bool storedOutcome(AeatStore::Kind kind, const QString &invoiceNumber, VerifactuResult *result);
     QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
     // Records can be generated (issuer and database ready). Sending may still fail:

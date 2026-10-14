@@ -639,12 +639,12 @@ private slots:
                                 "verifactu_rectification_type) VALUES ('798', 'Cliente E2E', '15-01-2026', '15-01-2026', '', "
                                 "'8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '1', 'h798a', "
                                 "'ERROR', 0, '797', 'S')"));
-        const auto rectify = [this](double amount) -> QString {
+        const auto rectify = [this](double amount, bool substitution = true) -> QString {
             RectifyInvoiceDialog dlg(m_db);
             dlg.m_verifactu = m_verifactu;
             dlg.findChild<QLineEdit *>("leTicketNum")->setText("797");
             QMetaObject::invokeMethod(&dlg, "onSearchClicked");
-            dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+            dlg.findChild<QRadioButton *>(substitution ? "rbSubstitution" : "rbDifferences")->setChecked(true);
             dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(amount);
             QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
             QTest::qWaitFor([&dlg] { return !dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"); }, 15000);
@@ -652,8 +652,24 @@ private slots:
         };
         const QString refused = rectify(7.00);
         QVERIFY2(refused.contains("trimestre cerrado"), qPrintable(refused));
+        const QString otherMode = rectify(8.00, false);                      // filed as S: never resent as I
+        QVERIFY2(otherMode.contains("como se registró"), qPrintable(otherMode));
         QVERIFY(m_server.requestsTo("Create").isEmpty());
-        rectify(8.00);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h798a'"), QStringLiteral("ERROR"));
+        FakeVerifactuServer::Reply slow;                                     // PENDIENTE while it is sent
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("797");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+            QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h798a'"), QStringLiteral("PENDIENTE"));
+            QTRY_VERIFY_WITH_TIMEOUT(!dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"), 15000);
+        }
         const auto creates = m_server.requestsTo("Create");
         QCOMPARE(creates.size(), 1);
         QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("798"));
@@ -768,6 +784,41 @@ private slots:
         AppSettings::instance()->setVerifactuDirectAeat(false);
         QCOMPARE(pendingRectificationOf(m_db, "800"), number);
         QCOMPARE(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kPending);
+    }
+
+    // A rectificativa AEAT accepted whose row was not settled (the app closed between the
+    // answer and the update): the start-up sweep settles it from the stored answer instead
+    // of offering it for a redo.
+    void test_startSettlesARectificativaFromItsStoredAnswer()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        QVERIFY(E2e::seedSentGarment(m_db, "810", "h810a", "10.00", today(), "A-ORIG0810"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("810");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);
+        dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        const QString number = scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = '810'");
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kAccepted, 10000);
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE n_recibo = '" + number + "'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA', fecha_anulacion = '' WHERE n_recibo = '810'"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + number + "'"), QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '810'"), QStringLiteral("RECTIFICADA"));
     }
 
     // Cobrar is refused like a paid save while the direct client's chain check has failed.

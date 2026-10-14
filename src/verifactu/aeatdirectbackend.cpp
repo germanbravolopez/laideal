@@ -344,6 +344,15 @@ void AeatDirectBackend::answerLater(const QString &requestId, const VerifactuRes
     }, Qt::QueuedConnection);
 }
 
+bool AeatDirectBackend::storedOutcome(AeatStore::Kind kind, const QString &invoiceNumber, VerifactuResult *result)
+{
+    const AeatStore::Record record = m_store.latest(kind, invoiceNumber, m_config.issuerNif);
+    if (!record.isValid() || record.state == AeatStore::kPending)
+        return false;
+    *result = resultFromStored(record);
+    return true;
+}
+
 VerifactuResult AeatDirectBackend::resultFromStored(const AeatStore::Record &record) const
 {
     VerifactuResult result;
