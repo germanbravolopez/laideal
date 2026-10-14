@@ -12,6 +12,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Request ids unique across backends** (compliance auditor blocking 1, third round of the 12.0 review): every backend numbered its requests from `aeat-1` / `req-1`. After Configuración re-initialised the backend, a new request could take the id a window was still waiting on, and one ticket was settled with another invoice's answer (ENVIADA, never correctable). The counters are now shared by every backend of the run. Test in `test_mainWindow_reinitialisesOneBackend` (mutation-checked).
 - [x] **Late outcomes nobody else would settle** (compliance auditor notes 10-12, second round of the 12.0 review):
   - with the gateway, a rectificativa whose dialog closes before the answer stayed PENDIENTE where nothing resends a rectificativa. It now becomes an ERROR to redo under its number (`~RectifyInvoiceDialog`);
   - the self-test's backend sends every pending record of the issuer and now reports those outcomes (`AeatSelfTest::recordSettled`), which the main window settles like any other (`MainWindow::onRecordSettled`);

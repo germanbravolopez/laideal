@@ -96,7 +96,11 @@ QString AeatDirectBackend::configurationInfo() const
 
 QString AeatDirectBackend::nextRequestId()
 {
-    return QStringLiteral("aeat-%1").arg(++m_requestCounter);
+    // Unique across every backend of the run: after Configuración a new one starts, and
+    // the windows still hold the previous one's requests - a repeated id would hand one
+    // ticket another invoice's answer.
+    static int counter = 0;
+    return QStringLiteral("aeat-%1").arg(++counter);
 }
 
 qint64 AeatDirectBackend::msecsUntilNextSend() const

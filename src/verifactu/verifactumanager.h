@@ -50,7 +50,6 @@ private:
     VerifactuConfig *m_config;
     QNetworkAccessManager *m_networkManager;
     QString m_lastError;
-    int m_requestCounter;
 
     QString nextRequestId();
     QNetworkRequest createNetworkRequest(const QString &endpoint) const;

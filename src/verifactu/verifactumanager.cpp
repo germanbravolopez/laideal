@@ -14,7 +14,7 @@
 #include <QPointer>
 
 VerifactuManager::VerifactuManager(QObject *parent)
-    : VerifactuBackend(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
+    : VerifactuBackend(parent), m_config(nullptr), m_networkManager(nullptr)
 {
     m_config = new VerifactuConfig();
     m_networkManager = new QNetworkAccessManager(this);
@@ -27,7 +27,8 @@ VerifactuManager::~VerifactuManager()
 
 QString VerifactuManager::nextRequestId()
 {
-    return QStringLiteral("req-%1").arg(++m_requestCounter);
+    static int counter = 0;     // unique across every manager of the run (see AeatDirectBackend)
+    return QStringLiteral("req-%1").arg(++counter);
 }
 
 void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description)

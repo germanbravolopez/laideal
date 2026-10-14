@@ -131,7 +131,6 @@ private:
     bool                       m_inFlight = false;
     QList<qint64>              m_inFlightIds;
     QHash<qint64, QStringList> m_waiters;      // record id -> request ids to answer
-    int                        m_requestCounter = 0;
     bool                       m_chainReady = false;
     bool                       m_syncRunning = false;
     bool                       m_firstSync = false;      // no sync with AEAT stored yet

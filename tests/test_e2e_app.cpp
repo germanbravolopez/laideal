@@ -505,6 +505,11 @@ private slots:
         QCOMPARE(mw.findChildren<VerifactuIntegration *>().size(), 1);
         QCOMPARE(mw.findChild<VerifactuIntegration *>(), integration);
         QCOMPARE(mw.findChildren<AeatDirectBackend *>().size(), 1);
+        // Request ids never repeat across backends: the windows may still wait on the old one's.
+        AeatDirectBackend first(AeatDirectBackend::Config(), m_db);
+        AeatDirectBackend second(AeatDirectBackend::Config(), m_db);
+        VerifactuInvoice inv;
+        QVERIFY(first.generateQRAsync(inv) != second.generateQRAsync(inv));
     }
 
     // A database behind AEAT (restored from an older backup): once the start-up sync has
