@@ -1608,7 +1608,7 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     return changed;
 }
 
-int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
+int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment)
 {
     if (dbNotConfigured(db, __func__)) return 0;
     int next = 0;
@@ -1630,8 +1630,9 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum)
     // one invoice. The table exists only once the direct connection was used.
     QSqlQuery used(db);
     used.prepare("SELECT invoice_number FROM aeat_records WHERE kind = 'alta' "
-                 "AND (invoice_number = :n OR invoice_number LIKE :prefix)");
+                 "AND (invoice_number = :n OR invoice_number LIKE :prefix) AND (:e = '' OR environment = :e)");
     used.bindValue(":n", ticketNum);
+    used.bindValue(":e", aeatEnvironment.isNull() ? QStringLiteral("") : aeatEnvironment);
     used.bindValue(":prefix", ticketNum + QStringLiteral("-%"));
     if (used.exec()) {
         while (used.next()) {

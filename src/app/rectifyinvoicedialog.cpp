@@ -371,6 +371,27 @@ void RectifyInvoiceDialog::onRectifyClicked()
     }
 }
 
+RectifyInvoiceDialog::~RectifyInvoiceDialog()
+{
+    // With the gateway nobody else applies the answer (the direct client's record sends
+    // itself and settles on its own): the row would stay PENDIENTE where nothing resends
+    // a rectificativa. As an error it is counted and redone under its number.
+    if (m_pendingRectifyId.isEmpty() || !m_verifactu || m_verifactu->directBackend())
+        return;
+    qWarning() << "RectifyInvoiceDialog: closed before AEAT answered rectificativa" << m_newInvoiceNumber;
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = :e, verifactu_error = :err "
+              "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o AND verifactu_estado = :pending");
+    q.bindValue(":e",       verifactuEstadoToString(VerifactuEstado::Error));
+    q.bindValue(":err",     tr("Sin respuesta de la AEAT al cerrar la ventana: rehágala en Rectificar factura."));
+    q.bindValue(":n",       m_newInvoiceNumber);
+    q.bindValue(":o",       m_loadedTicket);
+    q.bindValue(":pending", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    q.exec();
+    db.close();
+}
+
 void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     if (requestId != m_pendingRectifyId) return; // not ours

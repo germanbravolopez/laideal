@@ -8,6 +8,7 @@ AeatSelfTest::AeatSelfTest(AeatDirectBackend::Config config, const QSqlDatabase 
 {
     config.testEnvironment = true;    // never production
     m_backend = new AeatDirectBackend(config, db, this);
+    connect(m_backend, &VerifactuBackend::recordSettled, this, &AeatSelfTest::recordSettled);
     m_issueDate = QDate::currentDate();
     m_invoiceNumber = QStringLiteral("PRUEBA-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss"));
 }

@@ -26,6 +26,8 @@ public:
 signals:
     void progress(bool ok, const QString &text);
     void finished(bool ok);
+    // Its backend sends every pending record of the issuer: the app settles those too.
+    void recordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result);
 
 private:
     AeatDirectBackend *m_backend = nullptr;

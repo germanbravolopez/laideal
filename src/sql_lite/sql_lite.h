@@ -197,7 +197,8 @@ int         updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketN
 // Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
 // only PayDialog event (Verifactu disabled, no estado written) still
 // increments the seq for the next event.
-int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum);
+// `aeatEnvironment`: only the direct client's records of that environment count (empty: all).
+int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment = QString());
 
 // AEAT InvoiceID for a ticket payment event: bare n_recibo for seq 0 (save-time
 // / first event), "<n_recibo>-<seq>" for a later partial-pay event. Single source

@@ -576,6 +576,28 @@ private slots:
                  qPrintable(r5.mid(rectified, 400)));
     }
 
+    // With the gateway, a rectificativa whose dialog closes before the answer would stay
+    // PENDIENTE where nothing resends it: it becomes an error, counted and redone.
+    void test_rectifyGatewayClosedBeforeTheAnswer()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "785", "h785a", "10.00", today(), "A-ORIG0785"));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 3000;
+        m_server.enqueue("Create", slow);
+        {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("785");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+            QTRY_COMPARE(m_server.requestsTo("Create").size(), 1);
+        }                                                                     // closed while waiting
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE verifactu_rectifies_n_recibo = '785'"),
+                 QStringLiteral("ERROR"));
+        QTest::qWait(3500);                                                   // the late answer reaches nobody
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

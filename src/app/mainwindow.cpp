@@ -524,34 +524,36 @@ void MainWindow::connectVerifactu()
             this, &MainWindow::onVerifactuRequestFinished);
     // Direct client: outcomes nobody waited for (records sent at start or retried on
     // their own) still settle their rows.
-    connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this,
-            [this](const QString &invoiceId, bool cancellation, const VerifactuResult &result) {
-        if (cancellation) {
-            // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
-            const int applied = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
-            if (applied < 0 || applied == 2) {
-                // No ticket behind it (the self-test's record), or its dialog already marked it.
-                qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId
-                         << (applied < 0 ? "(no ticket)" : "(already marked)") << "-"
-                         << (result.isSuccess() ? "accepted" : result.errorDescription);
-                return;
-            }
-            const bool marked = applied > 0;
-            qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
-                       << (result.isSuccess() ? "accepted" : result.errorDescription) << "- marked" << marked;
-            m_result->setText(result.isSuccess()
-                ? UiKit::okHtml(tr("La AEAT ha registrado la anulación de la factura %1.").arg(invoiceId.toHtmlEscaped()))
-                      + (marked ? QString() : "<br>" + UiKit::errorHtml(tr("No se pudo marcar como anulada: revísela en Anular factura.")))
-                : UiKit::errorHtml(tr("La AEAT no ha aceptado la anulación de la factura %1: %2")
-                                       .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped())));
+    connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
+}
+
+void MainWindow::onRecordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result)
+{
+    if (cancellation) {
+        // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
+        const int applied = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
+        if (applied < 0 || applied == 2) {
+            // No ticket behind it (the self-test's record), or its dialog already marked it.
+            qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId
+                     << (applied < 0 ? "(no ticket)" : "(already marked)") << "-"
+                     << (result.isSuccess() ? "accepted" : result.errorDescription);
             return;
         }
-        const int rows = applySettledVerifactuResult(db, invoiceId, result);
-        qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
-        updateRefusedInvoices();
-        if (rows > 0)
-            showVerifactuRejection(invoiceId, result);
-    });
+        const bool marked = applied > 0;
+        qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
+                   << (result.isSuccess() ? "accepted" : result.errorDescription) << "- marked" << marked;
+        m_result->setText(result.isSuccess()
+            ? UiKit::okHtml(tr("La AEAT ha registrado la anulación de la factura %1.").arg(invoiceId.toHtmlEscaped()))
+                  + (marked ? QString() : "<br>" + UiKit::errorHtml(tr("No se pudo marcar como anulada: revísela en Anular factura.")))
+            : UiKit::errorHtml(tr("La AEAT no ha aceptado la anulación de la factura %1: %2")
+                                   .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped())));
+        return;
+    }
+    const int rows = applySettledVerifactuResult(db, invoiceId, result);
+    qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
+    updateRefusedInvoices();
+    if (rows > 0)
+        showVerifactuRejection(invoiceId, result);
 }
 
 void MainWindow::continueDirectChain()
@@ -603,6 +605,8 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     c.certificatePath = certificateFile;
     c.certificatePassword = certificatePassword;
     AeatSelfTest selfTest(c, db);
+    // Its backend may send the shop's pending pre-production records too: settled here.
+    connect(&selfTest, &AeatSelfTest::recordSettled, this, &MainWindow::onRecordSettled);
     QStringList lines;
     connect(&selfTest, &AeatSelfTest::progress, &dlg, [&lines, panel](bool ok, const QString &text) {
         lines << (ok ? UiKit::okHtml(text.toHtmlEscaped()) : UiKit::errorHtml(text.toHtmlEscaped()));

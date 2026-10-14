@@ -424,6 +424,29 @@ private slots:
         QVERIFY2(steps.last().contains("Alta de") && steps.last().contains("1100"), qPrintable(steps.last()));
     }
 
+    // The self-test's backend sends every pending record of the issuer: their outcomes
+    // are reported so the app settles them (pre-production records of the shop).
+    void test_selfTestReportsOtherRecordsItSettles()
+    {
+        m_server->setWaitSeconds(1);
+        {
+            AeatDirectBackend shop(config(), m_db);
+            QVERIFY(sync(shop));
+            m_server->enqueue({ QByteArray(), 200, 0, true });
+            QCOMPARE(waitFor(shop, shop.submitInvoiceAsync(ticket("S1", 10))).status, VerifactuResult::NETWORK_ERROR);
+        }
+        AeatSelfTest selfTest(config(), m_db);
+        QSignalSpy settled(&selfTest, &AeatSelfTest::recordSettled);
+        bool finished = false;
+        connect(&selfTest, &AeatSelfTest::finished, [&](bool) { finished = true; });
+        selfTest.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 30000);
+        bool sawShop = false;
+        for (const QList<QVariant> &s : settled)
+            sawShop |= s[0].toString() == QLatin1String("S1");
+        QVERIFY(sawShop);
+    }
+
     // A rectificativa R5 by substitution carries the rectified invoice and its former amounts.
     void test_rectificationMapping()
     {

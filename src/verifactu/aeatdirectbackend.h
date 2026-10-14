@@ -87,6 +87,8 @@ public:
     QString sendingError() const { return m_sendError; }
     AeatCertificate::Info certificateInfo() const { return m_certificate.info(); }
     QString issuerNif() const { return m_config.issuerNif; }
+    // "pruebas" / "produccion", as the store keeps its records.
+    QString environmentName() const { return m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"); }
     QString issuerName() const { return m_config.issuerName; }
     bool chainReady() const { return m_chainReady; }
     // The highest ticket number of our system AEAT returned in a sync (0: none seen).

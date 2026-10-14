@@ -26,6 +26,8 @@ class RectifyInvoiceDialog : public QDialog
 
 public:
     explicit RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent = nullptr);
+    // Closed with the gateway's answer still due: the row becomes an error to redo.
+    ~RectifyInvoiceDialog() override;
 
     VerifactuIntegration *m_verifactu = nullptr;
 

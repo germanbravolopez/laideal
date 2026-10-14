@@ -145,6 +145,8 @@ private:
     void continueDirectChain();
     // The window's handlers of AEAT outcomes, connected once to its integration.
     void connectVerifactu();
+    // A definitive AEAT outcome nobody waited for (or whose dialog closed): settles its rows.
+    void onRecordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result);
 
     // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
     // slots connect by name and the e2e bench finds them by it).

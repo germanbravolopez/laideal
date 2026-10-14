@@ -1,4 +1,5 @@
 #include "pay_dialog.h"
+#include "aeatdirectbackend.h"
 
 #include "appsettings.h"
 #include "imprimir.h"
@@ -264,7 +265,8 @@ void PayDialog::onCobrarClicked()
         }
     }
 
-    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum);
+    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu && m_verifactu->directBackend()
+                                                                 ? m_verifactu->directBackend()->environmentName() : QString());
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum
