@@ -317,6 +317,10 @@ void RectifyInvoiceDialog::onRectifyClicked()
         m_lblResult->setText(UiKit::errorHtml("Verifactu no está configurado: no se ha creado la rectificativa."));
         return;
     }
+    if (const QString blocked = m_verifactu->invoicingBlockedReason(); !blocked.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(blocked));
+        return;
+    }
 
     setFormEnabled(false);
     m_lblResult->setText("Enviando rectificativa a AEAT...");

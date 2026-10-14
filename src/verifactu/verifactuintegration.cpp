@@ -218,10 +218,10 @@ QString VerifactuIntegration::invoicingBlockedReason()
 {
     if (!m_direct || !m_direct->chainSyncFailed())
         return QString();
-    m_direct->syncChain(nullptr);                                   // try again for the next one
+    m_direct->syncChain([this](bool ok, const QString &) { emit chainChecked(ok); });   // try again
     return tr("La conexión directa no ha podido comprobar la cadena de registros con la AEAT (primer arranque, "
-              "base de datos restaurada u ordenador nuevo): no se puede cobrar hasta conectar con la AEAT, "
-              "porque los números podrían estar ya registrados. Puede guardar el ticket sin cobrar.");
+              "base de datos restaurada u ordenador nuevo): no se puede guardar ni cobrar ningún ticket hasta "
+              "conectar con la AEAT, porque sus números podrían estar ya registrados. Se vuelve a intentar ahora.");
 }
 
 bool VerifactuIntegration::isConfigured() const

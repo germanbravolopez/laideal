@@ -666,13 +666,28 @@ private slots:
     }
 
     // The direct client's first check cannot reach AEAT (first start of 12.0, restored DB,
-    // new PC): a paid ticket is refused - its number may already be at AEAT - and an
-    // unpaid one is still saved.
+    // new PC): no ticket is saved, paid or not - its number may already be at AEAT. The
+    // refused attempt checks again; once AEAT answers, the number continues after AEAT's.
     void test_mainWindow_noInvoicingUntilTheChainIsChecked()
     {
-        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
-        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        const int atAeat = 990101;                                            // AEAT holds it, the DB not (a restore)
         AppSettings::instance()->setVerifactuDirectAeat(true);
+        {
+            VerifactuIntegration elsewhere;
+            QVERIFY(elsewhere.initialize(m_db));
+            bool synced = false;
+            elsewhere.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+            QTRY_VERIFY(synced);
+            QVERIFY(!elsewhere.submitSimplifiedInvoiceAsync(QString::number(atAeat), QDate::currentDate(), 10.0, 21.0).isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, QString::number(atAeat)).state,
+                                      AeatStore::kAccepted, 10000);
+        }
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_records WHERE invoice_number = '990101'"));
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        aeat.server.enqueue({ QByteArray(), 200, 0, true });                  // the first check: no answer
         MainWindow mw;
         AppSettings::instance()->setVerifactuDirectAeat(false);
         auto *direct = mw.findChild<VerifactuIntegration *>()->directBackend();
@@ -680,14 +695,16 @@ private slots:
         const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
         mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
         enterGarment(mw, "Camisa", "1");
-        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
-        clickSave(mw);
-        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("no se puede cobrar"),
+        clickSave(mw);                                                        // unpaid: refused too
+        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("no se puede guardar"),
                  qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
-        mw.findChild<QCheckBox *>("pb_payment")->setChecked(false);
+        QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 15000);
+        QTRY_COMPARE(mw.findChild<QLineEdit *>("le_nr_ticket")->text(), QString::number(atAeat + 1));
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
         clickSave(mw);
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("NO"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + QString::number(atAeat + 1) + "'"),
+                 QStringLiteral("SI"));
     }
 
     // The status bar says when the direct client registers in AEAT's test environment
@@ -704,6 +721,99 @@ private slots:
         auto *environment = mw.findChild<QLabel *>("lblAeatEnvironment");
         QVERIFY(environment->isVisibleTo(&mw));
         QVERIFY(environment->text().contains("PRUEBAS"));
+        // After Configuración: production hides it, the gateway too.
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AppSettings::instance()->setAeatDirectProduction(true);
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        QVERIFY(!environment->isVisibleTo(&mw));
+        AppSettings::instance()->setAeatDirectProduction(false);
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        QVERIFY(environment->isVisibleTo(&mw));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        QVERIFY(!environment->isVisibleTo(&mw));
+    }
+
+    // A rectificativa the direct client still holds (its record pending at AEAT) is never
+    // turned into an error: not at start, not when its dialog closes before the answer -
+    // it goes out on its own, and a redo would send a second R5.
+    void test_queuedRectificativaIsLeftToTheDirectClient()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "10.00", today(), "A-ORIG0800"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        aeat.server.enqueue({ QByteArray(), 200, 0, true });                  // the send: reply lost
+        {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = &direct;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("800");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        }                                                                     // closed before the answer
+        const QString number = scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = '800'");
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kPending, 10000);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + number + "'"), QStringLiteral("PENDIENTE"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;                                                        // the start-up sweep
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QCOMPARE(pendingRectificationOf(m_db, "800"), number);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kPending);
+    }
+
+    // Cobrar is refused like a paid save while the direct client's chain check has failed.
+    void test_payDialog_noInvoicingUntilTheChainIsChecked()
+    {
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        QVERIFY(E2e::seedGarment(m_db, "805", "h805a", "12.10", today()));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool done = false;
+        direct.directBackend()->syncChain([&done](bool, const QString &) { done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+        QVERIFY(direct.directBackend()->chainSyncFailed());
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        QVERIFY(dlg.loadTicket("805"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("no se puede guardar ni cobrar"),
+                 qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h805a'"), QStringLiteral("NO"));
+        QVERIFY(!AeatStore(m_db, "pruebas").latest(AeatStore::Kind::Registration, "805").isValid());
+        // Nor is a rectificativa issued: its number could be at AEAT too.
+        QVERIFY(E2e::seedSentGarment(m_db, "806", "h806a", "10.00", today(), "A-ORIG0806"));
+        RectifyInvoiceDialog rectify(m_db);
+        rectify.m_verifactu = &direct;
+        rectify.findChild<QLineEdit *>("leTicketNum")->setText("806");
+        QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        rectify.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);
+        rectify.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&rectify, "onRectifyClicked");
+        QVERIFY2(rectify.findChild<QLabel *>("lblResult")->text().contains("no se puede guardar ni cobrar"),
+                 qPrintable(rectify.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '806'"), QStringLiteral("0"));
+    }
+
+    // Only while the shop's own direct client is in pre-production does the self-test share
+    // the shop's chain (marker and rows): never in production, never with the gateway.
+    void test_selfTestSharesTheShopChainOnlyInPreProduction()
+    {
+        QVERIFY(VerifactuIntegration::selfTestSharesShopChain(true, false));
+        QVERIFY(!VerifactuIntegration::selfTestSharesShopChain(true, true));
+        QVERIFY(!VerifactuIntegration::selfTestSharesShopChain(false, false));
+        QVERIFY(!VerifactuIntegration::selfTestSharesShopChain(false, true));
     }
 
     void test_mainWindow_saveUnpaidThenPaidTicket()

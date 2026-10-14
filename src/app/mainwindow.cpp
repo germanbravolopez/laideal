@@ -538,6 +538,13 @@ void MainWindow::connectVerifactu()
     // Direct client: outcomes nobody waited for (records sent at start or retried on
     // their own) still settle their rows.
     connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
+    // A retried chain check: AEAT may hold later numbers than the one on screen.
+    connect(m_verifactuIntegration, &VerifactuIntegration::chainChecked, this, [this](bool ok) {
+        if (!ok)
+            return;
+        setNextTicketNumber();
+        m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
+    });
 }
 
 void MainWindow::onRecordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result)
@@ -621,7 +628,8 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     // self-test keeps the chain marker and settles the shop's records it sends. Otherwise
     // (production, or the gateway) it must touch neither.
     AppSettings *settings = AppSettings::instance();
-    const bool shopInPreProduction = settings->verifactuDirectAeat() && !settings->aeatDirectProduction();
+    const bool shopInPreProduction = VerifactuIntegration::selfTestSharesShopChain(settings->verifactuDirectAeat(),
+                                                                                 settings->aeatDirectProduction());
     if (shopInPreProduction) {
         c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
         c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
@@ -772,7 +780,7 @@ bool MainWindow::validateTicket()
     };
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
-    if (ui->pb_payment->isChecked() && m_verifactuIntegration) {
+    if (m_verifactuIntegration) {
         const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
         if (!blocked.isEmpty())
             return refuse(blocked);
