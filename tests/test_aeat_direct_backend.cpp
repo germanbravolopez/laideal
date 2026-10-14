@@ -728,7 +728,6 @@ private slots:
         QVERIFY2(paged >= 2, qPrintable(QString::number(paged)));
     }
 
-    // "Pending" means pending at AEAT: a refused (or settled) record is not one.
     // AEAT's stored answer: none and pending give nothing; an accepted record gives SUCCESS
     // with its CSV, a refused one ERROR with AEAT's code.
     void test_storedOutcomeOnlyOnceAnswered()
@@ -750,6 +749,7 @@ private slots:
         QVERIFY(!backend.storedOutcome(AeatStore::Kind::Registration, "7", &r));             // pending
     }
 
+    // "Pending" means pending at AEAT: a refused (or settled) record is not one.
     void test_holdsPendingRecordOnlyWhilePending()
     {
         AeatDirectBackend backend(config(), m_db);

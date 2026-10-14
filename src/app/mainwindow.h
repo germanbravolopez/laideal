@@ -175,6 +175,7 @@ private:
     UiKit::ResultPanel *m_result = nullptr;
     QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration = nullptr;
+    bool m_saving = false;                      // inside on_pb_save_clicked (it may wait for AEAT)
     bool m_numberingRefused = false;            // the last save was refused until the chain is checked
     // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
     // the requestFinished handler can patch exactly the rows of that submission

@@ -46,7 +46,7 @@ private:
     // MainWindow::saveTicket from re-using the same number while we wait.
     void insertPlaceholderRow();
     // The refused rectificativa's own row, updated for its corrected resend.
-    void reusePlaceholderRow();
+    bool reusePlaceholderRow();
     // A refused rectificativa redone: its row reused, or resent as filed from a closed
     // quarter. False (reason shown) when it cannot be.
     bool prepareRefusedResend(const QString &refused, double amountWithIva, bool isSubstitution);

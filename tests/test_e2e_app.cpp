@@ -910,6 +910,76 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
     }
 
+    // Recogida's Añadir is refused like Cobrar while the chain is unchecked; an ordinary
+    // start (the chain checked before) never blocks saving while its sync runs.
+    void test_gateOnlyWhileTheChainIsUnchecked()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        QVERIFY(E2e::seedGarment(m_db, "925", "h925a", "10.00", today()));
+        aeat.server.enqueue({ QByteArray(), 200, 0, true });                  // first check: no answer
+        {
+            AppSettings::instance()->setVerifactuDirectAeat(true);
+            VerifactuIntegration direct;
+            QVERIFY(direct.initialize(m_db));
+            AppSettings::instance()->setVerifactuDirectAeat(false);
+            bool done = false;
+            direct.directBackend()->syncChain([&done](bool, const QString &) { done = true; });
+            QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+            QVERIFY(direct.directBackend()->chainSyncFailed());
+            aeat.server.enqueue({ QByteArray(), 200, 0, true });              // the retry fails too
+            RecogPrendas rp(m_db);
+            rp.m_verifactuIntegration = &direct;
+            QVERIFY(selectRow(rp, "925", "h925a"));
+            rp.findChild<QPushButton *>("pb_add")->click();
+            QVERIFY(!rp.findChild<AddGarment *>());
+            QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("cadena de registros"),
+                     qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+            QTRY_VERIFY_WITH_TIMEOUT(!direct.directBackend()->firstSyncRunning(), 15000);
+        }
+        QVERIFY(markChainReady(store));                                       // checked on an earlier run
+        aeat.server.enqueue({ QByteArray(), 200, 3000 });                     // start-up sync slow
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *direct = mw.findChild<VerifactuIntegration *>()->directBackend();
+        QVERIFY(!direct->chainReady());
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
+        enterGarment(mw, "Camisa", "1");
+        clickSave(mw);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
+        QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 15000);
+    }
+
+    // A sync ending while a paid save waits for AEAT never changes the number on screen:
+    // the factura and the recibo print the ticket being saved.
+    void test_mainWindow_syncDuringASaveKeepsItsNumber()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        aeat.server.enqueue({ QByteArray(), 200, 1000 });                     // start-up sync ends mid-save
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *number = mw.findChild<QLineEdit *>("le_nr_ticket");
+        const QString ticket = number->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        QString duringSave;
+        connect(mw.findChild<VerifactuIntegration *>(), &VerifactuIntegration::chainChecked, &mw,
+                [&] { duringSave = number->text(); });                // after the window's own handler
+        QVERIFY(!mw.findChild<VerifactuIntegration *>()->directBackend()->chainReady());
+        clickSave(mw);
+        QTRY_VERIFY(!duringSave.isEmpty());
+        QCOMPARE(duringSave, ticket);
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("SI"));
+    }
+
     // Any sync that succeeds after a failed first check (here one a resend starts, not the
     // refused save) moves the number on screen past AEAT's highest.
     void test_mainWindow_numberRefreshedAfterAnyChainSync()

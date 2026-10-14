@@ -694,6 +694,13 @@ void RecogPrendas::on_pb_add_clicked()
     const QString ticketNum = ui->le_nr_ticket->text();
     if (ticketNum.isEmpty())
         return;
+    if (m_verifactuIntegration) {                                   // a paid garment is invoiced
+        const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
+        if (!blocked.isEmpty()) {
+            m_result->setText(UiKit::errorHtml(blocked));
+            return;
+        }
+    }
     // The same window as Herramientas -> Añadir nuevas prendas, on the selected ticket.
     // It deletes itself on close; window-modal over Recogida while it is open.
     auto *dlg = new AddGarment(db, this);

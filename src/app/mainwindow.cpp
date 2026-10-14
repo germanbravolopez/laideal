@@ -6,6 +6,7 @@
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QUrl>
+#include <QScopeGuard>
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -532,8 +533,8 @@ void MainWindow::connectVerifactu()
     connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
     // Any finished chain sync: AEAT may hold later numbers than the one on screen.
     connect(m_verifactuIntegration, &VerifactuIntegration::chainChecked, this, [this](bool ok) {
-        if (!ok)
-            return;
+        if (!ok || m_saving)
+            return;                                                 // a save resets the form itself
         setNextTicketNumber();
         if (m_numberingRefused)
             m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
@@ -1083,6 +1084,9 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 
 void MainWindow::on_pb_save_clicked()
 {
+    // The number on screen is the ticket being printed until the form resets.
+    m_saving = true;
+    const auto saved = qScopeGuard([this] { m_saving = false; });
     {
         if (validateTicket()) {
             m_clientNote.clear();

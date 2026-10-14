@@ -400,9 +400,17 @@ bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double a
     const bool oldSubstitution = read && old.value(2).toString() == QLatin1String("S");
     old.finish();
     db.close();
-    if (!oldDate.isValid() || !quarterIsClosed(db, oldDate)) {
-        reusePlaceholderRow();
-        return true;
+    if (!read || !oldDate.isValid()) {                              // never rewrite a row we cannot read
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer la rectificativa rechazada %1: no se ha enviado nada.")
+                                                  .arg(refused.toHtmlEscaped())));
+        return false;
+    }
+    if (!quarterIsClosed(db, oldDate)) {
+        if (reusePlaceholderRow())
+            return true;
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo preparar el reenvío de la rectificativa %1: no se ha "
+                                                 "enviado nada.").arg(refused.toHtmlEscaped())));
+        return false;
     }
     // Counted in a quarter closed since: resent only as it was filed, its row untouched.
     if (qAbs(oldAmount - amountWithIva) > 0.005 || oldSubstitution != isSubstitution) {
@@ -559,7 +567,7 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     db.close();
 }
 
-void RectifyInvoiceDialog::reusePlaceholderRow()
+bool RectifyInvoiceDialog::reusePlaceholderRow()
 {
     qDebug() << "RectifyInvoiceDialog: resending refused rectificativa" << m_newInvoiceNumber << "of" << m_loadedTicket;
     const QString fechaStr = m_newInvoiceDate.toString("dd-MM-yyyy");
@@ -575,10 +583,12 @@ void RectifyInvoiceDialog::reusePlaceholderRow()
     q.bindValue(":e",   verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.bindValue(":n",   m_newInvoiceNumber);
     q.bindValue(":o",   m_loadedTicket);
-    if (!q.exec())
+    const bool ok = q.exec() && q.numRowsAffected() > 0;
+    if (!ok)
         qWarning() << "RectifyInvoiceDialog: UPDATE refused rectificativa row failed for" << m_newInvoiceNumber
                    << "-" << q.lastError().text();
     db.close();
+    return ok;
 }
 
 bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
