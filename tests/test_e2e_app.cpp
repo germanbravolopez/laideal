@@ -698,6 +698,30 @@ private slots:
                  QStringLiteral("RECTIFICADA|") + today());
     }
 
+    // A refused rectificativa whose date cannot be read is never rewritten nor resent.
+    void test_refusedRectificativaWithUnreadableDateNotResent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "935", "h935a", "10.00", today(), "A-ORIG0935"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+                                "verifactu_rectification_type) VALUES ('936', 'Cliente E2E', '', '', '', "
+                                "'8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '0', 'h936a', "
+                                "'ERROR', 0, '935', 'S')"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("935");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(7.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("No se pudo leer"),
+                 qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || importe || '|' || fecha_pago FROM ingresos WHERE hash='h936a'"),
+                 QStringLiteral("ERROR|8.00|"));
+    }
+
     // The direct client's first check cannot reach AEAT (first start of 12.0, restored DB,
     // new PC): no ticket is saved, paid or not - its number may already be at AEAT. The
     // refused attempt checks again; once AEAT answers, the number continues after AEAT's.
