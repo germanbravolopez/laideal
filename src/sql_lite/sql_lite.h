@@ -67,6 +67,10 @@ QString refusedRectificationOf(QSqlDatabase &db, const QString &original);
 // The number of a rectificativa of `original` still waiting for AEAT (PENDIENTE), or
 // empty: until it settles, the ticket is neither rectified nor cancelled again.
 QString pendingRectificationOf(QSqlDatabase &db, const QString &original);
+// Every rectificativa row still PENDIENTE (n_recibo).
+QStringList pendingRectificationNumbers(QSqlDatabase &db);
+// A PENDIENTE rectificativa nothing will send (no pending record): an ERROR to redo.
+bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QString &reason);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);

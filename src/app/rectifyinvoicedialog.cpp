@@ -232,7 +232,12 @@ void RectifyInvoiceDialog::onSearchClicked()
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
     const QString pending = pendingRectificationOf(db, ticketNum);
-    if (estadoEnum == VerifactuEstado::Enviada && !pending.isEmpty()) {
+    const bool cancellationPending = m_verifactu && m_verifactu->directBackend()
+        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Cancellation, verifactuInvoiceId(ticketNum, 0));
+    if (estadoEnum == VerifactuEstado::Enviada && cancellationPending) {
+        m_lblResult->setText(UiKit::warnHtml(tr("La anulación de este ticket está pendiente de envío a la AEAT: "
+                                                "no se puede rectificar.")));
+    } else if (estadoEnum == VerifactuEstado::Enviada && !pending.isEmpty()) {
         m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
                                                 "espere a que se registre antes de rectificarlo de nuevo.")
                                                  .arg(pending.toHtmlEscaped())));
@@ -332,10 +337,34 @@ void RectifyInvoiceDialog::onRectifyClicked()
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
-    if (refused.isEmpty())
+    if (refused.isEmpty()) {
         insertPlaceholderRow();
-    else
-        reusePlaceholderRow();
+    } else {
+        // A refused rectificativa counted in a quarter closed since: resent as it was
+        // (its date, its amount), the closed figures untouched.
+        db.open();
+        QSqlQuery old(db);
+        old.prepare("SELECT MIN(fecha_pago), SUM(importe) FROM ingresos WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
+        old.bindValue(":n", refused);
+        old.bindValue(":o", m_loadedTicket);
+        const bool read = old.exec() && old.next();
+        const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
+        const double oldAmount = read ? old.value(1).toDouble() : 0.0;
+        old.finish();
+        db.close();
+        if (oldDate.isValid() && quarterIsClosed(db, oldDate)) {
+            if (qAbs(oldAmount - amountWithIva) > 0.005) {
+                m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa rechazada %1 es de un trimestre cerrado: solo "
+                                                         "puede reenviarse con su importe (%2).")
+                                                          .arg(refused.toHtmlEscaped(), moneyText(oldAmount))));
+                setFormEnabled(true);
+                return;
+            }
+            m_newInvoiceDate = oldDate;
+        } else {
+            reusePlaceholderRow();
+        }
+    }
 
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
                                             : VerifactuInvoice::BY_DIFFERENCES;
@@ -373,11 +402,14 @@ void RectifyInvoiceDialog::onRectifyClicked()
 
 RectifyInvoiceDialog::~RectifyInvoiceDialog()
 {
-    // With the gateway nobody else applies the answer (the direct client's record sends
-    // itself and settles on its own): the row would stay PENDIENTE where nothing resends
-    // a rectificativa. As an error it is counted and redone under its number.
-    if (m_pendingRectifyId.isEmpty() || !m_verifactu || m_verifactu->directBackend())
+    // Nobody else would apply the answer (with the gateway, or the direct client before
+    // its record exists): the row would stay PENDIENTE where nothing resends a
+    // rectificativa. As an error it is counted and redone under its number.
+    if (m_pendingRectifyId.isEmpty() || !m_verifactu)
         return;
+    if (m_verifactu->directBackend()
+        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, m_newInvoiceNumber))
+        return;                                                     // it sends itself and settles
     qWarning() << "RectifyInvoiceDialog: closed before AEAT answered rectificativa" << m_newInvoiceNumber;
     db.open();
     QSqlQuery q(db);
@@ -435,7 +467,7 @@ bool RectifyInvoiceDialog::queuedWithoutAnswer(const VerifactuResult &result) co
     // row is an error to redo (under its number), not something that sends itself.
     return m_verifactu && m_verifactu->directBackend()
            && (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING)
-           && m_verifactu->directBackend()->holdsRecord(AeatStore::Kind::Registration, m_newInvoiceNumber);
+           && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, m_newInvoiceNumber);
 }
 
 void RectifyInvoiceDialog::insertPlaceholderRow()
@@ -588,7 +620,9 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
         qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
-        if (!markTicketRectified(db, m_loadedTicket, m_newInvoiceDate)) {
+        // Into an open period (a refused one from a closed quarter is resent with its date).
+        const QDate rectifiedOn = quarterIsClosed(db, m_newInvoiceDate) ? QDate::currentDate() : m_newInvoiceDate;
+        if (!markTicketRectified(db, m_loadedTicket, rectifiedOn)) {
             localOk = false;
             m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
                                          "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "

@@ -272,7 +272,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     r.errorCode        = q.value(11).toString();
     r.errorDescription = q.value(12).toString();
     r.attempts         = q.value(13).toInt();
-    r.reached          = q.value(14).toInt() != 0;
+    r.reached          = q.value(14).toInt() == 1;   // 2: only the send in progress
     return r;
 }
 
@@ -328,6 +328,33 @@ bool AeatStore::markReached(qint64 id)
     q.prepare("UPDATE aeat_records SET reached = 1 WHERE id = :id");
     q.bindValue(":id", id);
     const bool ok = q.exec() && q.numRowsAffected() == 1;
+    close(wasOpen);
+    return ok;
+}
+
+bool AeatStore::markSending(qint64 id)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    // 0 -> 2 (this send); 2 left by a send cut off earlier -> 1 (that one may have reached).
+    q.prepare("UPDATE aeat_records SET reached = CASE reached WHEN 0 THEN 2 ELSE 1 END WHERE id = :id");
+    q.bindValue(":id", id);
+    const bool ok = q.exec();
+    close(wasOpen);
+    return ok;
+}
+
+bool AeatStore::markNotSent(qint64 id)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE aeat_records SET reached = 0 WHERE id = :id AND reached = 2");
+    q.bindValue(":id", id);
+    const bool ok = q.exec();
     close(wasOpen);
     return ok;
 }

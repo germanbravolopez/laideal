@@ -12,6 +12,14 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Record states the client relies on** (compliance auditor blocking 2, findings 3-5, 7 and 9, test engineer 1-2, third round of the 12.0 review):
+  - "pending" means pending at AEAT (`holdsPendingRecord`): a refused record no longer makes a redone rectificativa or a retried cancellation look queued;
+  - a send is marked "may reach AEAT" before it leaves and cleared only if the request never went out (`aeat_records.reached` 0/2/1). A send cut off by closing the app or by a new backend after Configuración counts as reached, so its duplicate answer is ours;
+  - a rectificativa whose dialog closes without a pending record (gateway, or the direct client before its record exists) is an ERROR to redo;
+  - at start, any rectificativa left PENDIENTE with nothing to send it is marked ERROR (`pendingRectificationNumbers` / `markRectificationUnsent`), so it never blocks its ticket for good;
+  - a ticket whose cancellation is pending is not rectified;
+  - a refused rectificativa counted in a quarter closed since is resent only with its own amount and date, with its row untouched, and the original is marked RECTIFICADA in an open period.
+  Tests `test_holdsPendingRecordOnlyWhilePending`, `test_duplicateAfterAnInterruptedSendIsOurs`, `test_mainWindow_orphanedPendingRectificativaBecomesAnError`, `test_refusedRectificativaInAClosedQuarter`, and the rectify refusal in `test_cancelDirectQueuedIsPending`; each guard mutation-checked.
 - [x] **Request ids unique across backends** (compliance auditor blocking 1, third round of the 12.0 review): every backend numbered its requests from `aeat-1` / `req-1`. After Configuración re-initialised the backend, a new request could take the id a window was still waiting on, and one ticket was settled with another invoice's answer (ENVIADA, never correctable). The counters are now shared by every backend of the run. Test in `test_mainWindow_reinitialisesOneBackend` (mutation-checked).
 - [x] **Late outcomes nobody else would settle** (compliance auditor notes 10-12, second round of the 12.0 review):
   - with the gateway, a rectificativa whose dialog closes before the answer stayed PENDIENTE where nothing resends a rectificativa. It now becomes an ERROR to redo under its number (`~RectifyInvoiceDialog`);

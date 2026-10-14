@@ -1017,6 +1017,35 @@ int refusedInvoiceCount(QSqlDatabase &db)
     return count;
 }
 
+QStringList pendingRectificationNumbers(QSqlDatabase &db)
+{
+    QStringList out;
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return out;
+    QSqlQuery q(db);
+    if (q.exec("SELECT DISTINCT n_recibo FROM ingresos WHERE COALESCE(verifactu_rectifies_n_recibo, '') != '' "
+               "AND pagado = 'SI' AND verifactu_estado = 'PENDIENTE'"))
+        while (q.next())
+            out << q.value(0).toString();
+    q.finish();
+    db.close();
+    return out;
+}
+
+bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QString &reason)
+{
+    if (dbNotConfigured(db, __func__) || !db.open())
+        return false;
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = 'ERROR', verifactu_error = :r WHERE n_recibo = :n "
+              "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'PENDIENTE'");
+    q.bindValue(":r", reason);
+    q.bindValue(":n", number);
+    const bool ok = q.exec() && q.numRowsAffected() > 0;
+    db.close();
+    return ok;
+}
+
 QString pendingRectificationOf(QSqlDatabase &db, const QString &original)
 {
     if (dbNotConfigured(db, __func__) || !db.open())

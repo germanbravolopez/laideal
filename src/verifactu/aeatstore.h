@@ -51,7 +51,7 @@ public:
         QString   errorCode;
         QString   errorDescription;
         int       attempts = 0;
-        bool      reached = false;     // a send of it got to AEAT (AEAT may hold it)
+        bool      reached = false;     // an earlier send got to AEAT, or was cut off (AEAT may hold it)
         bool      isValid() const { return id > 0; }
     };
 
@@ -99,6 +99,10 @@ public:
     bool markAttempt(qint64 id);
     // A send of the record got to AEAT (answered, or sent and the reply lost).
     bool markReached(qint64 id);
+    // Around a send: before it, "may reach AEAT" (a send cut off by closing the app or a
+    // new backend then counts as reached); after it, cleared if the request never left.
+    bool markSending(qint64 id);
+    bool markNotSent(qint64 id);
     bool markOutcome(qint64 id, const QString &state, const QString &csv,
                      const QString &errorCode, const QString &errorDescription);
 

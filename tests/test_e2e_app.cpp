@@ -488,6 +488,14 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"), 20000);
         QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "778").state, AeatStore::kPending);
+        // While its cancellation is pending, the ticket is not rectified either.
+        RectifyInvoiceDialog rectify(m_db);
+        rectify.m_verifactu = &direct;
+        rectify.findChild<QLineEdit *>("leTicketNum")->setText("778");
+        QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        QVERIFY2(rectify.findChild<QLabel *>("lblResult")->text().contains("anulación de este ticket está pendiente"),
+                 qPrintable(rectify.findChild<QLabel *>("lblResult")->text()));
+        QVERIFY(!rectify.findChild<QDoubleSpinBox *>("sbAmount")->isEnabled());
     }
 
     // Aceptar in Configuración re-initialises Verifactu: one integration (the windows that
@@ -601,6 +609,60 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE verifactu_rectifies_n_recibo = '785'"),
                  QStringLiteral("ERROR"));
         QTest::qWait(3500);                                                   // the late answer reaches nobody
+    }
+
+    // At start, a rectificativa left PENDIENTE with nothing to send it (an earlier version
+    // closed its dialog before the answer) becomes an error to redo, never a row that
+    // blocks its ticket for good.
+    void test_mainWindow_orphanedPendingRectificativaBecomesAnError()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "795", "h795a", "10.00", today(), "A-ORIG0795"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+                                "verifactu_rectification_type) VALUES ('796', 'Cliente E2E', '" + today() + "', '" + today()
+                                + "', '', '8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '0', 'h796a', "
+                                "'PENDIENTE', 0, '795', 'S')"));
+        MainWindow mw;
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h796a'"), QStringLiteral("ERROR"));
+        QVERIFY(pendingRectificationOf(m_db, "795").isEmpty());
+    }
+
+    // A refused rectificativa counted in a quarter closed since is resent as it was (its
+    // date and amount): never with another amount, and its closed row stays as filed.
+    void test_refusedRectificativaInAClosedQuarter()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "797", "h797a", "10.00", today(), "A-ORIG0797"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+                                "verifactu_rectification_type) VALUES ('798', 'Cliente E2E', '15-01-2026', '15-01-2026', '', "
+                                "'8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '1', 'h798a', "
+                                "'ERROR', 0, '797', 'S')"));
+        const auto rectify = [this](double amount) -> QString {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("797");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(amount);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+            QTest::qWaitFor([&dlg] { return !dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"); }, 15000);
+            return dlg.findChild<QLabel *>("lblResult")->text();
+        };
+        const QString refused = rectify(7.00);
+        QVERIFY2(refused.contains("trimestre cerrado"), qPrintable(refused));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+        rectify(8.00);
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("798"));
+        QCOMPARE(scalar("SELECT fecha_pago || '|' || importe FROM ingresos WHERE hash='h798a'"),
+                 QStringLiteral("15-01-2026|8.00"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '797'"), QStringLiteral("1"));
+        // The original is marked in an open period, never back in the closed quarter.
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h797a'"),
+                 QStringLiteral("RECTIFICADA|") + today());
     }
 
     void test_mainWindow_saveUnpaidThenPaidTicket()

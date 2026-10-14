@@ -504,9 +504,9 @@ QPixmap AeatDirectBackend::qrFor(const VerifactuInvoice &invoice) const
     return QPixmap::fromImage(AeatQr::image(qrUrlFor(invoice), kQrPixelsPerModule));
 }
 
-bool AeatDirectBackend::holdsRecord(AeatStore::Kind kind, const QString &invoiceNumber)
+bool AeatDirectBackend::holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber)
 {
-    return m_store.latest(kind, invoiceNumber, m_config.issuerNif).isValid();
+    return m_store.latest(kind, invoiceNumber, m_config.issuerNif).state == AeatStore::kPending;
 }
 
 QPixmap AeatDirectBackend::queuedRecordQr(const VerifactuInvoice &invoice)
@@ -595,6 +595,7 @@ void AeatDirectBackend::sendPending()
         xmls << record.xml;
         m_inFlightIds << record.id;
         m_store.markAttempt(record.id);
+        m_store.markSending(record.id);
     }
     const QString envelope = AeatRecord::submissionEnvelope(m_config.issuerName, m_config.issuerNif, xmls);
     qDebug() << "AeatDirectBackend: sending" << records.size() << "record(s) to" << endpointUrl(m_config.testEnvironment);
@@ -636,9 +637,12 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     QHash<qint64, bool> reachedBefore;
     for (const AeatStore::Record &r : m_store.pending(1000, m_config.issuerNif))
         reachedBefore.insert(r.id, r.reached);
-    if (response.requestSent || parsed.parsed)
-        for (qint64 id : sent)
+    for (qint64 id : sent) {
+        if (response.requestSent || parsed.parsed)
             m_store.markReached(id);
+        else
+            m_store.markNotSent(id);
+    }
     // No AEAT answer, or AEAT's own service failed: the outcome is unknown, so the
     // records stay pending and are sent unchanged again on their own.
     const bool transient = !parsed.parsed || (parsed.fault && parsed.faultCode.contains(QLatin1String("Server")));

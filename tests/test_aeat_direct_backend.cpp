@@ -703,6 +703,37 @@ private slots:
         QVERIFY2(paged >= 2, qPrintable(QString::number(paged)));
     }
 
+    // "Pending" means pending at AEAT: a refused (or settled) record is not one.
+    void test_holdsPendingRecordOnlyWhilePending()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->rejectNext("5", "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("5", 10))).status, VerifactuResult::ERROR);
+        QVERIFY(!backend.holdsPendingRecord(AeatStore::Kind::Registration, "5"));
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("6", 20))).status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY(backend.holdsPendingRecord(AeatStore::Kind::Registration, "6"));
+    }
+
+    // A send cut off before its answer (the app closed, or Configuración replaced the
+    // backend) may have reached AEAT: its duplicate answer to the resend is ours.
+    void test_duplicateAfterAnInterruptedSendIsOurs()
+    {
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(sync(backend));
+            m_server->enqueue({ QByteArray(), 200, 3000 });                   // registered, answered late
+            backend.submitInvoiceAsync(ticket("1", 10));
+            QTRY_COMPARE_WITH_TIMEOUT(m_server->submissions().size(), 1, 10000);
+        }                                                                     // gone before the answer
+        QTest::qWait(3500);
+        AeatStore store(m_db, "pruebas");
+        AeatDirectBackend again(config(), m_db);                              // resends it at start
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kAccepted, 10000);
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "1").reached);
+    }
+
     // The QR printed before AEAT answers comes only from this issuer's record still
     // pending, with the invoice's date and amount: none once AEAT accepted or refused it.
     void test_queuedRecordQrOnlyForItsPendingRecord()

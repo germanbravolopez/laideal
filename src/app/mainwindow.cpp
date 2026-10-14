@@ -25,6 +25,7 @@
 #include "aeatexportdialog.h"
 #include "aeatcertificate.h"
 #include "aeatselftest.h"
+#include "aeatstore.h"
 #include "producerdeclaration.h"
 #include "reporthtml.h"
 #include "uikit.h"
@@ -509,6 +510,15 @@ void MainWindow::initializeVerifactu()
 
     if (first)
         connectVerifactu();
+    // A rectificativa left PENDIENTE with nothing to send it (closed before its answer by
+    // an earlier version, or never generated): an error to redo, counted as refused.
+    for (const QString &number : pendingRectificationNumbers(db)) {
+        AeatDirectBackend *direct = m_verifactuIntegration->directBackend();
+        if (direct && direct->holdsPendingRecord(AeatStore::Kind::Registration, number))
+            continue;
+        qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
+        markRectificationUnsent(db, number, tr("Sin envío pendiente: rehágala en Rectificar factura."));
+    }
     if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
         if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
             m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "

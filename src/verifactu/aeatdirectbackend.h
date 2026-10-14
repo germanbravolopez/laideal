@@ -74,8 +74,9 @@ public:
     // The QR of the pending registration stored for `invoice` (this issuer, same date and
     // amount), drawn from that record; null when there is none.
     QPixmap queuedRecordQr(const VerifactuInvoice &invoice);
-    // A record of this kind is stored for the invoice (generated: it is sent on its own).
-    bool holdsRecord(AeatStore::Kind kind, const QString &invoiceNumber);
+    // A record of this kind for the invoice is pending at AEAT (generated, not answered:
+    // it goes out on its own). A refused or settled one is not.
+    bool holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber);
     QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
     // Records can be generated (issuer and database ready). Sending may still fail:

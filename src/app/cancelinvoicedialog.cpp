@@ -261,7 +261,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     // The direct client stored the cancellation and sends it on its own: pending, not failed.
     if ((result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING)
         && m_verifactu->directBackend()
-        && m_verifactu->directBackend()->holdsRecord(AeatStore::Kind::Cancellation, e.invoiceId)) {
+        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Cancellation, e.invoiceId)) {
         m_lblResult->setText(UiKit::warnHtml(tr("Anulación de %1 guardada, pendiente de envío a la AEAT: %2")
                                                  .arg(e.invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
                              + "<br>" + tr("Se enviará sola y la factura quedará anulada; no la repita."));
