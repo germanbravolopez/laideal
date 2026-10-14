@@ -199,6 +199,7 @@ target_link_libraries(test_aeat_direct_backend PRIVATE
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Sql
     verifactu
+    sql_lite        # the helpers that read the store's table
 )
 target_compile_definitions(test_aeat_direct_backend PRIVATE
     AEAT_CERT_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/aeat-cert")

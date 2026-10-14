@@ -62,6 +62,9 @@
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
+#include <QSqlQuery>
+#include "aeatresponse.h"
+#include "aeatrecord.h"
 #include "aeatqr.h"
 #include "aeathash.h"
 #include "ticketrenderer.h"
@@ -502,6 +505,75 @@ private slots:
         QCOMPARE(mw.findChildren<VerifactuIntegration *>().size(), 1);
         QCOMPARE(mw.findChild<VerifactuIntegration *>(), integration);
         QCOMPARE(mw.findChildren<AeatDirectBackend *>().size(), 1);
+    }
+
+    // A database behind AEAT (restored from an older backup): once the start-up sync has
+    // seen our system's higher numbers at AEAT, the next ticket starts above them, the
+    // window says so, and a rectificativa does too.
+    void test_mainWindow_numbersAboveAeatAfterARestore()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        {
+            VerifactuIntegration elsewhere;                                   // the same system, records the DB lacks
+            QVERIFY(elsewhere.initialize(m_db));
+            bool synced = false;
+            elsewhere.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+            QTRY_VERIFY(synced);
+            QVERIFY(!elsewhere.submitSimplifiedInvoiceAsync("990001", QDate::currentDate(), 10.0, 21.0).isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "990001").state, AeatStore::kAccepted, 10000);
+        }
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_records WHERE invoice_number = '990001'"));   // only AEAT has it now
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QTRY_COMPARE_WITH_TIMEOUT(mw.findChild<QLineEdit *>("le_nr_ticket")->text(), QStringLiteral("990002"), 15000);
+        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("copia anterior"),
+                 qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(nextTicketNumber(m_db, mw.findChild<VerifactuIntegration *>()->highestNumberAtAeat()), 990002);
+    }
+
+    // The R5 names the corrected invoice as its stored record has it (here dated at
+    // reception, before the payment date), not the fallback.
+    void test_rectifyNamesTheStoredRecordsInvoice()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        const QString reception = QDate::currentDate().addDays(-3).toString("dd-MM-yyyy");
+        QVERIFY(E2e::seedSentGarment(m_db, "781", "h781a", "10.00", today(), "A-ORIG0781"));
+        AeatRecord::Registration original;
+        original.invoice = { AppSettings::instance()->verifactuNif(), QStringLiteral("781"), QDate::fromString(reception, "dd-MM-yyyy") };
+        original.invoiceType = QStringLiteral("F2");
+        original.generatedAt = QDateTime::currentDateTime().addDays(-3);
+        original.taxLines = { { 21.0, 8.26, 1.74 } };
+        const QString xml = AeatRecord::registrationXml(original, AeatRecord::laIdealSystem("12.0", "LAIDEAL-E2E"));
+        QVERIFY(AeatResponse::summarizeRecord(xml).valid);
+        QSqlQuery q(m_db);
+        QVERIFY(m_db.open());
+        q.prepare("UPDATE ingresos SET verifactu_xml = :x WHERE hash = 'h781a'");
+        q.bindValue(":x", xml);
+        QVERIFY(q.exec());
+        m_db.close();
+
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("781");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        const QString number = scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = '781'");
+        QTRY_VERIFY_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, number).isValid(), 15000);
+        const QString r5 = store.latest(AeatStore::Kind::Registration, number).xml;
+        const int rectified = r5.indexOf("FacturasRectificadas>");
+        QVERIFY(rectified > 0);
+        QVERIFY2(r5.indexOf(QStringLiteral("<sf:FechaExpedicionFactura>%1</sf:FechaExpedicionFactura>").arg(reception), rectified) > rectified,
+                 qPrintable(r5.mid(rectified, 400)));
     }
 
     void test_mainWindow_saveUnpaidThenPaidTicket()

@@ -16,6 +16,7 @@
 #include "aeatselftest.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
+#include "sql_lite.h"
 #include "fakeaeatserver.h"
 #include "verifactuinvoice.h"
 
@@ -498,6 +499,31 @@ private slots:
         QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
         QCOMPARE(m_server->sentRecords().last().previousHash, afterBackup);
         QCOMPARE(queriesSince(before), 2);
+    }
+
+    // Our highest number at AEAT reads "7-1" as 7 and ignores the self-test's records and
+    // other systems' numbers.
+    void test_highestNumberAtAeat()
+    {
+        registerElsewhere({ "7-1", "PRUEBA-20261012142926" });
+        registerElsewhere({ "9000" }, { "IreneSolutions", "B11111111", "VERIFACTU-API", "IR", "1.0", "GW-1" });
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        QCOMPARE(backend.highestNumberAtAeat(), 7);
+    }
+
+    // The helpers in sql_lite read the table the store writes (same kind, state and
+    // environment values): a payment whose rows were never stored still holds its number,
+    // and its unsent record counts in its environment.
+    void test_storeValuesSeenBySqlLite()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("U1", 10))).status, VerifactuResult::NETWORK_ERROR);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "U1"), 1);
+        QCOMPARE(aeatPendingRecordCount(m_db, "pruebas"), 1);
+        QCOMPARE(aeatPendingRecordCount(m_db, "produccion"), 0);
     }
 
     // A later sync whose second month fails keeps what AEAT already answered for the
