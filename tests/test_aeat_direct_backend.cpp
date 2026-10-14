@@ -533,6 +533,40 @@ private slots:
         QCOMPARE(m_server->sentRecords().last().previousHash, tip);
     }
 
+    // The chain marker kept outside the database (settings): it follows every record, and
+    // a database whose chain differs (restored from an older backup, or a new PC) must
+    // reach AEAT before any record - no fallback to its stale local chain.
+    void test_chainMarkerOutsideTheDatabase()
+    {
+        QString marker;
+        AeatDirectBackend::Config c = config();
+        c.readChainMarker = [&marker] { return marker; };
+        c.writeChainMarker = [&marker](const QString &m) { marker = m; };
+        QString first;
+        {
+            AeatDirectBackend backend(c, m_db);
+            first = waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).rawHash;
+        }
+        QCOMPARE(marker, QStringLiteral("pruebas|89890001K|") + first);
+
+        // Matching: AEAT out of reach is no obstacle (the local chain is this installation's).
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        {
+            AeatDirectBackend same(c, m_db);
+            QVERIFY(sync(same));
+        }
+        // Differing: the database is not the one this installation last used.
+        marker = QStringLiteral("pruebas|89890001K|") + QString(64, 'A');
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        AeatDirectBackend restored(c, m_db);
+        bool done = false, ok = true;
+        restored.syncChain([&](bool o, const QString &) { done = true; ok = o; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QVERIFY(!ok);
+        QCOMPARE(waitFor(restored, restored.submitInvoiceAsync(ticket("2", 20))).status, VerifactuResult::SUCCESS);
+        QCOMPARE(marker, QStringLiteral("pruebas|89890001K|") + m_server->sentRecords().last().hash);
+    }
+
     // After the first sync, AEAT out of reach does not stop the shop: the local chain
     // is used and the message says AEAT was not asked.
     void test_laterSyncFallsBackToLocalChain()

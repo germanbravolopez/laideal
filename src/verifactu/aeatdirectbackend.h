@@ -31,6 +31,7 @@
 //  - the QR is drawn locally (AeatQr), so it never depends on AEAT's reply.
 
 #include <QDateTime>
+#include <functional>
 #include <QHash>
 #include <QSqlDatabase>
 #include <QStringList>
@@ -56,6 +57,12 @@ public:
         QString certificateThumbprint;       // from the Windows personal store, or else
         QString certificatePath;             // the owner's .pfx / .p12 file
         QString certificatePassword;
+        // The chain's last record as this installation last saw it, kept outside the
+        // database (the settings file): a database whose chain differs - restored from an
+        // older backup, or moved to a new PC - must reach AEAT before any record, as on a
+        // first start. Unset: not kept.
+        std::function<QString()> readChainMarker;
+        std::function<void(const QString &)> writeChainMarker;
     };
 
     AeatDirectBackend(const Config &config, const QSqlDatabase &db, QObject *parent = nullptr);
@@ -106,6 +113,9 @@ public:
 
 private:
     QString qrUrlFor(const VerifactuInvoice &invoice) const;
+    // "<environment>|<issuer>|<head hash>" of the local chain; written after every change.
+    QString chainMarker();
+    void saveChainMarker();
     // The invoice's QR, drawn from its own data.
     QPixmap qrFor(const VerifactuInvoice &invoice) const;
     Config                     m_config;

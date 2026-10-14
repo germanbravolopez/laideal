@@ -375,6 +375,9 @@ void    AppSettings::setAeatCertificateFile(const QString &v) { setStr({"verifac
 QString AppSettings::aeatCertificatePassword() const { return decryptSecret(str({"verifactu", "aeat_certificate_password"})); }
 void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"verifactu", "aeat_certificate_password"}, encryptSecret(v)); }
 
+QString AppSettings::aeatChainMarker() const { return str({"verifactu", "aeat_chain_marker"}); }
+void    AppSettings::setAeatChainMarker(const QString &v) { setStr({"verifactu", "aeat_chain_marker"}, v); }
+
 QString AppSettings::aeatInstallationNumber()
 {
     QString number = str({"verifactu", "aeat_installation"});

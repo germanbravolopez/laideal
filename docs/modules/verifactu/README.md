@@ -190,6 +190,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | `verifactu.production` | `false` = TESTING, `true` = PRODUCTION (the gateway's environment) |
 | `verifactu.connection` | `irenesolutions` (default) or `aeat` - the direct client (research branch) |
 | `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Set in Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)*, which asks for confirmation; never the gateway's PRODUCCIÓN box |
+| `verifactu.aeat_chain_marker` | Written by the direct client: `<environment>|<issuer>|<huella of the chain's last record>` as this installation last saw it. A database whose chain differs (restored from an older backup, or a new PC) must reach AEAT at start before any record, as on a first start |
 | `verifactu.aeat_certificate_thumbprint` | Direct client: the owner's certificate in the Windows personal store (SHA-1 thumbprint) |
 | `verifactu.aeat_certificate_file` / `aeat_certificate_password` | Direct client, else: a .pfx file and its password (DPAPI-encrypted) |
 | `verifactu.aeat_installation` | `NumeroInstalacion` of the direct client's records, created once |

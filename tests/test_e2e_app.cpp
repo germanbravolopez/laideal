@@ -183,6 +183,17 @@ class TestE2eApp : public QObject
         return QStringLiteral("http://127.0.0.1:%1/never-used").arg(m_deadAeat.serverPort());
     }
 
+    // The direct client's chain as already synced with AEAT on this installation: the
+    // database's sync mark and the settings' chain marker (AeatDirectBackend::Config).
+    static bool markChainReady(AeatStore &store)
+    {
+        const QString nif = AppSettings::instance()->verifactuNif();
+        if (!store.ensureSchema() || !store.markChainSynced(nif))
+            return false;
+        AppSettings::instance()->setAeatChainMarker(QStringLiteral("pruebas|%1|%2").arg(nif, store.chainHead(nif).hash));
+        return true;
+    }
+
 private slots:
     void initTestCase()
     {
@@ -267,7 +278,7 @@ private slots:
     void test_mainWindow_directSavePrintsAtOnce()
     {
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         MainWindow mw;
         AppSettings::instance()->setVerifactuDirectAeat(false);
@@ -295,7 +306,7 @@ private slots:
     {
         LiveAeat aeat(suiteAeatEndpoint());
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         QVERIFY(E2e::seedSentGarment(m_db, "890", "h890a", "12.10", today(), ""));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h890a'"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
@@ -324,7 +335,7 @@ private slots:
     {
         LiveAeat aeat(suiteAeatEndpoint());
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         QVERIFY(E2e::seedGarment(m_db, "895", "h895a", "12.10", today()));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
@@ -357,7 +368,7 @@ private slots:
     {
         LiveAeat aeat(suiteAeatEndpoint());
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         const QDate paid = QDate::currentDate();
         QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0760"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
@@ -459,7 +470,7 @@ private slots:
     void test_cancelDirectQueuedIsPending()
     {
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         QVERIFY(E2e::seedSentGarment(m_db, "778", "h778a", "10.00", today(), "A-ORIG0778"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
@@ -966,7 +977,7 @@ private slots:
         QVERIFY(direct.initialize(m_db));
         AppSettings::instance()->setVerifactuDirectAeat(false);
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         bool synced = false;
         direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
         QTRY_VERIFY(synced);
@@ -1013,7 +1024,7 @@ private slots:
         QVERIFY(direct.directBackend());
         QVERIFY(direct.qrBeforeReply("720", QDate::currentDate(), 10.0, 21.0).isNull());   // no record yet
         AeatStore store(m_db, "pruebas");
-        QVERIFY(store.ensureSchema() && store.markChainSynced(AppSettings::instance()->verifactuNif()));
+        QVERIFY(markChainReady(store));
         bool synced = false;
         direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
         QTRY_VERIFY(synced);

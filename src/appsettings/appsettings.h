@@ -133,6 +133,9 @@ public:
     void    setAeatCertificatePassword(const QString &v);
     // NumeroInstalacion of the records: created once per installation.
     QString aeatInstallationNumber();
+    // The direct client's chain as this installation last saw it (see AeatDirectBackend::Config).
+    QString aeatChainMarker() const;
+    void    setAeatChainMarker(const QString &v);
 
     // --- Updater ---
     bool checkUpdatesOnStartup() const;

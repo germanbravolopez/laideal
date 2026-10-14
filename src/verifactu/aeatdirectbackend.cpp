@@ -185,7 +185,10 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
     // The first time, AEAT must be asked (the database may be new for a system that
     // already sent records); afterwards it is asked too - a database restored from an
     // older backup continues the same chain - but the local chain is enough without it.
-    m_firstSync = !m_store.chainSynced(m_config.issuerNif);
+    m_firstSync = !m_store.chainSynced(m_config.issuerNif)
+                  || (m_config.readChainMarker && m_config.readChainMarker() != chainMarker());
+    if (m_firstSync)
+        qDebug() << "AeatDirectBackend: chain sync must reach AEAT (first start, or a database other than the last one)";
     if (!m_sendError.isEmpty()) {
         if (m_firstSync) {
             syncFinished(false, tr("Antes del primer registro hay que consultar la AEAT, y no se puede: %1").arg(m_sendError));
@@ -201,12 +204,27 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
                kMonthsAlwaysQueried, {}, {}, false);
 }
 
+QString AeatDirectBackend::chainMarker()
+{
+    bool read = false;
+    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
+    return QStringLiteral("%1|%2|%3").arg(m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"),
+                                         m_config.issuerNif, read ? head.hash : QStringLiteral("?"));
+}
+
+void AeatDirectBackend::saveChainMarker()
+{
+    if (m_config.writeChainMarker)
+        m_config.writeChainMarker(chainMarker());
+}
+
 void AeatDirectBackend::syncFinished(bool ok, const QString &message)
 {
     m_syncRunning = false;
     if (ok) {
         m_chainReady = true;
         m_store.markChainSynced(m_config.issuerNif);
+        saveChainMarker();
     }
     qDebug() << "AeatDirectBackend: chain sync" << (ok ? "done -" : "failed -") << message;
     const QList<ChainDone> waiters = m_syncWaiters;
@@ -403,6 +421,7 @@ void AeatDirectBackend::storeAndQueueNow(
             answerLater(requestId, r);
             return;
         }
+        saveChainMarker();
         qDebug() << "AeatDirectBackend: new" << operationOf(kind) << "record" << record.id << "for" << invoiceNumber
                  << "huella" << record.hash << (afterRejection ? "(after a rejection)" : "");
     } else {

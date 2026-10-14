@@ -41,6 +41,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.certificateThumbprint = settings->aeatCertificateThumbprint();
         c.certificatePath       = settings->aeatCertificateFile();
         c.certificatePassword   = settings->aeatCertificatePassword();
+        c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
+        c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
         m_direct = new AeatDirectBackend(c, db.isValid() ? db : QSqlDatabase::database(QSqlDatabase::defaultConnection, false), this);
         m_backend = m_direct;
     } else {

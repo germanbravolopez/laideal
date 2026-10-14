@@ -137,7 +137,7 @@ private slots:
             QTimer::singleShot(0, [button] {
                 for (QWidget *w : QApplication::topLevelWidgets())
                     if (auto *box = qobject_cast<QMessageBox *>(w))
-                        box->button(button)->click();
+                        if (QAbstractButton *b = box->button(button)) b->click(); else box->reject();
             });
         };
         {
