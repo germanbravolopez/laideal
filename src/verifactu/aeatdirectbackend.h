@@ -92,6 +92,9 @@ public:
     QString environmentName() const { return m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"); }
     QString issuerName() const { return m_config.issuerName; }
     bool chainReady() const { return m_chainReady; }
+    // The last chain sync failed and none has succeeded since: no record can be generated
+    // (and, after a restore or on a new PC, the local numbers may already be at AEAT).
+    bool chainSyncFailed() const { return !m_chainReady && m_lastSyncFailed; }
     // The highest ticket number of our system AEAT returned in a sync (0: none seen).
     int highestNumberAtAeat() const { return m_highestNumberAtAeat; }
 
@@ -136,6 +139,7 @@ private:
     bool                       m_syncRunning = false;
     bool                       m_firstSync = false;      // no sync with AEAT stored yet
     int                        m_highestNumberAtAeat = 0;
+    bool                       m_lastSyncFailed = false;
     QList<ChainDone>           m_syncWaiters;   // held requests, resumed when the sync ends
 
     QString nextRequestId();

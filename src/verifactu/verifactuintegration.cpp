@@ -214,6 +214,16 @@ int VerifactuIntegration::highestNumberAtAeat() const
     return m_direct ? m_direct->highestNumberAtAeat() : 0;
 }
 
+QString VerifactuIntegration::invoicingBlockedReason()
+{
+    if (!m_direct || !m_direct->chainSyncFailed())
+        return QString();
+    m_direct->syncChain(nullptr);                                   // try again for the next one
+    return tr("La conexión directa no ha podido comprobar la cadena de registros con la AEAT (primer arranque, "
+              "base de datos restaurada u ordenador nuevo): no se puede cobrar hasta conectar con la AEAT, "
+              "porque los números podrían estar ya registrados. Puede guardar el ticket sin cobrar.");
+}
+
 bool VerifactuIntegration::isConfigured() const
 {
     return m_backend && m_backend->isConfigured();

@@ -225,6 +225,7 @@ void AeatDirectBackend::saveChainMarker()
 void AeatDirectBackend::syncFinished(bool ok, const QString &message)
 {
     m_syncRunning = false;
+    m_lastSyncFailed = !ok;
     if (ok) {
         m_chainReady = true;
         m_store.markChainSynced(m_config.issuerNif);

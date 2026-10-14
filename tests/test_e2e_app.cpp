@@ -665,6 +665,31 @@ private slots:
                  QStringLiteral("RECTIFICADA|") + today());
     }
 
+    // The direct client's first check cannot reach AEAT (first start of 12.0, restored DB,
+    // new PC): a paid ticket is refused - its number may already be at AEAT - and an
+    // unpaid one is still saved.
+    void test_mainWindow_noInvoicingUntilTheChainIsChecked()
+    {
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *direct = mw.findChild<VerifactuIntegration *>()->directBackend();
+        QTRY_VERIFY_WITH_TIMEOUT(direct->chainSyncFailed(), 15000);
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        clickSave(mw);
+        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("no se puede cobrar"),
+                 qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(false);
+        clickSave(mw);
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("NO"));
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;

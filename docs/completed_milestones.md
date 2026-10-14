@@ -12,6 +12,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **No invoicing until the chain is checked** (compliance auditor 6, third round of the 12.0 review): when the direct client's first check cannot reach AEAT (first start of 12.0, restored database, new PC), no record can be generated, and the local numbers may already be at AEAT. A paid ticket or a Cobrar then was saved anyway and later resent under a number AEAT holds for another sale. Now both are refused with the reason (`VerifactuIntegration::invoicingBlockedReason`, `AeatDirectBackend::chainSyncFailed`), each attempt starts a new check, and unpaid tickets are still saved. Test `test_mainWindow_noInvoicingUntilTheChainIsChecked` (mutation-checked).
 - [x] **Record states the client relies on** (compliance auditor blocking 2, findings 3-5, 7 and 9, test engineer 1-2, third round of the 12.0 review):
   - "pending" means pending at AEAT (`holdsPendingRecord`): a refused record no longer makes a redone rectificativa or a retried cancellation look queued;
   - a send is marked "may reach AEAT" before it leaves and cleared only if the request never went out (`aeat_records.reached` 0/2/1). A send cut off by closing the app or by a new backend after Configuración counts as reached, so its duplicate answer is ours;

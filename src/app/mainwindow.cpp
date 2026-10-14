@@ -760,6 +760,11 @@ bool MainWindow::validateTicket()
     };
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
+    if (ui->pb_payment->isChecked() && m_verifactuIntegration) {
+        const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
+        if (!blocked.isEmpty())
+            return refuse(blocked);
+    }
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {

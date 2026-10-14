@@ -227,6 +227,14 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
+    if (m_verifactu) {
+        const QString blocked = m_verifactu->invoicingBlockedReason();
+        if (!blocked.isEmpty()) {
+            m_lblStatus->setText(UiKit::errorHtml(blocked));
+            return;
+        }
+    }
+
     const QDate fechaPago = m_dePago->date();
     // The whole quarter: a month without rows inside a closed quarter is closed too.
     if (quarterIsClosed(db, fechaPago)) {

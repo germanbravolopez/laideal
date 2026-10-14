@@ -87,6 +87,9 @@ public:
     QString getLastError() const { return m_lastError; }
     // Our system's highest ticket number at AEAT (direct client, after its sync), else 0.
     int highestNumberAtAeat() const;
+    // Why a paid ticket cannot be invoiced now (the direct client could not sync its chain
+    // with AEAT: a check is started again), or empty.
+    QString invoicingBlockedReason();
     // The direct AEAT client when it is the chosen connection, else nullptr.
     AeatDirectBackend *directBackend() const { return m_direct; }
 
