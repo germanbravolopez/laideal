@@ -1190,6 +1190,7 @@ private slots:
     {
         const QDate today = QDate::currentDate();
         const QDate quarterStart(today.year(), ((today.month() - 1) / 3) * 3 + 1, 1);
+        QCOMPARE(openPeriodDate(m_db, QDate()), today);
         QCOMPARE(openPeriodDate(m_db, today.addDays(-1)), today.addDays(-1));
         insertIngreso("890", "15-01-2020", "10.00", "SI", "ENVIADA", 1, 0);         // a closed quarter
         QCOMPARE(openPeriodDate(m_db, QDate(2020, 1, 20)), today);
@@ -1205,6 +1206,8 @@ private slots:
                         "FROM ingresos WHERE n_recibo='892'"), QStringLiteral("PENDIENTE||15-01-2020|8.00"));
         QCOMPARE(pendingRectificationOf(m_db, "890"), QStringLiteral("892"));
         QVERIFY(!markRectificationResent(m_db, "890"));                             // not a rectificativa
+        exec("UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE n_recibo = '892'");
+        QVERIFY(!markRectificationResent(m_db, "892"));                             // an accepted one stays
     }
 
     // A substitution rectificativa AEAT accepted after its dialog closed marks the

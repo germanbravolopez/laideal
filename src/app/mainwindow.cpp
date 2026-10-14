@@ -513,22 +513,7 @@ void MainWindow::initializeVerifactu()
         connectVerifactu();
     else
         updateAeatEnvironment();
-    // A rectificativa left PENDIENTE: AEAT's stored answer settles it; with nothing to send
-    // it (closed before its answer by an earlier version, or never generated) it is an
-    // error to redo, counted as refused.
-    for (const QString &number : pendingRectificationNumbers(db)) {
-        AeatDirectBackend *direct = m_verifactuIntegration->directBackend();
-        if (direct && direct->holdsPendingRecord(AeatStore::Kind::Registration, number))
-            continue;
-        VerifactuResult stored;
-        if (direct && direct->storedOutcome(AeatStore::Kind::Registration, number, &stored)) {
-            qDebug() << "MainWindow: rectificativa" << number << "settled from its stored AEAT answer";
-            applySettledVerifactuResult(db, number, stored);
-            continue;
-        }
-        qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
-        markRectificationUnsent(db, number, tr("Sin envío pendiente: rehágala en Rectificar factura."));
-    }
+    settlePendingRectifications();
     if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
         if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
             m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
@@ -545,12 +530,14 @@ void MainWindow::connectVerifactu()
     // Direct client: outcomes nobody waited for (records sent at start or retried on
     // their own) still settle their rows.
     connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
-    // A retried chain check: AEAT may hold later numbers than the one on screen.
+    // Any finished chain sync: AEAT may hold later numbers than the one on screen.
     connect(m_verifactuIntegration, &VerifactuIntegration::chainChecked, this, [this](bool ok) {
         if (!ok)
             return;
         setNextTicketNumber();
-        m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
+        if (m_numberingRefused)
+            m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
+        m_numberingRefused = false;
     });
 }
 
@@ -581,6 +568,23 @@ void MainWindow::onRecordSettled(const QString &invoiceId, bool cancellation, co
     updateRefusedInvoices();
     if (rows > 0)
         showVerifactuRejection(invoiceId, result);
+}
+
+void MainWindow::settlePendingRectifications()
+{
+    AeatDirectBackend *direct = m_verifactuIntegration->directBackend();
+    for (const QString &number : pendingRectificationNumbers(db)) {
+        if (direct && direct->holdsPendingRecord(AeatStore::Kind::Registration, number))
+            continue;                                                   // it sends itself and settles
+        VerifactuResult stored;
+        if (direct && direct->storedOutcome(AeatStore::Kind::Registration, number, &stored)) {
+            qDebug() << "MainWindow: rectificativa" << number << "settled from its stored AEAT answer -"
+                     << applySettledVerifactuResult(db, number, stored) << "row(s)";
+            continue;
+        }
+        if (markRectificationUnsent(db, number, tr("Sin envío pendiente: rehágala en Rectificar factura.")))
+            qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
+    }
 }
 
 void MainWindow::continueDirectChain()
@@ -631,9 +635,6 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     c.certificateThumbprint = thumbprint;
     c.certificatePath = certificateFile;
     c.certificatePassword = certificatePassword;
-    // Pre-production is the shop's own chain only while its direct client uses it: then the
-    // self-test keeps the chain marker and settles the shop's records it sends. Otherwise
-    // (production, or the gateway) it must touch neither.
     AppSettings *settings = AppSettings::instance();
     const bool shopInPreProduction = VerifactuIntegration::selfTestSharesShopChain(settings->verifactuDirectAeat(),
                                                                                  settings->aeatDirectProduction());
@@ -789,7 +790,8 @@ bool MainWindow::validateTicket()
         return refuse(tr("No se ha introducido ningún cliente."));
     if (m_verifactuIntegration) {
         const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
-        if (!blocked.isEmpty())
+        m_numberingRefused = !blocked.isEmpty();
+        if (m_numberingRefused)
             return refuse(blocked);
     }
     double totalCost = 0.0;
@@ -1409,6 +1411,14 @@ void MainWindow::cleanDatabase(bool print)
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
+    // A paid garment is invoiced under its ticket's number: not while the chain is unchecked.
+    if (m_verifactuIntegration) {
+        const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
+        if (!blocked.isEmpty()) {
+            m_result->setText(UiKit::errorHtml(blocked));
+            return;
+        }
+    }
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays

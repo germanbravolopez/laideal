@@ -98,6 +98,8 @@ public:
     // The last chain sync failed and none has succeeded since: no record can be generated
     // (and, after a restore or on a new PC, the local numbers may already be at AEAT).
     bool chainSyncFailed() const { return !m_chainReady && m_lastSyncFailed; }
+    // The first sync (it must reach AEAT) is still running: numbers are not safe yet either.
+    bool firstSyncRunning() const { return !m_chainReady && m_syncRunning && m_firstSync; }
     // The highest ticket number of our system AEAT returned in a sync (0: none seen).
     int highestNumberAtAeat() const { return m_highestNumberAtAeat; }
 
@@ -119,6 +121,10 @@ public:
     // Seconds the next submission still has to wait (0 = it may go now).
     int secondsUntilNextSend() const;
     qint64 msecsUntilNextSend() const;
+
+signals:
+    // Every finished chain sync (AEAT may hold later numbers than the database).
+    void chainSynced(bool ok);
 
 private:
     QString qrUrlFor(const VerifactuInvoice &invoice) const;

@@ -236,6 +236,7 @@ void AeatDirectBackend::syncFinished(bool ok, const QString &message)
     m_syncWaiters.clear();
     for (const ChainDone &w : waiters)
         w(ok, message);
+    emit chainSynced(ok);
 }
 
 void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,

@@ -87,13 +87,9 @@ public:
     QString getLastError() const { return m_lastError; }
     // Our system's highest ticket number at AEAT (direct client, after its sync), else 0.
     int highestNumberAtAeat() const;
-    // The self-test always runs in pre-production: that is the shop's own chain only while
-    // its direct client uses pre-production too. Only then may it keep the shop's chain
-    // marker and settle the shop's records.
+    // The pre-production self-test may touch the shop's chain (marker, records): see the module doc.
     static bool selfTestSharesShopChain(bool directAeat, bool aeatDirectProduction) { return directAeat && !aeatDirectProduction; }
-    // Why no ticket number can be taken now (the direct client could not sync its chain
-    // with AEAT: the numbers may already be there). A check is started again, and
-    // chainChecked() reports it. Empty when numbering is safe.
+    // Why no number may be taken now (first chain check running or failed: a failed one is retried).
     QString invoicingBlockedReason();
     // The direct AEAT client when it is the chosen connection, else nullptr.
     AeatDirectBackend *directBackend() const { return m_direct; }
@@ -102,7 +98,7 @@ signals:
     void requestFinished(const QString &requestId, const VerifactuResult &result);
     void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
     void recordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result);
-    void chainChecked(bool ok);
+    void chainChecked(bool ok);                 // every finished chain sync of the direct client
 
 private:
     VerifactuBackend  *m_backend = nullptr;

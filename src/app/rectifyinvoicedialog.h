@@ -47,6 +47,9 @@ private:
     void insertPlaceholderRow();
     // The refused rectificativa's own row, updated for its corrected resend.
     void reusePlaceholderRow();
+    // A refused rectificativa redone: its row reused, or resent as filed from a closed
+    // quarter. False (reason shown) when it cannot be.
+    bool prepareRefusedResend(const QString &refused, double amountWithIva, bool isSubstitution);
     // Patches the row inserted by insertPlaceholderRow with the AEAT reply: csv /
     // xml / hash / url + estado=ENVIADA on success, or estado=ERROR + description
     // on failure. For substitution-mode success it also marks the original rows

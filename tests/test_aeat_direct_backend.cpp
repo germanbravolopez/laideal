@@ -729,6 +729,27 @@ private slots:
     }
 
     // "Pending" means pending at AEAT: a refused (or settled) record is not one.
+    // AEAT's stored answer: none and pending give nothing; an accepted record gives SUCCESS
+    // with its CSV, a refused one ERROR with AEAT's code.
+    void test_storedOutcomeOnlyOnceAnswered()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        VerifactuResult r;
+        QVERIFY(!backend.storedOutcome(AeatStore::Kind::Registration, "7", &r));             // none
+        m_server->rejectNext("8", "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
+        waitFor(backend, backend.submitInvoiceAsync(ticket("8", 20)));
+        QVERIFY(backend.storedOutcome(AeatStore::Kind::Registration, "8", &r));
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QCOMPARE(r.errorCode, QStringLiteral("1100"));
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("9", 30))).isSuccess());
+        QVERIFY(backend.storedOutcome(AeatStore::Kind::Registration, "9", &r));
+        QVERIFY(r.isSuccess() && !r.csv.isEmpty());
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        waitFor(backend, backend.submitInvoiceAsync(ticket("7", 10)));
+        QVERIFY(!backend.storedOutcome(AeatStore::Kind::Registration, "7", &r));             // pending
+    }
+
     void test_holdsPendingRecordOnlyWhilePending()
     {
         AeatDirectBackend backend(config(), m_db);

@@ -19,7 +19,7 @@ For every method declared in any `.h` under `src/`, grep for callers across all 
 5. **Public static singletons** like `AppSettings::instance()`.
 6. **Methods that form a deliberate library API** exposed across module boundaries — be conservative if a getter/setter pair is the natural surface of a model class even when only one side has callers today.
 7. Free helper functions known to be widely used by name lookup (e.g. `verifactuEstadoFromString`, `verifactuEstadoToString`).
-8. **Deliberate test hooks** — production never calls them, the tests depend on them to stay off the real AEAT, the PDF viewer and the user's settings: `VerifactuConfig::setEndpointOverride`, `Contabilidad::setOpenGeneratedReports`, `AppSettings::loadFrom`, `AppSettings::setBackupEnabled`, `dpapiEncrypt` / `dpapiDecrypt` / `dpapiIsEncrypted`, `EscPosBuilder::columns()` (guards the ticket column math). Mention a new one only if it looks accidental.
+8. **Deliberate test hooks** — production never calls them, the tests depend on them to stay off the real AEAT, the PDF viewer and the user's settings: `VerifactuConfig::setEndpointOverride`, `AeatDirectBackend::setEndpointOverride` / `setRetryDelaySeconds`, `Contabilidad::setOpenGeneratedReports`, `AppSettings::loadFrom`, `AppSettings::setBackupEnabled`, `dpapiEncrypt` / `dpapiDecrypt` / `dpapiIsEncrypted`, `EscPosBuilder::columns()` (guards the ticket column math). Mention a new one only if it looks accidental.
 
 ## Method
 

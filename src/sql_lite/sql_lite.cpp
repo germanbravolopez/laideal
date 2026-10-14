@@ -1042,6 +1042,8 @@ bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QStr
     q.bindValue(":r", reason);
     q.bindValue(":n", number);
     const bool ok = q.exec() && q.numRowsAffected() > 0;
+    if (!ok)
+        qWarning() << "markRectificationUnsent: rectificativa" << number << "not updated -" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -1055,6 +1057,8 @@ bool markRectificationResent(QSqlDatabase &db, const QString &number)
               "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'ERROR'");
     q.bindValue(":n", number);
     const bool ok = q.exec() && q.numRowsAffected() > 0;
+    if (!ok)
+        qWarning() << "markRectificationResent: rectificativa" << number << "not updated -" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -1895,6 +1899,8 @@ QDate openPeriodDate(QSqlDatabase &db, QDate preferred)
     QDate day = QDate::currentDate();
     for (int quarters = 0; quarters < 8 && quarterIsClosed(db, day); ++quarters)
         day = QDate(day.year(), ((day.month() - 1) / 3) * 3 + 1, 1).addMonths(3);
+    if (quarterIsClosed(db, day))
+        qWarning() << "openPeriodDate: no open quarter in two years from today - using" << day;
     return day;
 }
 

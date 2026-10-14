@@ -56,9 +56,15 @@ int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment);
 // An AEAT outcome nobody waited for (direct client, recordSettled): applied to the
 // paid rows of the payment event `invoiceId` names ("31277" or "31277-1") through
 // updateTicketVerifactuFields, which never rewrites a settled row. Returns the rows
-// updated, -1 when the id names no event.
+// updated, -1 when the id names no event. An accepted substitution rectificativa also
+// marks its original RECTIFICADA.
 int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, const VerifactuResult &result);
-// An accepted substitution rectificativa also marks its original RECTIFICADA.
+// An accepted cancellation nobody waited for (e.g. the dialog had given up):
+// markInvoiceSeqCancelled with `cancelDate`. 1 marked, 2 already marked (its dialog
+// did), 0 not marked (refused or the update failed), -1 when the id names no event
+// (the self-test's PRUEBA-...).
+int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
+                                       const VerifactuResult &result);
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
 // The number of a rectificativa of `original` AEAT refused (paid row in ERROR), or empty:
@@ -78,12 +84,6 @@ bool markRectificationResent(QSqlDatabase &db, const QString &number);
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);
 // Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR.
 int refusedInvoiceCount(QSqlDatabase &db);
-// The same for an accepted cancellation (the reply reached nobody, e.g. the dialog had
-// given up): markInvoiceSeqCancelled with `cancelDate`. 1 marked, 2 already marked (its
-// dialog did), 0 not marked (refused or the update failed), -1 when the id names no
-// event (the self-test's PRUEBA-...).
-int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
-                                       const VerifactuResult &result);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

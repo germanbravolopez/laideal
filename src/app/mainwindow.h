@@ -145,6 +145,9 @@ private:
     void runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
                          const QString &certificateFile, const QString &certificatePassword);
     void continueDirectChain();
+    // A PENDIENTE rectificativa: settled from AEAT's stored answer, left to the direct
+    // client while its record is pending, else an ERROR to redo.
+    void settlePendingRectifications();
     // The window's handlers of AEAT outcomes, connected once to its integration.
     void connectVerifactu();
     // A definitive AEAT outcome nobody waited for (or whose dialog closed): settles its rows.
@@ -172,6 +175,7 @@ private:
     UiKit::ResultPanel *m_result = nullptr;
     QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration = nullptr;
+    bool m_numberingRefused = false;            // the last save was refused until the chain is checked
     // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
     // the requestFinished handler can patch exactly the rows of that submission
     // event (a save-time submit and a recovered partial-pay event of the same

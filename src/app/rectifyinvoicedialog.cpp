@@ -330,12 +330,8 @@ void RectifyInvoiceDialog::onRectifyClicked()
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &RectifyInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
 
-    // Allocate the next n_recibo AND eagerly insert a PENDIENTE placeholder row so the
-    // number is claimed locally before the AEAT round-trip. Otherwise a regular
-    // MainWindow::saveTicket happening during the seconds-long AEAT call could pick the
-    // same number. Same pattern as MainWindow::saveTicket -> updateTicketVerifactuFields.
-    // A rectificativa of this ticket AEAT refused is resent corrected under its own
-    // number (AEAT, 13-10-2026), its row reused: never a second rectificativa beside it.
+    // The number is claimed (placeholder row) before the round-trip; a refused one is
+    // resent under its own number (AEAT, 13-10-2026), never beside a second one.
     const QString refused = refusedRectificationOf(db, m_loadedTicket);
     if (!refused.isEmpty() && m_verifactu->directBackend()
         && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, refused)) {
@@ -351,36 +347,9 @@ void RectifyInvoiceDialog::onRectifyClicked()
     m_submittedIsSubstitution = isSubstitution;
     if (refused.isEmpty()) {
         insertPlaceholderRow();
-    } else {
-        // A refused rectificativa counted in a quarter closed since: resent as it was
-        // (its date, its amount), the closed figures untouched.
-        db.open();
-        QSqlQuery old(db);
-        old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
-                    "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
-        old.bindValue(":n", refused);
-        old.bindValue(":o", m_loadedTicket);
-        const bool read = old.exec() && old.next();
-        const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
-        const double oldAmount = read ? old.value(1).toDouble() : 0.0;
-        const bool oldSubstitution = read && old.value(2).toString() == QLatin1String("S");
-        old.finish();
-        db.close();
-        if (oldDate.isValid() && quarterIsClosed(db, oldDate)) {
-            if (qAbs(oldAmount - amountWithIva) > 0.005 || oldSubstitution != isSubstitution) {
-                m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa rechazada %1 es de un trimestre cerrado: solo "
-                                                         "puede reenviarse como se registró (%2, %3).")
-                                                          .arg(refused.toHtmlEscaped(), moneyText(oldAmount),
-                                                               oldSubstitution ? tr("por sustitución")
-                                                                               : tr("por diferencias"))));
-                setFormEnabled(true);
-                return;
-            }
-            m_newInvoiceDate = oldDate;
-            markRectificationResent(db, refused);                   // PENDIENTE while sent, figures as filed
-        } else {
-            reusePlaceholderRow();
-        }
+    } else if (!prepareRefusedResend(refused, amountWithIva, isSubstitution)) {
+        setFormEnabled(true);
+        return;
     }
 
     const auto rectType    = isSubstitution ? VerifactuInvoice::BY_SUBSTITUTION
@@ -415,6 +384,41 @@ void RectifyInvoiceDialog::onRectifyClicked()
             .arg(m_verifactu->getLastError()));
         setFormEnabled(true);
     }
+}
+
+bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double amountWithIva, bool isSubstitution)
+{
+    db.open();
+    QSqlQuery old(db);
+    old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
+                "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
+    old.bindValue(":n", refused);
+    old.bindValue(":o", m_loadedTicket);
+    const bool read = old.exec() && old.next();
+    const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
+    const double oldAmount = read ? old.value(1).toDouble() : 0.0;
+    const bool oldSubstitution = read && old.value(2).toString() == QLatin1String("S");
+    old.finish();
+    db.close();
+    if (!oldDate.isValid() || !quarterIsClosed(db, oldDate)) {
+        reusePlaceholderRow();
+        return true;
+    }
+    // Counted in a quarter closed since: resent only as it was filed, its row untouched.
+    if (qAbs(oldAmount - amountWithIva) > 0.005 || oldSubstitution != isSubstitution) {
+        m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa rechazada %1 es de un trimestre cerrado: solo "
+                                                 "puede reenviarse como se registró (%2, %3).")
+                                                  .arg(refused.toHtmlEscaped(), moneyText(oldAmount),
+                                                       oldSubstitution ? tr("por sustitución") : tr("por diferencias"))));
+        return false;
+    }
+    if (!markRectificationResent(db, refused)) {                    // PENDIENTE while it is sent
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo preparar el reenvío de la rectificativa %1: no se ha "
+                                                 "enviado nada.").arg(refused.toHtmlEscaped())));
+        return false;
+    }
+    m_newInvoiceDate = oldDate;
+    return true;
 }
 
 RectifyInvoiceDialog::~RectifyInvoiceDialog()

@@ -101,11 +101,6 @@ QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int y
                       const QString &invoiceNumber = QString(), const InvoiceRef &pageAfter = {},
                       bool showSystem = false);
 
-// Namespaces of the AEAT schemas (exposed for the response parser and the tests).
-extern const char *const kSuministroInformacionNs;
-extern const char *const kSuministroLRNs;
-extern const char *const kConsultaLRNs;
-
 } // namespace AeatRecord
 
 #endif // AEATRECORD_H

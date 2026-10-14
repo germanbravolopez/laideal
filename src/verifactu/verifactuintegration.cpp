@@ -45,6 +45,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
         m_direct = new AeatDirectBackend(c, db.isValid() ? db : QSqlDatabase::database(QSqlDatabase::defaultConnection, false), this);
         m_backend = m_direct;
+        connect(m_direct, &AeatDirectBackend::chainSynced, this, &VerifactuIntegration::chainChecked);
     } else {
         m_manager = new VerifactuManager(this);
         if (!loadEmitterConfiguration()) {
@@ -216,9 +217,12 @@ int VerifactuIntegration::highestNumberAtAeat() const
 
 QString VerifactuIntegration::invoicingBlockedReason()
 {
+    if (m_direct && m_direct->firstSyncRunning())
+        return tr("La conexión directa está comprobando con la AEAT la cadena de registros (primer arranque, base de "
+                  "datos restaurada u ordenador nuevo): espere a que termine para guardar o cobrar tickets.");
     if (!m_direct || !m_direct->chainSyncFailed())
         return QString();
-    m_direct->syncChain([this](bool ok, const QString &) { emit chainChecked(ok); });   // try again
+    m_direct->syncChain(nullptr);                                   // try again: chainChecked reports it
     return tr("La conexión directa no ha podido comprobar la cadena de registros con la AEAT (primer arranque, "
               "base de datos restaurada u ordenador nuevo): no se puede guardar ni cobrar ningún ticket hasta "
               "conectar con la AEAT, porque sus números podrían estar ya registrados. Se vuelve a intentar ahora.");
