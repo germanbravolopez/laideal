@@ -424,6 +424,31 @@ private slots:
         QVERIFY2(steps.last().contains("Alta de") && steps.last().contains("1100"), qPrintable(steps.last()));
     }
 
+    // A self-test in the shop's pre-production chain keeps the shop's chain marker: the
+    // next start finds it matching and needs no AEAT (the main window wires the marker in
+    // only while the shop's direct client is in pre-production).
+    void test_selfTestKeepsTheChainMarker()
+    {
+        m_server->setWaitSeconds(1);
+        QString marker;
+        AeatDirectBackend::Config c = config();
+        c.readChainMarker = [&marker] { return marker; };
+        c.writeChainMarker = [&marker](const QString &m) { marker = m; };
+        {
+            AeatDirectBackend shop(c, m_db);
+            QVERIFY(waitFor(shop, shop.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        AeatSelfTest selfTest(c, m_db);
+        bool finished = false;
+        connect(&selfTest, &AeatSelfTest::finished, [&](bool) { finished = true; });
+        selfTest.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 30000);
+        QCOMPARE(marker, QStringLiteral("pruebas|89890001K|") + m_server->sentRecords().last().hash);
+        m_server->enqueue({ QByteArray(), 200, 0, true });
+        AeatDirectBackend next(c, m_db);
+        QVERIFY(sync(next));                                                  // matching: no AEAT needed
+    }
+
     // The self-test's backend sends every pending record of the issuer: their outcomes
     // are reported so the app settles them (pre-production records of the shop).
     void test_selfTestReportsOtherRecordsItSettles()

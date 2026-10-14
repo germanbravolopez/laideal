@@ -72,6 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_refusedInvoices = new QLabel(this);
     m_refusedInvoices->setObjectName("lblRefusedInvoices");
     statusBar()->addPermanentWidget(m_refusedInvoices);
+    updateAeatEnvironment();
     updateRefusedInvoices();
     auto *refusedTimer = new QTimer(this);
     connect(refusedTimer, &QTimer::timeout, this, &MainWindow::updateRefusedInvoices);
@@ -510,6 +511,8 @@ void MainWindow::initializeVerifactu()
 
     if (first)
         connectVerifactu();
+    else
+        updateAeatEnvironment();
     // A rectificativa left PENDIENTE with nothing to send it (closed before its answer by
     // an earlier version, or never generated): an error to redo, counted as refused.
     for (const QString &number : pendingRectificationNumbers(db)) {
@@ -614,9 +617,18 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     c.certificateThumbprint = thumbprint;
     c.certificatePath = certificateFile;
     c.certificatePassword = certificatePassword;
+    // Pre-production is the shop's own chain only while its direct client uses it: then the
+    // self-test keeps the chain marker and settles the shop's records it sends. Otherwise
+    // (production, or the gateway) it must touch neither.
+    AppSettings *settings = AppSettings::instance();
+    const bool shopInPreProduction = settings->verifactuDirectAeat() && !settings->aeatDirectProduction();
+    if (shopInPreProduction) {
+        c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
+        c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
+    }
     AeatSelfTest selfTest(c, db);
-    // Its backend may send the shop's pending pre-production records too: settled here.
-    connect(&selfTest, &AeatSelfTest::recordSettled, this, &MainWindow::onRecordSettled);
+    if (shopInPreProduction)
+        connect(&selfTest, &AeatSelfTest::recordSettled, this, &MainWindow::onRecordSettled);
     QStringList lines;
     connect(&selfTest, &AeatSelfTest::progress, &dlg, [&lines, panel](bool ok, const QString &text) {
         lines << (ok ? UiKit::okHtml(text.toHtmlEscaped()) : UiKit::errorHtml(text.toHtmlEscaped()));
@@ -863,6 +875,21 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     m_pendingSubmits.insert(reqId, { ticketNum, seq });
     statusBar()->showMessage(tr("Enviando ticket %1 a AEAT...").arg(invoiceId));
     return reqId;
+}
+
+void MainWindow::updateAeatEnvironment()
+{
+    // The direct client registers in AEAT's test environment unless production was chosen:
+    // real sales must never go there unnoticed.
+    if (!m_aeatEnvironment) {
+        m_aeatEnvironment = new QLabel(this);
+        m_aeatEnvironment->setObjectName("lblAeatEnvironment");
+        statusBar()->addPermanentWidget(m_aeatEnvironment);
+    }
+    const bool preProduction = m_verifactuIntegration && m_verifactuIntegration->directBackend()
+                               && !AppSettings::instance()->aeatDirectProduction();
+    m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
+    m_aeatEnvironment->setVisible(preProduction);
 }
 
 void MainWindow::updateRefusedInvoices()

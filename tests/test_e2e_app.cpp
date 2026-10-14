@@ -690,6 +690,22 @@ private slots:
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("NO"));
     }
 
+    // The status bar says when the direct client registers in AEAT's test environment
+    // (its default): real sales must never go there unnoticed.
+    void test_mainWindow_showsThePreProductionEnvironment()
+    {
+        {
+            MainWindow gateway;
+            QVERIFY(!gateway.findChild<QLabel *>("lblAeatEnvironment")->isVisibleTo(&gateway));
+        }
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *environment = mw.findChild<QLabel *>("lblAeatEnvironment");
+        QVERIFY(environment->isVisibleTo(&mw));
+        QVERIFY(environment->text().contains("PRUEBAS"));
+    }
+
     void test_mainWindow_saveUnpaidThenPaidTicket()
     {
         MainWindow mw;
