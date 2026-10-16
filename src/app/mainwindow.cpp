@@ -602,7 +602,8 @@ void MainWindow::continueDirectChain()
                 m_result->setText(UiKit::warnHtml(tr("La AEAT ya tiene facturas de este sistema hasta el nº %1 y esta base "
                                                      "de datos llega al %2 (¿restaurada de una copia anterior?). El "
                                                      "siguiente ticket será el %3.").arg(atAeat).arg(local).arg(atAeat + 1)));
-                setNextTicketNumber();
+                if (!m_saving)                                      // a save resets the form itself
+                    setNextTicketNumber();
             }
             if (!ok)
                 m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
@@ -1084,9 +1085,16 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 
 void MainWindow::on_pb_save_clicked()
 {
-    // The number on screen is the ticket being printed until the form resets.
+    // The number on screen is the ticket being printed until the form resets; a click
+    // during the wait for AEAT would save a second ticket under it.
+    if (m_saving)
+        return;
     m_saving = true;
-    const auto saved = qScopeGuard([this] { m_saving = false; });
+    ui->pb_save->setEnabled(false);
+    const auto saved = qScopeGuard([this] {
+        m_saving = false;
+        ui->pb_save->setEnabled(true);
+    });
     {
         if (validateTicket()) {
             m_clientNote.clear();

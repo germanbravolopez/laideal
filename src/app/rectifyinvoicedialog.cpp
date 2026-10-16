@@ -379,6 +379,8 @@ void RectifyInvoiceDialog::onRectifyClicked()
         ivaRate, desc, rectifiedNumber, rectifiedDate);
 
     if (m_pendingRectifyId.isEmpty()) {
+        // Nothing was sent: its row (claimed or reused) is an error to redo, not PENDIENTE.
+        markRectificationUnsent(db, m_newInvoiceNumber, tr("No se envió: Verifactu no configurado."));
         m_lblResult->setText(
             QString("<b style='color:red'>Verifactu no configurado:</b> %1")
             .arg(m_verifactu->getLastError()));

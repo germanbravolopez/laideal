@@ -997,10 +997,14 @@ private slots:
         QString duringSave;
         connect(mw.findChild<VerifactuIntegration *>(), &VerifactuIntegration::chainChecked, &mw,
                 [&] { duringSave = number->text(); });                // after the window's own handler
+        // A second click while the save waits for AEAT never saves a second ticket under it.
+        connect(mw.findChild<VerifactuIntegration *>(), &VerifactuIntegration::chainChecked, &mw,
+                [&] { QMetaObject::invokeMethod(&mw, "on_pb_save_clicked"); });
         QVERIFY(!mw.findChild<VerifactuIntegration *>()->directBackend()->chainReady());
         clickSave(mw);
         QTRY_VERIFY(!duringSave.isEmpty());
         QCOMPARE(duringSave, ticket);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("SI"));
     }
 
