@@ -382,3 +382,6 @@ set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 # limit; ctest then prints the suite's output up to the hang.
 get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
+# The direct client's suite drives the fake AEAT server through ~45 scenarios (~100 s
+# locally, more on a CI runner): a longer limit, still well short of a real hang.
+set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 300)
