@@ -90,6 +90,8 @@ public:
     // The pre-production self-test may touch the shop's chain (marker, records): see the module doc.
     static bool selfTestSharesShopChain(bool directAeat, bool aeatDirectProduction) { return directAeat && !aeatDirectProduction; }
     // Why no number may be taken now (first chain check running or failed: a failed one is retried).
+    QString numberingBlockedReason();
+    // Why no invoice may be issued now: numbering blocked, or Verifactu not configured.
     QString invoicingBlockedReason();
     // The direct AEAT client when it is the chosen connection, else nullptr.
     AeatDirectBackend *directBackend() const { return m_direct; }

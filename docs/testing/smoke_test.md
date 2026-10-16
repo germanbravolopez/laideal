@@ -15,14 +15,17 @@ lock, the backup, the language switch and the installer.
 
 ## 0. Safety rules — read before touching anything
 
-**The smoke test never contacts AEAT.** It runs with the Verifactu **service key removed** from the
-settings, so the app treats Verifactu as not configured and every submit, cancel, rectify, QR and
-query path is skipped locally. Never run it with a key: `TEST_ENDPOINT` and `PROD_ENDPOINT` in
-`verifactuconfig.h` are the same IreneSolutions URL, so a smoke ticket sent with the shop's key
-lands in the shop's own AEAT records. Its number would also collide with a real ticket the shop
-issues later.
+**The smoke test reaches only AEAT's test environment (pre-production).** It runs on the direct
+client ("Directa con la AEAT") with *Enviar a la AEAT real (PRODUCCIÓN)* **unticked**: every
+record goes to `prewww1.aeat.es`, which keeps nothing for the shop's real records. Since 12.0 a
+paid ticket needs a configured Verifactu (every invoice is a Verifactu record), so the run can no
+longer simply remove the key. It needs internet access and a certificate (Germán's or the
+shop's) installed on the PC. Never run it with the production box ticked or on the gateway: the
+gateway's test and production URLs are the same IreneSolutions URL.
 
-*Possible future change:* if IreneSolutions confirms that production uses a different URL from testing, a test key would only ever reach the AEAT test environment and the real-AEAT checks could come back. The conditions, including a fresh ticket-number base per run, are in the "Switch Verifactu to PRODUCTION" row of `docs/progress_tracker.md`. Until then, keep the key removed.
+AEAT's test environment keeps the records of earlier runs, so the seeded numbers 1-5 may already be
+there from a previous run. That is harmless in pre-production: a new ticket's number continues
+after the highest one AEAT holds, and a repeated number is answered as a duplicate.
 
 **Never test against the live database.** Work on a copy of a backup, with `ingresos` and `gastos`
 emptied (step 1.3), so the only tickets are the seeded ones below.
@@ -33,7 +36,7 @@ emptied (step 1.3), so the only tickets are the seeded ones below.
 
 ## 1. Setup
 
-1. **Back up the settings** (they hold the service key, encrypted):
+1. **Back up the settings** (they hold the keys and the chain marker, which the run changes):
    ```powershell
    Copy-Item "$env:USERPROFILE\.laideal_settings.json" "$env:USERPROFILE\.laideal_settings.pre-smoke.json"
    ```
@@ -48,14 +51,20 @@ emptied (step 1.3), so the only tickets are the seeded ones below.
    DELETE FROM ingresos;
    DELETE FROM gastos;
    ```
-4. **Point the settings at the copy and remove the key.** With the app closed, edit
+4. **Point the settings at the copy and at AEAT pre-production.** With the app closed, edit
    `%USERPROFILE%\.laideal_settings.json` in a text editor:
    - `"database"` → `"path"`: the full path of `laideal_SMOKE.db` (forward slashes).
-   - `"verifactu"` → `"service_key"`: `""` (empty string).
-5. **Safety check: first launch.** Start the new build. It **must** show *"No se pudo inicializar
-   Verifactu … Clave de servicio no configurada"*. **If that warning does not appear, close the app
-   and stop**: the key is still set. Accept it; Configuración must show the smoke database
-   path. This first launch also runs the migrations on the copy's schema (Block A). Close the app.
+   - `"verifactu"` → `"connection"`: `"aeat"`, and `"aeat_direct_production"`: `false`.
+   - `"verifactu"` → `"service_key"`: `""` (empty string). The direct client does not use it;
+     blank, a switch to the gateway during the run cannot reach the shop's real records.
+5. **Safety check: first launch.** Start the new build. The status bar **must** show *"AEAT:
+   entorno de PRUEBAS"*. **If it does not, close the app and stop**: the run could reach the real
+   AEAT. Then check Configuración → Verifactu: the issuer's NIF and name are filled, the
+   certificate is chosen, *Enviar a la AEAT real (PRODUCCIÓN)* is **unticked**, and the
+   database path is the smoke copy. Never change the connection during the run. Because the database is a copy, the
+   first chain check must reach AEAT before any ticket can be saved; wait until the result panel
+   no longer says *"comprobando con la AEAT"*. This first launch also runs the migrations on the
+   copy's schema (Block A). Close the app.
 6. **Seed the smoke tickets** (after the first launch, so the schema already has every column).
    Ticket numbers are plain integers; since `ingresos` is empty, the app's next ticket is 6.
    The block starts by emptying both tables, so running it twice cannot duplicate a row (the
@@ -106,7 +115,7 @@ Copy-Item "$env:USERPROFILE\.laideal_settings.pre-smoke.json" "$env:USERPROFILE\
 |---|------|----------|
 | A1 | First launch (step 1.5) | Starts; the log has the `migrateDatabase` lines and no SQL error |
 | A2 | Relaunch after seeding | Starts; no migration line repeats (idempotent); after ~4 s "Envíos Verifactu pendientes" lists ticket **3** only |
-| A3 | Log | None of `Submitting invoice`, `Cancelling invoice`, `Querying AEAT`, `Generating QR`, `Server response` anywhere in the run. Paid tickets log `Verifactu not configured` instead |
+| A3 | Log | Every `AeatDirectBackend: sending` line goes to `https://prewww1.aeat.es/...`; no line mentions `www1.agenciatributaria.gob.es` (production) or `irenesolutions` (the gateway) |
 
 A3 is the AEAT safety check: repeat it at the end.
 
@@ -123,15 +132,15 @@ A3 is the AEAT safety check: repeat it at the end.
 | B6b | Recogida → search ticket 2 → select a garment → **Anular prendas…** (opens with ticket 2 loaded) → tick → confirm → Cerrar | Recogida reports the voided garment in its result panel; the row reads `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today (also in the Anulación date under Recogida, with a red "Anulada"); Herramientas no longer lists Anular prendas. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
 | B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
 | B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
-| B9 | Herramientas → Anular factura / Rectificar | Both show "Verifactu no configurado" (correct in smoke mode; their flows are in `test_e2e_app`) |
+| B9 | Herramientas → Anular factura / Rectificar on ticket 4 | Both open with ticket 4 loaded; close them without sending (their flows are in `test_e2e_app`) |
 
 ## Block C — Printing · *printer connected, printing on*
 
 | # | Step | Expected |
 |---|------|----------|
 | C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances; the main window is the new layout (Cliente / Ticket / Prendas groups, Guardar ticket) and the result panel summarises the saved ticket. Picking a garment before typing its quantity fills 1; an m2 garment shows 0,00 until its size is typed |
-| C2 | Save a new **paid** ticket | A recibo with `IMPORTE PAGADO`, no QR (no AEAT in smoke mode) |
-| C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode; the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
+| C2 | Save a new **paid** ticket | At once, before AEAT answers: the factura with the QR and the VERI*FACTU leyenda for the client, and the recibo with `IMPORTE PAGADO` for the shop. The QR opens AEAT's pre-production check page (`prewww2.aeat.es`) |
+| C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text, QR); the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
 
 The QR itself is checked by `test_e2e_app` (when it is requested) and `test_ticket_preview` (how it renders).
 
@@ -163,7 +172,8 @@ Then the Teardown, and A3 once more on the final log.
 
 ## The real AEAT round trip
 
-Not checked by hand, since that would register smoke tickets in the shop's AEAT records. The
+The run above reaches AEAT's test environment only; production is never checked by hand, since
+that would register smoke tickets in the shop's AEAT records. The
 end-to-end bench covers it against the fake server: the accepted reply and QR request, the late
 reply adopted in Recogida, the duplicate → "Consultar en AEAT" comparison dialog
 (`test_e2e_verifactu`, `test_e2e_app`). The one real-AEAT check left is a single real ticket right

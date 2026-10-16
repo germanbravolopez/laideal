@@ -22,7 +22,7 @@ Every message is written in the result panel: the save summary (ticket, client, 
 | Method | Purpose |
 |--------|---------|
 | `mainwindowInitialSettings()` | UI setup at startup: runs `migrateDatabase()`, configures table columns, buttons, comboboxes |
-| `initializeVerifactu()` | Creates `VerifactuIntegration`; shows non-fatal warning if not configured |
+| `initializeVerifactu()` | Creates `VerifactuIntegration`; shows a warning if not configured (paid saves are then refused, unpaid ones still saved) |
 | `resetAllContents()` | Clears form after a ticket save |
 | `setNextTicketNumber()` | Auto-increments `n_recibo` from the max in `ingresos` |
 | `populateCbClient()` | Fills the client combobox from `clientes` table |

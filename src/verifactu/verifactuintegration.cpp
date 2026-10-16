@@ -215,7 +215,7 @@ int VerifactuIntegration::highestNumberAtAeat() const
     return m_direct ? m_direct->highestNumberAtAeat() : 0;
 }
 
-QString VerifactuIntegration::invoicingBlockedReason()
+QString VerifactuIntegration::numberingBlockedReason()
 {
     if (m_direct && m_direct->firstSyncRunning())
         return tr("La conexión directa está comprobando con la AEAT la cadena de registros (primer arranque, base de "
@@ -226,6 +226,23 @@ QString VerifactuIntegration::invoicingBlockedReason()
     return tr("La conexión directa no ha podido comprobar la cadena de registros con la AEAT (primer arranque, "
               "base de datos restaurada u ordenador nuevo): no se puede guardar ni cobrar ningún ticket hasta "
               "conectar con la AEAT, porque sus números podrían estar ya registrados. Se vuelve a intentar ahora.");
+}
+
+QString VerifactuIntegration::invoicingBlockedReason()
+{
+    if (const QString numbering = numberingBlockedReason(); !numbering.isEmpty())
+        return numbering;
+    if (isConfigured())
+        return QString();
+    // Every invoice is a Verifactu record (declaración responsable e): none without it.
+    QString missing = m_lastError;
+    if (m_direct)
+        missing = m_direct->configurationError();
+    else if (m_manager)
+        missing = m_manager->getConfig()->getValidationError();
+    return tr("Verifactu no está configurado (%1): no se puede cobrar ni emitir facturas. Configúrelo en "
+              "Archivo → Configuración.")
+        .arg(missing.isEmpty() ? tr("falta la configuración") : missing);
 }
 
 bool VerifactuIntegration::isConfigured() const

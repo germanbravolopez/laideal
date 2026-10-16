@@ -32,7 +32,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 > Art. 8.2.a / Orden HAC/1177/2024. Cada factura/ticket debe llevar una serie y numeración continua, sin huecos.
 
 **[COVERED]**
-- With the direct client, all of them are refused while its first chain check is running or has failed (`VerifactuIntegration::invoicingBlockedReason`), and every finished check refreshes the number on screen (`chainChecked` and the start-up sync, never in the middle of a save; Guardar is disabled while a save waits for AEAT).
+- No paid invoice is issued while Verifactu is not configured (`VerifactuIntegration::invoicingBlockedReason`: paid save, Cobrar, Rectificar, a paid garment in Añadir prendas; unpaid ones are still saved). With the direct client, every save is refused while its first chain check is running or has failed (`numberingBlockedReason`), and every finished check refreshes the number on screen (`chainChecked` and the start-up sync, never in the middle of a save; Guardar is disabled while a save waits for AEAT).
 - `setNextTicketNumber()` in `MainWindow` (and Rectificar factura) uses `sql_lite::nextTicketNumber(db, highestNumberAtAeat)`: the database's highest `n_recibo` + 1, or above our system's highest number at AEAT when the database is behind it (restored from an older backup, direct client) — strictly correlative; no way to skip or repeat a number. The maximum is numeric (`MAX(CAST(n_recibo AS INTEGER))` since 11.2): `n_recibo` is TEXT, and a text maximum would repeat numbers past 99999.
 - The user cannot edit `n_recibo` directly in the UI (the field is auto-filled on `resetAllContents()`).
 

@@ -22,6 +22,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScopeGuard>
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QStatusBar>
@@ -195,6 +196,16 @@ class TestE2eApp : public QObject
             return false;
         AppSettings::instance()->setAeatChainMarker(QStringLiteral("pruebas|%1|%2").arg(nif, store.chainHead(nif).hash));
         return true;
+    }
+
+    // Adds one paid Camisa through an open Añadir window; returns the window's panel text.
+    static QString addPaidGarment(AddGarment *add)
+    {
+        add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add->findChild<QLineEdit *>("leCantidad")->setText("1");
+        add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
+        add->findChild<QPushButton *>("btnSave")->click();
+        return add->findChild<QLabel *>("lblResult")->text();
     }
 
     // A ticket our system registered at AEAT that the database lacks (a restore): sent by
@@ -928,7 +939,9 @@ private slots:
                  qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
         QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");   // nor paid garments added
-        QVERIFY(!mw.findChild<AddGarment *>());
+        QPointer<AddGarment> add = mw.findChild<AddGarment *>();
+        QVERIFY(add && add->invoicingBlocked && add->invoicingBlocked().contains("comprobando"));
+        delete add;
         QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 20000);
         clickSave(mw);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
@@ -957,10 +970,13 @@ private slots:
             RecogPrendas rp(m_db);
             rp.m_verifactuIntegration = &direct;
             QVERIFY(selectRow(rp, "925", "h925a"));
-            rp.findChild<QPushButton *>("pb_add")->click();
-            QVERIFY(!rp.findChild<AddGarment *>());
-            QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("cadena de registros"),
-                     qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+            rp.findChild<QPushButton *>("pb_add")->click();                  // opens: unpaid garments are fine
+            QPointer<AddGarment> add = rp.findChild<AddGarment *>();
+            QVERIFY(add);
+            const QString refused = addPaidGarment(add);
+            QVERIFY2(refused.contains("cadena de registros"), qPrintable(refused));
+            QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '925' AND pagado = 'SI'"), QStringLiteral("0"));
+            delete add;
             QTRY_VERIFY_WITH_TIMEOUT(!direct.directBackend()->firstSyncRunning(), 15000);
         }
         QVERIFY(markChainReady(store));                                       // checked on an earlier run
@@ -1006,6 +1022,53 @@ private slots:
         QCOMPARE(duringSave, ticket);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("SI"));
+    }
+
+    // Verifactu not configured (here the issuer's NIF is missing): every invoice is a
+    // Verifactu record, so nothing is charged - ticket save, Cobrar, Añadir with a paid
+    // garment - while an unpaid ticket is still saved.
+    void test_noInvoiceWhileVerifactuIsNotConfigured()
+    {
+        const QString nif = AppSettings::instance()->verifactuNif();
+        AppSettings::instance()->setVerifactuNif(QString());
+        const auto restore = qScopeGuard([nif] { AppSettings::instance()->setVerifactuNif(nif); });
+        QVERIFY(E2e::seedGarment(m_db, "940", "h940a", "10.00", today()));
+        {
+            VerifactuIntegration unconfigured;
+            QVERIFY(!unconfigured.initialize(m_db));
+            PayDialog dlg(m_db);
+            dlg.m_verifactu = &unconfigured;
+            QVERIFY(dlg.loadTicket("940"));
+            QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+            QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("no está configurado"),
+                     qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+            QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h940a'"), QStringLiteral("NO"));
+        }
+        MainWindow mw;
+        QPointer<AddGarment> add;
+        QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
+        add = mw.findChild<AddGarment *>();
+        QVERIFY(add);
+        add->loadTicket("940");
+        const QString refused = addPaidGarment(add);
+        QVERIFY2(refused.contains("no está configurado"), qPrintable(refused));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '940' AND pagado = 'SI'"), QStringLiteral("0"));
+        delete add;
+        AddGarment unchecked(m_db);                                           // nobody set the check: refused too
+        unchecked.loadTicket("940");
+        QVERIFY(addPaidGarment(&unchecked).contains("no está disponible"));
+
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Verifactu");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        clickSave(mw);
+        QVERIFY2(mw.findChild<QLabel *>("lblResult")->text().contains("no está configurado"),
+                 qPrintable(mw.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(false);            // unpaid: saved
+        clickSave(mw);
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("NO"));
     }
 
     // Any sync that succeeds after a failed first check (here one a resend starts, not the

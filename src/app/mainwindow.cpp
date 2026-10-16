@@ -791,10 +791,14 @@ bool MainWindow::validateTicket()
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
     if (m_verifactuIntegration) {
-        const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
+        const QString blocked = m_verifactuIntegration->numberingBlockedReason();
         m_numberingRefused = !blocked.isEmpty();
         if (m_numberingRefused)
             return refuse(blocked);
+        const QString notInvoiced = ui->pb_payment->isChecked() ? m_verifactuIntegration->invoicingBlockedReason()
+                                                                : QString();
+        if (!notInvoiced.isEmpty())
+            return refuse(notInvoiced + " " + tr("Puede guardar el ticket sin cobrar."));
     }
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
@@ -1423,16 +1427,11 @@ void MainWindow::cleanDatabase(bool print)
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
-    // A paid garment is invoiced under its ticket's number: not while the chain is unchecked.
-    if (m_verifactuIntegration) {
-        const QString blocked = m_verifactuIntegration->invoicingBlockedReason();
-        if (!blocked.isEmpty()) {
-            m_result->setText(UiKit::errorHtml(blocked));
-            return;
-        }
-    }
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
+    ui_add_garment->invoicingBlocked = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
+    };
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
     // PENDIENTE for the startup recovery.
     connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,

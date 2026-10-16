@@ -50,7 +50,7 @@ Key methods:
 | Method | Purpose |
 |--------|---------|
 | `mainwindowInitialSettings()` | Runs `migrateDatabase()`, then UI setup (table columns, buttons) |
-| `initializeVerifactu()` | Creates `VerifactuIntegration`; shows warning if not configured |
+| `initializeVerifactu()` | Creates `VerifactuIntegration`; shows a warning if not configured (paid saves are then refused) |
 | `resetAllContents()` | Clears form after save |
 | `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
 | `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado` = PENDIENTE when paid / SIN COBRAR when not; async submit patches the paid rows when AEAT replies |

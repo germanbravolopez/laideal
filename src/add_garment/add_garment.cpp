@@ -259,6 +259,12 @@ QString AddGarment::validationError()
                + "<br>Rellene al menos la prenda y la cantidad.";
     if (garmentUnmeasured(m_cbPrenda->currentText(), m_leSize->text()))
         return UiKit::errorHtml("La prenda se cobra por m2: introduzca su tamaño.");
+    if (m_chkPagado->isChecked()) {                                 // a paid garment is an invoice
+        const QString blocked = invoicingBlocked ? invoicingBlocked()
+                                                 : tr("Verifactu no está disponible: no se puede cobrar.");
+        if (!blocked.isEmpty())
+            return UiKit::errorHtml(blocked);
+    }
     if (m_chkPagado->isChecked() && quarterIsClosed(db, m_deFechaPago->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
                + "<br>La fecha de pago pertenece a un trimestre cerrado por la contabilidad.";
