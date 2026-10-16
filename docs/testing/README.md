@@ -33,7 +33,7 @@ A suite can also be run directly for its full per-function report, e.g. `build\t
 - **Throwaway state only.** DB tests create SQLite files in a `QTemporaryDir`; settings tests point `AppSettings` at a throwaway file with `loadFrom()`. No test may read or write the real database, `~/.laideal_settings.json` or the real AEAT.
 - **Application type.** `QTEST_GUILESS_MAIN` (no display) by default; `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen` (CTest `ENVIRONMENT` property) when a `QPixmap`, widget or header is involved.
 - **Prove each new test can fail**: temporarily break the production line it guards, watch it fail, restore. A test that passes against the bug guards nothing.
-- **Hangs fail fast.** Every suite has a 120 s CTest `TIMEOUT` (set for all tests at the end of `tests/CMakeLists.txt`; CI also passes `--timeout 120`) and the CI build job has `timeout-minutes: 45`.
+- **Hangs fail fast.** Every suite has a 120 s CTest `TIMEOUT` (set for all tests at the end of `tests/CMakeLists.txt`; CI also passes `--timeout 120`) except `aeat_direct_backend`, which gets 300 s (about 100 s locally, 115 s on the CI runner), and the CI build job has `timeout-minutes: 45`.
 - **Executable names** must not contain `update`, `setup` or `install`: Windows' UAC installer heuristic flags them and CTest fails with `BAD_COMMAND` (hence `test_versioncompare` for the updater).
 
 ### Patterns, by kind of logic
