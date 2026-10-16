@@ -100,7 +100,7 @@ public:
     bool chainSyncFailed() const { return !m_chainReady && m_lastSyncFailed; }
     // The first sync (it must reach AEAT) is still running: numbers are not safe yet either.
     bool firstSyncRunning() const { return !m_chainReady && m_syncRunning && m_firstSync; }
-    // The highest ticket number of our system AEAT returned in a sync (0: none seen).
+    // The issuer's highest ticket number AEAT returned in a sync, from any system (0: none seen).
     int highestNumberAtAeat() const { return m_highestNumberAtAeat; }
 
     // Syncs the chain now (see above). `done(ok, message)`.

@@ -5,6 +5,7 @@
 // read or written. The dialog is never accepted (accept() would save).
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QPushButton>
@@ -181,6 +182,28 @@ private slots:
         QMetaObject::invokeMethod(&reopened, "accept");
         QVERIFY(!s->aeatDirectProduction());
         s->setVerifactuDirectAeat(false);
+    }
+
+    // While the shop's own direct client works in pre-production the self-test is off: the
+    // tickets are the test, and both would send the same pre-production outbox at once.
+    void test_selfTestOffWhileTheShopIsInPreProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        {
+            SettingsDialog dlg;
+            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        }
+        s->setAeatDirectProduction(true);
+        {
+            SettingsDialog dlg;
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        }
+        s->setVerifactuDirectAeat(false);
+        SettingsDialog gateway;
+        QVERIFY(gateway.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
     }
 
     // Leaving the direct connection is refused while it has unsent records.

@@ -212,7 +212,8 @@ QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, co
 
 int VerifactuIntegration::highestNumberAtAeat() const
 {
-    return m_direct ? m_direct->highestNumberAtAeat() : 0;
+    // Only the real AEAT: pre-production holds test numbers far above the shop's.
+    return m_direct && m_direct->environmentName() == QLatin1String("produccion") ? m_direct->highestNumberAtAeat() : 0;
 }
 
 QString VerifactuIntegration::numberingBlockedReason()

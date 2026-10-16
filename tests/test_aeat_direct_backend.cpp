@@ -557,7 +557,7 @@ private slots:
         registerElsewhere({ "9000" }, { "IreneSolutions", "B11111111", "VERIFACTU-API", "IR", "1.0", "GW-1" });
         AeatDirectBackend backend(config(), m_db);
         QVERIFY(sync(backend));
-        QCOMPARE(backend.highestNumberAtAeat(), 7);
+        QCOMPARE(backend.highestNumberAtAeat(), 9000);                         // the gateway's numbers count too
     }
 
     // The helpers in sql_lite read the table the store writes (same kind, state and

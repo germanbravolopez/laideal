@@ -260,15 +260,16 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             return;
         }
         for (const AeatResponse::QueryRecord &r : reply.records) {
-            // Another system's records (e.g. the gateway's) belong to its own chain.
-            if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
-                continue;
-            // Our highest ticket number at AEAT ("31277", "31277-1"; not the self-test's):
-            // a database older than AEAT must not issue those numbers again.
+            // The issuer's highest ticket number at AEAT, from any system (the gateway sent the
+            // shop's own numbers): a database older than AEAT must not issue them again.
+            // "31277", "31277-1"; never the self-test's PRUEBA-...
             bool numeric = false;
             const int number = r.invoiceNumber.section(QLatin1Char('-'), 0, 0).toInt(&numeric);
             if (numeric)
                 m_highestNumberAtAeat = qMax(m_highestNumberAtAeat, number);
+            // Another system's records (e.g. the gateway's) belong to its own chain.
+            if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
+                continue;
             AeatResponse::RecordSummary s;
             s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
             s.operation = kRegistration;

@@ -266,6 +266,13 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     auto *btnSelfTest = new QPushButton(tr("Prueba con la AEAT (entorno de pruebas)"));
     btnSelfTest->setObjectName("btnAeatSelfTest");
     btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
+    // The shop's own direct client in pre-production already is the test, and both would
+    // send the same pre-production outbox at once.
+    if (AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction()) {
+        btnSelfTest->setEnabled(false);
+        btnSelfTest->setToolTip(tr("La conexión directa ya trabaja en el entorno de pruebas de la AEAT: los propios "
+                                   "tickets son la prueba."));
+    }
     connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
         emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
                                    m_vCertFile->text().trimmed(), m_vCertPassword->text());

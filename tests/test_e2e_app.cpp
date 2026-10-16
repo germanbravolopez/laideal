@@ -189,12 +189,12 @@ class TestE2eApp : public QObject
 
     // The direct client's chain as already synced with AEAT on this installation: the
     // database's sync mark and the settings' chain marker (AeatDirectBackend::Config).
-    static bool markChainReady(AeatStore &store)
+    static bool markChainReady(AeatStore &store, const QString &environment = QStringLiteral("pruebas"))
     {
         const QString nif = AppSettings::instance()->verifactuNif();
         if (!store.ensureSchema() || !store.markChainSynced(nif))
             return false;
-        AppSettings::instance()->setAeatChainMarker(QStringLiteral("pruebas|%1|%2").arg(nif, store.chainHead(nif).hash));
+        AppSettings::instance()->setAeatChainMarker(QStringLiteral("%1|%2|%3").arg(environment, nif, store.chainHead(nif).hash));
         return true;
     }
 
@@ -276,6 +276,7 @@ private slots:
     {
         E2e::clearTables(m_db);
         AppSettings::instance()->setVerifactuPendingRecoveryEnabled(false);
+        AppSettings::instance()->setAeatDirectProduction(false);
         m_server.clear();
         m_popups->clear();
         m_driver->clear();
@@ -551,11 +552,31 @@ private slots:
     // A database behind AEAT (restored from an older backup): once the start-up sync has
     // seen our system's higher numbers at AEAT, the next ticket starts above them, the
     // window says so, and a rectificativa does too.
-    void test_mainWindow_numbersAboveAeatAfterARestore()
+    // In pre-production AEAT's (test) numbers never move the shop's numbering: the next
+    // ticket follows the database, and no restore warning shows.
+    void test_mainWindow_preProductionNumbersFollowTheDatabase()
     {
         LiveAeat aeat(suiteAeatEndpoint());
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
+        QVERIFY(registerOnlyAtAeat(store, "90000004"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *direct = mw.findChild<VerifactuIntegration *>()->directBackend();
+        QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 15000);
+        QCOMPARE(direct->highestNumberAtAeat(), 90000004);                    // seen, not used
+        QCOMPARE(mw.findChild<QLineEdit *>("le_nr_ticket")->text(),
+                 QString::number(nextTicketNumber(m_db, 0)));
+        QVERIFY(!mw.findChild<QLabel *>("lblResult")->text().contains("copia anterior"));
+    }
+
+    void test_mainWindow_numbersAboveAeatAfterARestore()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AppSettings::instance()->setAeatDirectProduction(true);              // AEAT's numbers count in production only
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         {
             VerifactuIntegration elsewhere;                                   // the same system, records the DB lacks
@@ -739,8 +760,9 @@ private slots:
     void test_mainWindow_noInvoicingUntilTheChainIsChecked()
     {
         LiveAeat aeat(suiteAeatEndpoint());
-        AeatStore store(m_db, "pruebas");
-        QVERIFY(markChainReady(store));
+        AppSettings::instance()->setAeatDirectProduction(true);              // AEAT's numbers count in production only
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
         const int atAeat = 990101;                                            // AEAT holds it, the DB not (a restore)
         AppSettings::instance()->setVerifactuDirectAeat(true);
         {
@@ -1076,8 +1098,9 @@ private slots:
     void test_mainWindow_numberRefreshedAfterAnyChainSync()
     {
         LiveAeat aeat(suiteAeatEndpoint());
-        AeatStore store(m_db, "pruebas");
-        QVERIFY(markChainReady(store));
+        AppSettings::instance()->setAeatDirectProduction(true);              // AEAT's numbers count in production only
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
         QVERIFY(registerOnlyAtAeat(store, "990301"));
         QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
         aeat.server.enqueue({ QByteArray(), 200, 0, true });                  // the first check: no answer

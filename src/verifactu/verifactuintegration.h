@@ -85,7 +85,8 @@ public:
 
     bool isConfigured() const;
     QString getLastError() const { return m_lastError; }
-    // Our system's highest ticket number at AEAT (direct client, after its sync), else 0.
+    // The issuer's highest ticket number at the real AEAT (direct client in production, after
+    // its sync), else 0: pre-production never moves the shop's numbering.
     int highestNumberAtAeat() const;
     // The pre-production self-test may touch the shop's chain (marker, records): see the module doc.
     static bool selfTestSharesShopChain(bool directAeat, bool aeatDirectProduction) { return directAeat && !aeatDirectProduction; }
