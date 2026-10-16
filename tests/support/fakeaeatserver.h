@@ -45,6 +45,8 @@ public:
         QString           queriedNumber;
         bool              showSystem = false;   // query asked for MostrarSistemaInformatico
         QString           pageAfter;            // ClavePaginacion: the last number of the previous page
+        int               year = 0;             // PeriodoImputacion asked for
+        int               month = 0;
         QDateTime         receivedAt;
     };
     struct Reply {
@@ -64,12 +66,17 @@ public:
     void setWaitSeconds(int seconds) { m_waitSeconds = seconds; }
     // Query replies without the records' Huella / chain block (both optional in the schema).
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
+    // The same for one record only.
+    void queryWithoutHashFor(const QString &invoiceNumber) { m_noHashFor.insert(invoiceNumber); }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
     // The next reply that includes this record has no line for it (AEAT did not report on it).
     void omitLineFor(const QString &invoiceNumber) { m_omitLine.insert(invoiceNumber); }
     // Query replies hold at most `records` (0: all), with IndicadorPaginacion S when more follow.
     void setQueryPageSize(int records) { m_pageSize = records; }
+    // Queries return only the records whose invoice date is in the asked month, as AEAT
+    // does (off by default: most tests use fixed dates).
+    void setQueryByMonth(bool on) { m_queryByMonth = on; }
     // The next request gets `reply` instead of the default answer.
     void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
 
@@ -95,6 +102,8 @@ private:
     QHash<QString, QPair<QString, QString>> m_rejectNext;
     QSet<QString> m_omitLine;
     int m_pageSize = 0;
+    bool m_queryByMonth = false;
+    QSet<QString> m_noHashFor;
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     int m_counter = 0;

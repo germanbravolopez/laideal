@@ -549,6 +549,99 @@ private slots:
         QCOMPARE(queriesSince(before), 2);
     }
 
+    // A first sync (here a database that never synced, as after a restore or on a new PC)
+    // reads every month: the chain's newest record may be dated months back (a resend),
+    // and the next record must follow it. A later, daily sync reads two months only.
+    void test_firstSyncReadsEveryMonth()
+    {
+        m_server->setQueryByMonth(true);
+        const QDate today = QDate::currentDate();
+        QString newest;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_months.db").arg(m_dbCounter)));
+            AeatDirectBackend elsewhere(config(), other);
+            VerifactuInvoice recent = ticket("1", 10);
+            recent.setInvoiceDate(today);
+            QVERIFY(waitFor(elsewhere, elsewhere.submitInvoiceAsync(recent)).isSuccess());
+            VerifactuInvoice resent = ticket("2", 20);                          // generated after, dated back
+            resent.setInvoiceDate(today.addMonths(-3));
+            newest = waitFor(elsewhere, elsewhere.submitInvoiceAsync(resent)).rawHash;
+            QVERIFY(!newest.isEmpty());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        int before = m_server->requests().size();
+        {
+            AeatDirectBackend restored(config(), m_db);
+            VerifactuInvoice next = ticket("3", 30);
+            next.setInvoiceDate(today);
+            QVERIFY(waitFor(restored, restored.submitInvoiceAsync(next)).isSuccess());
+            QCOMPARE(m_server->sentRecords().last().previousHash, newest);
+            QCOMPARE(queriesSince(before), 24);
+        }
+        before = m_server->requests().size();
+        AeatDirectBackend daily(config(), m_db);
+        QVERIFY(sync(daily));
+        QCOMPARE(queriesSince(before), 2);
+    }
+
+    // Registers, from another database of our system, "1" dated today and "2" generated
+    // after it but dated three months back (a resend): the chain's newest record.
+    void registerWithAnOlderDatedTip()
+    {
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_tip.db").arg(m_dbCounter)));
+            AeatDirectBackend elsewhere(config(), other);
+            VerifactuInvoice recent = ticket("1", 10);
+            recent.setInvoiceDate(QDate::currentDate());
+            QVERIFY(waitFor(elsewhere, elsewhere.submitInvoiceAsync(recent)).isSuccess());
+            VerifactuInvoice resent = ticket("2", 20);
+            resent.setInvoiceDate(QDate::currentDate().addMonths(-3));
+            QVERIFY(waitFor(elsewhere, elsewhere.submitInvoiceAsync(resent)).isSuccess());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+    }
+
+    // A first sync cannot trust a record of ours AEAT returns without its huella: it may
+    // be the chain's newest. The sync fails (numbering stays blocked) instead of guessing.
+    void test_firstSyncFailsOnARecordWithoutItsHuella()
+    {
+        m_server->setQueryByMonth(true);
+        registerWithAnOlderDatedTip();
+        m_server->queryWithoutHashFor("2");
+        AeatDirectBackend restored(config(), m_db);
+        bool ok = true;
+        QString message;
+        restored.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(!ok && message.contains("sin su huella"), qPrintable(message));
+        QVERIFY(restored.chainSyncFailed());
+    }
+
+    // A first sync failing partway through the months adopts nothing: the next one starts over.
+    void test_firstSyncFailingMidWalkAdoptsNothing()
+    {
+        m_server->setQueryByMonth(true);
+        registerWithAnOlderDatedTip();
+        for (int i = 0; i < 4; ++i)
+            m_server->enqueue({});                                            // months 0 to -3 answered
+        m_server->enqueue({ QByteArray(), 200, 0, true });                    // month -4: no answer
+        AeatDirectBackend restored(config(), m_db);
+        QVERIFY(!sync(restored));
+        QVERIFY(!restored.chainReady());
+        QVERIFY(!AeatStore(m_db, "pruebas").chainSynced(config().issuerNif));
+        QVERIFY(sync(restored));                                              // all 24 months this time
+        VerifactuInvoice next = ticket("3", 30);
+        next.setInvoiceDate(QDate::currentDate());
+        QVERIFY(waitFor(restored, restored.submitInvoiceAsync(next)).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().invoiceNumber, QStringLiteral("3"));
+        QCOMPARE(m_server->sentRecords().last().previousHash,
+                 m_server->registered().value(QStringLiteral("Alta:2")).hash);
+    }
+
     // Our highest number at AEAT reads "7-1" as 7 and ignores the self-test's records and
     // other systems' numbers.
     void test_highestNumberAtAeat()

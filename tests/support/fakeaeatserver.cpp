@@ -55,6 +55,10 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                     request.queriedNumber = text;
                 else if (name == QLatin1String("MostrarSistemaInformatico"))
                     request.showSystem = (text == QLatin1String("S"));
+                else if (name == QLatin1String("Ejercicio"))
+                    request.year = text.toInt();
+                else if (name == QLatin1String("Periodo"))
+                    request.month = text.toInt();
                 continue;
             }
             const bool inChain = path.contains(QStringLiteral("Encadenamiento"));
@@ -200,6 +204,9 @@ QByteArray FakeAeatServer::answer(const Request &request)
         // One invoice, or (no number) every registration held.
         QList<SentRecord> held;
         for (auto it = m_registered.cbegin(); it != m_registered.cend(); ++it) {
+            const QDate issued = QDate::fromString(it.value().issueDate, QStringLiteral("dd-MM-yyyy"));
+            if (m_queryByMonth && (issued.year() != request.year || issued.month() != request.month))
+                continue;
             if (it.value().operation == QLatin1String("Alta")
                 && (request.queriedNumber.isEmpty() || it.value().invoiceNumber == request.queriedNumber))
                 held << it.value();
@@ -234,11 +241,11 @@ QByteArray FakeAeatServer::answer(const Request &request)
                 "</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>%6</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro>"
                 "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
                 .arg(h.invoiceNumber, h.issueDate, h.total,
-                     m_queryWithoutHashes ? QString()
+                     (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
                                           : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>").arg(h.hash),
                      m_registeredRequestId.value(QStringLiteral("Alta:") + h.invoiceNumber),
                      cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), h.generatedAt,
-                     m_queryWithoutHashes ? QString()
+                     (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
                      : h.previousHash.isEmpty()
                          ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
                          : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"

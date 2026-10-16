@@ -292,12 +292,17 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             return;
         }
         // This month and the previous one always (a record generated now may be dated
-        // last month); further back only while nothing has been found.
-        if (monthsLeft > 1 && (mustQuery > 1 || found.isEmpty()) && !(found.isEmpty() && sawUnusable)) {
+        // last month); further back only while nothing has been found - except on a first
+        // sync (first start, restored database, new PC), which reads every month: the
+        // chain's newest record may carry an older date (a resend, a back-dated
+        // rectificativa). Never on a daily start, whose chain marker matches.
+        if (monthsLeft > 1 && (mustQuery > 1 || found.isEmpty() || m_firstSync) && !(found.isEmpty() && sawUnusable)) {
             queryMonth(month.addMonths(-1), monthsLeft - 1, mustQuery - 1, {}, found, sawUnusable);
             return;
         }
-        if (found.isEmpty() && sawUnusable) {
+        // A record of ours without its huella may be the chain's newest: a first sync, which
+        // has no local chain to trust, cannot know where it continues.
+        if (sawUnusable && (found.isEmpty() || m_firstSync)) {
             syncFinished(false, tr("La AEAT devuelve registros de este emisor sin su huella: no se puede saber "
                                    "dónde continúa la cadena."));
             return;
