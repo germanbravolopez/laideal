@@ -1,5 +1,6 @@
 #include "producerdeclaration.h"
 #include "aeatrecord.h"
+#include "appsettings.h"
 
 #include <QStringList>
 
@@ -24,8 +25,16 @@ const char *const kMonths[] = { "enero", "febrero", "marzo", "abril", "mayo", "j
 
 Signature currentSignature()
 {
-    // Filled in by the producer when he signs this version.
-    return { QString(), QDate(), QString() };
+    // j) the shop's address from the settings (never in the source); the date is set
+    // when the producer signs the version that ships.
+    const AppSettings *s = AppSettings::instance();
+    QStringList lines;
+    for (const QString &line : { s->businessAddress().trimmed(), s->businessCity().trimmed() })
+        if (!line.isEmpty())
+            lines << line;
+    const QString address = lines.join(QStringLiteral(", "));
+    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(),
+             QString::fromUtf8("Granada, España") };
 }
 
 bool isComplete(const Signature &signature)

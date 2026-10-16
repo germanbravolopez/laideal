@@ -4,11 +4,13 @@
 // by tests/aeat/validate_aeat_xml.py (ctest entry aeat_xsd).
 
 #include <QtTest>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
 
 #include "aeathash.h"
 #include "aeatrecord.h"
 #include "producerdeclaration.h"
+#include "appsettings.h"
 
 using namespace AeatRecord;
 
@@ -275,6 +277,24 @@ private slots:
         QVERIFY(!done.contains("(pendiente)"));
         QVERIFY(done.contains(QString::fromUtf8("14 de octubre de 2026, Granada, España")));
         QVERIFY(done.contains("Calle Mayor 1, 18001 Granada"));
+    }
+
+    // j) and l) of the version being built: the shop's address from the settings (never in
+    // the source), the place fixed, the date left for the release that signs it.
+    void test_currentSignatureFromTheSettings()
+    {
+        QTemporaryDir dir;
+        AppSettings::instance()->loadFrom(dir.filePath("settings.json"));   // new file: never the real one
+        AppSettings::instance()->setBusinessAddress("Calle Mayor 1, bajo 2");
+        AppSettings::instance()->setBusinessCity("18001 Granada");
+        const ProducerDeclaration::Signature now = ProducerDeclaration::currentSignature();
+        QCOMPARE(now.postalAddress, QString::fromUtf8("Calle Mayor 1, bajo 2, 18001 Granada, España"));
+        QCOMPARE(now.place, QString::fromUtf8("Granada, España"));
+        QVERIFY(!now.date.isValid());
+        QVERIFY(!ProducerDeclaration::isComplete(now));
+        AppSettings::instance()->setBusinessAddress(QString());
+        AppSettings::instance()->setBusinessCity(QString());
+        QVERIFY(ProducerDeclaration::currentSignature().postalAddress.isEmpty());
     }
 };
 
