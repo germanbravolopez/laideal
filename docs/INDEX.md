@@ -15,6 +15,7 @@
 | `docs/testing/README.md` | **Testing overview** — the three layers (unit suites, end-to-end bench, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
 | `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `testschema.h`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
+| `docs/testing/ui_smoke.md` | **Automated UI smoke test**: the installed app driven over UI Automation (pywinauto) on a `windows-latest` runner, synthetic DB + offline settings, widgets by object name; `tests/ui/`, `.github/workflows/ui-smoke.yml` |
 | `docs/testing/smoke_test.md` | **Manual pre-release checklist** — what `ctest` cannot cover: real network, real printer, the migration on real data, screens not yet automated |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |

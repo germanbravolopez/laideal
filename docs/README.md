@@ -18,7 +18,8 @@ docs/
 │   ├── README.md                      (how to run the tests, conventions, patterns)
 │   ├── unit_suites.md                 (what each unit / integration suite covers)
 │   ├── e2e.md                         (end-to-end bench, fake Verifactu server)
-│   └── smoke_test.md                  (manual pre-release checklist — run before the release commit)
+│   ├── smoke_test.md                  (manual pre-release checklist — run before the release commit)
+│   └── ui_smoke.md                    (automated UI smoke test — installed app over UI Automation)
 └── modules/
     ├── mainwindow.md                  (MainWindow — central controller)
     ├── sql_lite.md                    (database free-function API)
@@ -54,6 +55,7 @@ docs/
 | [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
 | [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu server | When testing a flow |
 | [testing/smoke_test.md](./testing/smoke_test.md) | Manual pre-release checklist — network, printer, migration, UI wiring | Run before each release |
+| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test on a disposable Windows runner | When automating a smoke-test block |
 | [INDEX.md](./INDEX.md) | Quick-find: every file, concept, topic | As needed |
 
 ## Module Documentation

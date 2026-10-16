@@ -1,0 +1,109 @@
+name: UI smoke
+
+# Drives the installed app like a person on a disposable windows-latest VM: build,
+# package the installer as the release job does, install it silently, then run
+# tests/ui with pywinauto over UI Automation on a synthetic database (never shop
+# data: the repository is public). Screenshots, the control tree, the app output
+# and the database are kept as an artifact. See docs/testing/ui_smoke.md.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ develop, 'feature/**' ]
+    paths:
+      - 'tests/ui/**'
+      - '.github/workflows/ui-smoke.yml'
+
+jobs:
+  ui-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Ninja and Inno Setup
+        run: choco install ninja innosetup -y --no-progress
+
+      - name: Install Qt + MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.4.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+
+      # Same MinGW 11.2 as ci.yml (Qt 6.4.3's runtime); see the comment there.
+      - name: Install MinGW 11.2 (matches Qt 6.4.3)
+        shell: pwsh
+        run: |
+          $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          for ($i = 1; $i -le 4 -and -not (Test-Path "$bin\g++.exe"); $i++) {
+            choco install mingw --version=11.2.0.07112021 -y --no-progress
+            if (-not (Test-Path "$bin\g++.exe")) { Write-Host "MinGW install attempt $i failed; retrying in 30 s"; Start-Sleep -Seconds 30 }
+          }
+          if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build the app
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
+          cmake --build build --target laideal
+
+      - name: Package the installer
+        id: package
+        shell: pwsh
+        run: |
+          if ((Get-Content CMakeLists.txt -Raw) -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
+            throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
+          }
+          $ver = $matches[1]
+          $stage = "releases\$ver"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item build\src\app\laideal.exe $stage
+          windeployqt --no-translations --no-system-d3d-compiler "$stage\laideal.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" releases\laideal.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
+          echo "INSTALLER=releases\setup_outputs\laideal_setup_$ver.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Install silently
+        id: install
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\La Ideal"
+          $p = Start-Process -FilePath '${{ steps.package.outputs.INSTALLER }}' -Wait -PassThru `
+               -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LANG=spanish', "/DIR=`"$dir`"", "/LOG=`"$env:RUNNER_TEMP\install.log`""
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\laideal.exe")) { throw "laideal.exe not installed in $dir" }
+          echo "EXE=$dir\laideal.exe" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install pywinauto
+        run: python -m pip install --quiet -r tests/ui/requirements.txt
+
+      # Run from outside the install dir with a clean PATH entry for Qt: the
+      # installed app must start on its own deployed DLLs, not the build's Qt.
+      - name: Run the UI smoke test (P0)
+        shell: pwsh
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
+          python tests/ui/smoke_p0.py --exe '${{ steps.install.outputs.EXE }}' --out ui-smoke-out
+
+      - name: Keep the run's outputs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ui-smoke-out -Force | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\install.log" ui-smoke-out -ErrorAction SilentlyContinue
+          Copy-Item "$HOME\.laideal.log" ui-smoke-out -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-smoke
+          path: ui-smoke-out
+          if-no-files-found: ignore
