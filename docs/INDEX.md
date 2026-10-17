@@ -12,7 +12,8 @@
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
 | `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
-| `docs/testing/README.md` | **Testing overview** — the three layers (unit suites, end-to-end bench, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
+| `CONTRIBUTING.md` (root) | **How to contribute**: rules for every change (branch, test, compliance review, docs, commit style), the development workflow (branching, version bump, merge, tag) and the release procedure (CI release job, local `release.ps1` fallback) |
+| `docs/testing/README.md` | **Testing overview** — the four layers (unit suites, end-to-end bench, UI smoke test, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
 | `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `testschema.h`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
 | `docs/testing/ui_smoke.md` | **Automated UI smoke test**: smoke blocks A-E on the installed UI-test build (CMake `LAIDEAL_UI_TEST`, `--fake-aeat`) driven over UI Automation (pywinauto) on a `windows-latest` runner, against the fake AEAT on a synthetic DB; captured printer queue; the local AEAT pre-production script; how Qt widgets show in UIA (nested dialogs, cell widgets, checkable cells, dates); `tests/ui/`, `tests/tools/`, `.github/workflows/ui-smoke.yml` |
@@ -180,7 +181,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | How to read customer bug logs | `~/.laideal.log` on customer machine; Archivo → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
-| Release procedure | Root `README.md` |
+| Development workflow, release procedure | Root `CONTRIBUTING.md` |
 | Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |
 | Verifactu XML export for Hacienda (Art. 14.1) | `src/app/aeatexportdialog.cpp` (`AeatExportDialog`, opened by `MainWindow::on_actionExportar_registros_aeat_triggered`), records from `sql_lite::aeatExportRecords` (one per payment event), XML written by `src/app/aeatexport.cpp`; column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |

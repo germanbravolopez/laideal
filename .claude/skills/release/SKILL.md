@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # /release — Ship a Release X.Y End-to-End
 
-Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
+Executes the full release flow described in the **Development workflow** and **Release procedure** sections of `CONTRIBUTING.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
