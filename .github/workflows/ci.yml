@@ -172,6 +172,18 @@ jobs:
           New-Item -ItemType Directory -Path "releases\${{ github.ref_name }}" -Force
           Copy-Item $exe.FullName -Destination "releases\${{ github.ref_name }}\"
 
+      # A UI-test build (CMake LAIDEAL_UI_TEST, ui-smoke.yml) can send AEAT records to a
+      # local fake AEAT through --fake-aeat; it must never be released.
+      - name: Refuse a UI-test build
+        shell: pwsh
+        run: |
+          $exe = "releases\${{ github.ref_name }}\laideal.exe"
+          $marker = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes('--fake-aeat'))
+          if ([BitConverter]::ToString([IO.File]::ReadAllBytes($exe)).Contains($marker)) {
+            throw "laideal.exe is a UI-test build (--fake-aeat): it must never be released."
+          }
+          Write-Host "Not a UI-test build."
+
       - name: Run windeployqt
         shell: pwsh
         run: |

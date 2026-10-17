@@ -290,7 +290,8 @@ add_test(NAME escpos
 # output back into a PNG simulation of the thermal paper + an ASCII mock (written
 # next to the test exe). QTEST_MAIN (QGuiApplication - links Gui, not Widgets)
 # under offscreen so QPainter text rasterizes headless.
-add_executable(test_ticket_preview test_ticket_preview.cpp)
+add_executable(test_ticket_preview test_ticket_preview.cpp support/escpospreview.h)
+target_include_directories(test_ticket_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(test_ticket_preview PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Gui
@@ -385,3 +386,17 @@ set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
 # The direct client's suite drives the fake AEAT server through ~45 scenarios (~100 s
 # locally, more on a CI runner): a longer limit, still well short of a real hang.
 set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 300)
+
+# Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
+# the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port
+# printer captures.
+add_executable(fake_aeat_server tools/fake_aeat_server.cpp
+    support/fakeaeatserver.h
+    support/fakeaeatserver.cpp
+)
+target_include_directories(fake_aeat_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(fake_aeat_server PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network)
+
+add_executable(escpos_preview tools/escpos_preview.cpp support/escpospreview.h)
+target_include_directories(escpos_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(escpos_preview PRIVATE Qt${QT_VERSION_MAJOR}::Gui printing)

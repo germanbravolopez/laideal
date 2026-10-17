@@ -84,7 +84,7 @@ if (Test-Path $BuildDir) {
 }
 
 Step "Configuring CMake (Release, Ninja)"
-& cmake -S $RepoRoot -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release
+& cmake -S $RepoRoot -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=OFF
 if ($LASTEXITCODE -ne 0) { Fail "CMake configure failed" }
 
 Step "Building"
@@ -93,6 +93,11 @@ if ($LASTEXITCODE -ne 0) { Fail "Build failed" }
 
 $builtExe = Join-Path $BuildDir 'src\app\laideal.exe'
 if (-not (Test-Path $builtExe)) { Fail "Build succeeded but exe not at $builtExe" }
+# Same guard as the CI release job: a UI-test build (--fake-aeat) must never be released.
+$uiTestMarker = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes('--fake-aeat'))
+if ([BitConverter]::ToString([IO.File]::ReadAllBytes($builtExe)).Contains($uiTestMarker)) {
+    Fail "laideal.exe is a UI-test build (--fake-aeat): it must never be released."
+}
 
 Step "Staging release in $StagingDir"
 New-Item -ItemType Directory -Path $StagingDir | Out-Null

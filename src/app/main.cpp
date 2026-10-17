@@ -5,6 +5,10 @@
 #include "settingsdialog.h"
 #include "sql_lite.h"
 #include "applogger.h"
+#ifdef LAIDEAL_UI_TEST
+#include "aeatdirectbackend.h"
+#include "reporthtml.h"
+#endif
 
 #include <QApplication>
 #include <QFile>
@@ -30,6 +34,24 @@ int main(int argc, char *argv[])
     } else {
         settings->load();
     }
+
+#ifdef LAIDEAL_UI_TEST
+    // UI smoke test build only (CMake LAIDEAL_UI_TEST, never a release): generated PDFs are
+    // not opened in a viewer, and `--fake-aeat <url>` sends the direct AEAT client to a
+    // local fake AEAT. Anything but 127.0.0.1 is refused.
+    ReportHtml::setOpenGeneratedReports(false);
+    const int fakeAeatArg = args.indexOf(QStringLiteral("--fake-aeat"));
+    QString fakeAeatUrl;
+    if (fakeAeatArg > 0 && fakeAeatArg + 1 < args.size()) {
+        fakeAeatUrl = args.at(fakeAeatArg + 1);
+        if (!fakeAeatUrl.startsWith(QLatin1String("http://127.0.0.1:"))) {
+            qCritical() << "main: --fake-aeat must be http://127.0.0.1:<port>, not" << fakeAeatUrl;
+            return 1;
+        }
+        AeatDirectBackend::setEndpointOverride(fakeAeatUrl);
+        qWarning() << "main: UI test build, AEAT replaced by the fake at" << fakeAeatUrl;
+    }
+#endif
 
     // Localize Qt's built-in strings (standard dialog buttons, etc.) to the configured
     // language; Configuracion re-applies it live when the setting changes.
@@ -59,6 +81,10 @@ int main(int argc, char *argv[])
     w.setWindowState(Qt::WindowMaximized);
     if (settingsArg > 0)
         w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(args.value(settingsArg + 1)));
+#ifdef LAIDEAL_UI_TEST
+    if (!fakeAeatUrl.isEmpty())
+        w.setWindowTitle(w.windowTitle() + QStringLiteral(" - AEAT simulada (prueba de interfaz)"));
+#endif
 
     QIcon icon(":/icons/laideal.ico");
     a.setWindowIcon(icon);

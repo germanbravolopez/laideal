@@ -33,6 +33,15 @@ add_subdirectory(src/verifactu)
 add_subdirectory(src/updater)
 add_subdirectory(src/backup)
 
+# UI smoke test build only (.github/workflows/ui-smoke.yml): compiles the --fake-aeat
+# switch into laideal.exe. Never set for a release; the release job refuses such an exe.
+option(LAIDEAL_UI_TEST "Build laideal.exe for the UI smoke test (--fake-aeat)" OFF)
+if (LAIDEAL_UI_TEST)
+    message(WARNING "LAIDEAL_UI_TEST is ON: this laideal.exe accepts --fake-aeat and must never be "
+                    "installed at the shop. Use a separate build folder (build-uitest).")
+    target_compile_definitions(laideal PRIVATE LAIDEAL_UI_TEST)
+endif()
+
 # Unit / integration tests (Qt Test + CTest). Run with `ctest` from build/ or
 # `cmake --build build --target test`. CI and the release gate run them too.
 enable_testing()
