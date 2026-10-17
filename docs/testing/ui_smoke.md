@@ -28,12 +28,15 @@ Limits found in the spike:
 
 ## Running it locally
 
-With a built or installed app (a build needs Qt's `bin` on `PATH`):
+With a built or installed app (a build needs Qt's `bin` on `PATH`), from the repository root. The packages go into a virtual environment in `.venv/` (git-ignored), not into the global Python; create it once, then call its own `python` (no activation needed):
 
 ```bash
-python -m pip install -r tests/ui/requirements.txt
-python tests/ui/smoke_p0.py --exe "build/src/app/laideal.exe" --out ui-smoke-out
+python -m venv .venv
+.venv/Scripts/python -m pip install -r tests/ui/requirements.txt
+.venv/Scripts/python tests/ui/smoke_p0.py --exe "build/src/app/laideal.exe" --out ui-smoke-out
 ```
+
+In PowerShell the interpreter is `.venv\Scripts\python.exe`. Re-run the `pip install` line after `requirements.txt` changes.
 
 It takes the mouse and keyboard for about 10 s; do not touch them meanwhile.
 

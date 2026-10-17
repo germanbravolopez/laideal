@@ -29,6 +29,14 @@ build*
 # local settings
 .claude/settings.local.json
 
+# Python virtual environment (docs/testing/ui_smoke.md)
+.venv/
+ui-smoke-out/
+
 # MkDocs documentation site build output (see mkdocs.yml / .github/workflows/docs.yml)
 site/
 _site/
+
+# Python packaging metadata (pip install -e .)
+*.egg-info/
+__pycache__/
