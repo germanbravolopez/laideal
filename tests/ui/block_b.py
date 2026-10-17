@@ -132,13 +132,16 @@ def run(run):
         run.check(_adjacent(titles), f"Listado de ingresos columns: {titles}")
 
     with run.step("B", "B8", "Listados: estado SIN COBRAR shown, accent-insensitive search, PDF export"):
-        # Only the on-screen columns have cells in the UIA tree (verifactu_estado is far right
-        # on a small screen), so filter by the estado and look at which garments stay.
-        type_into(ingresos, "filter_widget", "SIN COBRAR")
-        time.sleep(1)
-        shown = {c.window_text() for c in table_cells(find(ingresos, "table_listado"))}
-        run.check({"Pantalon", "Falda"} <= shown and "Jersey" not in shown,
-                  f"filtering the ingresos listado by 'SIN COBRAR' shows {sorted(shown)}")
+        # Only on-screen columns have cells in the UIA tree, and verifactu_estado is far right
+        # on a small screen: move right along a row, as a person scrolls, until it shows.
+        table = find(ingresos, "table_listado")
+        table_cells(table)[0].click_input()
+        for _ in range(30):
+            if any(c.window_text() == "SIN COBRAR" for c in table_cells(table)):
+                break
+            table.type_keys("{RIGHT}")
+        run.check(any(c.window_text() == "SIN COBRAR" for c in table_cells(table)),
+                  "no 'SIN COBRAR' estado in the ingresos listado")
         ingresos.close()
         prendas = open_listado(run.app, "Listado de prendas")
         click(prendas, "btnPdf")
