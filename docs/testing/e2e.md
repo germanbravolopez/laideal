@@ -119,7 +119,7 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 
 Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`, the Anular button enabled for every estado, Recogida not taking over PayDialog's request, no query after a duplicate, Actualizar enabled on any found record, Consultar shown on unpaid rows); each mutation made its scenario fail.
 
-**Not automated**: the real printer, PDF and screen rendering, menu wiring and the Listado lock are in [smoke_test.md](smoke_test.md), which never contacts AEAT. The real AEAT itself is checked once, with a single real ticket after the production switch.
+**Not in this bench**: menu wiring, printing, the Listado lock and the installed app are covered by the UI smoke test ([ui_smoke.md](ui_smoke.md)); the physical printer, the shop's real schema and how screens look by the manual [smoke_test.md](smoke_test.md). The real AEAT itself is checked once, with a single real ticket after the production switch.
 
 ## Direct AEAT connection - `test_e2e_aeat_direct`
 

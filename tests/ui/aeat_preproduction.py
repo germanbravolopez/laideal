@@ -13,7 +13,8 @@ answered:
     6  the export of the AEAT records of the day
     7  the log: every request went to prewww1.aeat.es
 
-    python tests/ui/aeat_preproduction.py --exe <laideal.exe> --settings-from <kit settings.json> --out <folder>
+    python tests/ui/aeat_preproduction.py --exe <laideal.exe> --out <new folder>
+        --settings-from %USERPROFILE%/work/tintoreria/documents/prueba-aeat-settings.json
 
 --settings-from is the kit's settings file with the issuer's NIF, name and certificate
 (store thumbprint, or .pfx file and password). Only those are taken from it; the run

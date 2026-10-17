@@ -1,4 +1,4 @@
-"""Automated UI smoke test: docs/testing/smoke_test.md driven like a person.
+"""Automated UI smoke test: the pre-release smoke test driven like a person.
 
 Starts the UI-test build of laideal.exe (CMake LAIDEAL_UI_TEST) against the fake
 AEAT (tests/tools/fake_aeat_server) on a synthetic database, and runs the smoke

@@ -1,4 +1,4 @@
-"""Block E - backup, settings, language, installer language (docs/testing/smoke_test.md)."""
+"""Block E - backup, settings, language, installer language (docs/testing/ui_smoke.md, What it checks)."""
 
 import json
 import subprocess

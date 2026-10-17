@@ -62,7 +62,7 @@ def write_settings(path: Path, db_path: Path, reports_root: Path, aeat: bool = F
     path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
-# The tickets of docs/testing/smoke_test.md step 1.6, seeded after the first start
+# The smoke tickets (docs/testing/ui_smoke.md, Safety), seeded after the first start
 # (the app's migrations add the verifactu_* columns). 1: unpaid, two garments;
 # 2: unpaid; 3: paid and left PENDIENTE; 4: paid and sent; 5: paid in Q3, cancelled
 # in Q4; one gasto in Q3.

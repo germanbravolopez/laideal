@@ -1,4 +1,4 @@
-"""Block B - ticket screens and wiring (docs/testing/smoke_test.md)."""
+"""Block B - ticket screens and wiring (docs/testing/ui_smoke.md, What it checks)."""
 
 import time
 

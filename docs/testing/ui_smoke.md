@@ -1,6 +1,6 @@
 # Automated UI smoke test
 
-Drives the **installed** `laideal.exe` the way a person does (mouse and keyboard over Windows UI Automation) on a disposable Windows VM, so the pre-release checklist in [smoke_test.md](smoke_test.md) runs by itself: installer, deployed DLLs, menus, windows, printing, Contabilidad and the quarter lock. It complements `ctest`: the e2e bench ([e2e.md](e2e.md)) calls the windows' slots from inside a test exe, while this test only sees what is on screen, what is printed and what lands in the database.
+Drives the **installed** `laideal.exe` the way a person does (mouse and keyboard over Windows UI Automation) on a disposable Windows VM, so the pre-release smoke test runs by itself: installer, deployed DLLs, menus, windows, printing, Contabilidad and the quarter lock. It complements `ctest`: the e2e bench ([e2e.md](e2e.md)) calls the windows' slots from inside a test exe, while this test only sees what is on screen, what is printed and what lands in the database. What still needs a person is in [smoke_test.md](smoke_test.md).
 
 Two scripts share one set of operator flows:
 
@@ -53,23 +53,23 @@ The artifact **`ui-smoke`** keeps:
 
 ## Safety
 
-- **Never shop data**: the repository is public. `tests/ui/seed.py` builds a throwaway database with the shop's original tables (as `tests/support/testschema.h`). The first start runs the app's own migrations. Then the tickets and gasto of smoke_test.md step 1.6 are seeded, plus a few garments, clients and a supplier.
+- **Never shop data**: the repository is public. `tests/ui/seed.py` builds a throwaway database with the shop's original tables (as `tests/support/testschema.h`). The first start runs the app's own migrations. Then the smoke tickets are seeded (`seed.SMOKE_TICKETS`): **1** unpaid with two garments (Camisa 12.00, Pantalon 8.00), **2** unpaid (Falda), **3** paid and left `PENDIENTE`, **4** paid and `ENVIADA` (24.20), **5** paid in Q3 and `ANULADA` on 01-10-2026 (12.10), and gasto **SMOKE-G1** (60.50, Q3), plus a few garments, clients and a supplier.
 - **Own settings**: the app starts with `--settings <file>`, so `~/.laideal_settings.json` is never touched. The file sets a synthetic issuer (B00000000) on the direct client in the test environment, and turns off the update check and the automatic backup.
 - **The log**: Qt reads the profile folder from the Windows account, so the app always writes `~/.laideal.log`. The scripts read only what each session added, and copy it to `laideal-run.log`. A local run appends to the developer's log; CI's is the runner's.
 
 ## What it checks
 
-| Block | Steps (smoke_test.md) | How |
-|-------|-----------------------|-----|
+| Block | Steps | How |
+|-------|-------|-----|
 | A | A1 first start: migrations in the log, no SQL error, verifactu columns added, status bar "entorno de PRUEBAS"; A2 restart after seeding: schema unchanged, no data migration repeats, the recovery dialog lists ticket 3 only; A3 every AEAT URL in the log is the fake's, never AEAT's or the gateway's (also at the end of the run) | DB schema, log, the dialog's table |
 | B | B1 Posponer writes nothing and the dialog comes back; B2 Marcar como error → `ERROR`, Recogida's Verifactu window offers Reintentar; B3 ticket 1 by number, Importe total 20,00; B4 Añadir prendas… adds an unpaid Falda; B5 Cobrar… charges only the Camisa, the fake AEAT accepts it (`ENVIADA`, CSV); B6 Añadir nuevas prendas refuses ticket 1; B6b Anular prendas… voids ticket 2, and Herramientas has no Anular prendas; B7 the four date columns side by side (on-screen order); B8 `SIN COBRAR` shown, accent-insensitive client search, Listado de prendas PDF; B9 Anular factura / Rectificar load ticket 4, nothing sent | DB rows, result panels, no pop-up opened |
 | C | C1 unpaid ticket: recibo with both copies, no QR, number advances; C2 paid ticket: factura with QR + leyenda, recibo with IMPORTE PAGADO, QR decoded to AEAT's test check page for that number, ticket `ENVIADA`; C3 Imprimir → Factura of ticket 4 (total, QR), Factura completa with the typed DNI and address | Captured print jobs decoded by `escpos_preview` |
 | D | D1 Q3 2026 with detail: income 66.30, gastos 60.50, the window stays open; D2 Q4: the cancellation of ticket 5 is taken back (-12.10); D3 Anual renders; D4 the lock box only in Trimestral (never in Revertir), Q3 without detail, Comprobar bloqueo "no está bloqueado"; D5 Bloquear Q3: SMOKE-G1 not editable, an expense dated 20-09-2026 refused, today's saved; D6 Revertir Q3: SMOKE-G1 editable again | PDF text (`pypdf`), DB, result panels, the focused cell editor |
-| E | E1 backup next to the database; E2 Configuración has no IVA field; E3 English: Yes/No buttons and English release notes, back to Español: Sí/No; E4 the installer's language becomes the app's first language (English, then Spanish installer) | DB files, dialogs, the settings file |
+| E | E1 backup next to the database; E2 Configuración has no IVA field; E3 English: Yes/No buttons and English release notes, back to Español: Sí/No; E4 the installer's language becomes the app's first language (English, then Spanish installer) | DB files, dialogs, the standard Yes/No buttons |
 
 Blocks run in this order on one database, as a person would. A failed step stops its block, and the run goes on with the next one. A block run alone (`--blocks D`) first does the start-up and seeding of block A. D2 needs block B's payment in Q4 and is skipped without it (see the Contabilidad issue in the tracker).
 
-**Stays manual** (smoke_test.md): the physical printer and paper, how the screens and PDFs look (reviewed from the screenshots), and the installer's language pages.
+**Stays manual** ([smoke_test.md](smoke_test.md)): the shop's real schema, the physical printer and paper, how the screens and PDFs look (reviewed from the screenshots), and the installer's language pages.
 
 ## Printing (block C)
 
@@ -96,10 +96,11 @@ Qt 6 publishes a widget's `objectName` as its UIA **AutomationId**, so the scrip
 
 ```bash
 .venv/Scripts/python tests/ui/aeat_preproduction.py --exe "<folder>/laideal.exe" \
-    --settings-from "<kit>/prueba-aeat-settings.json" --out aeat-run
+    --settings-from "$USERPROFILE/work/tintoreria/documents/prueba-aeat-settings.json" --out aeat-run
 ```
 
-- **What it takes from the kit's settings**: only the issuer's NIF, name and certificate (store thumbprint, or `.pfx` file + password, DPAPI-encrypted for the same Windows user).
+- **The settings file**: `%USERPROFILE%/work/tintoreria/documents/prueba-aeat-settings.json`, outside the repository (it names the issuer). It is the kit's settings with Germán's issuer (75929840D) and his FNMT certificate's store thumbprint, so it works only on a PC whose Windows store holds that certificate. For another issuer, copy it and set `verifactu.nif`, `company_name` and the certificate.
+- **What it takes from it**: only the issuer's NIF, name and certificate (store thumbprint, or `.pfx` file + password, DPAPI-encrypted for the same Windows user).
 - **What it forces**: a new synthetic database, the direct client, the test environment, PRODUCCIÓN off.
 - **Safety stop**: the script kills the app unless the status bar says *PRUEBAS* and every AEAT URL in the log starts with `https://prewww1.aeat.es/`. It checks once at the start and once at the end.
 - **Ticket numbers**: they start at `9DDDhhmm + 1` (day of the year, time). That is eight digits like the kit's `90000001`, because Recogida reads a nine-digit search as a phone number. They stay above the shop's numbers and those of earlier runs.

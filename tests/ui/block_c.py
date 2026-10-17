@@ -1,4 +1,4 @@
-"""Block C - printing (docs/testing/smoke_test.md), through a captured printer queue.
+"""Block C - printing (docs/testing/ui_smoke.md, What it checks), through a captured printer queue.
 
 Needs the queue of printer.py (`--printer <name>`); without it the block is skipped.
 Each print job is decoded back from its ESC/POS bytes, and the QR read from the

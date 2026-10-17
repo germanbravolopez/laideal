@@ -1,4 +1,4 @@
-"""Block A - start-up on a real schema (docs/testing/smoke_test.md)."""
+"""Block A - start-up on a real schema (docs/testing/ui_smoke.md, What it checks)."""
 
 import re
 

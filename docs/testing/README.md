@@ -1,13 +1,13 @@
 # Testing — La Ideal
 
-How the application is tested, how to run the tests, and where each kind of test is documented. Three layers, from fastest to most manual:
+How the application is tested, how to run the tests, and where each kind of test is documented. Four layers, from fastest to most manual (the root `README.md` §Tests lists the command for each):
 
 | Layer | What it proves | Where | Runs |
 |-------|----------------|-------|------|
 | **Unit / integration suites** | Pure logic and the `sql_lite` DB functions, each module in isolation | `tests/test_*.cpp` — see [unit_suites.md](unit_suites.md) | `ctest`, every CI run |
 | **End-to-end test bench** | Real objects working together (PayDialog, MainWindow and the app dialogs + Verifactu client + HTTP + DB) against a fake Verifactu server | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
 | **Automated UI smoke test** | The installed UI-test build driven like a person over UI Automation (pywinauto): smoke test blocks A-E (installer, menus and windows, Cobrar, printing through a captured queue, Contabilidad and the lock, language) against a fake AEAT on a synthetic DB; the AEAT pre-production run as a local script | `tests/ui/` + `tests/tools/` + `.github/workflows/ui-smoke.yml` — see [ui_smoke.md](ui_smoke.md) | `workflow_dispatch` before each release (`/release` step 1), pushes to `tests/ui/` |
-| **Manual smoke test** | What no automated test can see: the release build on a real schema, the real printer, PDF / screen rendering, menu wiring, the Listado lock, backup, language, installer. Never contacts AEAT | [smoke_test.md](smoke_test.md) | Before each release (`/release` step 1) |
+| **Manual smoke test** | What no automated test can see: the release build on the shop's real schema and data, the physical printer, how screens / PDFs / installer pages look. Sends no invoice | [smoke_test.md](smoke_test.md) | Before each release, after the UI smoke test (`/release` step 1) |
 
 ---
 

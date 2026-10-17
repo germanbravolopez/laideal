@@ -18,7 +18,7 @@ docs/
 │   ├── README.md                      (how to run the tests, conventions, patterns)
 │   ├── unit_suites.md                 (what each unit / integration suite covers)
 │   ├── e2e.md                         (end-to-end bench, fake Verifactu server)
-│   ├── smoke_test.md                  (manual pre-release checklist — run before the release commit)
+│   ├── smoke_test.md                  (manual pre-release checklist — what still needs a person)
 │   └── ui_smoke.md                    (automated UI smoke test — installed app over UI Automation)
 └── modules/
     ├── mainwindow.md                  (MainWindow — central controller)
@@ -54,8 +54,8 @@ docs/
 | [testing/README.md](./testing/README.md) | Testing overview: running the suites, conventions, patterns | When writing tests |
 | [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
 | [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu server | When testing a flow |
-| [testing/smoke_test.md](./testing/smoke_test.md) | Manual pre-release checklist — network, printer, migration, UI wiring | Run before each release |
-| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test on a disposable Windows runner | When automating a smoke-test block |
+| [testing/smoke_test.md](./testing/smoke_test.md) | Manual pre-release checklist — real schema, physical printer, how screens / PDFs / installer look | Run before each release, after the UI smoke test |
+| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test (CI) and the local AEAT pre-production run | Before each release; when changing a window or flow it covers |
 | [INDEX.md](./INDEX.md) | Quick-find: every file, concept, topic | As needed |
 
 ## Module Documentation

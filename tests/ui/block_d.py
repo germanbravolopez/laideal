@@ -1,4 +1,4 @@
-"""Block D - Contabilidad and the quarter lock (docs/testing/smoke_test.md)."""
+"""Block D - Contabilidad and the quarter lock (docs/testing/ui_smoke.md, What it checks)."""
 
 import time
 
