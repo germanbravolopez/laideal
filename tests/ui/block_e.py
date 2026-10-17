@@ -4,7 +4,7 @@ import json
 import subprocess
 import time
 
-from actions import escape_keys, open_listado, wait_ready
+from actions import escape_keys, open_listado
 from laideal_ui import click, exists, find, find_text, table_cells, text, wait_for
 
 
@@ -58,19 +58,21 @@ def install(run, language: str):
 
 def first_start_language(run) -> str:
     """Starts the app on a settings file without a language, as on a machine without
-    settings, and returns the language it stored."""
+    settings, and returns the language its standard buttons speak ('en' / 'es'). The
+    language taken from the installer stays in memory until something is saved, so it
+    is read from the screen, not from the file."""
     settings = json.loads(run.settings.read_text(encoding="utf-8"))
     settings.get("app", {}).pop("language", None)
     fresh = run.out / "settings-no-language.json"
     fresh.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     saved, run.settings = run.settings, fresh
     try:
-        app = run.start_app()
-        wait_ready(app)
+        run.fresh_start()
+        labels = question_buttons(run)
         run.stop_app()
     finally:
         run.settings = saved
-    return json.loads(fresh.read_text(encoding="utf-8")).get("app", {}).get("language", "")
+    return {("No", "Yes"): "en", ("No", "Sí"): "es"}.get(tuple(labels), str(labels))
 
 
 def run(run):
