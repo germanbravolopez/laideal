@@ -7,6 +7,11 @@ factura, Rectificar, the recovery dialog, the reprint QR rules and Contabilidad 
 revert against a fake AEAT server; see [e2e.md](e2e.md). The unit suites cover the migrations,
 the accounting figures, the estado rules and the AEAT reply parsing.
 
+Blocks A-E below are also **automated** on a disposable Windows runner against a fake AEAT
+([ui_smoke.md](ui_smoke.md), `ui-smoke.yml`), and the AEAT pre-production part as a local script.
+By hand, what still needs a person is the real printer and paper, the shop's real schema, and
+how screens, PDFs and the installer pages look.
+
 This checklist covers only what `ctest` cannot see: the release build starting on a real database
 schema, the real printer, PDF and screen rendering, menu and button wiring, the Listado editing
 lock, the backup, the language switch and the installer.

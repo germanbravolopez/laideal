@@ -87,7 +87,7 @@ Links `contabilidad` (and `reporthtml` for amount formatting). All pure statics,
 ## Printing — `test_escpos`, `test_ticket_preview`
 
 - **`test_escpos`** (guiless; `QImage` works without a platform plugin): `EscPosBuilder` exact control bytes (init, align, bold, font, size, cut), the PC858 transcode incl. unmapped → `?`, the dots / character-width column math; `TicketRenderer` recibo and factura fragments, the IVA split, and that a QR is rastered.
-- **`test_ticket_preview`**: renders a sample recibo and factura through the real `TicketRenderer`, then interprets the ESC/POS bytes back into a **PNG** simulation of the thermal paper and an **ASCII** mock (written next to the test exe), asserting the expected blocks (totals, copy marker, QR on the factura but not the recibo). On Windows it uses the native platform so system fonts render real glyphs; elsewhere offscreen. A committed PNG pair lives in `docs/modules/printer/`.
+- **`test_ticket_preview`**: renders a sample recibo and factura through the real `TicketRenderer`, then interprets the ESC/POS bytes back into a **PNG** simulation of the thermal paper and an **ASCII** mock (written next to the test exe), asserting the expected blocks (totals, copy marker, QR on the factura but not the recibo). The ESC/POS reader lives in `tests/support/escpospreview.h`, shared with the `escpos_preview` tool that decodes the UI smoke test's captured print jobs. On Windows it uses the native platform so system fonts render real glyphs; elsewhere offscreen. A committed PNG pair lives in `docs/modules/printer/`.
 
 ---
 

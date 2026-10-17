@@ -1,10 +1,15 @@
 name: UI smoke
 
-# Drives the installed app like a person on a disposable windows-latest VM: build,
-# package the installer as the release job does, install it silently, then run
-# tests/ui with pywinauto over UI Automation on a synthetic database (never shop
-# data: the repository is public). Screenshots, the control tree, the app output
-# and the database are kept as an artifact. See docs/testing/ui_smoke.md.
+# Drives the installed app like a person on a disposable windows-latest VM (see
+# docs/testing/ui_smoke.md): builds the UI-test build (CMake LAIDEAL_UI_TEST, which
+# adds the --fake-aeat switch; never a release), packages and installs it silently
+# as the release job does, installs a printer queue whose jobs are captured, then
+# runs the smoke test blocks A-E (tests/ui/smoke.py) against the fake AEAT and a
+# synthetic database (never shop data: the repository is public), and the AEAT
+# pre-production script in its dry run. Screenshots, control trees on failure, the
+# printed jobs, logs and databases are kept as the `ui-smoke` artifact.
+#
+# Run it before a release (/release step 1): gh workflow run ui-smoke.yml --ref develop
 
 on:
   workflow_dispatch:
@@ -12,12 +17,13 @@ on:
     branches: [ develop, 'feature/**' ]
     paths:
       - 'tests/ui/**'
+      - 'tests/tools/**'
       - '.github/workflows/ui-smoke.yml'
 
 jobs:
   ui-smoke:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v5
@@ -45,12 +51,23 @@ jobs:
           if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build the app
+      - name: Build the UI-test app and the test tools
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
-          cmake --build build --target laideal
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
+          cmake --build build --target laideal fake_aeat_server escpos_preview
 
-      - name: Package the installer
+      # The release job refuses an exe with this switch; check here that the marker it
+      # looks for is really in a UI-test build, so that guard cannot silently go blind.
+      - name: Check the UI-test marker the release guard looks for
+        shell: pwsh
+        run: |
+          $bytes = [IO.File]::ReadAllBytes("build\src\app\laideal.exe")
+          $marker = [Text.Encoding]::Unicode.GetBytes('--fake-aeat')
+          $text = [BitConverter]::ToString($bytes)
+          if (-not $text.Contains([BitConverter]::ToString($marker))) { throw "The UI-test build has no --fake-aeat marker" }
+          Write-Host "Marker found: the release guard would refuse this exe."
+
+      - name: Package the installer and the tools
         id: package
         shell: pwsh
         run: |
@@ -65,7 +82,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" releases\laideal.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
-          echo "INSTALLER=releases\setup_outputs\laideal_setup_$ver.exe" >> $env:GITHUB_OUTPUT
+          echo "INSTALLER=$PWD\releases\setup_outputs\laideal_setup_$ver.exe" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Path ui-tools -Force | Out-Null
+          foreach ($tool in 'fake_aeat_server', 'escpos_preview') {
+            Copy-Item "build\tests\$tool.exe" ui-tools
+            windeployqt --no-translations --no-system-d3d-compiler "ui-tools\$tool.exe"
+            if ($LASTEXITCODE -ne 0) { throw "windeployqt failed for $tool" }
+          }
 
       - name: Install silently
         id: install
@@ -82,16 +105,28 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install pywinauto
+      - name: Install the test's Python packages
         run: python -m pip install --quiet -r tests/ui/requirements.txt
 
-      # Run from outside the install dir with a clean PATH entry for Qt: the
-      # installed app must start on its own deployed DLLs, not the build's Qt.
-      - name: Run the UI smoke test (P0)
+      - name: Add the capturing printer queue
+        run: python tests/ui/printer.py install
+
+      # The build's Qt is taken off PATH: the installed app and the deployed tools must
+      # start on the DLLs next to them.
+      - name: Run the UI smoke test (blocks A-E)
         shell: pwsh
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
-          python tests/ui/smoke_p0.py --exe '${{ steps.install.outputs.EXE }}' --out ui-smoke-out
+          python tests/ui/smoke.py --exe '${{ steps.install.outputs.EXE }}' --tools ui-tools --out ui-smoke-out `
+                 --printer LaIdeal-Smoke --installer '${{ steps.package.outputs.INSTALLER }}'
+
+      - name: Dry run of the AEAT pre-production script (fake AEAT)
+        if: always() && steps.install.outcome == 'success'
+        shell: pwsh
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
+          python tests/ui/aeat_preproduction.py --exe '${{ steps.install.outputs.EXE }}' --dry-run `
+                 --tools ui-tools --out ui-smoke-out\aeat-dry-run
 
       - name: Keep the run's outputs
         if: always()

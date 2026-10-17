@@ -57,6 +57,8 @@ The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also o
 
 `tests/` holds Qt Test suites registered with CTest (built automatically as part of the normal build). Run them with `ctest --test-dir build --output-on-failure`. They cover the `sql_lite` free functions (accounting totals + Verifactu estado filters, accounting locks, invoice-seq, client lookup, hashing) against a throwaway SQLite DB, and `MySortFilterProxyModel`'s diacritic-insensitive filter. CI runs them on every push/PR and the release workflow runs them as a **hard gate** between build and publish, so a failing test aborts the release.
 
+The **UI smoke test** (`tests/ui/`, workflow `ui-smoke.yml`, run before each release) drives the installed app over Windows UI Automation against a fake AEAT. It needs the test-only build option `-DLAIDEAL_UI_TEST=ON`, which a release refuses; see [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md).
+
 > The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
 
 ### Debug in VSCode
