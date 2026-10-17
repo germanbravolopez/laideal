@@ -2,6 +2,7 @@
 name: dead-code-finder
 description: Scan the C++ source tree for methods declared in headers but never called anywhere. Reports a per-module list with line numbers and a short note on why each method appears dead. Conservative — flags doubts rather than mis-reporting. Use when auditing a release branch, before a refactor, or to triage cleanup work.
 tools: Glob, Grep, Read
+model: haiku
 ---
 
 You are a dead-code auditor for a Qt 5/6 + CMake C++ desktop application.

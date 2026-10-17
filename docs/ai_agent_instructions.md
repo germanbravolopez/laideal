@@ -81,12 +81,14 @@ Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one w
 
 ## Subagents
 
-| Agent | File | When to use |
-|-------|------|-------------|
-| `dead-code-finder` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). It reports back; remove what it finds or file it in the tracker - no report file is kept. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
-| `test-engineer` | `.claude/agents/test-engineer.md` | Write/extend Qt Test coverage for a change or module, proving each test fails without the fix. |
-| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only legal review of any diff touching invoices, `verifactu_*` columns, estado, numbering or the printed QR — run before committing such changes. |
-| `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | Run the coding-guidelines audit in `.claude/skills/coding-guidelines/audit.md` (before a release / after large work). |
+Each agent runs on the model tier set in its `model:` frontmatter, following the orchestration rules in `CLAUDE.md` (Model orchestration): `haiku` for mechanical work, `sonnet` for bounded implementation / tests / audits, `opus` for legal review and the final review gate.
+
+| Agent | Model | File | When to use |
+|-------|-------|------|-------------|
+| `dead-code-finder` | `haiku` | `.claude/agents/dead-code-finder.md` | Audit `src/` for unused methods (release prep, pre-refactor triage). It reports back; remove what it finds or file it in the tracker - no report file is kept. Invoke via `Agent` tool with `subagent_type: "dead-code-finder"`. |
+| `test-engineer` | `sonnet` | `.claude/agents/test-engineer.md` | Write/extend Qt Test coverage for a change or module, proving each test fails without the fix. |
+| `verifactu-compliance-auditor` | `opus` | `.claude/agents/verifactu-compliance-auditor.md` | Read-only legal review of any diff touching invoices, `verifactu_*` columns, estado, numbering or the printed QR — run before committing such changes. |
+| `guidelines-auditor` | `sonnet` | `.claude/agents/guidelines-auditor.md` | Run the coding-guidelines audit in `.claude/skills/coding-guidelines/audit.md` (before a release / after large work). |
 
 ## Agent Obligations
 
