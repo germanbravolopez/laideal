@@ -70,6 +70,11 @@ public:
     // contabilidad). A month reads its quarter; a year lists its four quarters.
     static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
 
+    // A quarter with no payments nor gastos whose only movements are cancellations of
+    // earlier quarters' invoices: it still needs its report (the regularisation), but
+    // has nothing of its own to lock.
+    static bool quarterHasOnlyRegularizations(QSqlDatabase &db, int quarter, int year);
+
 
     // All money figures of one accounting period (a quarter, a month, or - when
     // accumulated across the four quarters - a full year). Computed once per

@@ -53,14 +53,6 @@ def run(run):
         run.check(exists(run.app.window(title="Generar contabilidad"), "btnGenerate"), "the dialog closed")
         close_dialog(dialog)
 
-    paid_in_q4 = run.scalar("SELECT COUNT(*) FROM ingresos WHERE pagado='SI' AND substr(fecha_pago, 4) "
-                            "IN ('10-2026', '11-2026', '12-2026')")
-    if not paid_in_q4:
-        # A quarter whose only movement is a cancellation gets no report (tracker issue); in
-        # the smoke order block B's Cobrar puts a payment in the current quarter.
-        run.skip("D", "D2", "Contabilidad Q4 2026: ticket 5 cancelled in Q4 is taken back (-12.10)",
-                 "needs a payment in Q4 2026 (run block B first)")
-        return _after_q4(run)
     with run.step("D", "D2", "Contabilidad Q4 2026: ticket 5 cancelled in Q4 is taken back (-12.10)"):
         dialog = accounts_dialog(run.app)
         accounts_period(dialog, "Trimestral", YEAR, 4)
@@ -71,10 +63,6 @@ def run(run):
         run.check(amount_in(content, "12.10"), "the Q4 report does not take back 12.10")
         close_dialog(dialog)
 
-    _after_q4(run)
-
-
-def _after_q4(run):
     with run.step("D", "D3", "Contabilidad Anual 2026 renders"):
         dialog = accounts_dialog(run.app)
         accounts_period(dialog, "Anual", YEAR)

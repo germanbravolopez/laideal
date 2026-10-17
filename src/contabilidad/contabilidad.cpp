@@ -160,6 +160,16 @@ QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bo
     return QString();
 }
 
+bool Contabilidad::quarterHasOnlyRegularizations(QSqlDatabase &db, int quarter, int year)
+{
+    if (combinedLockState(readLockForQuarter(db, "ingresos", quarter, year),
+                          readLockForQuarter(db, "gastos", quarter, year)) != 2)
+        return false;
+    QDate start, end;
+    periodRangeFor(Trimestral, quarter, year, start, end);
+    return !regularizationsBetweenDates(db, start, end).isEmpty();
+}
+
 QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year)
 {
     const auto quarterLine = [&db, year](int q) {
@@ -168,7 +178,10 @@ QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int u
                                   readLockForQuarter(db, "gastos", q, year))) {
         case 1:  return name + " está bloqueado (contabilidad realizada).";
         case 0:  return name + " no está bloqueado.";
-        default: return name + " no tiene registros de ingresos ni de gastos.";
+        default:
+            return name + (quarterHasOnlyRegularizations(db, q, year)
+                           ? " solo tiene anulaciones de facturas de trimestres anteriores: no hay nada que bloquear."
+                           : " no tiene registros de ingresos ni de gastos.");
         }
     };
     if (mode == Trimestral)
@@ -252,6 +265,17 @@ void Contabilidad::onGenerateClicked()
             }
             break;
         default:
+            if (!revertirOn && quarterHasOnlyRegularizations(db, trim, year)) {
+                file = generateContabilidad(invalidAmounts);
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "has only regularisations, report"
+                         << (file.isEmpty() ? "not written" : "generated");
+                message = file.isEmpty()
+                    ? errorHtml("No se pudo guardar el informe " + quarterName + ".")
+                    : okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                      "El trimestre solo tiene anulaciones de facturas de trimestres anteriores: no tiene "
+                      "ingresos ni gastos propios que bloquear.";
+                break;
+            }
             qWarning() << "Contabilidad: no ingresos nor gastos for trim" << trim << "year" << year;
             message = warnHtml("No hay registros de ingresos ni de gastos " + quarterName + ".");
             break;

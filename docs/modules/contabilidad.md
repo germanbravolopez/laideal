@@ -30,7 +30,7 @@ Modes are the `Contabilidad::ConfigMode` enum (`Mensual=0`, `Trimestral=1`, `Anu
 
 ## On accept
 
-In Trimestral mode the quarter's lock state is read first via `sql_lite::readLockForQuarter()` for **both** `ingresos` and `gastos` (all three months in one query each), merged by `Contabilidad::combinedLockState`. The quarter is "no data" only if both tables are empty, and locked if either is, so a quarter with only gastos can be closed and reverted too. The closed/open labels in the Mensual and Anual headers use the same merge. Then:
+In Trimestral mode the quarter's lock state is read first via `sql_lite::readLockForQuarter()` for **both** `ingresos` and `gastos` (all three months in one query each), merged by `Contabilidad::combinedLockState`. The quarter is "no data" only if both tables are empty, and locked if either is, so a quarter with only gastos can be closed and reverted too. A "no data" quarter that holds cancellations of earlier quarters' invoices (`Contabilidad::quarterHasOnlyRegularizations`: a `fecha_anulacion` in the quarter, the same rows as the report's "Anulaciones / rectificaciones del periodo") still gets its report, since that regularisation belongs to it; it has nothing of its own to lock (the cancelled row is locked with its payment quarter), and the result panel and Comprobar bloqueo say so. The closed/open labels in the Mensual and Anual headers use the same merge. Then:
 
 1. `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF. If the PDF could not be written (`writePdf` false: a folder in its place, the old PDF open in a viewer, no permission) the result panel shows the error and **the quarter is not locked** - a quarter is never closed without its report.
 2. `updateLock()` sets `edit_lock` on all affected `ingresos` and `gastos` rows (via `updateLockForMonth`):
@@ -41,7 +41,7 @@ The **Bloquear el trimestre** checkbox is enabled only in Trimestral mode and ne
 
 **Incluir el detalle de tickets y facturas** (unticked by default, disabled while reverting) adds the [detail tables](#detail-tables-audit-annex) to the report; without it the PDF has only the summary blocks. The two versions are separate files (`Contabilidad::reportRelativePath`): `contabilidad_trimestral_<year>_<q>.pdf`, `Mensual/reporte_mensual_<year>_<m>.pdf`, `Anual/reporte_anual_<year>.pdf`, and the same names ending in `_detalle.pdf` for the detailed one, whose title also ends in "· Detalle".
 
-**Comprobar bloqueo** shows in the result panel whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
+**Comprobar bloqueo** shows in the result panel whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / only cancellations of earlier quarters (nothing to lock) / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
 
 ## Report content
 

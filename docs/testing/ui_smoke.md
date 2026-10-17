@@ -67,7 +67,7 @@ The artifact **`ui-smoke`** keeps:
 | D | D1 Q3 2026 with detail: income 66.30, gastos 60.50, the window stays open; D2 Q4: the cancellation of ticket 5 is taken back (-12.10); D3 Anual renders; D4 the lock box only in Trimestral (never in Revertir), Q3 without detail, Comprobar bloqueo "no está bloqueado"; D5 Bloquear Q3: SMOKE-G1 not editable, an expense dated 20-09-2026 refused, today's saved; D6 Revertir Q3: SMOKE-G1 editable again | PDF text (`pypdf`), DB, result panels, the focused cell editor |
 | E | E1 backup next to the database; E2 Configuración has no IVA field; E3 English: Yes/No buttons and English release notes, back to Español: Sí/No; E4 the installer's language becomes the app's first language (English, then Spanish installer) | DB files, dialogs, the standard Yes/No buttons |
 
-Blocks run in this order on one database, as a person would. A failed step stops its block, and the run goes on with the next one. A block run alone (`--blocks D`) first does the start-up and seeding of block A. D2 needs block B's payment in Q4 and is skipped without it (see the Contabilidad issue in the tracker).
+Blocks run in this order on one database, as a person would. A failed step stops its block, and the run goes on with the next one. A block run alone (`--blocks D`) first does the start-up and seeding of block A.
 
 **Stays manual** ([smoke_test.md](smoke_test.md)): the shop's real schema, the physical printer and paper, how the screens and PDFs look (reviewed from the screenshots), and the installer's language pages.
 

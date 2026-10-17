@@ -2840,6 +2840,38 @@ private slots:
         form->close();
         QTRY_VERIFY(form.isNull());
     }
+
+    // Contabilidad Trimestral Q3 whose only movement is the cancellation of a Q2 invoice:
+    // the report is still written with the regularisation (it used to say "No hay
+    // registros"), and Comprobar bloqueo says there is nothing to lock.
+    void test_contabilidad_quarterWithOnlyACancellation()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "430", "h430a", "12.10", "10-05-2026", "A-ORIG0430"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado='ANULADA', fecha_anulacion='05-08-2026' "
+                                "WHERE hash='h430a'"));
+        const QString pdf = AppSettings::instance()->contabilidadPath() + "/contabilidad_trimestral_2026_3.pdf";
+        QFile::remove(pdf);
+        QPointer<Contabilidad> form = new Contabilidad(m_db);
+        form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
+        form->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        form->findChild<QSpinBox *>("sbPeriod")->setValue(3);
+        form->findChild<QCheckBox *>("chkLock")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
+        const QString text = form->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("realizada") && text.contains("solo tiene anulaciones"), qPrintable(text));
+        QVERIFY(QFile::exists(pdf));
+        const QString html = ReportHtml::lastReportHtml();
+        QVERIFY(html.contains("Anulaciones / rectificaciones del periodo"));
+        QVERIFY2(html.contains("12,10") || html.contains("12.10"), "the cancelled 12.10 is not in the report");
+        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h430a'"), QStringLiteral("0"));   // Q2's row
+
+        form->findChild<QPushButton *>("btnCheckLock")->click();
+        const QString lock = form->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(lock.contains("solo tiene anulaciones") && lock.contains("nada que bloquear"), qPrintable(lock));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
+        form->close();
+        QTRY_VERIFY(form.isNull());
+    }
 };
 
 QTEST_MAIN(TestE2eApp)
