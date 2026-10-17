@@ -201,4 +201,6 @@ def steps(run, expected: str, base: int):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")   # a CI console is cp1252
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     main()
