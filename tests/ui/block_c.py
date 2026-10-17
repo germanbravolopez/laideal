@@ -71,10 +71,13 @@ def run(run):
         for expected in ("FACTURA SIMPLIFICADA", "[QR", "Factura verificable en la sede", "IMPORTE PAGADO"):
             run.check(expected in printed, f"{expected!r} not printed for a paid ticket")
         pngs = [job.with_suffix(".png") for job in run.printer.jobs[before:]]
-        codes = [c for c in (qr_text(p) for p in pngs) if c]
-        if codes:
+        codes = [qr_text(p) for p in pngs]
+        if None in codes:
+            print("  (OpenCV not installed: the QR's content is not read)")
+        else:
+            print(f"  QR read: {[c for c in codes if c]}")
             run.check(any("prewww2.aeat.es" in c and f"numserie={ticket}" in c for c in codes),
-                      f"QR does not lead to AEAT's test check page for {ticket}: {codes}")
+                      f"no QR leading to AEAT's test check page for {ticket}: {codes}")
         wait_for(lambda: run.scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo=?", ticket)
                  == "ENVIADA", 20, f"ticket {ticket} to be ENVIADA")
 

@@ -38,7 +38,7 @@ Steps:
 6. Run `smoke.py` with the build's Qt removed from `PATH`, so the app starts on the DLLs that were installed with it.
 7. Run the pre-production script in its dry run.
 
-About 25-30 minutes in all, of which the UI run takes about 4.
+About 9 minutes in all, of which the UI run takes about 4 and the pre-production dry run 1.
 
 The artifact **`ui-smoke`** keeps:
 - `report.md`, which is also the job summary
