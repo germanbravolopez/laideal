@@ -122,26 +122,19 @@ It stays local because the certificate must not become a secret of a public repo
 
 ## Running it locally
 
-Use a UI-test build, and run from the repository root inside a virtual environment in `.venv/` (git-ignored), not the global Python:
+First the [UI-test build and the `.venv`](../../README.md#ui-test-build) (README §Build). Then, from the repository root, in a PowerShell session with the toolchain `PATH` line of README §Build (the build tree loads Qt's DLLs from it):
 
 ```powershell
-cmake -B build-uitest -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON
-cmake --build build-uitest --target laideal fake_aeat_server escpos_preview
+.venv\Scripts\python.exe tests\ui\printer.py install          # once, for block C
+.venv\Scripts\python.exe tests\ui\smoke.py --exe build-uitest\src\app\laideal.exe `
+    --tools build-uitest\tests --out ui-smoke-out --printer LaIdeal-Smoke
 ```
 
-```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -r tests/ui/requirements.txt
-.venv/Scripts/python tests/ui/printer.py install          # once, for block C
-.venv/Scripts/python tests/ui/smoke.py --exe build-uitest/src/app/laideal.exe \
-    --tools build-uitest/tests --out ui-smoke-out --printer LaIdeal-Smoke
-```
-
-- **PATH**: a build tree needs Qt's `bin` on `PATH` (README §Build).
-- **PowerShell**: the interpreter is `.venv\Scripts\python.exe`.
-- **Partial runs**: `--blocks AB` runs only some blocks.
+- **Partial runs**: `--blocks AB` runs only some blocks (block A's start-up and seeding still happen first).
+- **Without a printer queue**: leave out `--printer`; block C is skipped.
 - **Installer step**: `--installer <setup.exe>` adds E4, which reinstalls in place; use it on a disposable machine only.
 - **During a run**: it takes the mouse and keyboard for about 3-4 minutes, so do not touch them, and keep the screen unlocked (a locked screen blocks input and screenshots).
+- **Results**: `ui-smoke-out\report.md`, a screenshot per step in `steps\`, and for a failed step every window's control tree in `failures\<step>\`.
 
 ## Files
 

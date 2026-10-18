@@ -40,18 +40,67 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 ## Build
 
-From a PowerShell prompt in the repo root:
+There are four build folders, one per purpose. Each is a separate CMake tree, so they coexist (all are git-ignored by `build*`):
+
+| Folder | What it builds | For | How |
+|--------|----------------|-----|-----|
+| `build/` | The app (Release) and the test suites | Running the app, `ctest` | [Release build](#release-build) below |
+| `build-debug/` | The app (Debug) | Debugging in VSCode (F5) | [Debug in VSCode](#debug-in-vscode) below |
+| `build-uitest/` | The **UI-test** app (`-DLAIDEAL_UI_TEST=ON`, with the `--fake-aeat` switch) and the tools `fake_aeat_server` / `escpos_preview` | The UI smoke test and the AEAT pre-production dry run on this PC | [UI-test build](#ui-test-build) below |
+| `build-release/` | The installer `laideal_setup_X.Y.exe` (clean configure, `windeployqt`, Inno Setup) | A release without CI | `releases\release.ps1 X.Y` - see [CONTRIBUTING.md](./CONTRIBUTING.md#local-fallback-releasesreleaseps1) |
+
+Every command below runs from a PowerShell prompt in the repo root, after putting the toolchain on `PATH` for the session:
 
 ```powershell
-# Add Qt + MinGW + CMake + Ninja to PATH for this shell session
 $env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+```
 
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build --output-on-failure   # run the test suite
+> The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
+
+### Release build
+
+```powershell
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release    # once (configure)
+cmake --build build                                   # the app + every test suite
+ctest --test-dir build --output-on-failure            # run the test suites
 ```
 
 The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
+
+### Debug in VSCode
+
+The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions.
+
+**Press F5** (launch config **Debug laideal (MinGW gdb)**): the build task configures `build-debug/` if needed (its `dependsOn` runs "CMake: configure (Debug)" first — CMake no-ops an already-valid cache, so it's free on repeat runs) and compiles `laideal`, then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. The Debug tree is separate from the Release `build/` so the two coexist. The alternative config **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
+
+The terminal equivalent (with the toolchain on `PATH` as above):
+
+```powershell
+cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.4.3/mingw_64
+cmake --build build-debug --target laideal
+```
+
+If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
+
+**Troubleshooting — F5 fails / no `laideal.exe` gets built:** a stale half-configured `build-debug/` (holds `CMakeCache.txt` + `CMakeFiles/` but **no `build.ninja`**, cache shows `CMAKE_MAKE_PROGRAM-NOTFOUND`) from a `cmake` configure that ran without `C:\Qt\Tools\Ninja` on PATH. Fix: `Remove-Item -Recurse -Force build-debug`, then F5 again (the configure step re-runs with the correct PATH). A healthy Debug tree always contains `build.ninja`.
+
+### UI-test build
+
+Needed only to run the UI smoke test or the AEAT pre-production dry run on this PC (CI builds its own). Never install it at the shop: a release refuses an exe with the `--fake-aeat` switch, and CMake warns while the option is ON. Keep it in this separate folder, because the option is cached per folder.
+
+```powershell
+cmake -B build-uitest -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON   # once (configure)
+cmake --build build-uitest --target laideal fake_aeat_server escpos_preview     # after each change
+```
+
+The test scripts are Python (pywinauto) and run from a virtual environment in `.venv/` (git-ignored), created once:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r tests\ui\requirements.txt   # again after requirements.txt changes
+```
+
+Then run them as listed in [Tests](#tests).
 
 ### Tests
 
@@ -61,31 +110,11 @@ Four kinds of test, from the fastest to the one that needs a person. Each row li
 |-------|---------------|---------------|---------|-------|
 | **Unit + end-to-end suites** (`tests/test_*.cpp`, CTest: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | Locally after any build; CI (`ci.yml`) on every push / PR, and as the release gate | `ctest --test-dir build --output-on-failure` | `-R <regex>` runs some suites (e.g. `-R e2e`); `aeat_xsd` is skipped unless Python has `lxml` (`python -m pip install lxml`) | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
 | **UI smoke test, CI** (`tests/ui/smoke.py`: the installed app driven like a person, blocks A-E, against a fake AEAT) | GitHub `windows-latest` runner, about 9 min | `gh workflow run ui-smoke.yml --ref <branch>`, then `gh run watch` | Also runs on pushes touching `tests/ui/` or `tests/tools/`; results in the job summary and the `ui-smoke` artifact | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#where-it-runs) |
-| **UI smoke test, local** (the same script on this PC; it takes the mouse and keyboard for about 4 min) | A UI-test build (`-DLAIDEAL_UI_TEST=ON`, in `build-uitest`) and a `.venv` | `.venv/Scripts/python tests/ui/smoke.py --exe build-uitest/src/app/laideal.exe --tools build-uitest/tests` | `--blocks AB` (some blocks), `--printer LaIdeal-Smoke` (block C, after `tests/ui/printer.py install`), `--installer <setup.exe>` (E4, disposable machines only), `--out <folder>` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#running-it-locally) |
+| **UI smoke test, local** (the same script on this PC; it takes the mouse and keyboard for about 4 min) | This PC, from the [UI-test build](#ui-test-build) and its `.venv` | `.venv/Scripts/python tests/ui/smoke.py --exe build-uitest/src/app/laideal.exe --tools build-uitest/tests` | `--blocks AB` (some blocks), `--printer LaIdeal-Smoke` (block C, after `tests/ui/printer.py install`), `--installer <setup.exe>` (E4, disposable machines only), `--out <folder>` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#running-it-locally) |
 | **AEAT pre-production run** (`tests/ui/aeat_preproduction.py`: paid ticket, two payments, cancellation, R5 rectifications, export, against AEAT's test environment) | **Locally only**, on a PC with the issuer's FNMT certificate | `.venv/Scripts/python tests/ui/aeat_preproduction.py --exe <laideal.exe> --settings-from %USERPROFILE%/work/tintoreria/documents/prueba-aeat-settings.json --out <new folder>` | `--dry-run --tools build-uitest/tests` runs it against the fake AEAT with the UI-test build (no certificate; CI does this on every UI smoke run) | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#the-aeat-pre-production-run-local) |
 | **Manual smoke test** (the shop's real schema, the physical printer, how screens / PDFs / installer pages look) | This PC, before each release, about 15 min | Follow the checklist | M6 only when the release changes the direct AEAT client | [docs/testing/smoke_test.md](docs/testing/smoke_test.md) |
 
-The UI-test build adds a `--fake-aeat` switch that a release refuses (CI release job and `release.ps1`), so keep it in its own `build-uitest` folder. How to write tests, and every suite, are in [docs/testing/](docs/testing/README.md).
-
-> The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
-
-### Debug in VSCode
-
-The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMake Tools and C/C++ extensions.
-
-**Press F5** (launch config **Debug laideal (MinGW gdb)**): the build task configures `build-debug/` if needed (its `dependsOn` runs "CMake: configure (Debug)" first — CMake no-ops an already-valid cache, so it's free on repeat runs) and compiles `laideal`, then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. The Debug tree is separate from the Release `build/` so the two coexist. The alternative config **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
-
-The terminal equivalent (mirrors §Build but into `build-debug/` with the Debug type):
-
-```powershell
-$env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
-cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.4.3/mingw_64
-cmake --build build-debug --target laideal
-```
-
-If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
-
-**Troubleshooting — F5 fails / no `laideal.exe` gets built:** a stale half-configured `build-debug/` (holds `CMakeCache.txt` + `CMakeFiles/` but **no `build.ninja`**, cache shows `CMAKE_MAKE_PROGRAM-NOTFOUND`) from a `cmake` configure that ran without `C:\Qt\Tools\Ninja` on PATH. Fix: `Remove-Item -Recurse -Force build-debug`, then F5 again (the configure step re-runs with the correct PATH). A healthy Debug tree always contains `build.ninja`.
+Before the local rows, have the toolchain `PATH` line of [Build](#build) in the session. The local UI smoke test and the pre-production dry run need the [UI-test build](#ui-test-build); every Python row needs its `.venv`. The real pre-production run drives a normal build of the branch (`build\src\app\laideal.exe`). How to write tests, and every suite, are in [docs/testing/](docs/testing/README.md).
 
 ---
 
