@@ -333,7 +333,8 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
 {
     // The quarter was open when Cobrar was pressed; a close while AEAT answered must not
     // drop an invoice AEAT may have registered, so it is stored and logged for review.
-    if (quarterIsClosed(db, m_pendingFechaPago))
+    m_paidIntoClosedQuarter = quarterIsClosed(db, m_pendingFechaPago);
+    if (m_paidIntoClosedQuarter)
         qCritical() << "PayDialog::persistPayment: the quarter of" << m_pendingFechaPago
                     << "was closed while ticket" << m_ticketNum << "was being charged - review its contabilidad";
     db.open();

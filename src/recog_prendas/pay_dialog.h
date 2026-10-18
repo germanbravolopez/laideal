@@ -38,6 +38,9 @@ public:
     bool loadTicket(const QString &ticketNum);
     // Garments charged (sent to AEAT) that could not be stored as paid afterwards.
     int unstoredGarments() const { return m_unstoredHashes.size(); }
+    // The payment was stored although Contabilidad closed its quarter while AEAT answered.
+    bool paidIntoClosedQuarter() const { return m_paidIntoClosedQuarter; }
+    QDate paymentDate() const { return m_pendingFechaPago; }
 
 signals:
     // Emitted when the bounded wait expires with the request still in flight.
@@ -80,6 +83,7 @@ private:
     QStringList m_pendingHashes;
     QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
     QStringList             m_unstoredHashes;
+    bool                    m_paidIntoClosedQuarter = false;
     QDate       m_pendingFechaPago;
 };
 

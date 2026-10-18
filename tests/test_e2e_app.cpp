@@ -2060,7 +2060,34 @@ private slots:
         QVERIFY(closeQuarterOf(QDate::currentDate()));
         QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
         QCOMPARE(dlg.unstoredGarments(), 0);
+        QVERIFY(dlg.paidIntoClosedQuarter());
         QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado) FROM ingresos WHERE n_recibo='955'"), QStringLiteral("SI,SI"));
+    }
+
+    // The same from Recogida: the operator is told in the result panel, not only in the
+    // log, that the closed quarter's report misses this payment and how to fix it.
+    void test_recogida_paymentIntoAQuarterClosedDuringTheSubmitIsShown()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "957", "h957a", "5.00", today()));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "957", "h957a"));
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("was closed while ticket \"957\" was being charged"));
+        m_driver->expect(ModalDriver::ofType<PayDialog>(), [this](QWidget *w) {
+            QMetaObject::invokeMethod(w, "onCobrarClicked");
+            QVERIFY(closeQuarterOf(QDate::currentDate()));          // while AEAT answers
+        });
+        rp.findChild<QPushButton *>("pb_pay_all")->click();
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h957a'"), QStringLiteral("SI"));
+        const QDate now = QDate::currentDate();
+        const QString quarter = QString("el trimestre %1 de %2").arg((now.month() + 2) / 3).arg(now.year());
+        const QString text = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("Ticket 957 cobrado") && text.contains("ha cerrado " + quarter)
+                 && text.contains("revierta y vuelva a generar la contabilidad de " + quarter), qPrintable(text));
     }
 
     // A garment paid from another window while its invoice is on the way is not stored
