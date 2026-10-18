@@ -60,6 +60,7 @@
 #include "reporthtml.h"
 #include "pendingsubmitsdialog.h"
 #include "rectifyinvoicedialog.h"
+#include "refusedinvoicesdialog.h"
 #include "sql_lite.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
@@ -305,6 +306,40 @@ private slots:
         auto *refused = mw.findChild<QLabel *>("lblRefusedInvoices");
         QVERIFY(refused->isVisibleTo(&mw));
         QVERIFY2(refused->text().contains("1 factura(s) rechazada(s)"), qPrintable(refused->text()));
+
+        // A pre-Verifactu ticket AEAT refused for its old date is before the recovery floor:
+        // never resendable, so it does not count nor appear in the list.
+        QVERIFY(E2e::seedSentGarment(m_db, "120", "h120a", "4.00", "15-05-2020", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR', "
+                                "verifactu_error = 'una fecha de años anteriores' WHERE hash='h120a'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_error = 'Valor o tipo incorrecto' WHERE hash='h880a'"));
+        const QString floorBefore = AppSettings::instance()->verifactuPendingRecoveryFloorDate();
+        AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2021-01-01");
+        auto restoreFloor = qScopeGuard([floorBefore] {
+            AppSettings::instance()->setVerifactuPendingRecoveryFloorDate(floorBefore);
+        });
+        QMetaObject::invokeMethod(&mw, "updateRefusedInvoices");
+        QVERIFY2(refused->text().contains("1 factura(s) rechazada(s)") && refused->text().contains("href"),
+                 qPrintable(refused->text()));
+
+        // The count is a link to the list, which opens Recogida on the selected ticket.
+        emit refused->linkActivated("refused");
+        auto *list = mw.findChild<RefusedInvoicesDialog *>();
+        QVERIFY(list);
+        auto *table = list->findChild<QTableWidget *>("tableRefused");
+        QCOMPARE(table->rowCount(), 1);
+        QCOMPARE(table->item(0, 0)->text(), QStringLiteral("880"));
+        QCOMPARE(table->item(0, 2)->text(), QStringLiteral("9,00 €"));
+        QCOMPARE(table->item(0, 3)->text(), QStringLiteral("Valor o tipo incorrecto"));
+        list->findChild<QPushButton *>("btnOpenRecogida")->click();
+        auto *recogida = mw.findChild<RecogPrendas *>();
+        QVERIFY(recogida);
+        QCOMPARE(recogida->findChild<QLineEdit *>("le_nr_ticket")->text(), QStringLiteral("880"));
+        QVERIFY(recogida->isCellClicked);
+        QVERIFY(recogida->findChild<QPushButton *>("pb_verifactu")->isEnabled());
+        delete recogida;
+        list->close();
+
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE hash='h880a'"));
         QMetaObject::invokeMethod(&mw, "updateRefusedInvoices");
         QVERIFY(!refused->isVisibleTo(&mw));
@@ -433,6 +468,9 @@ private slots:
         rectify(8.00);
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + number + "'"), QStringLiteral("ERROR"));
         QCOMPARE(refusedInvoiceCount(m_db), 1);
+        // A floor after the payment hides it (pre-Verifactu tickets AEAT can never accept).
+        QCOMPARE(refusedInvoiceCount(m_db, QDate::currentDate().addDays(1).toString(Qt::ISODate)), 0);
+        QCOMPARE(refusedInvoiceCount(m_db, QDate::currentDate().toString(Qt::ISODate)), 1);
 
         RecogPrendas rp(m_db);
         rp.m_verifactuIntegration = &direct;

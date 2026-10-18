@@ -21,6 +21,7 @@
 #include "verifacturesponse.h"
 #include "updaterdialog.h"
 #include "pendingsubmitsdialog.h"
+#include "refusedinvoicesdialog.h"
 #include "version.h"
 #include "aeatexport.h"
 #include "aeatexportdialog.h"
@@ -53,6 +54,7 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QKeySequence>
+#include <QPointer>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -72,6 +74,8 @@ MainWindow::MainWindow(QWidget *parent)
     // refreshed on every AEAT outcome, and regularly for those settled in other windows.
     m_refusedInvoices = new QLabel(this);
     m_refusedInvoices->setObjectName("lblRefusedInvoices");
+    m_refusedInvoices->setToolTip(tr("Pulse para ver cuáles son y abrirlas en Recogida de Prendas"));
+    connect(m_refusedInvoices, &QLabel::linkActivated, this, &MainWindow::showRefusedInvoices);
     statusBar()->addPermanentWidget(m_refusedInvoices);
     updateAeatEnvironment();
     updateRefusedInvoices();
@@ -910,11 +914,32 @@ void MainWindow::updateAeatEnvironment()
 
 void MainWindow::updateRefusedInvoices()
 {
-    const int refused = refusedInvoiceCount(db);
-    m_refusedInvoices->setText(UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: reenvíelas desde Recogida "
-                                                   "de Prendas (Verifactu\u2026); una rectificativa, desde Rectificar factura",
-                                                   "", refused)));
+    const int refused = refusedInvoiceCount(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate());
+    // A link: the count opens the list of those invoices (showRefusedInvoices).
+    m_refusedInvoices->setText("<a href=\"refused\" style=\"text-decoration:none\">"
+                               + UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: pulse aquí para ver "
+                                                     "cuáles y reenviarlas", "", refused)) + "</a>");
     m_refusedInvoices->setVisible(refused > 0);
+}
+
+void MainWindow::showRefusedInvoices()
+{
+    auto *dlg = new RefusedInvoicesDialog(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate(), this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &RefusedInvoicesDialog::openTicket, this, [this, dlg](const QString &nRecibo, int seq) {
+        auto *recogida = new RecogPrendas(db, this);
+        recogida->m_verifactuIntegration = m_verifactuIntegration;
+        recogida->show();
+        recogida->showTicket(nRecibo, seq);
+        // Back in the list, a resent invoice is gone.
+        QPointer<RefusedInvoicesDialog> list(dlg);
+        connect(recogida, &QObject::destroyed, this, [this, list] {
+            if (list)
+                list->reload();
+            updateRefusedInvoices();
+        });
+    });
+    dlg->show();
 }
 
 void MainWindow::showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result)

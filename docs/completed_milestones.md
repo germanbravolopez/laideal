@@ -12,6 +12,12 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Refused invoices: the red count leaves out pre-Verifactu tickets and opens the list** (Germán 19-10-2026, on a copy of the shop's DB):
+  - **Why the count was misleading:** it showed 33 refused invoices. 27 were tickets paid in 2020 / 2022 that the start-up recovery sent in May 2026, before the recovery floor date existed. AEAT refuses any invoice dated in an earlier year, so they can never be resent and kept the warning up forever. The count also gave no ticket numbers to look for in Recogida.
+  - **The floor date:** `refusedInvoiceCount` / the new `refusedInvoices` (`sql_lite`) now take the recovery floor date (`verifactu.pending_recovery_floor_date`, Configuración → *Solo tickets desde*, default 01-09-2026) and compare it with the **payment date**, the invoice date AEAT judges. The start-up pending check compares it with the reception date.
+  - **The list:** the status-bar text is a link that opens **Facturas rechazadas** (`RefusedInvoicesDialog`): ticket (marked when it is a rectificativa), payment date, amount and AEAT's reason. *Abrir en Recogida* (or a double click) opens Recogida on that ticket with its refused row selected (`RecogPrendas::showTicket`). The list and the count refresh when that Recogida closes.
+  - **The rows are untouched:** they stay `ERROR` and can still be resent from Recogida.
+  - **Tests:** e2e `test_mainWindow_refusedInvoicesStayInView` (floor, link, list, Recogida on the ticket) and the floor in `test_refusedRectificativaRedoneUnderItsNumber`.
 - [x] **Comprobar tras actualizar: the shop user's post-update self-check** (tracker item, design chosen by Germán 19-10-2026):
   - **Why:** the manual smoke test needed someone to copy the newest backup and the settings, edit JSON by hand and compare each result with a table.
   - **How it runs:** the installer now adds *Start → La Ideal - Comprobar tras actualizar*, which starts `laideal.exe --self-check`. `SelfCheckDialog` runs instead of MainWindow and works in a temporary folder:

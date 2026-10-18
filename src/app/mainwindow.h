@@ -77,6 +77,7 @@ private slots:
                                    double totalAmount, int seq = 0);
     // The status bar's count of invoices AEAT refused, until they are resent (hidden at 0).
     void updateRefusedInvoices();
+    void showRefusedInvoices();   // the list behind the red count
     // The status bar's notice that the direct client is in AEAT's test environment.
     void updateAeatEnvironment();
     // An AEAT refusal shown in the result panel (it can come after the factura was printed).

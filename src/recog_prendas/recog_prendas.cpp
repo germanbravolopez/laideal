@@ -488,6 +488,26 @@ double RecogPrendas::calculatePrice()
                           readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
 }
 
+void RecogPrendas::showTicket(const QString &nRecibo, int seq)
+{
+    ui->le_search->setText(nRecibo);
+    on_pb_search_clicked();
+    QAbstractItemModel *view = ui->tableView->model();
+    if (!view || view->rowCount() == 0)
+        return;
+    int pick = 0;
+    for (int r = 0; r < view->rowCount(); ++r) {
+        const int source = proxyModel->mapToSource(view->index(r, 0)).row();
+        if (sqlQueryModel->data(sqlQueryModel->index(source, INGRESOS_COL_VERIFACTU_ESTADO)).toString() == QLatin1String("ERROR")
+                && (seq < 0 || sqlQueryModel->data(sqlQueryModel->index(source, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt() == seq)) {
+            pick = r;
+            break;
+        }
+    }
+    ui->tableView->selectRow(pick);
+    on_tableView_clicked(view->index(pick, 0));
+}
+
 void RecogPrendas::on_le_search_returnPressed()
 {
     on_pb_search_clicked();

@@ -90,8 +90,22 @@ bool markRectificationResent(QSqlDatabase &db, const QString &number);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);
-// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR.
-int refusedInvoiceCount(QSqlDatabase &db);
+// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
+// paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
+// any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
+// never be resent and must not keep the warning up.
+int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso = QString());
+// The same invoices, one per payment event, newest payment first: what the operator
+// needs to find and resend each one.
+struct RefusedInvoice {
+    QString nRecibo;
+    int     seq = 0;
+    QString fechaPago;        // dd-MM-yyyy, the earliest of the event
+    double  importe = 0.0;
+    QString error;            // AEAT's reason
+    bool    rectificativa = false;   // resent from Rectificar factura, not Recogida
+};
+QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIso = QString());
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);

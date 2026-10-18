@@ -1273,17 +1273,43 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat)
     return qMax(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos"), highestAtAeat) + 1;
 }
 
-int refusedInvoiceCount(QSqlDatabase &db)
+QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIso)
 {
+    QVector<RefusedInvoice> invoices;
     if (dbNotConfigured(db, __func__) || !db.open())
-        return 0;
+        return invoices;
     QSqlQuery q(db);
-    const int count = q.exec("SELECT COUNT(DISTINCT n_recibo || '-' || verifactu_invoice_seq) FROM ingresos "
-                             "WHERE pagado = 'SI' AND verifactu_estado = 'ERROR'") && q.next()
-                          ? q.value(0).toInt() : 0;
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(CAST(importe AS REAL)), "
+              "MAX(COALESCE(verifactu_error, '')), MAX(COALESCE(verifactu_rectifies_n_recibo, '') != '') "
+              "FROM ingresos WHERE pagado = 'SI' AND verifactu_estado = 'ERROR' "
+              "GROUP BY n_recibo, verifactu_invoice_seq "
+              // The invoice's own date (its earliest payment) against the floor; an unreadable
+              // floor or payment date never hides a refusal.
+              "HAVING date(:floor) IS NULL OR MIN(" + kFechaPagoIso + ") IS NULL "
+              "    OR MIN(" + kFechaPagoIso + ") >= date(:floor2) "
+              "ORDER BY MIN(" + kFechaPagoIso + ") DESC, CAST(n_recibo AS INTEGER) DESC");
+    q.bindValue(":floor", floorIso);
+    q.bindValue(":floor2", floorIso);
+    if (!q.exec())
+        qWarning() << "refusedInvoices: query failed -" << q.lastError().text();
+    while (q.next()) {
+        RefusedInvoice r;
+        r.nRecibo = q.value(0).toString();
+        r.seq = q.value(1).toInt();
+        r.fechaPago = q.value(2).toString();
+        r.importe = q.value(3).toDouble();
+        r.error = q.value(4).toString();
+        r.rectificativa = q.value(5).toBool();
+        invoices.append(r);
+    }
     q.finish();
     db.close();
-    return count;
+    return invoices;
+}
+
+int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso)
+{
+    return refusedInvoices(db, floorIso).size();
 }
 
 QStringList pendingRectificationNumbers(QSqlDatabase &db)

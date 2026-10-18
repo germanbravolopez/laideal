@@ -47,6 +47,10 @@ public:
     bool isCellClicked = false;
     int rowClickedCell = -1;
 
+    // Searches the ticket and selects its refused row of payment `seq` (any seq when -1;
+    // else its first row), ready for Verifactu...
+    void showTicket(const QString &nRecibo, int seq = -1);
+
     enum UpdateDBop {
         PKU_YES,
         PKU_NO,
