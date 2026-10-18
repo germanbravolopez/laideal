@@ -181,8 +181,8 @@ bool Facturas::saveFactura()
              << "importe=" << m_leImporte->text();
     db.open();
     QSqlQuery q(db);
-    q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe, edit_lock) "
-              "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe, :edit_lock);");
+    q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe) "
+              "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe);");
     q.bindValue(":id", QString::number(idMax + 1));
     q.bindValue(":n_factura", m_leFra->text().trimmed());
     q.bindValue(":servicio", m_cbServicio->currentText());
@@ -191,7 +191,6 @@ bool Facturas::saveFactura()
     q.bindValue(":fecha", m_deFecha->date().toString("dd-MM-yyyy"));
     q.bindValue(":iva", m_cbIva->currentData().toString());
     q.bindValue(":importe", moneyText(m_leImporte->text()));
-    q.bindValue(":edit_lock", "0");
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "saveFactura INSERT failed for" << m_leFra->text() << "-" << q.lastError().text();

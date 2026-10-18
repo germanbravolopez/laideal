@@ -65,6 +65,8 @@ private:
     void setupUi();
     // Explanation and available buttons for tableName.
     void configureForTable();
+    // rowLocked() against the closed quarters read now, which also refreshes the view's.
+    bool rowLockedNow(int proxyRow);
 
     QSqlDatabase db;
     QLabel *m_lblIntro = nullptr;

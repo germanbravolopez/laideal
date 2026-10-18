@@ -86,6 +86,10 @@ class TestE2eApp : public QObject
     QString scalar(const QString &sql) { return E2e::scalar(m_db, sql); }
     static QString today() { return QDate::currentDate().toString("dd-MM-yyyy"); }
 
+    // Contabilidad's close / Revertir of the quarter containing `date`.
+    bool closeQuarterOf(const QDate &date) { return closeQuarter(m_db, (date.month() + 2) / 3, date.year(), ""); }
+    bool reopenQuarterOf(const QDate &date) { return reopenQuarter(m_db, (date.month() + 2) / 3, date.year()); }
+
     // Types one garment into row 0 of the ticket table as the operator does: the
     // quantity first, then the garment name, which looks up the price.
     static void enterGarment(MainWindow &mw, const QString &garment, const QString &quantity)
@@ -682,12 +686,13 @@ private slots:
     void test_refusedRectificativaInAClosedQuarter()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "797", "h797a", "10.00", today(), "A-ORIG0797"));
-        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
-                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, hash, "
                                 "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
-                                "verifactu_rectification_type) VALUES ('798', 'Cliente E2E', '15-01-2026', '15-01-2026', '', "
-                                "'8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', '1', 'h798a', "
+                                "verifactu_rectification_type) VALUES ('0', '798', 'Cliente E2E', '15-01-2026', '15-01-2026', '', "
+                                "'8.00', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', 'h798a', "
                                 "'ERROR', 0, '797', 'S')"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         const auto rectify = [this](double amount, bool substitution = true) -> QString {
             RectifyInvoiceDialog dlg(m_db);
             dlg.m_verifactu = m_verifactu;
@@ -1266,8 +1271,7 @@ private slots:
                  QStringLiteral("1|3.5"));
 
         // Closed quarter: refused in the panel, nothing saved.
-        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, "
-                                "importe, edit_lock) VALUES (9, 'X', '', '', '', '05-01-2026', '21', '1.00', 1)"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         const QString next = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
         mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Jarapa");
         mw.findChild<QDateEdit *>("de_date_recep")->setDate(QDate(2026, 2, 10));
@@ -1501,7 +1505,7 @@ private slots:
     void test_cancelInvoice_refusedWhileCurrentQuarterClosed()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "810", "h810a", "12.00", today(), "A-ORIG0810"));
-        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 1"));
+        QVERIFY(closeQuarterOf(QDate::currentDate()));
 
         CancelInvoiceDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
@@ -1579,11 +1583,11 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
 
         date->setDate(paid);
-        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 1"));
+        QVERIFY(closeQuarterOf(paid));
         QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
         QVERIFY(result->text().contains("contabilidad cerrada"));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
-        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 0"));
+        QVERIFY(reopenQuarterOf(paid));
 
         QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Rectificativa enviada"), 10000);
@@ -2005,7 +2009,9 @@ private slots:
     void test_recogida_refusedWritesAreReported()
     {
         QVERIFY(E2e::seedGarment(m_db, "940", "h940a", "9.00", today()));
-        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cantidad = '3', edit_lock = 1 WHERE hash='h940a'"));
+        QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET cantidad = '3', fecha_pago = '%1' WHERE hash='h940a'")
+                                    .arg(today())));
+        QVERIFY(closeQuarterOf(QDate::currentDate()));
         QVERIFY(E2e::seedGarment(m_db, "941", "h941a", "7.00", today()));
         RecogPrendas rp(m_db);
         const auto result = [&rp]() { return rp.findChild<QLabel *>("lblResult")->text(); };
@@ -2039,24 +2045,40 @@ private slots:
         QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 12.35);
     }
 
-    // A garment locked by Contabilidad while its invoice is on the way to AEAT is not
-    // stored as paid, and the dialog counts it so Recogida can report it.
-    void test_payDialog_reportsAGarmentLockedDuringTheSubmit()
+    // A quarter closed while the invoice is on the way to AEAT does not drop the payment
+    // (AEAT may have registered it): it is stored and logged for review.
+    void test_payDialog_storesThePaymentWhenTheQuarterClosesDuringTheSubmit()
     {
         QVERIFY(E2e::seedGarment(m_db, "955", "h955a", "5.00", today()));
         QVERIFY(E2e::seedGarment(m_db, "955", "h955b", "7.00", today()));
         PayDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
         QVERIFY(dlg.loadTicket("955"));
-        // Its factura would list fewer garments than the invoice sent: not printed.
-        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("factura of \"955\" not printed"));
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("was closed while ticket \"955\" was being charged"));
         QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
-        // The lock check before submitting has passed; the reply has not arrived yet.
-        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET edit_lock = 1 WHERE hash='h955b'"));
+        // The quarter was open when Cobrar was pressed; the reply has not arrived yet.
+        QVERIFY(closeQuarterOf(QDate::currentDate()));
+        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
+        QCOMPARE(dlg.unstoredGarments(), 0);
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado) FROM ingresos WHERE n_recibo='955'"), QStringLiteral("SI,SI"));
+    }
+
+    // A garment paid from another window while its invoice is on the way is not stored
+    // twice, and the dialog counts it so Recogida can report it.
+    void test_payDialog_reportsAGarmentPaidDuringTheSubmit()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "956", "h956a", "5.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "956", "h956b", "7.00", today()));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("956"));
+        // Its factura would list fewer garments than the invoice sent: not printed.
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("factura of \"956\" not printed"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET pagado = 'SI' WHERE hash='h956b'"));
         QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
         QCOMPARE(dlg.unstoredGarments(), 1);
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h955a'"), QStringLiteral("SI"));
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h955b'"), QStringLiteral("NO"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h956a'"), QStringLiteral("SI"));
     }
 
     // A ticket whose garments cannot all be stored keeps none of them (a retry would
@@ -2575,8 +2597,9 @@ private slots:
                                 "('Zurita', 'B2', '', ''), ('álvarez', 'B3', '', ''), ('Beta', 'B4', '', '')"));
         QVERIFY(E2e::exec(m_db, "INSERT INTO servicios VALUES ('Luz'), ('agua'), ('Gas')"));
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
-                                "importe, iva, edit_lock) VALUES (1, 'OLD', 'Luz', '', 'Proveedor E2E', "
-                                "'10-01-2026', '10.00', 21, 1)"));
+                                "importe, iva) VALUES (1, 'OLD', 'Luz', '', 'Proveedor E2E', "
+                                "'10-01-2026', '10.00', 21)"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         QPointer<Facturas> form = new Facturas(m_db);
         form->populateEmpresas();
         form->populateServicios();
@@ -2606,8 +2629,8 @@ private slots:
         QCOMPARE(form->findChild<QLineEdit *>("leIva")->text(), QStringLiteral("21.00"));
         form->findChild<QPushButton *>("btnSave")->click();
         QVERIFY2(result().contains("Factura F-77 de Proveedor E2E guardada"), qPrintable(result()));
-        QCOMPARE(scalar("SELECT importe || '|' || iva || '|' || edit_lock FROM gastos WHERE n_factura = 'F-77'"),
-                 QStringLiteral("121.00|21|0"));
+        QCOMPARE(scalar("SELECT importe || '|' || iva FROM gastos WHERE n_factura = 'F-77'"),
+                 QStringLiteral("121.00|21"));
         QVERIFY(form->findChild<QLineEdit *>("leFra")->text().isEmpty());          // ready for the next one
 
         fill("Otro", QDate::currentDate());
@@ -2631,10 +2654,11 @@ private slots:
     void test_genListadoGastos_pdfAndEmptyYear()
     {
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
-                                "iva, importe, edit_lock) VALUES "
-                                "(1, 'A-1', 'Luz', '', 'Beta', '10-02-2026', '21', '121.00', 1), "
-                                "(2, 'A-2', 'Agua', '', 'Alfa', '11-02-2026', '10', '11.00', 0), "
-                                "(3, 'A-3', 'Luz', '', 'Beta', '12-03-2025', '21', '50.00', 0)"));
+                                "iva, importe) VALUES "
+                                "(1, 'A-1', 'Luz', '', 'Beta', '10-02-2026', '21', '121.00'), "
+                                "(2, 'A-2', 'Agua', '', 'Alfa', '11-02-2026', '10', '11.00'), "
+                                "(3, 'A-3', 'Luz', '', 'Beta', '12-03-2025', '21', '50.00')"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         QPointer<GenListado> dlg = new GenListado(m_db);   // reads the years, then closes the connection
         // A SQLite model reads its rows from the live query, so open it after the dialog.
         QVERIFY(m_db.open());
@@ -2673,8 +2697,9 @@ private slots:
     void test_listado_buttonsAndMessagesInWindow()
     {
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
-                                "iva, importe, edit_lock) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
-                                "'21', '121.00', 1)"));
+                                "iva, importe) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
+                                "'21', '121.00')"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         MainWindow mw;
         const auto listado = [&mw](const QString &name) {
             for (Listado *l : mw.findChildren<Listado *>())
@@ -2724,8 +2749,9 @@ private slots:
     void test_listado_gastosDateNeverMovesIntoAClosedQuarter()
     {
         QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
-                                "iva, importe, edit_lock) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
-                                "'21', '121.00', 1), (2, 'L-2', 'Agua', '', 'Beta', '10-05-2026', '10', '22.00', 0)"));
+                                "iva, importe) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-02-2026', "
+                                "'21', '121.00'), (2, 'L-2', 'Agua', '', 'Beta', '10-05-2026', '10', '22.00')"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         MainWindow mw;
         QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
         Listado *gastos = nullptr;
@@ -2782,19 +2808,24 @@ private slots:
         QVERIFY2(result(form).contains("El trimestre se ha bloqueado"), qPrintable(result(form)));
         QVERIFY(result(form).contains("contabilidad_trimestral_2026_1.pdf"));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
-        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("1"));
+        QVERIFY(quarterIsClosed(m_db, 1, 2026));
+        QCOMPARE(scalar("SELECT origin || '|' || report_file || '|' || COALESCE(reopened_at, '') "
+                        "FROM accounting_closures WHERE year = 2026 AND quarter = 1"),
+                 QStringLiteral("contabilidad|contabilidad_trimestral_2026_1.pdf|"));
 
         // The dialog stays open: check the lock, then the detailed report, kept apart.
         QTest::qWait(50);
         QVERIFY(!form.isNull());
         form->findChild<QPushButton *>("btnCheckLock")->click();
-        QVERIFY2(result(form).contains("El trimestre 1 de 2026 está bloqueado"), qPrintable(result(form)));
+        QVERIFY2(result(form).contains("El trimestre 1 de 2026 está bloqueado (contabilidad realizada el "),
+                 qPrintable(result(form)));
         form->findChild<QCheckBox *>("chkDetail")->setChecked(true);
         form->findChild<QPushButton *>("btnGenerate")->click();
         QVERIFY(QFile::exists(detailedPdf));
         QVERIFY(ReportHtml::lastReportHtml().contains("Detalle del periodo"));
         QVERIFY(ReportHtml::lastReportHtml().contains("Trimestre 1 · 2026 · Detalle"));
         QVERIFY(result(form).contains("ya estaba realizada"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("1"));   // regenerated, not closed twice
         QVERIFY(result(form).contains("contabilidad_trimestral_2026_1_detalle.pdf"));
         form->findChild<QPushButton *>("btnClose")->click();
         QTRY_VERIFY(form.isNull());                                       // Cerrar closes it (WA_DeleteOnClose)
@@ -2809,9 +2840,13 @@ private slots:
         revert->findChild<QPushButton *>("btnGenerate")->click();
 
         QVERIFY2(result(revert).contains("revertida"), qPrintable(result(revert)));
-        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h400a'"), QStringLiteral("0"));
+        QVERIFY(!quarterIsClosed(m_db, 1, 2026));
+        const QVector<QuarterClosure> history = quarterClosures(m_db, 1, 2026);
+        QCOMPARE(history.size(), 1);                                      // the close stays in the history
+        QVERIFY(history[0].reopenedAt.isValid());
         revert->findChild<QPushButton *>("btnCheckLock")->click();
-        QVERIFY(result(revert).contains("El trimestre 1 de 2026 no está bloqueado"));
+        QVERIFY2(result(revert).contains("El trimestre 1 de 2026 no está bloqueado (contabilidad revertida el "),
+                 qPrintable(result(revert)));
         revert->findChild<QPushButton *>("btnGenerate")->click();        // nothing left to revert
         QVERIFY(result(revert).contains("no hay nada que revertir"));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
@@ -2836,14 +2871,15 @@ private slots:
         const QString text = form->findChild<QLabel *>("lblResult")->text();
         QDir(pdf).removeRecursively();
         QVERIFY2(text.contains("No se pudo guardar el informe") && !text.contains("realizada"), qPrintable(text));
-        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h410a'"), QStringLiteral("0"));
+        QVERIFY(!quarterIsClosed(m_db, 2, 2026));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("0"));
         form->close();
         QTRY_VERIFY(form.isNull());
     }
 
     // Contabilidad Trimestral Q3 whose only movement is the cancellation of a Q2 invoice:
-    // the report is still written with the regularisation (it used to say "No hay
-    // registros"), and Comprobar bloqueo says there is nothing to lock.
+    // the report is written with the regularisation and, with "Bloquear", the quarter is
+    // closed like any other.
     void test_contabilidad_quarterWithOnlyACancellation()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "430", "h430a", "12.10", "10-05-2026", "A-ORIG0430"));
@@ -2858,16 +2894,17 @@ private slots:
         form->findChild<QCheckBox *>("chkLock")->setChecked(true);
         form->findChild<QPushButton *>("btnGenerate")->click();
         const QString text = form->findChild<QLabel *>("lblResult")->text();
-        QVERIFY2(text.contains("realizada") && text.contains("solo tiene anulaciones"), qPrintable(text));
+        QVERIFY2(text.contains("realizada") && text.contains("El trimestre se ha bloqueado"), qPrintable(text));
         QVERIFY(QFile::exists(pdf));
         const QString html = ReportHtml::lastReportHtml();
         QVERIFY(html.contains("Anulaciones / rectificaciones del periodo"));
         QVERIFY2(html.contains("12,10") || html.contains("12.10"), "the cancelled 12.10 is not in the report");
-        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash='h430a'"), QStringLiteral("0"));   // Q2's row
+        QVERIFY(quarterIsClosed(m_db, 3, 2026));
+        QVERIFY(!quarterIsClosed(m_db, 2, 2026));                         // the cancelled invoice's quarter stays open
 
         form->findChild<QPushButton *>("btnCheckLock")->click();
         const QString lock = form->findChild<QLabel *>("lblResult")->text();
-        QVERIFY2(lock.contains("solo tiene anulaciones") && lock.contains("nada que bloquear"), qPrintable(lock));
+        QVERIFY2(lock.contains("El trimestre 3 de 2026 está bloqueado (contabilidad realizada el "), qPrintable(lock));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
         form->close();
         QTRY_VERIFY(form.isNull());

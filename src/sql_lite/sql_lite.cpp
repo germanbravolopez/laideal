@@ -41,16 +41,104 @@ static QString monthStr(int month)
     return month < 10 ? QStringLiteral("0%1").arg(month) : QString::number(month);
 }
 
-// Not locked by Contabilidad. The shop DB stores edit_lock as TEXT '0' / '1', and
-// COALESCE drops the column's affinity ('0' = 0 is false): only an explicit 0 is
-// unlocked, so a blank or odd value stays locked.
-static const QString kUnlockedWhere = QStringLiteral(" AND COALESCE(edit_lock, 0) IN (0, '0')");
+// The quarter of a dd-MM-yyyy date column has an open closure in accounting_closures.
+// An empty or NULL date is in no quarter, so it is never closed.
+static QString closedQuarterSql(const QString &dateColumn)
+{
+    return "EXISTS (SELECT 1 FROM accounting_closures c WHERE c.reopened_at IS NULL"
+           " AND c.year = CAST(substr(" + dateColumn + ", 7, 4) AS INTEGER)"
+           " AND c.quarter = (CAST(substr(" + dateColumn + ", 4, 2) AS INTEGER) + 2) / 3)";
+}
+
+// The shop's ingresos.edit_lock is NOT NULL without a default, so every INSERT still
+// writes the legacy lock flag as '0'; it is never read (accounting_closures holds the lock).
+
+// Not locked by Contabilidad: the row's payment date is not in a closed quarter.
+static const QString kUnlockedWhere = " AND NOT " + closedQuarterSql(QStringLiteral("ingresos.fecha_pago"));
 
 // The row's amount is still open: unpaid, never sent to AEAT, not locked by Contabilidad.
 static const QString kAmountEditableWhere =
     QStringLiteral(" AND COALESCE(pagado, '') != 'SI' "
                    " AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ERROR', 'ANULADA', 'RECTIFICADA') ")
     + kUnlockedWhere;
+
+// Contabilidad's quarterly close. Append-only: closing inserts a row, reopening sets its
+// reopened_at once, and the triggers refuse every other change, so the table is the
+// close / reopen history. The partial index allows one open closure per quarter.
+// origin is 'contabilidad', or 'migration' for a quarter closed before the table existed
+// (its closed_at is the migration time, the real date was never stored).
+static const char *const kAccountingClosuresSchema[] = {
+    "CREATE TABLE IF NOT EXISTS accounting_closures ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " year INTEGER NOT NULL CHECK (year BETWEEN 2000 AND 2999),"
+    " quarter INTEGER NOT NULL CHECK (quarter BETWEEN 1 AND 4),"
+    " closed_at TEXT NOT NULL,"
+    " reopened_at TEXT,"
+    " origin TEXT NOT NULL CHECK (origin IN ('contabilidad', 'migration')),"
+    " report_file TEXT NOT NULL DEFAULT '')",
+    "CREATE UNIQUE INDEX IF NOT EXISTS accounting_closures_open "
+    " ON accounting_closures (year, quarter) WHERE reopened_at IS NULL",
+    "CREATE TRIGGER IF NOT EXISTS accounting_closures_no_delete BEFORE DELETE ON accounting_closures "
+    "BEGIN SELECT RAISE(ABORT, 'accounting_closures is append-only'); END",
+    "CREATE TRIGGER IF NOT EXISTS accounting_closures_reopen_only BEFORE UPDATE ON accounting_closures "
+    "WHEN OLD.reopened_at IS NOT NULL OR NEW.reopened_at IS NULL OR NEW.id IS NOT OLD.id"
+    " OR NEW.year IS NOT OLD.year OR NEW.quarter IS NOT OLD.quarter OR NEW.closed_at IS NOT OLD.closed_at"
+    " OR NEW.origin IS NOT OLD.origin OR NEW.report_file IS NOT OLD.report_file "
+    "BEGIN SELECT RAISE(ABORT, 'an accounting closure can only be reopened, once'); END",
+};
+
+static QString closureTimestamp()
+{
+    return QDateTime::currentDateTime().toString(Qt::ISODate);
+}
+
+// Creates accounting_closures. The first time, in the same transaction, every quarter
+// that the old per-row edit_lock flag closed (any ingresos / gastos row of it set to 1)
+// gets a 'migration' closure; afterwards edit_lock is never read again, so a quarter
+// reopened later is not closed again by its stale flags. On an open db.
+static void migrateAccountingClosures(QSqlDatabase &db)
+{
+    QSqlQuery q(db);
+    const bool exists = q.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounting_closures'")
+                        && q.next();
+    q.finish();
+    if (exists) {
+        for (const char *sql : kAccountingClosuresSchema)   // index / triggers of an older build
+            if (!q.exec(QString::fromLatin1(sql)))
+                qWarning() << "migrateAccountingClosures: schema statement failed -" << q.lastError().text();
+        return;
+    }
+    if (!db.transaction()) {
+        qCritical() << "migrateAccountingClosures: could not start a transaction -" << db.lastError().text();
+        return;
+    }
+    bool ok = true;
+    for (const char *sql : kAccountingClosuresSchema)
+        ok = ok && q.exec(QString::fromLatin1(sql));
+    const auto quarterOf = [](const QString &col) {
+        return "SELECT CAST(substr(" + col + ", 7, 4) AS INTEGER) AS y, "
+               "(CAST(substr(" + col + ", 4, 2) AS INTEGER) + 2) / 3 AS qt";
+    };
+    ok = ok && q.prepare("INSERT INTO accounting_closures (year, quarter, closed_at, origin) "
+                         "SELECT DISTINCT y, qt, :now, 'migration' FROM ("
+                         + quarterOf("fecha_pago") + " FROM ingresos WHERE CAST(edit_lock AS INTEGER) = 1 "
+                         "UNION " + quarterOf("fecha") + " FROM gastos WHERE CAST(edit_lock AS INTEGER) = 1) "
+                         "WHERE y BETWEEN 2000 AND 2999 AND qt BETWEEN 1 AND 4");
+    if (ok) {
+        q.bindValue(":now", closureTimestamp());
+        ok = q.exec();
+    }
+    const int migrated = ok ? q.numRowsAffected() : 0;
+    if (ok && db.commit()) {
+        qDebug() << "migrateAccountingClosures: created accounting_closures," << migrated
+                 << "quarter(s) closed by edit_lock carried over";
+    } else {
+        // Without the table every quarter reads as open: say it loudly, retried at the next start.
+        qCritical() << "migrateAccountingClosures: migration failed, rolled back -" << q.lastError().text()
+                    << db.lastError().text();
+        db.rollback();
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Public functions
@@ -90,6 +178,9 @@ void migrateDatabase(QSqlDatabase &db)
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
     // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
+
+    // Before kAmountEditableWhere is used below: it reads accounting_closures.
+    migrateAccountingClosures(db);
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -585,7 +676,8 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
 
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT cantidad, importe, edit_lock FROM ingresos WHERE n_recibo = :n AND hash = :h");
+    q.prepare("SELECT cantidad, importe, " + closedQuarterSql("ingresos.fecha_pago")
+              + " FROM ingresos WHERE n_recibo = :n AND hash = :h");
     q.bindValue(":n", nRecibo);
     q.bindValue(":h", hash);
     if (!q.exec() || !q.first()) {
@@ -594,7 +686,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
         return QString();
     }
     const int qty = q.value(0).toInt();
-    if (q.value(2).toInt() != 0) {
+    if (q.value(2).toBool()) {
         qWarning() << "splitGarmentRow: row is locked by Contabilidad -" << nRecibo << hash;
         db.close();
         return QString();
@@ -637,7 +729,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     u.bindValue(":oldCant", QString::number(qty));
     bool ok = u.exec() && u.numRowsAffected() == 1;
     // Every other column is copied, verifactu_* included: the split-off garments stay
-    // in the invoice (and the estado) of the row they come from.
+    // in the invoice (and the estado) of the row they come from. edit_lock: always '0' (see kUnlockedWhere).
     QSqlQuery i(db);
     i.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
               "  importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, "
@@ -646,7 +738,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
               "  verifactu_rectification_type, verifactu_invoice_seq, verifactu_invoice_id, "
               "  fecha_anulacion, verifactu_cancel_xml) "
               "SELECT n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
-              "  :imp, pagado, estado, :cant, prenda, size, servicio, observaciones, edit_lock, "
+              "  :imp, pagado, estado, :cant, prenda, size, servicio, observaciones, '0', "
               "  :newHash, verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, "
               "  verifactu_url_qr, verifactu_xml, verifactu_hash, verifactu_rectifies_n_recibo, "
               "  verifactu_rectification_type, verifactu_invoice_seq, verifactu_invoice_id, "
@@ -780,7 +872,7 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
               "observaciones, edit_lock, hash, verifactu_estado) "
               "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
               ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
-              ":observaciones, :edit_lock, :hash, :verifactu_estado)");
+              ":observaciones, '0', :hash, :verifactu_estado)");
     q.bindValue(":n_recibo",         row.nRecibo);
     q.bindValue(":cliente",          row.cliente);
     q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
@@ -794,7 +886,6 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":size",             row.size);
     q.bindValue(":servicio",         row.servicio);
     q.bindValue(":observaciones",    row.observaciones);
-    q.bindValue(":edit_lock",        row.editLock);
     q.bindValue(":hash",             row.hash);
     q.bindValue(":verifactu_estado", row.verifactuEstado);
     const bool ok = q.exec();
@@ -875,48 +966,156 @@ static const QString kGastosPeriodWhere =
 
 
 
-int readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year)
+bool quarterIsClosed(QSqlDatabase &db, int quarter, int year)
 {
-    if (dbNotConfigured(db, __func__)) return 0;
-
-    const QString m1   = monthStr((quarter - 1) * 3 + 1);
-    const QString m2   = monthStr((quarter - 1) * 3 + 2);
-    const QString m3   = monthStr((quarter - 1) * 3 + 3);
-    const QString yStr = QString::number(year);
-
-    QString dateCol;
-    if (table == "ingresos")    dateCol = "fecha_pago";
-    else if (table == "gastos") dateCol = "fecha";
-    else {
-        qCritical() << "readLockForQuarter: unsupported table:" << table;
-        return 2;
-    }
-
-    // One pass over the quarter's three months (date stored as dd-MM-yyyy, so
-    // substr(col,4,2) is MM and substr(col,7,4) is yyyy). COUNT separates the
-    // no-data case (2) from data-present; MAX(edit_lock) reports the quarter as
-    // locked (1) if any row is locked, else open (0).
+    if (dbNotConfigured(db, __func__)) return false;
     // An open connection stays open: Listado asks while its table model reads through it.
     const bool wasOpen = db.isOpen();
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT COUNT(*), COALESCE(MAX(edit_lock), 0) FROM " + table + " WHERE "
-              "substr(" + dateCol + ", 4, 2) IN (:m1, :m2, :m3) AND substr(" + dateCol + ", 7, 4) = :y");
-    q.bindValue(":m1", m1);
-    q.bindValue(":m2", m2);
-    q.bindValue(":m3", m3);
-    q.bindValue(":y",  yStr);
-
-    int editLock = 2; // 2 = no data found for the quarter
+    q.prepare("SELECT COUNT(*) FROM accounting_closures WHERE year = :y AND quarter = :q AND reopened_at IS NULL");
+    q.bindValue(":y", year);
+    q.bindValue(":q", quarter);
+    // Fails closed, like the SQL guards: an unreadable accounting_closures never opens a quarter.
+    bool closed = true;
     if (q.exec() && q.first())
-        editLock = (q.value(0).toInt() == 0) ? 2 : q.value(1).toInt();
+        closed = q.value(0).toInt() > 0;
     else
-        qWarning() << "readLockForQuarter: query error for table" << table
-                   << "quarter" << quarter << "year" << yStr << "-" << q.lastError().text();
+        qCritical() << "quarterIsClosed: query failed for quarter" << quarter << year
+                    << "- treated as closed -" << q.lastError().text();
     q.finish();
     if (!wasOpen)
         db.close();
-    return editLock;
+    return closed;
+}
+
+// Appends a closure or reopens the open one; refused (false) when the quarter is
+// already in the wanted state, which the unique index / the WHERE also enforce.
+static bool writeClosure(QSqlDatabase &db, bool close, int quarter, int year, const QString &reportFile)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+    if (quarter < 1 || quarter > 4) {
+        qWarning() << "writeClosure: invalid quarter" << quarter << year;
+        return false;
+    }
+    const bool wasOpen = db.isOpen();
+    db.open();
+    QSqlQuery q(db);
+    if (close) {
+        q.prepare("INSERT INTO accounting_closures (year, quarter, closed_at, origin, report_file) "
+                  "SELECT :y, :q, :now, 'contabilidad', :file WHERE NOT EXISTS (SELECT 1 FROM accounting_closures "
+                  "  WHERE year = :y2 AND quarter = :q2 AND reopened_at IS NULL)");
+        q.bindValue(":file", reportFile);
+    } else {
+        q.prepare("UPDATE accounting_closures SET reopened_at = :now "
+                  "WHERE year = :y AND quarter = :q AND reopened_at IS NULL");
+    }
+    q.bindValue(":y", year);
+    q.bindValue(":q", quarter);
+    q.bindValue(":now", closureTimestamp());
+    if (close) {
+        q.bindValue(":y2", year);
+        q.bindValue(":q2", quarter);
+    }
+    const bool ok = q.exec() && q.numRowsAffected() == 1;
+    if (ok)
+        qDebug() << "writeClosure: quarter" << quarter << year << (close ? "closed" : "reopened");
+    else
+        qWarning() << "writeClosure: quarter" << quarter << year << "not" << (close ? "closed" : "reopened")
+                   << "(already so, or failed) -" << q.lastError().text();
+    q.finish();
+    if (!wasOpen)
+        db.close();
+    return ok;
+}
+
+bool closeQuarter(QSqlDatabase &db, int quarter, int year, const QString &reportFile)
+{
+    return writeClosure(db, true, quarter, year, reportFile);
+}
+
+bool reopenQuarter(QSqlDatabase &db, int quarter, int year)
+{
+    return writeClosure(db, false, quarter, year, QString());
+}
+
+QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year)
+{
+    QVector<QuarterClosure> closures;
+    if (dbNotConfigured(db, __func__)) return closures;
+    const bool wasOpen = db.isOpen();
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT closed_at, reopened_at, origin, report_file FROM accounting_closures "
+              "WHERE year = :y AND quarter = :q ORDER BY id");
+    q.bindValue(":y", year);
+    q.bindValue(":q", quarter);
+    if (!q.exec())
+        qWarning() << "quarterClosures: query failed for quarter" << quarter << year << "-" << q.lastError().text();
+    while (q.next()) {
+        QuarterClosure c;
+        c.closedAt   = QDateTime::fromString(q.value(0).toString(), Qt::ISODate);
+        c.reopenedAt = QDateTime::fromString(q.value(1).toString(), Qt::ISODate);
+        c.migrated   = q.value(2).toString() == QLatin1String("migration");
+        c.reportFile = q.value(3).toString();
+        closures.append(c);
+    }
+    q.finish();
+    if (!wasOpen)
+        db.close();
+    return closures;
+}
+
+QSet<int> closedQuarterKeys(QSqlDatabase &db)
+{
+    QSet<int> keys;
+    if (dbNotConfigured(db, __func__)) return keys;
+    const bool wasOpen = db.isOpen();
+    db.open();
+    QSqlQuery q(db);
+    if (!q.exec("SELECT year, quarter FROM accounting_closures WHERE reopened_at IS NULL"))
+        qWarning() << "closedQuarterKeys: query failed -" << q.lastError().text();
+    while (q.next())
+        keys.insert(quarterKey(q.value(1).toInt(), q.value(0).toInt()));
+    q.finish();
+    if (!wasOpen)
+        db.close();
+    return keys;
+}
+
+bool quarterHasMovements(QSqlDatabase &db, int quarter, int year)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+    // dd-MM-yyyy: substr(col, 4, 2) is MM and substr(col, 7, 4) is yyyy. One set of
+    // placeholders per column, each bound below.
+    const QStringList columns = { "fecha_pago", "fecha_anulacion", "fecha" };
+    const auto inQuarter = [&columns](int i) {
+        const QString n = QString::number(i);
+        return "substr(" + columns[i] + ", 4, 2) IN (:a" + n + ", :b" + n + ", :c" + n + ")"
+               " AND substr(" + columns[i] + ", 7, 4) = :y" + n;
+    };
+    const bool wasOpen = db.isOpen();
+    db.open();
+    QSqlQuery q(db);
+    q.prepare("SELECT EXISTS (SELECT 1 FROM ingresos WHERE " + inQuarter(0) + ")"
+              " OR EXISTS (SELECT 1 FROM ingresos WHERE " + inQuarter(1) + ")"
+              " OR EXISTS (SELECT 1 FROM gastos WHERE " + inQuarter(2) + ")");
+    for (int i = 0; i < columns.size(); ++i) {
+        const QString n = QString::number(i);
+        q.bindValue(":a" + n, monthStr((quarter - 1) * 3 + 1));
+        q.bindValue(":b" + n, monthStr((quarter - 1) * 3 + 2));
+        q.bindValue(":c" + n, monthStr((quarter - 1) * 3 + 3));
+        q.bindValue(":y" + n, QString::number(year));
+    }
+    bool any = false;
+    if (q.exec() && q.first())
+        any = q.value(0).toBool();
+    else
+        qWarning() << "quarterHasMovements: query failed for quarter" << quarter << year << "-" << q.lastError().text();
+    q.finish();
+    if (!wasOpen)
+        db.close();
+    return any;
 }
 
 QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int seq)
@@ -1186,31 +1385,6 @@ QString moneyText(double value)
 QString moneyText(const QString &value)
 {
     return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
-}
-
-void updateLockForMonth(QSqlDatabase &db, int value, int month, int year)
-{
-    if (dbNotConfigured(db, __func__)) return;
-
-    const QString mStr    = monthStr(month);
-    const QString yStr    = QString::number(year);
-    const QString pattern = "%-" + mStr + "-" + yStr;
-
-    qDebug() << "updateLockForMonth: UPDATE ingresos+gastos SET edit_lock =" << value
-             << "WHERE month=" << mStr << "year=" << yStr;
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET edit_lock = :val WHERE fecha_pago LIKE :pat");
-    q.bindValue(":val", value);
-    q.bindValue(":pat", pattern);
-    if (!q.exec())
-        qWarning() << "updateLockForMonth: failed to update ingresos for" << mStr << yStr << "-" << q.lastError().text();
-    q.prepare("UPDATE gastos SET edit_lock = :val WHERE fecha LIKE :pat");
-    q.bindValue(":val", value);
-    q.bindValue(":pat", pattern);
-    if (!q.exec())
-        qWarning() << "updateLockForMonth: failed to update gastos for" << mStr << yStr << "-" << q.lastError().text();
-    db.close();
 }
 
 int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item)
@@ -1887,9 +2061,7 @@ QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year)
 
 bool quarterIsClosed(QSqlDatabase &db, QDate date)
 {
-    const int quarter = (date.month() + 2) / 3;
-    return readLockForQuarter(db, "ingresos", quarter, date.year()) == 1
-        || readLockForQuarter(db, "gastos", quarter, date.year()) == 1;
+    return date.isValid() && quarterIsClosed(db, (date.month() + 2) / 3, date.year());
 }
 
 QDate openPeriodDate(QSqlDatabase &db, QDate preferred)

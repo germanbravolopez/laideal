@@ -529,7 +529,7 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
         "verifactu_rectifies_n_recibo, verifactu_rectification_type) "
         "VALUES "
         "(:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, :importe, :pagado, :estado, "
-        ":cantidad, :prenda, :size, :servicio, :observaciones, :edit_lock, :hash, "
+        ":cantidad, :prenda, :size, :servicio, :observaciones, '0', :hash, "
         ":vcsv, :vts, :vestado, :verror, :vurl, "
         ":vxml, :vhash, "
         ":vrectifies, :vrecttype);");
@@ -551,7 +551,6 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
                                             ? m_cbInvoiceType->currentText().left(2)
                                             : QString("R1"),
                                         modeStr));
-    q.bindValue(":edit_lock",       "0");
     q.bindValue(":hash",            hash);
     // Placeholder: AEAT metadata patched by applyRectificationResult() on reply.
     q.bindValue(":vcsv",            "");

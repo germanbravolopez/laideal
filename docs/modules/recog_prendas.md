@@ -27,7 +27,7 @@ ui->show();
 | Edit importe (manual) | `PRICE` | `importe` (comma-normalised manual override; `size` left as-is) |
 | Split garment row | `SEPARATE_GARM` | `sql_lite::splitGarmentRow`: moves the chosen quantity to a new row (`genHash16()`) that copies every other column, `verifactu_*` included, so split-off garments of a paid row stay in the invoice AEAT registered; the split-off part gets the proportional `importe` in cents while the original keeps the exact remainder, so the two rows keep the stored total (no re-pricing from the price list) |
 
-`updateDb()` keeps the business rules (edit_lock guard, the `Anulado` lock) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
+`updateDb()` keeps the business rules (the closed-quarter guard, the `Anulado` lock) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
 
 ## Pre-payment editing of quantity / service / importe
 
@@ -67,7 +67,7 @@ Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the con
 | `INGRESOS_COL_SIZE` | 10 | size |
 | `INGRESOS_COL_SERVICIO` | 11 | servicio |
 | `INGRESOS_COL_OBSERVACIONES` | 12 | observaciones |
-| `INGRESOS_COL_EDIT_LOCK` | 13 | edit_lock |
+| `INGRESOS_COL_EDIT_LOCK` | 13 | edit_lock (legacy, no longer read) |
 | `INGRESOS_COL_HASH` | 14 | hash |
 | `INGRESOS_COL_VERIFACTU_CSV` | 15 | verifactu_csv |
 | `INGRESOS_COL_VERIFACTU_TIMESTAMP` | 16 | verifactu_timestamp |
@@ -82,7 +82,7 @@ Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the con
 | `INGRESOS_COL_VERIFACTU_INVOICE_ID` | 25 | verifactu_invoice_id |
 | `INGRESOS_COL_FECHA_ANULACION` | 26 | fecha_anulacion — **visible**, header "Anulación", shown right after Recogida by `placeIngresosDateColumns()` so the four dates sit together |
 
-Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash, edit_lock) and `on_pb_verifactu_clicked()` (verifactu_*).
+Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash) and `on_pb_verifactu_clicked()` (verifactu_*).
 
 ## Verifactu info button (`pb_verifactu`)
 
@@ -153,6 +153,6 @@ Remaining unpaid rows of the same ticket stay unpaid; a later payment event pick
 ## Notes
 
 - All DB updates identify the target row by `n_recibo` + `hash` pair — safe under sort/filter.
-- Accounting-locked rows (`edit_lock=1`) cannot be modified; `updateDb()` checks this.
+- Rows whose `fecha_pago` is in a quarter closed by Contabilidad cannot be modified (`RecogPrendas::rowClickedLocked`, `quarterIsClosed`); `updateDb()` checks this.
 - `pb_pay_all` opens `PayDialog` for the clicked ticket (single-ticket scope); `PayDialog::loadTicket` skips `Anulado` rows so a voided garment can never be charged/submitted. `pb_pku_all` is likewise single-ticket scoped: it calls `sql_lite::markTicketPickedUp` which runs one `UPDATE ... WHERE n_recibo = :n AND estado != 'Anulado'` (no per-row loop over the model), so a name search no longer marks every ticket in the DB as Recogido and a voided garment is never revived.
 - Total price display (`le_total_price`) sums from the proxy model rows, not the raw SQL result, so it always reflects the filtered set. Rows excluded from every total are skipped (`garmentExcludedFromTotals`: `verifactu_estado` `ANULADA` or `RECTIFICADA`). A row voided in place has no `fecha_pago` / `fecha_recogida` (its date is in `fecha_anulacion`), so only an Anulación-date search lists it, without adding it. Unpaid rows still count, so a ticket searched by number shows the amount owed.

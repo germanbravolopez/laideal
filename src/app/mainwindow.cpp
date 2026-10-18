@@ -1013,7 +1013,6 @@ bool MainWindow::saveTicket(double &storedTotal)
             r.servicio       = cbService->currentText();
             r.observaciones  = ui->table_ticket->item(row, TABLE_TICKET_OBSE)
                                    ? ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text() : QString("");
-            r.editLock       = "0";
             r.hash           = genHash16();
             // An unpaid row has no invoice to send, so it is SIN COBRAR, not PENDIENTE;
             // a paid one starts PENDIENTE and the async AEAT submit patches it on reply.

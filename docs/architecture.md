@@ -84,8 +84,8 @@ Writes to the `gastos` table. Populated from the `proveedores` and `servicios` t
 ### Contabilidad (`src/contabilidad/`)
 Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.
 Per period it prints Ingresos, Gastos and a Resumen block (Liquidación de IVA = IVA repercutido − soportado; Resultado del periodo = base ingresos − base gastos; ticket/invoice counts). The annual mode adds a consolidated summary of the four quarters. Figures are gathered once into a `PeriodFigures` struct; the period date range flows through `periodRange()`. Counts are the number of detail rows (distinct paid tickets, gastos rows). A **Detalle** annex at the end lists the paid tickets and the gastos rows behind each period's figures (`incomeTicketsBetweenDates` / `expensesBetweenDates`). They share the totals' SQL predicate, so they always reconcile.
-Can lock quarters to prevent further data entry (`edit_lock` in `ingresos`).
-`revertirOn = true` unlocks a previously locked quarter.
+Can close (lock) a quarter to prevent further changes: a row in `accounting_closures` (below), checked by every writer against the row's date.
+`revertirOn = true` reopens a closed quarter (the closure is kept, with its `reopened_at`).
 All figures are derived from the period's detail rows (`incomeTicketsBetweenDates` / `expensesBetweenDates`, annual: `annualDetailsByQuarter`) via `Contabilidad::figuresFromDetails`; the income listing excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
 
 ### Imprimir (`src/imprimir/`)
@@ -188,8 +188,7 @@ Notable items:
 - `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type), then backfills unpaid `'PENDIENTE'` rows to `'SIN COBRAR'` (10.9); idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
 - `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
-- `quarterIsClosed()` / `readLockForQuarter()` → whether Contabilidad closed the quarter
-- `updateLockForMonth()` → locks/unlocks a month+year in both `ingresos` and `gastos`
+- `quarterIsClosed()` / `closeQuarter()` / `reopenQuarter()` / `quarterClosures()` → Contabilidad's quarterly close in `accounting_closures`
 - `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
 
 ---
@@ -213,7 +212,7 @@ Notable items:
 | size | TEXT | Size multiplier (m² for rugs, etc.) |
 | servicio | TEXT | `"Limp."` (cleaning) or `"Plan."` (ironing) |
 | observaciones | TEXT | Free-text notes |
-| edit_lock | TEXT | `'0'` = editable, `'1'` = locked by accounting close. Stored as TEXT: compare it on the column itself (`edit_lock = 0`, the column's affinity converts) or with `COALESCE(edit_lock, 0) IN (0, '0')` - never `COALESCE(edit_lock, 0) = 0`, which is false for `'0'` (the 11.0 bug fixed in 11.2) |
+| edit_lock | TEXT | Legacy accounting-lock flag (`'0'` / `'1'`). Read once, by the migration that created `accounting_closures`, and never again. The shop's column is `NOT NULL` without a default, so every INSERT still writes `'0'` |
 | hash | TEXT | 16-char deduplication hash |
 | verifactu_csv | TEXT | AEAT security code (CSV) — e.g. `A-9VARYQTZTARVU2`; empty if not submitted |
 | verifactu_timestamp | TEXT | ISO-8601 submission timestamp; empty if not submitted |
@@ -247,7 +246,10 @@ Notable items:
 | direccion | Address |
 
 ### `gastos` (expenses)
-Columns include `importe` (TEXT) and `edit_lock` (TEXT `'0'` / `'1'`, as in `ingresos`) and supplier/date/description fields. Managed via Listado.
+Columns include `importe` (TEXT) and supplier/date/description fields, and the legacy `edit_lock` (as in `ingresos`, no longer read). Managed via Listado.
+
+### `accounting_closures` (Contabilidad's quarterly close)
+Created by `migrateDatabase`. One row per close: `year`, `quarter` (1-4), `closed_at` (ISO), `reopened_at` (NULL while closed; set by Revertir), `origin` (`contabilidad`, or `migration` for a quarter the old `edit_lock` flags had closed, whose `closed_at` is the migration time) and `report_file` (the PDF written for it). A quarter is closed while it has a row with `reopened_at` NULL; a partial unique index allows only one such row per quarter. Append-only: triggers refuse a `DELETE` and every `UPDATE` other than setting `reopened_at` once, so the table is the close / reopen history. A row of `ingresos` (by `fecha_pago`) or `gastos` (by `fecha`) is locked when its date is in a closed quarter; closing a quarter writes nothing to `ingresos`.
 
 ### Other tables
 `proveedores`, `servicios`, `facturas`, `empresas` — managed via Listado or Facturas windows.

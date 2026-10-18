@@ -53,6 +53,7 @@ inline void clearTables(QSqlDatabase &db)
     exec(db, "DELETE FROM ingresos");
     exec(db, "DELETE FROM gastos");
     exec(db, "DELETE FROM clientes");
+    TestSchema::resetClosures(db);
 }
 
 // Settings for a run: Verifactu configured (the endpoint itself is redirected by

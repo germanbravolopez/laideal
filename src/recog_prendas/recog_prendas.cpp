@@ -302,10 +302,16 @@ void RecogPrendas::resetAllContents()
     ui->tableView->setModel(sqlQueryModel);
 }
 
+bool RecogPrendas::rowClickedLocked()
+{
+    const QString fechaPago = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString();
+    return quarterIsClosed(db, QDate::fromString(fechaPago, "dd-MM-yyyy"));
+}
+
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     QString failure;   // a write that was refused or failed, reported after the refresh
-    bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
+    const bool editLock = rowClickedLocked();
     static const char *const opNames[] = {
         "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
         "QTY", "SERVICE", "PRICE", "SEPARATE_GARM"
@@ -427,7 +433,7 @@ void RecogPrendas::updateRowClickedToFields()
     // observations: it can never be paid, picked up, split or re-priced again.
     const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
     const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI";
-    const bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
+    const bool editLock = rowClickedLocked();
     // Quantity / service / importe / size are editable only before payment (and while
     // not accounting-locked or voided): a paid row was already submitted to AEAT.
     const bool priceEditable = !isAnulado && !isPaid && !editLock;
@@ -608,7 +614,6 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_SIZE     , Qt::Horizontal, tr("Tam."));
         sqlQueryModel->setHeaderData(INGRESOS_COL_SERVICIO  , Qt::Horizontal, tr("Serv."));
         sqlQueryModel->setHeaderData(INGRESOS_COL_OBSERVACIONES   , Qt::Horizontal, tr("Obs."));
-        sqlQueryModel->setHeaderData(INGRESOS_COL_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
         proxyModel = new MySortFilterProxyModel(this);
         // lessThan() keys on table_name to pick the date / numeric comparators.

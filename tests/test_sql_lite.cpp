@@ -45,19 +45,29 @@ private:
         m_db.close();
     }
 
+    // True when the statement succeeded; for statements the DB is expected to refuse.
+    bool tryExec(const QString &sql)
+    {
+        if (!m_db.open())
+            return false;
+        QSqlQuery q(m_db);
+        const bool ok = q.exec(sql);
+        m_db.close();
+        return ok;
+    }
+
     // Insert one ingresos row. Only the columns the tests care about are
     // parameterised; the rest default to empty / 0.
     void insertIngreso(const QString &nRecibo, const QString &fechaPago,
                        const QString &importe, const QString &pagado,
-                       const QString &verifactuEstado, int editLock = 0,
-                       int invoiceSeq = 0)
+                       const QString &verifactuEstado, int invoiceSeq = 0)
     {
         exec("INSERT INTO ingresos "
-             "(n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
-             " estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
-             "VALUES (:n, '', :frec, :fp, :imp, :pag, '', :lock, :est, :seq)",
+             "(edit_lock, n_recibo, cliente, fecha_recepcion, fecha_pago, importe, pagado, "
+             " estado, verifactu_estado, verifactu_invoice_seq) "
+             "VALUES ('0', :n, '', :frec, :fp, :imp, :pag, '', :est, :seq)",
              { {":n", nRecibo}, {":frec", fechaPago}, {":fp", fechaPago},
-               {":imp", importe}, {":pag", pagado}, {":lock", editLock},
+               {":imp", importe}, {":pag", pagado},
                {":est", verifactuEstado}, {":seq", invoiceSeq} });
     }
 
@@ -106,6 +116,7 @@ private slots:
         exec("DELETE FROM ingresos");
         exec("DELETE FROM gastos");
         exec("DELETE FROM clientes");
+        TestSchema::resetClosures(m_db);
     }
 
     void test_genHash16_shapeAndUniqueness()
@@ -125,9 +136,9 @@ private slots:
         QCOMPARE(readMaxValueInColumnFromTable(m_db, "id", "gastos"), 5);
         // n_recibo is TEXT in the shop DB: the maximum is numeric, never alphabetical
         // ("9999" and "99999" rank above "100000" as text, so a number would repeat).
-        insertIngreso("9999", "", "10.00", "NO", "SIN COBRAR", 0, 0);
-        insertIngreso("100000", "", "10.00", "NO", "SIN COBRAR", 0, 0);
-        insertIngreso("99999", "", "10.00", "NO", "SIN COBRAR", 0, 0);
+        insertIngreso("9999", "", "10.00", "NO", "SIN COBRAR", 0);
+        insertIngreso("100000", "", "10.00", "NO", "SIN COBRAR", 0);
+        insertIngreso("99999", "", "10.00", "NO", "SIN COBRAR", 0);
         QCOMPARE(readMaxValueInColumnFromTable(m_db, "n_recibo", "ingresos"), 100000);
         // The next ticket: above the database and above our highest number at AEAT.
         QCOMPARE(nextTicketNumber(m_db, 0), 100001);
@@ -237,9 +248,10 @@ private slots:
     // only, whether or not its quarter was closed.
     void test_markInvoiceSeqCancelled_stampsTheCancelledEvent()
     {
-        insertIngreso("40", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/1);
-        insertIngreso("40", "20-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0, /*seq=*/2);
-        insertIngreso("41", "20-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0, /*seq=*/1);
+        insertIngreso("40", "10-02-2026", "10.00", "SI", "ENVIADA", /*seq=*/1);
+        insertIngreso("40", "20-04-2026", "10.00", "SI", "ENVIADA", /*seq=*/2);
+        insertIngreso("41", "20-04-2026", "10.00", "SI", "ENVIADA", /*seq=*/1);
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
 
         QVERIFY(markInvoiceSeqCancelled(m_db, "40", 1, QDate(2026, 5, 15)));
         QVERIFY(markInvoiceSeqCancelled(m_db, "41", 1, QDate(2026, 5, 15)));
@@ -251,7 +263,7 @@ private slots:
 
         // AEAT's cancellation record is stored on the event's paid rows, and a later
         // call without one never erases it.
-        insertIngreso("42", "20-04-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("42", "20-04-2026", "10.00", "SI", "ENVIADA", /*seq=*/0);
         QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 15), "<anulacion/>"));
         QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 20)));
         QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='42'"), QStringLiteral("<anulacion/>"));
@@ -263,7 +275,8 @@ private slots:
     // payment is invoiced on its own and can never reach back into a closed quarter.
     void test_cancelAndRectify_leaveUnpaidGarmentsChargeable()
     {
-        insertIngreso("80", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);
+        insertIngreso("80", "10-02-2026", "10.00", "SI", "ENVIADA", /*seq=*/0);
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         insertRow("80", "h80u", "15.00", "NO", "SIN COBRAR");          // unpaid remainder, seq 0
         QVERIFY(markInvoiceSeqCancelled(m_db, "80", 0, QDate(2026, 5, 15)));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='80' AND pagado='SI'"), QStringLiteral("ANULADA"));
@@ -295,8 +308,8 @@ private slots:
         insertIngreso("86", "10-02-2026", "10.00", "SI", "ANULADA");
         insertRow("86", "h86u", "15.00", "NO", "ANULADA");                // wrongly marked remainder
         insertRow("87", "h87u", "15.00", "NO", "RECTIFICADA");             // may be in a submitted substitution: kept
-        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado) "
-             "VALUES ('88', 'h88v', 'NO', 'Anulado', 'ANULADA')");           // genuine local void
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, pagado, estado, verifactu_estado) "
+             "VALUES ('0', '88', 'h88v', 'NO', 'Anulado', 'ANULADA')");           // genuine local void
         migrateDatabase(m_db);
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h86u'"), QStringLiteral("SIN COBRAR"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h87u'"), QStringLiteral("RECTIFICADA"));
@@ -306,8 +319,8 @@ private slots:
 
     void test_ticketLastPaymentDate()
     {
-        insertIngreso("90", "10-02-2026", "10.00", "SI", "ENVIADA", 0, 1);
-        insertIngreso("90", "05-04-2026", "10.00", "SI", "ENVIADA", 0, 2);
+        insertIngreso("90", "10-02-2026", "10.00", "SI", "ENVIADA", 1);
+        insertIngreso("90", "05-04-2026", "10.00", "SI", "ENVIADA", 2);
         insertRow("90", "h90u");                                      // unpaid: ignored
         QCOMPARE(ticketLastPaymentDate(m_db, "90"), QDate(2026, 4, 5));
         insertRow("91", "h91u");
@@ -316,8 +329,9 @@ private slots:
 
     void test_markTicketRectified_stampsRectificationDate()
     {
-        insertIngreso("42", "10-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
-        insertIngreso("43", "10-04-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
+        insertIngreso("42", "10-02-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("43", "10-04-2026", "10.00", "SI", "ENVIADA");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         QVERIFY(markTicketRectified(m_db, "42", QDate(2026, 6, 1)));
         QVERIFY(markTicketRectified(m_db, "43", QDate(2026, 6, 1)));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='42'"), QStringLiteral("RECTIFICADA"));
@@ -331,10 +345,11 @@ private slots:
     // never income nor a regularisation.
     void test_regularizations_countWhereTheyHappen()
     {
-        insertIngreso("50", "10-02-2026", "121.00", "SI", "ENVIADA", /*editLock=*/1, /*seq=*/0);  // Q1 closed
-        insertIngreso("51", "12-02-2026", "50.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);  // Q1 open
-        insertIngreso("52", "10-05-2026", "30.00",  "SI", "ENVIADA", /*editLock=*/0, /*seq=*/0);  // Q2, cancelled in Q2
+        insertIngreso("50", "10-02-2026", "121.00", "SI", "ENVIADA", /*seq=*/0);  // Q1 closed
+        insertIngreso("51", "12-02-2026", "50.00",  "SI", "ENVIADA", /*seq=*/0);  // Q1 open
+        insertIngreso("52", "10-05-2026", "30.00",  "SI", "ENVIADA", /*seq=*/0);  // Q2, cancelled in Q2
         insertRow("53", "hashV");                                                                   // unpaid, voided
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         QVERIFY(markInvoiceSeqCancelled(m_db, "50", 0, QDate(2026, 5, 15)));
         QVERIFY(markInvoiceSeqCancelled(m_db, "51", 0, QDate(2026, 5, 15)));
         QVERIFY(markInvoiceSeqCancelled(m_db, "52", 0, QDate(2026, 5, 20)));
@@ -366,12 +381,12 @@ private slots:
     // fecha_recogida: the migration moves it to fecha_anulacion, once.
     void test_migrateDatabase_movesVoidDateToFechaAnulacion()
     {
-        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
-             "VALUES ('70', 'h70', 'NO', 'Anulado', 'ANULADA', '07-08-2026', '07-08-2026')");
-        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
-             "VALUES ('71', 'h71', 'SI', 'Recogido', 'ANULADA', '01-03-2026', '02-03-2026')");  // AEAT-cancelled: untouched
-        exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
-             "VALUES ('72', 'h72', 'NO', 'Anulado', 'RECTIFICADA', '03-08-2026', '03-08-2026')");  // void later relabelled
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('0', '70', 'h70', 'NO', 'Anulado', 'ANULADA', '07-08-2026', '07-08-2026')");
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('0', '71', 'h71', 'SI', 'Recogido', 'ANULADA', '01-03-2026', '02-03-2026')");  // AEAT-cancelled: untouched
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, pagado, estado, verifactu_estado, fecha_pago, fecha_recogida) "
+             "VALUES ('0', '72', 'h72', 'NO', 'Anulado', 'RECTIFICADA', '03-08-2026', '03-08-2026')");  // void later relabelled
         migrateDatabase(m_db);
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='72'"), QStringLiteral("03-08-2026"));
         QCOMPARE(scalar("SELECT fecha_pago FROM ingresos WHERE n_recibo='72'"), QString());
@@ -422,19 +437,165 @@ private slots:
     }
 
 
-    // The 9.1 regression guard: a quarter with income only in its first month
-    // (nothing in the last month) must still report its real lock state, not 2.
-    void test_readLockForQuarter_firstMonthOnly()
+    // ---- Contabilidad's quarterly closure (accounting_closures) ----
+
+    // Rows of a shop DB from before the table existed: the old per-row edit_lock flag
+    // closes its quarter once, then edit_lock is ignored.
+    void test_migrateDatabase_backfillsClosedQuartersFromEditLock()
     {
-        insertIngreso("T1", "15-01-2026", "10.00", "SI", "ENVIADA", /*editLock=*/1);
-        QCOMPARE(readLockForQuarter(m_db, "ingresos", 1, 2026), 1); // Q1 locked
-        QCOMPARE(readLockForQuarter(m_db, "ingresos", 2, 2026), 2); // Q2 no data
+        exec("DROP TABLE accounting_closures");
+        exec("INSERT INTO ingresos (n_recibo, fecha_pago, hash, edit_lock) VALUES "
+             "('1', '10-02-2026', 'a', '1'), ('2', '20-03-2026', 'b', '1'),"      // Q1 2026, twice
+             "('3', '10-05-2026', 'c', '0'), ('4', '10-08-2026', 'd', ''),"        // open quarters
+             "('5', '', 'e', '1'), ('6', 'garbage', 'f', '1'), ('7', '10-13-2026', 'g', '1'),"  // no real quarter
+             "('8', '10-02-1999', 'h', '1')");                                    // year out of range
+        exec("INSERT INTO gastos (n_factura, fecha, importe, edit_lock) VALUES "
+             "('F1', '15-08-2025', '5.00', '1'), ('F2', '01-11-2025', '5.00', '0'), ('F3', '', '5.00', '1')");
+        migrateDatabase(m_db);
+
+        QCOMPARE(closedQuarterKeys(m_db), (QSet<int>{ quarterKey(1, 2026), quarterKey(3, 2025) }));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("2"));
+        const QVector<QuarterClosure> q1 = quarterClosures(m_db, 1, 2026);
+        QCOMPARE(q1.size(), 1);
+        QVERIFY(q1[0].migrated);
+        QVERIFY(q1[0].closedAt.isValid());
+        QVERIFY(!q1[0].reopenedAt.isValid());
+        QVERIFY(quarterClosures(m_db, 3, 2025)[0].migrated);
+        QVERIFY(!quarterIsClosed(m_db, 2, 2026));
+        QVERIFY(!quarterIsClosed(m_db, 4, 2025));
+
+        migrateDatabase(m_db);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("2"));
+
+        // A quarter reopened afterwards is not closed again by its stale flag.
+        QVERIFY(reopenQuarter(m_db, 1, 2026));
+        migrateDatabase(m_db);
+        QVERIFY(!quarterIsClosed(m_db, 1, 2026));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT edit_lock FROM ingresos WHERE hash = 'a'"), QStringLiteral("1"));
     }
 
-    void test_readLockForQuarter_open()
+    void test_closeQuarter_refusesASecondCloseAndReopenOfAnOpenQuarter()
     {
-        insertIngreso("T1", "20-02-2026", "10.00", "SI", "ENVIADA", /*editLock=*/0);
-        QCOMPARE(readLockForQuarter(m_db, "ingresos", 1, 2026), 0); // has data, open
+        QVERIFY(!reopenQuarter(m_db, 2, 2026));                  // never closed
+        QVERIFY(closeQuarter(m_db, 2, 2026, "a.pdf"));
+        QVERIFY(quarterIsClosed(m_db, 2, 2026));
+        QVERIFY(!closeQuarter(m_db, 2, 2026, "b.pdf"));
+        QVERIFY(!quarterIsClosed(m_db, 1, 2026));                // other quarter / year untouched
+        QVERIFY(!quarterIsClosed(m_db, 2, 2027));
+        QVERIFY(!closeQuarter(m_db, 5, 2026, ""));               // not a quarter
+        QVERIFY(!closeQuarter(m_db, 0, 2026, ""));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("1"));
+        QVERIFY(reopenQuarter(m_db, 2, 2026));
+        QVERIFY(!reopenQuarter(m_db, 2, 2026));
+        QVERIFY(!quarterIsClosed(m_db, 2, 2026));
+    }
+
+    void test_quarterIsClosed_byDateAndKeys()
+    {
+        QVERIFY(closeQuarter(m_db, 4, 2025, ""));
+        QVERIFY(quarterIsClosed(m_db, QDate(2025, 10, 1)));
+        QVERIFY(quarterIsClosed(m_db, QDate(2025, 12, 31)));     // a month with no rows is closed too
+        QVERIFY(!quarterIsClosed(m_db, QDate(2026, 1, 1)));      // year roll-over
+        QVERIFY(!quarterIsClosed(m_db, QDate(2025, 9, 30)));
+        QVERIFY(!quarterIsClosed(m_db, QDate()));
+        QCOMPARE(closedQuarterKeys(m_db), (QSet<int>{ 20254 }));
+        QCOMPARE(quarterKey(QDate(2025, 12, 31)), 20254);
+        QCOMPARE(quarterKey(QDate()), 0);
+    }
+
+    void test_quarterClosures_keepTheCloseAndReopenHistory()
+    {
+        QVERIFY(quarterClosures(m_db, 1, 2026).isEmpty());
+        QVERIFY(closeQuarter(m_db, 1, 2026, "first.pdf"));
+        QVERIFY(reopenQuarter(m_db, 1, 2026));
+        QVERIFY(closeQuarter(m_db, 1, 2026, "second.pdf"));
+
+        const QVector<QuarterClosure> h = quarterClosures(m_db, 1, 2026);
+        QCOMPARE(h.size(), 2);                                   // oldest first
+        QCOMPARE(h[0].reportFile, QStringLiteral("first.pdf"));
+        QVERIFY(h[0].reopenedAt.isValid());
+        QVERIFY(h[0].reopenedAt >= h[0].closedAt);
+        QVERIFY(!h[0].migrated);
+        QCOMPARE(h[1].reportFile, QStringLiteral("second.pdf"));
+        QVERIFY(!h[1].reopenedAt.isValid());
+        QVERIFY(quarterIsClosed(m_db, 1, 2026));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(origin) FROM accounting_closures"),
+                 QStringLiteral("contabilidad,contabilidad"));
+    }
+
+    // The history cannot be rewritten, not even by a raw statement.
+    void test_accountingClosures_triggersRefuseDeleteAndRewrite()
+    {
+        QVERIFY(closeQuarter(m_db, 1, 2026, "first.pdf"));
+        QVERIFY(reopenQuarter(m_db, 1, 2026));
+        QVERIFY(closeQuarter(m_db, 1, 2026, "second.pdf"));
+
+        QVERIFY(!tryExec("DELETE FROM accounting_closures"));
+        QVERIFY(!tryExec("DELETE FROM accounting_closures WHERE reopened_at IS NULL"));
+        QVERIFY(!tryExec("UPDATE accounting_closures SET year = 2027"));
+        QVERIFY(!tryExec("UPDATE accounting_closures SET report_file = 'x.pdf' WHERE reopened_at IS NULL"));
+        QVERIFY(!tryExec("UPDATE accounting_closures SET reopened_at = NULL"));           // reopening a reopen
+        QVERIFY(!tryExec("UPDATE accounting_closures SET reopened_at = '2030-01-01T00:00:00' WHERE report_file = 'first.pdf'"));
+        QVERIFY(!tryExec("UPDATE accounting_closures SET reopened_at = '2030-01-01T00:00:00', origin = 'migration' "
+                         "WHERE reopened_at IS NULL"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("2"));
+        QVERIFY(quarterIsClosed(m_db, 1, 2026));
+        QCOMPARE(quarterClosures(m_db, 1, 2026)[0].reportFile, QStringLiteral("first.pdf"));
+
+        // Only one open closure per quarter, whatever the writer.
+        QVERIFY(!tryExec("INSERT INTO accounting_closures (year, quarter, closed_at, origin) "
+                         "VALUES (2026, 1, '2030-01-01T00:00:00', 'contabilidad')"));
+        QVERIFY(!tryExec("INSERT INTO accounting_closures (year, quarter, closed_at, origin) "
+                         "VALUES (2026, 5, '2030-01-01T00:00:00', 'contabilidad')"));
+        // The one legal change still works.
+        QVERIFY(reopenQuarter(m_db, 1, 2026));
+    }
+
+    void test_quarterHasMovements_paymentGastoOrCancellation()
+    {
+        QVERIFY(!quarterHasMovements(m_db, 1, 2026));
+        insertIngreso("1", "10-02-2026", "10.00", "SI", "ENVIADA");                 // payment only
+        QVERIFY(quarterHasMovements(m_db, 1, 2026));
+        QVERIFY(!quarterHasMovements(m_db, 2, 2026));
+        QVERIFY(!quarterHasMovements(m_db, 1, 2025));
+
+        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES ('F1', '15-08-2026', '5.00')");
+        QVERIFY(quarterHasMovements(m_db, 3, 2026));                                // gasto only
+        QVERIFY(!quarterHasMovements(m_db, 4, 2026));
+
+        QVERIFY(markInvoiceSeqCancelled(m_db, "1", 0, QDate(2026, 11, 5)));         // cancellation only
+        QVERIFY(quarterHasMovements(m_db, 4, 2026));
+        QVERIFY(!quarterHasMovements(m_db, 4, 2025));
+
+        insertRow("U", "unpaid");                                                   // unpaid garment: no payment date
+        QVERIFY(!quarterHasMovements(m_db, 1, 2027));
+    }
+
+    // The row lock is the closure of the quarter of the row's fecha_pago; the old
+    // edit_lock flag has no say.
+    void test_rowLock_followsTheClosedQuarterOfFechaPago()
+    {
+        insertRow("L1", "unpaidQ1", "10.00", "NO", "SIN COBRAR");
+        exec("UPDATE ingresos SET fecha_pago = '10-02-2026', edit_lock = '0' WHERE hash = 'unpaidQ1'");
+        insertRow("L2", "unpaidQ2", "10.00", "NO", "SIN COBRAR");
+        exec("UPDATE ingresos SET fecha_pago = '10-05-2026', edit_lock = '1' WHERE hash = 'unpaidQ2'");
+        insertRow("L3", "paidQ1", "30.00", "SI", "ENVIADA");
+        exec("UPDATE ingresos SET fecha_pago = '12-02-2026', cantidad = '3' WHERE hash = 'paidQ1'");
+        insertRow("L4", "paidQ2", "30.00", "SI", "ENVIADA");
+        exec("UPDATE ingresos SET fecha_pago = '12-05-2026', cantidad = '3' WHERE hash = 'paidQ2'");
+
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "L1", "unpaidQ1", "1", "36.00"));       // Q1 closed
+        QVERIFY(updateTicketSizeAndPrice(m_db, "L2", "unpaidQ2", "1", "36.00"));        // Q2 open, flag '1' ignored
+        QVERIFY(splitGarmentRow(m_db, "L3", "paidQ1", 1).isEmpty());
+        QCOMPARE(splitGarmentRow(m_db, "L4", "paidQ2", 1).size(), 16);
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'unpaidQ1'"), QStringLiteral("10.00"));
+        QCOMPARE(scalar("SELECT cantidad FROM ingresos WHERE hash = 'paidQ1'"), QStringLiteral("3"));
+
+        QVERIFY(reopenQuarter(m_db, 1, 2026));
+        QVERIFY(updateTicketSizeAndPrice(m_db, "L1", "unpaidQ1", "1", "36.00"));
+        QCOMPARE(splitGarmentRow(m_db, "L3", "paidQ1", 1).size(), 16);
     }
 
     // nextVerifactuInvoiceSeq = MAX(seq over paid rows) + 1, 0 when none paid.
@@ -451,11 +612,11 @@ private slots:
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "U1"), 6);
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "U2", "produccion"), 0);
         exec("DROP TABLE aeat_records");
-        insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("T1", "10-03-2026", "10.00", "SI", "ENVIADA", /*seq=*/0);
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 1);
-        insertIngreso("T1", "11-03-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/1);
+        insertIngreso("T1", "11-03-2026", "10.00", "SI", "ENVIADA", /*seq=*/1);
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
-        insertIngreso("T1", "", "10.00", "NO", "", 0, /*seq=*/9); // unpaid: ignored
+        insertIngreso("T1", "", "10.00", "NO", "", /*seq=*/9); // unpaid: ignored
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
     }
 
@@ -541,7 +702,8 @@ private slots:
         insertRow("T3", "void", "5.00", "NO", "ANULADA");
         QVERIFY(!updateTicketSizeAndPrice(m_db, "T3", "void", "1", "6.00"));
         insertRow("T3", "locked", "5.00", "NO", "SIN COBRAR");
-        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        exec("UPDATE ingresos SET fecha_pago = '10-02-2026' WHERE hash = 'locked'");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         QVERIFY(!updateGarmentQtyAndImporte(m_db, "T3", "locked", "2", "10.00"));
     }
 
@@ -587,16 +749,16 @@ private slots:
     void test_pendingVerifactuEvents()
     {
         // T100 save-time event (seq 0): two PENDIENTE rows -> summed to 80.
-        insertIngreso("T100", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
-        insertIngreso("T100", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T100", "10-03-2026", "50.00", "SI", "PENDIENTE", /*seq=*/0);
+        insertIngreso("T100", "10-03-2026", "30.00", "SI", "PENDIENTE", /*seq=*/0);
         // T100 partial-pay event (seq 1): its own PENDIENTE row -> own total 20.
-        insertIngreso("T100", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        insertIngreso("T100", "12-03-2026", "20.00", "SI", "PENDIENTE", /*seq=*/1);
         // T100 seq 2 already confirmed by AEAT: excluded.
-        insertIngreso("T100", "13-03-2026", "15.00", "SI", "ENVIADA",   0, /*seq=*/2);
+        insertIngreso("T100", "13-03-2026", "15.00", "SI", "ENVIADA", /*seq=*/2);
         // T50 legacy empty estado: included.
-        insertIngreso("T50",  "05-02-2026", "40.00", "SI", "",          0, /*seq=*/0);
+        insertIngreso("T50",  "05-02-2026", "40.00", "SI", "", /*seq=*/0);
         // T10 before the floor: excluded.
-        insertIngreso("T10",  "20-12-2025", "99.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T10",  "20-12-2025", "99.00", "SI", "PENDIENTE", /*seq=*/0);
 
         const QVector<PendingVerifactuEvent> ev = pendingVerifactuEvents(m_db, "2026-01-01");
         QCOMPARE(ev.size(), 3);
@@ -621,10 +783,10 @@ private slots:
     void test_pendingVerifactuEvents_excludesUnpaid()
     {
         // Unpaid save-time rows: PENDIENTE, but no invoice was ever sent.
-        insertIngreso("T200", "10-03-2026", "50.00", "NO", "PENDIENTE", 0, /*seq=*/0);
-        insertIngreso("T200", "10-03-2026", "30.00", "NO", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("T200", "10-03-2026", "50.00", "NO", "PENDIENTE", /*seq=*/0);
+        insertIngreso("T200", "10-03-2026", "30.00", "NO", "PENDIENTE", /*seq=*/0);
         // Paid partial-pay event on the same ticket: a genuine pending submission.
-        insertIngreso("T200", "12-03-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        insertIngreso("T200", "12-03-2026", "20.00", "SI", "PENDIENTE", /*seq=*/1);
         // pagado='SI' but never stamped with a payment date: no AEAT date to
         // retry under, so it is not recoverable either.
         exec("INSERT INTO ingresos "
@@ -687,9 +849,9 @@ private slots:
     // paid rows must be patched, the unpaid sibling must be left completely alone.
     void test_updateTicketVerifactuFields_leavesUnpaidSiblingsAlone()
     {
-        insertIngreso("P1", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
-        insertIngreso("P1", "10-03-2026", "30.00", "SI", "PENDIENTE", 0, /*seq=*/0);
-        insertIngreso("P1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        insertIngreso("P1", "10-03-2026", "50.00", "SI", "PENDIENTE", /*seq=*/0);
+        insertIngreso("P1", "10-03-2026", "30.00", "SI", "PENDIENTE", /*seq=*/0);
+        insertIngreso("P1", "",           "20.00", "NO", "SIN COBRAR", /*seq=*/0);
 
         VerifactuResult ok;
         ok.status        = VerifactuResult::SUCCESS;
@@ -712,8 +874,8 @@ private slots:
     // also surface a bogus "Reintentar envio" button on it in RecogPrendas).
     void test_updateTicketVerifactuFields_errorAlsoSkipsUnpaid()
     {
-        insertIngreso("P2", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
-        insertIngreso("P2", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        insertIngreso("P2", "10-03-2026", "50.00", "SI", "PENDIENTE", /*seq=*/0);
+        insertIngreso("P2", "",           "20.00", "NO", "SIN COBRAR", /*seq=*/0);
 
         VerifactuResult bad;
         bad.status           = VerifactuResult::ERROR;
@@ -731,7 +893,7 @@ private slots:
     // already hold the invoice under that identity and a retry has to reuse it.
     void test_updateTicketVerifactuFields_transportFailureStaysPending()
     {
-        insertIngreso("P3", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P3", "10-03-2026", "50.00", "SI", "PENDIENTE", /*seq=*/0);
 
         VerifactuResult dropped;
         dropped.status           = VerifactuResult::NETWORK_ERROR;
@@ -753,7 +915,7 @@ private slots:
     // is cleared because nothing is registered under it.
     void test_updateTicketVerifactuFields_aeatRejectionIsFinal()
     {
-        insertIngreso("P4", "10-03-2026", "50.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P4", "10-03-2026", "50.00", "SI", "PENDIENTE", /*seq=*/0);
 
         VerifactuResult rejected;
         rejected.status           = VerifactuResult::ERROR;
@@ -771,9 +933,9 @@ private slots:
     // wipe their CSV (only a still-pending row of the same event takes the result).
     void test_updateTicketVerifactuFields_neverRewritesSettledRows()
     {
-        insertIngreso("P5", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("P5", "10-03-2026", "50.00", "SI", "ENVIADA", /*seq=*/0);
         exec("UPDATE ingresos SET verifactu_csv = 'CSV-P5', hash = 'p5a' WHERE n_recibo = 'P5'");
-        insertIngreso("P5", "10-03-2026", "8.00", "SI", "PENDIENTE", 0, /*seq=*/0);
+        insertIngreso("P5", "10-03-2026", "8.00", "SI", "PENDIENTE", /*seq=*/0);
 
         VerifactuResult dup;
         dup.status           = VerifactuResult::ERROR;
@@ -798,10 +960,10 @@ private slots:
     void test_verifactuEventFor()
     {
         // seq 0: paid 50, plus an unpaid 30 that is NOT part of the invoice.
-        insertIngreso("R1", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
-        insertIngreso("R1", "",           "30.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        insertIngreso("R1", "10-03-2026", "50.00", "SI", "ENVIADA", /*seq=*/0);
+        insertIngreso("R1", "",           "30.00", "NO", "SIN COBRAR", /*seq=*/0);
         // seq 1: a later partial pay of 20 on a different date.
-        insertIngreso("R1", "25-06-2026", "20.00", "SI", "PENDIENTE", 0, /*seq=*/1);
+        insertIngreso("R1", "25-06-2026", "20.00", "SI", "PENDIENTE", /*seq=*/1);
 
         const PendingVerifactuEvent e0 = verifactuEventFor(m_db, "R1", 0);
         QCOMPARE(e0.nRecibo, QStringLiteral("R1"));
@@ -820,8 +982,8 @@ private slots:
         // A pre-10.9 seq-0 invoice paid garment by garment on different days was
         // registered under the first payment: the earliest DATE, not the smallest
         // dd-MM-yyyy text ("05-03" sorts before "28-01").
-        insertIngreso("R2", "28-01-2026", "10.00", "SI", "ENVIADA", 0, /*seq=*/0);
-        insertIngreso("R2", "05-03-2026", "15.00", "SI", "ENVIADA", 0, /*seq=*/0);
+        insertIngreso("R2", "28-01-2026", "10.00", "SI", "ENVIADA", /*seq=*/0);
+        insertIngreso("R2", "05-03-2026", "15.00", "SI", "ENVIADA", /*seq=*/0);
         QCOMPARE(verifactuEventFor(m_db, "R2", 0).fechaPago, QStringLiteral("28-01-2026"));
     }
 
@@ -830,9 +992,9 @@ private slots:
     // settled, and the error text cleared.
     void test_reconcileVerifactuFromAeat_adoptsCsv()
     {
-        insertIngreso("K1", "10-03-2026", "50.00", "SI", "ERROR", 0, /*seq=*/0);
-        insertIngreso("K1", "10-03-2026", "30.00", "SI", "ERROR", 0, /*seq=*/0);
-        insertIngreso("K1", "",           "20.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        insertIngreso("K1", "10-03-2026", "50.00", "SI", "ERROR", /*seq=*/0);
+        insertIngreso("K1", "10-03-2026", "30.00", "SI", "ERROR", /*seq=*/0);
+        insertIngreso("K1", "",           "20.00", "NO", "SIN COBRAR", /*seq=*/0);
 
         QCOMPARE(reconcileVerifactuFromAeat(m_db, "K1", 0, "A-7F3K9Q",
                                             "https://aeat.example/v"), 2);
@@ -851,10 +1013,10 @@ private slots:
     // superseded, so overwriting either would revive a cancelled invoice.
     void test_reconcileVerifactuFromAeat_refusals()
     {
-        insertIngreso("K2", "10-03-2026", "50.00", "SI", "ANULADA",     0, /*seq=*/0);
-        insertIngreso("K3", "10-03-2026", "50.00", "SI", "RECTIFICADA", 0, /*seq=*/0);
-        insertIngreso("K4", "10-03-2026", "50.00", "SI", "ENVIADA",     0, /*seq=*/0);
-        insertIngreso("K5", "10-03-2026", "50.00", "SI", "ERROR",       0, /*seq=*/0);
+        insertIngreso("K2", "10-03-2026", "50.00", "SI", "ANULADA", /*seq=*/0);
+        insertIngreso("K3", "10-03-2026", "50.00", "SI", "RECTIFICADA", /*seq=*/0);
+        insertIngreso("K4", "10-03-2026", "50.00", "SI", "ENVIADA", /*seq=*/0);
+        insertIngreso("K5", "10-03-2026", "50.00", "SI", "ERROR", /*seq=*/0);
 
         QCOMPARE(reconcileVerifactuFromAeat(m_db, "K2", 0, "X", ""), 0);
         QCOMPARE(reconcileVerifactuFromAeat(m_db, "K3", 0, "X", ""), 0);
@@ -873,9 +1035,9 @@ private slots:
     // filters compare case-sensitively, so fixing only the reader is not enough.
     void test_migrateDatabase_normalisesEstadoCasing()
     {
-        insertIngreso("N1", "10-03-2026", "50.00", "SI", "Error",   0, /*seq=*/0);
-        insertIngreso("N2", "10-03-2026", "50.00", "SI", "ENVIADA", 0, /*seq=*/0);
-        insertIngreso("N3", "10-03-2026", "50.00", "SI", "Anulada", 0, /*seq=*/0);
+        insertIngreso("N1", "10-03-2026", "50.00", "SI", "Error", /*seq=*/0);
+        insertIngreso("N2", "10-03-2026", "50.00", "SI", "ENVIADA", /*seq=*/0);
+        insertIngreso("N3", "10-03-2026", "50.00", "SI", "Anulada", /*seq=*/0);
         // Blank stays blank - the split-off legacy shape must survive untouched.
         exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, importe, "
              "pagado, estado, edit_lock, verifactu_estado, verifactu_invoice_seq) "
@@ -924,7 +1086,7 @@ private slots:
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()
     {
-        insertIngreso("T300", "10-03-2026", "50.00", "NO", "SIN COBRAR", 0, /*seq=*/0);
+        insertIngreso("T300", "10-03-2026", "50.00", "NO", "SIN COBRAR", /*seq=*/0);
         QVERIFY(pendingVerifactuEvents(m_db, "2026-01-01").isEmpty());
     }
 
@@ -954,8 +1116,8 @@ private slots:
     // order, so the Q2 ticket count knows a Q2 payment was cancelled.
     void test_regularizations_mergedTicketKeepsLatestPayment()
     {
-        insertIngreso("R9", "10-02-2026", "20.00", "SI", "ANULADA", 0, /*seq=*/0);
-        insertIngreso("R9", "10-05-2026", "30.00", "SI", "ANULADA", 0, /*seq=*/1);
+        insertIngreso("R9", "10-02-2026", "20.00", "SI", "ANULADA", /*seq=*/0);
+        insertIngreso("R9", "10-05-2026", "30.00", "SI", "ANULADA", /*seq=*/1);
         exec("UPDATE ingresos SET fecha_anulacion = '20-05-2026' WHERE n_recibo = 'R9'");
         const QVector<RegularizationDetail> regs = regularizationsBetweenDates(m_db, QDate(2026, 4, 1), QDate(2026, 7, 1));
         QCOMPARE(regs.size(), 1);
@@ -971,11 +1133,11 @@ private slots:
     // it is counted so the export can warn about it, never silently dropped.
     void test_aeatExportRecords_countsUndatedInvoices()
     {
-        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
-             "verifactu_estado) VALUES ('200', '', '5.00', 'SI', 'u1', 'CSV-U', 'ENVIADA'), "
-             "('201', '3/5/26', '6.00', 'SI', 'u2', 'CSV-V', 'ENVIADA'), "
-             "('202', '05-03-2026', '7.00', 'SI', 'u3', 'CSV-W', 'ENVIADA'), "
-             "('203', '', '8.00', 'SI', 'u4', '', 'PENDIENTE')");     // unknown to AEAT: not counted
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
+             "verifactu_estado) VALUES ('0', '200', '', '5.00', 'SI', 'u1', 'CSV-U', 'ENVIADA'), "
+             "('0', '201', '3/5/26', '6.00', 'SI', 'u2', 'CSV-V', 'ENVIADA'), "
+             "('0', '202', '05-03-2026', '7.00', 'SI', 'u3', 'CSV-W', 'ENVIADA'), "
+             "('0', '203', '', '8.00', 'SI', 'u4', '', 'PENDIENTE')");     // unknown to AEAT: not counted
         QVector<AeatExportRecord> r;
         int undated = -1;
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), r, &undated));
@@ -988,15 +1150,15 @@ private slots:
     // legacy InvoiceID rebuilt; unpaid garments and legacy pre-Verifactu rows out.
     void test_submittedInvoiceEvents()
     {
-        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_csv, "
              "verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id) VALUES "
-             "('300', '05-03-2026', '10.00', 'SI', 'a', 'CSV-0', 'ENVIADA', 0, ''), "
-             "('300', '28-01-2026', '4.00',  'SI', 'b', 'CSV-0', 'ENVIADA', 0, ''), "
-             "('300', '',           '3.00',  'NO', 'c', '',      'SIN COBRAR', 0, ''), "
-             "('300', '10-04-2026', '6.00',  'SI', 'd', 'CSV-1', 'ANULADA', 1, '300-1'), "
-             "('300', '01-01-2025', '9.00',  'SI', 'e', '',      '', 2, ''), "
+             "('0', '300', '05-03-2026', '10.00', 'SI', 'a', 'CSV-0', 'ENVIADA', 0, ''), "
+             "('0', '300', '28-01-2026', '4.00',  'SI', 'b', 'CSV-0', 'ENVIADA', 0, ''), "
+             "('0', '300', '',           '3.00',  'NO', 'c', '',      'SIN COBRAR', 0, ''), "
+             "('0', '300', '10-04-2026', '6.00',  'SI', 'd', 'CSV-1', 'ANULADA', 1, '300-1'), "
+             "('0', '300', '01-01-2025', '9.00',  'SI', 'e', '',      '', 2, ''), "
              // a paid row of seq 1 without estado: not listed, but its date counts
-             "('300', '01-04-2026', '2.00',  'SI', 'f', '',      '', 1, '')");
+             "('0', '300', '01-04-2026', '2.00',  'SI', 'f', '',      '', 1, '')");
         QVector<SubmittedInvoiceEvent> ev;
         QVERIFY(submittedInvoiceEvents(m_db, "300", ev));
         QCOMPARE(ev.size(), 2);
@@ -1017,13 +1179,13 @@ private slots:
     // the original importe to the cent, so the invoice total does not change.
     void test_splitGarmentRow_paidRowStaysInItsInvoice()
     {
-        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
-             "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+             "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, hash, "
              "verifactu_csv, verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id, verifactu_xml) "
-             "VALUES ('400', 'Ana', '01-03-2026', '05-03-2026', '', '10.00', 'SI', 'En tienda', '3', "
-             "'Mantel', '', 'Limp.', 'nota', 0, 'orig', 'CSV-400', 'ENVIADA', 1, '400-1', '<x/>'), "
-             "('401', 'Ana', '01-03-2026', '05-04-2026', '', '10.00', 'SI', 'En tienda', '3', "
-             "'Mantel', '', 'Limp.', '', 1, 'locked', 'CSV-401', 'ENVIADA', 0, '401', '')");
+             "VALUES ('0', '400', 'Ana', '01-03-2026', '05-03-2026', '', '10.00', 'SI', 'En tienda', '3', "
+             "'Mantel', '', 'Limp.', 'nota', 'orig', 'CSV-400', 'ENVIADA', 1, '400-1', '<x/>'), "
+             "('0', '401', 'Ana', '01-03-2026', '05-04-2026', '', '10.00', 'SI', 'En tienda', '3', "
+             "'Mantel', '', 'Limp.', '', 'locked', 'CSV-401', 'ENVIADA', 0, '401', '')");
 
         const QString newHash = splitGarmentRow(m_db, "400", "orig", 1);
         QCOMPARE(newHash.size(), 16);
@@ -1044,21 +1206,19 @@ private slots:
         QVERIFY(splitGarmentRow(m_db, "400", "orig", 2).isEmpty());
         QVERIFY(splitGarmentRow(m_db, "400", "orig", 0).isEmpty());
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '400'"), QStringLiteral("2"));
-        // A row locked by Contabilidad is never split.
+        // A row locked by Contabilidad (its fecha_pago quarter is closed) is never split,
+        // and is splittable again once the quarter is reopened.
+        QVERIFY(closeQuarter(m_db, 2, 2026, ""));
         QVERIFY(splitGarmentRow(m_db, "401", "locked", 1).isEmpty());
         QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '401'"),
                  QStringLiteral("1|3"));
-        // A blank lock passes the C++ read (toInt() = 0) but not the UPDATE's own guard.
-        exec("INSERT INTO ingresos (n_recibo, importe, pagado, cantidad, edit_lock, hash, verifactu_estado) "
-             "VALUES ('402', '10.00', 'NO', '3', '', 'blank', 'SIN COBRAR')");
-        QVERIFY(splitGarmentRow(m_db, "402", "blank", 1).isEmpty());
-        QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) FROM ingresos WHERE n_recibo = '402'"),
-                 QStringLiteral("1|3"));
+        QVERIFY(reopenQuarter(m_db, 2, 2026));
+        QCOMPARE(splitGarmentRow(m_db, "401", "locked", 1).size(), 16);
 
         // An older paid row stored with three decimals is never re-rounded: the part
         // split off is in cents, the original keeps the exact remainder.
-        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, cantidad, hash, verifactu_estado) "
-             "VALUES ('402', '05-04-2026', '22.515', 'SI', '3', 'm2', 'ENVIADA')");
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, cantidad, hash, verifactu_estado) "
+             "VALUES ('0', '402', '05-04-2026', '22.515', 'SI', '3', 'm2', 'ENVIADA')");
         const QString part = splitGarmentRow(m_db, "402", "m2", 1);
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = :h", { {":h", part} }), QStringLiteral("7.51"));
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'm2'"), QStringLiteral("15.005"));
@@ -1070,19 +1230,19 @@ private slots:
     // payments, a cancelled invoice (would move income) and an ambiguous match stay.
     void test_migrateDatabase_relinksSplitOffPaidGarment()
     {
-        const QString ins = "INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, prenda, servicio, "
+        const QString ins = "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, prenda, servicio, "
                             "hash, verifactu_csv, verifactu_estado, verifactu_invoice_seq, verifactu_invoice_id, "
                             "fecha_anulacion) VALUES ";
-        exec(ins + "('500', '02-06-2026', '20.00', 'SI', 'Camisa', 'Limp.', 'a', 'CSV-500', 'ENVIADA', 1, '500-1', ''), "
-                   "('500', '02-06-2026', '5.00',  'SI', 'Camisa', 'Limp.', 'split', '', NULL, 0, NULL, ''), "
-                   "('500', '25-04-2025', '9.00',  'SI', 'Camisa', 'Limp.', 'legacy', '', NULL, 0, NULL, ''), "
-                   "('501', '03-06-2026', '6.00',  'SI', 'Traje', 'Limp.', 'b', 'CSV-501', 'ANULADA', 0, '501', '20-06-2026'), "
-                   "('501', '03-06-2026', '3.00',  'SI', 'Traje', 'Limp.', 'cancelledSplit', '', '', 0, '', ''), "
-                   "('502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'c', 'CSV-502', 'ENVIADA', 0, '502', ''), "
-                   "('502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'd', 'CSV-502-1', 'ENVIADA', 1, '502-1', ''), "
-                   "('502', '04-06-2026', '3.00',  'SI', 'Falda', 'Limp.', 'ambiguous', '', '', 0, '', ''), "
+        exec(ins + "('0', '500', '02-06-2026', '20.00', 'SI', 'Camisa', 'Limp.', 'a', 'CSV-500', 'ENVIADA', 1, '500-1', ''), "
+                   "('0', '500', '02-06-2026', '5.00',  'SI', 'Camisa', 'Limp.', 'split', '', NULL, 0, NULL, ''), "
+                   "('0', '500', '25-04-2025', '9.00',  'SI', 'Camisa', 'Limp.', 'legacy', '', NULL, 0, NULL, ''), "
+                   "('0', '501', '03-06-2026', '6.00',  'SI', 'Traje', 'Limp.', 'b', 'CSV-501', 'ANULADA', 0, '501', '20-06-2026'), "
+                   "('0', '501', '03-06-2026', '3.00',  'SI', 'Traje', 'Limp.', 'cancelledSplit', '', '', 0, '', ''), "
+                   "('0', '502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'c', 'CSV-502', 'ENVIADA', 0, '502', ''), "
+                   "('0', '502', '04-06-2026', '6.00',  'SI', 'Falda', 'Limp.', 'd', 'CSV-502-1', 'ENVIADA', 1, '502-1', ''), "
+                   "('0', '502', '04-06-2026', '3.00',  'SI', 'Falda', 'Limp.', 'ambiguous', '', '', 0, '', ''), "
                    // paid at seq 2 while Verifactu was off: its own event, never a split
-                   "('500', '02-06-2026', '4.00',  'SI', 'Camisa', 'Limp.', 'ownEvent', '', '', 2, '', '')");
+                   "('0', '500', '02-06-2026', '4.00',  'SI', 'Camisa', 'Limp.', 'ownEvent', '', '', 2, '', '')");
 
         // Every relinked row is logged, so an old separate payment can be found and checked.
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression("relinking paid garment \"split\" of ticket \"500\""));
@@ -1106,9 +1266,9 @@ private slots:
     // InvoiceID names (bare = seq 0, "-N" = seq N), never a settled row; unknown ids are -1.
     void test_applySettledVerifactuResult()
     {
-        insertIngreso("800", "10-10-2026", "10.00", "SI", "PENDIENTE", 0, 0);
-        insertIngreso("800", "11-10-2026", "5.00", "SI", "PENDIENTE", 0, 1);
-        insertIngreso("801", "10-10-2026", "7.00", "SI", "ENVIADA", 0, 0);
+        insertIngreso("800", "10-10-2026", "10.00", "SI", "PENDIENTE", 0);
+        insertIngreso("800", "11-10-2026", "5.00", "SI", "PENDIENTE", 1);
+        insertIngreso("801", "10-10-2026", "7.00", "SI", "ENVIADA", 0);
         VerifactuResult ok;
         ok.status = VerifactuResult::SUCCESS;
         ok.csv = "A-SETTLED";
@@ -1127,7 +1287,7 @@ private slots:
     // -1, so no "could not mark it" message is shown for it.
     void test_applySettledVerifactuCancellation()
     {
-        insertIngreso("810", "10-10-2026", "10.00", "SI", "ENVIADA", 0, 0);
+        insertIngreso("810", "10-10-2026", "10.00", "SI", "ENVIADA", 0);
         VerifactuResult refused;
         refused.status = VerifactuResult::ERROR;
         QCOMPARE(applySettledVerifactuCancellation(m_db, "810", QDate(2026, 10, 12), refused), 0);
@@ -1149,9 +1309,9 @@ private slots:
     // blank one or another seq's.
     void test_verifactuEventRecordXml()
     {
-        exec("INSERT INTO ingresos (n_recibo, pagado, verifactu_invoice_seq, verifactu_xml, hash) VALUES "
-             "('870', 'NO', 0, '<unpaid/>', 'a'), ('870', 'SI', 0, '', 'b'), ('870', 'SI', 0, '<seq0/>', 'c'), "
-             "('870', 'SI', 1, '<seq1/>', 'd')");
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, pagado, verifactu_invoice_seq, verifactu_xml, hash) VALUES "
+             "('0', '870', 'NO', 0, '<unpaid/>', 'a'), ('0', '870', 'SI', 0, '', 'b'), ('0', '870', 'SI', 0, '<seq0/>', 'c'), "
+             "('0', '870', 'SI', 1, '<seq1/>', 'd')");
         QCOMPARE(verifactuEventRecordXml(m_db, "870", 0), QStringLiteral("<seq0/>"));
         QCOMPARE(verifactuEventRecordXml(m_db, "870", 1), QStringLiteral("<seq1/>"));
         QVERIFY(verifactuEventRecordXml(m_db, "870", 2).isEmpty());
@@ -1162,10 +1322,11 @@ private slots:
     // quarter was closed meanwhile.
     void test_pendingRectificativaGuards()
     {
-        insertIngreso("880", "01-07-2026", "20.00", "SI", "ANULADA", 1, 0);         // Q3, closed
-        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+        insertIngreso("880", "01-07-2026", "20.00", "SI", "ANULADA", 0);            // Q3, closed below
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, hash, "
              "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
-             "VALUES ('881', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', '1', 'r881', 'PENDIENTE', 0, '880', 'S')");
+             "VALUES ('0', '881', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', 'r881', 'PENDIENTE', 0, '880', 'S')");
+        QVERIFY(closeQuarter(m_db, 3, 2026, "q3.pdf"));
         QCOMPARE(pendingRectificationOf(m_db, "880"), QStringLiteral("881"));
         QVERIFY(pendingRectificationOf(m_db, "999").isEmpty());
         VerifactuResult ok;
@@ -1174,10 +1335,10 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='880'"), QStringLiteral("ANULADA"));
         QVERIFY(pendingRectificationOf(m_db, "880").isEmpty());
 
-        insertIngreso("882", "01-07-2026", "20.00", "SI", "ENVIADA", 1, 0);         // Q3, closed
-        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+        insertIngreso("882", "01-07-2026", "20.00", "SI", "ENVIADA", 0);            // Q3, closed
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, hash, "
              "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
-             "VALUES ('883', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', '1', 'r883', 'PENDIENTE', 0, '882', 'S')");
+             "VALUES ('0', '883', '28-09-2026', '28-09-2026', '15.00', 'SI', 'Rectificativa', 'r883', 'PENDIENTE', 0, '882', 'S')");
         QCOMPARE(applySettledVerifactuResult(m_db, "883", ok), 1);
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE n_recibo='882'"),
                  QStringLiteral("RECTIFICADA|") + QDate::currentDate().toString("dd-MM-yyyy"));
@@ -1192,15 +1353,16 @@ private slots:
         const QDate quarterStart(today.year(), ((today.month() - 1) / 3) * 3 + 1, 1);
         QCOMPARE(openPeriodDate(m_db, QDate()), today);
         QCOMPARE(openPeriodDate(m_db, today.addDays(-1)), today.addDays(-1));
-        insertIngreso("890", "15-01-2020", "10.00", "SI", "ENVIADA", 1, 0);         // a closed quarter
+        insertIngreso("890", "15-01-2020", "10.00", "SI", "ENVIADA", 0);
+        QVERIFY(closeQuarter(m_db, 1, 2020, ""));                                   // a closed quarter
         QCOMPARE(openPeriodDate(m_db, QDate(2020, 1, 20)), today);
-        insertIngreso("891", today.toString("dd-MM-yyyy"), "10.00", "SI", "ENVIADA", 1, 0);   // today's closed too
+        QVERIFY(closeQuarter(m_db, (today.month() + 2) / 3, today.year(), ""));     // today's closed too
         QCOMPARE(openPeriodDate(m_db, QDate(2020, 1, 20)), quarterStart.addMonths(3));
 
-        exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, hash, "
              "verifactu_estado, verifactu_error, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
-             "verifactu_rectification_type) VALUES ('892', '15-01-2020', '15-01-2020', '8.00', 'SI', 'Rectificativa', "
-             "'1', 'r892', 'ERROR', 'refused', 0, '890', 'S')");
+             "verifactu_rectification_type) VALUES ('0', '892', '15-01-2020', '15-01-2020', '8.00', 'SI', 'Rectificativa', "
+             "'r892', 'ERROR', 'refused', 0, '890', 'S')");
         QVERIFY(markRectificationResent(m_db, "892"));
         QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_error || '|' || fecha_pago || '|' || importe "
                         "FROM ingresos WHERE n_recibo='892'"), QStringLiteral("PENDIENTE||15-01-2020|8.00"));
@@ -1215,8 +1377,8 @@ private slots:
     // A rectificativa is never offered to the startup recovery (it would go as an F2).
     void test_settledRectificativa()
     {
-        insertIngreso("850", "01-10-2026", "20.00", "SI", "ENVIADA", 0, 0);
-        insertIngreso("851", "01-10-2026", "20.00", "SI", "ENVIADA", 0, 0);
+        insertIngreso("850", "01-10-2026", "20.00", "SI", "ENVIADA");
+        insertIngreso("851", "01-10-2026", "20.00", "SI", "ENVIADA");
         const auto rectificativa = [this](const QString &number, const QString &original, const QString &type) {
             exec("INSERT INTO ingresos (n_recibo, fecha_recepcion, fecha_pago, importe, pagado, estado, edit_lock, hash, "
                  "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
@@ -1454,7 +1616,6 @@ private slots:
         row.size           = "1.5";
         row.servicio       = "Tinte";
         row.observaciones  = "urgente";
-        row.editLock       = "0";
         row.hash           = "splitHash";
 
         QVERIFY(insertGarmentRow(m_db, row));
@@ -1565,21 +1726,20 @@ private slots:
         QVERIFY(!garmentExcludedFromTotals("ERROR"));
     }
 
-    // The Contabilidad lock as the shop DB stores it (TEXT '0' / '1'): only an explicit
-    // 0 is unlocked. Before 11.2 the guard compared COALESCE(edit_lock, 0) = 0, which is
-    // false for the TEXT '0', so no garment could be voided or edited in the shop.
-    void test_voidGarmentRow_editLockAsStoredInTheShop()
+    // edit_lock is no longer read: whatever the old column holds, a garment in an open
+    // quarter can be voided (the lock is the quarter's closure, not the row's flag).
+    void test_voidGarmentRow_ignoresStaleEditLockValues()
     {
-        const QList<QPair<QVariant, bool>> cases = {
-            { QStringLiteral("0"), true }, { 0, true }, { QVariant(), true },
-            { QStringLiteral("1"), false }, { 1, false }, { QString(""), false }, { QStringLiteral("SI"), false } };
+        // Never NULL: the shop's column is NOT NULL, as in TestSchema.
+        const QList<QVariant> values = { QStringLiteral("0"), 0, QStringLiteral("1"), 1,
+                                         QString(""), QStringLiteral("SI") };
         int n = 0;
-        for (const auto &c : cases) {
+        for (const QVariant &v : values) {
             const QString hash = QStringLiteral("lock%1").arg(++n);
             exec("INSERT INTO ingresos (n_recibo, hash, pagado, estado, verifactu_estado, edit_lock) "
-                 "VALUES ('L1', :h, 'NO', 'En tienda', 'SIN COBRAR', :lock)", { {":h", hash}, {":lock", c.first} });
-            QVERIFY2(voidGarmentRow(m_db, "L1", hash) == c.second,
-                     qPrintable(QString("edit_lock %1").arg(c.first.isNull() ? "NULL" : "'" + c.first.toString() + "'")));
+                 "VALUES ('L1', :h, 'NO', 'En tienda', 'SIN COBRAR', :lock)", { {":h", hash}, {":lock", v} });
+            QVERIFY2(voidGarmentRow(m_db, "L1", hash),
+                     qPrintable(QString("edit_lock '%1'").arg(v.toString())));
         }
     }
 
@@ -1608,7 +1768,8 @@ private slots:
         insertRow("T9", "paid", "10.00", "SI", "ENVIADA");
         insertRow("T9", "sent", "10.00", "NO", "ERROR");
         insertRow("T9", "locked");
-        exec("UPDATE ingresos SET edit_lock = 1 WHERE hash = 'locked'");
+        exec("UPDATE ingresos SET fecha_pago = '10-02-2026' WHERE hash = 'locked'");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
         for (const char *h : { "paid", "sent", "hashA", "locked" })
             QVERIFY2(!voidGarmentRow(m_db, "T9", h), h);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='T9' AND estado = 'Anulado'"),
@@ -1625,9 +1786,9 @@ private slots:
         QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
         // Legacy row with a NULL estado must still be picked up (the != 'Anulado'
         // filter is NULL-guarded; SQLite treats NULL != x as NULL, i.e. excluded).
-        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, importe, pagado, "
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, importe, pagado, "
              "estado, cantidad, prenda, hash) "
-             "VALUES ('TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
+             "VALUES ('0', 'TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
 
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));

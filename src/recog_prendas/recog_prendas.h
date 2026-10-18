@@ -105,6 +105,8 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
+    // The clicked row's payment date is in a quarter Contabilidad closed.
+    bool rowClickedLocked();
     // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
     // slots connect by name and the e2e bench finds them by it).
     struct Widgets {

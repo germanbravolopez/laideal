@@ -151,7 +151,8 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Prenda | Garment item (clothing, rug, curtain, etc.) |
 | Limp. | "Limpieza" — cleaning service |
 | Plan. | "Plancha" — ironing service |
-| edit_lock | Column in `ingresos`: `0` = editable, `1` = locked by accounting close |
+| accounting_closures | Table of Contabilidad's quarterly closes (append-only close / reopen history); a row is locked when its date is in a closed quarter |
+| edit_lock | Legacy lock column in `ingresos` / `gastos`, replaced by `accounting_closures` (only read by its one-time migration) |
 | hash | 16-char alphanumeric identifier on each `ingresos` row for deduplication |
 | CSV (Verifactu) | "Código de Seguridad de la Versión" — the unique code AEAT issues per invoice |
 | ServiceKey | API key for the Verifactu REST service. External — not in source control. Stored encrypted at rest in `~/.laideal_settings.json` via Windows DPAPI (per-user, `dpapi:v1:` prefix); `AppSettings` getter/setter decrypt/encrypt transparently |
@@ -171,7 +172,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
 | Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`) — pixmap from save flow or REST `/GetQrCode`, rastered into the ESC/POS stream (`EscPosBuilder::rasterImage`); the legal verification leyenda prints below the QR when `verifactu_estado == ENVIADA` |
-| Accounting lock check | `src/sql_lite/sql_lite.h` (`quarterIsClosed`, `readLockForQuarter`) |
+| Accounting lock check | `src/sql_lite/sql_lite.h` (`quarterIsClosed`, `closeQuarter`, `reopenQuarter`, `quarterClosures`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print flow (ESC/POS) | `docs/modules/imprimir.md` (orchestration) + `docs/modules/printing.md` (ESC/POS core) + `src/imprimir/imprimir.h` |
 | ESC/POS command subset / code page (PC858) | `docs/modules/printer/03_escpos_command_reference.md` + `src/printing/escposbuilder.cpp` (`toCp858`) |

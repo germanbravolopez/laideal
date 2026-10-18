@@ -2,6 +2,8 @@
 #define SQL_LITE_H
 
 #include <QDate>
+#include <QDateTime>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QString>
@@ -87,14 +89,6 @@ int refusedInvoiceCount(QSqlDatabase &db);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-// Quarter-wide edit_lock state (quarter 1-4). Returns 1 if any row of the quarter
-// is accounting-locked, 0 if the quarter has data but is open, 2 if it has no rows.
-// Reads all three months of the quarter, so a quarter is not mistaken for empty
-// when only its last month lacks data.
-int         readLockForQuarter(QSqlDatabase &db, const QString &table, int quarter, int year);
-// Set edit_lock = value on both ingresos and gastos rows whose date falls in the
-// given month/year (1 = locked after doing the contabilidad, 0 = reverted/unlocked).
-void        updateLockForMonth(QSqlDatabase &db, int value, int month, int year);
 int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
 bool        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
@@ -103,7 +97,7 @@ QString     genHash16();
 // `ingresos` keyed by (n_recibo, hash) - the same shape RecogPrendas::updateDb
 // used inline. Pure of any widget: the dialog reads the new values off its fields
 // and hands them here, so the writes are unit-testable against a temp DB. The
-// edit_lock / blocked-quarter / Verifactu-submit business rules stay in the slot.
+// closed-quarter / Verifactu-submit business rules stay in the slot.
 
 // PKU_YES / PKU_NO: set fecha_recogida + estado. PKU_NO passes an empty fechaRecogida.
 bool        updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
@@ -177,7 +171,6 @@ struct IngresoGarmentRow {
     QString size;
     QString servicio;
     QString observaciones;
-    QString editLock = "0";
     QString hash;
     QString verifactuEstado;  // "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
 };
@@ -342,10 +335,32 @@ QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDa
 // n_recibo, ordered by that date.
 QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
 
-// True when Contabilidad has closed the quarter containing date: any ingresos or
-// gastos row of that quarter is locked; a month with no rows inside a closed quarter
-// still reads as closed.
+// Contabilidad's quarterly close, kept in accounting_closures (created by migrateDatabase):
+// a quarter is closed while it has a closure not yet reopened. Closures are never
+// deleted, so the table is also the quarter's close / reopen history. A row is locked
+// when its date (ingresos fecha_pago, gastos fecha) is in a closed quarter.
+struct QuarterClosure {
+    QDateTime closedAt;
+    QDateTime reopenedAt;     // invalid while the closure is open
+    bool migrated = false;    // carried over from the old edit_lock flags: closedAt is the migration time
+    QString reportFile;
+};
+bool quarterIsClosed(QSqlDatabase &db, int quarter, int year);
+// The quarter containing date (a month without rows inside a closed quarter is closed);
+// false for an invalid date.
 bool quarterIsClosed(QSqlDatabase &db, QDate date);
+// Closes the quarter with the report written for it; false if already closed or on error.
+bool closeQuarter(QSqlDatabase &db, int quarter, int year, const QString &reportFile);
+// Reopens the quarter's open closure (Revertir contabilidad); false if it was not closed.
+bool reopenQuarter(QSqlDatabase &db, int quarter, int year);
+// The quarter's closures, oldest first.
+QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year);
+// quarterKey() of every closed quarter, for views that check many rows at once.
+QSet<int> closedQuarterKeys(QSqlDatabase &db);
+inline int quarterKey(int quarter, int year) { return year * 10 + quarter; }
+inline int quarterKey(QDate date) { return date.isValid() ? quarterKey((date.month() + 2) / 3, date.year()) : 0; }
+// Any payment, cancellation (fecha_anulacion) or gasto dated in the quarter: something to report.
+bool quarterHasMovements(QSqlDatabase &db, int quarter, int year);
 // `preferred` when its quarter is open, else today, else the first day of the next
 // open quarter: where a late change (a subtraction) may still be counted.
 QDate openPeriodDate(QSqlDatabase &db, QDate preferred);

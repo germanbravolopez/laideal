@@ -2,6 +2,7 @@
 #define MYSORTFILTERPROXYMODEL_H
 
 #include <QDate>
+#include <QSet>
 #include <functional>
 #include <QSortFilterProxyModel>
 
@@ -35,12 +36,14 @@ public:
 
     QString table_name;
 
-    // A gastos row locked by Contabilidad (edit_lock = 1) is read-only.
+    // A gastos row whose fecha is in a quarter closed by Contabilidad is read-only.
+    // closedQuarters holds quarterKey()s (sql_lite closedQuarterKeys), set by the view.
     Qt::ItemFlags flags(const QModelIndex &index) const override;
     bool rowLocked(int proxyRow) const;
+    QSet<int> closedQuarters;
 
     // Checked before an edit is written: a non-empty message refuses it (editRefused).
-    std::function<QString(int column, const QVariant &value)> editValidator;
+    std::function<QString(const QModelIndex &index, const QVariant &value)> editValidator;
     bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
 
 signals:

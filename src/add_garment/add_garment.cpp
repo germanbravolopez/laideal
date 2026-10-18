@@ -312,7 +312,6 @@ bool AddGarment::saveGarment()
     row.size           = m_leSize->text().replace(',', '.');
     row.servicio       = m_cbServicio->currentText();
     row.observaciones  = m_leObservaciones->text();
-    row.editLock       = "0";
     row.hash           = hash;
     // Issue #41: a garment added to an existing ticket is un-submitted like a
     // freshly saved row, so it follows the same rule - SIN COBRAR while unpaid,

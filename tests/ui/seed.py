@@ -17,10 +17,10 @@ TABLES = [
     " n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT,"
     " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT,"
     " cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT,"
-    " observaciones TEXT, edit_lock TEXT DEFAULT '0', hash TEXT)",
+    " observaciones TEXT, edit_lock TEXT NOT NULL, hash TEXT)",
     "CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
     "descripcion TEXT, empresa TEXT, fecha TEXT, iva TEXT, importe TEXT, "
-    "edit_lock TEXT DEFAULT '0')",
+    "edit_lock TEXT)",
     "CREATE TABLE clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)",
     "CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)",
     "CREATE TABLE proveedores (nombre TEXT, cif TEXT, direccion TEXT, telefono TEXT)",

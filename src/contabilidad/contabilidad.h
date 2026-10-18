@@ -46,11 +46,6 @@ public:
     // reverting: the "Bloquear datos" checkbox is enabled only for Trimestral.
     static bool lockOptionAvailable(ConfigMode mode, bool reverting);
 
-    // Merges the lock state of ingresos and gastos for one period (each 0 = open,
-    // 1 = locked, 2 = no rows): 2 only when both are empty, 1 if either is locked,
-    // else 0. A quarter with only gastos can then be closed and reverted too.
-    static int combinedLockState(int ingresosLock, int gastosLock);
-
     // Detail tables appended to the report so each summary figure can be audited.
     // Pure HTML rendering (no DB / UI state), exposed for unit testing; the rows come
     // from incomeTicketsBetweenDates / expensesBetweenDates and the total row equals
@@ -67,13 +62,9 @@ public:
     static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
 
     // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
-    // contabilidad). A month reads its quarter; a year lists its four quarters.
+    // contabilidad), with the date of its last close or revert. A month reads its
+    // quarter; a year lists its four quarters.
     static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
-
-    // A quarter with no payments nor gastos whose only movements are cancellations of
-    // earlier quarters' invoices: it still needs its report (the regularisation), but
-    // has nothing of its own to lock.
-    static bool quarterHasOnlyRegularizations(QSqlDatabase &db, int quarter, int year);
 
 
     // All money figures of one accounting period (a quarter, a month, or - when
@@ -152,7 +143,6 @@ private:
     // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
     // comma-decimal amounts left out of the sums.
     QString generateContabilidad(int &invalidAmounts);
-    void updateLock();
 
     QSqlDatabase db;
     QLabel      *m_lblIntro = nullptr;

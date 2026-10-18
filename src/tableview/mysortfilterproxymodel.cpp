@@ -1,5 +1,6 @@
 #include "mysortfilterproxymodel.h"
 #include "ingresos_schema.h"
+#include "sql_lite.h"
 #include <QtWidgets>
 #include <QMessageBox>
 
@@ -26,7 +27,8 @@ bool MySortFilterProxyModel::rowLocked(int proxyRow) const
 {
     if (table_name != QLatin1String("gastos"))
         return false;
-    return index(proxyRow, GASTOS_IDX_CONTAB).data().toInt() == 1;
+    const QDate fecha = QDate::fromString(index(proxyRow, GASTOS_IDX_FECHA).data().toString().trimmed(), "dd-MM-yyyy");
+    return closedQuarters.contains(quarterKey(fecha));
 }
 
 Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
@@ -40,7 +42,7 @@ Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
 bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
     if (role == Qt::EditRole && editValidator) {
-        const QString refusal = editValidator(index.column(), value);
+        const QString refusal = editValidator(index, value);
         if (!refusal.isEmpty()) {
             emit editRefused(refusal);
             return false;

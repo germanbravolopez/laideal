@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QDesktopServices>
 #include <QAbstractItemModel>
+#include <QSet>
 #include <QSqlDatabase>
 
 #define C_FECHAS      "Fechas"
@@ -50,9 +51,12 @@ private:
     QString generate_html_gastos_table_with_specific_conditions();
     QString generate_html_gastos_table();
     bool check_years_invoice_type_for_row(int row);
+    // The row's fecha is in a quarter Contabilidad closed (m_closedQuarters).
+    bool rowClosed(int row) const;
     QString add_suffix_to_filename();
 
     QSqlDatabase db;
+    QSet<int> m_closedQuarters;   // quarterKey()s, read when the gastos table is built
     QComboBox *m_cbYear = nullptr;
     QCheckBox *m_chkAllYears = nullptr;
     QComboBox *m_cbType = nullptr;

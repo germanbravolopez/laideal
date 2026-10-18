@@ -5,9 +5,14 @@
 #include <QtTest>
 #include <QDate>
 #include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
 
 #include "contabilidad.h"
 #include "reporthtml.h"
+#include "sql_lite.h"
+#include "support/testschema.h"
 
 class TestContabilidad : public QObject
 {
@@ -101,14 +106,64 @@ private slots:
         QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Anual, false));
     }
 
-    void test_combinedLockState()
+    // The "Comprobar bloqueo" text reads the quarter's closure history.
+    void test_lockStatusMessage_followsTheClosureHistory()
     {
-        QCOMPARE(Contabilidad::combinedLockState(2, 2), 2);   // no rows in either table
-        QCOMPARE(Contabilidad::combinedLockState(2, 0), 0);   // gastos-only quarter, open
-        QCOMPARE(Contabilidad::combinedLockState(2, 1), 1);   // gastos-only quarter, locked
-        QCOMPARE(Contabilidad::combinedLockState(0, 2), 0);   // ingresos-only, open
-        QCOMPARE(Contabilidad::combinedLockState(1, 0), 1);   // either locked -> locked
-        QCOMPARE(Contabilidad::combinedLockState(0, 0), 0);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString conn = "test_contabilidad_lock";
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+            db.setDatabaseName(dir.filePath("lock.db"));
+            QVERIFY(TestSchema::create(db));
+            const auto msg = [&db](int q) { return Contabilidad::lockStatusMessage(db, Contabilidad::Trimestral, q, 2026); };
+            const QRegularExpression stamp(R"( el \d{2}-\d{2}-\d{4} a las \d{2}:\d{2}\)\.$)");
+
+            QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no tiene registros de ingresos ni de gastos."));
+            db.open();
+            QSqlQuery(db).exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES ('F1', '10-02-2026', '5.00')");
+            db.close();
+            QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no está bloqueado."));
+
+            QVERIFY(closeQuarter(db, 1, 2026, "q1.pdf"));
+            QVERIFY2(msg(1).startsWith("El trimestre 1 de 2026 está bloqueado (contabilidad realizada el "), qPrintable(msg(1)));
+            QVERIFY2(msg(1).contains(stamp), qPrintable(msg(1)));
+
+            QVERIFY(reopenQuarter(db, 1, 2026));
+            QVERIFY2(msg(1).startsWith("El trimestre 1 de 2026 no está bloqueado (contabilidad revertida el "), qPrintable(msg(1)));
+            QVERIFY2(msg(1).contains(stamp), qPrintable(msg(1)));
+
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Mensual, 2, 2026),
+                     QStringLiteral("El mes 2 de 2026 pertenece al trimestre 1, que no está bloqueado."));
+            QVERIFY(closeQuarter(db, 1, 2026, "q1.pdf"));
+            QVERIFY(Contabilidad::lockStatusMessage(db, Contabilidad::Mensual, 3, 2026).endsWith("que está bloqueado."));
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Anual, 0, 2026).split(QLatin1Char(0x0A)).size(), 4);
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(conn);
+    }
+
+    // A quarter closed by the old edit_lock flag has no real close date.
+    void test_lockStatusMessage_migratedClosureHasNoDate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString conn = "test_contabilidad_lock_migrated";
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+            db.setDatabaseName(dir.filePath("lock.db"));
+            QVERIFY(TestSchema::create(db));
+            db.open();
+            QSqlQuery q(db);
+            QVERIFY(q.exec("DROP TABLE accounting_closures"));
+            QVERIFY(q.exec("INSERT INTO ingresos (n_recibo, fecha_pago, edit_lock, hash) VALUES ('1', '10-02-2026', '1', 'a')"));
+            q.finish();
+            db.close();
+            migrateDatabase(db);
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Trimestral, 1, 2026),
+                     QStringLiteral("El trimestre 1 de 2026 está bloqueado (contabilidad realizada)."));
+        }
+        QSqlDatabase::removeDatabase(conn);
     }
 
     void test_detailIngresosRowsAndTotal()

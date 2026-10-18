@@ -137,6 +137,7 @@ private slots:
     {
         exec("DELETE FROM ingresos");
         exec("DELETE FROM gastos");
+        TestSchema::resetClosures(m_db);
         m_server.clear();
         m_popups->clear();
     }
@@ -239,8 +240,9 @@ private slots:
     // A payment dated in a closed quarter is refused in the dialog's result panel, and nothing is sent.
     void test_paymentIntoClosedQuarter_refusedAndNothingSent()
     {
-        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, edit_lock, hash, verifactu_estado) "
-             "VALUES ('499', '10-01-2026', '5.00', 'SI', 1, 'h499', 'ENVIADA')");   // January closed
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_estado) "
+             "VALUES ('0', '499', '10-01-2026', '5.00', 'SI', 'h499', 'ENVIADA')");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));                                   // Q1 closed
         seedGarment("500", "h500a", "18.00");
         QString result;
         QVERIFY(!payThroughDialog("500", QDate(2026, 1, 20), {}, 2000, &result));
@@ -258,8 +260,7 @@ private slots:
         seedGarment("600", "h600a", "50.00");
         seedGarment("600", "h600b", "30.00");
         QVERIFY(payThroughDialog("600", QDate(2026, 2, 10), {"h600b"}));
-        for (int month = 1; month <= 3; ++month)
-            updateLockForMonth(m_db, 1, month, 2026);
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
 
         QSignalSpy cancelled(m_verifactu, &VerifactuIntegration::requestFinished);
         const QString cancelId = m_verifactu->cancelInvoiceAsync("600", QDate(2026, 2, 10));

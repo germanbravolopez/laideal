@@ -113,7 +113,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 **[COVERED]**
 - La Ideal has no features for hidden sales, no "off the books" mode, no silent delete, no setting to disable AEAT submission per ticket.
-- The accounting lock (`edit_lock`) prevents modification of closed quarters.
+- The accounting lock (`accounting_closures`, append-only with its close / reopen history) prevents modification of closed quarters; closing a quarter writes nothing to the invoice rows.
 - `cleanDatabase()` only normalises decimal separators (comma→dot); it doesn't alter amounts or hide records.
 - **Test-only build:** the CMake option `LAIDEAL_UI_TEST` (OFF by default) compiles a `--fake-aeat http://127.0.0.1:<port>` switch for the automated UI smoke test (`docs/testing/ui_smoke.md`), with which a local fake AEAT "accepts" the records. It never ships: the CI release job and `release.ps1` refuse an exe holding the `--fake-aeat` marker, `ui-smoke.yml` checks that its own build holds it (so the check cannot go blind) and uploads no exe, configuring it ON prints a warning, and the in-app updater installs only GitHub Releases.
 

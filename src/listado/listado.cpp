@@ -161,9 +161,14 @@ void Listado::populateTable()
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = tableName;
         if (tableName == "gastos") {
+            proxyModel->closedQuarters = closedQuarterKeys(db);
             // Same rule as Formulario facturas: an invoice never moves into a closed quarter.
-            proxyModel->editValidator = [this](int column, const QVariant &value) {
-                if (column != GASTOS_IDX_FECHA)
+            proxyModel->editValidator = [this](const QModelIndex &index, const QVariant &value) {
+                // Live, not the view's cache: the quarter may have been closed since it was loaded.
+                if (rowLockedNow(index.row()))
+                    return UiKit::errorHtml("Fila bloqueada.")
+                           + "<br>Pertenece a un trimestre cerrado por la contabilidad: no se ha cambiado.";
+                if (index.column() != GASTOS_IDX_FECHA)
                     return QString();
                 const QDate date = QDate::fromString(value.toString().trimmed(), "dd-MM-yyyy");
                 if (!date.isValid())
@@ -201,6 +206,8 @@ void Listado::populateTable()
         }
         else if (tableName == "gastos") {
             table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
+            // edit_lock is the pre-accounting_closures lock flag, no longer read.
+            table_listado->setColumnHidden(GASTOS_IDX_CONTAB, true);
         }
         if (tableName == "ingresos") {
             table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
@@ -211,7 +218,7 @@ void Listado::populateTable()
             placeIngresosDateColumns(table_listado->horizontalHeader());
             // hash is not useful at user interface.
             table_listado->setColumnHidden(INGRESOS_COL_HASH, true);
-            // edit_lock is an internal flag (set by Contabilidad on quarter close); not user-facing.
+            // edit_lock is the pre-accounting_closures lock flag, no longer read.
             table_listado->setColumnHidden(INGRESOS_COL_EDIT_LOCK, true);
             // verifactu_csv is redundant with the clickable verifactu_url_qr link in this view.
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CSV, true);
@@ -334,7 +341,7 @@ void Listado::on_actionEliminar_fila_triggered()
                                              "o Anular factura."));
     } else if (!table_listado->currentIndex().isValid()) {
         m_lblResult->setText(UiKit::warnHtml("Seleccione primero la fila que quiere eliminar."));
-    } else if (proxyModel->rowLocked(table_listado->currentIndex().row())) {
+    } else if (rowLockedNow(table_listado->currentIndex().row())) {
         qWarning() << "Listado::on_actionEliminar_fila_triggered: refused deleting a locked" << tableName << "row";
         m_lblResult->setText(UiKit::errorHtml("Fila bloqueada.")
                              + "<br>Pertenece a un trimestre cerrado por la contabilidad; revierta la "
@@ -385,21 +392,20 @@ void Listado::closeEvent(QCloseEvent* event)
     }
 }
 
+bool Listado::rowLockedNow(int proxyRow)
+{
+    // A quarter may have been closed since the table was loaded.
+    if (proxyModel && tableName == "gastos")
+        proxyModel->closedQuarters = closedQuarterKeys(db);
+    return proxyModel && proxyModel->rowLocked(proxyRow);
+}
+
 void Listado::handleDoubleClick(const QModelIndex &index)
 {
-    if (index.isValid()) {
-        int lastColumn = table_listado->model()->columnCount() - 1;
-        QString headerName = table_listado->model()->headerData(lastColumn, Qt::Horizontal, Qt::DisplayRole).toString();
-        if (headerName == "edit_lock") {
-            QVariant value = table_listado->model()->data(table_listado->model()->index(index.row(), lastColumn));
-            if (value.toInt() == 1 && index.column() != lastColumn) {
-                m_lblResult->setText(UiKit::errorHtml("Edición bloqueada.")
-                                     + "<br>La fila pertenece a un trimestre cerrado por la contabilidad; "
-                                       "revierta la contabilidad para poder editarla.");
-                // Deselect the current cell
-                QItemSelectionModel *selectionModel = table_listado->selectionModel();
-                selectionModel->clearSelection();
-            }
-        }
+    if (index.isValid() && rowLockedNow(index.row())) {
+        m_lblResult->setText(UiKit::errorHtml("Edición bloqueada.")
+                             + "<br>La fila pertenece a un trimestre cerrado por la contabilidad; "
+                               "revierta la contabilidad para poder editarla.");
+        table_listado->selectionModel()->clearSelection();
     }
 }

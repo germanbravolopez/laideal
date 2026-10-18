@@ -108,7 +108,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     db.open();
     QSqlQuery q(db);
     q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
-              "importe, observaciones, pagado, hash, edit_lock, estado "
+              "importe, observaciones, pagado, hash, estado "
               "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
     q.bindValue(":n", ticketNum);
     if (!q.exec()) {
@@ -119,24 +119,17 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     }
 
     int unpaidCount  = 0;
-    int lockedCount  = 0;
     while (q.next()) {
         if (m_cliente.isEmpty()) {
             m_cliente        = q.value(0).toString();
             m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
         }
         const QString pagado   = q.value(8).toString();
-        const bool    editLock = q.value(10).toBool();
-        const QString estado   = q.value(11).toString();
+        const QString estado   = q.value(10).toString();
         if (pagado == "SI") continue;
         // A locally voided garment (estado "Anulado") is never chargeable - it
         // must not enter the payable set or it could be submitted to AEAT.
         if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
-        // edit_lock=1 means the row's quarter has been closed by contabilidad
-        // (`updateLockForMonth`); skip it so the locked row never enters the
-        // selectable set. Unpaid rows usually have edit_lock=0 (the lock keys
-        // on fecha_pago LIKE), so this is mostly a defensive filter.
-        if (editLock) { ++lockedCount; continue; }
 
         const int r = m_table->rowCount();
         m_table->insertRow(r);
@@ -167,8 +160,6 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     QString headerText = tr("Ticket %1 - %2 - Recepción %3")
                          .arg(ticketNum, m_cliente,
                               m_fechaRecepcion.toString("dd-MM-yyyy"));
-    if (lockedCount > 0)
-        headerText += tr("  (%1 prenda(s) omitida(s) por bloqueo de contabilidad)").arg(lockedCount);
     m_lblHeader->setText(headerText);
     connect(m_table, &QTableWidget::itemChanged,
             this, [this](QTableWidgetItem *it) {
@@ -241,36 +232,6 @@ void PayDialog::onCobrarClicked()
         m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
                              + "<br>" + tr("La fecha de pago pertenece a un trimestre cerrado por la contabilidad."));
         return;
-    }
-
-    // Race guard: edit_lock could have flipped 0->1 between loadTicket() and
-    // now (accountant closed the quarter in another window). Submitting to
-    // AEAT for an amount we can't actually mark paid locally would
-    // desynchronize the books from AEAT - abort before any AEAT call.
-    {
-        db.open();
-        QSqlQuery lockQ(db);
-        QString placeholders;
-        for (int i = 0; i < hashes.size(); ++i) {
-            if (i) placeholders += ',';
-            placeholders += ':' + QString("h%1").arg(i);
-        }
-        lockQ.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n "
-                      "AND edit_lock = 1 AND hash IN (" + placeholders + ")");
-        lockQ.bindValue(":n", m_ticketNum);
-        for (int i = 0; i < hashes.size(); ++i)
-            lockQ.bindValue(QString(":h%1").arg(i), hashes[i]);
-        int locked = 0;
-        if (lockQ.exec() && lockQ.first())
-            locked = lockQ.value(0).toInt();
-        db.close();
-        if (locked > 0) {
-            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
-                                 + "<br>" + tr("Una o más prendas seleccionadas pertenecen a un trimestre "
-                                               "que se ha bloqueado durante la operación. Cierra y vuelve "
-                                               "a abrir el cobro para refrescar el estado del ticket."));
-            return;
-        }
     }
 
     const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu && m_verifactu->directBackend()
@@ -370,16 +331,18 @@ void PayDialog::onVerifactuRequestFinished(const QString &requestId, const Verif
 
 void PayDialog::persistPayment(int seq, const VerifactuResult &result)
 {
+    // The quarter was open when Cobrar was pressed; a close while AEAT answered must not
+    // drop an invoice AEAT may have registered, so it is stored and logged for review.
+    if (quarterIsClosed(db, m_pendingFechaPago))
+        qCritical() << "PayDialog::persistPayment: the quarter of" << m_pendingFechaPago
+                    << "was closed while ticket" << m_ticketNum << "was being charged - review its contabilidad";
     db.open();
     QSqlQuery q(db);
-    // AND edit_lock = 0: defensive against a row whose quarter was closed
-    // between loadTicket and persistPayment (very narrow race window, but
-    // free to guard - keeps accounting lock authoritative).
     // importe = the amount shown and sent (cents), so an older row stored with more
     // decimals is invoiced and stored with the same figure.
     q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
               "verifactu_invoice_seq = :seq, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0 AND COALESCE(pagado, '') != 'SI'");
+              "WHERE n_recibo = :n AND hash = :h AND COALESCE(pagado, '') != 'SI'");
     m_unstoredHashes.clear();
     for (const QString &h : m_pendingHashes) {
         q.bindValue(":imp", moneyText(m_pendingAmounts.value(h)));
@@ -390,7 +353,7 @@ void PayDialog::persistPayment(int seq, const VerifactuResult &result)
         if (!q.exec() || q.numRowsAffected() != 1) {
             // The invoice is already on its way to AEAT: the row must be reviewed by hand.
             qCritical() << "PayDialog::persistPayment: garment" << h << "of ticket" << m_ticketNum
-                        << "not stored as paid (locked or already paid meanwhile) -" << q.lastError().text();
+                        << "not stored as paid (already paid meanwhile) -" << q.lastError().text();
             m_unstoredHashes << h;
         }
     }
