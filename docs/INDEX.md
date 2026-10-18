@@ -17,7 +17,8 @@
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
 | `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `testschema.h`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
 | `docs/testing/ui_smoke.md` | **Automated UI smoke test**: smoke blocks A-E on the installed UI-test build (CMake `LAIDEAL_UI_TEST`, `--fake-aeat`) driven over UI Automation (pywinauto) on a `windows-latest` runner, against the fake AEAT on a synthetic DB; captured printer queue; the local AEAT pre-production script; how Qt widgets show in UIA (nested dialogs, cell widgets, checkable cells, dates); `tests/ui/`, `tests/tools/`, `.github/workflows/ui-smoke.yml` |
-| `docs/testing/smoke_test.md` | **Manual pre-release checklist** (M1-M6, about 15 min, after the UI smoke test) — the shop's real schema and data, the physical printer, how screens / PDFs / installer pages look; sends no invoice |
+| `docs/testing/smoke_test.md` | **Smoke test** — part 1 before the release (look of screens / PDFs, AEAT pre-production), part 2 the shop user's *Comprobar tras actualizar* (`laideal.exe --self-check`) after installing |
+| `src/app/selfcheck.h/.cpp`, `src/app/selfcheckdialog.h/.cpp` | Post-update self-check: copies the newest backup and the settings, runs M1/M2, asks M2b/M3/M5, writes the report, deletes the copies (`test_selfcheck`) |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |

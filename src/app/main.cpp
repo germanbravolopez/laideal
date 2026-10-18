@@ -3,6 +3,7 @@
 #include "appsettings.h"
 #include "applanguage.h"
 #include "settingsdialog.h"
+#include "selfcheckdialog.h"
 #include "sql_lite.h"
 #include "applogger.h"
 #ifdef LAIDEAL_UI_TEST
@@ -14,6 +15,7 @@
 #include <QFile>
 #include <QIcon>
 #include <QMessageBox>
+#include <QTimer>
 
 int main(int argc, char *argv[])
 {
@@ -57,6 +59,18 @@ int main(int argc, char *argv[])
     // language; Configuracion re-applies it live when the setting changes.
     AppLanguage::applyQtTranslations(settings->language());
 
+    QIcon icon(":/icons/laideal.ico");
+    a.setWindowIcon(icon);
+
+    // `--self-check`: the post-update check on a copy of the newest backup (selfcheck.h);
+    // the shop's settings and database are only read.
+    if (args.contains(QStringLiteral("--self-check"))) {
+        SelfCheckDialog check(settings->filePath());
+        QTimer::singleShot(0, &check, &SelfCheckDialog::start);
+        check.exec();
+        return 0;
+    }
+
     // If the DB path is not set or the file is missing, prompt the user to
     // configure it before the main window is constructed. Without a valid
     // database the app cannot function.
@@ -86,8 +100,6 @@ int main(int argc, char *argv[])
         w.setWindowTitle(w.windowTitle() + QStringLiteral(" - AEAT simulada (prueba de interfaz)"));
 #endif
 
-    QIcon icon(":/icons/laideal.ico");
-    a.setWindowIcon(icon);
     w.setWindowIcon(icon);
 
     w.show();

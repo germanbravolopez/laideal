@@ -81,6 +81,8 @@ Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; The post-update self-check (docs/testing/smoke_test.md), run by the shop user.
+Name: "{autoprograms}\{#MyAppName} - Comprobar tras actualizar"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--self-check"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

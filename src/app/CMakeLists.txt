@@ -28,6 +28,10 @@ add_library(laideal_app STATIC
     aeatexport.cpp
     aeatexportdialog.h
     aeatexportdialog.cpp
+    selfcheck.h
+    selfcheck.cpp
+    selfcheckdialog.h
+    selfcheckdialog.cpp
 )
 
 target_include_directories(laideal_app PUBLIC

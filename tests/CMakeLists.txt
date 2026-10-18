@@ -378,6 +378,22 @@ add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The post-update self-check (laideal.exe --self-check): its checks and one whole run
+# of its window against a throwaway shop folder.
+add_executable(test_selfcheck
+    test_selfcheck.cpp
+    support/e2efixture.h
+    support/testschema.h
+)
+target_include_directories(test_selfcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(test_selfcheck PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    laideal_app
+)
+add_test(NAME selfcheck
+    COMMAND test_selfcheck -o ${CMAKE_BINARY_DIR}/test-results-selfcheck.xml,junitxml -o -,txt)
+set_tests_properties(selfcheck PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Fail any suite that hangs (e.g. a blocking system call or an unanswered modal
 # dialog under the offscreen platform) instead of stalling CI until the job
 # limit; ctest then prints the suite's output up to the hang.

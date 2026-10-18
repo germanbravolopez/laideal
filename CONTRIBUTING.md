@@ -31,7 +31,7 @@ La Ideal is maintained by one developer, mostly working with AI coding agents (C
 3. Before merging to `master`, the branch must be **release-ready**:
    - All planned changes are applied and reviewed.
    - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
-   - `ctest` and the UI smoke test (`ui-smoke.yml`) are green, and the manual smoke test ([`docs/testing/smoke_test.md`](docs/testing/smoke_test.md)) is done.
+   - `ctest` and the UI smoke test (`ui-smoke.yml`) are green, and part 1 of the smoke test ([`docs/testing/smoke_test.md`](docs/testing/smoke_test.md)) is done; part 2 is the shop user's self-check after installing.
    - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, the root `README.md` if a user-visible behaviour or the build changed, and this file if the workflow or release steps changed.
    - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
    - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new X.Y section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time; CI fails the release if either section is missing. Keep both files UTF-8 **with BOM** so the installer renders accents.

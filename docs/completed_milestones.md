@@ -12,6 +12,28 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Comprobar tras actualizar: the shop user's post-update self-check** (tracker item, design chosen by Germán 19-10-2026):
+  - **Why:** the manual smoke test needed someone to copy the newest backup and the settings, edit JSON by hand and compare each result with a table.
+  - **How it runs:** the installer now adds *Start → La Ideal - Comprobar tras actualizar*, which starts `laideal.exe --self-check`. `SelfCheckDialog` runs instead of MainWindow and works in a temporary folder:
+    - It copies the newest `backups/laideal_*.db` and a settings copy (`SelfCheck::testSettings`: the database copy, the direct client in pre-production, no gateway key, backups off).
+    - It runs M1 (`checkSchema`) and M2 (`checkData`).
+    - It asks M2b: the last closed quarter's figures recomputed without closing anything, against the filed PDF, which it can open.
+    - It asks M3 after printing the recibo and the factura of the newest invoice AEAT holds. The QR is drawn from the stored verification URL.
+    - It asks M5: the installer pages.
+    - It writes `comprobacion_laideal_<version>_<date>.txt` to the Desktop, with statuses and reasons but no shop data, and deletes the copies.
+  - **M1 in detail:** the migrations run on the copy while warnings are captured; any "failed" statement fails the check. It also checks `integrity_check`, the column count, that `accounting_closures` exists, and that the next number is the highest + 1.
+  - **Safety:** the live DB and `~/.laideal_settings.json` are only read. The Verifactu client is never started, so nothing can reach AEAT or the gateway.
+  - **Compliance review:**
+    - The factura is reprinted only if every paid row of the invoice is `ENVIADA` in the copy and the live DB, opened read-only, still holds it as sent. The backup can be a day old.
+    - The QR is drawn at the size the direct client uses.
+    - The question says the papers are test prints.
+    - The certificate password is stripped from the settings copy.
+    - Copies left behind by a crashed run are deleted at the next start.
+  - **Delivery:** chosen over a PyInstaller script driving the UI (large, fragile at the shop, antivirus flags) and a PowerShell script. It needs nothing installed and is testable in ctest.
+  - **Docs:** `smoke_test.md` is now part 1 (M4 look and M6 AEAT pre-production, before the release) and part 2 (the self-check). `/release` step 1, README, CONTRIBUTING and the testing overview follow.
+  - **Key files:** `src/app/selfcheck.{h,cpp}`, `src/app/selfcheckdialog.{h,cpp}`, `src/app/main.cpp`, `releases/laideal.iss`.
+  - **Tests:** new `test_selfcheck`, including a whole run that leaves the live files byte for byte unchanged.
+  - **For the 12.0 release notes:** "New: 'La Ideal - Comprobar tras actualizar' in the Start menu checks the new version with your data and printer, on a copy, and saves a report to send." / "Nuevo: 'La Ideal - Comprobar tras actualizar' en el menú Inicio comprueba la nueva versión con sus datos y su impresora, sobre una copia, y guarda un informe para enviarlo."
 - [x] **Decimals shown with the comma in every window and on the printed tickets, whatever the language** (Germán 18-10-2026):
   - **Before:** three formats were in use. Reports, Listado and some messages were always Spanish. The Recogida importe column followed the Windows locale. The ticket table, the Recogida / Añadir prendas fields, the Cobrar, Anular, Envíos pendientes and Rectificar windows and the printed recibo and factura used the stored dot. `app.language` changes none of it.
   - **The helpers:** every display now goes through `displayMoney()` / `displayDecimal()` (`sql_lite`, next to the storage format `moneyText`). They give two decimals with the comma and no thousands separator, so "1.234" is never ambiguous in a field. The reports keep `formatEuro` ("1.234,56 €").
