@@ -89,7 +89,6 @@ int refusedInvoiceCount(QSqlDatabase &db);
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
-int         updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item);
 bool        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 

@@ -53,6 +53,8 @@ After the initial load `verticalHeader()->setDefaultSectionSize(rowHeight(0))` l
 
 ## Dependencies (CMake)
 
+The price / amount columns (prendas `precio_limpieza` / `precio_plancha`, gastos `importe`) use `NumberFormatDelegate`, which shows two decimals and stores an edit with a dot (`storedNumber`: "2,5" → "2.5"). Since 12.0 that replaces the silent comma clean-up MainWindow ran after every Listado edit (`cleanDatabase(false)`).
+
 `listado` links against the `tableview` library as PUBLIC, which exposes `FilterWidget`, `MySortFilterProxyModel`, `TableView`, `NumberFormatDelegate`, and `TextColorDelegate` to consumers of `listado`.
 
 ## Sub-classes

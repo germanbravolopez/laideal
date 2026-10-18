@@ -209,13 +209,6 @@ void MainWindow::buildUi()
     actionAnadir_nuevas_prendas->setObjectName("actionAnadir_nuevas_prendas");
     actionAnadir_nuevas_prendas->setToolTip(tr("Añadir nuevas prendas a un ticket guardado"));
     actionAnadir_nuevas_prendas->setShortcut(QKeySequence("Alt+Shift+N"));
-    QAction *actionLimpiar_base_de_datos = new QAction(tr("Limpiar base de datos"), this);
-    actionLimpiar_base_de_datos->setObjectName("actionLimpiar_base_de_datos");
-    actionLimpiar_base_de_datos->setToolTip(tr("Limpiar comas ',' en importes guardados en la base de datos"));
-    actionLimpiar_base_de_datos->setShortcut(QKeySequence("Alt+L"));
-    QAction *actionCrear_hash_en_ingresos = new QAction(tr("Crear hash en ingresos"), this);
-    actionCrear_hash_en_ingresos->setObjectName("actionCrear_hash_en_ingresos");
-    actionCrear_hash_en_ingresos->setToolTip(tr("Crear hashes para los recibos que no tengan ya un hash en ingresos"));
     QAction *actionAnular_factura_verifactu = new QAction(tr("Anular factura Verifactu..."), this);
     actionAnular_factura_verifactu->setObjectName("actionAnular_factura_verifactu");
     actionAnular_factura_verifactu->setToolTip(tr("Anular una factura previamente enviada a la AEAT a través de Verifactu"));
@@ -246,9 +239,6 @@ void MainWindow::buildUi()
     QMenu *menuArchivo = menuBar()->addMenu(tr("Archivo"));
     menuArchivo->setObjectName("menuArchivo");
     menuArchivo->setToolTipsVisible(true);
-    menuArchivo->addAction(actionLimpiar_base_de_datos);
-    menuArchivo->addAction(actionCrear_hash_en_ingresos);
-    menuArchivo->addSeparator();
     menuArchivo->addAction(actionCerrar);
     QMenu *menuHerramientas = menuBar()->addMenu(tr("Herramientas"));
     menuHerramientas->setObjectName("menuHerramientas");
@@ -1271,7 +1261,6 @@ void MainWindow::on_actionGastos_triggered()
 void MainWindow::repopulatePrendas()
 {
     setGarmentToCbAndPopulate(0);
-    cleanDatabase(false);
 }
 
 void MainWindow::on_actionListado_de_prendas_triggered()
@@ -1402,28 +1391,6 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     ui_facturas->show();
 }
 
-void MainWindow::on_actionLimpiar_base_de_datos_triggered()
-{
-    cleanDatabase(true);
-}
-
-void MainWindow::cleanDatabase(bool print)
-{
-    // Change the cursor to a loading icon
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    int gastosCnt = updateComasInDecimalData(db, "gastos", "importe");
-    int ingresosCnt = updateComasInDecimalData(db, "ingresos", "importe");
-    ingresosCnt += updateComasInDecimalData(db, "ingresos", "size");
-    int prendasCnt = updateComasInDecimalData(db, "prendas", "precio_limpieza");
-    prendasCnt += updateComasInDecimalData(db, "prendas", "precio_plancha");
-    // Restore the cursor to default
-    QApplication::restoreOverrideCursor();
-    if (print)
-        m_result->setText(UiKit::okHtml(tr("Limpieza de la base de datos terminada."))
-                          + "<br>" + tr("Importes con ',' corregidos: %1 en gastos, %2 en ingresos, %3 en la lista de prendas.")
-                                         .arg(gastosCnt).arg(ingresosCnt).arg(prendasCnt));
-}
-
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
@@ -1438,107 +1405,6 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
         verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0);
     });
     ui_add_garment->show();
-}
-
-void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
-{
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-
-    db.open();
-
-    // Phase A: fill empty / NULL hashes. UPDATE keyed on rowid (SQLite's
-    // intrinsic per-row identifier) instead of the all-fields equality used
-    // by the legacy version, which could stamp two rows with the same hash
-    // when ticket lines happened to be identical across every column.
-    int filled = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT rowid FROM ingresos WHERE hash IS NULL OR hash = ''")) {
-            QList<qint64> emptyRowids;
-            while (q.next())
-                emptyRowids.append(q.value(0).toLongLong());
-            QSqlQuery u(db);
-            u.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
-            for (qint64 rid : emptyRowids) {
-                u.bindValue(":h",   genHash16());
-                u.bindValue(":rid", rid);
-                if (u.exec()) ++filled;
-                else qWarning() << "Crear hash: fill UPDATE failed for rowid" << rid
-                                 << "-" << u.lastError().text();
-            }
-        } else {
-            qWarning() << "Crear hash: SELECT empties failed -" << q.lastError().text();
-        }
-    }
-
-    // Phase B: resolve collisions (legacy data from the pre-QUuid genHash16
-    // era). For every hash shared by >1 row, keep the first row's hash and
-    // regenerate the rest with the new UUID-based hash so the column ends
-    // up globally unique.
-    int regenerated = 0;
-    int remainingGroups = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT hash FROM ingresos "
-                   "WHERE hash IS NOT NULL AND hash != '' "
-                   "GROUP BY hash HAVING COUNT(*) > 1")) {
-            QStringList collidingHashes;
-            while (q.next())
-                collidingHashes.append(q.value(0).toString());
-
-            QSqlQuery picker(db);
-            QSqlQuery upd(db);
-            upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
-            for (const QString &h : collidingHashes) {
-                picker.prepare("SELECT rowid FROM ingresos WHERE hash = :h ORDER BY rowid");
-                picker.bindValue(":h", h);
-                if (!picker.exec()) {
-                    qWarning() << "Crear hash: group SELECT failed for hash" << h
-                               << "-" << picker.lastError().text();
-                    continue;
-                }
-                bool skipFirst = true;
-                while (picker.next()) {
-                    if (skipFirst) { skipFirst = false; continue; }
-                    upd.bindValue(":h",   genHash16());
-                    upd.bindValue(":rid", picker.value(0).toLongLong());
-                    if (upd.exec()) ++regenerated;
-                    else qWarning() << "Crear hash: regen UPDATE failed for rowid"
-                                     << picker.value(0) << "-" << upd.lastError().text();
-                }
-            }
-            remainingGroups = collidingHashes.size(); // before regen
-        } else {
-            qWarning() << "Crear hash: collision SELECT failed -" << q.lastError().text();
-        }
-    }
-
-    // Phase C: defensive re-check - after Phase B the column should be unique;
-    // anything still in there indicates a logic error worth surfacing.
-    int stillColliding = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT COUNT(*) FROM (SELECT hash FROM ingresos "
-                   "WHERE hash IS NOT NULL AND hash != '' "
-                   "GROUP BY hash HAVING COUNT(*) > 1)")) {
-            if (q.next()) stillColliding = q.value(0).toInt();
-        }
-    }
-    db.close();
-
-    QApplication::restoreOverrideCursor();
-
-    qDebug() << "Crear hash: filled=" << filled
-             << "collision_groups=" << remainingGroups
-             << "regenerated=" << regenerated
-             << "still_colliding_groups=" << stillColliding;
-
-    const QString body = tr("Tabla de ingresos: %1 fila(s) sin hash rellenadas, %2 grupo(s) de hash duplicado "
-                            "detectados, %3 fila(s) regeneradas.").arg(filled).arg(remainingGroups).arg(regenerated);
-    m_result->setText(stillColliding > 0
-        ? UiKit::warnHtml(tr("Quedan %1 grupo(s) de hash duplicado: vuelva a ejecutar la acción; si persiste, "
-                             "consulte el log.").arg(stillColliding)) + "<br>" + body
-        : UiKit::okHtml(tr("Hashes de ingresos revisados.")) + "<br>" + body);
 }
 
 void MainWindow::on_actionAnular_factura_verifactu_triggered()

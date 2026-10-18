@@ -12,6 +12,23 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Dead-code sweep; the legacy Archivo utilities removed** (tracker item, Germán 18-10-2026):
+  - **Limpiar base de datos** (Alt+L) is gone. It replaced the decimal comma in `gastos.importe`, `ingresos.importe` / `size` and the `prendas` prices, and `MainWindow::repopulatePrendas` also ran it silently after every Listado edit. Its `ingresos` branch rewrote `importe` on any row, sent invoices included, which is an edit path on invoice records.
+  - **What replaces it:**
+    - `NumberFormatDelegate::setModelData` stores a Listado edit with a dot (`storedNumber`).
+    - `migrateDatabase` replaces a leftover comma at start in `gastos` and `prendas`. It skips a gasto of a closed quarter, whose report was filed without it, and a value such as "1.234,50", and never touches `ingresos`.
+    - Its two messages now say where to correct an amount: Contabilidad's comma-decimal warning and `readGarmentPrice`'s.
+  - **Crear hash en ingresos** is gone too. It filled empty hashes and gave a new hash to rows sharing one across the whole table, invoices included. `genHash16` has used a UUID for years and every INSERT sets a hash. A read-only check of the shop DB found no empty hash and no comma decimal left. It did find 33 groups (67 rows) of one ticket sharing a hash, all paid tickets from 2021-2023 never sent to AEAT. Every write keyed by `(n_recibo, hash)` hit both rows of such a group.
+  - **What replaces it:** a `migrateDatabase` step that runs before the start-up rounding, which also writes by that key:
+    - Every row of such a group but one gets a new hash; the row kept is one with a CSV when the group has one.
+    - An empty hash is filled the same way.
+    - A further row AEAT holds (a CSV) is only logged.
+    - Each change is logged with the old and new value.
+    - The same hash on two different tickets is no conflict and is left alone.
+    - The compliance review asked for the order, the empty hashes, the log and the keeper.
+  - **`dead-code-finder` sweep:** one dead method, `VerifactuInvoice::getTotalTaxAmount()` (its field still feeds the JSON), removed. Seven methods used only by tests are deliberate seams and were kept: `AeatQr::moduleCount`, `AeatCertificate::isLoaded`, `AeatDirectBackend::chainReady`, `AeatSelfTest::invoiceNumber`, `AddGarment::loadTicket`, `Imprimir::ticketBytes`, `ReportHtml::lastReportHtml`.
+  - **Key files:** `src/app/mainwindow.{h,cpp}`, `src/sql_lite/sql_lite.{h,cpp}`, `src/tableview/numberformatdelegate.{h,cpp}`.
+  - **Tests:** `test_sql_lite` `test_migrateDatabase_givesDuplicateAndEmptyHashesANewOne` / `..._replacesTheDecimalCommaOutsideInvoices`, `test_textcolordelegate` `test_numberFormatDelegate_storesADot`.
 - [x] **Cobrar warns on screen when its quarter was closed during the AEAT round trip** (tracker item, from the compliance review of the `accounting_closures` change): Cobrar checks the quarter just before calling AEAT, and since that change a payment AEAT may already hold is stored even if Contabilidad closes the quarter while AEAT answers - but only a log line said so, and the filed report then missed that income. `PayDialog::paidIntoClosedQuarter()` now flags it and Recogida shows "Ticket N cobrado" with a warning naming the quarter, saying its report misses the payment and to revert and generate it again (result panel, no pop-up). Also dropped "bloqueado" from the unstored-garments message: since the change only a garment paid meanwhile can be left unstored. e2e `test_recogida_paymentIntoAQuarterClosedDuringTheSubmitIsShown`.
 - [x] **Accounting lock moved from the per-row `edit_lock` flag to an `accounting_closures` table** (Germán 18-10-2026, after the cancellation-only quarter fix):
   - **Why:** the lock belongs to a period but lived on every row. A quarter's state was worked out from the rows dated in it, so a quarter without rows could not be closed; that is what forced the special case for a quarter holding only a cancellation. Closing also ran an `UPDATE` over every invoice row of the quarter. Every writer had to set the flag by hand. The TEXT `'0'` / `'1'` comparison had already caused the 11.0 bug.

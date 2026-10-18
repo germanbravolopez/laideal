@@ -60,7 +60,6 @@ public:
     InvoiceType getInvoiceType() const { return m_invoiceType; }
     QString getDescription() const { return m_description; }
     QList<VerifactuTaxItem> getTaxItems() const { return m_taxItems; }
-    double getTotalTaxAmount() const { return m_totalTaxAmount; }
     bool hasRectification() const { return m_hasRectification; }
     RectificationType getRectificationType() const { return m_rectificationType; }
     double getRectificationTaxBase() const { return m_rectificationTaxBase; }

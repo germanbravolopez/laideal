@@ -298,6 +298,56 @@ void migrateDatabase(QSqlDatabase &db)
                      << "split-off paid garment(s) to their AEAT invoice";
     }
 
+    // 12.0: a row is found by (n_recibo, hash), so two rows of one ticket sharing a hash
+    // (the rand() era) or an empty hash were hit together by every write. Before the
+    // rounding below, which writes by that key too, each such row gets a new hash -
+    // replacing the old "Crear hash en ingresos" action. A row with a CSV keeps its own
+    // and is only logged; within a group the row kept is one with a CSV if there is one.
+    {
+        QSqlQuery sel(db);
+        if (!sel.exec("SELECT i.rowid, i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') != '' "
+                      "FROM ingresos i JOIN (SELECT n_recibo, COALESCE(hash, '') AS h FROM ingresos "
+                      "      GROUP BY n_recibo, COALESCE(hash, '') HAVING COUNT(*) > 1 OR h = '') d "
+                      "  ON d.n_recibo = i.n_recibo AND d.h = COALESCE(i.hash, '') "
+                      "ORDER BY i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') = '', i.rowid"))
+            qWarning() << "migrateDatabase: duplicate-hash search failed -" << sel.lastError().text();
+        struct Change { qlonglong rowid; QString ticket, oldHash; };
+        QVector<Change> changes;
+        QString groupTicket, groupHash;
+        bool keptOne = false;
+        while (sel.next()) {
+            const QString ticket = sel.value(1).toString(), hash = sel.value(2).toString();
+            const bool sent = sel.value(3).toBool();
+            if (ticket != groupTicket || hash != groupHash) {
+                groupTicket = ticket;
+                groupHash = hash;
+                keptOne = false;
+            }
+            if (!hash.isEmpty() && !keptOne) {   // sorted: a row with a CSV comes first
+                keptOne = true;
+                continue;
+            }
+            if (sent)
+                qWarning() << "migrateDatabase: ticket" << ticket << "has a row sent to AEAT whose hash"
+                           << hash << "is empty or shared - review manually";
+            else
+                changes.append({ sel.value(0).toLongLong(), ticket, hash });
+        }
+        sel.finish();
+        QSqlQuery upd(db);
+        upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+        for (const Change &c : changes) {
+            const QString newHash = genHash16();
+            upd.bindValue(":h",   newHash);
+            upd.bindValue(":rid", c.rowid);
+            if (upd.exec())
+                qDebug() << "migrateDatabase: ticket" << c.ticket << "rowid" << c.rowid
+                         << "hash" << c.oldHash << "->" << newHash;
+            else
+                qWarning() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
+        }
+    }
+
     // 10.14: amounts are stored in cents. Rows still open (unpaid, never sent) that an
     // older Recogida m2 edit stored with more decimals are rounded the way they will be
     // charged; no invoice covers them yet. Paid rows keep what was stored.
@@ -325,6 +375,26 @@ void migrateDatabase(QSqlDatabase &db)
         }
         if (!rows.isEmpty())
             qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
+    }
+
+    // 12.0: comma decimals ("5,50") in the non-invoice amounts, which nothing sums or
+    // prices, become dots (the Listado editors now store a dot); one with a dot as well
+    // ("1.234,50") is ambiguous and left as it is. A gasto of a closed
+    // quarter keeps its value: its report was filed without it. Paid ingresos are
+    // invoices and are never rewritten.
+    {
+        const QStringList fixes = {
+            "UPDATE gastos SET importe = REPLACE(TRIM(importe), ',', '.') "
+            "WHERE importe LIKE '%,%' AND importe NOT LIKE '%.%' AND NOT " + closedQuarterSql("gastos.fecha"),
+            "UPDATE prendas SET precio_limpieza = REPLACE(TRIM(precio_limpieza), ',', '.') WHERE precio_limpieza LIKE '%,%' AND precio_limpieza NOT LIKE '%.%'",
+            "UPDATE prendas SET precio_plancha = REPLACE(TRIM(precio_plancha), ',', '.') WHERE precio_plancha LIKE '%,%' AND precio_plancha NOT LIKE '%.%'",
+        };
+        for (const QString &sql : fixes) {
+            if (!q.exec(sql))
+                qWarning() << "migrateDatabase: comma-decimal fix failed -" << q.lastError().text();
+            else if (q.numRowsAffected() > 0)
+                qDebug() << "migrateDatabase: replaced the decimal comma in" << q.numRowsAffected() << "amount(s) -" << sql.left(30);
+        }
     }
 
     // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
@@ -451,8 +521,8 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
             } else {
                 qCritical() << "readGarmentPrice: comma decimal found in prendas for garment" << garment;
                 QMessageBox::critical(nullptr, "Error en la base de datos",
-                                      "En la tabla prendas se ha detectado que hay valores decimales guardados con ','. "
-                                      "Utilizar herramienta de limpiado de importes decimales.",
+                                      "El precio de esta prenda está guardado con ',' como separador decimal. "
+                                      "Corríjalo en el listado de prendas.",
                                       QMessageBox::Ok, QMessageBox::Ok);
                 price = -1.0f;
             }
@@ -1387,73 +1457,6 @@ QString moneyText(const QString &value)
     return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
 }
 
-int updateComasInDecimalData(QSqlDatabase &db, const QString &table, const QString &item)
-{
-    if (dbNotConfigured(db, __func__)) return 0;
-
-    qDebug() << "updateComasInDecimalData: scanning" << table << "for comma decimals in column" << item;
-    int errorCnt = 0;
-
-    if (table == "ingresos") {
-        QStringList items  = readColumnFromTable(db, item,       table, "");
-        QStringList ids1   = readColumnFromTable(db, "n_recibo", table, "");
-        QStringList ids2   = readColumnFromTable(db, "hash",     table, "");
-
-        for (int i = 0; i < items.count(); ++i) {
-            if (!items[i].contains(',')) continue;
-            db.open();
-            QSqlQuery q(db);
-            q.prepare("UPDATE " + table + " SET " + item + " = :value "
-                      "WHERE n_recibo = :id1 AND hash = :id2");
-            q.bindValue(":value", QString(items[i]).replace(',', '.'));
-            q.bindValue(":id1",   ids1[i]);
-            q.bindValue(":id2",   ids2[i]);
-            if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "hash" << ids2[i] << "-" << q.lastError().text();
-            db.close();
-            ++errorCnt;
-        }
-    } else if (table == "gastos") {
-        QStringList items = readColumnFromTable(db, item, table, "id");
-        QStringList ids   = readColumnFromTable(db, "id", table, "id");
-
-        for (int i = 0; i < items.count(); ++i) {
-            if (!items[i].contains(',')) continue;
-            db.open();
-            QSqlQuery q(db);
-            q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE id = :id");
-            q.bindValue(":value", QString(items[i]).replace(',', '.'));
-            q.bindValue(":id",   ids[i]);
-            if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "id" << ids[i] << "-" << q.lastError().text();
-            db.close();
-            ++errorCnt;
-        }
-    } else if (table == "prendas") {
-        QStringList items = readColumnFromTable(db, item,     table, "nombre");
-        QStringList ids   = readColumnFromTable(db, "nombre", table, "nombre");
-
-        for (int i = 0; i < items.count(); ++i) {
-            if (!items[i].contains(',')) continue;
-            db.open();
-            QSqlQuery q(db);
-            q.prepare("UPDATE " + table + " SET " + item + " = :value WHERE nombre = :id");
-            q.bindValue(":value", QString(items[i]).replace(',', '.'));
-            q.bindValue(":id",   ids[i]);
-            if (!q.exec())
-                qWarning() << "updateComasInDecimalData: failed to fix comma in" << table << "nombre" << ids[i] << "-" << q.lastError().text();
-            db.close();
-            ++errorCnt;
-        }
-    } else {
-        qCritical() << "updateComasInDecimalData: unsupported table:" << table;
-        QMessageBox::critical(nullptr, "Error en updateComasInDecimalData",
-                              "La tabla especificada '" + table + "' no está soportada.",
-                              QMessageBox::Ok, QMessageBox::Ok);
-    }
-    return errorCnt;
-}
-
 bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)
 {
     if (dbNotConfigured(db, __func__)) return false;
@@ -1873,8 +1876,8 @@ QString genHash16()
     // to 16 leaves 64 bits of cryptographic entropy - 2^32 row birthday-
     // collision is around one chance in 4 billion, far below any plausible
     // ingresos size. Replaces a homegrown alphanum loop on QRandomGenerator
-    // that had a legacy rand()-era predecessor responsible for the
-    // cross-ticket hash collisions surfaced by "Crear hash en ingresos".
+    // that had a legacy rand()-era predecessor, whose duplicate hashes
+    // migrateDatabase repairs.
     return QUuid::createUuid().toString(QUuid::Id128).left(16);
 }
 

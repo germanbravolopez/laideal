@@ -56,7 +56,6 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 | `quarterClosures(db, quarter, year)` | `QVector<QuarterClosure>` | The quarter's close / reopen history, oldest first (`closedAt`, `reopenedAt`, `migrated`, `reportFile`) |
 | `closedQuarterKeys(db)` / `quarterKey(...)` | `QSet<int>` / `int` | Every closed quarter as `year * 10 + quarter`, for a view that checks many rows (Listado / GenListado gastos) |
 | `quarterHasMovements(db, quarter, year)` | `bool` | A payment (`fecha_pago`), cancellation (`fecha_anulacion`) or gasto (`fecha`) is dated in the quarter |
-| `updateComasInDecimalData(db, table, item)` | `int` | Replace comma decimal separators with dots |
 | `insertNewItemToTable(db, items, table)` | `void` | Generic row insert |
 | `genHash16()` | `QString` | Generate a 16-char alphanumeric deduplication hash |
 | `updateTicketPickup(db, nRecibo, hash, fechaRecogida, estado)` | `bool` | RecogPrendas seam: set `fecha_recogida` + `estado` (PKU_YES; PKU_NO passes empty `fechaRecogida`) |

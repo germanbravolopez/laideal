@@ -58,8 +58,6 @@ Key methods:
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
 | `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
-| `cleanDatabase()` | Fixes decimal separators (commas→dots) in DB |
-| `on_actionCrear_hash_en_ingresos_triggered()` | Backfills missing hashes in `ingresos` |
 
 Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OBSE=4`, `PRIC=5`
 
@@ -187,9 +185,8 @@ Notable items:
 - `DB_PATH` macro → `dbPath()` — runtime-configured by `main()` via `setDbPath(AppSettings::instance()->dbPath())`
 - `migrateDatabase(db)` — adds the 9 `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN` (csv / timestamp / estado / error / url_qr / xml / hash / rectifies_n_recibo / rectification_type), then backfills unpaid `'PENDIENTE'` rows to `'SIN COBRAR'` (10.9); idempotent (safe to call on every startup)
 - `dbNotConfigured()` guard — returns early with `qWarning` if `db.databaseName()` is empty; prevents spurious error dialogs at startup
-- `genHash16()` → 16-char alphanumeric hash for row deduplication (uses `QRandomGenerator`)
+- `genHash16()` → 16-char hash identifying a garment row within its ticket (truncated `QUuid`); `migrateDatabase` gives a new one to rows that shared one with a sibling of the same ticket
 - `quarterIsClosed()` / `closeQuarter()` / `reopenQuarter()` / `quarterClosures()` → Contabilidad's quarterly close in `accounting_closures`
-- `updateComasInDecimalData()` → data-quality fix for comma/dot decimal separator
 
 ---
 

@@ -1430,6 +1430,54 @@ private slots:
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'paid'"), QStringLiteral("22.515"));
     }
 
+    // Rows are found by (n_recibo, hash): two rows of one ticket sharing a hash (rand() era)
+    // or an empty hash get a new one, once. The row kept is one with a CSV when the group has
+    // one; a second row AEAT holds is only logged; the same hash on two tickets is no conflict.
+    void test_migrateDatabase_givesDuplicateAndEmptyHashesANewOne()
+    {
+        exec("INSERT INTO ingresos (n_recibo, hash, importe, pagado, edit_lock) VALUES "
+             "('D1', 'same', '5.00', 'SI', '0'), ('D1', 'same', '5.00', 'SI', '0'), ('D1', 'same', '5.00', 'SI', '0'), "
+             "('D2', 'same', '7.00', 'SI', '0'), ('E1', '', '4.00', 'NO', '0'), ('E1', '', '4.00', 'NO', '0')");
+        exec("INSERT INTO ingresos (n_recibo, hash, importe, pagado, verifactu_csv, verifactu_estado, edit_lock) VALUES "
+             "('D3', 'sent', '9.00', 'SI', 'CSV-D3', 'ENVIADA', '0'), ('D3', 'sent', '9.00', 'SI', 'CSV-D3', 'ENVIADA', '0'), "
+             "('D4', 'mix', '3.00', 'SI', '', '', '0'), ('D4', 'mix', '3.00', 'SI', 'CSV-D4', 'ENVIADA', '0')");
+        const QRegularExpression logged("ticket \"D3\" has a row sent to AEAT whose hash \"sent\" is empty or shared");
+        QTest::ignoreMessage(QtWarningMsg, logged);
+        migrateDatabase(m_db);
+
+        QCOMPARE(scalar("SELECT COUNT(DISTINCT hash) FROM ingresos WHERE n_recibo = 'D1'"), QStringLiteral("3"));
+        QCOMPARE(scalar("SELECT hash FROM ingresos WHERE n_recibo = 'D1' ORDER BY rowid LIMIT 1"), QStringLiteral("same"));
+        QCOMPARE(scalar("SELECT hash FROM ingresos WHERE n_recibo = 'D2'"), QStringLiteral("same"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'D3' AND hash = 'sent'"), QStringLiteral("2"));
+        QCOMPARE(scalar("SELECT hash FROM ingresos WHERE verifactu_csv = 'CSV-D4'"), QStringLiteral("mix"));
+        QVERIFY(scalar("SELECT hash FROM ingresos WHERE n_recibo = 'D4' AND verifactu_csv = ''") != "mix");
+        QCOMPARE(scalar("SELECT COUNT(DISTINCT hash) FROM ingresos WHERE n_recibo = 'E1' AND hash != ''"), QStringLiteral("2"));
+        const QString hashes = scalar("SELECT GROUP_CONCAT(hash) FROM (SELECT hash FROM ingresos ORDER BY rowid)");
+        QTest::ignoreMessage(QtWarningMsg, logged);
+        migrateDatabase(m_db);                                                   // nothing left to change
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(hash) FROM (SELECT hash FROM ingresos ORDER BY rowid)"), hashes);
+    }
+
+    // Comma decimals in gastos and prendas (never invoices) become dots at start; a gasto of
+    // a closed quarter keeps its value (its report was filed without it), and "1.234,50" is
+    // ambiguous and left alone.
+    void test_migrateDatabase_replacesTheDecimalCommaOutsideInvoices()
+    {
+        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES "
+             "('OPEN', '10-05-2026', '5,50'), ('CLOSED', '10-02-2026', '6,50'), ('BOTH', '10-05-2026', '1.234,50')");
+        exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', ' 2,5', '1,75')");
+        exec("INSERT INTO ingresos (n_recibo, hash, importe, pagado, edit_lock) VALUES ('P1', 'p1', '3,10', 'SI', '0')");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        migrateDatabase(m_db);
+
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE n_factura = 'OPEN'"), QStringLiteral("5.50"));
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE n_factura = 'CLOSED'"), QStringLiteral("6,50"));
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE n_factura = 'BOTH'"), QStringLiteral("1.234,50"));
+        QCOMPARE(scalar("SELECT precio_limpieza || '|' || precio_plancha FROM prendas WHERE nombre = 'Camisa'"),
+                 QStringLiteral("2.5|1.75"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'p1'"), QStringLiteral("3,10"));   // an invoice
+    }
+
     // The suites build ingresos through the app's own migrations; the column
     // positions are the ones INGRESOS_COL_* (used by every table view) expect.
     void test_ingresosSchema_matchesColumnIndices()

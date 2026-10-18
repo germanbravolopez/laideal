@@ -119,10 +119,7 @@ private slots:
     void on_actionGenerar_contabilidad_triggered();
     void on_actionRevertir_contabilidad_triggered();
     void on_actionFormulario_facturas_triggered();
-    void on_actionLimpiar_base_de_datos_triggered();
-    void cleanDatabase(bool print);
     void on_actionAnadir_nuevas_prendas_triggered();
-    void on_actionCrear_hash_en_ingresos_triggered();
     void on_actionAnular_factura_verifactu_triggered();
     void on_actionRectificar_factura_verifactu_triggered();
     void on_actionExportar_registros_aeat_triggered();

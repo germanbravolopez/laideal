@@ -12,6 +12,8 @@
 #include "ingresos_schema.h"
 #include "ingresoscolumns.h"
 #include "textcolordelegate.h"
+#include "numberformatdelegate.h"
+#include <QLineEdit>
 
 using TC = TextColorDelegate::TextColor;
 
@@ -72,6 +74,19 @@ private slots:
         placeIngresosDateColumns(h);
         QCOMPARE(h->visualIndex(INGRESOS_COL_FECHA_ANULACION), 5);
         QCOMPARE(h->logicalIndex(5), INGRESOS_COL_FECHA_ANULACION);
+    }
+
+    // An edited number is stored with a dot, whatever decimal separator was typed.
+    void test_numberFormatDelegate_storesADot()
+    {
+        QCOMPARE(NumberFormatDelegate::storedNumber(" 2,5 "), QStringLiteral("2.5"));
+        QCOMPARE(NumberFormatDelegate::storedNumber("12.40"), QStringLiteral("12.40"));
+        QStandardItemModel model(1, 1);
+        NumberFormatDelegate delegate;
+        QLineEdit editor;
+        editor.setText("3,75");
+        delegate.setModelData(&editor, &model, model.index(0, 0));
+        QCOMPARE(model.index(0, 0).data().toString(), QStringLiteral("3.75"));
     }
 };
 

@@ -254,8 +254,8 @@ void Contabilidad::onGenerateClicked()
         message += "<br>" + fileLinkHtml(file);
     if (invalidAmounts > 0)
         message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal: "
-                                              "no se han sumado y aparecen marcados en el detalle. Utilice la "
-                                              "herramienta de limpiado de importes decimales.").arg(invalidAmounts));
+                                              "no se han sumado y aparecen marcados en el detalle. Revíselos antes "
+                                              "de presentar el informe.").arg(invalidAmounts));
     m_lblResult->setText(message);
 }
 
