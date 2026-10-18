@@ -12,14 +12,14 @@ The menu bar has one menu per kind of work, all built in `MainWindow::buildUi()`
 
 | Menu | Entries |
 |------|---------|
-| **Archivo** | Configuración… · Hacer copia de seguridad ahora… · Cerrar (Alt+C) |
-| **Tickets** | Recogida de prendas (Alt+R) · Añadir nuevas prendas (Alt+Shift+N) · Imprimir ▸ Recibo (Alt+P, R) / Factura (Alt+P, F) / Factura completa (Alt+P, Alt+F) |
+| **Archivo** | Configuración… · Hacer copia de seguridad ahora · Cerrar (Alt+C) |
+| **Tickets** | Recogida de prendas… (Alt+R) · Añadir nuevas prendas… (Alt+Shift+N) · Imprimir ▸ Recibo… (Alt+P, R) / Factura… (Alt+P, F) / Factura completa… (Alt+P, Alt+F) |
 | **Facturas** | Anular factura Verifactu… (Alt+A) · Rectificar factura Verifactu… (Alt+T) · Exportar registros AEAT (XML)… |
-| **Contabilidad** | Añadir factura de gastos (Alt+F) · Generar contabilidad (Alt+G) · Revertir contabilidad… (no shortcut, so a closed quarter is never reopened by one key press) |
+| **Contabilidad** | Añadir factura de gastos… (Alt+F) · Generar contabilidad… (Alt+G) · Revertir contabilidad… (no shortcut, so a closed quarter is never reopened by one key press) |
 | **Ver** | Ingresos (Alt+Shift+I) · Gastos (Alt+Shift+G) · Listado de prendas / clientes / proveedores / servicios (Alt+Shift+P / C / O / S) |
-| **Ayuda** | Buscar actualizaciones… · Notas de la versión… · Log de depuración… · Acerca de Verifactu… |
+| **Ayuda** | Buscar actualizaciones · Notas de la versión · Log de depuración · Acerca de Verifactu |
 
-The top bar repeats Recogida de prendas, Añadir prendas and Factura de gastos as quick buttons. `Configuración…` is created with the other actions and connected in the constructor once the database is migrated.
+"…" marks an entry that opens a window to fill in or choose from before anything happens; an entry that acts at once (the backup, the update check) or only shows something (Ver, the release notes, the log, Acerca de Verifactu) has none. The top bar repeats Recogida de prendas, Añadir prendas and Factura de gastos as quick buttons. `Configuración…` is created with the other actions and connected in the constructor once the database is migrated.
 
 **Ticket entry**: a garment picked before its quantity counts 1 and is priced at once; prices follow the row that was edited (the combo's own row, not the table's current row, which a combo inside a cell does not move); an m2 garment shows 0,00 until its size is entered (`sql_lite::garmentUnmeasured`, the rule Recogida and Cobrar use too) and the ticket can be left **unpaid** like that - a ticket marked *Pagado al dejarlo* with an unmeasured m2 garment is refused, since its invoice would go to AEAT at 0 and could never be charged; a hand-typed price is kept (decimal comma accepted, shown in cents; a negative one is refused - corrections go through Rectificar factura); the total is always the sum of the rows and cannot be typed; slots with no garment are never saved, and the amount sent to AEAT is the sum of the rows actually stored (`saveTicket()` returns it). Saving into a closed quarter is refused (`quarterIsClosed`, the whole quarter).
 

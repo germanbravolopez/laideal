@@ -99,7 +99,7 @@ def run(run):
         recogida.close()
 
     with run.step("B", "B6", "Añadir nuevas prendas refuses a ticket with a paid garment"):
-        add = open_dialog(run.app, "Tickets", "Añadir nuevas prendas", "Añadir nuevas prendas")
+        add = open_dialog(run.app, "Tickets", "Añadir nuevas prendas...", "Añadir nuevas prendas")
         type_into(add, "leNRecibo", "1")
         click(add, "btnSearch")
         wait_for(lambda: "ya tiene prendas pagadas" in text(find(add, "lblResult")), 10, "the refusal")

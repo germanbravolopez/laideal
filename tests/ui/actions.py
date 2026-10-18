@@ -50,7 +50,7 @@ def save_ticket(app, client: str, garments, paid: bool = False, timeout: float =
 # --- Recogida -------------------------------------------------------------------------------
 
 def open_recogida(app):
-    app.menu("Tickets", "Recogida de prendas")
+    app.menu("Tickets", "Recogida de prendas...")
     return app.window("RecogPrendas")
 
 
@@ -215,10 +215,10 @@ def export_aeat_records(app, date_from: str, date_to: str):
 
 
 def print_dialog(app, kind: str):
-    """Tickets → Imprimir → Recibo / Factura / Factura completa."""
+    """Tickets → Imprimir → Recibo... / Factura... / Factura completa..."""
     find_text(app.main, "Tickets", "MenuItem").click_input()
     find_text(app.main, "Imprimir", "MenuItem").click_input()
-    find_text(app.main, kind, "MenuItem").click_input()
+    find_text(app.main, kind + "...", "MenuItem").click_input()
     return wait_for(lambda: next((w for w in app.windows() if exists(w, "le_n_ticket")), None),
                     10, f"the Imprimir {kind} window")
 
@@ -256,7 +256,7 @@ def select_combo(dialog, name: str, item: str):
 
 def accounts_dialog(app, revert: bool = False):
     title = "Revertir contabilidad" if revert else "Generar contabilidad"
-    return open_dialog(app, "Contabilidad", title + ("..." if revert else ""), title)
+    return open_dialog(app, "Contabilidad", title + "...", title)
 
 
 def accounts_period(dialog, kind: str, year: int, period: int = 0):
@@ -287,7 +287,7 @@ def accounts_run(app, dialog, button: str = "btnGenerate", timeout: float = 60.0
 
 
 def add_expense(app, number: str, date: str, supplier: str, amount: str):
-    dialog = open_dialog(app, "Contabilidad", "Añadir factura de gastos", "facturas de gastos")
+    dialog = open_dialog(app, "Contabilidad", "Añadir factura de gastos...", "facturas de gastos")
     type_into(dialog, "leFra", number)
     set_date(dialog, "deFecha", date)
     for name, value in (("cbEmpresa", supplier), ("cbServicio", "Suministros")):

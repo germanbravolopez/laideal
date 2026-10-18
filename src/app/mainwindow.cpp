@@ -153,21 +153,21 @@ void MainWindow::buildUi()
     resize(1240, 760);
 
     // Actions (names as in the former .ui: the on_action<Name>_triggered slots connect by name).
-    QAction *actionRecibo = new QAction(tr("Recibo"), this);
+    QAction *actionRecibo = new QAction(tr("Recibo..."), this);
     actionRecibo->setObjectName("actionRecibo");
     actionRecibo->setToolTip(tr("Imprimir recibo"));
     actionRecibo->setShortcut(QKeySequence("Alt+P, R"));
-    QAction *actionFactura = new QAction(tr("Factura"), this);
+    QAction *actionFactura = new QAction(tr("Factura..."), this);
     actionFactura->setObjectName("actionFactura");
     actionFactura->setToolTip(tr("Imprimir factura"));
     actionFactura->setShortcut(QKeySequence("Alt+P, F"));
-    QAction *actionRecogida_de_prendas = new QAction(tr("Recogida de prendas"), this);
+    QAction *actionRecogida_de_prendas = new QAction(tr("Recogida de prendas..."), this);
     actionRecogida_de_prendas->setObjectName("actionRecogida_de_prendas");
     actionRecogida_de_prendas->setShortcut(QKeySequence("Alt+R"));
-    QAction *actionFormulario_facturas = new QAction(tr("Añadir factura de gastos"), this);
+    QAction *actionFormulario_facturas = new QAction(tr("Añadir factura de gastos..."), this);
     actionFormulario_facturas->setObjectName("actionFormulario_facturas");
     actionFormulario_facturas->setShortcut(QKeySequence("Alt+F"));
-    QAction *actionGenerar_contabilidad = new QAction(tr("Generar contabilidad"), this);
+    QAction *actionGenerar_contabilidad = new QAction(tr("Generar contabilidad..."), this);
     actionGenerar_contabilidad->setObjectName("actionGenerar_contabilidad");
     actionGenerar_contabilidad->setShortcut(QKeySequence("Alt+G"));
     QAction *actionIngresos = new QAction(tr("Ingresos"), this);
@@ -194,7 +194,7 @@ void MainWindow::buildUi()
     actionListado_de_servicios->setObjectName("actionListado_de_servicios");
     actionListado_de_servicios->setToolTip(tr("Visualizar listado de servicios"));
     actionListado_de_servicios->setShortcut(QKeySequence("Alt+Shift+S"));
-    QAction *actionFactura_completa = new QAction(tr("Factura completa"), this);
+    QAction *actionFactura_completa = new QAction(tr("Factura completa..."), this);
     actionFactura_completa->setObjectName("actionFactura_completa");
     actionFactura_completa->setToolTip(tr("Imprimir factura completa"));
     actionFactura_completa->setShortcut(QKeySequence("Alt+P, Alt+F"));
@@ -205,7 +205,7 @@ void MainWindow::buildUi()
     // No shortcut: reopening a closed quarter is never one key press away.
     QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad..."), this);
     actionRevertir_contabilidad->setObjectName("actionRevertir_contabilidad");
-    QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas"), this);
+    QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas..."), this);
     actionAnadir_nuevas_prendas->setObjectName("actionAnadir_nuevas_prendas");
     actionAnadir_nuevas_prendas->setToolTip(tr("Añadir nuevas prendas a un ticket guardado"));
     actionAnadir_nuevas_prendas->setShortcut(QKeySequence("Alt+Shift+N"));
@@ -220,20 +220,20 @@ void MainWindow::buildUi()
     QAction *actionExportar_registros_aeat = new QAction(tr("Exportar registros AEAT (XML)..."), this);
     actionExportar_registros_aeat->setObjectName("actionExportar_registros_aeat");
     actionExportar_registros_aeat->setToolTip(tr("Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)"));
-    QAction *actionMostrar_log = new QAction(tr("Log de depuración..."), this);
+    QAction *actionMostrar_log = new QAction(tr("Log de depuración"), this);
     actionMostrar_log->setObjectName("actionMostrar_log");
     actionMostrar_log->setToolTip(tr("Muestra la ubicación del archivo de log para enviar al soporte técnico"));
-    QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu..."), this);
+    QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu"), this);
     actionAcerca_de_Verifactu->setObjectName("actionAcerca_de_Verifactu");
     actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático "
                                               "(art. 13 RD 1007/2023, art. 15 Orden HAC/1177/2024)"));
-    QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora..."), this);
+    QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora"), this);
     actionHacer_copia_de_seguridad->setObjectName("actionHacer_copia_de_seguridad");
     actionHacer_copia_de_seguridad->setToolTip(tr("Crea una copia íntegra de la base de datos en la carpeta de copias (Art. 8.2.c RD 1007/2023)"));
-    QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones..."), this);
+    QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones"), this);
     actionBuscar_actualizaciones->setObjectName("actionBuscar_actualizaciones");
     actionBuscar_actualizaciones->setToolTip(tr("Comprueba en GitHub si hay una versión más reciente y la instala"));
-    QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión..."), this);
+    QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión"), this);
     actionNotas_de_la_version->setObjectName("actionNotas_de_la_version");
     actionNotas_de_la_version->setToolTip(tr("Muestra el historial de cambios de todas las versiones publicadas"));
 
@@ -242,6 +242,8 @@ void MainWindow::buildUi()
     actionConfiguracion->setToolTip(tr("Datos del negocio, base de datos, impresora y conexión con la AEAT"));
 
     // Menus, one per kind of work. The UI smoke test opens them by their visible text.
+    // "..." marks an entry that opens a window to fill in or choose from before anything
+    // happens; one that acts at once or only shows something has none.
     const auto addMenu = [this](const QString &title, const char *name) {
         QMenu *menu = menuBar()->addMenu(title);
         menu->setObjectName(name);

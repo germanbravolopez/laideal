@@ -55,7 +55,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 - `ingresos` rows are never deleted by the application.
 - `src/backup/BackupManager` snapshots the live SQLite DB via `VACUUM INTO` to `<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db`. The copy is re-opened read-only and validated with `PRAGMA integrity_check`; a failed verdict deletes the copy and surfaces the error.
 - Retention: every backup from the last 30 days is kept; older backups are reduced to one per calendar month for 4 years (matching the LGT prescription window), then deleted.
-- Triggers: (1) auto on app startup once per 24h (silent on success, `QMessageBox` warning on failure); (2) on demand via **Archivo → Hacer copia de seguridad ahora...**.
+- Triggers: (1) auto on app startup once per 24h (silent on success, `QMessageBox` warning on failure); (2) on demand via **Archivo → Hacer copia de seguridad ahora**.
 - See `docs/modules/backup.md` for the full contract.
 
 ## 5. Trazabilidad
@@ -65,7 +65,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 **[COVERED — single-operator scope]**
 - `verifactu_timestamp` records the AEAT submission time per row. ✓
 - "Who" is the single operator running the shop; the machine identity is fixed (hardcoded DB path on one Windows account).
-- The `Acerca de Verifactu...` declaración responsable now states the **monoperador** scope explicitly and ties it to Art. 8.1: trazabilidad por usuario is satisfied implicitly by the single Windows session, and the declaration calls out that incorporating a second operator requires per-event identification first.
+- The `Acerca de Verifactu` declaración responsable now states the **monoperador** scope explicitly and ties it to Art. 8.1: trazabilidad por usuario is satisfied implicitly by the single Windows session, and the declaration calls out that incorporating a second operator requires per-event identification first.
 - If a second clerk is ever added, this requirement re-opens and the original full-fix plan (operator code prompt + new `operador TEXT` column stamped on each `ingresos` write) becomes the path forward.
 
 ## 6. Registro de eventos del sistema
@@ -94,7 +94,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 **[COVERED, pending the producer's signature data]** (rewritten for 12.0 after AEAT confirmed on 13-10-2026 that the producer signs it even for own use)
 - Content per art. 15 of Orden HAC/1177/2024, built by `ProducerDeclaration::html` (`src/verifactu/producerdeclaration.*`): the title "DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN", then items a) to l) in order, each preceded by its description - name La Ideal, code LI, the version (`PROJECT_VERSION`), components and description, only VERI\*FACTU = Sí, several obligados tributarios = No, signature types = not applicable, producer Germán Bravo López and NIF 75929840D (the same `AeatRecord::laIdealSystem` the records carry), his postal address, the compliance statement of 15.1.k, and the date and place of signature - plus an annex (15.2.d) with the single-operator scope that closes Req. 5 (art. 8.1).
 - Items j) and l) come from `ProducerDeclaration::currentSignature()`, filled in when the producer signs each version; until then they read "(pendiente)" and the window says the declaración is pending.
-- `MainWindow → Ayuda → Acerca de Verifactu...` shows it inside the program (15.3) and saves it as PDF for the client ("Guardar como PDF..."). With the IreneSolutions connection the window notes that their service is another producer's component with its own declaración (15.4).
+- `MainWindow → Ayuda → Acerca de Verifactu` shows it inside the program (15.3) and saves it as PDF for the client ("Guardar como PDF..."). With the IreneSolutions connection the window notes that their service is another producer's component with its own declaración (15.4).
 - Until 11.2 the dialog named the issuer (the shop) as producer and missed most items.
 
 ## 9. QR y texto obligatorio en el ticket

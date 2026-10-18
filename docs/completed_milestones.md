@@ -23,6 +23,9 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
     - **Ayuda:** updates, release notes, Log de depuración…, Acerca de Verifactu.
   - **Built in one place:** every menu is built in `buildUi()`. `actionConfiguracion` is created there and connected once the database is migrated.
   - **Shortcuts:** all kept, except Revertir contabilidad, which lost Alt+Shift+R and gained "…", so a closed quarter is never reopened by one key press. Anular and Rectificar got Alt+A / Alt+T. The three quick buttons stay.
+  - **"..." used one way everywhere** (Germán's follow-up): it marks an entry that opens a window to fill in or choose from before anything happens.
+    - Gained it: Recogida, Añadir nuevas prendas, the three Imprimir entries, Añadir factura de gastos, Generar contabilidad.
+    - Lost it: Hacer copia de seguridad ahora, Buscar actualizaciones, Notas de la versión, Log de depuración and Acerca de Verifactu, which act at once or only show something.
   - **Messages naming a menu path follow it:** "Ayuda → Log de depuración", and "Contabilidad → Añadir factura de gastos" in Listado. Three messages said "Ayuda → Mostrar log", an entry that never existed.
   - **Tests:** the e2e checks the whole layout and the shortcuts. The `tests/ui` scripts open the new menus.
   - **For the 12.0 release notes:** "The menu bar is organised by task: Tickets, Facturas and Contabilidad replace Herramientas; the backup is in Archivo and the log in Ayuda. 'Revertir contabilidad' no longer has a shortcut; 'Anular factura' and 'Rectificar factura' have Alt+A and Alt+T." / "La barra de menús se organiza por tareas: Tickets, Facturas y Contabilidad sustituyen a Herramientas; la copia de seguridad está en Archivo y el log en Ayuda. 'Revertir contabilidad' ya no tiene atajo de teclado; 'Anular factura' y 'Rectificar factura' tienen Alt+A y Alt+T."

@@ -1374,6 +1374,20 @@ private slots:
         QCOMPARE(action("actionAnular_factura_verifactu")->shortcut(), QKeySequence("Alt+A"));
         QCOMPARE(action("actionRectificar_factura_verifactu")->shortcut(), QKeySequence("Alt+T"));
         QCOMPARE(action("actionGenerar_contabilidad")->shortcut(), QKeySequence("Alt+G"));
+        // "..." only on an entry that opens a window to fill in or choose from first.
+        const QStringList withDots = { "actionConfiguracion", "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas",
+            "actionRecibo", "actionFactura", "actionFactura_completa", "actionAnular_factura_verifactu",
+            "actionRectificar_factura_verifactu", "actionExportar_registros_aeat", "actionFormulario_facturas",
+            "actionGenerar_contabilidad", "actionRevertir_contabilidad" };
+        int checked = 0;
+        for (QMenu *menu : mw.menuBar()->findChildren<QMenu *>())
+            for (QAction *a : menu->actions()) {
+                if (a->isSeparator() || a->menu())
+                    continue;
+                QVERIFY2(a->text().endsWith("...") == withDots.contains(a->objectName()), qPrintable(a->text()));
+                ++checked;
+            }
+        QVERIFY(checked >= 22);
     }
 
     // Recogida -> Anular prendas...: opens the void dialog on the selected garment's

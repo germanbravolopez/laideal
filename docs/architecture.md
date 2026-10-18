@@ -128,7 +128,7 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | `LinkDelegate` | `linkdelegate.h/.cpp` | `QStyledItemDelegate` that renders non-empty cells as blue underlined text; used for the `verifactu_url_qr` column in the Ingresos Listado |
 
 ### Updater (`src/updater/`)
-In-app updater. Two entry points: an unattended startup check (gated by `AppSettings::checkUpdatesOnStartup()`, default on) and a manual menu action (Ayuda → Buscar actualizaciones…). Both paths run through one `Updater` instance owned by `MainWindow`.
+In-app updater. Two entry points: an unattended startup check (gated by `AppSettings::checkUpdatesOnStartup()`, default on) and a manual menu action (Ayuda → Buscar actualizaciones). Both paths run through one `Updater` instance owned by `MainWindow`.
 
 | Class | File | Purpose |
 |-------|------|---------|
@@ -153,7 +153,7 @@ Closes Verifactu Req. 4 (Art. 8.2.c RD 1007/2023): durable archive of the live S
 
 Triggers wired in `MainWindow`:
 - **Auto**: `MainWindow` schedules the backup via `QTimer::singleShot(3000)` if `needsBackup()` returns true, then runs `performBackup()` on a `QThread::create` worker (it uses its own dedicated DB connections and touches no GUI, so `VACUUM INTO` + `integrity_check` don't block the event loop); the `Result` is marshalled back to the GUI thread with `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`. Silent on success (status-bar message); `QMessageBox::warning` on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
-- **Manual**: `Archivo → Hacer copia de seguridad ahora...` (`actionHacer_copia_de_seguridad`) runs `performBackup()` under `WaitCursor` and reports path + size in a `QMessageBox` so the operator can grab the file for offsite copy.
+- **Manual**: `Archivo → Hacer copia de seguridad ahora` (`actionHacer_copia_de_seguridad`) runs `performBackup()` under `WaitCursor` and reports path + size in a `QMessageBox` so the operator can grab the file for offsite copy.
 
 Filename convention `laideal_yyyy-MM-dd_HHmmss.sqlite` sorts lexicographically by time, which keeps the pruner trivial. Full module reference at `docs/modules/backup.md`.
 
@@ -163,7 +163,7 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 - Log format: `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] <message>`
 - Session separator written on each launch
 - Rotates to `.laideal.log.old` when the file exceeds 5 MB; thread-safe via `QMutex`
-- `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Ayuda → Log de depuración…) to show the customer the path with an "Abrir archivo" button that opens the log directly
+- `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Ayuda → Log de depuración) to show the customer the path with an "Abrir archivo" button that opens the log directly
 
 ### AppSettings (`src/appsettings/`)
 Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load.
