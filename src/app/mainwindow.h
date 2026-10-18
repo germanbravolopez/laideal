@@ -162,8 +162,7 @@ private:
         QLabel *lbl_payment_badge = nullptr;
         QTableWidget *table_ticket = nullptr;
         QPushButton *pb_add_row = nullptr, *pb_save = nullptr, *pb_reset = nullptr;
-        QMenu *menuArchivo = nullptr;
-        QAction *actionMostrar_log = nullptr;
+        QAction *actionConfiguracion = nullptr;   // connected once the database is migrated
     };
     void buildUi();
     int rowOfCellWidget(QObject *widget, int column) const;

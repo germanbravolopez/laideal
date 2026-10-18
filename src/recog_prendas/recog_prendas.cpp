@@ -699,7 +699,7 @@ void RecogPrendas::on_pb_add_clicked()
     const QString ticketNum = ui->le_nr_ticket->text();
     if (ticketNum.isEmpty())
         return;
-    // The same window as Herramientas -> Añadir nuevas prendas, on the selected ticket.
+    // The same window as Tickets -> Añadir nuevas prendas, on the selected ticket.
     // It deletes itself on close; window-modal over Recogida while it is open.
     auto *dlg = new AddGarment(db, this);
     dlg->invoicingBlocked = [this] {

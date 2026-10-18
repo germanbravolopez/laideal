@@ -1,6 +1,6 @@
 # Facturas (`src/facturas/`)
 
-Formal supplier invoice entry form (Herramientas → Formulario facturas). Distinct from customer receipts (`ingresos`). Writes to the `gastos` table.
+Formal supplier invoice entry form (Contabilidad → Añadir factura de gastos). Distinct from customer receipts (`ingresos`). Writes to the `gastos` table.
 
 A `QDialog` built in code with the shared [UiKit](uikit.md) style (no `.ui` file), `WA_DeleteOnClose`: explanation panel, a **Factura** group (Nº factura, Fecha, Empresa, Servicio, Descripción), an **Importe** group (Tipo de IVA, Importe total IVA incl., read-only Base imponible and Cuota de IVA), **Limpiar formulario** / **Guardar factura**, the result panel and Cerrar. Every outcome (saved, incomplete, unknown supplier, closed quarter, failed insert) is written in the result panel; there are no message boxes. Object names (`leFra`, `deFecha`, `cbEmpresa`, `cbServicio`, `leDescripcion`, `cbIva`, `leImporte`, `leBase`, `leIva`, `btnSave`, `btnReset`, `lblResult`) are used by the e2e bench.
 

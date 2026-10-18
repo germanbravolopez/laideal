@@ -179,7 +179,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/printing/ticketrenderer.cpp` (`copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
-| How to read customer bug logs | `~/.laideal.log` on customer machine; Archivo → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |
+| How to read customer bug logs | `~/.laideal.log` on customer machine; Ayuda → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
 | Development workflow, release procedure | Root `CONTRIBUTING.md` |
@@ -194,5 +194,5 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` + `src/updater/updaterdialog.h`; setting `updater.check_on_startup` in `~/.laideal_settings.json`; in-place install via `releases/laideal.iss` (`CloseApplications=yes`, `RestartApplications=yes`) |
-| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Herramientas → Hacer copia de seguridad ahora...) | `src/backup/backup_manager.h/.cpp`; settings `backup.directory` / `backup.enabled` / `backup.last_time`; auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
+| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Archivo → Hacer copia de seguridad ahora...) | `src/backup/backup_manager.h/.cpp`; settings `backup.directory` / `backup.enabled` / `backup.last_time`; auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
 | In-app version history (Ayuda → Notas de la versión) | `src/app/mainwindow.cpp` (`on_actionNotas_de_la_version_triggered`) reads the bundled `:/docs/releases_notes.txt` resource (declared in `resources/laideal.qrc`); the file is the same one Inno Setup's `InfoBeforeFile` shows at install time |

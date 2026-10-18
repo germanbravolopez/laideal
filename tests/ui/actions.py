@@ -50,7 +50,7 @@ def save_ticket(app, client: str, garments, paid: bool = False, timeout: float =
 # --- Recogida -------------------------------------------------------------------------------
 
 def open_recogida(app):
-    app.menu("Herramientas", "Recogida de prendas")
+    app.menu("Tickets", "Recogida de prendas")
     return app.window("RecogPrendas")
 
 
@@ -163,7 +163,7 @@ def search_ticket(dialog, ticket: str):
 def cancel_invoice(app, ticket: str, row: int = 0):
     """Anular factura Verifactu: searches the ticket and presses the Anular button of the
     invoice in `row`. Returns the dialog's result panel; the caller waits on the database."""
-    dialog = open_dialog(app, "Herramientas", "Anular factura Verifactu...", "Anular Factura")
+    dialog = open_dialog(app, "Facturas", "Anular factura Verifactu...", "Anular Factura")
     search_ticket(dialog, ticket)
     table = find(dialog, "table")
     columns = len(headers(table))
@@ -179,7 +179,7 @@ def cancel_invoice(app, ticket: str, row: int = 0):
 def rectify_invoice(app, ticket: str, substitution: bool, amount: str, date: str = None):
     """Rectificar factura Verifactu as R5 (a simplified invoice), by substitution or by
     differences. Returns the dialog's result panel; the caller waits on the database."""
-    dialog = open_dialog(app, "Herramientas", "Rectificar factura Verifactu...", "rectificativa")
+    dialog = open_dialog(app, "Facturas", "Rectificar factura Verifactu...", "rectificativa")
     search_ticket(dialog, ticket)
     combo = find(dialog, "cbInvoiceType")
     combo.click_input()
@@ -201,8 +201,8 @@ def rectify_invoice(app, ticket: str, substitution: bool, amount: str, date: str
 
 
 def export_aeat_records(app, date_from: str, date_to: str):
-    """Herramientas → Exportar registros AEAT (XML) for a range. Returns (result panel, file)."""
-    dialog = open_dialog(app, "Herramientas", "Exportar registros AEAT (XML)...", "Exportar")
+    """Facturas → Exportar registros AEAT (XML) for a range. Returns (result panel, file)."""
+    dialog = open_dialog(app, "Facturas", "Exportar registros AEAT (XML)...", "Exportar")
     set_date(dialog, "deFrom", date_from)
     set_date(dialog, "deTo", date_to)
     path = text(find(dialog, "leFile"))
@@ -215,8 +215,8 @@ def export_aeat_records(app, date_from: str, date_to: str):
 
 
 def print_dialog(app, kind: str):
-    """Herramientas → Imprimir → Recibo / Factura / Factura completa."""
-    find_text(app.main, "Herramientas", "MenuItem").click_input()
+    """Tickets → Imprimir → Recibo / Factura / Factura completa."""
+    find_text(app.main, "Tickets", "MenuItem").click_input()
     find_text(app.main, "Imprimir", "MenuItem").click_input()
     find_text(app.main, kind, "MenuItem").click_input()
     return wait_for(lambda: next((w for w in app.windows() if exists(w, "le_n_ticket")), None),
@@ -256,7 +256,7 @@ def select_combo(dialog, name: str, item: str):
 
 def accounts_dialog(app, revert: bool = False):
     title = "Revertir contabilidad" if revert else "Generar contabilidad"
-    return open_dialog(app, "Herramientas", title, title)
+    return open_dialog(app, "Contabilidad", title + ("..." if revert else ""), title)
 
 
 def accounts_period(dialog, kind: str, year: int, period: int = 0):
@@ -287,7 +287,7 @@ def accounts_run(app, dialog, button: str = "btnGenerate", timeout: float = 60.0
 
 
 def add_expense(app, number: str, date: str, supplier: str, amount: str):
-    dialog = open_dialog(app, "Herramientas", "Añadir factura de gastos", "facturas de gastos")
+    dialog = open_dialog(app, "Contabilidad", "Añadir factura de gastos", "facturas de gastos")
     type_into(dialog, "leFra", number)
     set_date(dialog, "deFecha", date)
     for name, value in (("cbEmpresa", supplier), ("cbServicio", "Suministros")):

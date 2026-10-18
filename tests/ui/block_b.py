@@ -99,7 +99,7 @@ def run(run):
         recogida.close()
 
     with run.step("B", "B6", "Añadir nuevas prendas refuses a ticket with a paid garment"):
-        add = open_dialog(run.app, "Herramientas", "Añadir nuevas prendas", "Añadir nuevas prendas")
+        add = open_dialog(run.app, "Tickets", "Añadir nuevas prendas", "Añadir nuevas prendas")
         type_into(add, "leNRecibo", "1")
         click(add, "btnSearch")
         wait_for(lambda: "ya tiene prendas pagadas" in text(find(add, "lblResult")), 10, "the refusal")
@@ -117,11 +117,11 @@ def run(run):
         run.check(garment[5] == today(), f"fecha_anulacion {garment[5]!r}, expected {today()}")
         run.check("anulad" in text(find(recogida, "lblResult")).lower(),
                   f"Recogida says {text(find(recogida, 'lblResult'))!r}")
-        find_text(run.app.main, "Herramientas", "MenuItem").click_input()
+        find_text(run.app.main, "Tickets", "MenuItem").click_input()
         time.sleep(0.5)
         items = [e.window_text() for e in run.app.main.descendants(control_type="MenuItem")]
         run.app.main.type_keys("{ESC}")
-        run.check("Anular prendas" not in items, "Herramientas still lists Anular prendas")
+        run.check("Anular prendas" not in items, "Tickets lists Anular prendas")
 
     with run.step("B", "B7", "Recogida and Listado de ingresos show Recepción, Pago, Recogida, Anulación together"):
         titles = visual_headers(find(recogida, "tableView"))
@@ -161,7 +161,7 @@ def run(run):
         sent_before = run.scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_estado='ENVIADA'")
         for item, title in (("Anular factura Verifactu...", "Anular Factura"),
                             ("Rectificar factura Verifactu...", "rectificativa")):
-            dialog = open_dialog(run.app, "Herramientas", item, title)
+            dialog = open_dialog(run.app, "Facturas", item, title)
             search_ticket(dialog, "4")
             if item.startswith("Anular"):
                 cells = [c.window_text() for c in table_cells(find(dialog, "table"))]

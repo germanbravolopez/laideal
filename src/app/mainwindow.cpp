@@ -202,9 +202,9 @@ void MainWindow::buildUi()
     actionCerrar->setObjectName("actionCerrar");
     actionCerrar->setToolTip(tr("Cerrar aplicación"));
     actionCerrar->setShortcut(QKeySequence("Alt+C"));
-    QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad"), this);
+    // No shortcut: reopening a closed quarter is never one key press away.
+    QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad..."), this);
     actionRevertir_contabilidad->setObjectName("actionRevertir_contabilidad");
-    actionRevertir_contabilidad->setShortcut(QKeySequence("Alt+Shift+R"));
     QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas"), this);
     actionAnadir_nuevas_prendas->setObjectName("actionAnadir_nuevas_prendas");
     actionAnadir_nuevas_prendas->setToolTip(tr("Añadir nuevas prendas a un ticket guardado"));
@@ -212,9 +212,11 @@ void MainWindow::buildUi()
     QAction *actionAnular_factura_verifactu = new QAction(tr("Anular factura Verifactu..."), this);
     actionAnular_factura_verifactu->setObjectName("actionAnular_factura_verifactu");
     actionAnular_factura_verifactu->setToolTip(tr("Anular una factura previamente enviada a la AEAT a través de Verifactu"));
+    actionAnular_factura_verifactu->setShortcut(QKeySequence("Alt+A"));
     QAction *actionRectificar_factura_verifactu = new QAction(tr("Rectificar factura Verifactu..."), this);
     actionRectificar_factura_verifactu->setObjectName("actionRectificar_factura_verifactu");
     actionRectificar_factura_verifactu->setToolTip(tr("Emitir una factura rectificativa (R1-R5) de una factura previamente enviada a la AEAT (Art. 8.2.a RD 1007/2023)"));
+    actionRectificar_factura_verifactu->setShortcut(QKeySequence("Alt+T"));
     QAction *actionExportar_registros_aeat = new QAction(tr("Exportar registros AEAT (XML)..."), this);
     actionExportar_registros_aeat->setObjectName("actionExportar_registros_aeat");
     actionExportar_registros_aeat->setToolTip(tr("Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)"));
@@ -235,36 +237,42 @@ void MainWindow::buildUi()
     actionNotas_de_la_version->setObjectName("actionNotas_de_la_version");
     actionNotas_de_la_version->setToolTip(tr("Muestra el historial de cambios de todas las versiones publicadas"));
 
-    // Menus
-    QMenu *menuArchivo = menuBar()->addMenu(tr("Archivo"));
-    menuArchivo->setObjectName("menuArchivo");
-    menuArchivo->setToolTipsVisible(true);
+    QAction *actionConfiguracion = new QAction(tr("Configuración..."), this);
+    actionConfiguracion->setObjectName("actionConfiguracion");
+    actionConfiguracion->setToolTip(tr("Datos del negocio, base de datos, impresora y conexión con la AEAT"));
+
+    // Menus, one per kind of work. The UI smoke test opens them by their visible text.
+    const auto addMenu = [this](const QString &title, const char *name) {
+        QMenu *menu = menuBar()->addMenu(title);
+        menu->setObjectName(name);
+        menu->setToolTipsVisible(true);
+        return menu;
+    };
+    QMenu *menuArchivo = addMenu(tr("Archivo"), "menuArchivo");
+    menuArchivo->addAction(actionConfiguracion);
+    menuArchivo->addAction(actionHacer_copia_de_seguridad);
+    menuArchivo->addSeparator();
     menuArchivo->addAction(actionCerrar);
-    QMenu *menuHerramientas = menuBar()->addMenu(tr("Herramientas"));
-    menuHerramientas->setObjectName("menuHerramientas");
-    menuHerramientas->setToolTipsVisible(true);
-    menuHerramientas->addAction(actionRecogida_de_prendas);
-    menuHerramientas->addAction(actionAnadir_nuevas_prendas);
-    QMenu *menuImprimir_ticket = menuHerramientas->addMenu(tr("Imprimir"));
+    QMenu *menuTickets = addMenu(tr("Tickets"), "menuTickets");
+    menuTickets->addAction(actionRecogida_de_prendas);
+    menuTickets->addAction(actionAnadir_nuevas_prendas);
+    QMenu *menuImprimir_ticket = menuTickets->addMenu(tr("Imprimir"));
     menuImprimir_ticket->setObjectName("menuImprimir_ticket");
     menuImprimir_ticket->setToolTipsVisible(true);
     menuImprimir_ticket->addAction(actionRecibo);
     menuImprimir_ticket->addAction(actionFactura);
     menuImprimir_ticket->addAction(actionFactura_completa);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionAnular_factura_verifactu);
-    menuHerramientas->addAction(actionRectificar_factura_verifactu);
-    menuHerramientas->addAction(actionExportar_registros_aeat);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionFormulario_facturas);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionGenerar_contabilidad);
-    menuHerramientas->addAction(actionRevertir_contabilidad);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionHacer_copia_de_seguridad);
-    QMenu *menuVisualizar = menuBar()->addMenu(tr("Ver"));
-    menuVisualizar->setObjectName("menuVisualizar");
-    menuVisualizar->setToolTipsVisible(true);
+    QMenu *menuFacturas = addMenu(tr("Facturas"), "menuFacturas");
+    menuFacturas->addAction(actionAnular_factura_verifactu);
+    menuFacturas->addAction(actionRectificar_factura_verifactu);
+    menuFacturas->addSeparator();
+    menuFacturas->addAction(actionExportar_registros_aeat);
+    QMenu *menuContabilidad = addMenu(tr("Contabilidad"), "menuContabilidad");
+    menuContabilidad->addAction(actionFormulario_facturas);
+    menuContabilidad->addSeparator();
+    menuContabilidad->addAction(actionGenerar_contabilidad);
+    menuContabilidad->addAction(actionRevertir_contabilidad);
+    QMenu *menuVisualizar = addMenu(tr("Ver"), "menuVisualizar");
     menuVisualizar->addAction(actionIngresos);
     menuVisualizar->addAction(actionGastos);
     menuVisualizar->addSeparator();
@@ -272,16 +280,14 @@ void MainWindow::buildUi()
     menuVisualizar->addAction(actionListado_de_clientes);
     menuVisualizar->addAction(actionListado_de_proveedores);
     menuVisualizar->addAction(actionListado_de_servicios);
-    QMenu *menuAyuda = menuBar()->addMenu(tr("Ayuda"));
-    menuAyuda->setObjectName("menuAyuda");
-    menuAyuda->setToolTipsVisible(true);
+    QMenu *menuAyuda = addMenu(tr("Ayuda"), "menuAyuda");
     menuAyuda->addAction(actionBuscar_actualizaciones);
     menuAyuda->addAction(actionNotas_de_la_version);
+    menuAyuda->addAction(actionMostrar_log);
     menuAyuda->addSeparator();
     menuAyuda->addAction(actionAcerca_de_Verifactu);
 
-    ui->menuArchivo = menuArchivo;
-    ui->actionMostrar_log = actionMostrar_log;
+    ui->actionConfiguracion = actionConfiguracion;
 
     QWidget *central = new QWidget(this);
     QVBoxLayout *layout = new QVBoxLayout(central);
@@ -418,9 +424,7 @@ void MainWindow::mainwindowInitialSettings()
 {
     migrateDatabase(db);
 
-    // Settings action - prepended to Archivo menu
-    QAction *actionConfig = new QAction(tr("Configuración..."), this);
-    connect(actionConfig, &QAction::triggered, this, [this]() {
+    connect(ui->actionConfiguracion, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
         QList<QPair<QString, QString>> certificates;
         for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
@@ -466,9 +470,6 @@ void MainWindow::mainwindowInitialSettings()
             initializeVerifactu();
         }
     });
-    ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);
-    ui->menuArchivo->insertAction(ui->menuArchivo->actions().at(1), ui->actionMostrar_log);
-    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(2));
 
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
@@ -1103,7 +1104,7 @@ void MainWindow::on_pb_save_clicked()
                 // Nothing is sent nor printed for a ticket that was not stored whole.
                 m_result->setText(UiKit::errorHtml(tr("No se pudo guardar el ticket %1 completo.").arg(ticketNum))
                                   + "<br>" + tr("No se ha guardado ninguna prenda ni se ha enviado a AEAT o impreso. "
-                                                "Revise el log (Archivo → Log de depuración) antes de repetirlo."));
+                                                "Revise el log (Ayuda → Log de depuración) antes de repetirlo."));
                 return;
             }
             if (isPaid) {

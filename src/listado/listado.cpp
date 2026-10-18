@@ -222,7 +222,7 @@ void Listado::populateTable()
             table_listado->setColumnHidden(INGRESOS_COL_EDIT_LOCK, true);
             // verifactu_csv is redundant with the clickable verifactu_url_qr link in this view.
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CSV, true);
-            // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
+            // Hide raw XML column - exported via Facturas > Exportar registros AEAT (XML), not viewed inline
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_XML, true);
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CANCEL_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
@@ -321,7 +321,7 @@ void Listado::on_actionAnadir_fila_triggered()
         insertNewItemToTable(db, {""}, "servicios");
         populateTable();
     } else if (tableName == "gastos") {
-        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Herramientas → Formulario facturas "
+        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Contabilidad → Añadir factura de gastos "
                                              "en la ventana principal."));
         return;
     } else {

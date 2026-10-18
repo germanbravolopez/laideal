@@ -163,7 +163,7 @@ void Facturas::onSaveClicked()
                                      m_cbIva->currentData().toString());
     if (!saveFactura()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo guardar la factura.")
-                             + "<br>Consulte el log (Ayuda → Mostrar log).");
+                             + "<br>Consulte el log (Ayuda → Log de depuración).");
         return;
     }
     resetAllContents();

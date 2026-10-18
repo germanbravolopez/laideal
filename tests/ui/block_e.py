@@ -77,9 +77,9 @@ def first_start_language(run) -> str:
 
 def run(run):
     run.fresh_start()
-    with run.step("E", "E1", "Herramientas → Hacer copia de seguridad ahora: a copy next to the database"):
+    with run.step("E", "E1", "Archivo → Hacer copia de seguridad ahora: a copy next to the database"):
         before = {p for p in run.out.rglob("*.db") if p != run.db}
-        run.app.menu("Herramientas", "Hacer copia de seguridad ahora...")
+        run.app.menu("Archivo", "Hacer copia de seguridad ahora...")
         result = find(run.app.main, "lblResult")
         wait_for(lambda: "Copia de seguridad creada" in text(result), 60, "the backup")
         copies = {p for p in run.out.rglob("*.db") if p != run.db} - before

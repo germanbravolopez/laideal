@@ -36,7 +36,7 @@ Run this after `ui-smoke.yml` is green on the release branch (`/release` step 1)
 
 | # | Area | Step | Expected |
 |---|------|------|----------|
-| M1 | Real schema | The first start on the copy | Starts; the log (Archivo → Log de depuración) has the `migrateDatabase` lines and no SQL error; the next ticket number is the last real one + 1 |
+| M1 | Real schema | The first start on the copy | Starts; the log (Ayuda → Log de depuración) has the `migrateDatabase` lines and no SQL error; the next ticket number is the last real one + 1 |
 | M2 | Real data | Recogida: search a recent ticket by number and a client by name; Contabilidad: the last closed quarter, without Bloquear | The ticket and its garments show as in the shop; the report's totals match the one filed for that quarter |
 | M3 | Printer | Printer connected, printing on: save an **unpaid** ticket; Imprimir → Recibo and Factura of a recent **paid** ticket | Recibo: both copies, cut, accents legible. Factura: header, lines, IVA, legal text and the QR, which a phone scans and opens on AEAT's page |
 | M4 | Look | The `ui-smoke` artifact: `steps/*.png` and the PDFs under `reports/` | Texts, buttons and groups legible and aligned, nothing cut off; the Contabilidad `_detalle` PDF and the listado PDF render |

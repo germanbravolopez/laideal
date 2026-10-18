@@ -12,6 +12,20 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Main window menu bar reorganised by kind of work** (tracker item, layout chosen by Germán 18-10-2026):
+  - **Why:** *Herramientas* mixed daily work, invoice corrections, accounting and maintenance. *Archivo* was built in two places, with Configuración and the log inserted by position (`actions().at(1)`), which was fragile.
+  - **The new layout:**
+    - **Archivo:** Configuración…, Hacer copia de seguridad ahora…, Cerrar.
+    - **Tickets:** Recogida, Añadir nuevas prendas, Imprimir ▸.
+    - **Facturas:** Anular, Rectificar, Exportar registros AEAT.
+    - **Contabilidad:** Añadir factura de gastos, Generar, Revertir contabilidad….
+    - **Ver:** unchanged.
+    - **Ayuda:** updates, release notes, Log de depuración…, Acerca de Verifactu.
+  - **Built in one place:** every menu is built in `buildUi()`. `actionConfiguracion` is created there and connected once the database is migrated.
+  - **Shortcuts:** all kept, except Revertir contabilidad, which lost Alt+Shift+R and gained "…", so a closed quarter is never reopened by one key press. Anular and Rectificar got Alt+A / Alt+T. The three quick buttons stay.
+  - **Messages naming a menu path follow it:** "Ayuda → Log de depuración", and "Contabilidad → Añadir factura de gastos" in Listado. Three messages said "Ayuda → Mostrar log", an entry that never existed.
+  - **Tests:** the e2e checks the whole layout and the shortcuts. The `tests/ui` scripts open the new menus.
+  - **For the 12.0 release notes:** "The menu bar is organised by task: Tickets, Facturas and Contabilidad replace Herramientas; the backup is in Archivo and the log in Ayuda. 'Revertir contabilidad' no longer has a shortcut; 'Anular factura' and 'Rectificar factura' have Alt+A and Alt+T." / "La barra de menús se organiza por tareas: Tickets, Facturas y Contabilidad sustituyen a Herramientas; la copia de seguridad está en Archivo y el log en Ayuda. 'Revertir contabilidad' ya no tiene atajo de teclado; 'Anular factura' y 'Rectificar factura' tienen Alt+A y Alt+T."
 - [x] **Dead-code sweep; the legacy Archivo utilities removed** (tracker item, Germán 18-10-2026):
   - **Limpiar base de datos** (Alt+L) is gone. It replaced the decimal comma in `gastos.importe`, `ingresos.importe` / `size` and the `prendas` prices, and `MainWindow::repopulatePrendas` also ran it silently after every Listado edit. Its `ingresos` branch rewrote `importe` on any row, sent invoices included, which is an edit path on invoice records.
   - **What replaces it:**

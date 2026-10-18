@@ -284,7 +284,7 @@ void AddGarment::onSaveClicked()
     const bool paid = m_chkPagado->isChecked();
     if (!saveGarment()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo añadir la prenda.")
-                             + "<br>Consulte el log (Ayuda → Mostrar log).");
+                             + "<br>Consulte el log (Ayuda → Log de depuración).");
         return;
     }
     resetAllContents();

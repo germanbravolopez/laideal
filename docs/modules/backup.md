@@ -58,7 +58,7 @@ The backup directory is **not** configurable separately — `BackupManager::back
 
 - Constructor: `m_backupManager = new BackupManager(this);` then `if (needsBackup()) QTimer::singleShot(3000, ...)` to defer the snapshot past the first paint.
 - Auto path: silent on success (8 s status-bar message), `QMessageBox::warning` on failure — a failed backup is the only signal the operator gets.
-- Manual path: `actionHacer_copia_de_seguridad` in the Herramientas menu calls `performBackup()` under `WaitCursor` and shows path + size in a `QMessageBox`.
+- Manual path: `actionHacer_copia_de_seguridad` in the Archivo menu calls `performBackup()` under `WaitCursor` and shows path + size in a `QMessageBox`.
 
 ## Why in-app instead of Windows Task Scheduler
 

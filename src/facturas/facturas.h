@@ -10,7 +10,7 @@ class QLineEdit;
 class QPushButton;
 namespace UiKit { class ResultPanel; }
 
-// Herramientas -> Formulario facturas: records one expense invoice (gastos) per
+// Contabilidad -> Añadir factura de gastos: records one expense invoice (gastos) per
 // save, IVA included; base and cuota are derived as the amount is typed. Built in
 // code with the shared UiKit style; every outcome is shown in the result panel.
 class Facturas : public QDialog

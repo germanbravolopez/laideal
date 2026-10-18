@@ -19,6 +19,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMenuBar>
+#include <QKeySequence>
 #include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
@@ -1314,8 +1316,8 @@ private slots:
 
     // Recogida -> Añadir prendas...: the Añadir nuevas prendas window opens on the
     // selected ticket; a garment added as paid is sent to AEAT as the ticket's first
-    // invoice; closing it refreshes Recogida, which reports the addition. Herramientas
-    // keeps the entry, now grouped by function.
+    // invoice; closing it refreshes Recogida, which reports the addition. The menu bar has
+    // one menu per kind of work (Tickets, Facturas, Contabilidad), each action in place.
     void test_recogida_addGarmentFromTheWindow()
     {
         QVERIFY(E2e::seedGarment(m_db, "920", "h920a", "10.00", today()));
@@ -1343,14 +1345,35 @@ private slots:
         QTRY_VERIFY(add.isNull());                                        // deletes itself on close
 
         MainWindow mw;
-        QMenu *tools = mw.findChild<QMenu *>("menuHerramientas");
-        QVERIFY(tools);
-        QStringList order;
-        for (QAction *a : tools->actions())
-            order << (a->isSeparator() ? QStringLiteral("|") : a->objectName().isEmpty() ? a->text() : a->objectName());
-        QCOMPARE(order.mid(0, 2), QStringList({ "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas" }));
-        QVERIFY(order.indexOf("actionAnular_factura_verifactu") < order.indexOf("actionFormulario_facturas"));
-        QVERIFY(order.indexOf("actionFormulario_facturas") < order.indexOf("actionGenerar_contabilidad"));
+        const auto entries = [&mw](const char *menuName) {
+            QStringList out;
+            if (QMenu *menu = mw.findChild<QMenu *>(menuName))
+                for (QAction *a : menu->actions())
+                    out << (a->isSeparator() ? QStringLiteral("|") : a->menu() ? a->menu()->objectName() : a->objectName());
+            return out;
+        };
+        QStringList bar;
+        for (QAction *a : mw.menuBar()->actions())
+            bar << a->text();
+        QCOMPARE(bar, QStringList({ "Archivo", "Tickets", "Facturas", "Contabilidad", "Ver", "Ayuda" }));
+        QCOMPARE(entries("menuArchivo"),
+                 QStringList({ "actionConfiguracion", "actionHacer_copia_de_seguridad", "|", "actionCerrar" }));
+        QCOMPARE(entries("menuTickets"),
+                 QStringList({ "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas", "menuImprimir_ticket" }));
+        QCOMPARE(entries("menuFacturas"), QStringList({ "actionAnular_factura_verifactu",
+                 "actionRectificar_factura_verifactu", "|", "actionExportar_registros_aeat" }));
+        QCOMPARE(entries("menuContabilidad"), QStringList({ "actionFormulario_facturas", "|",
+                 "actionGenerar_contabilidad", "actionRevertir_contabilidad" }));
+        QCOMPARE(entries("menuAyuda"), QStringList({ "actionBuscar_actualizaciones", "actionNotas_de_la_version",
+                 "actionMostrar_log", "|", "actionAcerca_de_Verifactu" }));
+        QVERIFY(!mw.findChild<QMenu *>("menuHerramientas"));
+        // Reopening a closed quarter is never one key press away; the Verifactu corrections have their own.
+        const auto action = [&mw](const char *name) { return mw.findChild<QAction *>(name); };
+        QVERIFY(action("actionRevertir_contabilidad")->shortcut().isEmpty());
+        QCOMPARE(action("actionRevertir_contabilidad")->text(), QStringLiteral("Revertir contabilidad..."));
+        QCOMPARE(action("actionAnular_factura_verifactu")->shortcut(), QKeySequence("Alt+A"));
+        QCOMPARE(action("actionRectificar_factura_verifactu")->shortcut(), QKeySequence("Alt+T"));
+        QCOMPARE(action("actionGenerar_contabilidad")->shortcut(), QKeySequence("Alt+G"));
     }
 
     // Recogida -> Anular prendas...: opens the void dialog on the selected garment's
@@ -2373,7 +2396,7 @@ private slots:
                                            "IDFactura:1600-1" }));
     }
 
-    // Herramientas -> Exportar registros AEAT, as the operator uses it: the file name
+    // Facturas -> Exportar registros AEAT, as the operator uses it: the file name
     // follows the dates, a reversed range is refused, the export is reported in the
     // window with the record count and a link to the file. No pop-ups.
     void test_aeatExportDialog_exportsAndReportsInWindow()
@@ -2742,7 +2765,7 @@ private slots:
         QVERIFY(!gastos->findChild<QPushButton *>("btnAdd")->isVisibleTo(gastos));
         QVERIFY(gastos->findChild<QPushButton *>("btnPdf")->isVisibleTo(gastos));
         gastos->actionAnadir_fila->trigger();                               // the menu entry still works
-        QVERIFY2(result(gastos).contains("Formulario facturas"), qPrintable(result(gastos)));
+        QVERIFY2(result(gastos).contains("Contabilidad → Añadir factura de gastos"), qPrintable(result(gastos)));
         emit gastos->table_listado->doubleClick(gastos->table_listado->model()->index(0, 1));
         QTRY_VERIFY2(result(gastos).contains("Edición bloqueada"), qPrintable(result(gastos)));
         // The locked row can be neither edited in place nor deleted.
