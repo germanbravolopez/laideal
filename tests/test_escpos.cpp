@@ -146,7 +146,7 @@ private slots:
         QVERIFY(out.contains("123"));
         QVERIFY(out.contains("Camisa"));
         QVERIFY(out.contains("TOTAL (IVA incl.):"));
-        QVERIFY(out.contains("7.50"));
+        QVERIFY(out.contains("7,50"));
         QVERIFY(out.contains("(Copia para el cliente)"));
         QVERIFY(out.endsWith(CUT_BYTES));
     }
@@ -190,9 +190,9 @@ private slots:
         const QByteArray out = TicketRenderer::render(d, 576);
         QVERIFY(out.contains("FACTURA SIMPLIFICADA"));
         QVERIFY(out.contains("Base Imponible:"));
-        QVERIFY(out.contains("100.00"));        // 121 / 1.21
+        QVERIFY(out.contains("100,00"));        // 121 / 1.21
         QVERIFY(out.contains("IVA (21%):"));
-        QVERIFY(out.contains("21.00"));         // 121 - 100
+        QVERIFY(out.contains("21,00"));         // 121 - 100
         QVERIFY(out.contains("TOTAL:"));
         // No recibo copy marker on a factura.
         QVERIFY(!out.contains("Copia para el cliente"));

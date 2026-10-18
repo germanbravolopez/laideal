@@ -118,7 +118,7 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
         new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
-        new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
+        new QTableWidgetItem(displayMoney(e.importe) + " €"));
 
     auto *cell = new QWidget(m_table);
     auto *h = new QHBoxLayout(cell);

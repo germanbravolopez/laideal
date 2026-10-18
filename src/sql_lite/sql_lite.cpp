@@ -709,7 +709,7 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET size = :sz, importe = :imp "
               "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
-    q.bindValue(":sz",  size);
+    q.bindValue(":sz",  QString(size).trimmed().replace(',', '.'));
     q.bindValue(":imp", moneyText(importe));
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
@@ -1455,6 +1455,21 @@ QString moneyText(double value)
 QString moneyText(const QString &value)
 {
     return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
+}
+
+QString displayMoney(double value)
+{
+    return moneyText(value).replace(QLatin1Char('.'), QLatin1Char(','));
+}
+
+QString displayMoney(const QString &stored)
+{
+    return displayMoney(moneyText(stored).toDouble());
+}
+
+QString displayDecimal(const QString &stored)
+{
+    return QString(stored).replace(QLatin1Char('.'), QLatin1Char(','));
 }
 
 bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table)

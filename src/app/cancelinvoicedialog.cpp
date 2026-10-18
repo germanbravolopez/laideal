@@ -154,7 +154,7 @@ void CancelInvoiceDialog::rebuildTable()
         m_table->setItem(row, COL_DATE, new QTableWidgetItem(
             e.invoiceDate.isValid() ? e.invoiceDate.toString("dd-MM-yyyy") : QStringLiteral("-")));
         m_table->setItem(row, COL_IMPORTE,
-            new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
+            new QTableWidgetItem(displayMoney(e.importe) + " €"));
         m_table->setItem(row, COL_ESTADO,
             new QTableWidgetItem(verifactuEstadoToString(verifactuEstadoFromString(e.estado))));
         m_table->setItem(row, COL_CSV,

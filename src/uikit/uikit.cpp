@@ -180,6 +180,24 @@ QString fileLinkHtml(const QString &file, const QString &label)
            + QFileInfo(file).fileName().toHtmlEscaped() + "</a>";
 }
 
+AmountSpinBox::AmountSpinBox(QWidget *parent)
+    : QDoubleSpinBox(parent)
+{
+    setLocale(QLocale(QLocale::Spanish, QLocale::Spain));
+    setGroupSeparatorShown(false);
+}
+
+QValidator::State AmountSpinBox::validate(QString &input, int &pos) const
+{
+    input.replace(QLatin1Char('.'), QLatin1Char(','));
+    return QDoubleSpinBox::validate(input, pos);
+}
+
+double AmountSpinBox::valueFromText(const QString &text) const
+{
+    return QDoubleSpinBox::valueFromText(QString(text).replace(QLatin1Char('.'), QLatin1Char(',')));
+}
+
 ResultPanel::ResultPanel(const QString &initialText, QWidget *parent)
     : QLabel(parent)
 {

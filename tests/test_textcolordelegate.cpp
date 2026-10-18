@@ -88,6 +88,23 @@ private slots:
         delegate.setModelData(&editor, &model, model.index(0, 0));
         QCOMPARE(model.index(0, 0).data().toString(), QStringLiteral("3.75"));
     }
+
+    // Amounts and sizes are shown with the comma whatever the language; an empty cell
+    // stays empty and the editor opens on the comma form.
+    void test_decimalDelegates_showTheComma()
+    {
+        const QLocale english(QLocale::English, QLocale::UnitedStates);
+        NumberFormatDelegate amount;
+        QCOMPARE(amount.displayText(QStringLiteral("12.5"), english), QStringLiteral("12,50"));
+        QCOMPARE(amount.displayText(QString(), english), QString());
+        DecimalCommaDelegate size;
+        QCOMPARE(size.displayText(QStringLiteral("2.6"), english), QStringLiteral("2,6"));
+        QStandardItemModel model(1, 1);
+        model.setData(model.index(0, 0), QStringLiteral("4.5"));
+        QLineEdit editor;
+        amount.setEditorData(&editor, model.index(0, 0));
+        QCOMPARE(editor.text(), QStringLiteral("4,5"));
+    }
 };
 
 QTEST_MAIN(TestTextColorDelegate)

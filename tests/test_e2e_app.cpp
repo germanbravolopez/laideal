@@ -1175,7 +1175,7 @@ private slots:
 
         mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Pantalla");
         enterGarment(mw, "Camisa", "2");
-        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("7.00"));
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("7,00"));
         clickSave(mw);
 
         QCOMPARE(scalar(QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE n_recibo='%1'").arg(first)),
@@ -1232,12 +1232,12 @@ private slots:
         // Garment on row 1 without touching the current cell (a combo does not move it).
         qobject_cast<QComboBox *>(table->cellWidget(1, 1))->setCurrentText("Camisa");
         QCOMPARE(table->item(1, 0)->text(), QStringLiteral("1"));
-        QCOMPARE(table->item(1, 5)->text(), QStringLiteral("3.50"));
+        QCOMPARE(table->item(1, 5)->text(), QStringLiteral("3,50"));
         QVERIFY(!table->item(0, 5) || table->item(0, 5)->text().isEmpty());   // row 0 untouched
-        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3.50"));
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3,50"));
         // A hand-typed price is kept and counted, with a decimal comma.
         table->item(1, 5)->setText("3,00");
-        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3.00"));
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), QStringLiteral("3,00"));
 
         // An m2 garment alone, not measured yet: saved with 0.
         mw.findChild<QPushButton *>("pb_reset")->click();
@@ -2544,7 +2544,7 @@ private slots:
 
         QCOMPARE(scalar("SELECT size || '|' || importe FROM ingresos WHERE hash='h2700a'"),
                  QStringLiteral("2.99|28.41"));
-        QCOMPARE(rp.findChild<QLineEdit *>("le_price")->text(), QStringLiteral("28.41"));
+        QCOMPARE(rp.findChild<QLineEdit *>("le_price")->text(), QStringLiteral("28,41"));
         E2e::exec(m_db, "DELETE FROM prendas WHERE nombre = 'Jarapa (m2)'");
     }
 
@@ -2689,8 +2689,8 @@ private slots:
         };
 
         fill("Proveedor E2E", QDate::currentDate());
-        QCOMPARE(form->findChild<QLineEdit *>("leBase")->text(), QStringLiteral("100.00"));
-        QCOMPARE(form->findChild<QLineEdit *>("leIva")->text(), QStringLiteral("21.00"));
+        QCOMPARE(form->findChild<QLineEdit *>("leBase")->text(), QStringLiteral("100,00"));
+        QCOMPARE(form->findChild<QLineEdit *>("leIva")->text(), QStringLiteral("21,00"));
         form->findChild<QPushButton *>("btnSave")->click();
         QVERIFY2(result().contains("Factura F-77 de Proveedor E2E guardada"), qPrintable(result()));
         QCOMPARE(scalar("SELECT importe || '|' || iva FROM gastos WHERE n_factura = 'F-77'"),

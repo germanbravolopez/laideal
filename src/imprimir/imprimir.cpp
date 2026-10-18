@@ -317,10 +317,10 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         const QString size = QString::number(
             sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_SIZE)).toFloat(), 'f', 2);
         if (size != "" && size != "0.00")
-            garmentName.append(" - " + size);
+            garmentName.append(" - " + displayDecimal(size));
         g.name = garmentName;
         const double importe = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toDouble();
-        g.amount = QString::number(importe, 'f', 2);
+        g.amount = displayMoney(importe);
         d.garments.append(g);
         total += importe;
     }

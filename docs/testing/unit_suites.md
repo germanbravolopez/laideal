@@ -25,7 +25,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_genlistado` | `listado` | guiless | Listado helpers |
 | `test_backup_manager` | `backup` | guiless | Backup retention |
 | `test_reporthtml` | `reporthtml` | guiless | Report HTML scaffolding |
-| `test_uikit` | `uikit` | offscreen | Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
+| `test_uikit` | `uikit` | offscreen | `AmountSpinBox` (shows "12,50", takes "7.25" and "7,25"); Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
 | `test_versioncompare` | `updater` | guiless | Version comparison |
 
 ---
@@ -80,7 +80,7 @@ Links `contabilidad` (and `reporthtml` for amount formatting). All pure statics,
 ## Grids — `test_mysortfilterproxymodel`, `test_textcolordelegate`
 
 - **`test_mysortfilterproxymodel`**: `removeDiacritics`, accent-insensitive `filterAcceptsRow`, and the `lessThan` comparators (chronological dates, numeric importe, locale-string fallback).
-- **`test_textcolordelegate`** (offscreen): `TextColorDelegate::classify` (Anulado or `ANULADA` green, SI / Recogido green, NO / En tienda red), `placeIngresosDateColumns` on a real `QTableView` header (Anulación right after the other three dates, idempotent), and `NumberFormatDelegate` storing an edit with a dot (`storedNumber`, `setModelData`).
+- **`test_textcolordelegate`** (offscreen): `TextColorDelegate::classify` (Anulado or `ANULADA` green, SI / Recogido green, NO / En tienda red), `placeIngresosDateColumns` on a real `QTableView` header (Anulación right after the other three dates, idempotent), `NumberFormatDelegate` storing an edit with a dot (`storedNumber`, `setModelData`), and both decimal delegates showing the comma under an English locale (an empty amount stays empty, the editor opens on "4,5").
 
 ---
 

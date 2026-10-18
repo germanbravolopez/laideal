@@ -143,7 +143,8 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
         m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
         m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
-        auto *imp = new QTableWidgetItem(moneyText(q.value(6).toString()));
+        auto *imp = new QTableWidgetItem(displayMoney(q.value(6).toString()));
+        imp->setData(Qt::UserRole, moneyText(q.value(6).toString()).toDouble());   // the shown text has a comma
         imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_table->setItem(r, COL_AMOUNT,  imp);
         m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
@@ -176,12 +177,12 @@ void PayDialog::recomputeTotal()
     for (int r = 0; r < m_table->rowCount(); ++r) {
         auto *chk = m_table->item(r, COL_CHECK);
         if (chk && chk->checkState() == Qt::Checked) {
-            total += m_table->item(r, COL_AMOUNT)->text().toDouble();
+            total += m_table->item(r, COL_AMOUNT)->data(Qt::UserRole).toDouble();
             ++selected;
         }
     }
     m_lblTotal->setText(tr("Total seleccionado (%1 prendas): %2 €")
-                        .arg(selected).arg(total, 0, 'f', 2));
+                        .arg(selected).arg(displayMoney(total)));
     m_btnCobrar->setEnabled(selected > 0);
 }
 
@@ -210,7 +211,7 @@ void PayDialog::onCobrarClicked()
             }
             hashes << m_table->item(r, COL_HASH)->text();
             amounts.insert(m_table->item(r, COL_HASH)->text(), m_table->item(r, COL_AMOUNT)->text());
-            total += m_table->item(r, COL_AMOUNT)->text().toDouble();
+            total += m_table->item(r, COL_AMOUNT)->data(Qt::UserRole).toDouble();
         }
     }
     if (hashes.isEmpty()) {

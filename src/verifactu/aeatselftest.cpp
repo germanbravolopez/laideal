@@ -87,7 +87,7 @@ void AeatSelfTest::query()
                      .arg(m_invoiceNumber, remote.found ? remote.statusResponse : tr("no encontrado")));
             return;
         }
-        emit progress(true, tr("Consulta: la AEAT tiene %1 por %2 €.").arg(m_invoiceNumber, QString::number(remote.totalAmount, 'f', 2)));
+        emit progress(true, tr("Consulta: la AEAT tiene %1 por %2 €.").arg(m_invoiceNumber, QString::number(remote.totalAmount, 'f', 2).replace('.', ',')));
         cancel();
     });
     m_pendingRequest = m_backend->queryInvoiceAsync(m_invoiceNumber);

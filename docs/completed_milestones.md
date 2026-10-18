@@ -12,6 +12,20 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-11.2 development — October 2026
+- [x] **Decimals shown with the comma in every window and on the printed tickets, whatever the language** (Germán 18-10-2026):
+  - **Before:** three formats were in use. Reports, Listado and some messages were always Spanish. The Recogida importe column followed the Windows locale. The ticket table, the Recogida / Añadir prendas fields, the Cobrar, Anular, Envíos pendientes and Rectificar windows and the printed recibo and factura used the stored dot. `app.language` changes none of it.
+  - **The helpers:** every display now goes through `displayMoney()` / `displayDecimal()` (`sql_lite`, next to the storage format `moneyText`). They give two decimals with the comma and no thousands separator, so "1.234" is never ambiguous in a field. The reports keep `formatEuro` ("1.234,56 €").
+  - **Tables:** `NumberFormatDelegate` no longer reads the view's locale, and an empty cell stays empty. The new `DecimalCommaDelegate` shows the size columns of Recogida and Listado de ingresos.
+  - **Printed ticket:** `TicketRenderer` prints the comma and computes base / IVA from numbers, not from the printed text.
+  - **Rectificar factura amount:** a `UiKit::AmountSpinBox`, which shows the comma and takes "," or "." as the decimal key, so the numeric keypad works either way.
+  - **Reading values back:**
+    - PayDialog keeps each amount as data instead of parsing its text.
+    - The size writer stores a comma-typed size with the dot.
+    - Recogida no longer rewrites a typed comma in the size field to a dot.
+  - **Unchanged:** the database, the maths and the AEAT XML keep the dot.
+  - **Coding guidelines:** new rule in `/coding-guidelines`.
+  - **Tests:** `test_sql_lite` `test_displayMoney_andDisplayDecimal`, `test_uikit` `test_amountSpinBox_commaShownEitherKeyTyped`, `test_textcolordelegate` `test_decimalDelegates_showTheComma`. The e2e, escpos and ticket-preview expectations now read "7,00" / "100,00" / "42,20".
+  - **For the 12.0 release notes:** "Amounts are shown with a decimal comma everywhere, also on printed receipts and invoices." / "Los importes se muestran con coma decimal en todas las ventanas y también en los recibos y facturas impresos."
 - [x] **Main window menu bar reorganised by kind of work** (tracker item, layout chosen by Germán 18-10-2026):
   - **Why:** *Herramientas* mixed daily work, invoice corrections, accounting and maintenance. *Archivo* was built in two places, with Configuración and the log inserted by position (`actions().at(1)`), which was fragile.
   - **The new layout:**

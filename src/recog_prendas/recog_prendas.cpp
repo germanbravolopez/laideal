@@ -425,8 +425,8 @@ void RecogPrendas::updateRowClickedToFields()
     // findText returns -1 for a legacy service not in the list -> blank rather than a wrong value.
     ui->cb_servic->setCurrentIndex(ui->cb_servic->findText(
         sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString()));
-    ui->le_size->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString());
-    ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString());
+    ui->le_size->setText(displayDecimal(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString()));
+    ui->le_price->setText(displayMoney(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString()));
     ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_OBSERVACIONES)).toString());
     const QString rowEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString();
     // A locally voided garment (estado "Anulado") is read-only everywhere except
@@ -484,10 +484,6 @@ void RecogPrendas::updateRowClickedToFields()
 
 double RecogPrendas::calculatePrice()
 {
-    if (ui->le_size->text().contains(",")) {
-        QStringList sizeSplitted = ui->le_size->text().split(",");
-        ui->le_size->setText(sizeSplitted.first() + "." + sizeSplitted.last());
-    }
     return garmentImporte(ui->le_qty->text(), ui->le_size->text(),
                           readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
 }
@@ -640,6 +636,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ,         true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_ID,          true);
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->resizeColumnsToContents();
@@ -656,7 +653,7 @@ void RecogPrendas::on_pb_search_clicked()
                 if (!garmentExcludedFromTotals(vEstado))
                     totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toFloat();
             }
-            ui->lbl_total->setText(tr("Importe total: %1 €").arg(moneyText(totalPrice).replace('.', ',')));
+            ui->lbl_total->setText(tr("Importe total: %1 €").arg(displayMoney(totalPrice)));
         }
         else
             ui->lbl_total->setText(tr("Importe total: -"));
@@ -781,7 +778,7 @@ void RecogPrendas::on_le_size_editingFinished()
             && !garmentUnmeasured(ui->le_garm->text(), ui->le_size->text())) {
         const double price = calculatePrice();
         if (price > 0) {
-            ui->le_price->setText(moneyText(price));
+            ui->le_price->setText(displayMoney(price));
             updateDb(SIZE_AND_PRICE);
         }
     }
@@ -1142,8 +1139,8 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    const QString localAmount = QString::number(ev.importe, 'f', 2);
-    const QString remoteAmount = rec.totalAmount > 0 ? QString::number(rec.totalAmount, 'f', 2)
+    const QString localAmount = displayMoney(ev.importe);
+    const QString remoteAmount = rec.totalAmount > 0 ? displayMoney(rec.totalAmount)
                                                      : QString("-");
     const QStringList fields = { tr("Nº factura"), tr("Fecha"), tr("Importe"), tr("CSV") };
     const QStringList remote = { rec.invoiceId, rec.invoiceDate, remoteAmount, rec.csv };

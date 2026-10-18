@@ -107,7 +107,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     QHBoxLayout *rowAmount = new QHBoxLayout();
     m_lblAmount = new QLabel(); // text set by onRectificationModeChanged()
     rowAmount->addWidget(m_lblAmount);
-    m_sbAmount = new QDoubleSpinBox();
+    m_sbAmount = new UiKit::AmountSpinBox();
     m_sbAmount->setObjectName("sbAmount");
     m_sbAmount->setDecimals(2);
     m_sbAmount->setRange(-100000.00, 100000.00); // negative deltas allowed in I mode
@@ -227,7 +227,7 @@ void RectifyInvoiceDialog::onSearchClicked()
                 "<b>CSV Verifactu:</b> %4<br>"
                 "<b>Estado:</b> %5")
         .arg(cliente, fecha,
-             QString::number(importe, 'f', 2),
+             displayMoney(importe),
              csv.isEmpty() ? "-" : csv,
              verifactuEstadoToString(verifactuEstadoFromString(estado))));
 
@@ -418,7 +418,7 @@ bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double a
     if (qAbs(oldAmount - amountWithIva) > 0.005 || oldSubstitution != isSubstitution) {
         m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa rechazada %1 es de un trimestre cerrado: solo "
                                                  "puede reenviarse como se registró (%2, %3).")
-                                                  .arg(refused.toHtmlEscaped(), moneyText(oldAmount),
+                                                  .arg(refused.toHtmlEscaped(), displayMoney(oldAmount),
                                                        oldSubstitution ? tr("por sustitución") : tr("por diferencias"))));
         return false;
     }

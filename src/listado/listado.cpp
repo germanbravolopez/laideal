@@ -211,6 +211,7 @@ void Listado::populateTable()
         }
         if (tableName == "ingresos") {
             table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+            table_listado->setItemDelegateForColumn(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
             table_listado->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
             table_listado->setItemDelegateForColumn(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));

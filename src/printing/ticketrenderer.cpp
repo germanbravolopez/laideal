@@ -4,7 +4,8 @@
 #include <QPainter>
 
 namespace {
-QString money(double v) { return QString::number(v, 'f', 2); }
+// Printed with the decimal comma whatever the language; this library has no sql_lite.
+QString money(double v) { return QString::number(v, 'f', 2).replace(QLatin1Char('.'), QLatin1Char(',')); }
 } // namespace
 
 QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
@@ -51,11 +52,10 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     } else {
         // Reproduce the legacy rounding: IVA is derived from the rounded base
         // string, not the raw base, so the printed base + IVA add back to total.
-        const double base = d.total / (1.0 + d.ivaRate / 100.0);
-        const QString baseStr = money(base);
-        b.leftRight(QStringLiteral("Base Imponible:"), baseStr);
+        const double base = QString::number(d.total / (1.0 + d.ivaRate / 100.0), 'f', 2).toDouble();
+        b.leftRight(QStringLiteral("Base Imponible:"), money(base));
         b.leftRight(QStringLiteral("IVA (%1%):").arg(d.ivaRate, 0, 'f', 0),
-                    money(d.total - baseStr.toDouble()));
+                    money(d.total - base));
         b.leftRight(QStringLiteral("TOTAL:"), money(d.total));
     }
     b.bold(false);

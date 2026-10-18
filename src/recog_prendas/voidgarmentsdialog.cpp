@@ -153,7 +153,7 @@ void VoidGarmentsDialog::rebuildTable()
 
         m_table->setItem(row, COL_PRENDA,  new QTableWidgetItem(g.prenda));
         m_table->setItem(row, COL_CANT,    new QTableWidgetItem(g.cantidad));
-        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(g.importe + " €"));
+        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(displayMoney(g.importe) + " €"));
         // Reason a row is not selectable: already voided, or paid/sent to AEAT
         // (must go through "Anular Factura Verifactu").
         QString estadoText = g.estado;

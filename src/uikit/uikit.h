@@ -7,6 +7,7 @@
 // secondary buttons and the closing row. A dialog is built in code from these
 // pieces, so a change of style is made here once.
 
+#include <QDoubleSpinBox>
 #include <QLabel>
 #include <QString>
 #include <QStringList>
@@ -69,6 +70,16 @@ class ResultPanel : public QLabel
 public:
     explicit ResultPanel(const QString &initialText = QString(), QWidget *parent = nullptr);
     void showInfo(const QString &plainText);   // neutral text, newlines kept
+};
+
+// Amount field: shows the decimal comma whatever the language, and takes "," or "."
+// as the decimal key (the numeric keypad sends either, depending on Windows).
+class AmountSpinBox : public QDoubleSpinBox
+{
+public:
+    explicit AmountSpinBox(QWidget *parent = nullptr);
+    QValidator::State validate(QString &input, int &pos) const override;
+    double valueFromText(const QString &text) const override;
 };
 
 } // namespace UiKit

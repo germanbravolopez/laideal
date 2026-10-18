@@ -159,7 +159,7 @@ void Facturas::onSaveClicked()
     const QString summary = QString("Factura %1 de %2 guardada (%3 €, IVA %4 %).")
                                 .arg(m_leFra->text().trimmed().toHtmlEscaped(),
                                      m_cbEmpresa->currentText().toHtmlEscaped(),
-                                     moneyText(m_leImporte->text()).replace('.', ','),
+                                     displayMoney(m_leImporte->text()),
                                      m_cbIva->currentData().toString());
     if (!saveFactura()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo guardar la factura.")
@@ -218,6 +218,6 @@ void Facturas::updateTaxSplit()
         return;
     }
     const double iva = m_cbIva->currentData().toDouble();
-    m_leBase->setText(QString::number(taxBaseFromGross(gross, iva), 'f', 2));
-    m_leIva->setText(QString::number(taxAmountFromGross(gross, iva), 'f', 2));
+    m_leBase->setText(displayMoney(taxBaseFromGross(gross, iva)));
+    m_leIva->setText(displayMoney(taxAmountFromGross(gross, iva)));
 }

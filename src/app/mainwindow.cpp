@@ -736,7 +736,7 @@ void MainWindow::setGarmentPrice(int garmentRow, QString garmentText, QString se
     // An m2 garment is priced by its size; until it is measured it is 0, not one m2.
     const double importe = garmentUnmeasured(garmentText, size) ? 0.0
         : garmentImporte(qntyItem->text(), size, readGarmentPrice(db, garmentText, serviceText));
-    auto *amount = new QTableWidgetItem(QString::number(importe, 'f', 2));
+    auto *amount = new QTableWidgetItem(displayMoney(importe));
     amount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, amount);
 }
@@ -1169,7 +1169,7 @@ void MainWindow::on_pb_save_clicked()
             resetAllContents();
             m_result->setText(UiKit::okHtml(tr("Ticket %1 guardado: %2, %3 prenda(s), %4 €, %5.")
                                                 .arg(ticketNum, client.toHtmlEscaped()).arg(garments)
-                                                .arg(moneyText(totalAmount).replace('.', ','),
+                                                .arg(displayMoney(totalAmount),
                                                      isPaid ? tr("pagado") : tr("sin cobrar")))
                               + "<br>" + (printedWhat.isEmpty()
                                               ? tr("No se ha impreso (impresión desactivada o impresora sin respuesta).")
@@ -1207,12 +1207,12 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
             QTableWidgetItem *priceItem = ui->table_ticket->item(rowCnt, column);
             if (priceItem && !priceItem->text().isEmpty()) {
                 const double priceValue = priceItem->text().replace(',', '.').toDouble();
-                priceItem->setText(moneyText(priceValue));
+                priceItem->setText(displayMoney(priceValue));
                 priceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 totalPrice += roundToCents(priceValue);
             }
         }
-        ui->le_cost_total->setText(moneyText(totalPrice));
+        ui->le_cost_total->setText(displayMoney(totalPrice));
     }
 }
 

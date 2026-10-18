@@ -55,6 +55,24 @@ private:
     }
 
 private slots:
+    // The amount field shows the decimal comma whatever the language and takes "," or
+    // "." as the decimal key, so the numeric keypad works either way.
+    void test_amountSpinBox_commaShownEitherKeyTyped()
+    {
+        UiKit::AmountSpinBox box;
+        box.setDecimals(2);
+        box.setRange(-1000, 1000);
+        box.setValue(12.5);
+        QCOMPARE(box.text(), QStringLiteral("12,50"));
+        for (const QString &typed : { QStringLiteral("7.25"), QStringLiteral("7,25") }) {
+            box.selectAll();
+            QTest::keyClicks(&box, typed);
+            box.interpretText();
+            QCOMPARE(box.value(), 7.25);
+        }
+        QCOMPARE(box.text(), QStringLiteral("7,25"));
+    }
+
     // Enter in a field presses the primary button, once, and never another one.
     void test_enterInFieldPressesPrimary()
     {

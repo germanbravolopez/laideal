@@ -654,6 +654,20 @@ private slots:
 
     // Money is stored in cents, half away from zero, whatever binary error the
     // double carries (28.405 is 28.40499... as a double).
+    // Shown with the decimal comma whatever the language, from a number or stored text
+    // (dot or legacy comma), never with a thousands separator; storage keeps the dot.
+    void test_displayMoney_andDisplayDecimal()
+    {
+        QCOMPARE(displayMoney(28.405), QStringLiteral("28,41"));
+        QCOMPARE(displayMoney(1234.5), QStringLiteral("1234,50"));
+        QCOMPARE(displayMoney(-3.1), QStringLiteral("-3,10"));
+        QCOMPARE(displayMoney(QStringLiteral("12.5")), QStringLiteral("12,50"));
+        QCOMPARE(displayMoney(QStringLiteral(" 7,25 ")), QStringLiteral("7,25"));
+        QCOMPARE(moneyText(displayMoney(9.99)), QStringLiteral("9.99"));        // back to storage
+        QCOMPARE(displayDecimal(QStringLiteral("2.6")), QStringLiteral("2,6"));
+        QCOMPARE(displayDecimal(QString()), QString());
+    }
+
     void test_moneyText_roundsHalfAwayFromZero()
     {
         QCOMPARE(moneyText(28.405), QStringLiteral("28.41"));

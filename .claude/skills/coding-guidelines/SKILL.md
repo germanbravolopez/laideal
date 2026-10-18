@@ -66,6 +66,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 - No fixed point sizes or pixel stylesheets: use the app font, or a size relative to it.
 - Give the widgets a test drives camelCase object names (`leFra`, `btnSave`, `lblResult`); the `pb_` / `le_` prefixes above are for the remaining `.ui` forms.
 - PDFs go through `ReportHtml::writePdf`.
+- **Decimals on screen and on paper use the comma**, whatever the language: `displayMoney()` for an amount ("12,50", no thousands separator), `displayDecimal()` for a stored size, `NumberFormatDelegate` / `DecimalCommaDelegate` for table columns, `UiKit::AmountSpinBox` for an amount spin box, `ReportHtml::formatEuro` in reports ("1.234,56 €"). The database, the maths and the AEAT XML keep the dot (`moneyText`). Any field the user types a decimal into accepts "," and "." (`moneyText(text)` / `.replace(',', '.')`); never parse a shown amount back with a plain `toDouble()`.
 
 ---
 

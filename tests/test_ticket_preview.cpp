@@ -168,7 +168,7 @@ private slots:
         QVERIFY(ascii.contains("La Ideal"));
         QVERIFY(ascii.contains("Recibo"));
         QVERIFY(ascii.contains("TOTAL (IVA incl.):"));
-        QVERIFY(ascii.contains("42.20"));
+        QVERIFY(ascii.contains("42,20"));
         QVERIFY(ascii.contains("(Copia para el cliente)"));
         // A recibo carries no QR.
         bool hasRaster = false;

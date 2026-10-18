@@ -159,7 +159,7 @@ void AddGarment::resetAllContents()
     m_cbServicio->setCurrentIndex(0);
     m_leCantidad->clear();
     m_leSize->clear();
-    m_leImporte->setText("0.00");
+    m_leImporte->setText(displayMoney(0.0));
     m_leObservaciones->clear();
     m_chkPagado->setChecked(false);
     m_deFechaPago->setDate(QDate::currentDate());
@@ -230,7 +230,7 @@ void AddGarment::populateGarments()
 void AddGarment::setGarmentPrice()
 {
     if (m_leCantidad->text().isEmpty()) {
-        m_leImporte->setText("0.00");
+        m_leImporte->setText(displayMoney(0.0));
         return;
     }
     // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
@@ -238,7 +238,7 @@ void AddGarment::setGarmentPrice()
     const double importe = garmentImporte(
         m_leCantidad->text(), m_leSize->text(),
         readGarmentPrice(db, m_cbPrenda->currentText(), m_cbServicio->currentText()));
-    m_leImporte->setText(moneyText(importe));
+    m_leImporte->setText(displayMoney(importe));
 }
 
 QString AddGarment::validationError()
@@ -280,7 +280,7 @@ void AddGarment::onSaveClicked()
     }
     const QString ticket = m_searchedTicket;
     const QString garment = m_cbPrenda->currentText();
-    const QString amount = moneyText(m_leImporte->text()).replace('.', ',');
+    const QString amount = displayMoney(m_leImporte->text());
     const bool paid = m_chkPagado->isChecked();
     if (!saveGarment()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo añadir la prenda.")

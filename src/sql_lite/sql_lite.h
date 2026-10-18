@@ -41,6 +41,12 @@ double      roundToCents(double value);
 // An importe as stored in `ingresos`: "28.41". Text input may use a decimal comma.
 QString     moneyText(double value);
 QString     moneyText(const QString &value);
+// What the windows and printed tickets show: a decimal comma whatever the language
+// ("28,41"), no thousands separator. Storage, the maths and AEAT keep the dot.
+QString     displayMoney(double value);
+QString     displayMoney(const QString &stored);
+// A stored decimal such as a size ("2.5") shown with the comma ("2,5"); other text unchanged.
+QString     displayDecimal(const QString &stored);
 QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
                                 const QString &columnToSearch, const QString &itemToSearch,
                                 bool exactMatch, bool printMsg);
