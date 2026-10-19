@@ -250,7 +250,7 @@ QByteArray FakeAeatServer::answer(const Request &request)
                          ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
                          : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"
                                           "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash),
-                     !request.showSystem ? QString()
+                     !request.showSystem || m_queryWithoutSystem ? QString()
                      : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
                                       "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
                                       "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>1</tik:NumeroInstalacion>"

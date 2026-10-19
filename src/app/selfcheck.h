@@ -37,6 +37,10 @@ QByteArray testSettings(const QByteArray &liveJson, const QString &dbCopy);
 // highest stored + 1.
 Check checkSchema(QSqlDatabase &db);
 
+// M1c: every stored AEAT record of both environments matches its huella and links to the
+// previous one (AeatChainCheck): an alteration of aeat_records is detected.
+Check checkChain(QSqlDatabase &db);
+
 // True when the live database (opened read-only) still holds invoice (n_recibo, seq) as
 // sent: the backup can be a day old, and a since-cancelled invoice must not be reprinted.
 bool invoiceStillSent(const QString &liveDb, const QString &nRecibo, int seq);

@@ -640,6 +640,34 @@ private slots:
         QVERIFY(restored.chainSyncFailed());
     }
 
+    // AEAT omitting the SistemaInformatico block (ignored MostrarSistemaInformatico, a schema
+    // change) leaves our own records unrecognisable: the first sync fails instead of taking
+    // them for another system's and restarting the chain with PrimerRegistro.
+    void test_firstSyncFailsWhenAeatOmitsTheSystemBlock()
+    {
+        m_server->setQueryByMonth(true);
+        registerWithAnOlderDatedTip();
+        m_server->setQueryWithoutSystemBlock(true);
+        AeatDirectBackend restored(config(), m_db);
+        bool ok = true;
+        QString message;
+        restored.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(!ok && message.contains("sin el sistema"), qPrintable(message));
+        QVERIFY(restored.chainSyncFailed());
+        m_server->setQueryWithoutSystemBlock(false);
+    }
+
+    // A certificate close to its expiry, or past it, is announced at start.
+    void test_certificateExpiryWarning()
+    {
+        const QDateTime now(QDate(2026, 10, 19), QTime(9, 0));
+        QVERIFY(AeatDirectBackend::expiryWarning(now.addDays(31), now).isEmpty());
+        QVERIFY(AeatDirectBackend::expiryWarning(QDateTime(), now).isEmpty());
+        QVERIFY(AeatDirectBackend::expiryWarning(now.addDays(29), now).contains("caduca el 17-11-2026"));
+        QVERIFY(AeatDirectBackend::expiryWarning(now.addDays(-1), now).contains("caducó el 18-10-2026"));
+    }
+
     // A first sync failing partway through the months adopts nothing: the next one starts over.
     void test_firstSyncFailingMidWalkAdoptsNothing()
     {

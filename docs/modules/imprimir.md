@@ -131,9 +131,13 @@ fallback:
    AEAT). `displayInvoiceId()` gathers the `verifactu_invoice_id` column and
    delegates the selection (first non-empty literal, else bare `n_recibo`) to the
    pure, unit-tested `sql_lite::verifactuDisplayInvoiceId` seam.
-3. When eligible and `verifactuIntegration` is configured, fetch the QR
-   asynchronously via REST `/GetQrCode` with a 5 s bounded wait; on timeout the
-   ticket prints without a QR.
+3. An accepted invoice is reprinted with the QR drawn (`AeatQr::image`) from the
+   verification URL stored with AEAT's answer (`verifactu_url_qr` of its paid rows,
+   gateway and direct client alike). It is never rebuilt from today's environment:
+   after the production switch an older test invoice would otherwise get a
+   production QR. Nor is it rebuilt from today's IVA rate. Only an older row without
+   that URL asks the backend (REST `/GetQrCode`, 5 s bounded wait; on timeout the
+   ticket prints without a QR).
 
 `buildTicket()` rasters the resolved `QPixmap` into the ESC/POS stream
 (`qr.scaled(192,192).toImage()` → `EscPosBuilder::rasterImage()`, `GS v 0`), so

@@ -138,6 +138,15 @@ target_link_libraries(test_aeat_hash PRIVATE
 add_test(NAME aeat_hash
     COMMAND test_aeat_hash -o ${CMAKE_BINARY_DIR}/test-results-aeat_hash.xml,junitxml -o -,txt)
 
+# AeatChainCheck: recomputes every stored record's huella and checks the links. Pure.
+add_executable(test_aeat_chaincheck test_aeat_chaincheck.cpp)
+target_link_libraries(test_aeat_chaincheck PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME aeat_chaincheck
+    COMMAND test_aeat_chaincheck -o ${CMAKE_BINARY_DIR}/test-results-aeat_chaincheck.xml,junitxml -o -,txt)
+
 # AeatRecord: the direct client's records and SOAP envelopes. It also writes sample
 # envelopes into build/aeat-xml, which aeat_xsd validates against the official AEAT
 # schemas (tests/fixtures/aeat-xsd, unchanged) with Python + lxml - skipped when

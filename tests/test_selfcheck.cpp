@@ -6,6 +6,7 @@
 // report carries no shop data.
 
 #include <QtTest>
+#include "aeatstore.h"
 #include <QCryptographicHash>
 #include <QGroupBox>
 #include <QJsonDocument>
@@ -107,6 +108,28 @@ private slots:
         broken = QSqlDatabase();
         QSqlDatabase::removeDatabase("schema");
         QSqlDatabase::removeDatabase("broken");
+    }
+
+    // M1c recomputes the stored AEAT chain: none or a valid one passes, an altered record fails
+    // without naming the invoice.
+    void test_checkChain()
+    {
+        QTemporaryDir dir;
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "chain");
+        db.setDatabaseName(dir.filePath("chain.db"));
+        QCOMPARE(SelfCheck::checkChain(db).status, SelfCheck::Check::Pass);
+        QVERIFY(AeatStore(db, "pruebas").ensureSchema());
+        QVERIFY(db.open());
+        QVERIFY(QSqlQuery(db).exec("INSERT INTO aeat_records (environment, kind, issuer_nif, invoice_number, "
+                                   "issue_date, hash, xml, generated_at, state) VALUES ('pruebas', 'alta', "
+                                   "'89890001K', '77', '10-10-2026', 'AB', '<RegistroAlta><Huella>AB</Huella>"
+                                   "</RegistroAlta>', '', 'ACEPTADO')"));
+        db.close();
+        const SelfCheck::Check bad = SelfCheck::checkChain(db);
+        QCOMPARE(bad.status, SelfCheck::Check::Fail);
+        QVERIFY2(bad.reason.contains("registro 1 de pruebas") && !bad.reason.contains("77"), qPrintable(bad.reason));
+        db = QSqlDatabase();
+        QSqlDatabase::removeDatabase("chain");
     }
 
     // The newest ticket, the invoice to print and the newest closed quarter's figures.
@@ -213,7 +236,7 @@ private slots:
             auto *question = dialog.findChild<QGroupBox *>();
             for (int answered = 0; question && question->isVisibleTo(&dialog) && answered < 10; ++answered)
                 dialog.findChild<QPushButton *>("btnYes")->click();
-            QCOMPARE(dialog.checks().size(), 5);   // M1, M2, M2b, M3, M5
+            QCOMPARE(dialog.checks().size(), 6);   // M1, M1c, M2, M2b, M3, M5
             for (const SelfCheck::Check &c : dialog.checks()) {
                 if (c.id == QLatin1String("M3"))
                     QCOMPARE(c.status, SelfCheck::Check::Skip);   // printing off

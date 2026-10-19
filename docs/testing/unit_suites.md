@@ -9,6 +9,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_verifactu_models` | `verifactu` | guiless | Invoice / tax-item / config models |
 | `test_verifactu_response` | `verifactu` | offscreen | AEAT reply parsing, query records, QR decode |
 | `test_aeat_hash` | `verifactu` | - | Direct-client huella and QR URL against the official AEAT vectors |
+| `test_aeat_chaincheck` | `verifactu` | - | `AeatChainCheck`: recomputed huellas, links per issuer, a restart, a restored copy's continuation |
 | `test_aeat_record` | `verifactu` | - | Records and SOAP envelopes; writes samples for `aeat_xsd` |
 | `aeat_xsd` | Python + lxml | - | The samples and reply fixtures against the official AEAT XSDs (skipped without lxml) |
 | `test_aeat_response` | `verifactu` | - | AEAT replies / faults and their mapping; record summary; chain tip |

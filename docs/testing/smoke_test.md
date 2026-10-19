@@ -32,6 +32,7 @@ The installer adds **Start → La Ideal - Comprobar tras actualizar** (`laideal.
 | # | Check | How | Correct when |
 |---|-------|-----|--------------|
 | M1 | Real schema and numbering | Automatic: the migrations run on the copy | No migration statement fails; `PRAGMA integrity_check` is `ok`; `ingresos` has every column and `accounting_closures` exists; the next ticket number is the highest stored + 1 |
+| M1c | AEAT record chain | Automatic | Every stored `aeat_records` record (both environments) matches its huella and links to the previous one (`AeatChainCheck`); the reason names only the record's position |
 | M2 | Real data | Automatic | The newest ticket loads with its garments and the search by its client finds it |
 | M2b | The last closed quarter | Shown, then asked: the quarter's income, IVA, gastos and IVA settlement, recomputed without closing anything ("Abrir el informe presentado" opens the filed PDF when it is in the Contabilidad folder) | The user confirms they match the report filed for that quarter |
 | M3 | Printer and QR | Prints the recibo and the factura of the newest ticket AEAT holds, then asks (skipped when printing is off in Configuración or no invoice has been sent yet) | Both copies printed and cut, accents legible, and a phone scanning the QR opens AEAT's page |

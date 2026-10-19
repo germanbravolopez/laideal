@@ -68,6 +68,8 @@ public:
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
     // The same for one record only.
     void queryWithoutHashFor(const QString &invoiceNumber) { m_noHashFor.insert(invoiceNumber); }
+    // Answers a query without the SistemaInformatico block even when it was asked for.
+    void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
     // The next reply that includes this record has no line for it (AEAT did not report on it).
@@ -106,6 +108,7 @@ private:
     QSet<QString> m_noHashFor;
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
+    bool m_queryWithoutSystem = false;
     int m_counter = 0;
 };
 

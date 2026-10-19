@@ -267,6 +267,12 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             const int number = r.invoiceNumber.section(QLatin1Char('-'), 0, 0).toInt(&numeric);
             if (numeric)
                 m_highestNumberAtAeat = qMax(m_highestNumberAtAeat, number);
+            // Without the SistemaInformatico block whose record it is cannot be told: as
+            // unusable as a missing huella, never taken for another system's.
+            if (r.systemId.isEmpty() || r.producerNif.isEmpty()) {
+                sawUnusable = true;
+                continue;
+            }
             // Another system's records (e.g. the gateway's) belong to its own chain.
             if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
                 continue;
@@ -303,8 +309,8 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
         // A record of ours without its huella may be the chain's newest: a first sync, which
         // has no local chain to trust, cannot know where it continues.
         if (sawUnusable && (found.isEmpty() || m_firstSync)) {
-            syncFinished(false, tr("La AEAT devuelve registros de este emisor sin su huella: no se puede saber "
-                                   "dónde continúa la cadena."));
+            syncFinished(false, tr("La AEAT devuelve registros de este emisor sin su huella o sin el sistema que "
+                                   "los generó: no se puede saber dónde continúa la cadena."));
             return;
         }
         QString message;
@@ -641,6 +647,16 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
         emit recordSettled(record.invoiceNumber, record.kind == AeatStore::Kind::Cancellation, answer);
 }
 
+QString AeatDirectBackend::expiryWarning(const QDateTime &expiry, const QDateTime &now, int days)
+{
+    if (!expiry.isValid() || expiry > now.addDays(days))
+        return QString();
+    return expiry < now ? tr("El certificado de la conexión directa con la AEAT caducó el %1: instale el nuevo y "
+                             "elíjalo en Configuración.").arg(expiry.toString("dd-MM-yyyy"))
+                        : tr("El certificado de la conexión directa con la AEAT caduca el %1: renuévelo antes, o los "
+                             "registros dejarán de enviarse.").arg(expiry.toString("dd-MM-yyyy"));
+}
+
 void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &response)
 {
     const QByteArray &body = response.body;
@@ -664,6 +680,12 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     // records stay pending and are sent unchanged again on their own.
     const bool transient = !parsed.parsed || (parsed.fault && parsed.faultCode.contains(QLatin1String("Server")));
     if (transient) {
+        // A certificate that expired while the app was open: say so, instead of retrying forever.
+        if (m_certificate.info().expiry.isValid() && m_certificate.info().expiry < QDateTime::currentDateTime()) {
+            m_sendError = tr("el certificado caducó el %1; instale el nuevo y elíjalo en Configuración")
+                              .arg(m_certificate.info().expiry.toString("dd-MM-yyyy"));
+            qWarning() << "AeatDirectBackend: the certificate expired -" << m_sendError;
+        }
         const QString why = parsed.fault ? parsed.faultText : (transportError.isEmpty() ? tr("respuesta no reconocida") : transportError);
         qWarning() << "AeatDirectBackend: submission without an AEAT answer -" << why << "- retrying in" << s_retryDelaySeconds << "s";
         m_nextSendAllowed = QDateTime::currentDateTime().addSecs(s_retryDelaySeconds);

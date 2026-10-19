@@ -2,6 +2,8 @@
 
 #include "contabilidad.h"
 #include "appsettings.h"
+#include "aeatchaincheck.h"
+#include "aeatstore.h"
 #include "sql_lite.h"
 
 #include <QDir>
@@ -105,6 +107,22 @@ Check checkSchema(QSqlDatabase &db)
         return fail(c, QStringLiteral("el siguiente número de ticket no es el último + 1"));
     c.status = Check::Pass;
     c.reason = QStringLiteral("migraciones sin errores, archivo íntegro, siguiente ticket = último + 1");
+    return c;
+}
+
+Check checkChain(QSqlDatabase &db)
+{
+    Check c{ QStringLiteral("M1c"), QStringLiteral("Cadena de registros AEAT: huellas y enlaces") };
+    int checked = 0;
+    for (const QString &environment : { QStringLiteral("pruebas"), QStringLiteral("produccion") }) {
+        const AeatChainCheck::Result r = AeatChainCheck::verify(AeatStore(db, environment).recordXmls());
+        if (!r.ok)   // the reason names no invoice: only the position in the chain
+            return fail(c, QStringLiteral("el registro %1 de %2 no coincide con sus datos o no enlaza con el anterior")
+                               .arg(r.failedIndex + 1).arg(environment));
+        checked += r.checked;
+    }
+    c.status = Check::Pass;
+    c.reason = QStringLiteral("%1 registro(s) comprobados").arg(checked);
     return c;
 }
 

@@ -544,11 +544,25 @@ void MainWindow::initializeVerifactu()
     else
         updateAeatEnvironment();
     settlePendingRectifications();
-    if (m_verifactuIntegration->directBackend() && m_verifactuIntegration->isConfigured()) {
-        if (!m_verifactuIntegration->directBackend()->sendingError().isEmpty())
-            m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
-                                                 "pueden enviar: %1")
-                                                  .arg(m_verifactuIntegration->directBackend()->sendingError().toHtmlEscaped())));
+    if (AeatDirectBackend *direct = m_verifactuIntegration->directBackend(); direct && m_verifactuIntegration->isConfigured()) {
+        QStringList warnings;   // HTML lines
+        if (!direct->sendingError().isEmpty())
+            warnings << UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
+                                           "pueden enviar: %1").arg(direct->sendingError().toHtmlEscaped()));
+        if (const QString expiry = direct->certificateExpiryWarning(); !expiry.isEmpty())
+            warnings << UiKit::warnHtml(expiry.toHtmlEscaped());
+        const AeatChainCheck::Result chain = direct->verifyStoredChain();
+        if (!chain.ok) {
+            qCritical() << "MainWindow: the stored AEAT record chain does not verify -" << chain.problem;
+            warnings << UiKit::errorHtml(tr("La cadena de registros de la AEAT guardada no es correcta: %1")
+                                             .arg(chain.problem.toHtmlEscaped()))
+                        + "<br>" + tr("Los registros se han modificado fuera de la aplicación. Avise al servicio técnico.");
+        } else if (chain.continuations > 0) {
+            qWarning() << "MainWindow: the stored chain continues" << chain.continuations
+                       << "record(s) not in this database (a restored copy)";
+        }
+        if (!warnings.isEmpty())
+            m_result->setText(warnings.join("<br>"));
         continueDirectChain();
     }
 }

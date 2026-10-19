@@ -23,6 +23,8 @@ set(PROJECT_SOURCES
     aeatresponse.cpp
     aeatstore.h
     aeatstore.cpp
+    aeatchaincheck.h
+    aeatchaincheck.cpp
     aeatqr.h
     aeatqr.cpp
     aeatcertificate.h

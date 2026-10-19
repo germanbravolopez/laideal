@@ -182,6 +182,10 @@ void SelfCheckDialog::runAutomatic()
     m_checks[m1] = SelfCheck::checkSchema(m_db);
     showCheck(m1);
 
+    const int m1c = addCheck(QStringLiteral("M1c"), QString());
+    m_checks[m1c] = SelfCheck::checkChain(m_db);
+    showCheck(m1c);
+
     const int m2 = addCheck(QStringLiteral("M2"), QString());
     m_checks[m2] = SelfCheck::checkData(m_db, AppSettings::instance()->contabilidadPath(), m_facts);
     showCheck(m2);

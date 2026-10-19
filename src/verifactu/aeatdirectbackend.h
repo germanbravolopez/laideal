@@ -38,6 +38,7 @@
 #include <QTimer>
 
 #include "aeatcertificate.h"
+#include "aeatchaincheck.h"
 #include "aeatrecord.h"
 #include "aeatresponse.h"
 #include "aeattransport.h"
@@ -90,6 +91,15 @@ public:
     // Why records cannot be sent now (the certificate), or empty.
     QString sendingError() const { return m_sendError; }
     AeatCertificate::Info certificateInfo() const { return m_certificate.info(); }
+    // A warning when the certificate expires within `days` of `now` or already has; else empty.
+    static QString expiryWarning(const QDateTime &expiry, const QDateTime &now, int days = 30);
+    QString certificateExpiryWarning() const
+    {
+        return m_sendError.isEmpty() ? expiryWarning(m_certificate.info().expiry, QDateTime::currentDateTime()) : QString();
+    }
+    // Art. 8.1 RD 1007/2023: the stored records are recomputed and their links checked, so an
+    // alteration is detected and reported.
+    AeatChainCheck::Result verifyStoredChain() { return AeatChainCheck::verify(m_store.recordXmls()); }
     QString issuerNif() const { return m_config.issuerNif; }
     // "pruebas" / "produccion", as the store keeps its records.
     QString environmentName() const { return m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"); }

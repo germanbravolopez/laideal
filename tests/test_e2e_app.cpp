@@ -2266,6 +2266,26 @@ private slots:
         delete form;
     }
 
+    // A reprint draws the QR from the verification URL stored with AEAT's answer: no
+    // request, and never a URL rebuilt for today's environment or IVA rate.
+    void test_reprintUsesTheStoredVerificationUrl()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "5340", "h5340a", "10.00", "10-02-2026", "A-5340"));
+        const QString url = QStringLiteral("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=89890001K"
+                                           "&numserie=5340&fecha=10-02-2026&importe=10.00");
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = '" + url + "' WHERE hash='h5340a'"));
+        Imprimir dlg(m_db);
+        dlg.verifactuIntegration = m_verifactu;
+        dlg.isRecibo = false;
+        dlg.le_n_ticket->setText("5340");
+        dlg.getTicketInfo();
+        const QPixmap qr = dlg.resolveQrCode();
+        QVERIFY(!qr.isNull());
+        QCOMPARE(qr.toImage().convertToFormat(QImage::Format_RGB32),
+                 AeatQr::image(url, 5).convertToFormat(QImage::Format_RGB32));
+        QVERIFY(m_server.requestsTo("GetQrCode").isEmpty());
+    }
+
     void test_imprimirDialog_qrNotReusedForTheNextTicket()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "660", "h660a", "10.00", "10-02-2026", "A-660"));

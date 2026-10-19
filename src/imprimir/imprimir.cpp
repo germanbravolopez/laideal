@@ -1,3 +1,4 @@
+#include "aeatqr.h"
 #include "imprimir.h"
 
 #include <QSet>
@@ -254,8 +255,21 @@ QPixmap Imprimir::resolveQrCode()
         return qrCode;
     }
 
-    // Reprint path: fire async QR fetch and wait up to 5s in a local event loop.
-    // If AEAT does not reply in time, print without QR (logged warning).
+    // Reprint of an accepted invoice: the verification URL stored with AEAT's answer, drawn
+    // as issued. Never rebuilt from today's environment (after the production switch an
+    // older test invoice would get a production QR) nor from today's IVA rate.
+    for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        if (!checkTicketPaid(row))
+            continue;
+        const QString url = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_URL_QR)).toString();
+        if (url.startsWith(QLatin1String("https://"))) {
+            qrCode = QPixmap::fromImage(AeatQr::image(url, 5));
+            return qrCode;
+        }
+    }
+
+    // No stored URL (older rows): ask the backend, waiting up to 5 s in a local event loop.
+    // If it does not reply in time, print without QR (logged warning).
     const QString reqId = verifactuIntegration->generateQRAsync(
         invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
     if (reqId.isEmpty()) {
