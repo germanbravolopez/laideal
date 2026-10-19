@@ -128,7 +128,7 @@ Issues:
 | # | Finding | Where | Proposal |
 |---|---------|-------|----------|
 | C1 | The release does not require the UI smoke. It is a manual gate in `/release`. `ui-smoke.yml` runs only on pushes touching `tests/ui/**` / `tests/tools/**`, so a `src/` change never triggers it. | `.github/workflows/ui-smoke.yml:13-20` | Add `pull_request: branches: [master]` (it is the release PR) and optionally a nightly; or have the `release` job check that the last ui-smoke run on the tagged SHA succeeded. |
-| C2 | The deploy assertion misses `sqldrivers\qsqlite.dll` and `tls\qschannelbackend.dll`. | `ci.yml:195-210` | Add both. |
+| C2 ✅ FIXED 19-10-2026 | The deploy assertion misses `sqldrivers\qsqlite.dll` and `tls\qschannelbackend.dll`. | `ci.yml:195-210` | Add both. |
 | C3 | `release.ps1` is not "the same pipeline": no `ctest`, no zip, no deploy assertion. Its header still says "MinGW Makefiles". CONTRIBUTING says it produces a zip. | `releases/release.ps1:4-12,113`; `CONTRIBUTING.md` "Local fallback" | Add ctest and the DLL check, or reword the docs. |
 | C4 | Typo `^r?` (meant `\r?`) in the notes regex, copied three times. Harmless today. | `ci.yml:238`, `CONTRIBUTING.md` local fallback, `release/SKILL.md:176` | Fix in all three. |
 | C5 | Installer: dead `.myp` file association (the app ignores `%1`); no `[InstallDelete]` for stale DLLs or plugins of earlier versions (`ignoreversion recursesubdirs` only adds); nothing prompts the shop to run "Comprobar tras actualizar" after an in-app update (updater #29). | `releases/laideal.iss:16-18,63-69,73` | Drop the association; `[InstallDelete] Type: filesandordirs; Name: "{app}\plugins"` etc.; an optional unchecked `[Run]` entry for `--self-check`. |
@@ -198,7 +198,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 ✅ FIXED 19-10-2026 | uikit | Enter on a focused secondary / Cerrar presses the primary (possible AEAT send) | `click()` the focused button; restrict to `window()==dialog` | S | uikit |
 | P1 ✅ FIXED 19-10-2026 | backup | Same-second backup deletes the good one; partial files; concurrent runs; AppSettings off-thread | `.part` + rename; never remove what you did not create; running guard; settings write on the GUI thread | S | backup |
 | P1 | app / sql_lite | `migrateDatabase` is void and runs before any backup of the new version | Pre-migration snapshot on version change; return a failure count and show it | S-M | 00, app A14 |
-| P1 | CI | Deploy assertion misses `qsqlite.dll` and the TLS plugin; `release.ps1` has none | Add to `ci.yml:195-210` and `release.ps1` | S | 00, updater |
+| P1 ✅ FIXED 19-10-2026 | CI | Deploy assertion misses `qsqlite.dll` and the TLS plugin; `release.ps1` has none | Add to `ci.yml:195-210` and `release.ps1` | S | 00, updater |
 | P1 | printing | Factura simplificada prints no fecha de expedición (QR uses `fecha_pago`); "Factura completa" headed SIMPLIFICADA | Print the issue date; heading per type; auditor decision | M | printing |
 | P1 | imprimir | Cancelled / rectified invoice reprints as a normal factura (F3) | Refuse or mark ANULADA; legal decision | M | imprimir |
 | P1 ✅ FIXED 19-10-2026 | appsettings | Leaving direct keeps production=true (#2); gateway PRODUCCION without confirmation (#3) | Force off on leave; confirm both | S | appsettings |
@@ -209,7 +209,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 | recog_prendas / add_garment / app | Payment / reception / rectification dates unbounded (future, before reception) | Max today, min reception; refuse in validation | S | recog_prendas #5, add_garment, app A11, A17 |
 | P1 | add_garment | Free-typed or empty garment gives pop-ups and 0 EUR paid invoices; negative size | Exact-name check; refuse 0 / negative; clamp | S | add_garment, sql_lite F14 |
 | P1 | recog_prendas | Zero-total Cobrar sent to AEAT; reply-time `INVALID_CONFIG` leaves the estado empty; null integration books without a record | Refuse; treat as PENDIENTE; refuse when null | S | recog_prendas #4, #6, #7 |
-| P1 | updater | Installer run without integrity check | Publish `.sha256` / use the asset digest; verify size + hash | M | updater |
+| P1 ✅ FIXED 19-10-2026 | updater | Installer run without integrity check | Publish `.sha256` / use the asset digest; verify size + hash | M | updater |
 | P1 | contabilidad | The current (unfinished) quarter can be closed, blocking today's Cobrar; gastos IVA text parsed to 0 silently | Warn / refuse; strict parse to -1 (flag) | S | contabilidad |
 | P1 | docs | `architecture.md` lacks the direct client and `aeat_*` tables; README config keys wrong; tracker status | G1, G3, G6 | M | 00, appsettings, gateway |
 | P1 | tracker | This review's findings not filed | File P1-P3 in `progress_tracker.md` (memory rule) | S | 00 |

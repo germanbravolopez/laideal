@@ -157,7 +157,7 @@ The tag push in step 7 kicked off `ci.yml` (the `build` job, then the gated `rel
 gh run watch (gh run list --workflow=ci.yml --branch X.Y --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that both assets are present and both halves render as clean bulleted lists.
+On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` + `laideal_setup_X.Y.exe.sha256` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that all three assets are present (without the `.sha256` the in-app updater refuses the installer) and both halves render as clean bulleted lists.
 
 **If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` or `releases_notes_es.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
 
@@ -182,6 +182,7 @@ Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `
+    build-release/laideal_setup_$ver.exe.sha256 `
     --title "Release $ver" `
     --notes-file $tmpNotes
 

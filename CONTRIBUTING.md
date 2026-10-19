@@ -80,8 +80,8 @@ The release is the second stage of the CI workflow: `.github/workflows/ci.yml` h
 1. (build job) Configure -> build (Release) -> **`ctest` (hard gate: a failing test aborts before the release job runs)** -> uploads `laideal.exe` as the `laideal` artifact.
 2. (release job) Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
 3. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, for `windeployqt` + the runtime DLLs) and Inno Setup 6 - no rebuild.
-4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
-5. Extracts the `X.Y` section from `releases_notes_es.txt` and `releases_notes.txt` (fails if either is missing/empty) and publishes a GitHub Release `X.Y` with a bilingual body (Spanish, then English - also what the in-app updater shows) with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
+4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs, the SQLite driver and the TLS backend were deployed) -> zip -> Inno Setup installer.
+5. Extracts the `X.Y` section from `releases_notes_es.txt` and `releases_notes.txt` (fails if either is missing/empty) and publishes a GitHub Release `X.Y` with a bilingual body (Spanish, then English - also what the in-app updater shows) with `X.Y.zip` + `laideal_setup_X.Y.exe` + `laideal_setup_X.Y.exe.sha256` attached and that section as the body. The in-app updater refuses to run an installer whose size or SHA-256 does not match. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
 
 So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
 
@@ -135,6 +135,7 @@ Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `
+    build-release/laideal_setup_$ver.exe.sha256 `
     --title "Release $ver" `
     --notes-file $tmpNotes
 

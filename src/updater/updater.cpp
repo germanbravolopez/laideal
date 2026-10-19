@@ -1,5 +1,6 @@
 #include "updater.h"
 
+#include <QCryptographicHash>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -17,6 +18,57 @@
 static const char *kGitHubApiLatestUrl =
     "https://api.github.com/repos/germanbravolopez/laideal/releases/latest";
 static const char *kInstallerAssetPrefix = "laideal_setup_";
+
+Updater::InstallerAsset Updater::findInstallerAsset(const QJsonArray &assets)
+{
+    InstallerAsset found;
+    QString installerName;
+    for (const QJsonValue &v : assets) {
+        const QJsonObject a = v.toObject();
+        const QString name  = a.value("name").toString();
+        if (name.startsWith(QString::fromLatin1(kInstallerAssetPrefix))
+            && name.endsWith(".exe", Qt::CaseInsensitive)) {
+            installerName = name;
+            found.url  = QUrl(a.value("browser_download_url").toString());
+            found.size = a.value("size").toVariant().toLongLong();
+            const QString digest = a.value("digest").toString();
+            if (digest.startsWith(QLatin1String("sha256:")))
+                found.sha256 = parseChecksumFile(digest.mid(7).toLatin1());
+            break;
+        }
+    }
+    for (const QJsonValue &v : assets) {
+        const QJsonObject a = v.toObject();
+        if (!installerName.isEmpty() && a.value("name").toString() == installerName + ".sha256")
+            found.checksumUrl = QUrl(a.value("browser_download_url").toString());
+    }
+    return found;
+}
+
+bool Updater::isTrustedDownloadUrl(const QUrl &url)
+{
+    const QString host = url.host().toLower();
+    return url.isValid() && url.scheme() == QLatin1String("https")
+           && (host == QLatin1String("github.com") || host.endsWith(QLatin1String(".githubusercontent.com")));
+}
+
+QString Updater::parseChecksumFile(const QByteArray &content)
+{
+    static const QRegularExpression rx(R"(^\s*([0-9a-fA-F]{64})(\s|$))");
+    const QRegularExpressionMatch m = rx.match(QString::fromLatin1(content));
+    return m.hasMatch() ? m.captured(1).toLower() : QString();
+}
+
+QString Updater::installerMismatch(const QByteArray &bytes, qint64 expectedSize, const QString &expectedSha256)
+{
+    if (expectedSha256.isEmpty())
+        return QStringLiteral("La versión no publica la suma SHA-256 del instalador.");
+    if (expectedSize > 0 && bytes.size() != expectedSize)
+        return QStringLiteral("El instalador descargado está incompleto (%1 de %2 bytes).").arg(bytes.size()).arg(expectedSize);
+    if (QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) != expectedSha256)
+        return QStringLiteral("El instalador descargado no coincide con el publicado (SHA-256 distinta).");
+    return QString();
+}
 
 Updater::Updater(QObject *parent)
     : QObject(parent)
@@ -101,26 +153,23 @@ void Updater::handleReleaseReply(QNetworkReply *reply)
         return;
     }
 
-    // Find the laideal_setup_X.Y.exe asset.
-    const QJsonArray assets = obj.value("assets").toArray();
-    QUrl installerUrl;
-    for (const QJsonValue &v : assets) {
-        const QJsonObject a = v.toObject();
-        const QString name  = a.value("name").toString();
-        if (name.startsWith(QString::fromLatin1(kInstallerAssetPrefix))
-            && name.endsWith(".exe", Qt::CaseInsensitive)) {
-            installerUrl = QUrl(a.value("browser_download_url").toString());
-            break;
-        }
-    }
-    if (!installerUrl.isValid()) {
+    const InstallerAsset installer = findInstallerAsset(obj.value("assets").toArray());
+    if (!installer.url.isValid()) {
         emit checkFailed(QStringLiteral(
             "La versión %1 no incluye un instalador 'laideal_setup_X.Y.exe' "
             "en sus assets de GitHub.").arg(latestTag));
         return;
     }
+    if (!isTrustedDownloadUrl(installer.url)
+        || (installer.sha256.isEmpty() && !isTrustedDownloadUrl(installer.checksumUrl))) {
+        qWarning() << "Updater: release" << latestTag << "has an untrusted installer URL or no SHA-256";
+        emit checkFailed(QStringLiteral("La versión %1 no publica un instalador que se pueda comprobar "
+                                        "(dirección de GitHub y suma SHA-256).").arg(latestTag));
+        return;
+    }
 
-    emit updateAvailable(latestTag, notes, installerUrl);
+    m_installer = installer;
+    emit updateAvailable(latestTag, notes, installer.url);
 }
 
 void Updater::downloadInstaller(const QUrl &installerUrl)
@@ -138,21 +187,53 @@ void Updater::downloadInstaller(const QUrl &installerUrl)
     }
     // Remove any installer left by a previous update so they do not accumulate.
     const QDir updatesDir(dir);
-    for (const QString &stale : updatesDir.entryList({ QStringLiteral("*.exe") }, QDir::Files))
+    for (const QString &stale : updatesDir.entryList({ QStringLiteral("*.exe"), QStringLiteral("*.part") }, QDir::Files))
         QFile::remove(updatesDir.filePath(stale));
 
-    const QString fileName = installerUrl.fileName();
+    if (installerUrl != m_installer.url) {
+        emit downloadFailed(QStringLiteral("No hay datos para comprobar este instalador; vuelva a buscar actualizaciones."));
+        return;
+    }
+    if (!m_installer.sha256.isEmpty()) {
+        startInstallerDownload();
+        return;
+    }
+    // The published laideal_setup_X.Y.exe.sha256 first: a few bytes.
+    QNetworkRequest req{m_installer.checksumUrl};
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("LAIDEAL/%1").arg(currentVersion()));
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setTransferTimeout(30000);
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        const QString sha256 = reply->error() == QNetworkReply::NoError && isTrustedDownloadUrl(reply->url())
+                                   ? parseChecksumFile(reply->read(4096)) : QString();
+        if (sha256.isEmpty()) {
+            emit downloadFailed(QStringLiteral("No se pudo leer la suma SHA-256 publicada del instalador."));
+            return;
+        }
+        m_installer.sha256 = sha256;
+        startInstallerDownload();
+    });
+}
+
+void Updater::startInstallerDownload()
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                        + QStringLiteral("/updates");
+    const QString fileName = m_installer.url.fileName();
     const QString localPath = QDir(dir).filePath(fileName.isEmpty()
                                                  ? QStringLiteral("laideal_setup.exe")
                                                  : fileName);
 
-    qDebug() << "Updater: downloading" << installerUrl << "to" << localPath;
+    qDebug() << "Updater: downloading" << m_installer.url << "to" << localPath;
 
-    QNetworkRequest req{installerUrl};
+    QNetworkRequest req{m_installer.url};
     req.setHeader(QNetworkRequest::UserAgentHeader,
                   QStringLiteral("LAIDEAL/%1").arg(currentVersion()));
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setTransferTimeout(60000);   // no byte for a minute: give up instead of hanging
 
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::downloadProgress,
@@ -170,20 +251,38 @@ void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath
         emit downloadFailed(reply->errorString());
         return;
     }
-
-    QFile out(localPath);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        emit downloadFailed(QStringLiteral("No se pudo crear el archivo:\n%1").arg(localPath));
+    if (!isTrustedDownloadUrl(reply->url())) {
+        qWarning() << "Updater: the download was redirected to" << reply->url().host();
+        emit downloadFailed(QStringLiteral("La descarga se ha redirigido fuera de GitHub; no se instala."));
         return;
     }
     const QByteArray bytes = reply->readAll();
-    if (out.write(bytes) != bytes.size()) {
+    if (const QString mismatch = installerMismatch(bytes, m_installer.size, m_installer.sha256); !mismatch.isEmpty()) {
+        qWarning() << "Updater: installer rejected -" << mismatch;
+        emit downloadFailed(mismatch);
+        return;
+    }
+
+    // Written as .part and renamed: a cut-off write never leaves a runnable installer.
+    const QString partPath = localPath + QStringLiteral(".part");
+    QFile out(partPath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        emit downloadFailed(QStringLiteral("No se pudo crear el archivo:\n%1").arg(partPath));
+        return;
+    }
+    if (out.write(bytes) != bytes.size() || !out.flush()) {
         out.close();
-        QFile::remove(localPath);
-        emit downloadFailed(QStringLiteral("Escritura incompleta en:\n%1").arg(localPath));
+        QFile::remove(partPath);
+        emit downloadFailed(QStringLiteral("Escritura incompleta en:\n%1").arg(partPath));
         return;
     }
     out.close();
+    QFile::remove(localPath);
+    if (!QFile::rename(partPath, localPath)) {
+        QFile::remove(partPath);
+        emit downloadFailed(QStringLiteral("No se pudo guardar el instalador en:\n%1").arg(localPath));
+        return;
+    }
 
     qDebug() << "Updater: download complete," << bytes.size() << "bytes ->" << localPath;
     emit downloadFinished(localPath);

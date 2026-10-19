@@ -112,6 +112,11 @@ $stagedExe = Join-Path $StagingDir 'laideal.exe'
 # plugin." Letting it auto-detect deploys the correct plugins.
 & windeployqt --no-translations --no-system-d3d-compiler $stagedExe
 if ($LASTEXITCODE -ne 0) { Fail "windeployqt failed" }
+# Same guard as ci.yml: an installer without these fails on the shop's machine.
+foreach ($d in @('libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll', 'Qt6Core.dll',
+                 'platforms\qwindows.dll', 'sqldrivers\qsqlite.dll', 'tls\qschannelbackend.dll')) {
+    if (-not (Test-Path (Join-Path $StagingDir $d))) { Fail "windeployqt did not deploy '$d'" }
+}
 
 Step "Compiling installer (Inno Setup)"
 # /O overrides the .iss OutputDir so the installer lands in build-release\ (wiped
@@ -119,6 +124,9 @@ Step "Compiling installer (Inno Setup)"
 & $InnoSetupCompiler "/DMyAppVersion=$Version" "/O$BuildDir" $IssFile
 if ($LASTEXITCODE -ne 0) { Fail "Inno Setup compile failed" }
 if (-not (Test-Path $InstallerPath)) { Fail "Installer not produced at $InstallerPath" }
+# Published next to the installer: the updater refuses an installer without a matching SHA-256.
+$hash = (Get-FileHash $InstallerPath -Algorithm SHA256).Hash.ToLower()
+[System.IO.File]::WriteAllText("$InstallerPath.sha256", "$hash  laideal_setup_$Version.exe`n")
 
 Step "Cleaning up staging"
 Remove-Item -Recurse -Force $StagingDir
@@ -126,3 +134,4 @@ Remove-Item -Recurse -Force $StagingDir
 Write-Host ""
 Write-Host "Release v$Version ready:" -ForegroundColor Green
 Write-Host "  Installer: $InstallerPath"
+Write-Host "  SHA-256:   $InstallerPath.sha256 (upload it with the installer)"

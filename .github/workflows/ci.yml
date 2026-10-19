@@ -193,13 +193,17 @@ jobs:
           # Fail loudly if the MinGW compiler runtime or Qt core were not deployed -
           # the installed app would otherwise crash on launch on a clean machine with
           # a missing-DLL error. The build job never runs windeployqt, so this is the
-          # only place that guards the packaging step.
+          # only place that guards the packaging step. Without the SQLite driver there
+          # is no database; without the TLS backend every HTTPS call (AEAT, gateway,
+          # updater) fails.
           $required = @(
             'libgcc_s_seh-1.dll',
             'libstdc++-6.dll',
             'libwinpthread-1.dll',
             'Qt6Core.dll',
-            'platforms\qwindows.dll'
+            'platforms\qwindows.dll',
+            'sqldrivers\qsqlite.dll',
+            'tls\qschannelbackend.dll'
           )
           foreach ($d in $required) {
             if (-not (Test-Path (Join-Path $stage $d))) {
@@ -266,7 +270,11 @@ jobs:
             gh release delete $ver --yes
             if ($LASTEXITCODE -ne 0) { throw "Failed to delete existing release $ver" }
           }
-          gh release create $ver $zip $installer --title "Release $ver" --notes-file $notes
+          # The updater runs the installer only when its SHA-256 matches this file.
+          $checksum = "$installer.sha256"
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          [System.IO.File]::WriteAllText((Join-Path $PWD $checksum), "$hash  laideal_setup_$ver.exe`n")
+          gh release create $ver $zip $installer $checksum --title "Release $ver" --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
 
       - name: Clean up staging

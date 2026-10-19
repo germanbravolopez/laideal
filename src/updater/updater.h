@@ -5,6 +5,7 @@
 #include <QString>
 #include <QUrl>
 
+class QJsonArray;
 class QNetworkAccessManager;
 class QNetworkReply;
 
@@ -17,8 +18,11 @@ class QNetworkReply;
 // checkFailed. The release's laideal_setup_X.Y.exe asset URL is forwarded so
 // the caller can pass it to downloadInstaller().
 //
-// downloadInstaller() saves the installer .exe to %TEMP%\laideal_setup_X.Y.exe
-// and emits downloadFinished with the local path. The caller is expected to
+// downloadInstaller() saves the installer .exe under the per-user app data dir
+// (as .part, renamed once its size and SHA-256 match what the release publishes:
+// the asset's "digest" or the laideal_setup_X.Y.exe.sha256 asset) and emits
+// downloadFinished with the local path. An installer that cannot be verified is
+// never handed over to run. The caller is expected to
 // launch it detached and quit the app so Inno Setup can replace the files in
 // place (the .iss declares CloseApplications + RestartApplications as a
 // safety net in case the app has not finished exiting yet).
@@ -49,6 +53,21 @@ public:
 
     bool isSilentCheck() const { return m_silentOnNoUpdate; }
 
+    // What a release says about its installer.
+    struct InstallerAsset {
+        QUrl    url;
+        qint64  size = 0;
+        QString sha256;        // from the asset's "digest" ("sha256:<hex>"), when GitHub gives it
+        QUrl    checksumUrl;   // the laideal_setup_X.Y.exe.sha256 asset
+    };
+    static InstallerAsset findInstallerAsset(const QJsonArray &assets);
+    // https on github.com or *.githubusercontent.com only.
+    static bool isTrustedDownloadUrl(const QUrl &url);
+    // The lower-case hex digest of a sha256sum line ("<hex>  <file>" or "<hex>"); empty if none.
+    static QString parseChecksumFile(const QByteArray &content);
+    // Why these installer bytes must not run; empty when size and SHA-256 match.
+    static QString installerMismatch(const QByteArray &bytes, qint64 expectedSize, const QString &expectedSha256);
+
     // Downloads installerUrl to %TEMP%; emits downloadFinished or
     // downloadFailed. The local path under %TEMP% is reused across runs -
     // a subsequent download for the same version overwrites the file.
@@ -67,10 +86,12 @@ signals:
 
 private:
     void handleReleaseReply(QNetworkReply *reply);
+    void startInstallerDownload();
     void handleDownloadReply(QNetworkReply *reply, const QString &localPath);
 
     QNetworkAccessManager *m_nam;
     bool m_silentOnNoUpdate;
+    InstallerAsset m_installer;   // of the release last reported by updateAvailable
 };
 
 #endif // UPDATER_H
