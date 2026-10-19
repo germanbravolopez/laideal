@@ -2,6 +2,8 @@
 #include "applanguage.h"
 #include <QDir>
 #include <QFile>
+#include <QDateTime>
+#include <QSaveFile>
 #include <QFileInfo>
 #include <QTextStream>
 #include <QUuid>
@@ -135,7 +137,9 @@ bool AppSettings::load()
         migrateFromLegacyFiles();
         encryptSecretsAtRest();   // a key brought in from ~/.verifactu_key must not land as plaintext
         applyDefaults();
-        save();
+        // The plaintext legacy key file goes once the settings hold the encrypted copy.
+        if (save() && !m_legacyKeyFile.isEmpty() && QFile::remove(m_legacyKeyFile))
+            qDebug() << "AppSettings: removed the plaintext legacy key file";
         qDebug() << "AppSettings: created new settings file at" << m_filePath;
         return false;
     }
@@ -151,7 +155,12 @@ bool AppSettings::load()
     file.close();
 
     if (err.error != QJsonParseError::NoError) {
-        qWarning() << "AppSettings: JSON parse error:" << err.errorString();
+        // Kept aside: the next save would otherwise overwrite the only copy of the
+        // database path and the credentials with defaults.
+        const QString aside = m_filePath + ".corrupt-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+        const bool kept = QFile::rename(m_filePath, aside);
+        qCritical() << "AppSettings: JSON parse error:" << err.errorString() << "- the file is"
+                    << (kept ? "kept as " + aside : QStringLiteral("NOT kept aside"));
         applyDefaults();
         return false;
     }
@@ -177,32 +186,16 @@ bool AppSettings::loadFrom(const QString &path)
 
 bool AppSettings::save() const
 {
-    // Atomic write: serialize to a sibling .tmp file, fsync-equivalent flush, then
-    // rename over the target. A crash mid-write leaves the previous settings intact
-    // instead of producing a zero-byte JSON that would lose the DB path / Verifactu
-    // credentials on next start.
-    const QString tmpPath = m_filePath + ".tmp";
-    QFile tmp(tmpPath);
-    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qWarning() << "AppSettings: cannot write to" << tmpPath;
+    // QSaveFile writes a temporary file and replaces the target in one step on commit:
+    // a crash mid-write leaves the previous settings intact, never no file.
+    QSaveFile file(m_filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "AppSettings: cannot write to" << m_filePath << "-" << file.errorString();
         return false;
     }
     const QByteArray bytes = QJsonDocument(m_data).toJson(QJsonDocument::Indented);
-    if (tmp.write(bytes) != bytes.size()) {
-        qWarning() << "AppSettings: short write to" << tmpPath;
-        tmp.close();
-        QFile::remove(tmpPath);
-        return false;
-    }
-    tmp.flush();
-    tmp.close();
-
-    // QFile::rename is not atomic on Windows when the target exists, so remove first.
-    // The window between remove and rename is small; the .tmp still exists on disk
-    // so a crash here is recoverable by hand.
-    QFile::remove(m_filePath);
-    if (!QFile::rename(tmpPath, m_filePath)) {
-        qWarning() << "AppSettings: rename" << tmpPath << "->" << m_filePath << "failed";
+    if (file.write(bytes) != bytes.size() || !file.commit()) {
+        qWarning() << "AppSettings: saving" << m_filePath << "failed -" << file.errorString();
         return false;
     }
     return true;
@@ -277,6 +270,7 @@ void AppSettings::migrateFromLegacyFiles()
         QTextStream in(&keyFile);
         setStr({"verifactu", "service_key"}, in.readLine().trimmed());
         keyFile.close();
+        m_legacyKeyFile = keyFile.fileName();   // removed once the encrypted copy is saved
         qDebug() << "AppSettings: migrated service key from ~/.verifactu_key";
     }
 }

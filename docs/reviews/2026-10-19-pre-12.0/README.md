@@ -33,3 +33,4 @@ Each fix is its own commit. It also marks the item ✅ in §2 / §6 of [`00_inte
 | Item | Status |
 |------|--------|
 | Personal data in the log (logging, P1) | ✅ Fixed 19-10-2026. No client name, phone or address in any log line (AddGarment insert, addNewClient, updateItemToClient, readClientPhones). Rule added to `/coding-guidelines`. Unit `test_clientWritesLogNoPersonalData`. |
+| Settings safety (appsettings #2-#6, P1) | ✅ Fixed 19-10-2026. Leaving the direct client saves its production flag off; the gateway PRODUCCIÓN box is confirmed in and out; `save()` uses `QSaveFile`; a corrupt file is kept aside; the plaintext `~/.verifactu_key` is removed after migration. Tests `test_gatewayProductionNeedsConfirmation`, `test_leavingDirectNeverKeepsProduction`, `test_corruptFileKeptAside`, `test_saveIsAtomic`. |

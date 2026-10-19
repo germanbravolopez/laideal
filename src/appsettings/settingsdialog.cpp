@@ -216,6 +216,7 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     keyRow->addWidget(revealKey);
 
     m_vProduction = new QCheckBox(tr("Entorno de PRODUCCIÓN (marcar solo para uso real con AEAT)"));
+    m_vProduction->setObjectName("chkProduction");
     m_vProduction->setChecked(s->verifactuProduction());
 
     m_vPendingRecoveryEnabled = new QCheckBox(tr(
@@ -340,6 +341,17 @@ void SettingsDialog::accept()
                                  tr("Las facturas dejarán de registrarse en la AEAT real. ¿Salir de PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
+    // The gateway's environment is a production switch too: confirmed both ways.
+    const bool gatewayProduction = m_vProduction->isChecked();
+    if (gatewayProduction != AppSettings::instance()->verifactuProduction()
+        && QMessageBox::question(this, tr("Conexión con la AEAT"),
+                                 gatewayProduction
+                                     ? tr("Con IreneSolutions las facturas se registrarán en la AEAT real, con efectos "
+                                          "tributarios. ¿Pasar a PRODUCCIÓN?")
+                                     : tr("Con IreneSolutions las facturas dejarán de registrarse en la AEAT real. "
+                                          "¿Salir de PRODUCCIÓN?"),
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
     AppSettings *s = AppSettings::instance();
 
     s->setLanguage(m_language->currentData().toString());
@@ -362,7 +374,7 @@ void SettingsDialog::accept()
     s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
     s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
-    s->setAeatDirectProduction(m_vDirectProduction->isChecked());
+    s->setAeatDirectProduction(directProduction);
     s->setAeatCertificateThumbprint(selectedThumbprint());
     s->setAeatCertificateFile(m_vCertFile->text().trimmed());
     s->setAeatCertificatePassword(m_vCertPassword->text());

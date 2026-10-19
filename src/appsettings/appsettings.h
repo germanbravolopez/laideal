@@ -177,6 +177,7 @@ private:
 
     QJsonObject m_data;
     QString     m_filePath;
+    QString     m_legacyKeyFile;   // ~/.verifactu_key, when the key was migrated from it
 
     static AppSettings *s_instance;
 };

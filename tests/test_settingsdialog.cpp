@@ -184,6 +184,64 @@ private slots:
         s->setVerifactuDirectAeat(false);
     }
 
+    // The gateway's PRODUCCIÓN box is a production switch too: confirmed going in and out.
+    void test_gatewayProductionNeedsConfirmation()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuProduction(false); });
+        s->setVerifactuDirectAeat(false);
+        s->setVerifactuProduction(false);
+        const auto answer = [](QMessageBox::StandardButton button) {
+            QTimer::singleShot(0, [button] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        if (QAbstractButton *b = box->button(button)) b->click(); else box->reject();
+            });
+        };
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkProduction")->setChecked(true);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(!s->verifactuProduction());
+        }
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->verifactuProduction());
+        }
+        SettingsDialog leaving;
+        leaving.findChild<QCheckBox *>("chkProduction")->setChecked(false);
+        answer(QMessageBox::Yes);
+        QMetaObject::invokeMethod(&leaving, "accept");
+        QVERIFY(!s->verifactuProduction());
+    }
+
+    // Leaving the direct client never keeps its production flag: coming back would
+    // otherwise skip the "Pasar a PRODUCCIÓN" question.
+    void test_leavingDirectNeverKeepsProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(true);
+        SettingsDialog dlg;
+        dlg.setDirectPendingCount(0);
+        auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+        connection->setCurrentIndex(connection->findData(QStringLiteral("irenesolutions")));
+        QVERIFY(dlg.findChild<QCheckBox *>("chkDirectProduction")->isChecked());   // hidden, still ticked
+        QTimer::singleShot(0, [] {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (auto *box = qobject_cast<QMessageBox *>(w))
+                    box->button(QMessageBox::Yes)->click();
+        });
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QVERIFY(!s->verifactuDirectAeat());
+        QVERIFY(!s->aeatDirectProduction());
+    }
+
     // While the shop's own direct client works in pre-production the self-test is off: the
     // tickets are the test, and both would send the same pre-production outbox at once.
     void test_selfTestOffWhileTheShopIsInPreProduction()

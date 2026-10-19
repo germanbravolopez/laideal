@@ -201,7 +201,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 | CI | Deploy assertion misses `qsqlite.dll` and the TLS plugin; `release.ps1` has none | Add to `ci.yml:195-210` and `release.ps1` | S | 00, updater |
 | P1 | printing | Factura simplificada prints no fecha de expedición (QR uses `fecha_pago`); "Factura completa" headed SIMPLIFICADA | Print the issue date; heading per type; auditor decision | M | printing |
 | P1 | imprimir | Cancelled / rectified invoice reprints as a normal factura (F3) | Refuse or mark ANULADA; legal decision | M | imprimir |
-| P1 | appsettings | Leaving direct keeps production=true (#2); gateway PRODUCCION without confirmation (#3) | Force off on leave; confirm both | S | appsettings |
+| P1 ✅ FIXED 19-10-2026 | appsettings | Leaving direct keeps production=true (#2); gateway PRODUCCION without confirmation (#3) | Force off on leave; confirm both | S | appsettings |
 | P1 | sql_lite | Settled cancellation dated today even in a closed quarter (F3); connection left open (F2); void-date step not idempotent (F7) | `openPeriodDate`; close on all paths; skip dateless rows | S | sql_lite |
 | P1 | sql_lite (X6) | Seven `ingresos` writers outside `sql_lite`; the rectificativa reply lacks the settled guard | Move into guarded `sql_lite` functions; tests | M-L | sql_lite, 00 |
 | P1 ✅ FIXED 19-10-2026 | logging | Client names / phones in `~/.laideal.log` | Drop the PII from the messages | S | logging, sql_lite F22 |

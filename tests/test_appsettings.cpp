@@ -160,6 +160,30 @@ private slots:
         QCOMPARE(AppSettings::instance()->aeatInstallationNumber(), number);
     }
 
+    // A settings file that cannot be read is kept aside before defaults apply: the next
+    // save would otherwise overwrite the only copy of the database path and credentials.
+    void test_corruptFileKeptAside()
+    {
+        const QString path = loadJson("{ this is not json");
+        QVERIFY(!QFile::exists(path));
+        const QStringList aside = QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + ".corrupt-*" });
+        QCOMPARE(aside.size(), 1);
+        QFile kept(m_dir.filePath(aside.first()));
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QCOMPARE(kept.readAll(), QByteArray("{ this is not json"));
+    }
+
+    // The save replaces the file in one step and leaves no temporary file behind.
+    void test_saveIsAtomic()
+    {
+        const QString path = loadJson(R"({"database":{"path":"a.db"}})");
+        AppSettings::instance()->setDbPath("b.db");
+        QVERIFY(AppSettings::instance()->save());
+        QCOMPARE(QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + "*" }).size(), 1);
+        QCOMPARE(QJsonDocument::fromJson([&path] { QFile f(path); f.open(QIODevice::ReadOnly); return f.readAll(); }())
+                     .object().value("database").toObject().value("path").toString(), QStringLiteral("b.db"));
+    }
+
     void test_encryptSecretsAtRestMigration()
     {
         const QString plain = "plaintext-service-key-XyZ987";
