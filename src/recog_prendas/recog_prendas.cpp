@@ -913,6 +913,22 @@ void RecogPrendas::on_pb_print_clicked()
                   rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
     }
     const QString ticketNum = ui->le_nr_ticket->text();
+    if (seq < 0) {
+        // No row chosen: a factura is one payment event, never several merged into one.
+        QVector<SubmittedInvoiceEvent> events;
+        if (!submittedInvoiceEvents(db, ticketNum, events) || events.isEmpty()) {
+            m_result->setText(UiKit::warnHtml(tr("El ticket %1 no tiene ninguna factura que reimprimir.")
+                                                  .arg(ticketNum.toHtmlEscaped())));
+            return;
+        }
+        if (events.size() > 1) {
+            m_result->setText(UiKit::warnHtml(tr("El ticket %1 tiene %2 facturas (pagos parciales).")
+                                                  .arg(ticketNum.toHtmlEscaped()).arg(events.size()))
+                              + "<br>" + tr("Seleccione una prenda del pago que quiera reimprimir."));
+            return;
+        }
+        seq = events.first().seq;
+    }
     const bool printed = printFactura(ticketNum, seq);
     resetAllContents();
     m_result->setText(printed ? UiKit::okHtml(tr("Factura del ticket %1 impresa.").arg(ticketNum.toHtmlEscaped()))

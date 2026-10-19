@@ -2087,6 +2087,64 @@ private slots:
 
     // The Imprimir window stays open between prints, so a QR fetched for one invoice
     // must never be printed on the next one (here a voided ticket, which has none).
+    // A reprint never prints a blank ticket nor an invoice AEAT never received: a number
+    // typed with a trailing space still loads; a ticket whose garments are all voided is
+    // refused; Recogida with no row selected picks the only payment event or asks for one;
+    // and the QR engine refuses rows of several events.
+    void test_reprintNeverBlankNorMerged()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "860", "h860a", "5.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = 'Anulado' WHERE hash='h860a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "861", "h861a", "10.00", "10-02-2026", "A-861"));
+        QVERIFY(E2e::seedSentGarment(m_db, "862", "h862a", "8.00", "10-02-2026", "A-862"));
+        QVERIFY(E2e::seedSentGarment(m_db, "862", "h862b", "5.00", "12-02-2026", "A-862-1"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '862-1' "
+                                "WHERE hash='h862b'"));
+
+        auto *dlg = new Imprimir(m_db);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->isRecibo = true;
+        dlg->show();
+        const auto press = [dlg](const QString &ticket) {
+            dlg->le_n_ticket->setText(ticket);
+            dlg->findChild<QPushButton *>("btnPrint")->click();
+            return dlg->findChild<QLabel *>("lblResult")->text();
+        };
+        QString text = press("860");
+        QVERIFY2(text.contains("no tiene prendas que imprimir") && !text.contains("impreso"), qPrintable(text));
+        text = press("861 ");
+        QVERIFY2(text.contains("Recibo Nº 861 impreso"), qPrintable(text));
+        dlg->close();
+
+        // The engine alone: rows of two payment events give no QR.
+        Imprimir merged(m_db);
+        merged.isRecibo = false;
+        merged.verifactuIntegration = m_verifactu;
+        merged.le_n_ticket->setText("862");
+        merged.getTicketInfo();
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("rows of 2 payment events loaded - no QR"));
+        QVERIFY(merged.resolveQrCode().isNull());
+        Imprimir empty(m_db);
+        empty.le_n_ticket->setText("860");
+        empty.getTicketInfo();
+        empty.buildTicket(true, false);
+        QVERIFY(empty.ticketBytes().isEmpty());
+
+        // Recogida, Imprimir factura with no row selected.
+        RecogPrendas rp(m_db);
+        rp.findChild<QLineEdit *>("le_search")->setText("862");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        rp.findChild<QLineEdit *>("le_nr_ticket")->setText("862");
+        rp.isCellClicked = false;
+        QMetaObject::invokeMethod(&rp, "on_pb_print_clicked");
+        text = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("tiene 2 facturas") && text.contains("Seleccione una prenda"), qPrintable(text));
+        rp.findChild<QLineEdit *>("le_nr_ticket")->setText("861");
+        QMetaObject::invokeMethod(&rp, "on_pb_print_clicked");
+        text = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(!text.contains("facturas (pagos parciales)") && !text.contains("ninguna factura"), qPrintable(text));
+    }
+
     void test_imprimirDialog_qrNotReusedForTheNextTicket()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "660", "h660a", "10.00", "10-02-2026", "A-660"));

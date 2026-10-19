@@ -116,6 +116,8 @@ with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
 
 ## Verifactu QR
 
+Never blank, never merged: the ticket number is trimmed before loading; `buildTicket` builds nothing when no row is printable (unknown number, every garment voided) and the dialog says so instead of "impreso"; `resolveQrCode` sums only the paid rows and draws no QR when the loaded paid rows belong to more than one payment event (`invoiceSeq` -1 over a partially paid ticket), so a QR always describes an invoice AEAT received.
+
 A QR is printed on **facturas only** (recibos are claim tickets, not tax
 documents). `resolveQrCode()` is unchanged by the ESC/POS migration — order of
 fallback:

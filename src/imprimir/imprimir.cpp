@@ -1,4 +1,6 @@
 #include "imprimir.h"
+
+#include <QSet>
 #include "sql_lite.h"
 #include "appsettings.h"
 #include "uikit.h"
@@ -124,13 +126,13 @@ void Imprimir::getTicketInfo()
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
                   "AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
                   "AND (estado IS NULL OR estado != :anulado)");
-        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":n_recibo", le_n_ticket->text().trimmed());
         q.bindValue(":seq", invoiceSeq);
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     } else {
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
                   "AND (estado IS NULL OR estado != :anulado)");
-        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":n_recibo", le_n_ticket->text().trimmed());
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     }
     q.exec();
@@ -222,9 +224,18 @@ QPixmap Imprimir::resolveQrCode()
     if (!invoiceDate.isValid())
         return QPixmap();
 
+    // The QR describes the invoice AEAT received: the paid rows of ONE payment event.
     double total = 0.0;
+    QSet<int> seqs;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
+        if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() != QLatin1String("SI"))
+            continue;
         total += sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
+        seqs.insert(sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
+    }
+    if (seqs.size() > 1) {
+        qWarning() << "Imprimir::resolveQrCode: rows of" << seqs.size() << "payment events loaded - no QR";
+        return QPixmap();
     }
 
     double ivaRate = AppSettings::instance()->ivaRate();
@@ -282,6 +293,12 @@ int Imprimir::paperDots() const
 
 void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 {
+    // Nothing to print (unknown number, every garment voided): never a blank ticket.
+    if (!sqlQueryModel || sqlQueryModel->rowCount() == 0) {
+        qWarning() << "Imprimir::buildTicket: no printable rows for ticket" << le_n_ticket->text() << "- nothing built";
+        m_ticketBytes.clear();
+        return;
+    }
     AppSettings *settings = AppSettings::instance();
 
     TicketData d;
@@ -538,6 +555,11 @@ void Imprimir::onPrintClicked()
     if (!isRecibo && events.size() == 1)
         invoiceSeq = events.first().first;
     getTicketInfo();
+    if (sqlQueryModel->rowCount() == 0) {
+        m_lblResult->setText(UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + " no tiene prendas que imprimir "
+                                             "(todas anuladas)."));
+        return;
+    }
     if (!isRecibo && !checkAnyItemPaid()) {
         m_lblResult->setText(UiKit::warnHtml("No hay ninguna prenda pagada en el recibo Nº " + ticket.toHtmlEscaped() + ".")
                              + "<br>Una factura solo se emite por lo cobrado; imprima el recibo.");

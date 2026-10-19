@@ -113,7 +113,7 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 | Button | Enabled when |
 |--------|-------------|
 | `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm` | A row is selected AND it is **not** `Anulado` (a voided garment is read-only); `sb_separ` (how many to split off, 1 .. cantidad − 1) only when the quantity is over 1 |
-| `pb_print` | A row is selected |
+| `pb_print` | A row is selected (with none, *Imprimir factura* prints the ticket's only payment event, or asks to select a garment of one when there are several) |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
