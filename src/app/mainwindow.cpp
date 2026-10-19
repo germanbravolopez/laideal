@@ -367,6 +367,7 @@ void MainWindow::buildUi()
     ui->le_nr_ticket->setFont(numberFont);
     ui->le_nr_ticket->setMaximumWidth(160);
     ui->de_date_recep = UiKit::dateEdit(QDate::currentDate(), "de_date_recep");
+    ui->de_date_recep->setMaximumDate(QDate::currentDate());   // a paid ticket's invoice date
     ui->de_date_recep->setToolTip(tr("Fecha de recepción de las prendas."));
     ui->pb_payment = new QCheckBox(tr("Pagado al dejarlo"));
     ui->pb_payment->setObjectName("pb_payment");
@@ -698,6 +699,7 @@ void MainWindow::resetAllContents()
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
     ui->le_phone->clear();
+    ui->de_date_recep->setMaximumDate(QDate::currentDate());
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->pb_payment->setChecked(false);
     on_pb_payment_toggled(false);

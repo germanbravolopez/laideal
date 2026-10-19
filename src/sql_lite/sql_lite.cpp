@@ -1466,6 +1466,15 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
     return phones;
 }
 
+int expenseIvaRate(const QVariant &stored)
+{
+    if (stored.isNull())
+        return -1;
+    bool ok = false;
+    const double rate = stored.toString().trimmed().replace(',', '.').toDouble(&ok);
+    return ok && rate >= 0.0 && rate == std::floor(rate) ? int(rate) : -1;
+}
+
 double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
 {
     const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
@@ -1474,7 +1483,7 @@ double garmentImporte(const QString &quantityText, const QString &sizeText, doub
     if (price < 0.0)
         return 0.0;
     const double size = sizeText.trimmed().replace(',', '.').toDouble();
-    return roundToCents((size != 0.0) ? size * price : price);
+    return qMax(0.0, roundToCents((size != 0.0) ? size * price : price));   // a negative size too
 }
 
 bool garmentUnmeasured(const QString &garment, const QString &sizeText)
@@ -2025,7 +2034,7 @@ static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
         e.empresa  = q.value(1).toString();
         e.servicio = q.value(2).toString();
         e.fecha    = q.value(3).toString();
-        e.iva      = q.value(4).isNull() ? -1 : q.value(4).toInt();
+        e.iva      = expenseIvaRate(q.value(4));
         const QString importe = q.value(5).toString();
         e.invalidAmount = importe.contains(QLatin1Char(','));
         e.importe  = e.invalidAmount ? 0.0 : importe.toDouble();

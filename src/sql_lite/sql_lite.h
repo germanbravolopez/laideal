@@ -27,6 +27,9 @@ int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &colum
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);
 QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, const QString &orderByColumn);
 float       readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &service);
+// gastos.iva is TEXT: a whole number ("21", "21.0", "21,0") is the rate; NULL, empty,
+// a fraction or text is -1, which the report flags as "tipo de IVA no reconocido".
+int         expenseIvaRate(const QVariant &stored);
 // Importe for one garment line, shared by MainWindow/AddGarment setGarmentPrice.
 // Pure (no DB): quantity * unitPrice, multiplied by a non-zero size factor (m2
 // garments), clamped to >= 0, rounded to cents. Quantity and size are parsed with

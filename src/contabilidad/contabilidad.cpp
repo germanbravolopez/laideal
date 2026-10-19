@@ -190,6 +190,11 @@ void Contabilidad::onCheckLockClicked()
     m_lblResult->showInfo(message);
 }
 
+QDate Contabilidad::quarterLastDay(int quarter, int year)
+{
+    return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1);
+}
+
 void Contabilidad::onGenerateClicked()
 {
     m_dataReadFailed = false;   // only this action's own read may report a failure
@@ -241,6 +246,12 @@ void Contabilidad::onGenerateClicked()
                 qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated, not locked";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           "El trimestre no se ha bloqueado: se pueden realizar modificaciones posteriores.";
+            } else if (QDate::currentDate() < quarterLastDay(trim, year)) {
+                // Closing an unfinished quarter would refuse every payment of today.
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "not ended, not locked";
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          + warnHtml("El trimestre no se ha bloqueado: todavía no ha terminado. Se puede bloquear "
+                                     "a partir de su último día, el " + quarterLastDay(trim, year).toString("dd-MM-yyyy") + ".");
             } else if (!closeQuarter(db, trim, year, QFileInfo(file).fileName())) {
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           + errorHtml("No se pudo bloquear el trimestre.") + " Vuelva a intentarlo.";
@@ -248,6 +259,9 @@ void Contabilidad::onGenerateClicked()
                 qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated and closed";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           "El trimestre se ha bloqueado: sus ingresos y gastos ya no se pueden modificar.";
+                if (QDate::currentDate() == quarterLastDay(trim, year))
+                    message += "<br>" + warnHtml("Hoy es su último día: los cobros de hoy ya no se pueden registrar "
+                                                 "hasta que se revierta.");
             }
         }
     }
@@ -259,8 +273,9 @@ void Contabilidad::onGenerateClicked()
     if (!file.isEmpty())
         message += "<br>" + fileLinkHtml(file);
     if (invalidAmounts > 0)
-        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal: "
-                                              "no se han sumado y aparecen marcados en el detalle. Revíselos antes "
+        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal "
+                                              "o gasto(s) con un tipo de IVA no reconocido: no se han sumado y "
+                                              "aparecen marcados en el detalle. Revíselos antes "
                                               "de presentar el informe.").arg(invalidAmounts));
     m_lblResult->setText(message);
 }
@@ -496,7 +511,7 @@ int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
     for (const RegularizationDetail &r : regularizations)
         n += r.invalidAmounts;
     for (const ExpenseDetail &e : expenses)
-        n += e.invalidAmount ? 1 : 0;
+        n += e.invalidAmount || e.iva < 0 ? 1 : 0;   // either is left out of the sums
     return n;
 }
 

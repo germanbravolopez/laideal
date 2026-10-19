@@ -295,6 +295,23 @@ private slots:
         QCOMPARE(e[1].iva, 0);
     }
 
+    // gastos.iva is TEXT: only a whole number is a rate; anything else is flagged, never
+    // silently summed as SIN IVA.
+    void test_expenseIvaRate_strict()
+    {
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("21"))), 21);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral(" 21.0 "))), 21);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("21,0"))), 21);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("0"))), 0);
+        QCOMPARE(expenseIvaRate(QVariant(10)), 10);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("21,5"))), -1);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral(""))), -1);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("abc"))), -1);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("21 %"))), -1);
+        QCOMPARE(expenseIvaRate(QVariant(QStringLiteral("-4"))), -1);
+        QCOMPARE(expenseIvaRate(QVariant()), -1);
+    }
+
     // The annual one-scan listing must bucket exactly like four per-quarter calls,
     // including a ticket whose garments were paid in two different quarters.
     // An AEAT cancellation records fecha_anulacion on the cancelled payment event
@@ -695,8 +712,9 @@ private slots:
         QVERIFY(qAbs(garmentImporte("3", "2,5", 4.0) - 30.0) < 0.001);
         // size "0" -> no factor applied
         QVERIFY(qAbs(garmentImporte("3", "0", 4.0) - 12.0) < 0.001);
-        // negative result clamps to 0
+        // negative result clamps to 0, a negative size too
         QVERIFY(qAbs(garmentImporte("-1", "", 5.0)) < 0.001);
+        QCOMPARE(garmentImporte("1", "-2", 10.0), 0.0);
         // empty quantity -> 0
         QVERIFY(qAbs(garmentImporte("", "", 5.0)) < 0.001);
         // m2 garments land on half a cent: rounded up, as AEAT received them (ticket

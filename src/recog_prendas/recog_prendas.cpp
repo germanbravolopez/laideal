@@ -518,6 +518,16 @@ void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
     on_pb_search_clicked();
 }
 
+// QSqlQueryModel fetches in batches of 256 and fetchMore() needs the connection open:
+// drain the result before the caller closes it, or a long search is cut silently.
+static void loadEveryRow(QSqlQueryModel *model, QSqlQuery &&q)
+{
+    q.exec();
+    model->setQuery(std::move(q));
+    while (model->canFetchMore())
+        model->fetchMore();
+}
+
 void RecogPrendas::on_pb_search_clicked()
 {
     resetAllContents();
@@ -552,8 +562,7 @@ void RecogPrendas::on_pb_search_clicked()
                     QSqlQuery q(db);
                     q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
                     q.bindValue(":cliente", clientFromPhone);
-                    q.exec();
-                    sqlQueryModel->setQuery(std::move(q));
+                    loadEveryRow(sqlQueryModel, std::move(q));
                     db.close();
                 }
             }
@@ -563,8 +572,7 @@ void RecogPrendas::on_pb_search_clicked()
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
                 q.bindValue(":n_recibo", ui->le_search->text());
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
+                loadEveryRow(sqlQueryModel, std::move(q));
                 db.close();
                 totalPriceActive = true;
             }
@@ -584,8 +592,7 @@ void RecogPrendas::on_pb_search_clicked()
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos WHERE " + dateType + " = :date");
                 q.bindValue(":date", date.toString("dd-MM-yyyy"));
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
+                loadEveryRow(sqlQueryModel, std::move(q));
                 db.close();
             }
             else {
@@ -594,15 +601,7 @@ void RecogPrendas::on_pb_search_clicked()
                 db.open();
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos");
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
-                // QSqlQueryModel lazy-fetches in 256-row batches and fetchMore() needs the
-                // db connection open. Drain the full result set here, BEFORE closing - if
-                // we close first, canFetchMore() returns false and the proxy filter only
-                // sees the first 256 rows, silently dropping tickets for prolific clients
-                // (or any client whose receipts landed past row 256 of ingresos).
-                while (sqlQueryModel->canFetchMore())
-                    sqlQueryModel->fetchMore();
+                loadEveryRow(sqlQueryModel, std::move(q));   // the proxy filter needs every row
                 db.close();
                 nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
                 qDebug() << "RecogPrendas::on_pb_search_clicked: name search loaded"

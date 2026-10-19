@@ -197,7 +197,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 ✅ FIXED 19-10-2026 | app / verifactu | Chain gate only at UI level: Anular and startup Reintentar skip it (A5, A6) | Enforce in the backend / facade; Reintentar honours an empty reqId | S | app (pending verifactu-direct) |
 | P1 ✅ FIXED 19-10-2026 | uikit | Enter on a focused secondary / Cerrar presses the primary (possible AEAT send) | `click()` the focused button; restrict to `window()==dialog` | S | uikit |
 | P1 ✅ FIXED 19-10-2026 | backup | Same-second backup deletes the good one; partial files; concurrent runs; AppSettings off-thread | `.part` + rename; never remove what you did not create; running guard; settings write on the GUI thread | S | backup |
-| P1 | app / sql_lite | `migrateDatabase` is void and runs before any backup of the new version | Pre-migration snapshot on version change; return a failure count and show it | S-M | 00, app A14 |
+| P1 ✅ FIXED 19-10-2026 | app / sql_lite | `migrateDatabase` is void and runs before any backup of the new version | Pre-migration snapshot on version change; return a failure count and show it | S-M | 00, app A14 |
 | P1 ✅ FIXED 19-10-2026 | CI | Deploy assertion misses `qsqlite.dll` and the TLS plugin; `release.ps1` has none | Add to `ci.yml:195-210` and `release.ps1` | S | 00, updater |
 | P1 ✅ FIXED 19-10-2026 | printing | Factura simplificada prints no fecha de expedición (QR uses `fecha_pago`); "Factura completa" headed SIMPLIFICADA | Print the issue date; heading per type; auditor decision | M | printing |
 | P1 ✅ FIXED 19-10-2026 | imprimir | Cancelled / rectified invoice reprints as a normal factura (F3) | Refuse or mark ANULADA; legal decision | M | imprimir |
@@ -205,12 +205,12 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 | sql_lite | Settled cancellation dated today even in a closed quarter (F3); connection left open (F2); void-date step not idempotent (F7) | `openPeriodDate`; close on all paths; skip dateless rows | S | sql_lite |
 | P1 | sql_lite (X6) | Seven `ingresos` writers outside `sql_lite`; the rectificativa reply lacks the settled guard | Move into guarded `sql_lite` functions; tests | M-L | sql_lite, 00 |
 | P1 ✅ FIXED 19-10-2026 | logging | Client names / phones in `~/.laideal.log` | Drop the PII from the messages | S | logging, sql_lite F22 |
-| P1 | recog_prendas | Phone / date / ticket search cut at 256 rows; wrong total (#2) | Drain helper (X7) | S | recog_prendas |
-| P1 | recog_prendas / add_garment / app | Payment / reception / rectification dates unbounded (future, before reception) | Max today, min reception; refuse in validation | S | recog_prendas #5, add_garment, app A11, A17 |
-| P1 | add_garment | Free-typed or empty garment gives pop-ups and 0 EUR paid invoices; negative size | Exact-name check; refuse 0 / negative; clamp | S | add_garment, sql_lite F14 |
+| P1 ✅ FIXED 19-10-2026 | recog_prendas | Phone / date / ticket search cut at 256 rows; wrong total (#2) | Drain helper (X7) | S | recog_prendas |
+| P1 ✅ FIXED 19-10-2026 | recog_prendas / add_garment / app | Payment / reception / rectification dates unbounded (future, before reception) | Max today, min reception; refuse in validation | S | recog_prendas #5, add_garment, app A11, A17 |
+| P1 ✅ FIXED 19-10-2026 | add_garment | Free-typed or empty garment gives pop-ups and 0 EUR paid invoices; negative size | Exact-name check; refuse 0 / negative; clamp | S | add_garment, sql_lite F14 |
 | P1 | recog_prendas | Zero-total Cobrar sent to AEAT; reply-time `INVALID_CONFIG` leaves the estado empty; null integration books without a record | Refuse; treat as PENDIENTE; refuse when null | S | recog_prendas #4, #6, #7 |
 | P1 ✅ FIXED 19-10-2026 | updater | Installer run without integrity check | Publish `.sha256` / use the asset digest; verify size + hash | M | updater |
-| P1 | contabilidad | The current (unfinished) quarter can be closed, blocking today's Cobrar; gastos IVA text parsed to 0 silently | Warn / refuse; strict parse to -1 (flag) | S | contabilidad |
+| P1 ✅ FIXED 19-10-2026 | contabilidad | The current (unfinished) quarter can be closed, blocking today's Cobrar; gastos IVA text parsed to 0 silently | Warn / refuse; strict parse to -1 (flag) | S | contabilidad |
 | P1 | docs | `architecture.md` lacks the direct client and `aeat_*` tables; README config keys wrong; tracker status | G1, G3, G6 | M | 00, appsettings, gateway |
 | P1 | tracker | This review's findings not filed | File P1-P3 in `progress_tracker.md` (memory rule) | S | 00 |
 | P2 | sql_lite / all | Three policies for comma amounts; `moneyText` garbage gives 0; SQL `SUM` prefix; float sums | One strict stored-amount parser; double / cents everywhere; flag commas | M | 00, sql_lite F6, F21, recog #10, listado |

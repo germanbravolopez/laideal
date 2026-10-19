@@ -316,6 +316,24 @@ private slots:
         QCOMPARE(Contabilidad::yearTicketCount(d, 2026), 2);
     }
 
+    // A quarter can be closed from its last day on.
+    void test_quarterLastDay()
+    {
+        QCOMPARE(Contabilidad::quarterLastDay(1, 2026), QDate(2026, 3, 31));
+        QCOMPARE(Contabilidad::quarterLastDay(2, 2026), QDate(2026, 6, 30));
+        QCOMPARE(Contabilidad::quarterLastDay(3, 2026), QDate(2026, 9, 30));
+        QCOMPARE(Contabilidad::quarterLastDay(4, 2026), QDate(2026, 12, 31));
+    }
+
+    // A gasto with an unrecognised IVA rate is left out of the sums, so it is counted
+    // with the comma amounts for the result-panel warning.
+    void test_unrecognisedIvaCounted()
+    {
+        ExpenseDetail bad; bad.nFactura = "F-8"; bad.iva = -1; bad.importe = 50.0;
+        ExpenseDetail ok;  ok.nFactura = "F-1"; ok.iva = 21;  ok.importe = 121.0;
+        QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, ok}), 1);
+    }
+
     void test_invalidAmountsFlagged()
     {
         IncomeTicketDetail t; t.nRecibo = "7"; t.importe = 10.0; t.garments = 2; t.invalidAmounts = 1;

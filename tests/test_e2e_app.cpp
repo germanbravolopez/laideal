@@ -2183,6 +2183,89 @@ private slots:
         QVERIFY2(!text.contains("facturas (pagos parciales)") && !text.contains("ninguna factura"), qPrintable(text));
     }
 
+    // Recogida lists every row of a long search: the model fetches 256 rows at a time and
+    // the phone, ticket and date searches closed the connection before the rest came.
+    void test_recogida_searchReturnsEveryRowBeyondTheFirstBatch()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Hotel Grande', '', '600111222', '')"));
+        QVERIFY(E2e::exec(m_db, "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 300) "
+                                "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, "
+                                "  pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "  verifactu_estado, verifactu_invoice_seq) "
+                                "SELECT '5300', 'Hotel Grande', '03-03-2025', '', '', '1.00', 'NO', 'En tienda', '1', "
+                                "  'Camisa', '', 'Limp.', '', 0, 'h5300-' || x, 'SIN COBRAR', 0 FROM n"));
+        RecogPrendas rp(m_db);
+        const auto rows = [&rp](const QString &search) {
+            rp.findChild<QLineEdit *>("le_search")->setText(search);
+            QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+            return rp.findChild<QTableView *>("tableView")->model()->rowCount();
+        };
+        QCOMPARE(rows("600111222"), 300);                                  // phone
+        QCOMPARE(rows("5300"), 300);                                       // ticket
+        QCOMPARE(rows("03-03-2025"), 300);                                 // reception date
+        QCOMPARE(rows("hotel grande"), 300);                               // name
+    }
+
+    // A free-typed garment never opens a pop-up and is never saved (0,00 EUR invoices).
+    void test_addGarment_refusesAGarmentNotInTheList()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "5310", "h5310a", "10.00", today()));
+        AddGarment add(m_db);
+        add.loadTicket("5310");
+        add.findChild<QLineEdit *>("leCantidad")->setText("1");                // before the garment
+        add.findChild<QComboBox *>("cbPrenda")->setCurrentText("Inventada");
+        add.findChild<QLineEdit *>("leSize")->setText("2");
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+        add.findChild<QPushButton *>("btnSave")->click();
+        QVERIFY2(add.findChild<QLabel *>("lblResult")->text().contains("no está en la lista"),
+                 qPrintable(add.findChild<QLabel *>("lblResult")->text()));
+        add.findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
+        add.findChild<QLineEdit *>("leCantidad")->setText("0");
+        add.findChild<QPushButton *>("btnSave")->click();
+        QVERIFY(add.findChild<QLabel *>("lblResult")->text().contains("al menos 1"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '5310'"), QStringLiteral("1"));
+        QVERIFY(m_popups->messages().isEmpty());
+    }
+
+    // Payment dates never lie in the future nor before the reception (the AEAT invoice date).
+    void test_paymentDatesBoundedByReceptionAndToday()
+    {
+        const QString reception = QDate::currentDate().addDays(-5).toString("dd-MM-yyyy");
+        QVERIFY(E2e::seedGarment(m_db, "5320", "h5320a", "10.00", reception));
+        PayDialog pay(m_db);
+        QVERIFY(pay.loadTicket("5320"));
+        auto *dePago = pay.findChild<QDateEdit *>("dePago");
+        QCOMPARE(dePago->maximumDate(), QDate::currentDate());
+        QCOMPARE(dePago->minimumDate(), QDate::currentDate().addDays(-5));
+        AddGarment add(m_db);
+        add.loadTicket("5320");
+        QCOMPARE(add.findChild<QDateEdit *>("deFechaPago")->maximumDate(), QDate::currentDate());
+        QCOMPARE(add.findChild<QDateEdit *>("deFechaPago")->minimumDate(), QDate::currentDate().addDays(-5));
+        MainWindow mw;
+        QCOMPARE(mw.findChild<QDateEdit *>("de_date_recep")->maximumDate(), QDate::currentDate());
+    }
+
+    // The quarter that has not ended yet is reported but never closed: closing it would
+    // refuse every payment of today.
+    void test_contabilidad_unfinishedQuarterIsNotClosed()
+    {
+        const QDate today = QDate::currentDate();
+        const int quarter = (today.month() + 2) / 3;
+        if (today == Contabilidad::quarterLastDay(quarter, today.year()))
+            return;                                                         // closing is allowed today
+        QVERIFY(E2e::seedSentGarment(m_db, "5330", "h5330a", "12.10", today.toString("dd-MM-yyyy"), "A-5330"));
+        QPointer<Contabilidad> form = new Contabilidad(m_db);
+        form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
+        form->findChild<QSpinBox *>("sbYear")->setValue(today.year());
+        form->findChild<QSpinBox *>("sbPeriod")->setValue(quarter);
+        form->findChild<QCheckBox *>("chkLock")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
+        const QString text = form->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("realizada") && text.contains("todavía no ha terminado"), qPrintable(text));
+        QVERIFY(!quarterIsClosed(m_db, quarter, today.year()));
+        delete form;
+    }
+
     void test_imprimirDialog_qrNotReusedForTheNextTicket()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "660", "h660a", "10.00", "10-02-2026", "A-660"));

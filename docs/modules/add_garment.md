@@ -28,8 +28,9 @@ ui->show();
 ## Validation
 
 - Search must succeed before saving (`ticketFound=true`), for the number actually saved: if the receipt number is retyped after the search, the save is refused ("No se ha buscado ningún Nº recibo…"). The paid-garment check is repeated at save, so a ticket charged meanwhile is refused too.
-- Garment and quantity must not be empty.
+- Garment and quantity must not be empty. The garment must be an exact entry of the garment list: a free-typed name is refused, and it never triggers a price lookup or a pop-up while typing. The quantity must be at least 1, and the importe more than 0,00 (`garmentImporte` clamps a negative size to 0).
 - Garments whose name contains "m2" require a size greater than 0.
+- The payment and pickup dates are bounded: never after today, never before the ticket's reception date. The payment date is the invoice date AEAT receives.
 - If marking as paid: the payment date must fall in an open quarter (`quarterIsClosed`, the whole quarter).
 
 ## Price calculation

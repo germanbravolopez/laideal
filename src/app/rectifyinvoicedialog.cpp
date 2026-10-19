@@ -101,6 +101,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_deRectifyDate->setObjectName("deRectifyDate");
     m_deRectifyDate->setCalendarPopup(true);
     m_deRectifyDate->setDisplayFormat("dd-MM-yyyy");
+    m_deRectifyDate->setMaximumDate(QDate::currentDate());   // AEAT refuses a future invoice date
     rowDate->addWidget(m_deRectifyDate);
     rowDate->addStretch();
     formLayout->addLayout(rowDate);

@@ -211,6 +211,12 @@ void AddGarment::onSearchClicked()
     m_leCliente->setText(m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_CLIENTE)).toString());
     m_deFechaRecepcion->setDate(QDate::fromString(
         m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString(), "dd-MM-yyyy"));
+    // The payment date is the invoice date AEAT gets: not in the future, not before reception.
+    for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida }) {
+        edit->setMaximumDate(QDate::currentDate());
+        if (m_deFechaRecepcion->date() <= QDate::currentDate())
+            edit->setMinimumDate(m_deFechaRecepcion->date());
+    }
     populateGarments();
     m_grpTicket->setEnabled(true);
     m_grpGarment->setEnabled(true);
@@ -229,7 +235,7 @@ void AddGarment::populateGarments()
 
 void AddGarment::setGarmentPrice()
 {
-    if (m_leCantidad->text().isEmpty()) {
+    if (m_leCantidad->text().isEmpty() || m_cbPrenda->findText(m_cbPrenda->currentText(), Qt::MatchExactly) == -1) {
         m_leImporte->setText(displayMoney(0.0));
         return;
     }
@@ -257,8 +263,16 @@ QString AddGarment::validationError()
     if (m_leCliente->text().isEmpty() || m_cbPrenda->currentText().isEmpty() || m_leCantidad->text().isEmpty())
         return UiKit::errorHtml("Formulario incompleto.")
                + "<br>Rellene al menos la prenda y la cantidad.";
+    if (m_cbPrenda->findText(m_cbPrenda->currentText(), Qt::MatchExactly) == -1)
+        return UiKit::errorHtml("La prenda \"" + m_cbPrenda->currentText().toHtmlEscaped() + "\" no está en la lista de prendas.")
+               + "<br>Elíjala de la lista (o añádala antes a la lista de prendas).";
+    if (m_leCantidad->text().toInt() <= 0)
+        return UiKit::errorHtml("La cantidad tiene que ser al menos 1.");
     if (garmentUnmeasured(m_cbPrenda->currentText(), m_leSize->text()))
         return UiKit::errorHtml("La prenda se cobra por m2: introduzca su tamaño.");
+    if (moneyText(m_leImporte->text()).toDouble() <= 0.0)
+        return UiKit::errorHtml("El importe de la prenda es 0,00.")
+               + "<br>Compruebe la prenda, el servicio, la cantidad y el tamaño.";
     if (m_chkPagado->isChecked()) {                                 // a paid garment is an invoice
         const QString blocked = invoicingBlocked ? invoicingBlocked()
                                                  : tr("Verifactu no está disponible: no se puede cobrar.");

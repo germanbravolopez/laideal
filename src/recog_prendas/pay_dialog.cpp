@@ -162,6 +162,10 @@ bool PayDialog::loadTicket(const QString &ticketNum)
                          .arg(ticketNum, m_cliente,
                               m_fechaRecepcion.toString("dd-MM-yyyy"));
     m_lblHeader->setText(headerText);
+    // The payment date is the invoice date AEAT gets: not in the future, not before reception.
+    m_dePago->setMaximumDate(QDate::currentDate());
+    if (m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate())
+        m_dePago->setMinimumDate(m_fechaRecepcion);
     connect(m_table, &QTableWidget::itemChanged,
             this, [this](QTableWidgetItem *it) {
         if (it && it->column() == COL_CHECK) recomputeTotal();

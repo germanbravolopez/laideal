@@ -125,6 +125,8 @@ public:
     // one ticket, and one paid and cancelled within the year is none.
     static int yearTicketCount(const QuarterlyDetails &details, int year);
     // Comma-decimal amounts in a period's rows (listed but not summed).
+    // A quarter can be closed from its last day on (closing it earlier refuses today's payments).
+    static QDate quarterLastDay(int quarter, int year);
     static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,
                                   const QVector<RegularizationDetail> &regularizations,
                                   const QVector<ExpenseDetail> &expenses);
