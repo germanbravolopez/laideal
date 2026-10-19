@@ -319,7 +319,7 @@ bool AddGarment::saveGarment()
     row.verifactuEstado = verifactuEstadoToString(
         row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                           : VerifactuEstado::Unpaid);
-    qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo << "cliente=" << row.cliente
+    qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo
              << "prenda=" << row.prenda << "cantidad=" << row.cantidad << "importe=" << row.importe
              << "pagado=" << row.pagado << "hash=" << hash;
     if (!insertGarmentRow(db, row))

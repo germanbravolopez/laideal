@@ -584,7 +584,7 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    qDebug() << "updateItemToClient: UPDATE clientes SET" << column << "= ? WHERE nombre =" << client;
+    qDebug() << "updateItemToClient: UPDATE clientes SET" << column;
     db.open();
     QSqlQuery q(db);
     q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
@@ -592,7 +592,7 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
     q.bindValue(":client", client);
     bool ok = q.exec();
     if (!ok)
-        qWarning() << "updateItemToClient: failed to update column" << column << "for client" << client << "-" << q.lastError().text();
+        qWarning() << "updateItemToClient: failed to update column" << column << "-" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -602,8 +602,8 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    qDebug() << "addNewClient: INSERT INTO clientes nombre=" << client << "tel_fijo=" << telFijo
-             << "movil=" << movil;
+    // No name, phones nor address in the log: it is sent to support.
+    qDebug() << "addNewClient: INSERT INTO clientes";
     db.open();
     QSqlQuery q(db);
     q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) "
@@ -614,7 +614,7 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     q.bindValue(":movil",     movil);
     bool ok = q.exec();
     if (!ok)
-        qWarning() << "addNewClient: failed to insert client" << client << "-" << q.lastError().text();
+        qWarning() << "addNewClient: failed to insert the client -" << q.lastError().text();
     db.close();
     return ok;
 }
@@ -1447,7 +1447,7 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
         phones[0] = q.value(0).toString();
         phones[1] = q.value(1).toString();
     } else if (q.lastError().isValid()) {
-        qWarning() << "readClientPhones: query error for client" << client << "-" << q.lastError().text();
+        qWarning() << "readClientPhones: query error -" << q.lastError().text();
     }
     db.close();
     return phones;

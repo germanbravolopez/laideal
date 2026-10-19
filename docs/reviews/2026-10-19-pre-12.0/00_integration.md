@@ -204,7 +204,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 | appsettings | Leaving direct keeps production=true (#2); gateway PRODUCCION without confirmation (#3) | Force off on leave; confirm both | S | appsettings |
 | P1 | sql_lite | Settled cancellation dated today even in a closed quarter (F3); connection left open (F2); void-date step not idempotent (F7) | `openPeriodDate`; close on all paths; skip dateless rows | S | sql_lite |
 | P1 | sql_lite (X6) | Seven `ingresos` writers outside `sql_lite`; the rectificativa reply lacks the settled guard | Move into guarded `sql_lite` functions; tests | M-L | sql_lite, 00 |
-| P1 | logging | Client names / phones in `~/.laideal.log` | Drop the PII from the messages | S | logging, sql_lite F22 |
+| P1 ✅ FIXED 19-10-2026 | logging | Client names / phones in `~/.laideal.log` | Drop the PII from the messages | S | logging, sql_lite F22 |
 | P1 | recog_prendas | Phone / date / ticket search cut at 256 rows; wrong total (#2) | Drain helper (X7) | S | recog_prendas |
 | P1 | recog_prendas / add_garment / app | Payment / reception / rectification dates unbounded (future, before reception) | Max today, min reception; refuse in validation | S | recog_prendas #5, add_garment, app A11, A17 |
 | P1 | add_garment | Free-typed or empty garment gives pop-ups and 0 EUR paid invoices; negative size | Exact-name check; refuse 0 / negative; clamp | S | add_garment, sql_lite F14 |

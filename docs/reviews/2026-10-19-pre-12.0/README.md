@@ -27,3 +27,9 @@ Each fix is its own commit. It also marks the item ✅ in §2 / §6 of [`00_inte
 **Compliance audit of the fixes (blockers 4-10, `288d017..a8dc507`):** PASS, nothing blocking. Follow-ups:
 - Fixed in the next commit: the read-failure message no longer outlives its action; a gateway rectificativa without a CSV says to check it with Consultar en AEAT; the printed Nº uses the trimmed number; the search unlocks after a queued cancellation; the requirements doc covers the new numbering and cancellation rules.
 - The rest is filed in the tracker ("Follow-ups from the compliance audit of the pre-12.0 blocker fixes").
+
+## Resolution status of the open items (P1, P2 / P3)
+
+| Item | Status |
+|------|--------|
+| Personal data in the log (logging, P1) | ✅ Fixed 19-10-2026. No client name, phone or address in any log line (AddGarment insert, addNewClient, updateItemToClient, readClientPhones). Rule added to `/coding-guidelines`. Unit `test_clientWritesLogNoPersonalData`. |

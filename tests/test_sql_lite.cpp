@@ -119,6 +119,31 @@ private slots:
         TestSchema::resetClosures(m_db);
     }
 
+    // The log is sent to support: the client writes never put a name nor a phone in it.
+    void test_clientWritesLogNoPersonalData()
+    {
+        static QStringList *captured = nullptr;
+        QStringList messages;
+        captured = &messages;
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &m) {
+            if (captured) captured->append(m);
+        });
+        addNewClient(m_db, "Persona Privada", "958111222", "Calle Secreta 1", "600111222");
+        updateItemToClient(m_db, "movil", "600333444", "Persona Privada");
+        readClientPhones(m_db, "Persona Privada");
+        exec("ALTER TABLE clientes RENAME COLUMN movil TO movil_off");      // the error paths too
+        addNewClient(m_db, "Persona Privada", "958111222", "Calle Secreta 1", "600111222");
+        updateItemToClient(m_db, "movil", "600333444", "Persona Privada");
+        readClientPhones(m_db, "Persona Privada");
+        exec("ALTER TABLE clientes RENAME COLUMN movil_off TO movil");
+        qInstallMessageHandler(previous);
+        captured = nullptr;
+        QVERIFY(!messages.isEmpty());
+        for (const QString &m : messages)
+            QVERIFY2(!m.contains("Persona") && !m.contains("958111222") && !m.contains("600111222")
+                     && !m.contains("600333444") && !m.contains("Secreta"), qPrintable(m));
+    }
+
     void test_genHash16_shapeAndUniqueness()
     {
         const QString h = genHash16();

@@ -102,6 +102,10 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 ---
 
+## What never goes into the log
+
+`~/.laideal.log` is sent to support: never log a secret (the service key, the certificate password; the gateway payload is logged with the key redacted) nor a client's personal data (name, phones, address, DNI). Log ticket numbers, invoice ids, counts, amounts, states and SQL error text instead.
+
 ## Error handling
 
 - Return `bool` or a result struct from anything that can fail.
