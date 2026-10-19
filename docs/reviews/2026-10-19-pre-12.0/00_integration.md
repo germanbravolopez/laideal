@@ -20,7 +20,7 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
 
 ### 2a. Release mechanics (hard gates in CI or `/release`)
 
-1. **Release notes 12.0** are missing from `releases_notes.txt` and `releases_notes_es.txt`. The top section is 11.2, and `ci.yml:238-247` fails the release without them. 12.0 is large: direct AEAT client, self-check, the menu rework, decimal comma, refused-invoices link. The notes must tell the shop what changes for them on TEST.
+1. ⏳ **DEFERRED to `/release`; drafts in the tracker.** **Release notes 12.0** are missing from `releases_notes.txt` and `releases_notes_es.txt`. The top section is 11.2, and `ci.yml:238-247` fails the release without them. 12.0 is large: direct AEAT client, self-check, the menu rework, decimal comma, refused-invoices link. The notes must tell the shop what changes for them on TEST.
 2. **Version bump:** `CMakeLists.txt:2` still says `VERSION 11.2`.
 3. **Declaración responsable date:** `src/verifactu/producerdeclaration.cpp` (`currentSignature`) still has a pending date. Set it on release day (tracker row 3, release SKILL step 1). Until then Req. 8 is not really "COVERED", although the summary table in `verifactu-requirements.md:131` says it is.
 4. **Gates:**

@@ -15,7 +15,7 @@ Each fix is its own commit. It also marks the item ✅ in §2 / §6 of [`00_inte
 |---|------------------|--------|
 | 1 | Private data in the public repo (repo) | ✅ Fixed 19-10-2026. HEAD cleaned: NIF, full name and the request CSVs removed; the test uses AEAT's test NIF. History kept (owner's decision). The shop's public street address stays as the first-run default. |
 | 2 | Shop connection for 12.0 (release) | ✅ Fixed 19-10-2026. The gateway on TEST in 12.0; the direct client for the later production switch. The tracker's Next line, the production row and the Verifactu README now say so. The gateway items (blocker 9) are the 12.0 blockers. |
-| 3 | 12.0 release mechanics and gates (release) | Open |
+| 3 | 12.0 release mechanics and gates (release) | ⏳ Deferred to `/release` (owner's decision 19-10-2026). ES / EN release-note drafts are in the tracker row; Req. 8 no longer claims COVERED before the signature. The gates run after the blocker fixes. |
 | 4 | Anular / Rectificar act on the re-searched ticket; Rectificar success without a row (app A1-A3) | Open |
 | 5 | Closing Cobrar / Anular / Rectificar while AEAT answers (recog_prendas #1, app A7) | Open |
 | 6 | No single-instance guard (app A4) | Open |

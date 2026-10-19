@@ -131,7 +131,7 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 5 | Trazabilidad | COVERED — monoperador scope stated in the declaración responsable (Art. 8.1) |
 | 6 | Event log | COVERED (VERIFACTU mode) |
 | 7 | XML export for Hacienda | COVERED |
-| 8 | Declaración responsable | COVERED |
+| 8 | Declaración responsable | COVERED once signed: the signature date is set on release day (`/release`), still pending for 12.0 |
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
