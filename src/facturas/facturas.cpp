@@ -172,7 +172,12 @@ void Facturas::onSaveClicked()
 
 bool Facturas::saveFactura()
 {
-    const int idMax = readMaxValueInColumnFromTable(db, "id", "gastos");
+    bool idRead = false;
+    const int idMax = readMaxValueInColumnFromTable(db, "id", "gastos", &idRead);
+    if (!idRead) {
+        qCritical() << "saveFactura: the highest gastos id could not be read - nothing saved";
+        return false;
+    }
     qDebug() << "saveFactura: INSERT INTO gastos id=" << (idMax + 1)
              << "n_factura=" << m_leFra->text()
              << "empresa=" << m_cbEmpresa->currentText()

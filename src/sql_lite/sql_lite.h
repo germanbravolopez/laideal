@@ -22,7 +22,7 @@ QString dbPath();
 
 void migrateDatabase(QSqlDatabase &db);
 
-int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table);
+int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok = nullptr);
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);
 QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, const QString &orderByColumn);
 float       readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &service);
@@ -89,7 +89,10 @@ bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QStr
 bool markRectificationResent(QSqlDatabase &db, const QString &number);
 // The next ticket number: above the database's highest and above `highestAtAeat` (our
 // system's highest number at AEAT: a database restored from an older backup).
-int nextTicketNumber(QSqlDatabase &db, int highestAtAeat);
+// Returns 0 with *ok false when the highest stored number cannot be read: never 1.
+// The detail listings and readMaxValueInColumnFromTable set *ok false when their query
+// failed, so an unreadable database is never mistaken for an empty period.
+int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
 // Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
 // paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
 // any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
@@ -348,11 +351,11 @@ struct RegularizationDetail {
 // fecha_anulacion still counts as income in its payment period, and is listed by
 // regularizationsBetweenDates in the period of its fecha_anulacion. (Pre-10.12
 // cancellations have no date and simply stay excluded.)
-QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
-QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok = nullptr);
+QVector<ExpenseDetail>      expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok = nullptr);
 // Regularisations whose fecha_anulacion falls in [startDate, endDate), one entry per
 // n_recibo, ordered by that date.
-QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate);
+QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok = nullptr);
 
 // Contabilidad's quarterly close, kept in accounting_closures (created by migrateDatabase):
 // a quarter is closed while it has a closure not yet reopened. Closures are never
@@ -410,6 +413,6 @@ struct QuarterlyDetails {
     QVector<ExpenseDetail>        expenses[4];
     QVector<RegularizationDetail> regularizations[4];   // bucketed by fecha_anulacion
 };
-QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year);
+QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year, bool *ok = nullptr);
 
 #endif // SQL_LITE_H

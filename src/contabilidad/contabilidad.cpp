@@ -250,6 +250,11 @@ void Contabilidad::onGenerateClicked()
             }
         }
     }
+    if (m_dataReadFailed) {
+        qCritical() << "Contabilidad: the period's data could not be read - no report, nothing closed";
+        message = errorHtml("No se pudieron leer los datos de la base de datos: no se ha generado el informe "
+                            "ni se ha bloqueado el trimestre.") + "<br>Revise el log de depuración (Ayuda) y vuelva a intentarlo.";
+    }
     if (!file.isEmpty())
         message += "<br>" + fileLinkHtml(file);
     if (invalidAmounts > 0)
@@ -281,14 +286,21 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
     const QString detailTitle = withDetail ? QStringLiteral(" · Detalle") : QString();
     QString contabilidadHtml;
     invalidAmounts = 0;
+    m_dataReadFailed = false;
 
     if (currentMode() == Trimestral || currentMode() == Mensual) {
         QDate start, endExclusive;
         periodRange(0, start, endExclusive);
         // One fetch per table: the summary and the detail tables use the same rows.
-        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive);
-        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive);
-        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, endExclusive);
+        bool incomeRead = false, expensesRead = false, regsRead = false;
+        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive, &incomeRead);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive, &expensesRead);
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, endExclusive, &regsRead);
+        // An unreadable database is never reported (and closed) as an empty period.
+        if (!incomeRead || !expensesRead || !regsRead) {
+            m_dataReadFailed = true;
+            return QString();
+        }
         invalidAmounts = invalidAmountCount(income, regs, expenses);
 
         QString title, subtitle = periodSubtitle(0);
@@ -312,7 +324,12 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
         contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year) + detailTitle);
         // One scan per table for the whole year, bucketed by quarter; each quarter's
         // figures and detail tables come from the same rows.
-        const QuarterlyDetails details = annualDetailsByQuarter(db, year);
+        bool detailsRead = false;
+        const QuarterlyDetails details = annualDetailsByQuarter(db, year, &detailsRead);
+        if (!detailsRead) {
+            m_dataReadFailed = true;
+            return QString();
+        }
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
             const int i = trim - 1;

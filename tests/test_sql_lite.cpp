@@ -146,6 +146,34 @@ private slots:
         QCOMPARE(nextTicketNumber(m_db, 7), 100001);
     }
 
+    // A failed read is never an empty period nor ticket number 1: the listings and the
+    // numbering say so (*ok false), and the readable ones still say ok.
+    void test_failedReadsAreReportedNotEmpty()
+    {
+        insertIngreso("120", "10-02-2026", "10.00", "SI", "ENVIADA", 0);
+        bool ok = false;
+        QCOMPARE(nextTicketNumber(m_db, 0, &ok), 121);
+        QVERIFY(ok);
+        QCOMPARE(incomeTicketsBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok).size(), 1);
+        QVERIFY(ok);
+
+        exec("ALTER TABLE gastos RENAME COLUMN importe TO importe_off");       // gastos unreadable
+        expensesBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok);
+        QVERIFY(!ok);
+        annualDetailsByQuarter(m_db, 2026, &ok);
+        QVERIFY(!ok);
+        regularizationsBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok);
+        QVERIFY(ok);                                                         // ingresos still readable
+        exec("ALTER TABLE gastos RENAME COLUMN importe_off TO importe");
+
+        exec("ALTER TABLE ingresos RENAME COLUMN n_recibo TO n_recibo_off");  // numbering unreadable
+        QCOMPARE(nextTicketNumber(m_db, 500, &ok), 0);
+        QVERIFY(!ok);
+        incomeTicketsBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok);
+        QVERIFY(!ok);
+        exec("ALTER TABLE ingresos RENAME COLUMN n_recibo_off TO n_recibo");
+    }
+
     // incomeTicketsBetweenDates: only pagado='SI', excludes ANULADA and
     // RECTIFICADA, includes ENVIADA / legacy-empty, half-open [start, end).
     void test_incomeTickets_filters()

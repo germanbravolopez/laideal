@@ -592,8 +592,9 @@ void MainWindow::continueDirectChain()
         [this](bool ok, const QString &message) {
             qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
             const int atAeat = m_verifactuIntegration->highestNumberAtAeat();
-            const int local = readMaxValueInColumnFromTable(db, "n_recibo", "ingresos");
-            if (atAeat > local) {
+            bool localRead = false;
+            const int local = readMaxValueInColumnFromTable(db, "n_recibo", "ingresos", &localRead);
+            if (localRead && atAeat > local) {
                 // Restored from an older backup: AEAT already holds later numbers.
                 qWarning() << "MainWindow: AEAT holds ticket numbers up to" << atAeat << "- the database only" << local;
                 m_result->setText(UiKit::warnHtml(tr("La AEAT ya tiene facturas de este sistema hasta el nº %1 y esta base "
@@ -677,8 +678,14 @@ void MainWindow::resetAllContents()
 
 void MainWindow::setNextTicketNumber()
 {
-    ui->le_nr_ticket->setText(QString::number(
-        nextTicketNumber(db, m_verifactuIntegration ? m_verifactuIntegration->highestNumberAtAeat() : 0)));
+    bool read = false;
+    const int next = nextTicketNumber(db, m_verifactuIntegration ? m_verifactuIntegration->highestNumberAtAeat() : 0,
+                                      &read);
+    // Never a guessed number: without the highest stored one no ticket is saved.
+    ui->le_nr_ticket->setText(read ? QString::number(next) : QString());
+    if (!read && m_result)
+        m_result->setText(UiKit::errorHtml(tr("No se pudo leer el último número de ticket de la base de datos."))
+                          + "<br>" + tr("No se puede guardar ningún ticket hasta que se pueda leer; revise el log de depuración."));
 }
 
 void MainWindow::populateCbClient()
@@ -785,6 +792,8 @@ bool MainWindow::validateTicket()
         m_result->setText(UiKit::errorHtml(reason) + "<br>" + tr("No se ha guardado nada."));
         return false;
     };
+    if (ui->le_nr_ticket->text().toInt() <= 0)
+        return refuse(tr("No hay número de ticket: no se pudo leer el último de la base de datos."));
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
     if (m_verifactuIntegration) {

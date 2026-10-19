@@ -3106,6 +3106,29 @@ private slots:
         QTRY_VERIFY(form.isNull());
     }
 
+    // Contabilidad with data it cannot read: no all-zero report, and the quarter is not
+    // closed even with "Bloquear" ticked.
+    void test_contabilidad_unreadableDataNeitherReportsNorCloses()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "415", "h415a", "12.10", "10-05-2026", "A-ORIG0415"));
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE gastos RENAME COLUMN importe TO importe_off"));
+        const QString pdf = AppSettings::instance()->contabilidadPath() + "/contabilidad_trimestral_2026_2.pdf";
+        QFile::remove(pdf);
+        QPointer<Contabilidad> form = new Contabilidad(m_db);
+        form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
+        form->findChild<QSpinBox *>("sbPeriod")->setValue(2);
+        form->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        form->findChild<QCheckBox *>("chkLock")->setChecked(true);
+        form->findChild<QPushButton *>("btnGenerate")->click();
+        const QString text = form->findChild<QLabel *>("lblResult")->text();
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE gastos RENAME COLUMN importe_off TO importe"));
+        QVERIFY2(text.contains("No se pudieron leer los datos") && !text.contains("realizada"), qPrintable(text));
+        QVERIFY(!QFile::exists(pdf));
+        QVERIFY(!quarterIsClosed(m_db, 2, 2026));
+        form->close();
+        QTRY_VERIFY(form.isNull());
+    }
+
     // Contabilidad Trimestral Q3 whose only movement is the cancellation of a Q2 invoice:
     // the report is written with the regularisation and, with "Bloquear", the quarter is
     // closed like any other.

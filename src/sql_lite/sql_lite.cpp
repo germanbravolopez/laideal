@@ -413,8 +413,9 @@ void migrateDatabase(QSqlDatabase &db)
     db.close();
 }
 
-int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table)
+int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok)
 {
+    if (ok) *ok = false;
     if (dbNotConfigured(db, __func__)) return 0;
 
     int maxValue = 0;
@@ -424,19 +425,16 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
     // (the next ticket would repeat a number) or "9999" above "31163".
     q.exec("SELECT MAX(CAST(" + column + " AS INTEGER)) FROM " + table);
     if (q.isSelect()) {
-        if (q.first())
+        if (q.first()) {
             maxValue = q.value(0).toInt();
-        else {
+            if (ok) *ok = true;
+        } else {
             qWarning() << "readMaxValueInColumnFromTable: empty result for column" << column << "in" << table;
-            QMessageBox::warning(nullptr, "Error base de datos",
-                                 "Búsqueda vacía al usar readMaxValueInColumnFromTable.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
         }
     } else {
-        qCritical() << "readMaxValueInColumnFromTable: query error for column" << column << "in" << table;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar readMaxValueInColumnFromTable.",
-                              QMessageBox::Ok, QMessageBox::Ok);
+        // Reported by the caller (*ok false), in its own window.
+        qCritical() << "readMaxValueInColumnFromTable: query error for column" << column << "in" << table
+                    << "-" << q.lastError().text();
     }
     db.close();
     return maxValue;
@@ -1268,9 +1266,14 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
     return changed;
 }
 
-int nextTicketNumber(QSqlDatabase &db, int highestAtAeat)
+int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok)
 {
-    return qMax(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos"), highestAtAeat) + 1;
+    bool read = false;
+    const int highest = readMaxValueInColumnFromTable(db, "n_recibo", "ingresos", &read);
+    if (ok) *ok = read;
+    if (!read)
+        qCritical() << "nextTicketNumber: the highest ticket number could not be read - no number given";
+    return read ? qMax(highest, highestAtAeat) + 1 : 0;
 }
 
 QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIso)
@@ -1942,7 +1945,7 @@ static int quarterBucket(const QString &ddMMyyyy) { return (ddMMyyyy.mid(3, 2).t
 // COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
 // a bucket keeps its first payment date. A comma-decimal importe is not summed;
 // it is counted in invalidAmounts so the report can flag it.
-static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
+static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
                                  QVector<IncomeTicketDetail> *buckets, int bucketCount,
                                  int (*bucketOf)(const QString &))
 {
@@ -1955,7 +1958,7 @@ static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
     if (!q.exec()) {
         qWarning() << "collectIncomeTickets: query failed -" << q.lastError().text();
         db.close();
-        return;
+        return false;
     }
     QVector<QHash<QString, int>> indexByTicket(bucketCount);
     while (q.next()) {
@@ -1981,11 +1984,12 @@ static void collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
         t.garments++;
     }
     db.close();
+    return true;
 }
 
 // Every gastos row in [start, end) into buckets[bucketOf(fecha)]. A NULL iva is
 // kept as -1 so it is not mistaken for sin IVA (0).
-static void collectExpenses(QSqlDatabase &db, QDate start, QDate end,
+static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
                             QVector<ExpenseDetail> *buckets, int bucketCount,
                             int (*bucketOf)(const QString &))
 {
@@ -1998,7 +2002,7 @@ static void collectExpenses(QSqlDatabase &db, QDate start, QDate end,
     if (!q.exec()) {
         qWarning() << "collectExpenses: query failed -" << q.lastError().text();
         db.close();
-        return;
+        return false;
     }
     while (q.next()) {
         const int bucket = bucketOf(q.value(3).toString());
@@ -2015,11 +2019,12 @@ static void collectExpenses(QSqlDatabase &db, QDate start, QDate end,
         buckets[bucket].append(e);
     }
     db.close();
+    return true;
 }
 
 // Regularised rows in [start, end) of their fecha_anulacion, aggregated by n_recibo
 // into buckets[bucketOf(fecha_anulacion)].
-static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
+static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
                                    QVector<RegularizationDetail> *buckets, int bucketCount,
                                    int (*bucketOf)(const QString &))
 {
@@ -2033,7 +2038,7 @@ static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
     if (!q.exec()) {
         qWarning() << "collectRegularizations: query failed -" << q.lastError().text();
         db.close();
-        return;
+        return false;
     }
     QVector<QHash<QString, int>> indexByTicket(bucketCount);
     while (q.next()) {
@@ -2066,40 +2071,45 @@ static void collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
         r.garments++;
     }
     db.close();
+    return true;
 }
 
-QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+QVector<IncomeTicketDetail> incomeTicketsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok)
 {
     QVector<IncomeTicketDetail> tickets;
-    if (dbNotConfigured(db, __func__)) return tickets;
-    collectIncomeTickets(db, startDate, endDate, &tickets, 1, singleBucket);
+    const bool read = !dbNotConfigured(db, __func__)
+                      && collectIncomeTickets(db, startDate, endDate, &tickets, 1, singleBucket);
+    if (ok) *ok = read;
     return tickets;
 }
 
-QVector<ExpenseDetail> expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+QVector<ExpenseDetail> expensesBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok)
 {
     QVector<ExpenseDetail> expenses;
-    if (dbNotConfigured(db, __func__)) return expenses;
-    collectExpenses(db, startDate, endDate, &expenses, 1, singleBucket);
+    const bool read = !dbNotConfigured(db, __func__)
+                      && collectExpenses(db, startDate, endDate, &expenses, 1, singleBucket);
+    if (ok) *ok = read;
     return expenses;
 }
 
-QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate)
+QVector<RegularizationDetail> regularizationsBetweenDates(QSqlDatabase &db, QDate startDate, QDate endDate, bool *ok)
 {
     QVector<RegularizationDetail> regs;
-    if (dbNotConfigured(db, __func__)) return regs;
-    collectRegularizations(db, startDate, endDate, &regs, 1, singleBucket);
+    const bool read = !dbNotConfigured(db, __func__)
+                      && collectRegularizations(db, startDate, endDate, &regs, 1, singleBucket);
+    if (ok) *ok = read;
     return regs;
 }
 
-QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year)
+QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year, bool *ok)
 {
     QuarterlyDetails d;
-    if (dbNotConfigured(db, __func__)) return d;
     const QDate start(year, 1, 1), end(year + 1, 1, 1);
-    collectIncomeTickets(db, start, end, d.income, 4, quarterBucket);
-    collectExpenses(db, start, end, d.expenses, 4, quarterBucket);
-    collectRegularizations(db, start, end, d.regularizations, 4, quarterBucket);
+    const bool read = !dbNotConfigured(db, __func__)
+                      && collectIncomeTickets(db, start, end, d.income, 4, quarterBucket)
+                      && collectExpenses(db, start, end, d.expenses, 4, quarterBucket)
+                      && collectRegularizations(db, start, end, d.regularizations, 4, quarterBucket);
+    if (ok) *ok = read;
     return d;
 }
 

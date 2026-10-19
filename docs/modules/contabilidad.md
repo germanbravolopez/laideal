@@ -34,6 +34,7 @@ In Trimestral mode the quarter's state is read first from `accounting_closures` 
 
 - **Revertir**: a closed quarter is reopened (`reopenQuarter`: its closure gets `reopened_at` and is never deleted); an open one reports that there is nothing to revert.
 - **Already closed**: the report is generated again; the quarter stays closed.
+- **Unreadable data**: if any listing query fails (`*ok` false) no report is written and nothing is closed; the panel says the data could not be read.
 - **No movements** (`quarterHasMovements`: no payment, cancellation or gasto dated in it): a warning, no report and no close.
 - **Otherwise**: `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF. If the PDF could not be written (`writePdf` false: a folder in its place, the old PDF open in a viewer, no permission) the result panel shows the error and **the quarter is not closed** - a quarter is never closed without its report. With *Bloquear el trimestre* ticked, `closeQuarter()` then adds the closure with the report's file name. A quarter whose only movement is the cancellation of an earlier quarter's invoice is closed like any other.
 

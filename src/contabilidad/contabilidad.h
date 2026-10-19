@@ -143,6 +143,7 @@ private:
     // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
     // comma-decimal amounts left out of the sums.
     QString generateContabilidad(int &invalidAmounts);
+    bool m_dataReadFailed = false;   // the last generateContabilidad could not read the data: no report
 
     QSqlDatabase db;
     QLabel      *m_lblIntro = nullptr;

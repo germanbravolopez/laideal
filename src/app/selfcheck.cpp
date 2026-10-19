@@ -98,7 +98,8 @@ Check checkSchema(QSqlDatabase &db)
         return fail(c, QStringLiteral("la comprobación de integridad del archivo no es correcta"));
     if (columns != INGRESOS_COL_VERIFACTU_CANCEL_XML + 1 || !closures)
         return fail(c, QStringLiteral("a la base de datos le faltan columnas o tablas"));
-    if (nextTicketNumber(db, 0) != highest + 1)
+    bool numberRead = false;
+    if (nextTicketNumber(db, 0, &numberRead) != highest + 1 || !numberRead)
         return fail(c, QStringLiteral("el siguiente número de ticket no es el último + 1"));
     c.status = Check::Pass;
     c.reason = QStringLiteral("migraciones sin errores, archivo íntegro, siguiente ticket = último + 1");
@@ -154,9 +155,14 @@ Check checkData(QSqlDatabase &db, const QString &contabilidadPath, DataFacts &fa
     if (facts.closedQuarter > 0) {
         QDate start, end;
         Contabilidad::periodRangeFor(Contabilidad::Trimestral, facts.closedQuarter, facts.closedYear, start, end);
+        bool incomeRead = false, regsRead = false, expensesRead = false;
+        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, end, &incomeRead);
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, end, &regsRead);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, end, &expensesRead);
+        if (!incomeRead || !regsRead || !expensesRead)
+            return fail(c, QStringLiteral("no se pudieron leer los datos del último trimestre cerrado"));
         const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails(
-            incomeTicketsBetweenDates(db, start, end), regularizationsBetweenDates(db, start, end),
-            expensesBetweenDates(db, start, end), AppSettings::ivaRate(), start, end);
+            income, regs, expenses, AppSettings::ivaRate(), start, end);
         facts.income = f.ingImporte;
         facts.incomeIva = f.ingIva;
         facts.expenses = f.gastosImporteTotal();

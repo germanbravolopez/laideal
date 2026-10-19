@@ -343,8 +343,15 @@ void RectifyInvoiceDialog::onRectifyClicked()
         setFormEnabled(true);
         return;
     }
-    m_newInvoiceNumber = refused.isEmpty() ? QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat()))
+    bool numbered = true;
+    m_newInvoiceNumber = refused.isEmpty() ? QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat(), &numbered))
                                            : refused;
+    if (!numbered) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer el último número de ticket de la base de datos: no se "
+                                                 "ha enviado nada a la AEAT.")));
+        setFormEnabled(true);
+        return;
+    }
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
