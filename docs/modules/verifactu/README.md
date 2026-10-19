@@ -1,6 +1,6 @@
 # Verifactu Module (`src/verifactu/`)
 
-AEAT mandatory digital invoicing integration. Submits invoices to AEAT in real time, either directly (the 12.0 direct client, §Direct AEAT connection) or via the Irene Solutions REST gateway (until 11.x), captures the CSV security code and QR image, and persists them with the ticket. Required for Spanish businesses from 2026.
+AEAT mandatory digital invoicing integration. Submits invoices to AEAT in real time, either through the Irene Solutions REST gateway (the shop's connection in 12.0, on AEAT's test environment) or directly (the direct client, §Direct AEAT connection, for the later production switch), captures the CSV security code and QR image, and persists them with the ticket. Required for Spanish businesses from 2026.
 
 **Status (12.0 in development)**: the direct client is validated in AEAT pre-production; production waits for AEAT's written answer (see `docs/progress_tracker.md`). The gateway (v8.0-11.x) stays selectable in Configuración.
 

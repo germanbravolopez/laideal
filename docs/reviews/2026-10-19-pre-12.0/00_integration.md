@@ -28,7 +28,7 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
    - `ui-smoke.yml` green
    - smoke part 1, including **M6**: the real pre-production run with the certificate, because 12.0 changes the direct client
    - `ctest` green in CI
-5. **Decide and write down which Verifactu connection the shop runs on 12.0.**
+5. ✅ **FIXED 19-10-2026: (a), the gateway on TEST in 12.0; the direct client for the later production switch.** **Decide and write down which Verifactu connection the shop runs on 12.0.**
    - The default is still the gateway: `verifactu.connection` is unset, so it means `irenesolutions` (`appsettings.cpp:367`).
    - The direct client in pre-production needs the issuer's certificate on the shop PC, which is not there yet (tracker row 4, item 3).
    - The tracker contradicts itself. `progress_tracker.md:23` says "Next: switch to PRODUCTION once IreneSolutions answers"; `:42` says production goes through the direct client and the IreneSolutions request "becomes moot".
@@ -176,7 +176,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | Pri | Module | Finding | Proposal | Eff | Source |
 |-----|--------|---------|----------|-----|--------|
 | P0 | release | No 12.0 section in `releases_notes*.txt`; CMake 11.2; declaración date pending | Write ES + EN notes; bump; set the date at `/release` | S | 00 |
-| P0 | release | Shop connection for 12.0 undecided; the tracker contradicts itself (`:23` vs `:42`) | Decide gateway-TEST vs direct pre-production; align tracker / README / verifactu README; install-day checklist | S | 00, verifactu-gateway |
+| P0 ✅ FIXED | release | Shop connection for 12.0 undecided; the tracker contradicts itself (`:23` vs `:42`) | Decide gateway-TEST vs direct pre-production; align tracker / README / verifactu README; install-day checklist | S | 00, verifactu-gateway |
 | P0 | release | Gates: compliance auditor on `11.2..HEAD`, ui-smoke green, M6 pre-production run, CI green | Run them | M | 00 |
 | P0 ✅ FIXED | repo | The issuer's NIF / name and the AEAT request CSV in the public repo | Remove from HEAD (tracker:39,42; investigation:151,161,171-172; `test_e2e_app.cpp:1824`; `aeatcertificate.h:22`); owner decides on history | S | 00 |
 | P0 | app | Anular / Rectificar act on the re-searched ticket when the reply arrives (A1, A2) | Snapshot the submitted ticket / seq / id; lock the search while pending | S | app |
