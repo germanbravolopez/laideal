@@ -3,6 +3,7 @@
 
 #include <QDate>
 #include <QDialog>
+#include <functional>
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
@@ -28,6 +29,9 @@ class PendingSubmitsDialog : public QDialog
     Q_OBJECT
 public:
     explicit PendingSubmitsDialog(QSqlDatabase &db, QWidget *parent = nullptr);
+    // Resends one pending invoice; returns why nothing was sent (empty when it was). The
+    // row stays listed when nothing was sent.
+    std::function<QString(const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount)> retry;
 
     struct Entry {
         QString ticketNum;
@@ -40,14 +44,6 @@ public:
     // Loads one entry per (n_recibo, seq) with at least one PENDIENTE row.
     // Returns false (and does not populate the UI) when there are none.
     bool loadPending();
-
-signals:
-    // Emitted when the operator presses Reintentar. The receiver (MainWindow)
-    // re-fires verifactuSubmitInvoice() with these args, which registers the
-    // reqId in m_pendingSubmits so onVerifactuRequestFinished patches the
-    // rows on AEAT reply. seq selects the event (save-time = 0, partial-pay > 0)
-    // so the correct InvoiceID and that event's amount are re-submitted.
-    void retryRequested(const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount);
 
 private slots:
     void onRetryClicked(int row);

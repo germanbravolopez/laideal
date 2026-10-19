@@ -78,6 +78,12 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
     double taxRate,
     const QString &description)
 {
+    // A chained record needs the checked chain, whichever window asks for it.
+    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
+        m_lastError = blocked;
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+        return QString();
+    }
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
         qWarning() << m_lastError;
@@ -91,6 +97,12 @@ QString VerifactuIntegration::cancelInvoiceAsync(
     const QString &invoiceNumber,
     const QDate &invoiceDate)
 {
+    // A chained record needs the checked chain, whichever window asks for it.
+    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
+        m_lastError = blocked;
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+        return QString();
+    }
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
         qWarning() << m_lastError;
@@ -113,6 +125,12 @@ QString VerifactuIntegration::submitRectificationAsync(
     const QString &rectifiedInvoiceNumber,
     const QDate &rectifiedInvoiceDate)
 {
+    // A chained record needs the checked chain, whichever window asks for it.
+    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
+        m_lastError = blocked;
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+        return QString();
+    }
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
         qWarning() << m_lastError;

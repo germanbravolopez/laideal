@@ -102,6 +102,22 @@ private slots:
         QCOMPARE(f.primaryClicks, 0);
     }
 
+    // Enter on a focused secondary button (not auto-default, like Cerrar) presses that
+    // button, never the primary action.
+    void test_enterOnFocusedSecondaryButtonPressesIt()
+    {
+        Form f(true);
+        auto *secondary = UiKit::secondaryButton("Cerrar", "btnClose");
+        f.dialog.layout()->addWidget(secondary);
+        secondary->show();                                                 // added after the dialog was shown
+        int secondaryClicks = 0;
+        QObject::connect(secondary, &QPushButton::clicked, [&secondaryClicks] { ++secondaryClicks; });
+        QVERIFY(!secondary->autoDefault());
+        press(secondary);
+        QCOMPARE(secondaryClicks, 1);
+        QCOMPARE(f.primaryClicks, 0);
+    }
+
     // A held key does not repeat the primary action; a disabled primary is not pressed.
     void test_autoRepeatAndDisabledPrimary()
     {

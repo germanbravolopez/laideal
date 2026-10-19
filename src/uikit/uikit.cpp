@@ -1,5 +1,6 @@
 #include "uikit.h"
 
+#include <QAbstractButton>
 #include <QCollator>
 #include <QDateEdit>
 #include <QDialog>
@@ -76,6 +77,13 @@ protected:
             return QObject::eventFilter(watched, event);
         if (key->isAutoRepeat())
             return true;
+        // A focused button that ignored Enter (secondary buttons are not auto-default)
+        // presses itself: Enter on Cerrar must never fire the primary action.
+        if (auto *focused = qobject_cast<QAbstractButton *>(m_dialog->focusWidget());
+                focused && focused->isEnabled()) {
+            focused->click();
+            return true;
+        }
         for (QPushButton *button : m_dialog->findChildren<QPushButton *>()) {
             if (button->property(kPrimaryProperty).toBool() && button->isVisible() && button->isEnabled()) {
                 button->click();

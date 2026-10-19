@@ -202,6 +202,10 @@ void CancelInvoiceDialog::onCancelClicked(int row)
         return;
     }
 
+    if (const QString blocked = m_verifactu->numberingBlockedReason(); !blocked.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(blocked.toHtmlEscaped()));
+        return;
+    }
     const Event &e = m_events[row];
     // AEAT keys an invoice on (emisor, InvoiceID, date): cancel it under the date it
     // was issued with - the payment date, not the ticket's reception date.

@@ -108,10 +108,14 @@ MainWindow::MainWindow(QWidget *parent)
             dlg->deleteLater();
             return;
         }
-        connect(dlg, &PendingSubmitsDialog::retryRequested,
-                this, [this](const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount) {
-            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
-        });
+        dlg->retry = [this](const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount) {
+            if (!m_verifactuIntegration)
+                return tr("Verifactu no está disponible.");
+            if (const QString blocked = m_verifactuIntegration->numberingBlockedReason(); !blocked.isEmpty())
+                return blocked;
+            const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
+            return reqId.isEmpty() ? m_verifactuIntegration->getLastError() : QString();
+        };
         dlg->open();
     });
 

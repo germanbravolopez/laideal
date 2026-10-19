@@ -1044,6 +1044,18 @@ private slots:
             QVERIFY2(refused.contains("cadena de registros"), qPrintable(refused));
             QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '925' AND pagado = 'SI'"), QStringLiteral("0"));
             delete add;
+            // Anular says why; and the facade itself refuses any chained record meanwhile.
+            QVERIFY(E2e::seedSentGarment(m_db, "926", "h926a", "6.00", today(), "A-ORIG0926"));
+            CancelInvoiceDialog cancel(m_db);
+            cancel.m_verifactu = &direct;
+            cancel.findChild<QLineEdit *>("leTicketNum")->setText("926");
+            QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+            QMetaObject::invokeMethod(&cancel, "onCancelClicked", Q_ARG(int, 0));
+            const QString cancelText = cancel.findChild<QLabel *>("lblResult")->text();
+            QVERIFY2(cancelText.contains("cadena de registros"), qPrintable(cancelText));
+            QVERIFY(direct.cancelInvoiceAsync("926", QDate::currentDate()).isEmpty());
+            QVERIFY(direct.submitSimplifiedInvoiceAsync("927", QDate::currentDate(), 10.0, 21.0, "x").isEmpty());
+            QVERIFY(direct.getLastError().contains("cadena de registros"));
             QTRY_VERIFY_WITH_TIMEOUT(!direct.directBackend()->firstSyncRunning(), 15000);
         }
         QVERIFY(markChainReady(store));                                       // checked on an earlier run
@@ -1059,6 +1071,29 @@ private slots:
         clickSave(mw);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
         QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 15000);
+    }
+
+    // The start-up Reintentar reports whether it sent anything: a refusal keeps the row
+    // listed with the reason, a send removes it.
+    void test_pendingRetryKeepsTheRowWhenNothingWasSent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "940", "h940p", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h940p'"));
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        const auto off = qScopeGuard([] { AppSettings::instance()->setVerifactuPendingRecoveryEnabled(false); });
+        PendingSubmitsDialog dlg(m_db);
+        QVERIFY(dlg.loadPending());
+        auto *table = dlg.findChild<QTableWidget *>();
+        const int rows = table->rowCount();
+        QVERIFY(rows >= 1);
+        QString answer = QStringLiteral("La cadena no está comprobada.");
+        dlg.retry = [&answer](const QString &, int, const QDate &, double) { return answer; };
+        QMetaObject::invokeMethod(&dlg, "onRetryClicked", Q_ARG(int, 0));
+        QCOMPARE(table->rowCount(), rows);
+        QVERIFY(dlg.findChild<QLabel *>("lblResult")->text().contains("no se ha reenviado"));
+        answer.clear();
+        QMetaObject::invokeMethod(&dlg, "onRetryClicked", Q_ARG(int, 0));
+        QCOMPARE(table->rowCount(), rows - 1);
     }
 
     // A sync ending while a paid save waits for AEAT never changes the number on screen:

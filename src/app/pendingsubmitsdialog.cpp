@@ -152,7 +152,13 @@ void PendingSubmitsDialog::onRetryClicked(int row)
              << "seq=" << e.seq
              << "date=" << e.fechaPago.toString(Qt::ISODate)
              << "total=" << e.importe;
-    emit retryRequested(e.ticketNum, e.seq, e.fechaPago, e.importe);
+    const QString notSent = retry ? retry(e.ticketNum, e.seq, e.fechaPago, e.importe)
+                                  : tr("No se puede reenviar desde aquí.");
+    if (!notSent.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+                             + "<br>" + notSent.toHtmlEscaped());
+        return;                                                            // stays listed
+    }
     m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
                          + "<br>" + tr("La respuesta aparece en la barra de estado de la ventana principal."));
     // Drop the row from the table; the async reply will patch the DB. If it
