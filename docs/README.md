@@ -14,6 +14,7 @@ docs/
 ├── architecture.md                    (modules, DB schema, data flow, known issues)
 ├── progress_tracker.md                (current status, blocking / open issues)
 ├── completed_milestones.md            (finished work history + archive)
+├── reviews/2026-10-19-pre-12.0/      (pre-12.0 review: module reports + integration backlog)
 ├── testing/
 │   ├── README.md                      (how to run the tests, conventions, patterns)
 │   ├── unit_suites.md                 (what each unit / integration suite covers)
@@ -51,6 +52,7 @@ docs/
 | [architecture.md](./architecture.md) | Full module reference, DB schema, data flow | 15 min |
 | [progress_tracker.md](./progress_tracker.md) | Current status, blocking / open issues, backlog | 2 min |
 | [completed_milestones.md](./completed_milestones.md) | Finished work history, newest first | As needed |
+| [reviews/2026-10-19-pre-12.0/](./reviews/2026-10-19-pre-12.0/README.md) | Pre-12.0 deep review: per-module findings, doc drift, test gaps; integration report §6 is the prioritised backlog | Read when picking up a tracker item that cites it |
 | [testing/README.md](./testing/README.md) | Testing overview: running the suites, conventions, patterns | When writing tests |
 | [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
 | [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu server | When testing a flow |

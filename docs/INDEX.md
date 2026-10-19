@@ -12,6 +12,7 @@
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
 | `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
+| `docs/reviews/2026-10-19-pre-12.0/` | Pre-12.0 deep review: one report per `src/` module plus the integration report with the prioritised backlog (P0 / P1 filed in the tracker) |
 | `CONTRIBUTING.md` (root) | **How to contribute**: rules for every change (branch, test, compliance review, docs, commit style), the development workflow (branching, version bump, merge, tag) and the release procedure (CI release job, local `release.ps1` fallback) |
 | `docs/testing/README.md` | **Testing overview** — the four layers (unit suites, end-to-end bench, UI smoke test, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
