@@ -851,20 +851,12 @@ void RecogPrendas::on_pb_pay_all_clicked()
     }
     const bool charged = dlg.exec() == QDialog::Accepted;
     on_pb_search_clicked();
-    if (charged && dlg.unstoredGarments() > 0)
-        m_result->setText(UiKit::errorHtml(tr("%1 prenda(s) del ticket %2 no se han guardado como cobradas.")
-                                               .arg(dlg.unstoredGarments()).arg(ticketNum.toHtmlEscaped()))
-                          + "<br>" + tr("La factura ya se ha enviado a AEAT con ellas (se han cobrado "
-                                        "mientras tanto) y no se ha impreso. Revise el ticket antes de seguir."));
-    else if (charged && dlg.paidIntoClosedQuarter()) {
-        const QDate paid = dlg.paymentDate();
-        const QString quarter = tr("el trimestre %1 de %2").arg((paid.month() + 2) / 3).arg(paid.year());
+    if (charged && !dlg.notSentReason().isEmpty())
         m_result->setText(UiKit::okHtml(tr("Ticket %1 cobrado.").arg(ticketNum.toHtmlEscaped()))
-                          + "<br>" + UiKit::warnHtml(tr("La contabilidad ha cerrado %1 mientras se enviaba "
-                                                        "el cobro a AEAT.").arg(quarter))
-                          + "<br>" + tr("El cobro está guardado, pero no figura en el informe de ese trimestre: "
-                                        "revierta y vuelva a generar la contabilidad de %1.").arg(quarter));
-    } else if (charged)
+                          + "<br>" + UiKit::warnHtml(tr("La factura no se ha enviado a AEAT: %1")
+                                                         .arg(dlg.notSentReason().toHtmlEscaped()))
+                          + "<br>" + tr("Queda pendiente y se reenvía al iniciar la aplicación (Facturas pendientes)."));
+    else if (charged)
         m_result->setText(UiKit::okHtml(tr("Ticket %1 cobrado.").arg(ticketNum.toHtmlEscaped()))
                           + "<br>" + tr("El envío a AEAT se confirma en la barra de estado."));
 }

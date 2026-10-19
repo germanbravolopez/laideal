@@ -2423,74 +2423,73 @@ private slots:
         dlg.m_verifactu = m_verifactu;
         QVERIFY(dlg.loadTicket("950"));
         QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
-        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT pagado FROM ingresos WHERE hash='h950a'"), QStringLiteral("SI"), 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h950a'"), QStringLiteral("ENVIADA"), 10000);
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h950a'"), QStringLiteral("12.35"));
         const auto creates = m_server.requestsTo("Create");
         QCOMPARE(creates.size(), 1);
         QCOMPARE(creates[0].json.value("TotalAmount").toDouble(), 12.35);
     }
 
-    // A quarter closed while the invoice is on the way to AEAT does not drop the payment
-    // (AEAT may have registered it): it is stored and logged for review.
-    void test_payDialog_storesThePaymentWhenTheQuarterClosesDuringTheSubmit()
+    // Cobrar stores the payment (paid + PENDIENTE) before anything goes to AEAT, like
+    // saveTicket: a crash during the round trip leaves a payment the start-up recovery
+    // resends, never an invoice at AEAT for a ticket shown unpaid. A quarter closed while
+    // AEAT answers therefore already holds the payment in its report.
+    void test_payDialog_storesThePaymentBeforeSubmitting()
     {
         QVERIFY(E2e::seedGarment(m_db, "955", "h955a", "5.00", today()));
         QVERIFY(E2e::seedGarment(m_db, "955", "h955b", "7.00", today()));
-        PayDialog dlg(m_db);
-        dlg.m_verifactu = m_verifactu;
-        QVERIFY(dlg.loadTicket("955"));
-        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("was closed while ticket \"955\" was being charged"));
-        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
-        // The quarter was open when Cobrar was pressed; the reply has not arrived yet.
-        QVERIFY(closeQuarterOf(QDate::currentDate()));
-        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
-        QCOMPARE(dlg.unstoredGarments(), 0);
-        QVERIFY(dlg.paidIntoClosedQuarter());
-        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado) FROM ingresos WHERE n_recibo='955'"), QStringLiteral("SI,SI"));
-    }
-
-    // The same from Recogida: the operator is told in the result panel, not only in the
-    // log, that the closed quarter's report misses this payment and how to fix it.
-    void test_recogida_paymentIntoAQuarterClosedDuringTheSubmitIsShown()
-    {
-        QVERIFY(E2e::seedGarment(m_db, "957", "h957a", "5.00", today()));
         FakeVerifactuServer::Reply slow;
         slow.delayMs = 1500;
         m_server.enqueue("Create", slow);
-        RecogPrendas rp(m_db);
-        rp.m_verifactuIntegration = m_verifactu;
-        QVERIFY(selectRow(rp, "957", "h957a"));
-        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("was closed while ticket \"957\" was being charged"));
-        m_driver->expect(ModalDriver::ofType<PayDialog>(), [this](QWidget *w) {
-            QMetaObject::invokeMethod(w, "onCobrarClicked");
-            QVERIFY(closeQuarterOf(QDate::currentDate()));          // while AEAT answers
-        });
-        rp.findChild<QPushButton *>("pb_pay_all")->click();
-        QCOMPARE(m_driver->handled(), 1);
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h957a'"), QStringLiteral("SI"));
-        const QDate now = QDate::currentDate();
-        const QString quarter = QString("el trimestre %1 de %2").arg((now.month() + 2) / 3).arg(now.year());
-        const QString text = rp.findChild<QLabel *>("lblResult")->text();
-        QVERIFY2(text.contains("Ticket 957 cobrado") && text.contains("ha cerrado " + quarter)
-                 && text.contains("revierta y vuelva a generar la contabilidad de " + quarter), qPrintable(text));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("955"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado || '|' || verifactu_estado || '|' || verifactu_invoice_id) "
+                        "FROM ingresos WHERE n_recibo='955'"), QStringLiteral("SI|PENDIENTE|955,SI|PENDIENTE|955"));
+        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(verifactu_estado) FROM ingresos WHERE n_recibo='955'"),
+                 QStringLiteral("ENVIADA,ENVIADA"));
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
     }
 
-    // A garment paid from another window while its invoice is on the way is not stored
-    // twice, and the dialog counts it so Recogida can report it.
-    void test_payDialog_reportsAGarmentPaidDuringTheSubmit()
+    // A garment paid from another window after Cobrar opened stops the charge: nothing is
+    // stored, nothing is sent (the invoice would cover a garment charged twice).
+    void test_payDialog_garmentPaidMeanwhileStopsTheCharge()
     {
         QVERIFY(E2e::seedGarment(m_db, "956", "h956a", "5.00", today()));
         QVERIFY(E2e::seedGarment(m_db, "956", "h956b", "7.00", today()));
         PayDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
         QVERIFY(dlg.loadTicket("956"));
-        // Its factura would list fewer garments than the invoice sent: not printed.
-        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("factura of \"956\" not printed"));
-        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET pagado = 'SI' WHERE hash='h956b'"));
-        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
-        QCOMPARE(dlg.unstoredGarments(), 1);
-        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h956a'"), QStringLiteral("SI"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("no se ha enviado nada"),
+                 qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(dlg.result(), int(QDialog::Rejected));
+        QCOMPARE(scalar("SELECT pagado || '|' || verifactu_estado FROM ingresos WHERE hash='h956a'"),
+                 QStringLiteral("NO|SIN COBRAR"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+    }
+
+    // A 0,00 total is no invoice, and without a Verifactu integration nothing is booked.
+    void test_payDialog_refusesZeroTotalAndNoIntegration()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "958", "h958a", "0.00", today()));
+        PayDialog zero(m_db);
+        zero.m_verifactu = m_verifactu;
+        QVERIFY(zero.loadTicket("958"));
+        QMetaObject::invokeMethod(&zero, "onCobrarClicked");
+        QVERIFY2(zero.findChild<QLabel *>("lblResult")->text().contains("0,00"),
+                 qPrintable(zero.findChild<QLabel *>("lblResult")->text()));
+        QVERIFY(E2e::seedGarment(m_db, "959", "h959a", "5.00", today()));
+        PayDialog none(m_db);
+        QVERIFY(none.loadTicket("959"));
+        QMetaObject::invokeMethod(&none, "onCobrarClicked");
+        QVERIFY(none.findChild<QLabel *>("lblResult")->text().contains("no está disponible"));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado) FROM ingresos WHERE n_recibo IN ('958', '959')"),
+                 QStringLiteral("NO,NO"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
     }
 
     // A ticket whose garments cannot all be stored keeps none of them (a retry would

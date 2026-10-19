@@ -378,7 +378,9 @@ target_link_libraries(test_e2e_app PRIVATE
 )
 add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
-set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# Many fixed AEAT delays (5 s waits, slow fake replies): about 105 s on the CI runner,
+# past ctest's --timeout 120 default as the suite grows. The property overrides it.
+set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 300)
 
 # InstanceLock: one copy of the app per database.
 add_executable(test_instancelock test_instancelock.cpp)

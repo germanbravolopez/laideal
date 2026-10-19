@@ -36,10 +36,9 @@ public:
     // the ticket is not found or every row is already paid (caller should
     // not show the dialog in that case).
     bool loadTicket(const QString &ticketNum);
-    // Garments charged (sent to AEAT) that could not be stored as paid afterwards.
-    int unstoredGarments() const { return m_unstoredHashes.size(); }
-    // The payment was stored although Contabilidad closed its quarter while AEAT answered.
-    bool paidIntoClosedQuarter() const { return m_paidIntoClosedQuarter; }
+    // Why the stored payment's invoice was not sent (empty when it was): it stays
+    // PENDIENTE and the start-up recovery resends it.
+    QString notSentReason() const { return m_notSentReason; }
     QDate paymentDate() const { return m_pendingFechaPago; }
 
 signals:
@@ -64,10 +63,9 @@ private:
     void buildUi();
     void setFormEnabled(bool enabled);
     void recomputeTotal();
-    void persistPayment(int seq, const VerifactuResult &result);
-    // Stamp the just-paid rows of this seq as PENDIENTE (used when AEAT did not
-    // confirm in time - the submission outcome is unknown, not a failure).
-    void markPendingVerifactu(int seq);
+    // Stores the selected garments as paid + PENDIENTE under this seq, all or none.
+    bool storePayment(int seq);
+    void applyReply(int seq, const VerifactuResult &result);
     void printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued = false);
 
     QString m_ticketNum;
@@ -87,8 +85,7 @@ private:
     int         m_pendingSeq = -1;
     QStringList m_pendingHashes;
     QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
-    QStringList             m_unstoredHashes;
-    bool                    m_paidIntoClosedQuarter = false;
+    QString                 m_notSentReason;
     QDate       m_pendingFechaPago;
 };
 
