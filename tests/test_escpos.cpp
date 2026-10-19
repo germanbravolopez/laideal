@@ -198,6 +198,60 @@ private slots:
         QVERIFY(!out.contains("Copia para el cliente"));
     }
 
+    // Art. 7 RD 1619/2012: a factura prints its date of issue (the payment date in the
+    // QR), apart from the reception date; a recibo does not.
+    void test_renderFacturaIssueDate()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.invoiceId = "55";
+        d.receptionDate = "01/02/2026";
+        d.issueDate = "10/02/2026";
+        const QByteArray factura = TicketRenderer::render(d, 576);
+        QVERIFY(factura.contains("Fecha de expedici"));
+        QVERIFY(factura.contains("10/02/2026"));
+        QVERIFY(factura.contains("01/02/2026"));
+        d.isRecibo = true;
+        QVERIFY(!TicketRenderer::render(d, 576).contains("Fecha de expedici"));
+    }
+
+    // A reprint of a cancelled or rectified invoice says so and carries no QR or leyenda.
+    void test_renderVoidedFacturaMarked()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.invoiceId = "56";
+        d.qr = QImage(29, 29, QImage::Format_Mono);
+        d.qr.fill(0);
+        d.verifactuVerifiable = true;
+        const QByteArray valid = TicketRenderer::render(d, 576);
+        QVERIFY(valid.contains("Factura verificable"));
+        d.voidedMarker = "ANULADA";
+        d.voidedDate = "12/02/2026";
+        const QByteArray voided = TicketRenderer::render(d, 576);
+        QVERIFY(voided.contains("*** FACTURA ANULADA ***"));
+        QVERIFY(voided.contains("anulada el 12/02/2026"));
+        QVERIFY(voided.contains("factura en vigor"));   // wrapped: the end of the note
+        QVERIFY(!voided.contains("Factura verificable"));
+        const QByteArray raster("\x1d\x76\x30", 3);       // GS v 0: the QR image
+        QVERIFY(valid.contains(raster));
+        QVERIFY(!voided.contains(raster));
+        d.voidedMarker = "RECTIFICADA";
+        QVERIFY(TicketRenderer::render(d, 576).contains("*** FACTURA RECTIFICADA ***"));
+    }
+
+    // A completa without a typed DNI prints no empty "DNI:" line.
+    void test_renderCompleteInvoiceWithoutDni()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.isCompleteInvoice = true;
+        d.clientAddress = "Calle Mayor 1";
+        QVERIFY(!TicketRenderer::render(d, 576).contains("DNI:"));
+        d.clientDni = "12345678Z";
+        QVERIFY(TicketRenderer::render(d, 576).contains("DNI: 12345678Z"));
+    }
+
     // --- TicketRenderer: a QR is rastered when present ---
     void test_renderFacturaWithQrRaster()
     {

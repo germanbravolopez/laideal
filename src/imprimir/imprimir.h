@@ -102,6 +102,7 @@ private:
     UiKit::ResultPanel *m_lblResult = nullptr;
     QString      m_eventsTicket;           // the ticket m_cbEvent was filled for
     QStringList  m_printProblems;          // collected while the dialog is shown
+    QString      m_lastVoidedMarker;        // of the last buildTicket(): ANULADA / RECTIFICADA / empty
 };
 
 #endif // IMPRIMIR_H

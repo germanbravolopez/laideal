@@ -81,8 +81,8 @@ top to bottom:
 | Block | Content |
 |-------|---------|
 | Header (centered) | `business.name` double-size; then `verifactu.company_name`, `NIF`, `business.address`, `business.city`, `Tlf:` (bold), closed by a `=` rule |
-| Document type | `Recibo` or `FACTURA SIMPLIFICADA` |
-| Identity | `Nº:` (bold, right), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice) |
+| Document type | `Recibo` or `FACTURA SIMPLIFICADA`. A reprint of a cancelled or rectified invoice adds `*** FACTURA ANULADA ***` / `*** FACTURA RECTIFICADA ***` and, under the identity block, "Factura anulada el <fecha_anulacion>. Esta copia no es una factura en vigor."; it never carries a QR or leyenda |
+| Identity | `Nº:` (bold, right), `Fecha de expedición:` (facturas: the paid rows' `fecha_pago`, the date in the QR and at AEAT; art. 7 RD 1619/2012), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice; the window refuses a completa without a typed DNI / NIF). A completa keeps the `FACTURA SIMPLIFICADA` heading: its AEAT record is F2, and art. 7.2 RD 1619/2012 lets a simplificada carry the recipient's NIF and address |
 | Garment table | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura); long names word-wrap |
 | Totals (bold) | recibo: `TOTAL (IVA incl.)`; factura: `Base Imponible` + `IVA (rate%)` + `TOTAL` |
 | Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker (`Copia para el cliente` / `... establecimiento`) |

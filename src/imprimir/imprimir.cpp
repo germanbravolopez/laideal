@@ -217,6 +217,8 @@ QPixmap Imprimir::resolveQrCode()
     // unfiltered legacy reprint path.
     QDate invoiceDate;
     for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        if (!checkTicketPaid(row))
+            continue;
         invoiceDate = QDate::fromString(
             sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString(), "dd-MM-yyyy");
         if (invoiceDate.isValid()) break;
@@ -315,6 +317,25 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     const QString client = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString();
     d.clientName     = client;
     d.receptionDate  = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-", "/");
+
+    // A factura shows its date of issue - the payment date, as in the QR - and says so
+    // when the invoice was cancelled or rectified since.
+    m_lastVoidedMarker.clear();
+    if (!isRecibo) {
+        for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+            if (!checkTicketPaid(row))
+                continue;
+            if (d.issueDate.isEmpty())
+                d.issueDate = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString().replace("-", "/");
+            const VerifactuEstado e = verifactuEstadoFromString(
+                sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString());
+            if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada) {
+                d.voidedMarker = e == VerifactuEstado::Anulada ? QStringLiteral("ANULADA") : QStringLiteral("RECTIFICADA");
+                d.voidedDate   = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_ANULACION)).toString().replace("-", "/");
+            }
+        }
+        m_lastVoidedMarker = d.voidedMarker;
+    }
 
     // Complete invoice: billing address (typed, else the client's) + DNI / NIF (typed).
     if (isCompleteInvoice) {
@@ -481,6 +502,11 @@ void Imprimir::onPrintClicked()
             lines << problem.toHtmlEscaped().replace('\n', "<br>");
         return lines.isEmpty() ? QString() : "<br>" + UiKit::errorHtml(lines.join("<br>"));
     };
+    if (isCompleteInvoice && m_leDni->text().trimmed().isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml("Escriba el DNI / NIF del cliente.")
+                             + "<br>La factura completa lleva el NIF de quien la pide (art. 7.2 RD 1619/2012).");
+        return;
+    }
     invoiceSeq = -1;
 
     // Factura path: enumerate the (seq, invoice_id) pairs that have actually
@@ -542,7 +568,8 @@ void Imprimir::onPrintClicked()
             getTicketInfo();
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
             sendIfEnabled();
-            printed << labelFor(ev);
+            printed << labelFor(ev) + (m_lastVoidedMarker.isEmpty()
+                                           ? QString() : " (" + m_lastVoidedMarker.toLower() + ", sin QR)");
         }
         m_lblResult->setText(UiKit::okHtml("Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".")
                              + printingOff + problems());
@@ -584,10 +611,13 @@ void Imprimir::onPrintClicked()
                              + printingOff + problems());
         return;
     }
+    const QString noQr = !m_lastVoidedMarker.isEmpty()
+        ? "<br>" + UiKit::warnHtml("La factura está " + m_lastVoidedMarker.toLower()
+                                   + ": la copia lo indica y no lleva código QR.")
+        : qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
+                            "o AEAT no respondió a tiempo."
+                          : QString();
     m_lblResult->setText(UiKit::okHtml((isCompleteInvoice ? "Factura completa " : "Factura ")
                                        + displayInvoiceId().toHtmlEscaped() + " impresa.")
-                         + (qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
-                                              "o AEAT no respondió a tiempo."
-                                            : QString())
-                         + printingOff + problems());
+                         + noQr + printingOff + problems());
 }

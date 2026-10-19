@@ -27,15 +27,29 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     // --- Document identity ---
     b.align(EscPosBuilder::Align::Left);
     b.line(d.isRecibo ? QStringLiteral("Recibo") : QStringLiteral("FACTURA SIMPLIFICADA"));
+    const bool voided = !d.isRecibo && !d.voidedMarker.isEmpty();
+    if (voided) {
+        b.align(EscPosBuilder::Align::Center).bold(true);
+        b.line("*** FACTURA " + d.voidedMarker + " ***");
+        b.bold(false).align(EscPosBuilder::Align::Left);
+    }
     b.align(EscPosBuilder::Align::Right).bold(true);
     b.line("Nº: " + d.invoiceId);
     b.bold(false).align(EscPosBuilder::Align::Left);
+    // Art. 7 RD 1619/2012: the date of issue, the one the QR and AEAT carry.
+    if (!d.isRecibo && !d.issueDate.isEmpty())
+        b.line("Fecha de expedición: " + d.issueDate);
     b.line("Cliente: " + d.clientName);
     b.line("Recepción: " + d.receptionDate);
     if (d.isCompleteInvoice) {
         b.paragraph("Dirección: " + d.clientAddress);
-        b.line("DNI: " + d.clientDni);
+        if (!d.clientDni.isEmpty())
+            b.line("DNI: " + d.clientDni);
     }
+    if (voided)
+        b.paragraph("Factura " + d.voidedMarker.toLower()
+                    + (d.voidedDate.isEmpty() ? QString() : " el " + d.voidedDate)
+                    + ". Esta copia no es una factura en vigor.");
     b.rule('=');
 
     // --- Garment table ---
@@ -76,7 +90,7 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     }
 
     // --- Verifactu QR (facturas only; raster the AEAT-issued pixmap verbatim) ---
-    if (!d.qr.isNull()) {
+    if (!d.qr.isNull() && !voided) {
         // No extra feed here: the payment marker above already separates the QR,
         // and the AEAT pixmap carries its own quiet-zone margin - an added blank
         // line left too much empty space before the code.

@@ -2096,6 +2096,9 @@ private slots:
 
         QPointer<Imprimir> complete = open(false, true);
         QVERIFY(complete->findChild<QLineEdit *>("leDni")->isVisible());
+        text = press(complete, "650");                                   // art. 7.2: no NIF, no completa
+        QVERIFY2(text.contains("Escriba el DNI / NIF"), qPrintable(text));
+        QVERIFY(complete->ticketBytes().isEmpty());
         complete->findChild<QLineEdit *>("leDni")->setText("12345678Z");
         complete->findChild<QLineEdit *>("leAddress")->setText("Calle Mayor 1");
         text = press(complete, "650");
@@ -2198,9 +2201,13 @@ private slots:
         QVERIFY2(!text.contains("Sin código QR"), qPrintable(text));
         QVERIFY(!dlg.qrCode.isNull());
         text = press("661");
-        QVERIFY2(text.contains("Sin código QR"), qPrintable(text));
+        QVERIFY2(text.contains("anulada: la copia lo indica"), qPrintable(text));
         QVERIFY(dlg.qrCode.isNull());
+        QVERIFY(dlg.ticketBytes().contains("*** FACTURA ANULADA ***"));
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);
+        // The factura shows the payment date as its date of issue.
+        QVERIFY(dlg.ticketBytes().contains("Fecha de expedici"));
+        QVERIFY(dlg.ticketBytes().contains("10/02/2026"));
     }
 
     // Enter in a dialog's number field runs that field's action once and nothing else:

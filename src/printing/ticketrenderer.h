@@ -31,8 +31,13 @@ struct TicketData {
     QString invoiceId;                  // displayInvoiceId()
     QString clientName;
     QString receptionDate;              // already normalised ('-' -> '/')
+    QString issueDate;                  // facturas: fecha de expedición (the payment date AEAT holds)
     QString clientAddress;              // complete-invoice only
-    QString clientDni;                  // complete-invoice only
+    QString clientDni;                  // complete-invoice only; no DNI line when empty
+    // A reprint of an invoice no longer in force: "ANULADA" or "RECTIFICADA" (and the
+    // date it happened). Printed prominently; such a copy carries no QR or leyenda.
+    QString voidedMarker;
+    QString voidedDate;
 
     // Body
     QList<TicketGarmentLine> garments;
