@@ -11,7 +11,7 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
 - **Overall health: good core, rough edges at the seams.** The Verifactu core (estado mapping, settled-row guards, closed-quarter guards in `sql_lite`, append-only `accounting_closures`, direct-client chain in one transaction, the UI-test/`--fake-aeat` release guard) is careful and well tested (26 CTest suites, a strong e2e bench, UI smoke A-E, the new self-check).
 - **The real risks are cross-module.** They sit where a window keeps state across an async AEAT request (Anular / Rectificar / Cobrar), where `ingresos` is written outside `sql_lite` (7 raw statements skip its guards), where nothing stops two app instances on one DB, and where errors turn into "empty" (Contabilidad listings, `nextTicketNumber`, gateway replies). Each can leave the books and AEAT disagreeing.
 - **Docs drift is broad.** `architecture.md` does not mention the direct AEAT client at all, the README configuration table has the wrong JSON keys, and the tracker contradicts itself on the production path.
-- **Hygiene: shop personal data is in the public repo.** Rocío's NIF appears in the tracker, the investigation doc and a test, and the CSV of an AEAT written request is published.
+- **Hygiene: shop personal data is in the public repo.** The issuer's NIF appears in the tracker, the investigation doc and a test, and the CSV of an AEAT written request is published.
 - **Verdict for 12.0 (shop on AEAT TEST): not ready to tag yet, but close.** About 15 small (S) fixes, the release mechanics (notes, version, declaración date) and one decision (which connection the shop runs on 12.0) stand between it and a safe release. No L-sized work is required before 12.0. Estimate: 2-4 days of S fixes plus tests, then the `/release` gates (UI smoke, M6 pre-production run, compliance auditor on `11.2..HEAD`).
 
 ---
@@ -30,17 +30,17 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
    - `ctest` green in CI
 5. **Decide and write down which Verifactu connection the shop runs on 12.0.**
    - The default is still the gateway: `verifactu.connection` is unset, so it means `irenesolutions` (`appsettings.cpp:367`).
-   - The direct client in pre-production needs Rocío's certificate on the shop PC, which is not there yet (tracker row 4, item 3).
+   - The direct client in pre-production needs the issuer's certificate on the shop PC, which is not there yet (tracker row 4, item 3).
    - The tracker contradicts itself. `progress_tracker.md:23` says "Next: switch to PRODUCTION once IreneSolutions answers"; `:42` says production goes through the direct client and the IreneSolutions request "becomes moot".
    - Choose: (a) the gateway on TEST in 12.0, with the direct switch later; or (b) the direct client in pre-production from 12.0, which needs the certificate installed and an install-day checklist.
    - With (a), the gateway P0 items below matter more. Align the README, `docs/modules/verifactu/README.md:3/156/191` and the tracker with the choice.
 
 ### 2b. Repository / privacy (the repo is public; the tag publishes)
 
-6. **Remove shop personal data and AEAT access codes from HEAD:**
-   - Rocío's NIF `<NIF del emisor>`: `docs/progress_tracker.md:42`, `docs/modules/verifactu/aeat-direct-investigation.md:151,161`, `tests/test_e2e_app.cpp:1824` (use AEAT's test NIF instead).
+6. ✅ **FIXED 19-10-2026** (HEAD cleaned; history kept, owner's decision). **Remove shop personal data and AEAT access codes from HEAD:**
+   - The issuer's NIF: `docs/progress_tracker.md:42`, `docs/modules/verifactu/aeat-direct-investigation.md:151,161`, `tests/test_e2e_app.cpp:1824` (use AEAT's test NIF instead).
    - Her full name: `src/verifactu/aeatcertificate.h:22` (comment).
-   - The INFORMA+ request references and the **CSV `HU46ECNUUU7SXN3D`** (`progress_tracker.md:39`, `aeat-direct-investigation.md:171-172`). A CSV is a document-verification code at the AEAT sede, so do not publish it.
+   - The INFORMA+ request references and the **CSV of a written request** (`progress_tracker.md:39`, `aeat-direct-investigation.md:171-172`). A CSV is a document-verification code at the AEAT sede, so do not publish it.
    - The shop address hard-coded as a default (`appsettings.cpp:103-108`) contradicts the tracker's claim "never in the source" (row 3). Decide and document; appsettings #11.
    - Germán's own NIF in `aeatrecord.cpp:239` is the producer's data, which the record legally carries: acceptable.
    - Rewriting history is the owner's call.
@@ -178,7 +178,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P0 | release | No 12.0 section in `releases_notes*.txt`; CMake 11.2; declaración date pending | Write ES + EN notes; bump; set the date at `/release` | S | 00 |
 | P0 | release | Shop connection for 12.0 undecided; the tracker contradicts itself (`:23` vs `:42`) | Decide gateway-TEST vs direct pre-production; align tracker / README / verifactu README; install-day checklist | S | 00, verifactu-gateway |
 | P0 | release | Gates: compliance auditor on `11.2..HEAD`, ui-smoke green, M6 pre-production run, CI green | Run them | M | 00 |
-| P0 | repo | Rocío's NIF / name and the AEAT request CSV in the public repo | Remove from HEAD (tracker:39,42; investigation:151,161,171-172; `test_e2e_app.cpp:1824`; `aeatcertificate.h:22`); owner decides on history | S | 00 |
+| P0 ✅ FIXED | repo | The issuer's NIF / name and the AEAT request CSV in the public repo | Remove from HEAD (tracker:39,42; investigation:151,161,171-172; `test_e2e_app.cpp:1824`; `aeatcertificate.h:22`); owner decides on history | S | 00 |
 | P0 | app | Anular / Rectificar act on the re-searched ticket when the reply arrives (A1, A2) | Snapshot the submitted ticket / seq / id; lock the search while pending | S | app |
 | P0 | app | Rectificar "success" without a local row (A3) | Abort on a failed placeholder INSERT; check `numRowsAffected` | S | app |
 | P0 | recog_prendas | PayDialog Esc / X during the AEAT wait drops the payment (#1); same for Anular / Rectificar close in flight (A7) | Override `reject()` / `closeEvent` while pending | S | recog_prendas, app |

@@ -1821,7 +1821,7 @@ private slots:
     // printed: 30-40 mm (art. 21.1 of the Orden), whole dots per module, quiet zone.
     void test_printedQrSizeOfARealQr()
     {
-        const QString url = AeatHash::qrValidationUrl("24215141M", "31163-12", QDate(2026, 10, 13), "1234.56", false);
+        const QString url = AeatHash::qrValidationUrl("89890001K", "31163-12", QDate(2026, 10, 13), "1234.56", false);
         const int modules = AeatQr::moduleCount(url);
         const QImage out = TicketRenderer::printableQr(AeatQr::image(url, 5));
         QVERIFY(!out.isNull());

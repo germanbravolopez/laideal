@@ -19,7 +19,7 @@ class AeatCertificate
 {
 public:
     struct Info {
-        QString   subject;          // e.g. "LOPEZ DOMINGUEZ ROCIO - 00000000T"
+        QString   subject;          // e.g. "APELLIDO1 APELLIDO2 NOMBRE - 00000000T"
         QString   issuer;
         QString   thumbprint;       // SHA-1, upper-case hex
         QString   nif;              // the holder's NIF (subject serialNumber without "IDCES-")
