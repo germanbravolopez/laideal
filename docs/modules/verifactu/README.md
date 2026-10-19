@@ -110,7 +110,7 @@ Never hardcode the string values — always go through the helpers, and map an A
 
 ### Bounded waits vs the transport timeout
 
-`VerifactuManager` sets a **10 s** transfer timeout, while the UI waits **3 s** (MainWindow save) and **5 s** (PayDialog). The UI therefore gives up first *by design* — a slow AEAT must not freeze the counter — which means a request is often still in flight when the ticket has already printed. Two consequences the code must honour:
+`VerifactuManager` gives every gateway request a **30 s** transfer timeout (`createNetworkRequest`; *probar conexión* 10 s), so a stalled connection ends as a NETWORK_ERROR instead of waiting forever, while the UI waits **3 s** (MainWindow save) and **5 s** (PayDialog). The UI therefore gives up first *by design* — a slow AEAT must not freeze the counter — which means a request is often still in flight when the ticket has already printed. Two consequences the code must honour: The reply parser (`parseVerifactuResponse`, told whether it answers a submit, a cancellation or a QR) treats a body that is not JSON or has no `ResultCode` as a NETWORK_ERROR (unknown outcome: the row stays PENDIENTE and is checked), never as an AEAT refusal; and a submit "success" without AEAT's CSV as PENDING, never ENVIADA.
 
 - the printed document degrades to a **recibo with IMPORTE PAGADO and no QR** (a recibo is a claim ticket, never a tax document, so it must not carry a QR);
 - the in-flight request must be **adopted by an object that outlives the print** (`RecogPrendas` for PayDialog; MainWindow already owns its own `m_pendingSubmits`), so a late reply still patches the row. On a late success both paths tell the operator the factura with QR can now be printed.

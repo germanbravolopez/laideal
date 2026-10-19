@@ -53,7 +53,7 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
 ✅ **FIXED** 10. **No single-instance guard** (app A4, `main.cpp:78-96`). Two windows on one DB give duplicate `n_recibo` (MAX+1 twice) and, with the direct client, a forked hash chain. Fix: a `QLockFile` next to the DB, never taken by `--self-check`.
 ✅ **FIXED** 11. **Silent empty Contabilidad can lock a quarter** (sql_lite F1 = contabilidad High). The listings return empty on a query error (e.g. SQLITE_BUSY during the backup `VACUUM INTO`), the report shows zeros, and "Bloquear" closes the quarter. Locations: `sql_lite.cpp:1945-2104`, `contabilidad.cpp:232-291`. M.
 ✅ **FIXED** 12. **`nextTicketNumber` returns 1 when the read fails** (sql_lite F10, `sql_lite.cpp:1271,416-443`). With the gateway (`highestAtAeat` 0) this gives a duplicate number (Req. 2).
-13. **Gateway client** (if the shop stays on the gateway in 12.0):
+✅ **FIXED** 13. **Gateway client** (if the shop stays on the gateway in 12.0):
     - no transfer timeout on async calls (`verifactumanager.cpp:322-328`); the docs claim 10 s;
     - `ResultCode 0` without a CSV becomes ENVIADA with no CSV (`verifacturesponse.cpp:110-157`);
     - an HTML / non-JSON body becomes a definitive ERROR (`:116-124`).
@@ -186,7 +186,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P0 ✅ FIXED | sql_lite / contabilidad | Listings return empty on SQL error, so a zero report can lock a quarter (F1) | `ok` channel; refuse to write / close | M | sql_lite, contabilidad |
 | P0 ✅ FIXED | sql_lite | `nextTicketNumber` returns 1 on a read failure (F10) | Return an error; refuse to save | S | sql_lite |
 | P0 ✅ FIXED | imprimir | Recogida reprint with no row: merged events, QR amount over unpaid rows (F2); blank recibo (F1) | Paid-only sums, refuse multi-seq without a seq, trim, empty-model guard | S-M | imprimir, printing F18 |
-| P0* | verifactu-gateway | No transfer timeout; SUCCESS without CSV becomes ENVIADA; HTML becomes ERROR (*P0 if the shop stays on the gateway in 12.0, else P1) | `setTransferTimeout`; submit-without-CSV becomes PENDING; non-JSON becomes NETWORK_ERROR | S | verifactu-gateway |
+| P0* ✅ FIXED | verifactu-gateway | No transfer timeout; SUCCESS without CSV becomes ENVIADA; HTML becomes ERROR (*P0 if the shop stays on the gateway in 12.0, else P1) | `setTransferTimeout`; submit-without-CSV becomes PENDING; non-JSON becomes NETWORK_ERROR | S | verifactu-gateway |
 | P0* | appsettings | NumeroInstalacion / chain marker not saved (#1) (*P0 if direct at the shop) | `save()` when created / set | S | appsettings |
 | P0* | verifactu-direct | A lost cancellation reply, resent and answered "duplicate / Anulada", becomes ERROR: books keep the income and Anular loops (*P0 if direct, else P1) | Cancellation duplicate = accepted; fake answers like AEAT; confirm in M6 | S | verifactu-direct |
 | P1 | verifactu-direct | A first sync skips records without `SistemaInformatico`, so it may restart the chain with `PrimerRegistro` | Treat as unusable, so the sync fails | S | verifactu-direct |

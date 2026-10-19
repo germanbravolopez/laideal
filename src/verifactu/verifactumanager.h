@@ -6,6 +6,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include "verifactuconfig.h"
+#include "verifacturesponse.h"
 #include "verifactuinvoice.h"
 #include "verifactutypes.h"
 #include "verifactubackend.h"
@@ -59,7 +60,7 @@ private:
     // Queues an error so callers see it via requestFinished, same as a real reply.
     void emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description);
     // Connects reply finished to a lambda that processes the response and emits requestFinished.
-    void wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest);
+    void wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind);
 };
 
 #endif // VERIFACTUMANAGER_H

@@ -42,9 +42,9 @@ void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Sta
     }, Qt::QueuedConnection);
 }
 
-void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest)
+void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind)
 {
-    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, isQrRequest]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, kind]() {
         VerifactuResult result;
         if (reply->error() != QNetworkReply::NoError) {
             result.status = VerifactuResult::NETWORK_ERROR;
@@ -54,7 +54,7 @@ void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, boo
         } else {
             QByteArray responseData = reply->readAll();
             logResponse(responseData);
-            result = parseVerifactuResponse(responseData, isQrRequest);
+            result = parseVerifactuResponse(responseData, kind);
         }
         reply->deleteLater();
         emit requestFinished(reqId, result);
@@ -92,7 +92,7 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-    wireReply(reqId, reply, false);
+    wireReply(reqId, reply, VerifactuReply::Submit);
     return reqId;
 }
 
@@ -182,7 +182,7 @@ QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const
     qDebug() << "Cancelling invoice" << invoiceNumber << "(" << reqId << ")";
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-    wireReply(reqId, reply, false);
+    wireReply(reqId, reply, VerifactuReply::Cancel);
     return reqId;
 }
 
@@ -224,7 +224,7 @@ QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
         } else {
             QByteArray responseData = reply->readAll();
             logResponse(responseData);
-            result = parseVerifactuResponse(responseData, true);
+            result = parseVerifactuResponse(responseData, VerifactuReply::Qr);
             result.validationUrl = validationUrl;
         }
         reply->deleteLater();
@@ -324,6 +324,9 @@ QNetworkRequest VerifactuManager::createNetworkRequest(const QString &endpoint) 
     QNetworkRequest request{QUrl(endpoint)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL/" + QString(PROJECT_VERSION));
+    // A stalled connection would never answer: it ends as a NETWORK_ERROR (the row stays
+    // pending and is checked), so no request waits forever.
+    request.setTransferTimeout(30000);
     return request;
 }
 
