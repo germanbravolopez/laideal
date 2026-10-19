@@ -1,5 +1,7 @@
 # 04 — Current Printing Flow (what we are replacing)
 
+> **Historical (Excel era).** This page describes the printing path before 10.0 (Excel/QXlsx/cscript), kept as design background. The shipped code is `src/printing/` and `src/imprimir/`; see [`../printing.md`](../printing.md) and [`../imprimir.md`](../imprimir.md).
+
 This is the baseline: how `src/imprimir/` prints today, the exact layout the new ESC/POS code
 must reproduce, and every place that calls the printing API (the integration surface a rewrite
 must keep working). Source: [`../../../src/imprimir/imprimir.cpp`](../../../src/imprimir/imprimir.cpp)

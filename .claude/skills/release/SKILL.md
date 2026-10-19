@@ -11,7 +11,7 @@ Executes the full release flow described in the **Development workflow** and **R
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
-The root `README.md` is the source of truth. If a step here ever drifts from the README, the README wins; update this skill afterwards (`/update-skills`).
+`CONTRIBUTING.md` (Development workflow and Release procedure) is the source of truth. If a step here ever drifts from it, CONTRIBUTING wins; update this skill afterwards (`/update-skills`).
 
 ---
 
@@ -29,7 +29,7 @@ If any precondition fails, stop and surface the problem — don't try to "fix it
 
 ## Steps
 
-### 1. Pre-flight the release-ready checklist (README step 3)
+### 1. Pre-flight the release-ready checklist (CONTRIBUTING workflow step 3)
 
 The working branch must be release-ready before the version-bump commit. Verify each item; if missing, fix it and stage the change for the bump commit (do not commit yet):
 
@@ -74,7 +74,7 @@ If the build **or any test** fails, **stop**. Fix on the working branch, commit,
 
 This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
 
-### 4. Open a GitHub PR to `master` (README step 4)
+### 4. Open a GitHub PR to `master` (CONTRIBUTING workflow step 4)
 
 `master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Push the working branch and open the PR — but do **not** merge yet; step 5 reviews the diff first.
 
@@ -140,7 +140,7 @@ git pull --ff-only origin master
 
 Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
-### 7. Tag the merge commit (README step 5)
+### 7. Tag the merge commit (CONTRIBUTING workflow step 5)
 
 ```powershell
 git tag -a X.Y -m "Release X.Y"

@@ -7,7 +7,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](./License.txt)
 
-Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt** (5.15+/6.x) on Windows, using a local SQLite database.
+Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt 6.4.3** on Windows (MinGW + Ninja), using a local SQLite database.
 
 ---
 
@@ -18,9 +18,9 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Garment pickup** — mark items as paid and collected; edit sizes, prices, and observations; split garment rows
 - **Printing** — receipts and invoices printed as direct ESC/POS over the Windows RAW spooler (10.0+, no Excel/Office dependency); configurable printer queue and 58/80 mm paper width, with an optional Epson Status API layer for paper-out / cover-open detection
 - **Supplier invoices** — invoice entry form with automatic IVA/base calculation
-- **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
+- **Accounting reports** — monthly, quarterly, and annual PDF reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
-- **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
+- **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026): through the Irene Solutions gateway, or (12.0) directly with AEAT using the owner's certificate; *Comprobar tras actualizar* (`--self-check`) checks an update on a copy of the newest backup
 - **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
 - **In-app release notes** — Ayuda → Notas de la versión shows the full version history, offline, in the configured language (`releases_notes.txt` English / `releases_notes_es.txt` Spanish, both bundled).
 
@@ -30,11 +30,11 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 | Dependency | Version |
 |------------|---------|
-| Qt | 5.15+ or 6.x |
+| Qt | 6.4.3 (MinGW 64-bit); Qt 5 is not tested |
 | Qt modules | Widgets, Sql, PrintSupport, Network |
 | CMake | 3.5+ |
-| Compiler | C++17-compatible (MSVC or MinGW) |
-| OS | Windows 10 / 11 |
+| Compiler | MinGW 11.2 (C++17), built with Ninja |
+| OS | Windows 10 / 11 only (WinHTTP, CNG and DPAPI are used) |
 
 ---
 
@@ -104,7 +104,7 @@ Then run them as listed in [Tests](#tests).
 
 ### Tests
 
-Four kinds of test, from the fastest to the one that needs a person. Each row links to the document with the full steps; the commands run from the repository root.
+Five kinds of test, from the fastest to the one that needs a person. Each row links to the document with the full steps; the commands run from the repository root.
 
 | Suite | Where it runs | How to run it | Options | Steps |
 |-------|---------------|---------------|---------|-------|
@@ -129,14 +129,26 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 | Setting | Key in JSON | Notes |
 |---------|-------------|-------|
 | Language | `app.language` | `es` or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.) and of Ayuda → Notas de la versión. Applied live when Configuración is accepted. On first run it takes the language chosen in the installer (default `es`). The rest of the app is still Spanish |
-| Database path | `db.path` | Full path to the SQLite `.db` file |
-| IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
-| Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |
-| Business name / address / city | `business.*` | Printed on receipts and invoices |
+| Database path | `database.path` | Full path to the SQLite `.db` file |
+| Printing on/off | `print.enable` | `"Yes"` / `"No"` (text). Guards the actual print call |
+| Printer queue | `print.printer_name` | RAW target queue; empty = the Windows default printer |
+| Paper width | `print.paper_width_mm` | 58 or 80 (default 80) |
+| Epson Status API | `print.use_status_api` | `"Yes"` / `"No"`; paper-out / cover-open detection |
+| Report root folder | `reports.root` | One folder; PDFs go to `Contabilidad`, `Listados/Prendas` and `Listados/Gastos` below it |
+| Business name / address / city / phone | `business.name`, `business.address`, `business.city`, `business.phone` | Printed on receipts and invoices |
 | Verifactu NIF | `verifactu.nif` | Issuer tax ID (NIF) |
-| Verifactu company name | `verifactu.name` | Issuer name as registered with AEAT |
-| Verifactu ServiceKey | `verifactu.serviceKey` | Obtain at https://facturae.irenesolutions.com/verifactu/go |
-| Verifactu environment | `verifactu.production` | `false` = TESTING, `true` = production |
+| Verifactu company name | `verifactu.company_name` | Issuer name as registered with AEAT |
+| Verifactu connection | `verifactu.connection` | `irenesolutions` (gateway) or `aeat` (direct client) |
+| Gateway ServiceKey | `verifactu.service_key` | Stored encrypted (Windows DPAPI). Obtain at https://facturae.irenesolutions.com/verifactu/go |
+| Gateway environment | `verifactu.environment` | `TESTING` or `PRODUCTION` |
+| Direct client production | `verifactu.aeat_direct_production` | `false` = AEAT pre-production, `true` = production |
+| Direct client certificate | `verifactu.aeat_certificate_thumbprint`, `verifactu.aeat_certificate_file`, `verifactu.aeat_certificate_password` | Windows store thumbprint, or a .pfx file and its password (stored encrypted) |
+| Direct client internals | `verifactu.aeat_installation`, `verifactu.aeat_chain_marker` | Written by the app (installation number, chain marker); do not edit |
+| Startup recovery | `verifactu.pending_recovery_enabled`, `verifactu.pending_recovery_floor_date` | Whether the start lists PENDIENTE rows to resend, and the oldest date it considers |
+| Update check | `updater.check_on_startup` | `true` by default |
+| Backups | `backup.enabled`, `backup.last_time`, `backup.last_version` | Daily backup on/off (default on); the last two are written by the app |
+
+The ingresos IVA rate is not a setting (fixed at 21 %). Obsolete keys of older versions are removed on load.
 
 The application icon is embedded in the executable (Windows resource + Qt resource) so no `.ico` path needs to be configured by the user.
 
