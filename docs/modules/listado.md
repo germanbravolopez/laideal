@@ -34,10 +34,11 @@ signals:
 ## Features
 
 - Add / delete rows via the buttons, the menu actions or the table's context menu
-- Text filter via `FilterWidget` (backed by `MySortFilterProxyModel`)
+- Text filter via `FilterWidget` (backed by `MySortFilterProxyModel`; one invalidation per keystroke through `setFilters`; ingresos searches up to Observaciones, never the Verifactu metadata columns). Sorting is numeric for `n_recibo` (past 99999), amounts, quantities and sizes (decimal comma read), and by date for the four ingresos dates
+- The prendas PDF reports a failed write in red (`print_table` returns the `writePdf` result); report cells are HTML-escaped
 - **Diacritic-insensitive search**: typing "garcia" matches "García". Implemented via `MySortFilterProxyModel::setNormalizedFilter` called from `textFilterChanged()`.
 - PDF export via `GenListado` dialog (`actionGenerar_pdf_con_el_listado`)
-- Inline cell editing via double-click for editable tables; a `gastos` row whose `fecha` is in a quarter closed by Contabilidad reports "Edición bloqueada" in the result panel, is read-only (`MySortFilterProxyModel::flags` drops `ItemIsEditable`; `rowLocked` against `closedQuarters`, the `closedQuarterKeys` Listado loads) and cannot be deleted ("Fila bloqueada") - revert the Contabilidad to change it. Delete, double click and every edit re-read the closed quarters first (`Listado::rowLockedNow`), so a quarter closed while the listing is open is honoured. An open row's `fecha` is checked before it is written (the proxy's `editValidator`, set by Listado): a date in a closed quarter (`quarterIsClosed`, the Formulario facturas rule) or not written as dd-mm-aaaa is refused in the result panel and the cell keeps its value. **`ingresos` is read-only in this view** — `setEditTriggers(NoEditTriggers)` is applied so the operator cannot bypass AEAT / the chained Huella / the accounting lock by editing cells directly. All `ingresos` changes must go through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog (Verifactu Req. 1, Art. 8.1 RD 1007/2023).
+- Inline cell editing via double-click for editable tables; a `gastos` row whose `fecha` is in a quarter closed by Contabilidad reports "Edición bloqueada" in the result panel, is read-only (`MySortFilterProxyModel::flags` drops `ItemIsEditable`; `rowLocked` against `closedQuarters`, the `closedQuarterKeys` Listado loads) and cannot be deleted ("Fila bloqueada") - revert the Contabilidad to change it. Delete, double click and every edit re-read the closed quarters first (`Listado::rowLockedNow`), so a quarter closed while the listing is open is honoured. An open row's `fecha` is checked before it is written (the proxy's `editValidator`, set by Listado): a date in a closed quarter (`quarterIsClosed`, the Formulario facturas rule) or not written as dd-mm-aaaa is refused in the result panel and the cell keeps its value. **`ingresos` is read-only in this view**, at the model level too: the proxy drops `ItemIsEditable` and refuses `setData` for ingresos, besides `setEditTriggers(NoEditTriggers)`, applied so the operator cannot bypass AEAT / the chained Huella / the accounting lock by editing cells directly. All `ingresos` changes must go through RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog (Verifactu Req. 1, Art. 8.1 RD 1007/2023).
 - Auto-resize window to table content, capped at the current screen's available width (`screen()->availableGeometry().width()`) so the window never extends off-screen
 
 ## Data loading strategy (`populateTable`)
@@ -46,7 +47,7 @@ signals:
 
 | Table | Strategy | Reason |
 |-------|----------|--------|
-| `ingresos` | SQL-level `ORDER BY n_recibo DESC` — first batch is the most recent 256 rows; older rows load lazily as the user scrolls | `ingresos` can have thousands of rows; loading all upfront is slow |
+| `ingresos` | SQL-level `ORDER BY n_recibo DESC` — first batch is the most recent 256 rows; older rows load lazily as the user scrolls. A search or a header click drains the model first (`Listado::loadEveryRow`), so they see every row | `ingresos` can have thousands of rows; loading all upfront is slow |
 | All others | `model->fetchMore()` loop until `canFetchMore()` is false — all rows loaded immediately | Smaller tables where full load is fast and filters need all data |
 
 After the initial load `verticalHeader()->setDefaultSectionSize(rowHeight(0))` locks the compact row height so lazily-fetched rows match the initially-sized rows and don't expand unexpectedly on scroll.

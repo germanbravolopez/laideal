@@ -70,6 +70,8 @@ Both tables end with a note that per-line base/IVA are rounded to cents while th
 
 ## Output
 
+Regenerating a quarter that is already closed never touches its filed report: the new PDF is written as `<name>_regenerado_YYYYMMDD[_N].pdf` (`Contabilidad::regeneratedPath`). Every PDF is written as `.part` and renamed (`ReportHtml::writePdf`), so a failed or locked write keeps the previous file.
+
 The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= `<reports.root>/Contabilidad`) and opened automatically via `QDesktopServices::openUrl()`. Trimestral reports land directly in that folder; mensual reports under `Contabilidad/Mensual`, anual reports under `Contabilidad/Anual` (appended in `contabilidad.cpp`). `QDir::mkpath()` is called on demand.
 
 ## Verifactu interaction

@@ -59,6 +59,27 @@ private slots:
                  QStringLiteral("/Anual/reporte_anual_2026.pdf"));
     }
 
+    // A regenerated report of a closed quarter never takes the filed PDF's name.
+    void test_regeneratedPath_keepsFiledReport()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString filed = dir.filePath("contabilidad_trimestral_2026_1.pdf");
+        const QDate day(2026, 4, 20);
+        QCOMPARE(Contabilidad::regeneratedPath(filed, day), filed);   // nothing filed yet
+        QFile f(filed);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("filed");
+        f.close();
+        const QString first = Contabilidad::regeneratedPath(filed, day);
+        QCOMPARE(first, dir.filePath("contabilidad_trimestral_2026_1_regenerado_20260420.pdf"));
+        QFile g(first);
+        QVERIFY(g.open(QIODevice::WriteOnly));
+        g.close();
+        QCOMPARE(Contabilidad::regeneratedPath(filed, day),
+                 dir.filePath("contabilidad_trimestral_2026_1_regenerado_20260420_2.pdf"));
+    }
+
     void test_trimestralQuarters()
     {
         QDate s, e;

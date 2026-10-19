@@ -22,8 +22,9 @@ Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
             this, &Listado::on_actionEliminar_fila_triggered);
     connect(filter_widget, &FilterWidget::filterChanged,
             this, &Listado::textFilterChanged);
-    connect(filter_widget, &QLineEdit::textChanged,
-            this, &Listado::textFilterChanged);
+    // A header click sorts the loaded rows only, so load the rest first.
+    connect(table_listado->horizontalHeader(), &QHeaderView::sectionClicked,
+            this, [this]() { loadEveryRow(); });
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
     connect(table_listado, &QTableView::clicked, this, [this](const QModelIndex &index) {
@@ -279,12 +280,31 @@ void Listado::textFilterChanged()
     if (filter_widget->caseSensitivity() == Qt::CaseInsensitive)
         options |= QRegularExpression::CaseInsensitiveOption;
     QRegularExpression regularExpression(pattern, options);
-    proxyModel->setFilterRegularExpression(regularExpression);
-    // Also set normalized filter so searches without tildes match names that have them
-    proxyModel->setNormalizedFilter(MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
-    // Resize table
-    table_listado->resizeColumnsToContents();
-    table_listado->resizeRowsToContents();
+    // The proxy only sees the rows the model has fetched: read them all before filtering.
+    const bool filtering = !filter_widget->text().isEmpty();
+    if (filtering)
+        loadEveryRow();
+    // Regex plus the normalized text (so a search without tildes matches names that
+    // have them), applied in a single pass.
+    proxyModel->setFilters(regularExpression,
+                           MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
+    // Sizing every row per keystroke is slow on big tables: only when the filter is cleared.
+    if (!filtering) {
+        table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
+    }
+}
+
+// Ingresos is loaded lazily (a batch at a time); a text filter or a header sort
+// needs all of it, or older tickets would be missing from the result.
+void Listado::loadEveryRow()
+{
+    if (!model || !model->canFetchMore(QModelIndex()))
+        return;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    while (model->canFetchMore(QModelIndex()))
+        model->fetchMore(QModelIndex());
+    QApplication::restoreOverrideCursor();
 }
 
 void Listado::on_actionActualizar_triggered()
@@ -374,8 +394,12 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
             ui_generar_listado = new GenListado(db, this);
             ui_generar_listado->model = table_listado->model();
             ui_generar_listado->table_name = tableName;
-            ui_generar_listado->print_table();
-            m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF."));
+            if (ui_generar_listado->print_table())
+                m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF.") + "<br>"
+                                     + UiKit::fileLinkHtml(ui_generar_listado->printedFile()));
+            else
+                m_lblResult->setText(UiKit::errorHtml("No se pudo escribir el PDF.") + "<br>"
+                                     + ui_generar_listado->printedFile().toHtmlEscaped());
     } else {
         qDebug() << "Listado::on_actionGenerar_pdf_con_el_listado_triggered: no PDF listing for" << tableName;
         m_lblResult->setText(UiKit::warnHtml("Este listado no tiene versión en PDF."));

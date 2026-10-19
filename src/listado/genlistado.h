@@ -30,7 +30,9 @@ public:
     explicit GenListado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QAbstractItemModel *model;
     QString table_name;
-    void print_table();
+    // Writes the prendas PDF; false when it could not be written (see printedFile()).
+    bool print_table();
+    QString printedFile() const { return m_lastPrintedFile; }
 
     // Pure helpers extracted from the ui-reading slots, exposed for unit testing.
     // Filename suffix for the gastos listado PDF: "agrupado_<agrupar>_<tipo>_<year>",
@@ -56,6 +58,7 @@ private:
     QString add_suffix_to_filename();
 
     QSqlDatabase db;
+    QString m_lastPrintedFile;
     QSet<int> m_closedQuarters;   // quarterKey()s, read when the gastos table is built
     QComboBox *m_cbYear = nullptr;
     QCheckBox *m_chkAllYears = nullptr;

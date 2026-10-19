@@ -80,7 +80,7 @@ void GenListado::set_cb_fechas()
     m_cbYear->addItems(fechas_list);
 }
 
-void GenListado::print_table()
+bool GenListado::print_table()
 {
     model->sort(0, Qt::AscendingOrder);
     QString html_table_prendas = generate_html_prendas_table();
@@ -92,7 +92,8 @@ void GenListado::print_table()
     // create directory in case it does not exists
     if (!QFile::exists(path))
         QDir().mkpath(path);
-    ReportHtml::writePdf(path + filename, html_table_prendas);
+    m_lastPrintedFile = path + filename;
+    return ReportHtml::writePdf(m_lastPrintedFile, html_table_prendas);
 }
 
 QString GenListado::generate_html_prendas_table()
@@ -117,7 +118,7 @@ QString GenListado::generate_html_prendas_table()
         else
             html_table += "<tr style='background-color: #f6f7f9;'>";
         // set row content
-        html_table += "<td>" + model->index(row, 0).data().toString() + "</td>";
+        html_table += "<td>" + model->index(row, 0).data().toString().toHtmlEscaped() + "</td>";
         if (model->index(row, 1).data().toFloat() == 0.0)
             html_table += "<td></td>";
         else
@@ -208,10 +209,10 @@ QString GenListado::generate_html_gastos_table()
             else
                 html_table += "<tr style='background-color: #f6f7f9;'>";
             // set row content
-            html_table +="<td>" + model->index(row, 1).data().toString() + "</td>"
-                                "<td>" + model->index(row, 2).data().toString() + "</td>"
-                                "<td>" + model->index(row, 4).data().toString() + "</td>"
-                                "<td>" + model->index(row, 5).data().toString() + "</td>"
+            html_table +="<td>" + model->index(row, 1).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 2).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 4).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 5).data().toString().toHtmlEscaped() + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(iva.toFloat()) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(base.toFloat()) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(importe.toFloat()) + "</td>";

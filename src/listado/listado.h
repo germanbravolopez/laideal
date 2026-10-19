@@ -48,12 +48,13 @@ public:
 
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
-    QSqlTableModel *model;
+    QSqlTableModel *model = nullptr;
     MySortFilterProxyModel *proxyModel;
 
 private slots:
     void resizeWindowToTable();
     void textFilterChanged();
+    void loadEveryRow();
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();

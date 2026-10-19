@@ -60,16 +60,18 @@ target_link_libraries(test_genlistado PRIVATE
 add_test(NAME genlistado
     COMMAND test_genlistado -o ${CMAKE_BINARY_DIR}/test-results-genlistado.xml,junitxml -o -,txt)
 
-# facturas: pure IVA split (base + cuota from a gross amount).
+# facturas: pure IVA split, amount parsing and the dialog save on a throwaway DB.
 add_executable(test_facturas test_facturas.cpp)
 target_link_libraries(test_facturas PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Widgets   # facturas.h includes <QMainWindow>
     Qt${QT_VERSION_MAJOR}::Sql       # facturas.h includes <QSqlQueryModel>
     facturas
+    sql_lite                         # TestSchema (throwaway DB for the dialog tests)
 )
 add_test(NAME facturas
     COMMAND test_facturas -o ${CMAKE_BINARY_DIR}/test-results-facturas.xml,junitxml -o -,txt)
+set_tests_properties(facturas PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # appsettings: DPAPI secret-at-rest helpers (encrypt/decrypt round-trip + marker).
 add_executable(test_appsettings test_appsettings.cpp)
@@ -98,10 +100,13 @@ set_tests_properties(settingsdialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offs
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Gui
     reporthtml
+    appsettings                     # documentOpen reads the business identity
 )
 add_test(NAME reporthtml
     COMMAND test_reporthtml -o ${CMAKE_BINARY_DIR}/test-results-reporthtml.xml,junitxml -o -,txt)
+set_tests_properties(reporthtml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # updater: pure version-compare helpers. NB the executable must NOT be named
 # *update*/*setup*/*install* - Windows' UAC installer-detection heuristic would

@@ -153,6 +153,20 @@ QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bo
     return QString();
 }
 
+QString Contabilidad::regeneratedPath(const QString &file, const QDate &date)
+{
+    if (!QFileInfo::exists(file))
+        return file;
+    const QFileInfo info(file);
+    const QString stem = info.absolutePath() + "/" + info.completeBaseName() + "_regenerado_"
+                         + date.toString("yyyyMMdd");
+    const QString ext = info.suffix().isEmpty() ? QString() : "." + info.suffix();
+    QString candidate = stem + ext;
+    for (int n = 2; QFileInfo::exists(candidate); ++n)
+        candidate = stem + "_" + QString::number(n) + ext;
+    return candidate;
+}
+
 QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year)
 {
     const auto quarterLine = [&db, year](int q) {
@@ -226,11 +240,11 @@ void Contabilidad::onGenerateClicked()
                           + "El trimestre vuelve a estar abierto.";
             }
         } else if (closed) {
-            file = generateContabilidad(invalidAmounts);
-            qDebug() << "Contabilidad: trim" << trim << "year" << year << "already closed, report regenerated";
+            file = generateContabilidad(invalidAmounts, /*keepFiledReport=*/true);
+            qDebug() << "Contabilidad: trim" << trim << "year" << year << "already closed, report regenerated as" << file;
             message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
                       + "<br>" + (file.isEmpty() ? errorHtml("No se pudo guardar el informe de nuevo.")
-                                                 : QString("Documentación generada de nuevo."));
+                                                 : QString("Documentación generada de nuevo; el informe ya presentado se conserva."));
         } else if (!quarterHasMovements(db, trim, year)) {
             qWarning() << "Contabilidad: no ingresos, gastos nor cancellations for trim" << trim << "year" << year;
             message = warnHtml("No hay registros de ingresos ni de gastos " + quarterName + ".");
@@ -294,7 +308,7 @@ void Contabilidad::onConfigChanged()
     m_sbPeriod->setVisible(currentMode() != Anual);
 }
 
-QString Contabilidad::generateContabilidad(int &invalidAmounts)
+QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledReport)
 {
     const int year = m_sbYear->value();
     const double ivaRate = AppSettings::ivaRate();
@@ -371,8 +385,11 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
     }
     if (invalidAmounts > 0)
         qCritical() << "Contabilidad::generateContabilidad:" << invalidAmounts << "comma-decimal importe(s) not summed";
-    const QString file = AppSettings::instance()->contabilidadPath()
+    QString file = AppSettings::instance()->contabilidadPath()
             + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : m_sbPeriod->value(), year, withDetail);
+    // The report filed for a closed quarter is never overwritten or deleted.
+    if (keepFiledReport)
+        file = regeneratedPath(file, QDate::currentDate());
     QDir().mkpath(QFileInfo(file).absolutePath());
     return ReportHtml::writePdf(file, contabilidadHtml) ? file : QString();
 }

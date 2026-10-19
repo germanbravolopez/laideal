@@ -40,9 +40,14 @@ public:
     // Returns the compile-time PROJECT_VERSION as "X.Y".
     static QString currentVersion();
 
+    // True for exactly "X.Y" or "vX.Y" (nothing before or after).
+    static bool isValidVersion(const QString &version);
+
     // Compares two "X.Y" version strings numerically (major-then-minor).
-    // Returns >0 if a > b, 0 if equal, <0 if a < b. Strings that don't match
-    // the X.Y pattern (e.g. "v8.2" with leading 'v') are normalised first.
+    // Returns >0 if a > b, 0 if equal, <0 if a < b. A leading 'v' is ignored.
+    // Anything that is not exactly X.Y ("12.0.1", "nightly") compares equal to
+    // everything, so a malformed tag is never reported as newer; callers check
+    // isValidVersion() first to report it as a failure.
     static int compareVersions(const QString &a, const QString &b);
 
     // Kicks off the GitHub /releases/latest request. If silentOnNoUpdate is
@@ -51,7 +56,14 @@ public:
     // startup check so offline / no-update is not user-visible.
     void checkForUpdates(bool silentOnNoUpdate);
 
+    // Silent flag of the check whose result is being emitted right now (valid
+    // inside the noUpdateAvailable / checkFailed / updateAvailable slots).
     bool isSilentCheck() const { return m_silentOnNoUpdate; }
+
+    // True while a download (checksum or installer) is running.
+    bool isDownloading() const { return m_downloadReply != nullptr; }
+    // Aborts the running download without emitting downloadFailed.
+    void cancelDownload();
 
     // What a release says about its installer.
     struct InstallerAsset {
@@ -91,6 +103,9 @@ private:
 
     QNetworkAccessManager *m_nam;
     bool m_silentOnNoUpdate;
+    bool m_checkInFlight = false;
+    bool m_checkSilent = true;               // of the check in flight; a manual click makes it false
+    QNetworkReply *m_downloadReply = nullptr;
     InstallerAsset m_installer;   // of the release last reported by updateAvailable
 };
 

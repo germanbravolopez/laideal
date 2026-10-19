@@ -2,6 +2,8 @@
 #include "sql_lite.h"
 #include "uikit.h"
 
+#include <cmath>
+
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDebug>
@@ -10,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVBoxLayout>
@@ -131,22 +134,65 @@ void Facturas::populateServicios()
 
 QString Facturas::validationError()
 {
-    if (m_leFra->text().trimmed().isEmpty() || m_cbServicio->currentText().isEmpty()
-            || m_cbEmpresa->currentText().isEmpty() || m_leImporte->text().trimmed().isEmpty())
+    if (m_leFra->text().trimmed().isEmpty() || m_cbServicio->currentText().trimmed().isEmpty()
+            || m_cbEmpresa->currentText().trimmed().isEmpty() || m_leImporte->text().trimmed().isEmpty())
         return UiKit::errorHtml("Formulario incompleto.")
                + "<br>Para guardar la factura rellene al menos: Nº factura, Empresa, Servicio e Importe total.";
-    bool isNumber = false;
-    m_leImporte->text().trimmed().replace(',', '.').toDouble(&isNumber);
-    if (!isNumber)
-        return UiKit::errorHtml("El importe total no es un número válido.");
-    if (m_cbEmpresa->findText(m_cbEmpresa->currentText(), Qt::MatchExactly) == -1)
+    double gross = 0.0;
+    if (!parseGross(m_leImporte->text(), &gross))
+        return UiKit::errorHtml("El importe total no es válido.")
+               + "<br>Escriba un importe mayor que cero, con coma o punto decimal (por ejemplo 121,50).";
+    if (m_cbEmpresa->findText(m_cbEmpresa->currentText().trimmed(), Qt::MatchExactly) == -1)
         return UiKit::errorHtml("La empresa no está en la lista de proveedores.")
                + "<br>Añádala en Listado de proveedores antes de introducir esta factura.";
     // The whole quarter, both tables: a month without gastos in a closed quarter is closed too.
     if (quarterIsClosed(db, m_deFecha->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
                + "<br>La fecha de la factura pertenece a un trimestre cerrado por la contabilidad.";
+    // Same supplier and invoice number: a double click or a second open window.
+    const QString duplicate = existingInvoiceSummary();
+    if (!duplicate.isEmpty())
+        return UiKit::errorHtml("Factura duplicada.")
+               + "<br>Ya existe una factura " + m_leFra->text().trimmed().toHtmlEscaped() + " de "
+               + m_cbEmpresa->currentText().trimmed().toHtmlEscaped() + ": " + duplicate;
     return QString();
+}
+
+bool Facturas::parseGross(const QString &text, double *value)
+{
+    // Digits with an optional decimal part: no sign, exponent, inf or nan.
+    static const QRegularExpression rx(R"(^\d{1,9}([.,]\d+)?$)");
+    const QString trimmed = text.trimmed();
+    if (!rx.match(trimmed).hasMatch())
+        return false;
+    QString dotted = trimmed;
+    bool ok = false;
+    const double gross = dotted.replace(',', '.').toDouble(&ok);
+    if (!ok || !std::isfinite(gross) || gross <= 0.0)
+        return false;
+    if (value)
+        *value = gross;
+    return true;
+}
+
+QString Facturas::existingInvoiceSummary()
+{
+    const bool wasOpen = db.isOpen();
+    if (!wasOpen && !db.open())
+        return QString();
+    QString summary;
+    {
+        QSqlQuery q(db);
+        q.prepare("SELECT fecha, importe FROM gastos WHERE TRIM(n_factura) = :n AND TRIM(empresa) = :e LIMIT 1;");
+        q.bindValue(":n", m_leFra->text().trimmed());
+        q.bindValue(":e", m_cbEmpresa->currentText().trimmed());
+        if (q.exec() && q.next())
+            summary = QString("del %1 por %2 €.").arg(q.value(0).toString().toHtmlEscaped(),
+                                                       displayMoney(q.value(1).toString()));
+    }
+    if (!wasOpen)
+        db.close();
+    return summary;
 }
 
 void Facturas::onSaveClicked()
@@ -172,34 +218,38 @@ void Facturas::onSaveClicked()
 
 bool Facturas::saveFactura()
 {
-    bool idRead = false;
-    const int idMax = readMaxValueInColumnFromTable(db, "id", "gastos", &idRead);
-    if (!idRead) {
-        qCritical() << "saveFactura: the highest gastos id could not be read - nothing saved";
-        return false;
-    }
-    qDebug() << "saveFactura: INSERT INTO gastos id=" << (idMax + 1)
-             << "n_factura=" << m_leFra->text()
-             << "empresa=" << m_cbEmpresa->currentText()
+    const QString nFactura = m_leFra->text().trimmed();
+    const QString empresa = m_cbEmpresa->currentText().trimmed();
+    qDebug() << "saveFactura: INSERT INTO gastos n_factura=" << nFactura
+             << "empresa=" << empresa
              << "fecha=" << m_deFecha->date().toString("dd-MM-yyyy")
              << "iva=" << m_cbIva->currentData().toString()
              << "importe=" << m_leImporte->text();
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe) "
-              "VALUES (:id, :n_factura, :servicio, :descripcion, :empresa, :fecha, :iva, :importe);");
-    q.bindValue(":id", QString::number(idMax + 1));
-    q.bindValue(":n_factura", m_leFra->text().trimmed());
-    q.bindValue(":servicio", m_cbServicio->currentText());
-    q.bindValue(":descripcion", m_leDescripcion->text());
-    q.bindValue(":empresa", m_cbEmpresa->currentText());
-    q.bindValue(":fecha", m_deFecha->date().toString("dd-MM-yyyy"));
-    q.bindValue(":iva", m_cbIva->currentData().toString());
-    q.bindValue(":importe", moneyText(m_leImporte->text()));
-    const bool ok = q.exec();
-    if (!ok)
-        qWarning() << "saveFactura INSERT failed for" << m_leFra->text() << "-" << q.lastError().text();
-    db.close();
+    const bool wasOpen = db.isOpen();
+    if (!wasOpen && !db.open()) {
+        qWarning() << "saveFactura: database not opened -" << db.lastError().text();
+        return false;
+    }
+    bool ok = false;
+    {
+        // The id comes from the same statement as the insert (no separate read).
+        QSqlQuery q(db);
+        q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe) "
+                  "SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) + 1, :n_factura, :servicio, :descripcion, "
+                  ":empresa, :fecha, :iva, :importe FROM gastos;");
+        q.bindValue(":n_factura", nFactura);
+        q.bindValue(":servicio", m_cbServicio->currentText().trimmed());
+        q.bindValue(":descripcion", m_leDescripcion->text().trimmed());
+        q.bindValue(":empresa", empresa);
+        q.bindValue(":fecha", m_deFecha->date().toString("dd-MM-yyyy"));
+        q.bindValue(":iva", m_cbIva->currentData().toString());
+        q.bindValue(":importe", moneyText(m_leImporte->text().trimmed()));
+        ok = q.exec();
+        if (!ok)
+            qWarning() << "saveFactura INSERT failed for" << nFactura << "-" << q.lastError().text();
+    }
+    if (!wasOpen)
+        db.close();
     return ok;
 }
 
@@ -215,9 +265,8 @@ double Facturas::taxAmountFromGross(double gross, double ivaRate)
 
 void Facturas::updateTaxSplit()
 {
-    bool isNumber = false;
-    const double gross = m_leImporte->text().trimmed().replace(',', '.').toDouble(&isNumber);
-    if (!isNumber) {
+    double gross = 0.0;
+    if (!parseGross(m_leImporte->text(), &gross)) {
         m_leBase->clear();
         m_leIva->clear();
         return;

@@ -11,13 +11,13 @@
 ## Findings
 | Sev | Cat | file:line | Finding | Proposal | Eff |
 |---|---|---|---|---|---|
-| Medium | bug | src/reporthtml/reporthtml.cpp:46-51 | `documentOpen` inserts the settings values (businessName, Address, City, verifactuNif, businessPhone) and title / subtitle raw. A name such as "A&B <x>" breaks the header. | Escape the settings values with `toHtmlEscaped()`. Document title / subtitle as HTML by contract. | S |
-| Medium | bug | src/listado/genlistado.cpp:116, 211-214 | Listado cells (prenda, nFactura, servicio, empresa, fecha) are not escaped, while Contabilidad escapes the same kind of fields. A supplier named "R&D <S.L.>" breaks the table. | Escape every user cell, optionally through a `ReportHtml::cell()` helper. | S |
+| Medium ✅ FIXED 20-10-2026 | bug | src/reporthtml/reporthtml.cpp:46-51 | `documentOpen` inserts the settings values (businessName, Address, City, verifactuNif, businessPhone) and title / subtitle raw. A name such as "A&B <x>" breaks the header. | Escape the settings values with `toHtmlEscaped()`. Document title / subtitle as HTML by contract. | S |
+| Medium ✅ FIXED 20-10-2026 | bug | src/listado/genlistado.cpp:116, 211-214 | Listado cells (prenda, nFactura, servicio, empresa, fecha) are not escaped, while Contabilidad escapes the same kind of fields. A supplier named "R&D <S.L.>" breaks the table. | Escape every user cell, optionally through a `ReportHtml::cell()` helper. | S |
 | Low | bug | reporthtml.cpp:121-129 | The result of `QFile::remove` is ignored. If a viewer locks the old PDF and QPrinter fails, the stale non-empty file passes the size check. | Fail when the old file exists and cannot be removed, or check its modification time. | S |
-| Low | bug | reporthtml.cpp:131 | The result of `openUrl` is ignored. | Log a warning when it fails. | S |
+| Low ✅ FIXED 20-10-2026 | bug | reporthtml.cpp:131 | The result of `openUrl` is ignored. | Log a warning when it fails. | S |
 | Low | bug | reporthtml.cpp:81-103 | -0.004 prints "-0,00 €". NaN / inf / huge values reach `qRound64` (undefined behaviour). Callers pass `toFloat()` and sum in float (genlistado.cpp:125,130,176,215-217). | Take the sign from the rounded cents, guard non-finite values, use double in the callers. | S |
-| Low | design | reporthtml.cpp:104-135 | `writePdf` writes straight to the final path: a crash leaves a truncated file of size > 0 that passes the check. | Write to a temporary file, then rename. | M |
-| Low | design | genlistado.cpp:95 | `print_table()` ignores the result of `writePdf`. | Propagate or log it. | S |
+| Low ✅ FIXED 20-10-2026 | design | reporthtml.cpp:104-135 | `writePdf` writes straight to the final path: a crash leaves a truncated file of size > 0 that passes the check. | Write to a temporary file, then rename. | M |
+| Low ✅ FIXED 20-10-2026 | design | genlistado.cpp:95 | `print_table()` ignores the result of `writePdf`. | Propagate or log it. | S |
 | Low | design | src/app/mainwindow.cpp:1539 | The declaración PDF is a bare `<html><body>`, without `documentOpen` / `documentClose`. | Confirm this is intended and document it. | S |
 | Low | design | reporthtml.cpp:117-129 | No page numbers; Arial is only a preference and Qt substitutes a font silently. | Optional page footer, or document the behaviour. | M |
 | Low | design | reporthtml.cpp | PDFs are Spanish-only, although the app has a language setting. | Document that this is by design. | S |

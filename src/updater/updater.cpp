@@ -82,15 +82,23 @@ QString Updater::currentVersion()
     return QString(PROJECT_VERSION);
 }
 
+static const QRegularExpression &versionRegex()
+{
+    static const QRegularExpression rx(R"(^v?(\d+)\.(\d+)$)");
+    return rx;
+}
+
+bool Updater::isValidVersion(const QString &version)
+{
+    return versionRegex().match(version).hasMatch();
+}
+
 int Updater::compareVersions(const QString &a, const QString &b)
 {
-    static const QRegularExpression rx(R"(^v?(\d+)\.(\d+))");
-    QRegularExpressionMatch ma = rx.match(a);
-    QRegularExpressionMatch mb = rx.match(b);
-    if (!ma.hasMatch() || !mb.hasMatch()) {
-        // Fall back to lexicographic; better than crashing on a malformed tag.
-        return QString::compare(a, b);
-    }
+    const QRegularExpressionMatch ma = versionRegex().match(a);
+    const QRegularExpressionMatch mb = versionRegex().match(b);
+    if (!ma.hasMatch() || !mb.hasMatch())
+        return 0;   // never "newer"
     const int majA = ma.captured(1).toInt();
     const int minA = ma.captured(2).toInt();
     const int majB = mb.captured(1).toInt();
@@ -101,7 +109,15 @@ int Updater::compareVersions(const QString &a, const QString &b)
 
 void Updater::checkForUpdates(bool silentOnNoUpdate)
 {
-    m_silentOnNoUpdate = silentOnNoUpdate;
+    if (m_checkInFlight) {
+        // Overlapping check: do not start another request. A manual click still
+        // wants its answer shown, so it turns the running check non-silent.
+        if (!silentOnNoUpdate)
+            m_checkSilent = false;
+        return;
+    }
+    m_checkInFlight = true;
+    m_checkSilent = silentOnNoUpdate;
 
     QNetworkRequest req{QUrl(QString::fromLatin1(kGitHubApiLatestUrl))};
     req.setHeader(QNetworkRequest::UserAgentHeader,
@@ -121,6 +137,8 @@ void Updater::checkForUpdates(bool silentOnNoUpdate)
 void Updater::handleReleaseReply(QNetworkReply *reply)
 {
     reply->deleteLater();
+    m_checkInFlight = false;
+    m_silentOnNoUpdate = m_checkSilent;   // read by the slots of the signals below
 
     if (reply->error() != QNetworkReply::NoError) {
         const QString err = reply->errorString();
@@ -143,6 +161,12 @@ void Updater::handleReleaseReply(QNetworkReply *reply)
 
     if (latestTag.isEmpty()) {
         emit checkFailed(QStringLiteral("La respuesta de GitHub no contiene 'tag_name'."));
+        return;
+    }
+
+    if (!isValidVersion(latestTag)) {
+        qWarning() << "Updater: unrecognised release tag" << latestTag;
+        emit checkFailed(QStringLiteral("La etiqueta de la última versión no es válida: %1").arg(latestTag));
         return;
     }
 
@@ -172,8 +196,22 @@ void Updater::handleReleaseReply(QNetworkReply *reply)
     emit updateAvailable(latestTag, notes, installer.url);
 }
 
+void Updater::cancelDownload()
+{
+    if (!m_downloadReply)
+        return;
+    QNetworkReply *reply = m_downloadReply;
+    m_downloadReply = nullptr;
+    reply->disconnect(this);
+    reply->abort();
+    reply->deleteLater();
+    qDebug() << "Updater: download cancelled";
+}
+
 void Updater::downloadInstaller(const QUrl &installerUrl)
 {
+    if (m_downloadReply)
+        return;   // one download at a time; a second would race the stale-file cleanup
     // Deliberately NOT the temp dir: on hardened machines %TEMP% is ACL'd to deny
     // execute to the normal (non-elevated) user, so the downloaded installer can't
     // be launched from there (Windows "no se puede acceder ... permisos"). A
@@ -204,8 +242,10 @@ void Updater::downloadInstaller(const QUrl &installerUrl)
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(30000);
     QNetworkReply *reply = m_nam->get(req);
+    m_downloadReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
+        m_downloadReply = nullptr;
         const QString sha256 = reply->error() == QNetworkReply::NoError && isTrustedDownloadUrl(reply->url())
                                    ? parseChecksumFile(reply->read(4096)) : QString();
         if (sha256.isEmpty()) {
@@ -236,6 +276,7 @@ void Updater::startInstallerDownload()
     req.setTransferTimeout(60000);   // no byte for a minute: give up instead of hanging
 
     QNetworkReply *reply = m_nam->get(req);
+    m_downloadReply = reply;
     connect(reply, &QNetworkReply::downloadProgress,
             this, &Updater::downloadProgress);
     connect(reply, &QNetworkReply::finished, this, [this, reply, localPath]() {
@@ -246,6 +287,7 @@ void Updater::startInstallerDownload()
 void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath)
 {
     reply->deleteLater();
+    m_downloadReply = nullptr;
 
     if (reply->error() != QNetworkReply::NoError) {
         emit downloadFailed(reply->errorString());

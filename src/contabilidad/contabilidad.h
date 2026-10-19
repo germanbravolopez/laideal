@@ -59,6 +59,9 @@ public:
     // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
     // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";
     // the version with the detail tables gets "_detalle" before ".pdf", so both are kept.
+    // Where a regenerated report of a closed period goes: file itself when absent, else
+    // "<name>_regenerado_YYYYMMDD[_N].pdf" next to it, so the filed PDF is kept.
+    static QString regeneratedPath(const QString &file, const QDate &date);
     static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
 
     // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
@@ -144,7 +147,8 @@ private:
     void initialSettings();
     // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
     // comma-decimal amounts left out of the sums.
-    QString generateContabilidad(int &invalidAmounts);
+    // keepFiledReport: write beside an existing report under regeneratedPath(), never over it.
+    QString generateContabilidad(int &invalidAmounts, bool keepFiledReport = false);
     bool m_dataReadFailed = false;   // the last generateContabilidad could not read the data: no report
 
     QSqlDatabase db;
