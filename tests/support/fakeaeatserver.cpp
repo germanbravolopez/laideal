@@ -287,9 +287,11 @@ QByteArray FakeAeatServer::answer(const Request &request)
                                    "<tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>%1</tik:IdPeticionRegistroDuplicado>"
                                    "<tik:EstadoRegistroDuplicado>%2</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado>")
                         .arg(m_registeredRequestId.value(key),
-                             // An alta of an invoice AEAT holds as cancelled.
-                             record.operation == QLatin1String("Alta")
-                                     && m_registered.contains(QStringLiteral("Anulacion:") + record.invoiceNumber)
+                             // An alta of an invoice AEAT holds as cancelled, and a repeated
+                             // anulación (AEAT answers with the invoice's state: Anulada).
+                             record.operation == QLatin1String("Anulacion")
+                                     || (record.operation == QLatin1String("Alta")
+                                         && m_registered.contains(QStringLiteral("Anulacion:") + record.invoiceNumber))
                                  ? QStringLiteral("Anulada") : QStringLiteral("Correcta"));
         } else {
             m_registered.insert(key, record);

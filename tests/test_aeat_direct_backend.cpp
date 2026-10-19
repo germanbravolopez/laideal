@@ -258,6 +258,25 @@ private slots:
         QVERIFY(m_server->registered().contains("Anulacion:30837"));
     }
 
+    // A cancellation whose reply was lost is resent; AEAT answers that it holds it (a
+    // duplicate, the invoice Anulada): accepted, never an error that would keep the income
+    // counted and make Anular loop.
+    void test_cancellationLostReplyResentIsAccepted()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        const VerifactuResult alta = waitFor(backend, backend.submitInvoiceAsync(ticket("30839", 12.10)));
+        QVERIFY(alta.isSuccess());
+        m_server->enqueue({ QByteArray(), 200, 0, false, true });          // registered, answer lost
+        const VerifactuResult lost = waitFor(backend, backend.cancelInvoiceAsync("30839", QDate(2026, 10, 10)));
+        QCOMPARE(lost.status, VerifactuResult::NETWORK_ERROR);
+
+        AeatDirectBackend later(config(), m_db);
+        const VerifactuResult resent = waitFor(later, later.cancelInvoiceAsync("30839", QDate(2026, 10, 10)), 15000);
+        QVERIFY2(resent.isSuccess(), qPrintable(resent.errorDescription));
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "30839").state, AeatStore::kAccepted);
+    }
+
     // A fault from AEAT's side leaves the record pending; one about the request rejects it.
     void test_faults()
     {

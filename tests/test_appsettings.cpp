@@ -145,6 +145,21 @@ private slots:
 
     // A plaintext service key on disk is encrypted at rest on load: the getter
     // still returns plaintext, and the file is rewritten with the encrypted value.
+    // The direct client's NumeroInstalacion and chain marker are written to the file at
+    // once: every record carries the number, so a crash before another save must not
+    // give the next run a different one.
+    void test_installationNumberAndChainMarkerPersistAtOnce()
+    {
+        const QString path = loadJson(R"({"database":{"path":"x.db"}})");
+        const QString number = AppSettings::instance()->aeatInstallationNumber();
+        QVERIFY(number.startsWith("LAIDEAL-"));
+        QCOMPARE(rawValue(path, "verifactu", "aeat_installation"), number);
+        AppSettings::instance()->setAeatChainMarker("30839|ABC");
+        QCOMPARE(rawValue(path, "verifactu", "aeat_chain_marker"), QStringLiteral("30839|ABC"));
+        AppSettings::instance()->loadFrom(path);                       // the next run
+        QCOMPARE(AppSettings::instance()->aeatInstallationNumber(), number);
+    }
+
     void test_encryptSecretsAtRestMigration()
     {
         const QString plain = "plaintext-service-key-XyZ987";

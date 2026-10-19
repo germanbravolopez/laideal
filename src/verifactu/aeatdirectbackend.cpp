@@ -701,7 +701,16 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
             continue;
         }
         VerifactuResult result = AeatResponse::resultFor(parsed, record.invoiceNumber, operation);
-        if (line && line->duplicate && line->duplicateState == QLatin1String("Anulada")) {
+        if (line && line->duplicate && record.kind == AeatStore::Kind::Cancellation) {
+            // A cancellation AEAT already holds (its reply was lost and the record resent):
+            // the invoice is cancelled, which is what was asked. Ours only when an earlier
+            // send of it reached AEAT.
+            const bool ours = reachedBefore.value(record.id, false);
+            result.status = VerifactuResult::SUCCESS;
+            m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
+                                result.csv, result.errorCode, result.errorDescription);
+            finishRecord(record, result, ours);
+        } else if (line && line->duplicate && line->duplicateState == QLatin1String("Anulada")) {
             // AEAT holds the invoice as cancelled: never register it again.
             result.status = VerifactuResult::ERROR;
             result.errorDescription = tr("La AEAT tiene la factura %1 anulada.").arg(record.invoiceNumber);

@@ -376,7 +376,11 @@ QString AppSettings::aeatCertificatePassword() const { return decryptSecret(str(
 void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"verifactu", "aeat_certificate_password"}, encryptSecret(v)); }
 
 QString AppSettings::aeatChainMarker() const { return str({"verifactu", "aeat_chain_marker"}); }
-void    AppSettings::setAeatChainMarker(const QString &v) { setStr({"verifactu", "aeat_chain_marker"}, v); }
+void AppSettings::setAeatChainMarker(const QString &v)
+{
+    setStr({"verifactu", "aeat_chain_marker"}, v);
+    save();   // at once: it must survive a crash before any other save
+}
 
 QString AppSettings::aeatInstallationNumber()
 {
@@ -384,6 +388,7 @@ QString AppSettings::aeatInstallationNumber()
     if (number.isEmpty()) {
         number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
         setStr({"verifactu", "aeat_installation"}, number);
+        save();   // at once: every record carries it, so it may never change between runs
     }
     return number;
 }
