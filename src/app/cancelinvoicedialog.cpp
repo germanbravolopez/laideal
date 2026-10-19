@@ -45,6 +45,7 @@ void CancelInvoiceDialog::buildUi()
     m_leTicketNum->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leTicketNum);
     auto *btnSearch = new QPushButton(tr("Buscar"));
+    m_btnSearch = btnSearch;
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
@@ -81,6 +82,8 @@ void CancelInvoiceDialog::buildUi()
 
 void CancelInvoiceDialog::onSearchClicked()
 {
+    if (!m_pendingCancelId.isEmpty())   // the reply belongs to the ticket shown
+        return;
     m_lblResult->clear();
     m_loadedTicket.clear();
     m_events.clear();
@@ -172,6 +175,10 @@ void CancelInvoiceDialog::rebuildTable()
 
 void CancelInvoiceDialog::setActionsEnabled(bool enabled)
 {
+    // No other ticket can be searched while a cancellation waits for AEAT.
+    m_leTicketNum->setEnabled(enabled);
+    if (m_btnSearch)
+        m_btnSearch->setEnabled(enabled);
     for (int row = 0; row < m_events.size(); ++row) {
         if (auto *btn = qobject_cast<QPushButton *>(m_table->cellWidget(row, COL_ACTION))) {
             const VerifactuEstado st = verifactuEstadoFromString(m_events[row].estado);
@@ -212,6 +219,8 @@ void CancelInvoiceDialog::onCancelClicked(int row)
             this, &CancelInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
 
     m_pendingCancelRow = row;
+    m_pendingTicket = m_loadedTicket;
+    m_pendingEvent = e;
     m_firstRejection.clear();
     m_pendingFallbackDate = (e.seq == 0 && m_receptionDate.isValid() && m_receptionDate != e.invoiceDate)
                             ? m_receptionDate : QDate();
@@ -230,12 +239,21 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     m_pendingCancelId.clear();
     const int row = m_pendingCancelRow;
     m_pendingCancelRow = -1;
-
-    if (row < 0 || row >= m_events.size()) {
+    if (row < 0) {
         setActionsEnabled(true);
         return;
     }
-    Event &e = m_events[row];
+    // The invoice the request was sent for, not whatever row `row` holds now.
+    Event &e = m_pendingEvent;
+    // Shows the new estado on the table row of that invoice, when the window still lists it.
+    const auto showEstado = [this](const Event &sent, VerifactuEstado estado) {
+        if (m_loadedTicket != m_pendingTicket)
+            return;
+        for (Event &shown : m_events)
+            if (shown.seq == sent.seq)
+                shown.estado = verifactuEstadoToString(estado);
+        rebuildTable();
+    };
 
     // Before 10.9 a failed submission was re-sent with the reception date, so some old
     // seq-0 invoices are registered under it. When AEAT rejects the cancellation, try
@@ -284,17 +302,16 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     // events of the same n_recibo stay ENVIADA. This is the fix the 8.5 blocker
     // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
     // and would have marked every event ANULADA in one shot.
-    qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_loadedTicket << "seq" << e.seq;
+    qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_pendingTicket << "seq" << e.seq;
     // Stamp the date the closed-quarter guard checked, not the (later) reply time -
     // unless that quarter was closed while the request was in flight.
     QDate cancelDate = m_pendingCancelDate;
     if (quarterIsClosed(db, cancelDate) && !quarterIsClosed(db, QDate::currentDate()))
         cancelDate = QDate::currentDate();
-    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, cancelDate, result.rawXml)) {
+    if (!markInvoiceSeqCancelled(db, m_pendingTicket, e.seq, cancelDate, result.rawXml)) {
         // AEAT did cancel it: show it as such so its button cannot send a second
         // cancellation, and flag the missing local write.
-        e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
-        rebuildTable();
+        showEstado(e, VerifactuEstado::Anulada);
         m_lblResult->setText(tr("<b style='color:red'>La AEAT aceptó la anulación de %1, pero no se pudo guardar "
                                 "en la base de datos local. Revise el log de depuración antes de hacer la "
                                 "contabilidad.</b>").arg(e.invoiceId.toHtmlEscaped()));
@@ -302,8 +319,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         return;
     }
 
-    e.estado = verifactuEstadoToString(VerifactuEstado::Anulada);
-    rebuildTable();
+    showEstado(e, VerifactuEstado::Anulada);
 
     m_lblResult->setText(QString("<b style='color:green'>Anulación confirmada para %1.</b><br>CSV: %2")
                              .arg(e.invoiceId.toHtmlEscaped(),

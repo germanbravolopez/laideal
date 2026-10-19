@@ -55,6 +55,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_leTicketNum->setPlaceholderText("Ej: 24417");
     searchRow->addWidget(m_leTicketNum);
     QPushButton *btnSearch = new QPushButton("Buscar");
+    m_btnSearch = btnSearch;
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
@@ -168,6 +169,8 @@ void RectifyInvoiceDialog::setFormEnabled(bool enabled)
 
 void RectifyInvoiceDialog::onSearchClicked()
 {
+    if (!m_pendingRectifyId.isEmpty())   // the reply belongs to the ticket shown
+        return;
     setFormEnabled(false);
     m_lblResult->clear();
     m_loadedTicket.clear();
@@ -345,8 +348,14 @@ void RectifyInvoiceDialog::onRectifyClicked()
     m_newInvoiceDate   = m_deRectifyDate->date();
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
+    m_submittedTicket = m_loadedTicket;
     if (refused.isEmpty()) {
-        insertPlaceholderRow();
+        if (!insertPlaceholderRow()) {
+            m_lblResult->setText(UiKit::errorHtml(tr("No se pudo guardar el nuevo ticket %1 de la rectificativa: no se ha "
+                                                     "enviado nada a la AEAT.").arg(m_newInvoiceNumber.toHtmlEscaped())));
+            setFormEnabled(true);
+            return;
+        }
     } else if (!prepareRefusedResend(refused, amountWithIva, isSubstitution)) {
         setFormEnabled(true);
         return;
@@ -378,6 +387,9 @@ void RectifyInvoiceDialog::onRectifyClicked()
         newTaxBase, newTaxAmount, origTaxBase, origTaxAmount,
         ivaRate, desc, rectifiedNumber, rectifiedDate);
 
+    // No other ticket can be searched while this one waits for AEAT.
+    m_leTicketNum->setEnabled(m_pendingRectifyId.isEmpty());
+    m_btnSearch->setEnabled(m_pendingRectifyId.isEmpty());
     if (m_pendingRectifyId.isEmpty()) {
         // Nothing was sent: its row (claimed or reused) is an error to redo, not PENDIENTE.
         markRectificationUnsent(db, m_newInvoiceNumber, tr("No se envió: Verifactu no configurado."));
@@ -395,7 +407,7 @@ bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double a
     old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
                 "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
     old.bindValue(":n", refused);
-    old.bindValue(":o", m_loadedTicket);
+    old.bindValue(":o", m_submittedTicket);
     const bool read = old.exec() && old.next();
     const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
     const double oldAmount = read ? old.value(1).toDouble() : 0.0;
@@ -449,7 +461,7 @@ RectifyInvoiceDialog::~RectifyInvoiceDialog()
     q.bindValue(":e",       verifactuEstadoToString(VerifactuEstado::Error));
     q.bindValue(":err",     tr("Sin respuesta de la AEAT al cerrar la ventana: rehágala en Rectificar factura."));
     q.bindValue(":n",       m_newInvoiceNumber);
-    q.bindValue(":o",       m_loadedTicket);
+    q.bindValue(":o",       m_submittedTicket);
     q.bindValue(":pending", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.exec();
     db.close();
@@ -459,6 +471,8 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
 {
     if (requestId != m_pendingRectifyId) return; // not ours
     m_pendingRectifyId.clear();
+    m_leTicketNum->setEnabled(true);
+    m_btnSearch->setEnabled(true);
 
     const bool localOk = applyRectificationResult(result);
 
@@ -501,7 +515,7 @@ bool RectifyInvoiceDialog::queuedWithoutAnswer(const VerifactuResult &result) co
            && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, m_newInvoiceNumber);
 }
 
-void RectifyInvoiceDialog::insertPlaceholderRow()
+bool RectifyInvoiceDialog::insertPlaceholderRow()
 {
     const QString fechaStr = m_newInvoiceDate.toString("dd-MM-yyyy");
     const QString modeStr  = VerifactuInvoice::rectificationTypeToString(
@@ -511,7 +525,7 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
 
     qDebug() << "RectifyInvoiceDialog::insertPlaceholderRow:"
              << "newTicket=" << m_newInvoiceNumber
-             << "rectifies=" << m_loadedTicket
+             << "rectifies=" << m_submittedTicket
              << "mode=" << modeStr
              << "amount=" << m_submittedAmount;
 
@@ -542,7 +556,7 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     q.bindValue(":pagado",          "SI");
     q.bindValue(":estado",          "Rectificativa");
     q.bindValue(":cantidad",        "1");
-    q.bindValue(":prenda",          QString("Rectificativa de ticket %1").arg(m_loadedTicket));
+    q.bindValue(":prenda",          QString("Rectificativa de ticket %1").arg(m_submittedTicket));
     q.bindValue(":size",            "");
     q.bindValue(":servicio",        "");
     q.bindValue(":observaciones",   QString("Rectificativa %1 (%2)").arg(
@@ -560,17 +574,19 @@ void RectifyInvoiceDialog::insertPlaceholderRow()
     q.bindValue(":vurl",            "");
     q.bindValue(":vxml",            "");
     q.bindValue(":vhash",           "");
-    q.bindValue(":vrectifies",      m_loadedTicket);
+    q.bindValue(":vrectifies",      m_submittedTicket);
     q.bindValue(":vrecttype",       modeStr);
-    if (!q.exec())
+    const bool ok = q.exec();
+    if (!ok)
         qWarning() << "RectifyInvoiceDialog: INSERT placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
     db.close();
+    return ok;
 }
 
 bool RectifyInvoiceDialog::reusePlaceholderRow()
 {
-    qDebug() << "RectifyInvoiceDialog: resending refused rectificativa" << m_newInvoiceNumber << "of" << m_loadedTicket;
+    qDebug() << "RectifyInvoiceDialog: resending refused rectificativa" << m_newInvoiceNumber << "of" << m_submittedTicket;
     const QString fechaStr = m_newInvoiceDate.toString("dd-MM-yyyy");
     db.open();
     QSqlQuery q(db);
@@ -583,7 +599,7 @@ bool RectifyInvoiceDialog::reusePlaceholderRow()
                             m_submittedIsSubstitution ? VerifactuInvoice::BY_SUBSTITUTION : VerifactuInvoice::BY_DIFFERENCES));
     q.bindValue(":e",   verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     q.bindValue(":n",   m_newInvoiceNumber);
-    q.bindValue(":o",   m_loadedTicket);
+    q.bindValue(":o",   m_submittedTicket);
     const bool ok = q.exec() && q.numRowsAffected() > 0;
     if (!ok)
         qWarning() << "RectifyInvoiceDialog: UPDATE refused rectificativa row failed for" << m_newInvoiceNumber
@@ -635,8 +651,9 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         q.bindValue(":id",     "");
     }
     q.bindValue(":num",  m_newInvoiceNumber);
-    q.bindValue(":orig", m_loadedTicket);
-    if (!q.exec()) {
+    q.bindValue(":orig", m_submittedTicket);
+    // A row that is not there (0 rows changed) is a failure too, not a silent success.
+    if (!q.exec() || q.numRowsAffected() == 0) {
         qWarning() << "RectifyInvoiceDialog: UPDATE placeholder rectificativa row failed for new ticket"
                    << m_newInvoiceNumber << "-" << q.lastError().text();
         if (result.isSuccess()) {
@@ -651,14 +668,14 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     // count toward accounting. Differences (I) leaves the original untouched - the
     // delta row alone reconciles the books. Only on AEAT success.
     if (result.isSuccess() && m_submittedIsSubstitution) {
-        qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_loadedTicket;
+        qDebug() << "RectifyInvoiceDialog: marking RECTIFICADA ticket" << m_submittedTicket;
         // Into an open period (a refused one from a closed quarter is resent with its date).
         const QDate rectifiedOn = openPeriodDate(db, m_newInvoiceDate);
-        if (!markTicketRectified(db, m_loadedTicket, rectifiedOn)) {
+        if (!markTicketRectified(db, m_submittedTicket, rectifiedOn)) {
             localOk = false;
             m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
                                          "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "
-                                         "de depuración antes de hacer la contabilidad.</b>").arg(m_loadedTicket.toHtmlEscaped()));
+                                         "de depuración antes de hacer la contabilidad.</b>").arg(m_submittedTicket.toHtmlEscaped()));
         }
     }
     db.close();

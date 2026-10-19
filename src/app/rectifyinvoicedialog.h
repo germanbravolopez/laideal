@@ -44,7 +44,7 @@ private:
     // Inserts the rectificativa row at submit time with estado=PENDIENTE so the
     // n_recibo is claimed locally before the AEAT round-trip - prevents a regular
     // MainWindow::saveTicket from re-using the same number while we wait.
-    void insertPlaceholderRow();
+    bool insertPlaceholderRow();   // false when the row was not written: nothing is sent
     // The refused rectificativa's own row, updated for its corrected resend.
     bool reusePlaceholderRow();
     // A refused rectificativa redone: its row reused, or resent as filed from a closed
@@ -59,6 +59,7 @@ private:
 
     // Top row - ticket lookup
     QLineEdit *m_leTicketNum;
+    QPushButton *m_btnSearch = nullptr;
     QLabel    *m_lblInfo;
 
     // Rectification form (only enabled after a valid ENVIADA ticket is loaded)
@@ -76,6 +77,9 @@ private:
 
     // Loaded ticket state
     QString m_loadedTicket;
+    // The ticket the in-flight rectificativa was sent for: its row, its reply and the
+    // original it marks, whatever the window shows by then.
+    QString m_submittedTicket;
     QString m_loadedCliente;
     double  m_loadedImporteTotal = 0.0; // includes IVA
     QString m_pendingRectifyId;         // empty when no AEAT call in flight

@@ -1516,6 +1516,80 @@ private slots:
         QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), firstPaid.toString("dd-MM-yyyy"));
     }
 
+    // While a cancellation waits for AEAT, no other ticket can be searched, and the reply
+    // marks the invoice it was sent for: never the ticket the window shows by then.
+    void test_cancelInvoice_replyAppliesToTheTicketItWasSentFor()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "810", "h810a", "12.00", today(), "A-ORIG0810"));
+        QVERIFY(E2e::seedSentGarment(m_db, "811", "h811a", "7.00", today(), "A-ORIG0811"));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Cancel", slow);
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        auto *ticket = dlg.findChild<QLineEdit *>("leTicketNum");
+        ticket->setText("810");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY(!ticket->isEnabled());
+        ticket->setText("811");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");                   // ignored while pending
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 0)->text(), QStringLiteral("810"));
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 810"), 10000);
+        QVERIFY(ticket->isEnabled());
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h810a'"), QStringLiteral("ANULADA"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h811a'"), QStringLiteral("ENVIADA"));
+    }
+
+    // A rectificativa whose row cannot be stored is not sent: AEAT never holds an
+    // invoice the books do not.
+    void test_rectify_placeholderNotStoredSendsNothing()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "815", "h815a", "10.00", today(), "A-ORIG0815"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("815");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(-2.00);
+        QVERIFY(E2e::exec(m_db, "CREATE TRIGGER e2e_block BEFORE INSERT ON ingresos "
+                                "BEGIN SELECT RAISE(ABORT, 'blocked by test'); END"));
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        E2e::exec(m_db, "DROP TRIGGER e2e_block");
+        const QString text = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("no se ha enviado nada"), qPrintable(text));
+        QTest::qWait(300);
+        QCOMPARE(m_server.requestsTo("Create").size(), 0);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '815'"), QStringLiteral("0"));
+    }
+
+    // While a rectificativa waits for AEAT, no other ticket can be searched, and the reply
+    // settles the row of the ticket it was sent for.
+    void test_rectify_replyAppliesToTheTicketItWasSentFor()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "820", "h820a", "10.00", today(), "A-ORIG0820"));
+        QVERIFY(E2e::seedSentGarment(m_db, "821", "h821a", "9.00", today(), "A-ORIG0821"));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        auto *ticket = dlg.findChild<QLineEdit *>("leTicketNum");
+        ticket->setText("820");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(-2.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_COMPARE(m_server.requestsTo("Create").size(), 1);
+        QVERIFY(!ticket->isEnabled());
+        ticket->setText("821");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");                   // ignored while pending
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Rectificativa enviada"), 10000);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE verifactu_rectifies_n_recibo = '820'"),
+                 QStringLiteral("ENVIADA"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '821'"), QStringLiteral("0"));
+    }
+
     // Anular factura on older data. (1) A seq-0 invoice whose garments were paid on
     // different days was registered under the first payment, so that date is sent.
     // (2) Before 10.9 a failed submission was re-sent with the reception date, so

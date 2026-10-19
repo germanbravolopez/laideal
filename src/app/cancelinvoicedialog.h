@@ -46,6 +46,7 @@ private:
     };
 
     QLineEdit    *m_leTicketNum;
+    QPushButton  *m_btnSearch = nullptr;
     QLabel       *m_lblHeader;
     QTableWidget *m_table;
     QLabel       *m_lblResult;
@@ -58,6 +59,10 @@ private:
     QDate            m_pendingFallbackDate; // set while a reception-date retry is still possible
     QString          m_firstRejection;      // AEAT's answer to the first attempt, kept for the operator
     int              m_pendingCancelRow = -1; // row index in m_events for the in-flight cancel
+    // The ticket and invoice the in-flight cancellation was sent for: the reply applies to
+    // them, whatever the window shows by then.
+    QString          m_pendingTicket;
+    Event            m_pendingEvent;
     QSqlDatabase     db;
 
     void buildUi();

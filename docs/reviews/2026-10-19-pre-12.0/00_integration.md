@@ -47,7 +47,7 @@ Note on the help-desk role: this session had no `ListAgents` tool, and `SendMess
 
 ### 2c. Correctness / compliance - books vs AEAT can diverge (all S unless noted)
 
-7. **Anular / Rectificar keep "loaded ticket" state during the in-flight request** (app A1, A2). A second search marks the WRONG ticket ANULADA / RECTIFICADA. Also: **Rectificar reports success with no local row** when the placeholder INSERT failed (app A3). Locations: `cancelinvoicedialog.cpp:82-90,229-293`, `rectifyinvoicedialog.cpp:169-176,565-567,611-663`.
+✅ **FIXED** 7. **Anular / Rectificar keep "loaded ticket" state during the in-flight request** (app A1, A2). A second search marks the WRONG ticket ANULADA / RECTIFICADA. Also: **Rectificar reports success with no local row** when the placeholder INSERT failed (app A3). Locations: `cancelinvoicedialog.cpp:82-90,229-293`, `rectifyinvoicedialog.cpp:169-176,565-567,611-663`.
 8. **PayDialog Esc / title-bar X during "Enviando a AEAT..."** drops the payment while AEAT may hold the invoice (recog_prendas #1, `pay_dialog.cpp:287-412`). The same class of problem: Anular / Rectificar closed in flight (app A7).
 9. **PayDialog order of operations** (supervisor finding). Cobrar submits to AEAT before the rows are stored as paid; with the direct client the record is chained and queued in `aeat_records` first. `MainWindow::saveTicket` does it the other way round: rows first (PENDIENTE), then submit (`mainwindow.cpp:1130-1137`). A crash or power cut between the two leaves an AEAT record for rows still SIN COBRAR. Locations: `pay_dialog.cpp:261-292` before `:333-358` (`persistPayment`). Fix: mark the rows paid + PENDIENTE before `submitSimplifiedInvoiceAsync`, then patch them on the reply, as the save does. M; owner recog_prendas + auditor.
 10. **No single-instance guard** (app A4, `main.cpp:78-96`). Two windows on one DB give duplicate `n_recibo` (MAX+1 twice) and, with the direct client, a forked hash chain. Fix: a `QLockFile` next to the DB, never taken by `--self-check`.
@@ -179,8 +179,8 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P0 ✅ FIXED | release | Shop connection for 12.0 undecided; the tracker contradicts itself (`:23` vs `:42`) | Decide gateway-TEST vs direct pre-production; align tracker / README / verifactu README; install-day checklist | S | 00, verifactu-gateway |
 | P0 | release | Gates: compliance auditor on `11.2..HEAD`, ui-smoke green, M6 pre-production run, CI green | Run them | M | 00 |
 | P0 ✅ FIXED | repo | The issuer's NIF / name and the AEAT request CSV in the public repo | Remove from HEAD (tracker:39,42; investigation:151,161,171-172; `test_e2e_app.cpp:1824`; `aeatcertificate.h:22`); owner decides on history | S | 00 |
-| P0 | app | Anular / Rectificar act on the re-searched ticket when the reply arrives (A1, A2) | Snapshot the submitted ticket / seq / id; lock the search while pending | S | app |
-| P0 | app | Rectificar "success" without a local row (A3) | Abort on a failed placeholder INSERT; check `numRowsAffected` | S | app |
+| P0 ✅ FIXED | app | Anular / Rectificar act on the re-searched ticket when the reply arrives (A1, A2) | Snapshot the submitted ticket / seq / id; lock the search while pending | S | app |
+| P0 ✅ FIXED | app | Rectificar "success" without a local row (A3) | Abort on a failed placeholder INSERT; check `numRowsAffected` | S | app |
 | P0 | recog_prendas | PayDialog Esc / X during the AEAT wait drops the payment (#1); same for Anular / Rectificar close in flight (A7) | Override `reject()` / `closeEvent` while pending | S | recog_prendas, app |
 | P0 | app | No single-instance guard: duplicate `n_recibo`, forked chain (A4) | `QLockFile` in `main()` (not for `--self-check`) | S | app |
 | P0 | sql_lite / contabilidad | Listings return empty on SQL error, so a zero report can lock a quarter (F1) | `ok` channel; refuse to write / close | M | sql_lite, contabilidad |
