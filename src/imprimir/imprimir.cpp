@@ -150,7 +150,7 @@ QString Imprimir::displayInvoiceId() const
         invoiceIds << sqlQueryModel->data(
             sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
     }
-    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text());
+    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text().trimmed());
 }
 
 bool Imprimir::checkTicketPaid(int row)

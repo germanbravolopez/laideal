@@ -192,6 +192,7 @@ void Contabilidad::onCheckLockClicked()
 
 void Contabilidad::onGenerateClicked()
 {
+    m_dataReadFailed = false;   // only this action's own read may report a failure
     const int trim = m_sbPeriod->value();
     const int year = m_sbYear->value();
     const QString quarterName = "del trimestre " + QString::number(trim) + " de " + QString::number(year);

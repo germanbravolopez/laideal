@@ -514,10 +514,17 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
                              + "<br>" + tr("Se enviará sola; no la repita."));
         m_loadedTicket.clear();
         m_leTicketNum->clear();
+    } else if (result.status == VerifactuResult::PENDING) {
+        // A gateway "success" without AEAT's CSV: AEAT may hold it. Check before redoing it.
+        m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 no se ha confirmado: %2")
+                                                 .arg(m_newInvoiceNumber.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
+                             + "<br>" + tr("La AEAT puede tenerla: compruébelo con \"Consultar en AEAT\" en Recogida de "
+                                           "Prendas antes de rehacerla."));
+        setFormEnabled(true);
     } else {
         m_lblResult->setText(
             QString("<b style='color:red'>Error al rectificar:</b> %1")
-            .arg(result.errorDescription));
+            .arg(result.errorDescription.toHtmlEscaped()));
         setFormEnabled(true);
     }
 }

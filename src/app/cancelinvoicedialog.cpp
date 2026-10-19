@@ -292,6 +292,8 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         m_lblResult->setText(UiKit::warnHtml(tr("Anulación de %1 guardada, pendiente de envío a la AEAT: %2")
                                                  .arg(e.invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
                              + "<br>" + tr("Se enviará sola y la factura quedará anulada; no la repita."));
+        m_leTicketNum->setEnabled(true);   // another ticket may be searched; this one is settled by itself
+        m_btnSearch->setEnabled(true);
         return;
     }
     if (!result.isSuccess()) {
