@@ -5,6 +5,7 @@
 #include <QSqlDatabase>
 #include <QDate>
 #include "verifactuintegration.h"
+#include "sql_lite.h"
 
 class QLineEdit;
 class QLabel;
@@ -49,6 +50,7 @@ private:
     // Inserts the rectificativa row at submit time with estado=PENDIENTE so the
     // n_recibo is claimed locally before the AEAT round-trip - prevents a regular
     // MainWindow::saveTicket from re-using the same number while we wait.
+    RectificativaRow rectificativaRow() const;
     bool insertPlaceholderRow();   // false when the row was not written: nothing is sent
     // The refused rectificativa's own row, updated for its corrected resend.
     bool reusePlaceholderRow();

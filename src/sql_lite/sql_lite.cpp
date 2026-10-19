@@ -218,7 +218,8 @@ bool migrateDatabase(QSqlDatabase &db)
                 "fecha_pago = '', fecha_recogida = '' "
                 "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
                 "  AND (pagado IS NULL OR pagado != 'SI') "
-                "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '')"))
+                "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '') "
+                "  AND COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')) IS NOT NULL"))
         fail() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
@@ -1416,35 +1417,224 @@ QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
     return original;
 }
 
+bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<QString, QString> &amountByHash,
+                          const QDate &paymentDate, int seq, const QString &invoiceId)
+{
+    if (dbNotConfigured(db, __func__) || amountByHash.isEmpty()) return false;
+    if (quarterIsClosed(db, paymentDate)) {
+        qWarning() << "storeChargedGarments: the payment date of" << invoiceId << "is in a closed quarter";
+        return false;
+    }
+    if (!db.open() || !db.transaction()) {
+        qCritical() << "storeChargedGarments: no transaction -" << db.lastError().text();
+        db.close();
+        return false;
+    }
+    QSqlQuery q(db);
+    // importe = the amount shown and sent (cents), so an older row stored with more
+    // decimals is invoiced and stored with the same figure.
+    q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, verifactu_invoice_seq = :seq, "
+              "importe = :imp, verifactu_estado = :estado, verifactu_invoice_id = :id, verifactu_error = '' "
+              "WHERE n_recibo = :n AND hash = :h AND COALESCE(pagado, '') != 'SI'");
+    bool ok = true;
+    for (auto it = amountByHash.cbegin(); ok && it != amountByHash.cend(); ++it) {
+        q.bindValue(":fp",     paymentDate.toString("dd-MM-yyyy"));
+        q.bindValue(":seq",    seq);
+        q.bindValue(":imp",    moneyText(it.value()));
+        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+        q.bindValue(":id",     invoiceId);
+        q.bindValue(":n",      nRecibo);
+        q.bindValue(":h",      it.key());
+        if (!q.exec() || q.numRowsAffected() != 1) {
+            qWarning() << "storeChargedGarments: garment" << it.key() << "of ticket" << nRecibo
+                       << "not stored as paid (paid meanwhile?) -" << q.lastError().text();
+            ok = false;
+        }
+    }
+    q.finish();
+    ok = ok && db.commit();
+    if (!ok)
+        db.rollback();
+    db.close();
+    return ok;
+}
+
+bool markPendingEventUnreconciled(QSqlDatabase &db, const QString &nRecibo, int seq)
+{
+    if (dbNotConfigured(db, __func__) || !db.open()) return false;
+    QSqlQuery q(db);
+    // Scoped by seq: a sibling event of the same ticket still PENDIENTE is left alone.
+    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
+              "verifactu_error = 'Pendiente sin reconciliar tras cierre - revisar en sede AEAT' "
+              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
+              "  AND COALESCE(verifactu_estado, '') IN ('', 'PENDIENTE')");
+    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
+    q.bindValue(":n",      nRecibo);
+    q.bindValue(":seq",    seq);
+    const bool ok = q.exec();
+    if (!ok)
+        qWarning() << "markPendingEventUnreconciled: UPDATE failed for ticket" << nRecibo << "-" << q.lastError().text();
+    q.finish();
+    db.close();
+    return ok;
+}
+
+bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+    if (quarterIsClosed(db, row.date)) {
+        qWarning() << "insertRectificativaRow: the date of" << row.number << "is in a closed quarter";
+        return false;
+    }
+    if (!db.open()) return false;
+    const QString date = row.date.toString("dd-MM-yyyy");
+    QSqlQuery q(db);
+    // A rectificativa row carries the verifactu_* set IngresoGarmentRow does not; AEAT's
+    // metadata is written by applyRectificativaResult on the reply.
+    q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, "
+              "  pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+              "  verifactu_csv, verifactu_timestamp, verifactu_estado, verifactu_error, verifactu_url_qr, "
+              "  verifactu_xml, verifactu_hash, verifactu_rectifies_n_recibo, verifactu_rectification_type) "
+              "VALUES (:n, :cliente, :f, :f, '', :imp, 'SI', 'Rectificativa', '1', :prenda, '', '', :obs, '0', :hash, "
+              "  '', '', :estado, '', '', '', '', :orig, :type)");
+    q.bindValue(":n",       row.number);
+    q.bindValue(":cliente", row.client);
+    q.bindValue(":f",       date);                  // a rectificativa always reflects a paid operation
+    q.bindValue(":imp",     moneyText(QString::number(row.amount, 'f', 2)));
+    q.bindValue(":prenda",  QStringLiteral("Rectificativa de ticket %1").arg(row.original));
+    q.bindValue(":obs",     QStringLiteral("Rectificativa %1 (%2)").arg(row.label, row.type));
+    q.bindValue(":hash",    genHash16());
+    q.bindValue(":estado",  verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    q.bindValue(":orig",    row.original);
+    q.bindValue(":type",    row.type);
+    const bool ok = q.exec();
+    if (!ok)
+        qWarning() << "insertRectificativaRow: INSERT failed for" << row.number << "-" << q.lastError().text();
+    q.finish();
+    db.close();
+    return ok;
+}
+
+bool resetRefusedRectificativa(QSqlDatabase &db, const RectificativaRow &row)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+    if (quarterIsClosed(db, row.date)) {
+        qWarning() << "resetRefusedRectificativa: the new date of" << row.number << "is in a closed quarter";
+        return false;
+    }
+    if (!db.open()) return false;
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET fecha_recepcion = :f, fecha_pago = :f, importe = :imp, "
+              "verifactu_rectification_type = :t, verifactu_estado = :pending, verifactu_error = '' "
+              "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o AND verifactu_estado = :refused");
+    q.bindValue(":f",       row.date.toString("dd-MM-yyyy"));
+    q.bindValue(":imp",     moneyText(QString::number(row.amount, 'f', 2)));
+    q.bindValue(":t",       row.type);
+    q.bindValue(":pending", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    q.bindValue(":n",       row.number);
+    q.bindValue(":o",       row.original);
+    q.bindValue(":refused", verifactuEstadoToString(VerifactuEstado::Error));
+    const bool ok = q.exec() && q.numRowsAffected() > 0;
+    if (!ok)
+        qWarning() << "resetRefusedRectificativa: no refused row" << row.number << "of" << row.original
+                   << "-" << q.lastError().text();
+    q.finish();
+    db.close();
+    return ok;
+}
+
+int applyRectificativaResult(QSqlDatabase &db, const QString &number, const QString &original,
+                             const VerifactuResult &result, VerifactuEstado estado)
+{
+    if (dbNotConfigured(db, __func__) || !db.open()) return -1;
+    const bool accepted = result.isSuccess();
+    QSqlQuery q(db);
+    // A refusal or an unknown outcome never rewrites an accepted row (a late duplicate).
+    q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
+              "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
+              "verifactu_xml = :xml, verifactu_hash = :hash, verifactu_invoice_id = :id "
+              "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o"
+              + QString(accepted ? "" : " AND COALESCE(verifactu_estado, '') != 'ENVIADA'"));
+    q.bindValue(":csv",    accepted ? result.csv : QString(""));
+    q.bindValue(":ts",     QDateTime::currentDateTime().toString(Qt::ISODate));
+    q.bindValue(":estado", verifactuEstadoToString(accepted ? VerifactuEstado::Enviada : estado));
+    q.bindValue(":error",  accepted ? QString("") : result.errorDescription);
+    q.bindValue(":url",    accepted ? result.validationUrl : QString(""));
+    q.bindValue(":xml",    accepted ? result.rawXml : QString(""));
+    q.bindValue(":hash",   accepted ? result.rawHash : QString(""));
+    // The literal InvoiceID AEAT holds it under, read by Imprimir's QR and header.
+    q.bindValue(":id",     accepted ? number : QString(""));
+    q.bindValue(":n",      number);
+    q.bindValue(":o",      original);
+    const int changed = q.exec() ? q.numRowsAffected() : -1;
+    if (changed < 0)
+        qWarning() << "applyRectificativaResult: UPDATE failed for" << number << "-" << q.lastError().text();
+    else if (changed == 0 && !accepted)
+        qWarning() << "applyRectificativaResult:" << number << "is already accepted - the late answer is ignored";
+    q.finish();
+    db.close();
+    return changed;
+}
+
+bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const QString &original,
+                                 const QString &error)
+{
+    if (dbNotConfigured(db, __func__) || !db.open()) return false;
+    QSqlQuery q(db);
+    q.prepare("UPDATE ingresos SET verifactu_estado = :e, verifactu_error = :err "
+              "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o AND verifactu_estado = :pending");
+    q.bindValue(":e",       verifactuEstadoToString(VerifactuEstado::Error));
+    q.bindValue(":err",     error);
+    q.bindValue(":n",       number);
+    q.bindValue(":o",       original);
+    q.bindValue(":pending", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+    const bool ok = q.exec();
+    if (!ok)
+        qWarning() << "markRectificativaUnanswered: UPDATE failed for" << number << "-" << q.lastError().text();
+    q.finish();
+    db.close();
+    return ok;
+}
+
 int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
                                       const VerifactuResult &result)
 {
     QString nRecibo;
     int seq = 0;
     splitInvoiceId(invoiceId, &nRecibo, &seq);
+    if (dbNotConfigured(db, __func__))
+        return 0;
+    // Into an open period, like applySettledVerifactuResult: a quarter closed meanwhile keeps its figures.
+    const QDate stampDate = openPeriodDate(db, cancelDate);
+    if (stampDate != cancelDate)
+        qWarning() << "applySettledVerifactuCancellation:" << invoiceId << "dated" << stampDate
+                   << "instead of" << cancelDate << "(closed quarter)";
     // -1 only when the database answers that no paid row carries the InvoiceID: a read
     // failure is 0, so an accepted cancellation of a real ticket is never passed over.
-    if (dbNotConfigured(db, __func__) || !db.open())
+    if (!db.open())
         return 0;
-    QSqlQuery q(db);
-    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
-    q.bindValue(":n",   nRecibo);
-    q.bindValue(":seq", seq);
-    if (!q.exec() || !q.next()) {
-        qWarning() << "applySettledVerifactuCancellation: lookup failed for" << invoiceId << "-" << q.lastError().text();
-        return 0;
+    int outcome = 0;   // 0 = mark it (if accepted)
+    {
+        QSqlQuery q(db);
+        q.prepare("SELECT COUNT(*), SUM(COALESCE(verifactu_estado, '') != 'ANULADA') FROM ingresos "
+                  "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
+        q.bindValue(":n",   nRecibo);
+        q.bindValue(":seq", seq);
+        if (!q.exec() || !q.next()) {
+            qWarning() << "applySettledVerifactuCancellation: lookup failed for" << invoiceId << "-" << q.lastError().text();
+            outcome = 3;                                            // read failure: not marked
+        } else if (q.value(0).toInt() == 0) {
+            outcome = -1;
+        } else if (result.isSuccess() && q.value(1).toInt() == 0) {
+            outcome = 2;                                            // already marked (its dialog did)
+        }
     }
-    if (q.value(0).toInt() == 0)
-        return -1;
-    q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
-              "AND pagado = 'SI' AND COALESCE(verifactu_estado, '') != 'ANULADA'");
-    q.bindValue(":n",   nRecibo);
-    q.bindValue(":seq", seq);
-    if (result.isSuccess() && q.exec() && q.next() && q.value(0).toInt() == 0)
-        return 2;                                                   // already marked (its dialog did)
-    if (!result.isSuccess())
+    db.close();
+    if (outcome == -1 || outcome == 2)
+        return outcome;
+    if (outcome == 3 || !result.isSuccess())
         return 0;
-    return markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, result.rawXml) ? 1 : 0;
+    return markInvoiceSeqCancelled(db, nRecibo, seq, stampDate, result.rawXml) ? 1 : 0;
 }
 
 QStringList readClientPhones(QSqlDatabase &db, const QString &client)

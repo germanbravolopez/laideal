@@ -3,6 +3,7 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QHash>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -13,6 +14,7 @@
 #include "ingresos_schema.h"
 
 struct VerifactuResult;
+enum class VerifactuEstado;
 
 // Configured once at startup by main() via setDbPath().
 // All sql_lite functions expand DB_PATH to the runtime-configured value.
@@ -77,6 +79,35 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
 // (the self-test's PRUEBA-...).
 int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
                                        const VerifactuResult &result);
+// --- The ingresos writers of the windows (one guarded function each) ---------------
+// Cobrar: the garments (hash -> amount charged) stored as paid + PENDIENTE under `seq`
+// and `invoiceId`, all or none. False (nothing stored) when one was paid meanwhile, the
+// payment date lies in a closed quarter, or the database fails.
+bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<QString, QString> &amountByHash,
+                          const QDate &paymentDate, int seq, const QString &invoiceId);
+// Start-up recovery, "Marcar como error": a still PENDIENTE (or empty) event becomes ERROR.
+bool markPendingEventUnreconciled(QSqlDatabase &db, const QString &nRecibo, int seq);
+// A new rectificativa of `original`: its paid row, PENDIENTE until AEAT answers. Refused
+// in a closed quarter. `type` is "S" or "I".
+struct RectificativaRow {
+    QString number, original, client, type, label;   // label: e.g. "R5" (observaciones)
+    QDate   date;
+    double  amount = 0.0;
+};
+bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row);
+// A refused rectificativa resent under its own number: its row back to PENDIENTE with the
+// new date, amount and type. Only a row still in ERROR is rewritten, never into a closed quarter.
+bool resetRefusedRectificativa(QSqlDatabase &db, const RectificativaRow &row);
+// AEAT's answer for rectificativa `number`, stored with `estado` (the dialog's call: an
+// unknown outcome nothing will resend is an ERROR to redo). A refusal or an unknown outcome
+// never rewrites a row already ENVIADA (a late duplicate rejection). Returns the rows
+// changed, -1 on error.
+int applyRectificativaResult(QSqlDatabase &db, const QString &number, const QString &original,
+                             const VerifactuResult &result, VerifactuEstado estado);
+// Its window closed before AEAT answered and nothing else will apply it: PENDIENTE -> ERROR.
+bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const QString &original,
+                                 const QString &error);
+
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
 // The number of a rectificativa of `original` AEAT refused (paid row in ERROR), or empty:

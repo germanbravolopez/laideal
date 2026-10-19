@@ -172,30 +172,10 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
 
-    db.open();
-    QSqlQuery q(db);
-    // Scope by seq so marking one event as Error never clobbers a sibling event
-    // (a different seq) of the same ticket that is still PENDIENTE.
-    // The estado MUST come from the helper: a hardcoded 'Error' does not match the
-    // canonical "ERROR", so verifactuEstadoFromString() fell through to its
-    // NotSubmitted default and the row stopped offering "Reintentar envio a AEAT".
-    q.prepare(
-        "UPDATE ingresos SET verifactu_estado = :estado, "
-        "verifactu_error = 'Pendiente sin reconciliar tras cierre - revisar en sede AEAT' "
-        "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
-        "  AND (verifactu_estado IS NULL OR verifactu_estado = '' "
-        "       OR verifactu_estado = 'PENDIENTE')");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
-    q.bindValue(":n", e.ticketNum);
-    q.bindValue(":seq", e.seq);
-    if (!q.exec()) {
-        qWarning() << "PendingSubmitsDialog: UPDATE estado=Error failed for ticket"
-                   << e.ticketNum << "-" << q.lastError().text();
+    if (!markPendingEventUnreconciled(db, e.ticketNum, e.seq)) {
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum)));
-        db.close();
         return;
     }
-    db.close();
     m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
                          + "<br>" + tr("Revíselo en la sede electrónica de AEAT o con Consultar en AEAT en Recogida."));
     removeRowAt(row);

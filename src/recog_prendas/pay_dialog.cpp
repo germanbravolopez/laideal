@@ -212,7 +212,7 @@ void PayDialog::onCobrarClicked()
                                      + "<br>" + tr("Introduzca su tamaño en Recogida o desmárquela para cobrar el resto."));
                 return;
             }
-            hashes << m_table->item(r, COL_HASH)->text();
+            hashes << m_table->item(r, COL_HASH)->text();   // the charged set: m_pendingAmounts
             amounts.insert(m_table->item(r, COL_HASH)->text(), m_table->item(r, COL_AMOUNT)->text());
             total += m_table->item(r, COL_AMOUNT)->data(Qt::UserRole).toDouble();
         }
@@ -261,6 +261,12 @@ void PayDialog::onCobrarClicked()
     // crash during the AEAT round trip leaves a payment the start-up recovery resends,
     // never an invoice at AEAT for a ticket the database shows unpaid.
     if (!storePayment(seq)) {
+        if (quarterIsClosed(db, fechaPago)) {
+            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                                 + "<br>" + tr("La contabilidad ha cerrado el trimestre de la fecha de pago: no se ha "
+                                               "guardado ni enviado nada."));
+            return;
+        }
         m_lblStatus->setText(UiKit::errorHtml(tr("No se ha podido guardar el cobro: no se ha enviado nada a AEAT."))
                              + "<br>" + tr("Alguna prenda se ha cobrado desde otra ventana o la base de datos no "
                                            "responde. Cierre y vuelva a abrir Cobrar."));
@@ -339,40 +345,8 @@ void PayDialog::onVerifactuRequestFinished(const QString &requestId, const Verif
 
 bool PayDialog::storePayment(int seq)
 {
-    // All the garments or none: a garment paid from another window meanwhile stops the charge.
-    db.open();
-    if (!db.transaction()) {
-        qCritical() << "PayDialog::storePayment: no transaction -" << db.lastError().text();
-        db.close();
-        return false;
-    }
-    QSqlQuery q(db);
-    // importe = the amount shown and sent (cents), so an older row stored with more
-    // decimals is invoiced and stored with the same figure.
-    q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, verifactu_invoice_seq = :seq, "
-              "importe = :imp, verifactu_estado = :estado, verifactu_invoice_id = :id, verifactu_error = '' "
-              "WHERE n_recibo = :n AND hash = :h AND COALESCE(pagado, '') != 'SI'");
-    bool ok = true;
-    for (const QString &h : m_pendingHashes) {
-        q.bindValue(":fp",     m_pendingFechaPago.toString("dd-MM-yyyy"));
-        q.bindValue(":seq",    seq);
-        q.bindValue(":imp",    moneyText(m_pendingAmounts.value(h)));
-        q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
-        q.bindValue(":id",     verifactuInvoiceId(m_ticketNum, seq));
-        q.bindValue(":n",      m_ticketNum);
-        q.bindValue(":h",      h);
-        if (!q.exec() || q.numRowsAffected() != 1) {
-            qWarning() << "PayDialog::storePayment: garment" << h << "of ticket" << m_ticketNum
-                       << "not stored as paid (paid meanwhile?) -" << q.lastError().text();
-            ok = false;
-            break;
-        }
-    }
-    ok = ok && db.commit();
-    if (!ok)
-        db.rollback();
-    db.close();
-    return ok;
+    return storeChargedGarments(db, m_ticketNum, m_pendingAmounts, m_pendingFechaPago, seq,
+                                verifactuInvoiceId(m_ticketNum, seq));
 }
 
 void PayDialog::applyReply(int seq, const VerifactuResult &result)

@@ -119,6 +119,117 @@ private slots:
         TestSchema::resetClosures(m_db);
     }
 
+    // --- the ingresos writers moved out of the windows (X6) -----------------------------
+
+    // Cobrar's store: all or none, never into a closed quarter, the amount in cents.
+    void test_storeChargedGarments_allOrNone()
+    {
+        insertRow("70", "h70a", "5.004");
+        insertRow("70", "h70b", "7.00");
+        insertRow("70", "h70c", "1.00", "SI", "ENVIADA");                   // paid meanwhile
+        QVERIFY(!storeChargedGarments(m_db, "70", { {"h70a", "5,00"}, {"h70c", "1,00"} }, QDate(2026, 5, 4), 1, "70-1"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h70a'"), QStringLiteral("NO"));
+        QVERIFY(storeChargedGarments(m_db, "70", { {"h70a", "5,00"}, {"h70b", "7,00"} }, QDate(2026, 5, 4), 1, "70-1"));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado || '|' || importe || '|' || verifactu_estado || '|' || "
+                        "verifactu_invoice_id || '|' || fecha_pago) FROM ingresos WHERE hash IN ('h70a', 'h70b')"),
+                 QStringLiteral("SI|5.00|PENDIENTE|70-1|04-05-2026,SI|7.00|PENDIENTE|70-1|04-05-2026"));
+        insertRow("71", "h71a");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        QVERIFY(!storeChargedGarments(m_db, "71", { {"h71a", "10,00"} }, QDate(2026, 2, 1), 0, "71"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h71a'"), QStringLiteral("NO"));
+        QVERIFY(!m_db.isOpen());
+    }
+
+    // A late refusal of a rectificativa AEAT already accepted never turns it into ERROR;
+    // a refused one is reset for its resend, an accepted one never.
+    void test_rectificativaWritersKeepTheSettledRow()
+    {
+        RectificativaRow row;
+        row.number = "80"; row.original = "79"; row.client = "Cli"; row.type = "S"; row.label = "R5";
+        row.date = QDate(2026, 5, 4); row.amount = 12.345;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        QCOMPARE(scalar("SELECT importe || '|' || verifactu_estado || '|' || verifactu_rectifies_n_recibo "
+                        "FROM ingresos WHERE n_recibo='80'"), QStringLiteral("12.35|PENDIENTE|79"));
+        VerifactuResult accepted;
+        accepted.status = VerifactuResult::SUCCESS;
+        accepted.csv = "CSV80";
+        QCOMPARE(applyRectificativaResult(m_db, "80", "79", accepted, VerifactuEstado::Enviada), 1);
+        VerifactuResult late;
+        late.status = VerifactuResult::ERROR;
+        late.errorDescription = "Registro duplicado";
+        QCOMPARE(applyRectificativaResult(m_db, "80", "79", late, VerifactuEstado::Error), 0);
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE n_recibo='80'"),
+                 QStringLiteral("ENVIADA|CSV80"));
+        QVERIFY(!resetRefusedRectificativa(m_db, row));                      // only a refused one
+        QVERIFY(markRectificativaUnanswered(m_db, "80", "79", "x"));            // only a PENDIENTE one changes
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='80'"), QStringLiteral("ENVIADA"));
+        row.number = "81";
+        QVERIFY(insertRectificativaRow(m_db, row));
+        QCOMPARE(applyRectificativaResult(m_db, "81", "79", late, VerifactuEstado::Error), 1);
+        row.amount = 10.0;
+        QVERIFY(resetRefusedRectificativa(m_db, row));
+        QCOMPARE(scalar("SELECT importe || '|' || verifactu_estado FROM ingresos WHERE n_recibo='81'"),
+                 QStringLiteral("10.00|PENDIENTE"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        row.number = "82";
+        row.date = QDate(2026, 2, 1);
+        QVERIFY(!insertRectificativaRow(m_db, row));                         // closed quarter
+        QVERIFY(!m_db.isOpen());
+    }
+
+    // The start-up recovery's "Marcar como error" touches only that pending event.
+    void test_markPendingEventUnreconciled()
+    {
+        insertIngreso("90", "04-05-2026", "5.00", "SI", "PENDIENTE", 0);
+        insertIngreso("90", "05-05-2026", "6.00", "SI", "PENDIENTE", 1);
+        insertIngreso("91", "05-05-2026", "6.00", "SI", "ENVIADA", 0);
+        QVERIFY(markPendingEventUnreconciled(m_db, "90", 1));
+        QVERIFY(markPendingEventUnreconciled(m_db, "91", 0));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(verifactu_estado) FROM (SELECT verifactu_estado FROM ingresos "
+                        "WHERE n_recibo IN ('90', '91') ORDER BY n_recibo, verifactu_invoice_seq)"),
+                 QStringLiteral("PENDIENTE,ERROR,ENVIADA"));
+    }
+
+    // sql_lite F2 / F3: a settled cancellation closes the connection on every outcome and
+    // is dated in an open period when its quarter was closed meanwhile.
+    void test_applySettledVerifactuCancellation_closesAndDatesOpenPeriod()
+    {
+        VerifactuResult accepted;
+        accepted.status = VerifactuResult::SUCCESS;
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "PRUEBA-1", QDate(2026, 5, 4), accepted), -1);
+        QVERIFY(!m_db.isOpen());
+        insertIngreso("95", "10-02-2026", "5.00", "SI", "ENVIADA", 0);
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "95", QDate(2026, 3, 20), accepted), 1);
+        QVERIFY(!m_db.isOpen());
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='95'"),
+                 openPeriodDate(m_db, QDate(2026, 3, 20)).toString("dd-MM-yyyy"));   // not the closed Q1
+        QVERIFY(!scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='95'").endsWith("-03-2026"));
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "95", QDate(2026, 3, 20), accepted), 2);
+        QVERIFY(!m_db.isOpen());
+        VerifactuResult refused;
+        refused.status = VerifactuResult::ERROR;
+        insertIngreso("96", "10-05-2026", "5.00", "SI", "ENVIADA", 0);
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "96", QDate(2026, 5, 20), refused), 0);
+        QVERIFY(!m_db.isOpen());
+    }
+
+    // sql_lite F7: a voided garment with no date to move is not matched again at every start.
+    void test_migrateDatabase_voidDateStepSkipsDatelessRows()
+    {
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, fecha_recogida, pagado, estado, verifactu_estado) "
+             "VALUES ('0', '97', '', '', 'NO', 'Anulado', 'ANULADA')");
+        QVERIFY(migrateDatabase(m_db));
+        static int moved = 0;
+        moved = 0;
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &m) {
+            if (m.contains("moved the void date")) ++moved;
+        });
+        QVERIFY(migrateDatabase(m_db));
+        qInstallMessageHandler(previous);
+        QCOMPARE(moved, 0);
+    }
+
     // The log is sent to support: the client writes never put a name nor a phone in it.
     void test_clientWritesLogNoPersonalData()
     {
