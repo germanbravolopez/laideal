@@ -321,6 +321,15 @@ void PayDialog::onCobrarClicked()
     });
 }
 
+void PayDialog::done(int result)
+{
+    if (!m_pendingReqId.isEmpty()) {
+        m_lblStatus->setText(UiKit::warnHtml(tr("Esperando la respuesta de la AEAT: la ventana se cerrará o se podrá cerrar en cuanto responda.")));
+        return;
+    }
+    QDialog::done(result);
+}
+
 void PayDialog::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     if (requestId != m_pendingReqId) return; // not ours

@@ -1542,6 +1542,59 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h811a'"), QStringLiteral("ENVIADA"));
     }
 
+    // Esc / the window's X while AEAT answers is refused in Cobrar, Anular and Rectificar:
+    // the outcome of an invoice AEAT may already hold is never dropped.
+    void test_dialogsCannotCloseWhileAeatAnswers()
+    {
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        QVERIFY(E2e::seedGarment(m_db, "830", "h830a", "5.00", today()));
+        m_server.enqueue("Create", slow);
+        {
+            PayDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            QVERIFY(dlg.loadTicket("830"));
+            QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+            dlg.reject();                                                     // Esc while AEAT answers
+            QCOMPARE(dlg.result(), 0);
+            QVERIFY2(dlg.findChild<QLabel *>("lblResult")->text().contains("Esperando la respuesta de la AEAT"),
+                     qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+            QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
+            QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h830a'"), QStringLiteral("SI"));
+        }
+        QVERIFY(E2e::seedSentGarment(m_db, "831", "h831a", "6.00", today(), "A-ORIG0831"));
+        m_server.enqueue("Cancel", slow);
+        {
+            CancelInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("831");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+            dlg.reject();
+            auto *result = dlg.findChild<QLabel *>("lblResult");
+            QVERIFY(result->text().contains("Esperando la respuesta de la AEAT"));
+            QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 10000);
+            QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h831a'"), QStringLiteral("ANULADA"));
+        }
+        QVERIFY(E2e::seedSentGarment(m_db, "832", "h832a", "8.00", today(), "A-ORIG0832"));
+        m_server.enqueue("Create", slow);
+        {
+            RectifyInvoiceDialog dlg(m_db);
+            dlg.m_verifactu = m_verifactu;
+            dlg.findChild<QLineEdit *>("leTicketNum")->setText("832");
+            QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+            dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(-1.00);
+            QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+            QTRY_COMPARE(m_server.requestsTo("Create").size(), 2);
+            dlg.reject();
+            auto *result = dlg.findChild<QLabel *>("lblResult");
+            QVERIFY(result->text().contains("Esperando la respuesta de la AEAT"));
+            QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Rectificativa enviada"), 10000);
+            QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE verifactu_rectifies_n_recibo = '832'"),
+                     QStringLiteral("ENVIADA"));
+        }
+    }
+
     // A rectificativa whose row cannot be stored is not sent: AEAT never holds an
     // invoice the books do not.
     void test_rectify_placeholderNotStoredSendsNothing()

@@ -233,6 +233,15 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     }
 }
 
+void CancelInvoiceDialog::done(int result)
+{
+    if (!m_pendingCancelId.isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml(tr("Esperando la respuesta de la AEAT: la ventana se cerrará o se podrá cerrar en cuanto responda.")));
+        return;
+    }
+    QDialog::done(result);
+}
+
 void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     if (requestId != m_pendingCancelId) return; // not ours

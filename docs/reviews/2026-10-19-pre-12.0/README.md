@@ -17,7 +17,7 @@ Each fix is its own commit. It also marks the item ✅ in §2 / §6 of [`00_inte
 | 2 | Shop connection for 12.0 (release) | ✅ Fixed 19-10-2026. The gateway on TEST in 12.0; the direct client for the later production switch. The tracker's Next line, the production row and the Verifactu README now say so. The gateway items (blocker 9) are the 12.0 blockers. |
 | 3 | 12.0 release mechanics and gates (release) | ⏳ Deferred to `/release` (owner's decision 19-10-2026). ES / EN release-note drafts are in the tracker row; Req. 8 no longer claims COVERED before the signature. The gates run after the blocker fixes. |
 | 4 | Anular / Rectificar act on the re-searched ticket; Rectificar success without a row (app A1-A3) | ✅ Fixed 19-10-2026. Both dialogs lock the search while a request is pending and apply the reply to a snapshot taken at click time. Rectificar sends nothing when its row cannot be stored, and an UPDATE that finds no row is a failure. 3 e2e tests. |
-| 5 | Closing Cobrar / Anular / Rectificar while AEAT answers (recog_prendas #1, app A7) | Open |
+| 5 | Closing Cobrar / Anular / Rectificar while AEAT answers (recog_prendas #1, app A7) | ✅ Fixed 19-10-2026. `done()` is overridden in PayDialog, CancelInvoiceDialog and RectifyInvoiceDialog and refuses Esc / X / Cerrar while a request is pending, with a notice. Each dialog still closes itself on the reply (Cobrar also after its bounded wait). e2e `test_dialogsCannotCloseWhileAeatAnswers`. |
 | 6 | No single-instance guard (app A4) | Open |
 | 7 | Failed DB read: zero report closes a quarter; numbering restarts at 1 (sql_lite F1, F10) | Open |
 | 8 | Recogida reprint without a row; blank recibo (imprimir F1, F2) | Open |

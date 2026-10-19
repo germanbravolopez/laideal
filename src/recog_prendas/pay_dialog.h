@@ -50,6 +50,11 @@ signals:
     // facturaPrinted: the customer already has the factura with the QR (direct client).
     void submitAdopted(const QString &requestId, const QString &ticketNum, int seq, bool facturaPrinted);
 
+protected:
+    // Esc, the window's X and Cerrar all end here: refused while AEAT has not answered,
+    // or the outcome of an invoice AEAT may already hold would be lost.
+    void done(int result) override;
+
 private slots:
     void onCobrarClicked();
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);

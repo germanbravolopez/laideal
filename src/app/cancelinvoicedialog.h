@@ -30,6 +30,11 @@ public:
 
     VerifactuIntegration *m_verifactu = nullptr;
 
+protected:
+    // Esc, the window's X and Cerrar all end here: refused while AEAT has not answered,
+    // or the outcome of an invoice AEAT may already hold would be lost.
+    void done(int result) override;
+
 private slots:
     void onSearchClicked();
     void onCancelClicked(int row);
