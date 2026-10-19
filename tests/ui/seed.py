@@ -88,6 +88,9 @@ SMOKE_GASTO = (1, "SMOKE-G1", "Suministros", "Smoke", "SMOKE", "20-09-2026", "21
 
 def seed_smoke_tickets(path: Path) -> None:
     with sqlite3.connect(path) as db:
+        # The app's Req. 1 guard triggers refuse deleting registered rows; the seed resets them.
+        db.execute("DROP TRIGGER IF EXISTS ingresos_registered_no_delete")
+        db.execute("DROP TRIGGER IF EXISTS ingresos_accepted_identity")
         db.execute("DELETE FROM ingresos")
         db.execute("DELETE FROM gastos")
         db.executemany(f"INSERT INTO ingresos ({_INGRESOS}) VALUES ({', '.join('?' * 20)})", SMOKE_TICKETS)

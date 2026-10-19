@@ -20,9 +20,19 @@
 
 namespace E2e {
 
+// Test data is shaped by hand, sent rows included: the database's own Req. 1 guards
+// (migrateDatabase's triggers) are dropped first. The app's code paths run with them, since
+// MainWindow recreates them; test_sql_lite covers the triggers themselves.
+inline void dropIngresosGuards(QSqlDatabase &db)
+{
+    for (const char *sql : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete", "DROP TRIGGER IF EXISTS ingresos_accepted_identity" })
+        QSqlQuery(db).exec(QString::fromLatin1(sql));
+}
+
 inline bool exec(QSqlDatabase &db, const QString &sql)
 {
     db.open();
+    dropIngresosGuards(db);
     QSqlQuery q(db);
     const bool ok = q.exec(sql);
     if (!ok)

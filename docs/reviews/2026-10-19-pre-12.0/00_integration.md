@@ -213,12 +213,12 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 ✅ FIXED 19-10-2026 | contabilidad | The current (unfinished) quarter can be closed, blocking today's Cobrar; gastos IVA text parsed to 0 silently | Warn / refuse; strict parse to -1 (flag) | S | contabilidad |
 | P1 ✅ FIXED 19-10-2026 | docs | `architecture.md` lacks the direct client and `aeat_*` tables; README config keys wrong; tracker status | G1, G3, G6 | M | 00, appsettings, gateway |
 | P1 | tracker | This review's findings not filed | File P1-P3 in `progress_tracker.md` (memory rule) | S | 00 |
-| P2 | sql_lite / all | Three policies for comma amounts; `moneyText` garbage gives 0; SQL `SUM` prefix; float sums | One strict stored-amount parser; double / cents everywhere; flag commas | M | 00, sql_lite F6, F21, recog #10, listado |
+| P2 ✅ FIXED 20-10-2026 | sql_lite / all | Three policies for comma amounts; `moneyText` garbage gives 0; SQL `SUM` prefix; float sums | One strict stored-amount parser; double / cents everywhere; flag commas | M | 00, sql_lite F6, F21, recog #10, listado |
 | P2 | verifactu / facturas | Gross-to-base split duplicated, unrounded to the gateway; Contabilidad IVA vs per-record rounding | `splitGross` helper (X4); accountant decision on modelo 303 | M | verifactu-gateway, contabilidad, facturas |
 | P2 | architecture | `sql_lite` / `add_garment` include a verifactu header by relative path; facade leaks (X1, X2, X3, X5) | INTERFACE types target; facade methods; `AeatStore` reads | M | 00 |
 | P2 | sql_lite | Shared-connection open / close (X7), `QMessageBox` in the data layer (X8) | `ConnectionScope` RAII; return a status | M | sql_lite, facturas, listado, imprimir |
 | P2 | sql_lite | `migrateDatabase` hardening (user_version, per-repair transaction, log once) + base schema / unique index / busy timeout | Tracker plan + F8 / F12 | M | sql_lite, tracker backlog |
-| P2 | sql_lite | DB triggers for ENVIADA row inalterability (Req. 1 defence in depth) | After X6; auditor on the column list | M | sql_lite F4 |
+| P2 ✅ FIXED 20-10-2026 | sql_lite | DB triggers for ENVIADA row inalterability (Req. 1 defence in depth) | After X6; auditor on the column list | M | sql_lite F4 |
 | P2 ✅ FIXED 20-10-2026 | tableview / listado | `n_recibo` text sort (rollover at 100000); `fecha_anulacion` sort; filter scans 10 columns; double filter per keystroke; lazy-load filter | Numeric / date branches; one invalidate; drain | S-M | tableview, listado |
 | P2 ✅ FIXED 20-10-2026 | listado | Ingresos read-only only through the view flag | Model / proxy level refusal + tests (Req. 1) | S | listado |
 | P2 | app | Anular with a live I-mode rectificativa (A9); Rectificar lookup picks an arbitrary group (A10); client autofill copies another client's data (A13 = sql_lite F16) | Refuse / warn; event-based load; exact-match autofill | M | app, sql_lite |

@@ -10,6 +10,7 @@
 #include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QRegularExpression>
 #include <QSqlRecord>
 
 #include <cmath>
@@ -98,6 +99,23 @@ static QString closureTimestamp()
 // that the old per-row edit_lock flag closed (any ingresos / gastos row of it set to 1)
 // gets a 'migration' closure; afterwards edit_lock is never read again, so a quarter
 // reopened later is not closed again by its stale flags. On an open db.
+// Req. 1 defence in depth, in the database itself: a row registered at AEAT is never
+// deleted, and a row AEAT accepted keeps its invoice identity. Only an actual change of
+// those columns aborts; estado, fecha_anulacion and the pickup move on as before, and the
+// amount stays writable for Separar prendas (the two parts keep the invoice total).
+static const char *const kIngresosGuards[] = {
+    "CREATE TRIGGER IF NOT EXISTS ingresos_registered_no_delete BEFORE DELETE ON ingresos "
+    "WHEN COALESCE(OLD.verifactu_csv, '') != '' OR OLD.verifactu_estado IN ('ENVIADA', 'ANULADA', 'RECTIFICADA') "
+    "BEGIN SELECT RAISE(ABORT, 'ingresos: a row registered at AEAT is never deleted'); END",
+    "CREATE TRIGGER IF NOT EXISTS ingresos_accepted_identity BEFORE UPDATE OF n_recibo, fecha_pago, pagado, "
+    "verifactu_csv, verifactu_xml, verifactu_hash, verifactu_invoice_id, verifactu_invoice_seq ON ingresos "
+    "WHEN OLD.verifactu_estado = 'ENVIADA' AND (NEW.n_recibo IS NOT OLD.n_recibo OR NEW.fecha_pago IS NOT OLD.fecha_pago "
+    "  OR NEW.pagado IS NOT OLD.pagado OR NEW.verifactu_csv IS NOT OLD.verifactu_csv "
+    "  OR NEW.verifactu_xml IS NOT OLD.verifactu_xml OR NEW.verifactu_hash IS NOT OLD.verifactu_hash "
+    "  OR NEW.verifactu_invoice_id IS NOT OLD.verifactu_invoice_id OR NEW.verifactu_invoice_seq IS NOT OLD.verifactu_invoice_seq) "
+    "BEGIN SELECT RAISE(ABORT, 'ingresos: a row AEAT accepted keeps its invoice data'); END",
+};
+
 static bool migrateAccountingClosures(QSqlDatabase &db)
 {
     QSqlQuery q(db);
@@ -193,6 +211,9 @@ bool migrateDatabase(QSqlDatabase &db)
 
     // Before kAmountEditableWhere is used below: it reads accounting_closures.
     ok = migrateAccountingClosures(db) && ok;
+    for (const char *sql : kIngresosGuards)
+        if (!q.exec(QString::fromLatin1(sql)))
+            fail() << "migrateDatabase: an ingresos guard trigger failed -" << q.lastError().text();
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -566,8 +587,11 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
     QString result;
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT " + itemToGet + " FROM " + table + " WHERE " + columnToSearch + " LIKE :item");
-    q.bindValue(":item", exactMatch ? itemToSearch : itemToSearch + "%");
+    // Exact: "="; otherwise a prefix with % and _ taken literally.
+    q.prepare("SELECT " + itemToGet + " FROM " + table + " WHERE " + columnToSearch
+              + (exactMatch ? QStringLiteral(" = :item") : QStringLiteral(" LIKE :item ESCAPE '\\'")));
+    q.bindValue(":item", exactMatch ? itemToSearch
+                                    : QString(itemToSearch).replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_") + "%");
     q.exec();
     if (q.isSelect()) {
         if (q.first()) {
@@ -591,7 +615,9 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
 
 QString searchItemFromClient(QSqlDatabase &db, const QString &item, const QString &client, bool printMsg)
 {
-    return selectFromWhereLike(db, item, "clientes", "nombre", client, false, printMsg);
+    // Exact: a prefix filled the form with another client's phone and address ("Ana" got
+    // "Ana Maria"'s), which the save then wrote onto the typed client.
+    return selectFromWhereLike(db, item, "clientes", "nombre", client, true, printMsg);
 }
 
 bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client)
@@ -712,8 +738,8 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
                               const QString &size, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (moneyText(importe).toDouble() < 0.0) {
-        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
+        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
         return false;
     }
 
@@ -734,8 +760,8 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
                                 const QString &cantidad, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (moneyText(importe).toDouble() < 0.0) {
-        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
+        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
         return false;
     }
 
@@ -847,8 +873,8 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
                                     const QString &servicio, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (moneyText(importe).toDouble() < 0.0) {
-        qWarning() << __func__ << ": refused a negative importe" << importe << "for" << nRecibo << hash;
+    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
+        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
         return false;
     }
 
@@ -948,6 +974,11 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
 // Runs the INSERT on an already open db; the callers open, close and own the transaction.
 static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
+    if (double amount = 0.0; !moneyParse(row.importe, &amount) || amount < 0.0) {
+        qWarning() << "insertGarmentRow: refused an unreadable or negative importe" << row.importe
+                   << "for" << row.nRecibo << row.hash;
+        return false;
+    }
     QSqlQuery q(db);
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
               "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
@@ -1296,7 +1327,7 @@ QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIs
     if (dbNotConfigured(db, __func__) || !db.open())
         return invoices;
     QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(CAST(importe AS REAL)), "
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(" INGRESOS_IMPORTE_VALUE "), "
               "MAX(COALESCE(verifactu_error, '')), MAX(COALESCE(verifactu_rectifies_n_recibo, '') != '') "
               "FROM ingresos WHERE pagado = 'SI' AND verifactu_estado = 'ERROR' "
               "GROUP BY n_recibo, verifactu_invoice_seq "
@@ -1314,7 +1345,7 @@ QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIs
         r.nRecibo = q.value(0).toString();
         r.seq = q.value(1).toInt();
         r.fechaPago = q.value(2).toString();
-        r.importe = q.value(3).toDouble();
+        r.importe = roundToCents(q.value(3).toDouble());
         r.error = q.value(4).toString();
         r.rectificativa = q.value(5).toBool();
         invoices.append(r);
@@ -1701,6 +1732,19 @@ QString moneyText(const QString &value)
     return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
 }
 
+bool moneyParse(const QString &text, double *value)
+{
+    static const QRegularExpression rx(QStringLiteral(R"(^[+-]?\d+([.,]\d+)?$)"));
+    const QString t = text.trimmed();
+    if (!rx.match(t).hasMatch())
+        return false;
+    bool ok = false;
+    const double v = QString(t).replace(',', '.').toDouble(&ok);
+    if (ok && value)
+        *value = v;
+    return ok;
+}
+
 QString displayMoney(double value)
 {
     return moneyText(value).replace(QLatin1Char('.'), QLatin1Char(','));
@@ -1809,7 +1853,7 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
     // submission on - reusing it is what makes a duplicate register as a duplicate
     // instead of silently creating a second invoice.
     QSqlQuery q(db);
-    q.prepare("SELECT " + kEarliestFechaPago + ", MIN(cliente), SUM(importe), COUNT(*) "
+    q.prepare("SELECT " + kEarliestFechaPago + ", MIN(cliente), SUM(" INGRESOS_IMPORTE_VALUE "), COUNT(*) "
               "FROM ingresos "
               "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI'");
     q.bindValue(":n",   nRecibo);
@@ -1819,7 +1863,7 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
         e.seq       = seq;
         e.fechaPago = q.value(0).toString();
         e.cliente   = q.value(1).toString();
-        e.importe   = q.value(2).toDouble();
+        e.importe   = roundToCents(q.value(2).toDouble());
     }
     db.close();
     return e;
@@ -1837,7 +1881,7 @@ bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
     // Rows of one event share its CSV, estado and invoice id, so MAX picks them. The
     // date is over every paid row of the seq, as verifactuEventFor (retry, query) takes it.
     QSqlQuery q(db);
-    q.prepare("SELECT verifactu_invoice_seq, COALESCE(MAX(verifactu_invoice_id), ''), SUM(importe), "
+    q.prepare("SELECT verifactu_invoice_seq, COALESCE(MAX(verifactu_invoice_id), ''), SUM(" INGRESOS_IMPORTE_VALUE "), "
               "       COALESCE(MAX(verifactu_csv), ''), COALESCE(MAX(verifactu_estado), ''), "
               "       COALESCE((SELECT " + kEarliestFechaPago + " FROM ingresos s "
               "                 WHERE s.n_recibo = ingresos.n_recibo AND s.pagado = 'SI' "
@@ -1858,7 +1902,7 @@ bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
         SubmittedInvoiceEvent e;
         e.seq       = q.value(0).toInt();
         e.invoiceId = q.value(1).toString();
-        e.importe   = q.value(2).toDouble();
+        e.importe   = roundToCents(q.value(2).toDouble());
         e.csv       = q.value(3).toString();
         e.estado    = q.value(4).toString();
         e.fechaPago = q.value(5).toString();
@@ -1911,7 +1955,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
-        "       MIN(cliente), SUM(importe) "
+        "       MIN(cliente), SUM(" INGRESOS_IMPORTE_VALUE ") "
         "FROM ingresos "
         "WHERE (verifactu_estado IS NULL OR verifactu_estado = '' "
         "       OR verifactu_estado = 'PENDIENTE') "
@@ -1935,7 +1979,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         e.seq       = q.value(1).toInt();
         e.fechaPago = q.value(2).toString();
         e.cliente   = q.value(3).toString();
-        e.importe   = q.value(4).toDouble();
+        e.importe   = roundToCents(q.value(4).toDouble());
         events.append(e);
     }
     db.close();
@@ -1956,7 +2000,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     // Rows of one event share its dates, CSV, payload and ids, so MAX picks them.
     // Grouping also by CSV keeps two submissions apart should old data ever share a seq.
     QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(importe), "
+    q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(" INGRESOS_IMPORTE_VALUE "), "
               "       COALESCE(MAX(verifactu_invoice_id), ''), COALESCE(verifactu_csv, ''), "
               "       COALESCE(MAX(verifactu_estado), ''), COALESCE(" + kLatestFechaAnulacion + ", ''), "
               "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
@@ -1986,7 +2030,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
         r.nRecibo           = q.value(0).toString();
         r.seq               = q.value(1).toInt();
         r.fechaPago         = q.value(2).toString();
-        r.importe           = q.value(3).toDouble();
+        r.importe           = roundToCents(q.value(3).toDouble());
         r.invoiceId         = q.value(4).toString();
         r.csv               = q.value(5).toString();
         r.estado            = q.value(6).toString();

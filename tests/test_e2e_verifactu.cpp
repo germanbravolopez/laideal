@@ -42,6 +42,10 @@ class TestE2eVerifactu : public QObject
     void exec(const QString &sql)
     {
         m_db.open();
+        // Test data is shaped by hand: the Req. 1 guard triggers go first.
+        for (const char *drop : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete",
+                                  "DROP TRIGGER IF EXISTS ingresos_accepted_identity" })
+            QSqlQuery(m_db).exec(QString::fromLatin1(drop));
         QSqlQuery q(m_db);
         QVERIFY2(q.exec(sql), qPrintable(q.lastError().text() + " :: " + sql));
         m_db.close();

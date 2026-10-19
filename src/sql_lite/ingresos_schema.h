@@ -31,6 +31,9 @@
 #define INGRESOS_COL_VERIFACTU_RECTIFICATION_TYPE  23
 #define INGRESOS_COL_VERIFACTU_INVOICE_SEQ         24
 #define INGRESOS_COL_VERIFACTU_INVOICE_ID          25
+// The numeric value of `importe` in SQL: a legacy comma amount ("5,50") reads as 5.50,
+// where SQLite's own text-to-number would read its prefix (5).
+#define INGRESOS_IMPORTE_VALUE "CAST(REPLACE(TRIM(importe), ',', '.') AS REAL)"
 #define INGRESOS_COL_FECHA_ANULACION               26
 #define INGRESOS_COL_VERIFACTU_CANCEL_XML          27
 

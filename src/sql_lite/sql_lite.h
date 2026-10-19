@@ -47,6 +47,10 @@ double      roundToCents(double value);
 // An importe as stored in `ingresos`: "28.41". Text input may use a decimal comma.
 QString     moneyText(double value);
 QString     moneyText(const QString &value);
+// Strict reading of a typed or stored amount: an optional sign, digits and at most one
+// decimal separator (dot or comma). "1.234,50", "abc" and "" are refused (false), never
+// read as 0 - every amount writer refuses them.
+bool        moneyParse(const QString &text, double *value);
 // What the windows and printed tickets show: a decimal comma whatever the language
 // ("28,41"), no thousands separator. Storage, the maths and AEAT keep the dot.
 QString     displayMoney(double value);

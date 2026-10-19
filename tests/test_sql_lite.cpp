@@ -34,9 +34,13 @@ private:
     QSqlDatabase  m_db;
 
     // Open the connection, run one statement, close. Fails the test on SQL error.
+    // Test data is shaped by hand, sent rows included: the Req. 1 guard triggers are dropped
+    // first (test_ingresosGuardTriggers covers them, through tryExec).
     void exec(const QString &sql, const QVariantMap &binds = {})
     {
         QVERIFY2(m_db.open(), qPrintable(m_db.lastError().text()));
+        for (const char *drop : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete", "DROP TRIGGER IF EXISTS ingresos_accepted_identity" })
+            QSqlQuery(m_db).exec(QString::fromLatin1(drop));
         QSqlQuery q(m_db);
         QVERIFY2(q.prepare(sql), qPrintable(q.lastError().text()));
         for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
@@ -878,6 +882,74 @@ private slots:
         QCOMPARE(moneyText(displayMoney(9.99)), QStringLiteral("9.99"));        // back to storage
         QCOMPARE(displayDecimal(QStringLiteral("2.6")), QStringLiteral("2,6"));
         QCOMPARE(displayDecimal(QString()), QString());
+    }
+
+    // sql_lite F4: the database itself refuses deleting a row registered at AEAT and changing
+    // an accepted row's invoice identity; estado, the cancellation date, the pickup and the
+    // amount (Separar prendas) still move.
+    void test_ingresosGuardTriggers()
+    {
+        insertIngreso("63", "04-05-2026", "5.00", "SI", "ENVIADA", 0);
+        insertIngreso("64", "04-05-2026", "5.00", "NO", "SIN COBRAR", 0);
+        QVERIFY(migrateDatabase(m_db));
+        QVERIFY(!tryExec("DELETE FROM ingresos WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("DELETE FROM ingresos WHERE n_recibo = '64'"));
+        QVERIFY(!tryExec("UPDATE ingresos SET fecha_pago = '05-05-2026' WHERE n_recibo = '63'"));
+        QVERIFY(!tryExec("UPDATE ingresos SET n_recibo = '630' WHERE n_recibo = '63'"));
+        QVERIFY(!tryExec("UPDATE ingresos SET verifactu_invoice_seq = 1 WHERE n_recibo = '63'"));
+        QVERIFY(!tryExec("UPDATE ingresos SET pagado = 'NO' WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("UPDATE ingresos SET fecha_pago = '04-05-2026' WHERE n_recibo = '63'"));   // unchanged
+        QVERIFY(tryExec("UPDATE ingresos SET importe = '2.50' WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("UPDATE ingresos SET fecha_recogida = '06-05-2026', estado = 'Recogido' WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("UPDATE ingresos SET verifactu_estado = 'ANULADA', fecha_anulacion = '07-05-2026' WHERE n_recibo = '63'"));
+        QVERIFY(!tryExec("DELETE FROM ingresos WHERE n_recibo = '63'"));                          // cancelled: still kept
+        QVERIFY(tryExec("UPDATE ingresos SET fecha_pago = '01-01-2026' WHERE n_recibo = '63'"));   // ANULADA is not frozen
+    }
+
+    // sql_lite F6: an amount is read strictly; garbage is refused, never stored as 0.00.
+    void test_moneyParse_strict()
+    {
+        double v = -1.0;
+        QVERIFY(moneyParse("12,50", &v) && qFuzzyCompare(v, 12.5));
+        QVERIFY(moneyParse(" 7.25 ", &v) && qFuzzyCompare(v, 7.25));
+        QVERIFY(moneyParse("-3", &v) && qFuzzyCompare(v, -3.0));
+        for (const char *bad : { "1.234,50", "abc", "", "12,", ",5", "1e3", "inf", "5 €" })
+            QVERIFY2(!moneyParse(bad, &v), bad);
+        insertRow("60", "h60a");
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "60", "h60a", "2", "abc"));
+        QVERIFY(!updateTicketSizeAndPrice(m_db, "60", "h60a", "2", "1.234,50"));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h60a'"), QStringLiteral("10.00"));
+        IngresoGarmentRow row;
+        row.nRecibo = "61"; row.hash = "h61a"; row.importe = "abc"; row.pagado = "NO";
+        QVERIFY(!insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='61'"), QStringLiteral("0"));
+    }
+
+    // sql_lite F21: the resend feed sums a legacy comma amount as its value (5,50 is 5.50,
+    // not 5) and rounds the total to cents.
+    void test_pendingEventsSumParsedAmounts()
+    {
+        insertIngreso("62", "04-05-2026", "5,50", "SI", "PENDIENTE", 0);
+        insertIngreso("62", "04-05-2026", "0.10", "SI", "PENDIENTE", 0);
+        insertIngreso("62", "04-05-2026", "0.20", "SI", "PENDIENTE", 0);
+        const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(m_db, "2000-01-01");
+        double total = -1.0;
+        for (const PendingVerifactuEvent &e : events)
+            if (e.nRecibo == QLatin1String("62"))
+                total = e.importe;
+        QCOMPARE(total, 5.80);
+    }
+
+    // sql_lite F16: the client autofill matches the exact name ("Ana" never gets "Ana
+    // Maria"'s phone); the prefix search takes % and _ literally.
+    void test_clientLookupExactAndWildcardsEscaped()
+    {
+        addNewClient(m_db, "Ana Maria", "", "", "600000001");
+        QCOMPARE(searchItemFromClient(m_db, "movil", "Ana", false), QString());
+        QCOMPARE(searchItemFromClient(m_db, "movil", "Ana Maria", false), QStringLiteral("600000001"));
+        addNewClient(m_db, "50% Descuento", "", "", "600000002");
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "5_%", false, false), QString());
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "50%", false, false), QStringLiteral("600000002"));
     }
 
     void test_moneyText_roundsHalfAwayFromZero()
