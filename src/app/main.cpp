@@ -4,6 +4,7 @@
 #include "applanguage.h"
 #include "settingsdialog.h"
 #include "selfcheckdialog.h"
+#include "instancelock.h"
 #include "sql_lite.h"
 #include "applogger.h"
 #ifdef LAIDEAL_UI_TEST
@@ -90,6 +91,13 @@ int main(int argc, char *argv[])
     }
 
     setDbPath(settings->dbPath());
+
+    const std::unique_ptr<QLockFile> instance = InstanceLock::acquire(settings->dbPath());
+    if (!instance) {
+        QMessageBox::information(nullptr, QObject::tr("La Ideal ya está abierto"),
+            QObject::tr("La Ideal ya está abierto con esta base de datos. Use la ventana que ya está abierta."));
+        return 0;
+    }
 
     MainWindow w;
     w.setWindowState(Qt::WindowMaximized);

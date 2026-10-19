@@ -34,6 +34,8 @@ add_library(laideal_app STATIC
     selfcheckdialog.cpp
     refusedinvoicesdialog.h
     refusedinvoicesdialog.cpp
+    instancelock.h
+    instancelock.cpp
 )
 
 target_include_directories(laideal_app PUBLIC

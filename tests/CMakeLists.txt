@@ -378,6 +378,13 @@ add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# InstanceLock: one copy of the app per database.
+add_executable(test_instancelock test_instancelock.cpp)
+target_link_libraries(test_instancelock PRIVATE Qt${QT_VERSION_MAJOR}::Test laideal_app)
+add_test(NAME instancelock
+    COMMAND test_instancelock -o ${CMAKE_BINARY_DIR}/test-results-instancelock.xml,junitxml -o -,txt)
+set_tests_properties(instancelock PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The post-update self-check (laideal.exe --self-check): its checks and one whole run
 # of its window against a throwaway shop folder.
 add_executable(test_selfcheck

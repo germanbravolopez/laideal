@@ -26,6 +26,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_backup_manager` | `backup` | guiless | Backup retention |
 | `test_reporthtml` | `reporthtml` | guiless | Report HTML scaffolding |
 | `test_uikit` | `uikit` | offscreen | `AmountSpinBox` (shows "12,50", takes "7.25" and "7,25"); Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
+| `test_instancelock` | `laideal_app` | offscreen | One copy per database: the lock path ignores case and separators, a second lock on the same database is refused until the first is released, another database is free, and a crashed copy's lock is taken over |
 | `test_selfcheck` | `laideal_app` | offscreen | The post-update self-check: newest backup, the settings copy (database copy, direct client in pre-production, no gateway key), M1 passes and fails on a failed migration, M2's facts (ticket, invoice to print, closed quarter's figures, filed PDF), the report; one whole run of the window leaves the live DB and settings byte for byte unchanged, deletes the copies and reports no shop data |
 | `test_versioncompare` | `updater` | guiless | Version comparison |
 
