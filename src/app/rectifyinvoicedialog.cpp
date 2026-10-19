@@ -561,8 +561,11 @@ bool RectifyInvoiceDialog::reusePlaceholderRow()
 bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &result)
 {
     bool localOk = true;
+    // A gateway "success" without AEAT's CSV (PENDING) may be held by AEAT: PENDIENTE with
+    // its reason, to check with Consultar en AEAT, never an error to redo under a new record.
     const VerifactuEstado estado = result.isSuccess()         ? VerifactuEstado::Enviada
-                                 : queuedWithoutAnswer(result) ? VerifactuEstado::NotSubmitted
+                                 : queuedWithoutAnswer(result) || result.status == VerifactuResult::PENDING
+                                                               ? VerifactuEstado::NotSubmitted
                                                                : VerifactuEstado::Error;
 
     qDebug() << "RectifyInvoiceDialog::applyRectificationResult:"

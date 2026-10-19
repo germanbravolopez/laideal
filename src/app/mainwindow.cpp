@@ -549,6 +549,10 @@ void MainWindow::initializeVerifactu()
         if (!direct->sendingError().isEmpty())
             warnings << UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
                                            "pueden enviar: %1").arg(direct->sendingError().toHtmlEscaped()));
+        if (const QString saveError = AppSettings::instance()->lastSaveError(); !saveError.isEmpty())
+            warnings << UiKit::errorHtml(tr("No se puede guardar la configuración (%1): el número de instalación "
+                                            "de la conexión directa podría cambiar al reiniciar. Avise al servicio técnico.")
+                                             .arg(saveError.toHtmlEscaped()));
         if (const QString expiry = direct->certificateExpiryWarning(); !expiry.isEmpty())
             warnings << UiKit::warnHtml(expiry.toHtmlEscaped());
         const AeatChainCheck::Result chain = direct->verifyStoredChain();

@@ -118,7 +118,8 @@ QString refusedRectificationOf(QSqlDatabase &db, const QString &original);
 QString pendingRectificationOf(QSqlDatabase &db, const QString &original);
 // Every rectificativa row still PENDIENTE (n_recibo).
 QStringList pendingRectificationNumbers(QSqlDatabase &db);
-// A PENDIENTE rectificativa nothing will send (no pending record): an ERROR to redo.
+// A PENDIENTE rectificativa nothing will send (no pending record) and no answer reached: an
+// ERROR to redo. One the gateway answered without CSV (its reason stored) stays PENDIENTE.
 bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QString &reason);
 // A refused rectificativa resent as it was: PENDIENTE again, nothing else changed.
 bool markRectificationResent(QSqlDatabase &db, const QString &number);

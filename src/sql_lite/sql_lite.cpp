@@ -1349,8 +1349,11 @@ bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QStr
     if (dbNotConfigured(db, __func__) || !db.open())
         return false;
     QSqlQuery q(db);
+    // Only a placeholder with no answer at all: one AEAT answered without its CSV (the
+    // gateway's PENDING, its reason stored) may be held by AEAT and stays PENDIENTE.
     q.prepare("UPDATE ingresos SET verifactu_estado = 'ERROR', verifactu_error = :r WHERE n_recibo = :n "
-              "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'PENDIENTE'");
+              "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'PENDIENTE' "
+              "AND COALESCE(verifactu_error, '') = ''");
     q.bindValue(":r", reason);
     q.bindValue(":n", number);
     const bool ok = q.exec() && q.numRowsAffected() > 0;

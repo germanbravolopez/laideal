@@ -177,6 +177,25 @@ private slots:
         QVERIFY(!m_db.isOpen());
     }
 
+    // The start-up orphan rule turns only an unanswered rectificativa placeholder into ERROR:
+    // one the gateway answered without CSV (its reason stored) may be held by AEAT.
+    void test_markRectificationUnsent_onlyUnanswered()
+    {
+        RectificativaRow row;
+        row.number = "85"; row.original = "84"; row.type = "S"; row.label = "R5"; row.date = QDate(2026, 5, 4); row.amount = 5.0;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        row.number = "86";
+        QVERIFY(insertRectificativaRow(m_db, row));
+        VerifactuResult noCsv;
+        noCsv.status = VerifactuResult::PENDING;
+        noCsv.errorDescription = "La respuesta no trae el CSV de la AEAT";
+        QCOMPARE(applyRectificativaResult(m_db, "86", "84", noCsv, VerifactuEstado::NotSubmitted), 1);
+        QVERIFY(markRectificationUnsent(m_db, "85", "Sin envío pendiente"));
+        QVERIFY(!markRectificationUnsent(m_db, "86", "Sin envío pendiente"));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(verifactu_estado) FROM (SELECT verifactu_estado FROM ingresos "
+                        "WHERE n_recibo IN ('85', '86') ORDER BY n_recibo)"), QStringLiteral("ERROR,PENDIENTE"));
+    }
+
     // The start-up recovery's "Marcar como error" touches only that pending event.
     void test_markPendingEventUnreconciled()
     {

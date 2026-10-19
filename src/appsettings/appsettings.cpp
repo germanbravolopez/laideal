@@ -190,14 +190,17 @@ bool AppSettings::save() const
     // a crash mid-write leaves the previous settings intact, never no file.
     QSaveFile file(m_filePath);
     if (!file.open(QIODevice::WriteOnly)) {
-        qWarning() << "AppSettings: cannot write to" << m_filePath << "-" << file.errorString();
+        m_lastSaveError = file.errorString();
+        qCritical() << "AppSettings: cannot write to" << m_filePath << "-" << m_lastSaveError;
         return false;
     }
     const QByteArray bytes = QJsonDocument(m_data).toJson(QJsonDocument::Indented);
     if (file.write(bytes) != bytes.size() || !file.commit()) {
-        qWarning() << "AppSettings: saving" << m_filePath << "failed -" << file.errorString();
+        m_lastSaveError = file.errorString();
+        qCritical() << "AppSettings: saving" << m_filePath << "failed -" << m_lastSaveError;
         return false;
     }
+    m_lastSaveError.clear();
     return true;
 }
 

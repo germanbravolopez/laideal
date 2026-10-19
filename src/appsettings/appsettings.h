@@ -19,6 +19,9 @@ public:
 
     // Persist current state back to the JSON file.
     bool save() const;
+    // Why the last save() failed, or empty: shown at start (the installation number and
+    // the chain marker must survive a restart).
+    QString lastSaveError() const { return m_lastSaveError; }
 
     // Injection seam: load from an explicit file path instead of the fixed
     // ~/.laideal_settings.json, resetting in-memory state first so repeated calls
@@ -181,6 +184,7 @@ private:
     QJsonObject m_data;
     QString     m_filePath;
     QString     m_legacyKeyFile;   // ~/.verifactu_key, when the key was migrated from it
+    mutable QString m_lastSaveError;
 
     static AppSettings *s_instance;
 };

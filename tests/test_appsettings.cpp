@@ -173,6 +173,21 @@ private slots:
         QCOMPARE(kept.readAll(), QByteArray("{ this is not json"));
     }
 
+    // A failed save is remembered for the start-up message, and cleared by the next good one.
+    void test_lastSaveErrorReported()
+    {
+        const QString path = loadJson(R"({"database":{"path":"a.db"}})");
+        QVERIFY(AppSettings::instance()->save());
+        QVERIFY(AppSettings::instance()->lastSaveError().isEmpty());
+        QVERIFY(QFile::remove(path));
+        QVERIFY(QDir().mkpath(path));                                        // a folder where the file goes
+        QVERIFY(!AppSettings::instance()->save());
+        QVERIFY(!AppSettings::instance()->lastSaveError().isEmpty());
+        QVERIFY(QDir(path).removeRecursively());
+        QVERIFY(AppSettings::instance()->save());
+        QVERIFY(AppSettings::instance()->lastSaveError().isEmpty());
+    }
+
     // The save replaces the file in one step and leaves no temporary file behind.
     void test_saveIsAtomic()
     {
