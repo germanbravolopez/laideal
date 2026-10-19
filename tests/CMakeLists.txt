@@ -436,3 +436,12 @@ target_link_libraries(fake_aeat_server PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${Q
 add_executable(escpos_preview tools/escpos_preview.cpp support/escpospreview.h)
 target_include_directories(escpos_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(escpos_preview PRIVATE Qt${QT_VERSION_MAJOR}::Gui printing)
+
+# logging: in-session rotation, a failed rename keeps the old log, unopenable file.
+add_executable(test_applogger test_applogger.cpp)
+target_link_libraries(test_applogger PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    logging
+)
+add_test(NAME applogger
+    COMMAND test_applogger -o ${CMAKE_BINARY_DIR}/test-results-applogger.xml,junitxml -o -,txt)

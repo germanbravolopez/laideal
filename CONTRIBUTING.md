@@ -87,7 +87,7 @@ So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of De
 
 ### Local fallback: `releases\release.ps1`
 
-The same pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1` for offline builds or when you need the artifacts without publishing. No Qt cmd prompt needed - the script loads the Qt environment itself. It does **not** publish to GitHub; attach the artifacts manually (see the `gh release create` snippet at the end of this section).
+The same pipeline (configure -> build -> `ctest` -> `windeployqt` with the DLL check -> zip -> Inno Setup installer + `.sha256`) runs in one command via `releases\release.ps1` for offline builds or when you need the artifacts without publishing. No Qt cmd prompt needed - the script loads the Qt environment itself. It does **not** publish to GitHub; attach the artifacts manually (see the `gh release create` snippet at the end of this section).
 
 **Release toolchain** (pinned by `releases\release.ps1`):
 

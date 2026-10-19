@@ -41,9 +41,12 @@ public:
 
 | Age | Behaviour |
 |-----|-----------|
-| 0 — 30 days | every snapshot kept |
-| 31 days — 4 years | one snapshot per (year, month) — first match wins, rest pruned |
-| > 4 years | deleted |
+| newest 3 | always kept, whatever their age |
+| 0 — 30 days | every snapshot kept (`ts.addDays(30) > now`) |
+| 30 days — 4 years | one snapshot per (year, month): the **last** of the month, the one closest to the month's end; the rest pruned |
+| > 4 years | deleted (`ts.addYears(4) < now`) |
+
+A wrong clock never decides what is deleted. Nothing is pruned when "now" is before the newest copy or more than 45 days after it, or when the two newest copies are more than 45 days apart (a copy made with a wrong clock).
 
 The 4-year window matches the LGT tax-prescription period; the daily-for-30-days window keeps recent restorability cheap.
 
@@ -54,6 +57,9 @@ The 4-year window matches the LGT tax-prescription period; the daily-for-30-days
 | `backup.enabled` | bool | `true` | gates `needsBackup()`; manual trigger is independent |
 | `backup.last_time` | string (ISO-8601) | empty | populated after each successful backup |
 | `backup.last_version` | string (`X.Y`) | empty | the version whose first start backed up the DB before migrating it |
+| `backup.last_error` | string | empty | time + reason of the last failed backup (`recordFailure`); cleared by the next success |
+
+At every start MainWindow shows `BackupManager::currentBackupWarning()` in the result panel: backups switched off, or no correct backup for more than 3 days (with the last error). The pure `backupWarning(enabled, lastSuccess, lastError, now)` is unit-tested.
 
 The backup directory is **not** configurable separately — `BackupManager::backupDirectory()` returns `<QFileInfo(dbPath()).absolutePath()>/backups`, so backups always sit in a `backups/` subdir next to the live DB. One location for the operator to manage; one path to back up offsite.
 

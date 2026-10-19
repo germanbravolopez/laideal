@@ -14,9 +14,6 @@
 #define MyAppPublisher "German Bravo Lopez"
 #define MyAppURL "https://github.com/germanbravolopez/laideal"
 #define MyAppExeName "laideal.exe"
-#define MyAppAssocName MyAppName + ""
-#define MyAppAssocExt ".myp"
-#define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
 ; NOTE: AppId uniquely identifies this application. Do not reuse it elsewhere.
@@ -35,7 +32,6 @@ AppUpdatesURL={#MyAppURL}
 ; With lowest, {autopf} resolves to %LOCALAPPDATA%\Programs and HKA maps to HKCU.
 PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#MyAppName}
-ChangesAssociations=yes
 DisableProgramGroupPage=yes
 LicenseFile=..\License.txt
 ; Default output dir; the manual release.ps1 overrides this with ISCC /O so its
@@ -63,6 +59,20 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"; InfoBeforeFile:
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; Qt/MinGW DLLs and plugin folders of earlier versions go before the new set is copied,
+; so a library dropped or renamed between versions is not left behind. User data
+; (database, backups, settings) lives outside {app}.
+Type: files; Name: "{app}\*.dll"
+Type: filesandordirs; Name: "{app}\platforms"
+Type: filesandordirs; Name: "{app}\styles"
+Type: filesandordirs; Name: "{app}\sqldrivers"
+Type: filesandordirs; Name: "{app}\imageformats"
+Type: filesandordirs; Name: "{app}\iconengines"
+Type: filesandordirs; Name: "{app}\tls"
+Type: filesandordirs; Name: "{app}\networkinformation"
+Type: filesandordirs; Name: "{app}\generic"
+
 [Files]
 Source: "{#MyAppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -72,11 +82,6 @@ Source: "{#MyAppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 ; AppLanguage::installerChoice() only while the settings have none yet).
 Root: HKA; Subkey: "Software\La Ideal"; ValueType: string; ValueName: "Language"; ValueData: "en"; Languages: english; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\La Ideal"; ValueType: string; ValueName: "Language"; ValueData: "es"; Languages: spanish; Flags: uninsdeletevalue
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
-Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".myp"; ValueData: ""
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -86,3 +91,4 @@ Name: "{autoprograms}\{#MyAppName} - Comprobar tras actualizar"; Filename: "{app
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--self-check"; Description: "Comprobar la instalacion tras actualizar (--self-check)"; Flags: nowait postinstall skipifsilent unchecked

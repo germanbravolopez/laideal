@@ -1,8 +1,9 @@
 // Tests for BackupManager: real copies of a throwaway DB (.part then rename, the
 // same-second and concurrent-run guards, stale .part cleanup), and
 // backupsToPrune() - the pure retention decision. Policy: keep every copy
-// from the last 30 days, then one (the earliest) per calendar month for up to
-// 4 years, drop the rest; non-matching names are ignored.
+// from the last 30 days, then the last copy of each calendar month for up to
+// 4 years, drop the rest; the newest 3 are always kept; a suspect clock prunes
+// nothing; non-matching names are ignored.
 
 #include <QtTest>
 #include <QDateTime>
@@ -144,27 +145,106 @@ private slots:
         QVERIFY2(second.errorMessage.contains("en curso"), qPrintable(second.errorMessage));
     }
 
+    // Recent copies so the newest-3 rule does not shadow the file under test.
+    static QStringList filler(const QDate &last)
+    {
+        QStringList l;
+        for (int i = 0; i < 3; ++i)
+            l << last.addDays(-i).toString("'laideal_'yyyy-MM-dd'_100000.db'");
+        return l;
+    }
+
     void test_retentionPolicy()
     {
         const QDateTime now(QDate(2026, 6, 2), QTime(12, 0, 0));
-        const QStringList names = {
-            "laideal_2026-06-01_120000.db",  // 1 day   -> recent, keep
+        const QStringList names = filler(QDate(2026, 6, 1)) + QStringList{
             "laideal_2026-05-20_120000.db",  // 13 days -> recent, keep
-            "laideal_2026-03-01_120000.db",  // ~93 days, month 2026-03, first  -> keep
-            "laideal_2026-03-15_120000.db",  // ~79 days, month 2026-03, second -> DELETE
-            "laideal_2026-02-10_120000.db",  // ~112 days, month 2026-02, first -> keep
+            "laideal_2026-03-01_120000.db",  // month 2026-03, earlier -> DELETE
+            "laideal_2026-03-15_120000.db",  // month 2026-03, last    -> keep
+            "laideal_2026-02-10_120000.db",  // month 2026-02, only    -> keep
             "laideal_2020-01-01_120000.db",  // > 4 years -> DELETE
             "notabackup.db"                  // not our schema -> ignored (keep)
         };
 
-        const QStringList del = BackupManager::backupsToPrune(names, now);
+        QCOMPARE(BackupManager::backupsToPrune(names, now),
+                 (QStringList{ "laideal_2020-01-01_120000.db", "laideal_2026-03-01_120000.db" }));
+    }
 
-        QCOMPARE(del.size(), 2);
-        QVERIFY(del.contains("laideal_2026-03-15_120000.db")); // monthly dup
-        QVERIFY(del.contains("laideal_2020-01-01_120000.db")); // too old
-        QVERIFY(!del.contains("laideal_2026-03-01_120000.db")); // monthly survivor
-        QVERIFY(!del.contains("laideal_2026-06-01_120000.db")); // recent
-        QVERIFY(!del.contains("notabackup.db"));                // ignored
+    // Age exactly 30 days is no longer "recent"; 29 days is.
+    void test_boundary30Days()
+    {
+        const QDateTime now(QDate(2026, 6, 30), QTime(12, 0, 0));
+        QStringList names = filler(QDate(2026, 6, 29));
+        names << "laideal_2026-05-31_120000.db"   // exactly 30 days: monthly window, last of May
+              << "laideal_2026-05-30_120000.db";  // 31 days: monthly, earlier -> delete
+        QCOMPARE(BackupManager::backupsToPrune(names, now), QStringList{ "laideal_2026-05-30_120000.db" });
+
+        const QDateTime now2(QDate(2026, 7, 1), QTime(12, 0, 0));
+        QStringList names2 = filler(QDate(2026, 6, 30));
+        names2 << "laideal_2026-06-02_120000.db"  // 29 days: recent, keep
+               << "laideal_2026-06-01_120000.db"; // 30 days: sole monthly candidate, keep
+        QCOMPARE(BackupManager::backupsToPrune(names2, now2).size(), 0);
+    }
+
+    // 4 years are calendar years (a leap day does not make the copy 1 day too old).
+    void test_boundary4Years()
+    {
+        const QDateTime now(QDate(2026, 6, 2), QTime(12, 0, 0));
+        const QStringList recent = filler(QDate(2026, 6, 1));
+        QCOMPARE(BackupManager::backupsToPrune(recent + QStringList{ "laideal_2022-06-02_120000.db" }, now).size(), 0);
+        QCOMPARE(BackupManager::backupsToPrune(recent + QStringList{ "laideal_2022-06-02_115900.db" }, now),
+                 QStringList{ "laideal_2022-06-02_115900.db" });
+    }
+
+    // A clock before the newest copy, far after it, or a jump between the two
+    // newest copies deletes nothing.
+    void test_clockJumpPrunesNothing()
+    {
+        const QStringList old = { "laideal_2020-01-01_120000.db", "laideal_2020-01-02_120000.db",
+                                  "laideal_2024-03-01_120000.db", "laideal_2024-03-15_120000.db" };
+        QStringList names = filler(QDate(2026, 6, 1)) + old;
+        QVERIFY(!BackupManager::backupsToPrune(names, QDateTime(QDate(2026, 6, 2), QTime(0, 0))).isEmpty());
+        QVERIFY(BackupManager::backupsToPrune(names, QDateTime(QDate(2025, 1, 1), QTime(0, 0))).isEmpty());
+        QVERIFY(BackupManager::backupsToPrune(names, QDateTime(QDate(2031, 1, 1), QTime(0, 0))).isEmpty());
+        // The newest copy was made when the clock had already jumped forward.
+        names << "laideal_2030-01-01_120000.db";
+        QVERIFY(BackupManager::backupsToPrune(names, QDateTime(QDate(2030, 1, 1), QTime(13, 0))).isEmpty());
+    }
+
+    // The newest 3 copies survive even inside the monthly window.
+    void test_newestThreeKept()
+    {
+        const QDateTime now(QDate(2026, 6, 10), QTime(12, 0, 0));
+        QStringList names;
+        for (int d = 1; d <= 5; ++d)
+            names << QString("laideal_2026-05-0%1_120000.db").arg(d);
+        // 05-03..05-05 protected, 05-02 is the month's survivor, 05-01 goes.
+        QCOMPARE(BackupManager::backupsToPrune(names, now), QStringList{ "laideal_2026-05-01_120000.db" });
+    }
+
+    void test_backupWarning()
+    {
+        const QDateTime now(QDate(2026, 6, 10), QTime(12, 0, 0));
+        const QString iso2d = now.addDays(-2).toString(Qt::ISODate);
+        const QString iso4d = now.addDays(-4).toString(Qt::ISODate);
+        QVERIFY(BackupManager::backupWarning(true, iso2d, QString(), now).isEmpty());
+        QVERIFY(!BackupManager::backupWarning(true, iso4d, QString(), now).isEmpty());
+        QVERIFY(!BackupManager::backupWarning(true, QString(), QString(), now).isEmpty());
+        QVERIFY(BackupManager::backupWarning(true, iso4d, "disco lleno", now).contains("disco lleno"));
+        QVERIFY(!BackupManager::backupWarning(false, iso2d, QString(), now).isEmpty());
+    }
+
+    void test_recordFailureThenSuccessClearsError()
+    {
+        BackupManager::Result bad;
+        bad.errorMessage = "sin espacio";
+        BackupManager::recordFailure(bad);
+        QVERIFY(AppSettings::instance()->backupLastError().contains("sin espacio"));
+        BackupManager::Result ok;
+        ok.success = true;
+        ok.finishedAt = QDateTime::currentDateTime();
+        BackupManager::recordSuccess(ok);
+        QVERIFY(AppSettings::instance()->backupLastError().isEmpty());
     }
 
     void test_emptyAndRecentOnly()

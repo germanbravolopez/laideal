@@ -127,12 +127,12 @@ Issues:
 
 | # | Finding | Where | Proposal |
 |---|---------|-------|----------|
-| C1 | The release does not require the UI smoke. It is a manual gate in `/release`. `ui-smoke.yml` runs only on pushes touching `tests/ui/**` / `tests/tools/**`, so a `src/` change never triggers it. | `.github/workflows/ui-smoke.yml:13-20` | Add `pull_request: branches: [master]` (it is the release PR) and optionally a nightly; or have the `release` job check that the last ui-smoke run on the tagged SHA succeeded. |
+| C1 ✅ FIXED 20-10-2026 | The release does not require the UI smoke. It is a manual gate in `/release`. `ui-smoke.yml` runs only on pushes touching `tests/ui/**` / `tests/tools/**`, so a `src/` change never triggers it. | `.github/workflows/ui-smoke.yml:13-20` | Add `pull_request: branches: [master]` (it is the release PR) and optionally a nightly; or have the `release` job check that the last ui-smoke run on the tagged SHA succeeded. |
 | C2 ✅ FIXED 19-10-2026 | The deploy assertion misses `sqldrivers\qsqlite.dll` and `tls\qschannelbackend.dll`. | `ci.yml:195-210` | Add both. |
-| C3 | `release.ps1` is not "the same pipeline": no `ctest`, no zip, no deploy assertion. Its header still says "MinGW Makefiles". CONTRIBUTING says it produces a zip. | `releases/release.ps1:4-12,113`; `CONTRIBUTING.md` "Local fallback" | Add ctest and the DLL check, or reword the docs. |
+| C3 ✅ FIXED 20-10-2026 | `release.ps1` is not "the same pipeline": no `ctest`, no zip, no deploy assertion. Its header still says "MinGW Makefiles". CONTRIBUTING says it produces a zip. | `releases/release.ps1:4-12,113`; `CONTRIBUTING.md` "Local fallback" | Add ctest and the DLL check, or reword the docs. |
 | C4 | Typo `^r?` (meant `\r?`) in the notes regex, copied three times. Harmless today. | `ci.yml:238`, `CONTRIBUTING.md` local fallback, `release/SKILL.md:176` | Fix in all three. |
-| C5 | Installer: dead `.myp` file association (the app ignores `%1`); no `[InstallDelete]` for stale DLLs or plugins of earlier versions (`ignoreversion recursesubdirs` only adds); nothing prompts the shop to run "Comprobar tras actualizar" after an in-app update (updater #29). | `releases/laideal.iss:16-18,63-69,73` | Drop the association; `[InstallDelete] Type: filesandordirs; Name: "{app}\plugins"` etc.; an optional unchecked `[Run]` entry for `--self-check`. |
-| C6 | Updater trust: the downloaded installer is run with no hash or signature check (updater High). The release job could publish `.sha256` or rely on the asset `digest`. | `updater.cpp:174-189`; `ci.yml` release | P1 (M): hash; signing later (L). |
+| C5 ✅ FIXED 20-10-2026 | Installer: dead `.myp` file association (the app ignores `%1`); no `[InstallDelete]` for stale DLLs or plugins of earlier versions (`ignoreversion recursesubdirs` only adds); nothing prompts the shop to run "Comprobar tras actualizar" after an in-app update (updater #29). | `releases/laideal.iss:16-18,63-69,73` | Drop the association; `[InstallDelete] Type: filesandordirs; Name: "{app}\plugins"` etc.; an optional unchecked `[Run]` entry for `--self-check`. |
+| C6 ✅ FIXED 20-10-2026 | Updater trust: the downloaded installer is run with no hash or signature check (updater High). The release job could publish `.sha256` or rely on the asset `digest`. | `updater.cpp:174-189`; `ci.yml` release | P1 (M): hash; signing later (L). |
 | C7 | `windows-latest`, chocolatey MinGW and `jurplel` are not pinned to a runner image; already mitigated with retries and the runtime check. | `ci.yml` | Accept; consider `windows-2022` pinning. |
 
 ---
@@ -151,7 +151,7 @@ Issues:
 | G8 ✅ FIXED 19-10-2026 | `CONTRIBUTING.md` / `.claude/skills/release/SKILL.md` | The release skill says "The root README.md is the source of truth" and cites "README step 3/4/5" (the workflow lives in CONTRIBUTING). The user's auto-memory says "master only fast-forwards at release time", while CONTRIBUTING and the skill require a merge commit (`--no-ff`). | Point the skill at CONTRIBUTING; the owner should reconcile the memory note (outside the repo). |
 | G9 ✅ FIXED 19-10-2026 | `docs/testing/README.md` | The e2e row says "against a fake Verifactu server" (there is also the fake AEAT). The layers table omits the self-check as a fifth layer, although the root README lists it. | Align with the root README. |
 | G10 ✅ FIXED 19-10-2026 | `docs/modules/verifactu/rest_api.md`, `docs/modules/printer/04_*.md`, `05_*.md` | Heavily stale. `rest_api.md` describes non-existent APIs and even advises logging the ServiceKey (gateway Low, `:584-588`). Printer 04/05 are Excel-era. | Delete the debugging advice now; mark 04/05 as "historical" or archive them; trim `rest_api.md` to the fields actually sent. |
-| G11 | Repo hygiene | Unused `icon/lavadora_fancy.ico`, `lavadora_nobg.ico`, `lavadora.png`, `change_icon.ps1`; stale remote branch `origin/feature/recog-prendas-edit-qty-service-price`; `CMakeLists.txt.user`, `laideal_docs.egg-info/`, `ui-smoke-out/` correctly ignored; `.gitignore` gaps (3.3). `completed_milestones.md` at 611 lines: check the archive rule of `/update-docs`. | Clean up in a docs/hygiene commit. |
+| G11 ✅ FIXED 20-10-2026 | Repo hygiene | Unused `icon/lavadora_fancy.ico`, `lavadora_nobg.ico`, `lavadora.png`, `change_icon.ps1`; stale remote branch `origin/feature/recog-prendas-edit-qty-service-price`; `CMakeLists.txt.user`, `laideal_docs.egg-info/`, `ui-smoke-out/` correctly ignored; `.gitignore` gaps (3.3). `completed_milestones.md` at 611 lines: check the archive rule of `/update-docs`. | Clean up in a docs/hygiene commit. |
 
 ---
 
@@ -223,20 +223,20 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P2 | listado | Ingresos read-only only through the view flag | Model / proxy level refusal + tests (Req. 1) | S | listado |
 | P2 | app | Anular with a live I-mode rectificativa (A9); Rectificar lookup picks an arbitrary group (A10); client autofill copies another client's data (A13 = sql_lite F16) | Refuse / warn; event-based load; exact-match autofill | M | app, sql_lite |
 | P2 | app | Anular has no confirmation (A8); Cancel / Rectify not UiKit, unescaped AEAT text (A21) | Confirm; port to UiKit | M | app, uikit |
-| P2 | printing | CP858 Ì maps to 0xDD (should be 0xDE) and the test is circular; control characters injected; RAW path says "impreso" when offline | Fix the table + an independent reference test; map C0 to space; `GetPrinterW` status | S-M | printing |
+| P2 ✅ FIXED 20-10-2026 | printing | CP858 Ì maps to 0xDD (should be 0xDE) and the test is circular; control characters injected; RAW path says "impreso" when offline | Fix the table + an independent reference test; map C0 to space; `GetPrinterW` status | S-M | printing |
 | P2 | backup | Clock-jump pruning, earliest-of-month survivor, same-disk storage, no warning when disabled | Keep the newest N; last-of-month; `last_success` warning; second folder (product) | M | backup |
 | P2 | updater | No download timeout / cancel; shared silent flag; process-wide TEMP; URL host not checked | Per the updater report items 2-5 | S-M | updater |
 | P2 ✅ FIXED 19-10-2026 | appsettings | Corrupt settings overwritten by defaults; non-atomic save; legacy plaintext key file left | `.corrupt` copy; `QSaveFile`; delete legacy | S-M | appsettings |
 | P2 | facturas | inf / nan / negative / zero amounts; duplicate invoice; untrimmed fields; free-text servicio | Validation + duplicate check | S | facturas |
 | P2 | contabilidad | Regenerating a closed quarter replaces the filed PDF | Temp + rename / new name; keep the original | M | contabilidad, reporthtml |
 | P2 | reporthtml / listado | Unescaped business / supplier text in PDFs; prendas PDF result ignored | `toHtmlEscaped`; propagate `writePdf` | S | reporthtml, listado |
-| P2 | logging | Rotation only at start; `.old` lost on a rename failure; silent when the file is not openable | In-session rotation; checks; fallback | S-M | logging |
-| P2 | CI | UI smoke not triggered by `src/` changes nor required for release (C1); `release.ps1` lacks ctest / zip (C3) | PR-to-master trigger; align `release.ps1` | S | 00 |
-| P2 | installer | Dead `.myp` association; stale DLLs never removed; no prompt for the self-check after an update | C5 | S | 00, updater |
+| P2 ✅ FIXED 20-10-2026 | logging | Rotation only at start; `.old` lost on a rename failure; silent when the file is not openable | In-session rotation; checks; fallback | S-M | logging |
+| P2 ✅ FIXED 20-10-2026 | CI | UI smoke not triggered by `src/` changes nor required for release (C1); `release.ps1` lacks ctest / zip (C3) | PR-to-master trigger; align `release.ps1` | S | 00 |
+| P2 ✅ FIXED 20-10-2026 | installer | Dead `.myp` association; stale DLLs never removed; no prompt for the self-check after an update | C5 | S | 00, updater |
 | P2 | tests | Self-check additions: twice-run migration, settings health, backup age, money / iva counts, chain verifier, export round trip | Section 5 | M | sql_lite, appsettings, backup, app, listado |
 | P2 | tests | E2E state races + gateway failure modes + Recogida search modes | Section 5 | M | app, recog_prendas, verifactu-gateway |
 | P2 | docs | ai_agent_instructions, INDEX, docs/README, requirements, release skill drift (G2, G4, G5, G7, G8, G9); rest_api ServiceKey logging advice (G10) | Update; delete the advice | M | 00, all |
-| P2 | repo | `.gitignore` lacks `*.sqlite`, `*.pfx` / `*.p12` (fixture exception), settings copies | Add | S | 00 |
+| P2 ✅ FIXED 20-10-2026 | repo | `.gitignore` lacks `*.sqlite`, `*.pfx` / `*.p12` (fixture exception), settings copies | Add | S | 00 |
 | P2 | verifactu-direct | A client SOAP fault refuses a whole batch (up to 1000 records); a duplicate is adopted without checking amount and date; the restore head may be a cancellation (chain fork; GZ44 item 3) | Resend singly after a batch fault; query and compare before adopting; extend the settings marker to the full head | M | verifactu-direct, tracker:39 |
 | P2 | verifactu-direct | `NombreRazonEmisor` not truncated to 120 (schema fault for every record); qrcodegen exception uncaught; waiters not answered in two edge cases; WinHTTP up to about 120 s per request, which can hang the exit | `left(120)`; catch; answer from the store; shorter connect timeout / private pool | S | verifactu-direct |
 | P2 | docs | `aeat-direct-investigation.md` hand-over text obsolete since 13-10-2026; `unit_suites.md` direct rows stale; verifactu README lacks the direct branch in its source table / diagram and the restore limit | Mark obsolete sections; update | S | verifactu-direct |
@@ -245,7 +245,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P3 | verifactu | Unknown estado string falls back to PENDIENTE | Map unknown values to a non-resendable state + warning | S | 00 |
 | P3 | tableview / uikit / imprimir / app | Leaks (`new Imprimir` / Listado / RecogPrendas per action, models per refresh), unused includes, colours, `tr()` consistency | Cleanup batch (Haiku / Sonnet) | M | several |
 | P3 | repo | Unused icons, stale remote branch, printer 04 / 05 docs Excel-era, milestones size | Hygiene commit | S | 00, printing |
-| P3 | printing | qrcodegen not pinned by hash; no third-party notice | README hash + test; notice line | S | printing |
+| P3 ✅ FIXED 20-10-2026 | printing | qrcodegen not pinned by hash; no third-party notice | README hash + test; notice line | S | printing |
 
 verifactu-direct confirms these points:
 - Amount rounding per field is correct: base and cuota rounded separately always add up to the total for one VAT rate on whole cents. Printing F9 verified the same against the renderer.

@@ -170,7 +170,7 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 
 - Log format: `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] <message>`
 - Session separator written on each launch
-- Rotates to `.laideal.log.old` when the file exceeds 5 MB; thread-safe via `QMutex`
+- Rotates to `.laideal.log.old` when the file exceeds 5 MB, also during a session; the current file is moved aside first and `.old` replaced only if that worked. If the log cannot be opened it falls back to `<temp>/laideal.log`, else logs nothing (never crashes). Thread-safe via `QMutex`; `installAt(path, maxBytes)` is the test seam (`test_applogger`)
 - `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Ayuda → Log de depuración) to show the customer the path with an "Abrir archivo" button that opens the log directly
 
 ### AppSettings (`src/appsettings/`)

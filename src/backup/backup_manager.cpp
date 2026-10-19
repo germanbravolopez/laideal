@@ -13,7 +13,9 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QVector>
 
+#include <algorithm>
 #include <atomic>
 
 namespace {
@@ -32,6 +34,9 @@ std::atomic<bool> s_running{ false };
 // by pruneOldBackups().
 constexpr int kKeepEveryDays   = 30;
 constexpr int kKeepMonthlyYears = 4;
+constexpr int kKeepNewest       = 3;    // never pruned, whatever their age
+constexpr int kMaxClockGapDays  = 45;   // a larger gap to "now" means the clock is suspect
+constexpr int kWarnAfterDays    = 3;    // last successful backup older than this is reported
 
 QString errorIfNotOk(QSqlQuery &q, const QString &context)
 {
@@ -94,7 +99,44 @@ void BackupManager::recordSuccess(const Result &result)
     if (!result.success)
         return;
     AppSettings::instance()->setBackupLastTime(result.finishedAt.toString(Qt::ISODate));
-    AppSettings::instance()->save();
+    AppSettings::instance()->setBackupLastError(QString());
+    if (!AppSettings::instance()->save())
+        qWarning() << "BackupManager: could not save the backup time to the settings";
+}
+
+void BackupManager::recordFailure(const Result &result)
+{
+    if (result.success)
+        return;
+    AppSettings::instance()->setBackupLastError(
+        QDateTime::currentDateTime().toString(Qt::ISODate) + QLatin1Char(' ') + result.errorMessage);
+    if (!AppSettings::instance()->save())
+        qWarning() << "BackupManager: could not save the backup error to the settings";
+}
+
+QString BackupManager::backupWarning(bool enabled, const QString &lastSuccessIso,
+                                     const QString &lastError, const QDateTime &now)
+{
+    if (!enabled)
+        return tr("Las copias de seguridad automáticas están desactivadas.");
+    const QDateTime last = QDateTime::fromString(lastSuccessIso, Qt::ISODate);
+    const bool tooOld = !last.isValid() || last.addDays(kWarnAfterDays) < now;
+    if (!tooOld)
+        return QString();
+    QString msg = last.isValid()
+        ? tr("La última copia de seguridad correcta es del %1 (hace más de %2 días).")
+              .arg(last.toString("dd/MM/yyyy HH:mm")).arg(kWarnAfterDays)
+        : tr("Todavía no se ha hecho ninguna copia de seguridad correcta.");
+    if (!lastError.isEmpty())
+        msg += tr(" Último error: %1").arg(lastError);
+    return msg;
+}
+
+QString BackupManager::currentBackupWarning()
+{
+    AppSettings *s = AppSettings::instance();
+    return backupWarning(s->backupEnabled(), s->backupLastTime(), s->backupLastError(),
+                         QDateTime::currentDateTime());
 }
 
 BackupManager::Result BackupManager::performBackup()
@@ -223,35 +265,51 @@ QStringList BackupManager::backupsToPrune(const QStringList &fileNames, const QD
     static const QRegularExpression namePattern(
         R"(^laideal_(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})\.db$)");
 
-    // Sort ascending so the timestamp prefix orders chronologically; the
-    // monthly window then keeps the earliest survivor of each month.
-    QStringList sorted = fileNames;
-    sorted.sort();
-
-    QSet<QString> monthlyKept; // "yyyy-MM" already has a survivor
-    QStringList toDelete;
-    for (const QString &name : sorted) {
+    struct Copy { QString name; QDateTime ts; };
+    QVector<Copy> copies;
+    for (const QString &name : fileNames) {
         const auto m = namePattern.match(name);
         if (!m.hasMatch()) continue; // not one of ours: ignore (keep)
         const QDateTime ts(QDate(m.captured(1).toInt(), m.captured(2).toInt(), m.captured(3).toInt()),
                            QTime(m.captured(4).toInt(), m.captured(5).toInt(), m.captured(6).toInt()));
-        if (!ts.isValid()) continue;
+        if (ts.isValid())
+            copies.append({ name, ts });
+    }
+    // Newest first.
+    std::sort(copies.begin(), copies.end(), [](const Copy &a, const Copy &b) {
+        return a.ts != b.ts ? a.ts > b.ts : a.name > b.name;
+    });
+    if (copies.isEmpty())
+        return {};
 
-        const qint64 ageDays = ts.daysTo(now);
-        if (ageDays < kKeepEveryDays) {
+    // A wrong clock must not decide what is deleted: a "now" before the newest copy
+    // or long after it, or a jump between the two newest copies, prunes nothing.
+    const QDateTime newest = copies.first().ts;
+    if (now < newest || newest.addDays(kMaxClockGapDays) < now)
+        return {};
+    if (copies.size() > 1 && copies.at(1).ts.addDays(kMaxClockGapDays) < newest)
+        return {};
+
+    QSet<QString> monthlyKept; // "yyyy-MM" already has a survivor (the last copy of the month)
+    QStringList toDelete;
+    for (int i = 0; i < copies.size(); ++i) {
+        const Copy &c = copies.at(i);
+        if (i < kKeepNewest)
+            continue; // always keep the newest copies
+        if (c.ts.addDays(kKeepEveryDays) > now)
             continue; // recent: keep every copy
-        }
-        if (ageDays > kKeepMonthlyYears * 365) {
-            toDelete << name; // beyond the retention window
+        if (c.ts.addYears(kKeepMonthlyYears) < now) {
+            toDelete << c.name; // beyond the retention window
             continue;
         }
-        // Monthly window: keep the first survivor per (year, month), delete the rest.
-        const QString monthKey = ts.toString("yyyy-MM");
+        // Monthly window, newest first: the first copy seen of a month is its last one.
+        const QString monthKey = c.ts.toString("yyyy-MM");
         if (!monthlyKept.contains(monthKey))
             monthlyKept.insert(monthKey);
         else
-            toDelete << name;
+            toDelete << c.name;
     }
+    toDelete.sort();
     return toDelete;
 }
 

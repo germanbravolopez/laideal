@@ -7,11 +7,12 @@
 #   1. Prepends Qt + MinGW to PATH for this process.
 #   2. Validates the supplied version matches `project(laideal VERSION ...)` in CMakeLists.txt.
 #   3. Refuses to overwrite an existing release (zip / installer / staging dir).
-#   4. Configures CMake (Release, MinGW Makefiles) into build-release/.
-#   5. Builds with all available cores.
+#   4. Configures CMake (Release, Ninja) into build-release/.
+#   5. Builds with all available cores, then runs ctest (as ci.yml does).
 #   6. Stages laideal.exe into releases/<version>/ and runs windeployqt.
-#   7. Runs Inno Setup ISCC.exe -> build-release/laideal_setup_<version>.exe.
-#   8. Deletes the staging dir; leaves the installer in build-release/.
+#   7. Zips the staged folder -> build-release/<version>.zip (as ci.yml does).
+#   8. Runs Inno Setup ISCC.exe -> build-release/laideal_setup_<version>.exe.
+#   9. Deletes the staging dir; leaves the installer and zip in build-release/.
 #
 # The installer is written into build-release/ (gitignored, wiped on each run)
 # rather than into a tracked releases/ subfolder, so the manual release flow
@@ -91,6 +92,10 @@ Step "Building"
 & cmake --build $BuildDir
 if ($LASTEXITCODE -ne 0) { Fail "Build failed" }
 
+Step "Running tests (ctest)"
+& ctest --test-dir $BuildDir --output-on-failure --no-tests=error --timeout 120
+if ($LASTEXITCODE -ne 0) { Fail "ctest failed - no release is built from a red suite" }
+
 $builtExe = Join-Path $BuildDir 'src\app\laideal.exe'
 if (-not (Test-Path $builtExe)) { Fail "Build succeeded but exe not at $builtExe" }
 # Same guard as the CI release job: a UI-test build (--fake-aeat) must never be released.
@@ -118,6 +123,11 @@ foreach ($d in @('libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll',
     if (-not (Test-Path (Join-Path $StagingDir $d))) { Fail "windeployqt did not deploy '$d'" }
 }
 
+Step "Creating ZIP archive"
+$ZipPath = Join-Path $BuildDir "$Version.zip"
+Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
+[IO.Compression.ZipFile]::CreateFromDirectory($StagingDir, $ZipPath)
+
 Step "Compiling installer (Inno Setup)"
 # /O overrides the .iss OutputDir so the installer lands in build-release\ (wiped
 # each run, gitignored) instead of accumulating inside releases\.
@@ -133,5 +143,6 @@ Remove-Item -Recurse -Force $StagingDir
 
 Write-Host ""
 Write-Host "Release v$Version ready:" -ForegroundColor Green
+Write-Host "  ZIP:       $ZipPath"
 Write-Host "  Installer: $InstallerPath"
 Write-Host "  SHA-256:   $InstallerPath.sha256 (upload it with the installer)"

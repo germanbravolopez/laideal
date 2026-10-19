@@ -134,6 +134,7 @@ MainWindow::MainWindow(QWidget *parent)
                 const BackupManager::Result res = m_backupManager->performBackup();
                 QMetaObject::invokeMethod(this, [this, res]() {
                     BackupManager::recordSuccess(res);   // settings are written on the GUI thread
+                    BackupManager::recordFailure(res);
                     if (!res.success) {
                         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
                                           + "<br>" + res.errorMessage.toHtmlEscaped());
@@ -452,6 +453,7 @@ void MainWindow::mainwindowInitialSettings()
             AppSettings::instance()->setBackupLastVersion(version);
             BackupManager::recordSuccess(res);   // saves the settings
         } else {
+            BackupManager::recordFailure(res);
             startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
                                                   .arg(res.errorMessage).toHtmlEscaped());
         }
@@ -459,6 +461,9 @@ void MainWindow::mainwindowInitialSettings()
     if (!migrateDatabase(db))
         startProblems << UiKit::errorHtml(tr("La base de datos no se ha actualizado del todo para esta versión. "
                                              "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
+    // Req. 4: backups switched off, or none correct for days, stay visible at every start.
+    if (const QString backup = BackupManager::currentBackupWarning(); !backup.isEmpty())
+        startProblems << UiKit::warnHtml(backup.toHtmlEscaped());
     if (!startProblems.isEmpty())
         m_result->setText(startProblems.join("<br>"));
 
@@ -1683,6 +1688,7 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
     const auto res = m_backupManager->performBackup();
     QApplication::restoreOverrideCursor();
     BackupManager::recordSuccess(res);
+    BackupManager::recordFailure(res);
 
     if (!res.success) {
         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad."))

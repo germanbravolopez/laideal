@@ -16,6 +16,14 @@ build*
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+
+# certificates and settings copies (the test certificates under tests/fixtures are synthetic)
+*.pfx
+*.p12
+!tests/fixtures/**/*.p12
+.laideal_settings*.json
+laideal_settings*.json
 
 # qtcreator generated files
 *.pro.user*

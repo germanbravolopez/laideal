@@ -408,6 +408,8 @@ bool    AppSettings::backupEnabled() const            { return bln({"backup", "e
 void    AppSettings::setBackupEnabled(bool v)         { setBln({"backup", "enabled"}, v); }
 QString AppSettings::backupLastTime() const           { return str({"backup", "last_time"}); }
 void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }
+QString AppSettings::backupLastError() const           { return str({"backup", "last_error"}); }
+void    AppSettings::setBackupLastError(const QString &v) { setStr({"backup", "last_error"}, v); }
 QString AppSettings::backupLastVersion() const        { return str({"backup", "last_version"}); }
 void    AppSettings::setBackupLastVersion(const QString &v) { setStr({"backup", "last_version"}, v); }
 

@@ -13,6 +13,9 @@ name: UI smoke
 
 on:
   workflow_dispatch:
+  # The release PR (develop -> master) runs it; never on every push.
+  pull_request:
+    branches: [ master ]
   push:
     branches: [ develop, 'feature/**' ]
     paths:
