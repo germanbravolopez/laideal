@@ -8,6 +8,8 @@
 #include <QMessageBox>
 #include <QStyleFactory>
 #include <QHash>
+#include <QPointer>
+#include <QThread>
 #include "verifactuintegration.h"
 #include "cancelinvoicedialog.h"
 #include "rectifyinvoicedialog.h"
@@ -187,6 +189,7 @@ private:
     class QLabel *m_aeatEnvironment = nullptr;   // status bar: the direct client in pre-production
     class QLabel *m_refusedInvoices = nullptr;   // status bar: invoices AEAT refused, until resent
     BackupManager *m_backupManager = nullptr;
+    QPointer<QThread> m_backupThread;   // the automatic backup, waited for on close
 };
 
 #endif // MAINWINDOW_H

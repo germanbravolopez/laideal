@@ -1,4 +1,5 @@
 #include "sql_lite.h"
+#include "ingresos_schema.h"
 
 #include "../verifactu/verifactutypes.h"
 
@@ -9,6 +10,7 @@
 #include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
 
 #include <cmath>
 
@@ -96,21 +98,24 @@ static QString closureTimestamp()
 // that the old per-row edit_lock flag closed (any ingresos / gastos row of it set to 1)
 // gets a 'migration' closure; afterwards edit_lock is never read again, so a quarter
 // reopened later is not closed again by its stale flags. On an open db.
-static void migrateAccountingClosures(QSqlDatabase &db)
+static bool migrateAccountingClosures(QSqlDatabase &db)
 {
     QSqlQuery q(db);
     const bool exists = q.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounting_closures'")
                         && q.next();
     q.finish();
     if (exists) {
+        bool ok = true;
         for (const char *sql : kAccountingClosuresSchema)   // index / triggers of an older build
-            if (!q.exec(QString::fromLatin1(sql)))
+            if (!q.exec(QString::fromLatin1(sql))) {
+                ok = false;
                 qWarning() << "migrateAccountingClosures: schema statement failed -" << q.lastError().text();
-        return;
+            }
+        return ok;
     }
     if (!db.transaction()) {
         qCritical() << "migrateAccountingClosures: could not start a transaction -" << db.lastError().text();
-        return;
+        return false;
     }
     bool ok = true;
     for (const char *sql : kAccountingClosuresSchema)
@@ -132,11 +137,13 @@ static void migrateAccountingClosures(QSqlDatabase &db)
     if (ok && db.commit()) {
         qDebug() << "migrateAccountingClosures: created accounting_closures," << migrated
                  << "quarter(s) closed by edit_lock carried over";
+        return true;
     } else {
         // Without the table every quarter reads as open: say it loudly, retried at the next start.
         qCritical() << "migrateAccountingClosures: migration failed, rolled back -" << q.lastError().text()
                     << db.lastError().text();
         db.rollback();
+        return false;
     }
 }
 
@@ -144,9 +151,9 @@ static void migrateAccountingClosures(QSqlDatabase &db)
 // Public functions
 // ---------------------------------------------------------------------------
 
-void migrateDatabase(QSqlDatabase &db)
+bool migrateDatabase(QSqlDatabase &db)
 {
-    if (dbNotConfigured(db, __func__)) return;
+    if (dbNotConfigured(db, __func__)) return false;
     qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
     db.open();
     QSqlQuery q(db);
@@ -178,9 +185,14 @@ void migrateDatabase(QSqlDatabase &db)
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
     // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
+    // The ALTERs fail on purpose when the column exists: check the result instead.
+    bool ok = true;
+    const auto fail = [&ok]() { ok = false; return qWarning(); };   // a step that failed
+    if (db.record("ingresos").count() <= INGRESOS_COL_VERIFACTU_CANCEL_XML)
+        fail() << "migrateDatabase: adding the verifactu_* columns failed";
 
     // Before kAmountEditableWhere is used below: it reads accounting_closures.
-    migrateAccountingClosures(db);
+    ok = migrateAccountingClosures(db) && ok;
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
@@ -192,7 +204,7 @@ void migrateDatabase(QSqlDatabase &db)
     if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
                 "WHERE verifactu_estado = 'PENDIENTE' "
                 "  AND (pagado != 'SI' OR fecha_pago IS NULL OR fecha_pago = '')"))
-        qWarning() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
+        fail() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
                  << "unpaid PENDIENTE rows as SIN COBRAR";
@@ -207,7 +219,7 @@ void migrateDatabase(QSqlDatabase &db)
                 "WHERE estado = '" INGRESOS_ESTADO_ANULADO "' AND verifactu_estado IN ('ANULADA', 'RECTIFICADA') "
                 "  AND (pagado IS NULL OR pagado != 'SI') "
                 "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '')"))
-        qWarning() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
+        fail() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
                  << q.numRowsAffected() << "voided garments";
@@ -233,7 +245,7 @@ void migrateDatabase(QSqlDatabase &db)
                 "WHERE (pagado IS NULL OR pagado != 'SI') "
                 "  AND verifactu_estado = 'ANULADA' "
                 "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
-        qWarning() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
+        fail() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
                  << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
@@ -258,7 +270,7 @@ void migrateDatabase(QSqlDatabase &db)
                         "WHERE c.pagado = 'SI' AND COALESCE(c.verifactu_estado, '') = '' "
                         "  AND COALESCE(c.verifactu_invoice_seq, 0) = 0 "
                         "GROUP BY c.rowid"))
-            qWarning() << "migrateDatabase: split-row search failed -" << match.lastError().text();
+            fail() << "migrateDatabase: split-row search failed -" << match.lastError().text();
         while (match.next()) {
             const QString ticket = match.value(1).toString();
             if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
@@ -291,7 +303,7 @@ void migrateDatabase(QSqlDatabase &db)
             upd.bindValue(":src", r.second);
             upd.bindValue(":dst", r.first);
             if (!upd.exec())
-                qWarning() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
+                fail() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
         }
         if (!relinks.isEmpty())
             qDebug() << "migrateDatabase: relinked" << relinks.size()
@@ -310,7 +322,7 @@ void migrateDatabase(QSqlDatabase &db)
                       "      GROUP BY n_recibo, COALESCE(hash, '') HAVING COUNT(*) > 1 OR h = '') d "
                       "  ON d.n_recibo = i.n_recibo AND d.h = COALESCE(i.hash, '') "
                       "ORDER BY i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') = '', i.rowid"))
-            qWarning() << "migrateDatabase: duplicate-hash search failed -" << sel.lastError().text();
+            fail() << "migrateDatabase: duplicate-hash search failed -" << sel.lastError().text();
         struct Change { qlonglong rowid; QString ticket, oldHash; };
         QVector<Change> changes;
         QString groupTicket, groupHash;
@@ -344,7 +356,7 @@ void migrateDatabase(QSqlDatabase &db)
                 qDebug() << "migrateDatabase: ticket" << c.ticket << "rowid" << c.rowid
                          << "hash" << c.oldHash << "->" << newHash;
             else
-                qWarning() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
+                fail() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
         }
     }
 
@@ -370,7 +382,7 @@ void migrateDatabase(QSqlDatabase &db)
             upd.bindValue(":n",   rows[i].first);
             upd.bindValue(":h",   rows[i].second);
             if (!upd.exec())
-                qWarning() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
+                fail() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
                            << upd.lastError().text();
         }
         if (!rows.isEmpty())
@@ -391,7 +403,7 @@ void migrateDatabase(QSqlDatabase &db)
         };
         for (const QString &sql : fixes) {
             if (!q.exec(sql))
-                qWarning() << "migrateDatabase: comma-decimal fix failed -" << q.lastError().text();
+                fail() << "migrateDatabase: comma-decimal fix failed -" << q.lastError().text();
             else if (q.numRowsAffected() > 0)
                 qDebug() << "migrateDatabase: replaced the decimal comma in" << q.numRowsAffected() << "amount(s) -" << sql.left(30);
         }
@@ -405,12 +417,13 @@ void migrateDatabase(QSqlDatabase &db)
     if (!q.exec("UPDATE ingresos SET verifactu_estado = UPPER(verifactu_estado) "
                 "WHERE verifactu_estado IS NOT NULL AND verifactu_estado != '' "
                 "  AND verifactu_estado != UPPER(verifactu_estado)"))
-        qWarning() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
+        fail() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
                  << "verifactu_estado value(s)";
 
     db.close();
+    return ok;
 }
 
 int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok)

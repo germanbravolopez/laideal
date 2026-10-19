@@ -20,13 +20,19 @@ public:
         QString backupPath;     // absolute path of the created file (empty on failure)
         QString errorMessage;   // localized Spanish message suitable for QMessageBox
         qint64  bytesWritten = 0;
+        QDateTime finishedAt;   // when the copy was verified (success only)
     };
 
-    // Snapshot the live DB via SQLite "VACUUM INTO". Synchronous. Verifies
-    // the copy with PRAGMA integrity_check; deletes it and reports failure
-    // if the check does not return "ok". Applies the retention policy on
-    // success and persists the timestamp to AppSettings.
+    // Snapshot the live DB via SQLite "VACUUM INTO" into "<name>.part", verify it
+    // with PRAGMA integrity_check, then rename it to its final name - a cut-off copy
+    // never looks like a backup. Synchronous; one run at a time in the process (a
+    // second call fails at once). Applies the retention policy on success. Never
+    // touches AppSettings, so it can run on a worker thread: the caller records the
+    // success with recordSuccess() on the GUI thread.
     Result performBackup();
+
+    // Saves the time of a successful backup to AppSettings. GUI thread only.
+    static void recordSuccess(const Result &result);
 
     // True when the recorded last-backup timestamp is older than
     // minIntervalSeconds (default 24h) or no backup has ever run.
@@ -50,6 +56,7 @@ private:
     // (creates it if missing).
     QString backupDirectory() const;
     static QString timestampedFileName();
+    static void removeStalePartFiles(const QString &dir);
 };
 
 #endif // BACKUP_MANAGER_H

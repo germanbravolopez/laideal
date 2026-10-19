@@ -55,9 +55,9 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 
 **[COVERED]**
 - `ingresos` rows are never deleted by the application.
-- `src/backup/BackupManager` snapshots the live SQLite DB via `VACUUM INTO` to `<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db`. The copy is re-opened read-only and validated with `PRAGMA integrity_check`; a failed verdict deletes the copy and surfaces the error.
+- `src/backup/BackupManager` snapshots the live SQLite DB via `VACUUM INTO` to `<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db.part`. The copy is re-opened read-only and validated with `PRAGMA integrity_check`, and only then renamed to its final `.db` name. A failed verdict deletes the `.part` and surfaces the error, so a cut-off copy never counts as a backup. A run never removes a copy it did not create, and only one runs at a time.
 - Retention: every backup from the last 30 days is kept; older backups are reduced to one per calendar month for 4 years (matching the LGT prescription window), then deleted.
-- Triggers: (1) auto on app startup once per 24h (silent on success, `QMessageBox` warning on failure); (2) on demand via **Archivo → Hacer copia de seguridad ahora**.
+- Triggers: (1) auto on app startup once per 24h (silent on success, a red result-panel message on failure); (2) on the first start of a new version, before `migrateDatabase()` changes the schema; (3) on demand via **Hacer copia de seguridad ahora**.
 - See `docs/modules/backup.md` for the full contract.
 
 ## 5. Trazabilidad

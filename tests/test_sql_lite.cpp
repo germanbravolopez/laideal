@@ -492,6 +492,17 @@ private slots:
 
     // ---- Contabilidad's quarterly closure (accounting_closures) ----
 
+    // A failed step is reported to the caller, which says so on screen: the app must not
+    // carry on silently on a half-migrated schema.
+    void test_migrateDatabase_reportsAFailedStep()
+    {
+        QVERIFY(migrateDatabase(m_db));
+        exec("ALTER TABLE gastos RENAME TO gastos_renamed");
+        QVERIFY(!migrateDatabase(m_db));
+        exec("ALTER TABLE gastos_renamed RENAME TO gastos");
+        QVERIFY(migrateDatabase(m_db));
+    }
+
     // Rows of a shop DB from before the table existed: the old per-row edit_lock flag
     // closes its quarter once, then edit_lock is ignored.
     void test_migrateDatabase_backfillsClosedQuartersFromEditLock()
@@ -504,7 +515,7 @@ private slots:
              "('8', '10-02-1999', 'h', '1')");                                    // year out of range
         exec("INSERT INTO gastos (n_factura, fecha, importe, edit_lock) VALUES "
              "('F1', '15-08-2025', '5.00', '1'), ('F2', '01-11-2025', '5.00', '0'), ('F3', '', '5.00', '1')");
-        migrateDatabase(m_db);
+        QVERIFY(migrateDatabase(m_db));
 
         QCOMPARE(closedQuarterKeys(m_db), (QSet<int>{ quarterKey(1, 2026), quarterKey(3, 2025) }));
         QCOMPARE(scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("2"));

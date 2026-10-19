@@ -67,6 +67,7 @@ MainWindow::MainWindow(QWidget *parent)
     buildUi();
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
+    db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=15000");   // a save waits out a backup's read
     mainwindowInitialSettings();
     initializeVerifactu();
 
@@ -123,7 +124,6 @@ MainWindow::MainWindow(QWidget *parent)
     // it doesn't block the first paint of the window. Silent on success - the
     // operator only sees a message if the backup fails (since the regulatory
     // requirement is durable storage, a failed snapshot is worth surfacing).
-    m_backupManager = new BackupManager(this);
     if (m_backupManager->needsBackup()) {
         QTimer::singleShot(3000, this, [this]() {
             // performBackup() does VACUUM INTO + integrity_check (seconds on a
@@ -133,6 +133,7 @@ MainWindow::MainWindow(QWidget *parent)
             QThread *worker = QThread::create([this]() {
                 const BackupManager::Result res = m_backupManager->performBackup();
                 QMetaObject::invokeMethod(this, [this, res]() {
+                    BackupManager::recordSuccess(res);   // settings are written on the GUI thread
                     if (!res.success) {
                         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
                                           + "<br>" + res.errorMessage.toHtmlEscaped());
@@ -143,6 +144,7 @@ MainWindow::MainWindow(QWidget *parent)
                 }, Qt::QueuedConnection);
             });
             connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+            m_backupThread = worker;
             worker->start();
         });
     }
@@ -150,6 +152,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // Closing during the automatic backup waits for it: a cut-off copy is only a .part file,
+    // but the thread must not outlive the window it reports to.
+    if (m_backupThread)
+        m_backupThread->wait();
     delete ui;
 }
 
@@ -432,7 +438,28 @@ void MainWindow::buildUi()
 
 void MainWindow::mainwindowInitialSettings()
 {
-    migrateDatabase(db);
+    QStringList startProblems;   // HTML lines for the result panel
+    m_backupManager = new BackupManager(this);
+    // A new version migrates the database: keep a copy of it as it was first.
+    const QString version = Updater::currentVersion();
+    if (AppSettings::instance()->backupEnabled() && AppSettings::instance()->backupLastVersion() != version
+        && QFile::exists(DB_PATH)) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        const BackupManager::Result res = m_backupManager->performBackup();
+        QApplication::restoreOverrideCursor();
+        if (res.success) {
+            AppSettings::instance()->setBackupLastVersion(version);
+            BackupManager::recordSuccess(res);   // saves the settings
+        } else {
+            startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
+                                                  .arg(res.errorMessage).toHtmlEscaped());
+        }
+    }
+    if (!migrateDatabase(db))
+        startProblems << UiKit::errorHtml(tr("La base de datos no se ha actualizado del todo para esta versión. "
+                                             "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
+    if (!startProblems.isEmpty())
+        m_result->setText(startProblems.join("<br>"));
 
     connect(ui->actionConfiguracion, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
@@ -1635,6 +1662,7 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
     QApplication::setOverrideCursor(Qt::WaitCursor);
     const auto res = m_backupManager->performBackup();
     QApplication::restoreOverrideCursor();
+    BackupManager::recordSuccess(res);
 
     if (!res.success) {
         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad."))

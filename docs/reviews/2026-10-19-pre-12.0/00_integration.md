@@ -196,7 +196,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 | recog_prendas | Cobrar submits before the rows are stored as paid (crash window) | Store paid + PENDIENTE first, then submit, patch on reply (like `saveTicket`) | M | 00 |
 | P1 ✅ FIXED 19-10-2026 | app / verifactu | Chain gate only at UI level: Anular and startup Reintentar skip it (A5, A6) | Enforce in the backend / facade; Reintentar honours an empty reqId | S | app (pending verifactu-direct) |
 | P1 ✅ FIXED 19-10-2026 | uikit | Enter on a focused secondary / Cerrar presses the primary (possible AEAT send) | `click()` the focused button; restrict to `window()==dialog` | S | uikit |
-| P1 | backup | Same-second backup deletes the good one; partial files; concurrent runs; AppSettings off-thread | `.part` + rename; never remove what you did not create; running guard; settings write on the GUI thread | S | backup |
+| P1 ✅ FIXED 19-10-2026 | backup | Same-second backup deletes the good one; partial files; concurrent runs; AppSettings off-thread | `.part` + rename; never remove what you did not create; running guard; settings write on the GUI thread | S | backup |
 | P1 | app / sql_lite | `migrateDatabase` is void and runs before any backup of the new version | Pre-migration snapshot on version change; return a failure count and show it | S-M | 00, app A14 |
 | P1 | CI | Deploy assertion misses `qsqlite.dll` and the TLS plugin; `release.ps1` has none | Add to `ci.yml:195-210` and `release.ps1` | S | 00, updater |
 | P1 | printing | Factura simplificada prints no fecha de expedición (QR uses `fecha_pago`); "Factura completa" headed SIMPLIFICADA | Print the issue date; heading per type; auditor decision | M | printing |

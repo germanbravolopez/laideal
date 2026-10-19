@@ -20,7 +20,8 @@ void    setDbPath(const QString &path);
 QString dbPath();
 #define DB_PATH dbPath()
 
-void migrateDatabase(QSqlDatabase &db);
+// False when a migration step failed (logged): the schema may be half-migrated.
+bool migrateDatabase(QSqlDatabase &db);
 
 int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok = nullptr);
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);

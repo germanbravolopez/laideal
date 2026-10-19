@@ -79,10 +79,12 @@ Check checkSchema(QSqlDatabase &db)
     QStringList failures;
     {
         LogCapture capture;
-        migrateDatabase(db);
+        const bool migrated = migrateDatabase(db);
         for (const QString &m : capture.messages)
             if (m.contains(QLatin1String("failed"), Qt::CaseInsensitive))
                 failures << m;
+        if (!migrated && failures.isEmpty())
+            failures << QStringLiteral("migrateDatabase");
     }
     if (!failures.isEmpty())
         return fail(c, QStringLiteral("%1 instrucción(es) de migración fallaron (ver el log)").arg(failures.size()));

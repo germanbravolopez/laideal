@@ -14,12 +14,19 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include <atomic>
+
 namespace {
 // Connection names are unique so the backup never piggy-backs on the app's
 // main connection (which would interfere with QSqlDatabase::open/close
 // cycles in sql_lite helpers).
 constexpr const char *kSnapshotConnectionName = "laideal_backup_snapshot";
 constexpr const char *kVerifyConnectionName   = "laideal_backup_verify";
+constexpr const char *kPartSuffix             = ".part";
+
+// One backup at a time in the process: the automatic one runs on a worker thread
+// and the manual one on the GUI thread, and both use the connection names above.
+std::atomic<bool> s_running{ false };
 
 // Daily-for-30-days + monthly-for-4-years window. Older copies are removed
 // by pruneOldBackups().
@@ -58,6 +65,15 @@ QString BackupManager::timestampedFileName()
         .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss"));
 }
 
+void BackupManager::removeStalePartFiles(const QString &dir)
+{
+    // Left by a run that was cut off (crash, power cut); none is being written now.
+    QDir d(dir);
+    for (const QString &name : d.entryList({ QStringLiteral("laideal_*.db") + kPartSuffix }, QDir::Files))
+        if (QFile::remove(d.filePath(name)))
+            qWarning() << "BackupManager: removed an unfinished copy" << name;
+}
+
 bool BackupManager::needsBackup(qint64 minIntervalSeconds) const
 {
     if (!AppSettings::instance()->backupEnabled())
@@ -68,12 +84,29 @@ bool BackupManager::needsBackup(qint64 minIntervalSeconds) const
     const QDateTime lastTime = QDateTime::fromString(last, Qt::ISODate);
     if (!lastTime.isValid())
         return true;
-    return lastTime.secsTo(QDateTime::currentDateTime()) >= minIntervalSeconds;
+    // A last time in the future (the clock was wrong then) must not stop backups.
+    const qint64 elapsed = lastTime.secsTo(QDateTime::currentDateTime());
+    return elapsed < 0 || elapsed >= minIntervalSeconds;
+}
+
+void BackupManager::recordSuccess(const Result &result)
+{
+    if (!result.success)
+        return;
+    AppSettings::instance()->setBackupLastTime(result.finishedAt.toString(Qt::ISODate));
+    AppSettings::instance()->save();
 }
 
 BackupManager::Result BackupManager::performBackup()
 {
     Result res;
+    if (s_running.exchange(true)) {
+        res.errorMessage = tr("Ya hay una copia de seguridad en curso; espere a que termine.");
+        qWarning() << "BackupManager: a backup is already running";
+        return res;
+    }
+    struct Release { ~Release() { s_running = false; } } release;
+
     const QString sourcePath = dbPath();
     if (sourcePath.isEmpty() || !QFile::exists(sourcePath)) {
         res.errorMessage = tr("No se encuentra la base de datos en %1.").arg(sourcePath);
@@ -82,7 +115,15 @@ BackupManager::Result BackupManager::performBackup()
     }
 
     const QString dir = backupDirectory();
-    const QString target = QDir(dir).filePath(timestampedFileName());
+    removeStalePartFiles(dir);
+    const QString finalPath = QDir(dir).filePath(timestampedFileName());
+    if (QFile::exists(finalPath)) {
+        // Same second as the previous copy: that one is kept, never overwritten.
+        res.errorMessage = tr("Ya se ha hecho una copia hace un momento (%1).").arg(QFileInfo(finalPath).fileName());
+        qWarning() << "BackupManager: a copy with this timestamp already exists -" << finalPath;
+        return res;
+    }
+    const QString target = finalPath + kPartSuffix;
 
     // Step 1: VACUUM INTO produces a transactionally-consistent point-in-time
     // copy without requiring exclusive access on the live DB.
@@ -93,6 +134,7 @@ BackupManager::Result BackupManager::performBackup()
     {
         QSqlDatabase snap = QSqlDatabase::addDatabase("QSQLITE", kSnapshotConnectionName);
         snap.setDatabaseName(sourcePath);
+        snap.setConnectOptions("QSQLITE_BUSY_TIMEOUT=30000");   // wait out a ticket being saved
         if (!snap.open()) {
             res.errorMessage = tr("No se pudo abrir la base de datos para copia: %1")
                                    .arg(snap.lastError().text());
@@ -157,17 +199,20 @@ BackupManager::Result BackupManager::performBackup()
         QFile::remove(target);
         return res;
     }
+    if (!QFile::rename(target, finalPath)) {
+        res.errorMessage = tr("No se pudo dar el nombre final a la copia %1.").arg(QFileInfo(finalPath).fileName());
+        qWarning() << "BackupManager: rename" << target << "->" << finalPath << "failed";
+        QFile::remove(target);
+        return res;
+    }
 
     res.success      = true;
-    res.backupPath   = target;
-    res.bytesWritten = QFileInfo(target).size();
-
-    AppSettings::instance()->setBackupLastTime(
-        QDateTime::currentDateTime().toString(Qt::ISODate));
-    AppSettings::instance()->save();
+    res.backupPath   = finalPath;
+    res.bytesWritten = QFileInfo(finalPath).size();
+    res.finishedAt   = QDateTime::currentDateTime();
 
     const int pruned = pruneOldBackups();
-    qDebug() << "BackupManager: backup completed -" << target
+    qDebug() << "BackupManager: backup completed -" << finalPath
              << "(" << res.bytesWritten << "bytes, pruned" << pruned << "old copies)";
     return res;
 }

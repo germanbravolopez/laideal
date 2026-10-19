@@ -149,6 +149,9 @@ public:
     // ISO-8601 timestamp of the last successful backup (empty = never).
     QString backupLastTime() const;
     void    setBackupLastTime(const QString &v);
+    // App version ("X.Y") whose database was backed up before migrating it.
+    QString backupLastVersion() const;
+    void    setBackupLastVersion(const QString &v);
 
 private:
     AppSettings();
