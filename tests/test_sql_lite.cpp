@@ -276,6 +276,19 @@ private slots:
         QCOMPARE(notices, 1);
     }
 
+    // Without a copy taken before the migration, the schema steps run and the row rewrites wait.
+    void test_migrateDatabase_schemaOnlyLeavesRowsAlone()
+    {
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, importe, pagado, estado, verifactu_estado) "
+             "VALUES ('0', '67', 'h67', '1.005', 'NO', 'En tienda', 'SIN COBRAR')");
+        QVERIFY(migrateDatabase(m_db, false));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h67'"), QStringLiteral("1.005"));   // not rounded yet
+        QCOMPARE(scalar("SELECT COUNT(*) FROM pragma_table_info('ingresos') WHERE name = 'verifactu_cancel_xml'"),
+                 QStringLiteral("1"));
+        QVERIFY(migrateDatabase(m_db));
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='h67'"), QStringLiteral("1.01"));
+    }
+
     // sql_lite F7: a voided garment with no date to move is not matched again at every start.
     void test_migrateDatabase_voidDateStepSkipsDatelessRows()
     {

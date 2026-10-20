@@ -39,7 +39,10 @@ private:
 };
 
 // False when a migration step failed (logged): the schema may be half-migrated.
-bool migrateDatabase(QSqlDatabase &db);
+// rewriteData = false runs only the schema steps (tables, columns, closures, guards) and
+// leaves every repair that rewrites rows for a later start: used when no copy of the
+// database could be taken before a new version migrates it.
+bool migrateDatabase(QSqlDatabase &db, bool rewriteData = true);
 
 int         readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok = nullptr);
 int         readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QString &column, const QString &table);

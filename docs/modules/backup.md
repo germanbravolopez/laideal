@@ -65,7 +65,7 @@ The backup directory is **not** configurable separately — `BackupManager::back
 
 ## Wiring (MainWindow)
 
-- `mainwindowInitialSettings()`: creates `m_backupManager`. On the first start of a new version (`backup.last_version` differs from `Updater::currentVersion()`), it takes a synchronous backup **before** `migrateDatabase()`, so the database as the previous version left it is kept. A failure is shown in the result panel. `migrateDatabase()` returns `false` when a step failed, and the result panel says so too.
+- `mainwindowInitialSettings()`: creates `m_backupManager`. On the first start of a new version (`backup.last_version` differs from `Updater::currentVersion()`), it takes a synchronous backup **before** `migrateDatabase()`, so the database as the previous version left it is kept. A failure is shown in the result panel, and then `migrateDatabase(db, false)` runs only the schema steps: the repairs that rewrite rows wait until a later start takes the copy. `migrateDatabase()` returns `false` when a step failed, and the result panel says so too.
 - Constructor: `if (needsBackup()) QTimer::singleShot(3000, ...)` defers the daily snapshot past the first paint and runs it on a worker thread, kept in `m_backupThread`. `~MainWindow` waits for it.
 - Auto path: silent on success (8 s status-bar message), a red result-panel message on failure — a failed backup is the only signal the operator gets.
 - Manual path: *Hacer copia de seguridad ahora* calls `performBackup()` under `WaitCursor` and shows path + size in the result panel.

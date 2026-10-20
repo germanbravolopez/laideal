@@ -184,7 +184,7 @@ static const char *const kBaseSchema[] = {
     "CREATE TABLE IF NOT EXISTS migration_notes (note TEXT PRIMARY KEY, first_seen TEXT NOT NULL)",
 };
 
-bool migrateDatabase(QSqlDatabase &db)
+bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
 {
     if (dbNotConfigured(db, __func__)) return false;
     qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
@@ -246,6 +246,13 @@ bool migrateDatabase(QSqlDatabase &db)
     for (const char *sql : kIngresosGuards)
         if (!q.exec(QString::fromLatin1(sql)))
             fail() << "migrateDatabase: an ingresos guard trigger failed -" << q.lastError().text();
+
+    // Everything below rewrites rows: never without a copy of the database as it was.
+    if (!rewriteData) {
+        qWarning() << "migrateDatabase: schema only - the data repairs wait until a backup succeeds";
+        q.finish();
+        return ok;
+    }
 
     // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
     // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting

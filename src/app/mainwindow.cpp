@@ -442,6 +442,7 @@ void MainWindow::mainwindowInitialSettings()
     m_backupManager = new BackupManager(this);
     // A new version migrates the database: keep a copy of it as it was first.
     const QString version = Updater::currentVersion();
+    bool rewriteData = true;   // false: no copy of the database as the previous version left it
     if (AppSettings::instance()->backupEnabled() && AppSettings::instance()->backupLastVersion() != version
         && QFile::exists(DB_PATH)) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -452,11 +453,14 @@ void MainWindow::mainwindowInitialSettings()
             BackupManager::recordSuccess(res);   // saves the settings
         } else {
             BackupManager::recordFailure(res);
+            rewriteData = false;
             startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
-                                                  .arg(res.errorMessage).toHtmlEscaped());
+                                                  .arg(res.errorMessage).toHtmlEscaped())
+                             + "<br>" + tr("Las reparaciones de datos de esta versión esperan a que la copia se haga "
+                                           "(se reintenta al iniciar de nuevo).");
         }
     }
-    if (!migrateDatabase(db))
+    if (!migrateDatabase(db, rewriteData))
         startProblems << UiKit::errorHtml(tr("La base de datos no se ha actualizado del todo para esta versión. "
                                              "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
     // Req. 4: backups switched off, or none correct for days, stay visible at every start.
