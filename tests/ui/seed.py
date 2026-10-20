@@ -94,6 +94,10 @@ def seed_smoke_tickets(path: Path) -> None:
         db.execute("DELETE FROM ingresos")
         db.execute("DELETE FROM gastos")
         db.executemany(f"INSERT INTO ingresos ({_INGRESOS}) VALUES ({', '.join('?' * 20)})", SMOKE_TICKETS)
+        # An accepted invoice keeps the verification URL of AEAT's answer; reprints draw it.
+        db.execute("UPDATE ingresos SET verifactu_url_qr = ? WHERE n_recibo = '4'",
+                   ("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=4"
+                    "&fecha=16-09-2026&importe=24.20",))
         db.execute("INSERT INTO gastos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", SMOKE_GASTO)
         db.executemany("INSERT INTO clientes VALUES (?, '', '', ?)",
                        [("SMOKE", "Calle Smoke 1"), ("Señora Álvarez", "")])
