@@ -509,6 +509,12 @@ void MainWindow::mainwindowInitialSettings()
                 QMessageBox::information(&dlg, tr("Conexión correcta"),
                     tr("Servidor accesible (%1).\n\nEntorno: %2\nNIF: %3\nEndpoint: %4")
                         .arg(result.errorDescription, env, nif, endpoint));
+            } else if (result.status == VerifactuResult::ERROR) {
+                // The server answered and refused the key (testConnection's only ERROR).
+                QMessageBox::warning(&dlg, tr("Clave rechazada"),
+                    tr("El servidor responde, pero ha rechazado la clave de servicio: compruébela.\n\n"
+                       "Detalle: %1\nEntorno: %2\nEndpoint: %3")
+                        .arg(result.errorDescription, env, endpoint));
             } else {
                 QMessageBox::warning(&dlg, tr("Conexión fallida"),
                     tr("No se pudo conectar al servidor.\n\nDetalle: %1\nEntorno: %2\nEndpoint: %3")

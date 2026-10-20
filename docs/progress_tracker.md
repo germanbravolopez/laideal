@@ -40,7 +40,6 @@ From the [pre-12.0 review](reviews/2026-10-19-pre-12.0/README.md) of 19-10-2026 
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Configuración: a refused gateway key still says "No se pudo conectar" | `src/appsettings/settingsdialog.cpp` | `testConnection` now tells a refused key apart from a network failure; the Configuración message should say which. |
 | Small leftovers of the pre-12.0 P3 cleanup | `src/listado/listado.cpp`, `src/tableview/*`, `src/uikit/*`, `src/appsettings/settingsdialog.cpp` | The item delegates `Listado::populateTable` re-creates at every refresh still accumulate; the hard-coded colours (green 0,180,0 on white is about 2.6:1) and the `tr()` consistency of tableview / filterwidget / linkdelegate / settingsdialog; the about 25 `db.open()` / `db.close()` call sites outside `sql_lite` (X7's second half) to move onto `ConnectionScope`. From the review's P3 rows. |
 | Backups to a second folder (product option) | `src/backup/backup_manager.cpp`, `src/appsettings/settingsdialog.cpp` | Backups sit next to the live database (same disk); Req. 4 durability holds only if that folder is synced or copied offsite. Option: a second backup folder in Configuración (a USB or another drive). Owner's call. From the pre-12.0 review (backup Medium). |
 | Repo hygiene left for the owner | GitHub remote | The stale remote branch `origin/feature/recog-prendas-edit-qty-service-price` (deleting it is the owner's call), and `docs/completed_milestones.md` size. From the pre-12.0 review (G11 / P3). |
