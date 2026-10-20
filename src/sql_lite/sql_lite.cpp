@@ -6,7 +6,6 @@
 #include <QDateTime>
 #include <QHash>
 #include <QDebug>
-#include <QMessageBox>
 #include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -169,12 +168,43 @@ static bool migrateAccountingClosures(QSqlDatabase &db)
 // Public functions
 // ---------------------------------------------------------------------------
 
+// The tables an empty database file needs (a fresh install); the shop's are older and
+// already have them, so these only ever create on a new file.
+static const char *const kBaseSchema[] = {
+    "CREATE TABLE IF NOT EXISTS ingresos (n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, fecha_pago TEXT, "
+    " fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT, cantidad TEXT, prenda TEXT, size TEXT, "
+    " servicio TEXT, observaciones TEXT, edit_lock TEXT NOT NULL DEFAULT '0', hash TEXT)",
+    "CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, descripcion TEXT, "
+    " empresa TEXT, fecha TEXT, iva TEXT, importe TEXT, edit_lock TEXT)",
+    "CREATE TABLE IF NOT EXISTS clientes (nombre TEXT, tel_fijo TEXT, movil TEXT, direccion TEXT)",
+    "CREATE TABLE IF NOT EXISTS prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)",
+    "CREATE TABLE IF NOT EXISTS proveedores (nombre TEXT, cif TEXT, direccion TEXT, telefono TEXT)",
+    "CREATE TABLE IF NOT EXISTS servicios (nombre TEXT)",
+    // The "review manually" notices already logged: each is logged once, not at every start.
+    "CREATE TABLE IF NOT EXISTS migration_notes (note TEXT PRIMARY KEY, first_seen TEXT NOT NULL)",
+};
+
 bool migrateDatabase(QSqlDatabase &db)
 {
     if (dbNotConfigured(db, __func__)) return false;
     qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
-    db.open();
+    const bool wasOpen = db.isOpen();
+    if (!wasOpen && !db.open()) {
+        qCritical() << "migrateDatabase: the database cannot be opened -" << db.lastError().text();
+        return false;
+    }
     QSqlQuery q(db);
+    bool baseOk = true;
+    for (const char *sql : kBaseSchema)
+        baseOk = q.exec(QString::fromLatin1(sql)) && baseOk;
+    // True the first time this notice is seen (then logged); false afterwards.
+    const auto firstNotice = [&db](const QString &note) {
+        QSqlQuery n(db);
+        n.prepare("INSERT OR IGNORE INTO migration_notes (note, first_seen) VALUES (:n, :t)");
+        n.bindValue(":n", note);
+        n.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+        return !n.exec() || n.numRowsAffected() == 1;   // a failed insert still logs
+    };
     // Each exec() silently fails if the column already exists - safe to call repeatedly.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT");
@@ -204,8 +234,10 @@ bool migrateDatabase(QSqlDatabase &db)
     // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
     // The ALTERs fail on purpose when the column exists: check the result instead.
-    bool ok = true;
+    bool ok = baseOk;
     const auto fail = [&ok]() { ok = false; return qWarning(); };   // a step that failed
+    if (!baseOk)
+        fail() << "migrateDatabase: creating the base tables failed -" << q.lastError().text();
     if (db.record("ingresos").count() <= INGRESOS_COL_VERIFACTU_CANCEL_XML)
         fail() << "migrateDatabase: adding the verifactu_* columns failed";
 
@@ -260,8 +292,9 @@ bool migrateDatabase(QSqlDatabase &db)
                         "WHERE (pagado IS NULL OR pagado != 'SI') AND verifactu_estado = 'RECTIFICADA' "
                         "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
             while (review.next())
-                qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
-                           << "has unpaid garments marked RECTIFICADA - review manually before charging them";
+                if (firstNotice("rectificada-unpaid:" + review.value(0).toString()))
+                    qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
+                               << "has unpaid garments marked RECTIFICADA - review manually before charging them";
     }
     if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
                 "WHERE (pagado IS NULL OR pagado != 'SI') "
@@ -296,9 +329,10 @@ bool migrateDatabase(QSqlDatabase &db)
         while (match.next()) {
             const QString ticket = match.value(1).toString();
             if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
-                qWarning() << "migrateDatabase: ticket" << ticket
-                           << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
-                              " - review manually";
+                if (firstNotice("split-ambiguous:" + match.value(2).toString()))
+                    qWarning() << "migrateDatabase: ticket" << ticket
+                               << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
+                                  " - review manually";
                 continue;
             }
             // A payment made with Verifactu off by a version before 8.5 on the same day,
@@ -321,12 +355,18 @@ bool migrateDatabase(QSqlDatabase &db)
                     "  s.verifactu_invoice_seq, s.verifactu_invoice_id, s.fecha_anulacion, "
                     "  s.verifactu_cancel_xml FROM ingresos s WHERE s.rowid = :src) "
                     "WHERE rowid = :dst AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = ''");
+        db.transaction();   // every relink or none
+        bool relinked = true;
         for (const auto &r : relinks) {
             upd.bindValue(":src", r.second);
             upd.bindValue(":dst", r.first);
-            if (!upd.exec())
+            if (!upd.exec()) {
+                relinked = false;
                 fail() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
+                break;
+            }
         }
+        if (relinked) db.commit(); else db.rollback();
         if (!relinks.isEmpty())
             qDebug() << "migrateDatabase: relinked" << relinks.size()
                      << "split-off paid garment(s) to their AEAT invoice";
@@ -361,15 +401,19 @@ bool migrateDatabase(QSqlDatabase &db)
                 keptOne = true;
                 continue;
             }
-            if (sent)
-                qWarning() << "migrateDatabase: ticket" << ticket << "has a row sent to AEAT whose hash"
-                           << hash << "is empty or shared - review manually";
+            if (sent) {
+                if (firstNotice("sent-hash:" + sel.value(0).toString()))
+                    qWarning() << "migrateDatabase: ticket" << ticket << "has a row sent to AEAT whose hash"
+                               << hash << "is empty or shared - review manually";
+            }
             else
                 changes.append({ sel.value(0).toLongLong(), ticket, hash });
         }
         sel.finish();
         QSqlQuery upd(db);
         upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+        db.transaction();   // every new hash or none
+        bool rehashed = true;
         for (const Change &c : changes) {
             const QString newHash = genHash16();
             upd.bindValue(":h",   newHash);
@@ -377,9 +421,17 @@ bool migrateDatabase(QSqlDatabase &db)
             if (upd.exec())
                 qDebug() << "migrateDatabase: ticket" << c.ticket << "rowid" << c.rowid
                          << "hash" << c.oldHash << "->" << newHash;
-            else
+            else {
+                rehashed = false;
                 fail() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
+                break;
+            }
         }
+        if (rehashed) db.commit(); else db.rollback();
+        // Every write is keyed by (n_recibo, hash): from now on the database keeps it unique.
+        // A sent row left sharing its hash (logged above) keeps the index from being built.
+        if (!QSqlQuery(db).exec("CREATE UNIQUE INDEX IF NOT EXISTS ingresos_ticket_hash ON ingresos (n_recibo, hash)"))
+            qWarning() << "migrateDatabase: (n_recibo, hash) is not unique yet - the index waits for the review";
     }
 
     // 10.14: amounts are stored in cents. Rows still open (unpaid, never sent) that an
@@ -399,14 +451,20 @@ bool migrateDatabase(QSqlDatabase &db)
         sel.finish();
         QSqlQuery upd(db);
         upd.prepare("UPDATE ingresos SET importe = :imp WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
+        db.transaction();   // every rounding or none
+        bool rounded = true;
         for (int i = 0; i < rows.size(); ++i) {
             upd.bindValue(":imp", values[i]);
             upd.bindValue(":n",   rows[i].first);
             upd.bindValue(":h",   rows[i].second);
-            if (!upd.exec())
+            if (!upd.exec()) {
+                rounded = false;
                 fail() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
                            << upd.lastError().text();
+                break;
+            }
         }
+        if (rounded) db.commit(); else db.rollback();
         if (!rows.isEmpty())
             qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
     }
@@ -444,7 +502,9 @@ bool migrateDatabase(QSqlDatabase &db)
         qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
                  << "verifactu_estado value(s)";
 
-    db.close();
+    q.finish();
+    if (!wasOpen)
+        db.close();
     return ok;
 }
 
@@ -492,15 +552,9 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
             value = q.value(0).toInt();
         else {
             qWarning() << "readMaxNMinYearInColumnFromTable: empty result for column" << column << "in" << table;
-            QMessageBox::warning(nullptr, "Error base de datos",
-                                 "Búsqueda vacía al usar readMaxNMinYearInColumnFromTable.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
         }
     } else {
         qCritical() << "readMaxNMinYearInColumnFromTable: query error for column" << column << "in" << table;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar readMaxNMinYearInColumnFromTable.",
-                              QMessageBox::Ok, QMessageBox::Ok);
     }
     db.close();
     return value;
@@ -523,9 +577,6 @@ QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const Q
             list.append(q.value(0).toString());
     } else {
         qCritical() << "readColumnFromTable: query error for column" << column << "in" << table;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar readColumnFromTable.",
-                              QMessageBox::Ok, QMessageBox::Ok);
     }
     db.close();
     return list;
@@ -553,26 +604,14 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
                 price = q.value(0).toFloat();
             } else {
                 qCritical() << "readGarmentPrice: comma decimal found in prendas for garment" << garment;
-                QMessageBox::critical(nullptr, "Error en la base de datos",
-                                      "El precio de esta prenda está guardado con ',' como separador decimal. "
-                                      "Corríjalo en el listado de prendas.",
-                                      QMessageBox::Ok, QMessageBox::Ok);
                 price = -1.0f;
             }
         } else {
             qWarning() << "readGarmentPrice: garment not found:" << garment << "service:" << service;
-            QMessageBox::warning(nullptr, "Error base de datos",
-                                 "No se ha encontrado la prenda '" + garment +
-                                 "' al usar readGarmentPrice para el servicio '" + service + "'.\n"
-                                 "Añadir un precio en el listado de prendas antes de continuar con esta acción.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
             price = -1.0f;
         }
     } else {
         qCritical() << "readGarmentPrice: query error for garment" << garment << "service" << service;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar readGarmentPrice.",
-                              QMessageBox::Ok, QMessageBox::Ok);
     }
     db.close();
     return price;
@@ -598,16 +637,9 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
             result = q.value(0).toString();
         } else if (printMsg) {
             qWarning() << "selectFromWhereLike: item not found:" << itemToSearch << "in column" << columnToSearch;
-            QMessageBox::warning(nullptr, "Búsqueda vacía",
-                                 "El elemento '" + itemToSearch + "' no se ha encontrado en la base de datos para '"
-                                 + columnToSearch + "'.",
-                                 QMessageBox::Ok, QMessageBox::Ok);
         }
     } else if (printMsg) {
         qCritical() << "selectFromWhereLike: query error for" << itemToSearch << "in column" << columnToSearch;
-        QMessageBox::critical(nullptr, "Error base de datos",
-                              "Acceso a la tabla da un error al usar selectFromWhereLike.",
-                              QMessageBox::Ok, QMessageBox::Ok);
     }
     db.close();
     return result;

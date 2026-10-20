@@ -39,7 +39,8 @@ private:
     void exec(const QString &sql, const QVariantMap &binds = {})
     {
         QVERIFY2(m_db.open(), qPrintable(m_db.lastError().text()));
-        for (const char *drop : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete", "DROP TRIGGER IF EXISTS ingresos_accepted_identity" })
+        for (const char *drop : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete", "DROP TRIGGER IF EXISTS ingresos_accepted_identity",
+                                  "DROP INDEX IF EXISTS ingresos_ticket_hash" })
             QSqlQuery(m_db).exec(QString::fromLatin1(drop));
         QSqlQuery q(m_db);
         QVERIFY2(q.prepare(sql), qPrintable(q.lastError().text()));
@@ -235,6 +236,44 @@ private slots:
         insertIngreso("96", "10-05-2026", "5.00", "SI", "ENVIADA", 0);
         QCOMPARE(applySettledVerifactuCancellation(m_db, "96", QDate(2026, 5, 20), refused), 0);
         QVERIFY(!m_db.isOpen());
+    }
+
+    // sql_lite F8 / F12: an empty file gets the base tables; an open connection stays open;
+    // a "review manually" notice is logged once, not at every start; (n_recibo, hash) is unique.
+    void test_migrateDatabase_baseSchemaNoticesOnceAndUniqueKey()
+    {
+        QTemporaryDir dir;
+        QSqlDatabase fresh = QSqlDatabase::addDatabase("QSQLITE", "fresh");
+        fresh.setDatabaseName(dir.filePath("empty.db"));
+        QVERIFY(migrateDatabase(fresh));
+        QVERIFY(fresh.open());
+        QVERIFY(migrateDatabase(fresh));
+        QVERIFY(fresh.isOpen());                                              // the caller's connection
+        for (const char *table : { "ingresos", "gastos", "clientes", "prendas", "proveedores", "servicios" })
+            QVERIFY2(fresh.record(table).count() > 0, table);
+        QSqlQuery dup(fresh);
+        QVERIFY(dup.exec("INSERT INTO ingresos (n_recibo, hash, edit_lock) VALUES ('1', 'a', '0')"));
+        QVERIFY(!dup.exec("INSERT INTO ingresos (n_recibo, hash, edit_lock) VALUES ('1', 'a', '0')"));
+        dup.finish();
+        fresh.close();
+        fresh = QSqlDatabase();
+        QSqlDatabase::removeDatabase("fresh");
+
+        // A sent row sharing its hash cannot be repaired: noticed once, then quiet.
+        exec("DROP INDEX IF EXISTS ingresos_ticket_hash");
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, hash, pagado, verifactu_csv, verifactu_estado) "
+             "VALUES ('0', '66', 'x', 'SI', 'CSV1', 'ENVIADA'), ('0', '66', 'x', 'SI', 'CSV2', 'ENVIADA')");
+        static int notices = 0;
+        notices = 0;
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &m) {
+            if (m.contains("review manually")) ++notices;
+        });
+        migrateDatabase(m_db);
+        const int first = notices;
+        migrateDatabase(m_db);
+        qInstallMessageHandler(previous);
+        QCOMPARE(first, 1);
+        QCOMPARE(notices, 1);
     }
 
     // sql_lite F7: a voided garment with no date to move is not matched again at every start.
@@ -648,9 +687,12 @@ private slots:
     void test_migrateDatabase_reportsAFailedStep()
     {
         QVERIFY(migrateDatabase(m_db));
-        exec("ALTER TABLE gastos RENAME TO gastos_renamed");
+        // A view where a table should be: the comma-decimal step cannot update it.
+        exec("ALTER TABLE prendas RENAME TO prendas_table");
+        exec("CREATE VIEW prendas AS SELECT * FROM prendas_table");
         QVERIFY(!migrateDatabase(m_db));
-        exec("ALTER TABLE gastos_renamed RENAME TO gastos");
+        exec("DROP VIEW prendas");
+        exec("ALTER TABLE prendas_table RENAME TO prendas");
         QVERIFY(migrateDatabase(m_db));
     }
 
@@ -1751,8 +1793,7 @@ private slots:
         QVERIFY(scalar("SELECT hash FROM ingresos WHERE n_recibo = 'D4' AND verifactu_csv = ''") != "mix");
         QCOMPARE(scalar("SELECT COUNT(DISTINCT hash) FROM ingresos WHERE n_recibo = 'E1' AND hash != ''"), QStringLiteral("2"));
         const QString hashes = scalar("SELECT GROUP_CONCAT(hash) FROM (SELECT hash FROM ingresos ORDER BY rowid)");
-        QTest::ignoreMessage(QtWarningMsg, logged);
-        migrateDatabase(m_db);                                                   // nothing left to change
+        migrateDatabase(m_db);       // nothing left to change, and the notice is not logged again
         QCOMPARE(scalar("SELECT GROUP_CONCAT(hash) FROM (SELECT hash FROM ingresos ORDER BY rowid)"), hashes);
     }
 
