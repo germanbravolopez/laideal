@@ -13,7 +13,8 @@ docs/
 ├── ai_agent_instructions.md           (agent onboarding — start here)
 ├── architecture.md                    (modules, DB schema, data flow, known issues)
 ├── progress_tracker.md                (current status, blocking / open issues)
-├── completed_milestones.md            (finished work history + archive)
+├── completed_milestones.md            (finished work history since 11.0)
+├── completed_milestones_archive.md    (10.13 and before)
 ├── reviews/2026-10-19-pre-12.0/      (pre-12.0 review: module reports + integration backlog)
 ├── testing/
 │   ├── README.md                      (how to run the tests, conventions, patterns)
@@ -52,7 +53,8 @@ docs/
 | [ai_agent_instructions.md](./ai_agent_instructions.md) | Agent onboarding, critical issues, file map, rules | 5 min |
 | [architecture.md](./architecture.md) | Full module reference, DB schema, data flow | 15 min |
 | [progress_tracker.md](./progress_tracker.md) | Current status, blocking / open issues, backlog | 2 min |
-| [completed_milestones.md](./completed_milestones.md) | Finished work history, newest first | As needed |
+| [completed_milestones.md](./completed_milestones.md) | Finished work history since 11.0, newest first | As needed |
+| [completed_milestones_archive.md](./completed_milestones_archive.md) | Milestones of 10.13 and before | Never (history) |
 | [reviews/2026-10-19-pre-12.0/](./reviews/2026-10-19-pre-12.0/README.md) | Pre-12.0 deep review: per-module findings, doc drift, test gaps; integration report §6 is the prioritised backlog | Read when picking up a tracker item that cites it |
 | [testing/README.md](./testing/README.md) | Testing overview: running the suites, conventions, patterns | When writing tests |
 | [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
