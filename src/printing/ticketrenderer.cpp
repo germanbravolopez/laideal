@@ -1,5 +1,6 @@
 #include "ticketrenderer.h"
 #include "escposbuilder.h"
+#include "../verifactu/verifactutypes.h"   // splitGross (header-only)
 
 #include <QPainter>
 
@@ -64,12 +65,11 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     if (d.isRecibo) {
         b.leftRight(QStringLiteral("TOTAL (IVA incl.):"), money(d.total));
     } else {
-        // Reproduce the legacy rounding: IVA is derived from the rounded base
-        // string, not the raw base, so the printed base + IVA add back to total.
-        const double base = QString::number(d.total / (1.0 + d.ivaRate / 100.0), 'f', 2).toDouble();
-        b.leftRight(QStringLiteral("Base Imponible:"), money(base));
+        // The split of the Verifactu record (splitGross): base in cents, IVA the rest.
+        const GrossSplit split = splitGross(d.total, d.ivaRate);
+        b.leftRight(QStringLiteral("Base Imponible:"), money(split.base));
         b.leftRight(QStringLiteral("IVA (%1%):").arg(d.ivaRate, 0, 'f', 0),
-                    money(d.total - base));
+                    money(split.tax));
         b.leftRight(QStringLiteral("TOTAL:"), money(d.total));
     }
     b.bold(false);

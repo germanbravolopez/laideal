@@ -5,7 +5,7 @@
 // itself (AeatRecord), keeps their chain and outbox in the shop database (AeatStore)
 // and sends them to the AEAT SOAP service over mutual TLS with the owner's
 // certificate (AeatCertificate, through WinHTTP: AeatTransport), honouring AEAT's
-// wait time between submissions. Research branch: see
+// wait time between submissions. The 12.0 direct connection; its research is in
 // docs/modules/verifactu/aeat-direct-investigation.md.
 //
 // Behaviour the app relies on:

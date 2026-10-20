@@ -1,6 +1,7 @@
 #ifndef VERIFACTUTYPES_H
 #define VERIFACTUTYPES_H
 
+#include <cmath>
 #include <QDebug>
 #include <QPixmap>
 #include <QString>
@@ -140,6 +141,23 @@ inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)
     // NETWORK_ERROR / PENDING / INVALID_CONFIG: unknown or never sent.
     default:                       return VerifactuEstado::NotSubmitted;
     }
+}
+
+// A gross amount (IVA included) split the way it is invoiced and printed: the base rounded
+// to cents (half away from zero) and the tax the rest, so base + tax is always the gross.
+struct GrossSplit {
+    double base = 0.0;
+    double tax = 0.0;
+};
+inline GrossSplit splitGross(double gross, double ratePercent)
+{
+    const auto cents = [](double v) {
+        const double c = v * 100.0;
+        return std::round(c + (c >= 0.0 ? 1e-6 : -1e-6)) / 100.0;
+    };
+    const double g = cents(gross);
+    const double base = cents(g / (1.0 + ratePercent / 100.0));
+    return { base, cents(g - base) };
 }
 
 #endif // VERIFACTUTYPES_H

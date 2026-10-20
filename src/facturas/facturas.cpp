@@ -1,3 +1,4 @@
+#include "../verifactu/verifactutypes.h"   // splitGross (header-only, like sql_lite)
 #include "facturas.h"
 #include "sql_lite.h"
 #include "uikit.h"
@@ -255,6 +256,8 @@ bool Facturas::saveFactura()
 
 double Facturas::taxBaseFromGross(double gross, double ivaRate)
 {
+    // Unrounded on purpose: the Verifactu facade gets gross / (1 + rate) and splits it back
+    // in cents itself (splitGross); a rounded base would lose a cent of the total.
     return gross / (1.0 + ivaRate / 100.0);
 }
 
@@ -272,6 +275,8 @@ void Facturas::updateTaxSplit()
         return;
     }
     const double iva = m_cbIva->currentData().toDouble();
-    m_leBase->setText(displayMoney(taxBaseFromGross(gross, iva)));
-    m_leIva->setText(displayMoney(taxAmountFromGross(gross, iva)));
+    // As invoiced: the base in cents and the IVA the rest, adding up to the amount typed.
+    const GrossSplit split = splitGross(gross, iva);
+    m_leBase->setText(displayMoney(split.base));
+    m_leIva->setText(displayMoney(split.tax));
 }

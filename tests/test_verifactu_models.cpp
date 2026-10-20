@@ -28,6 +28,21 @@ private:
     }
 
 private slots:
+    // The invoiced split: base in cents and tax the rest, always adding up to the gross.
+    void test_splitGrossAddsUpForEveryAmount()
+    {
+        for (int cents = -2000; cents <= 100000; ++cents) {
+            const double gross = cents / 100.0;
+            const GrossSplit s = splitGross(gross, 21.0);
+            QCOMPARE(qRound64((s.base + s.tax) * 100.0), qint64(cents));
+            QCOMPARE(qRound64(s.base * 100.0) / 100.0, s.base);
+        }
+        QCOMPARE(splitGross(10.00, 21.0).base, 8.26);
+        QCOMPARE(splitGross(10.00, 21.0).tax, 1.74);
+        QCOMPARE(splitGross(12.10, 21.0).base, 10.00);
+        QCOMPARE(splitGross(5.00, 10.0).base, 4.55);
+    }
+
     // ---- VerifactuConfig ----------------------------------------------------
     void test_configDefaultsAndValidation()
     {

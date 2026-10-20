@@ -1,6 +1,8 @@
 # Investigation: talking to AEAT directly instead of through IreneSolutions
 
-Status: **research report and implementation, October 2026** (branch `feature/aeat-direct-investigation`, not merged). The direct client is built and tested against a fake AEAT; it has not talked to AEAT yet - see [Status on this branch](#status-on-this-branch-october-2026). Nothing reaches AEAT production.
+> **Historical research report.** The direct client it describes is part of 12.0 (`src/verifactu/aeat*.cpp`); `docs/modules/verifactu/README.md` and the code are authoritative. The sections about handing over the gateway's chain are obsolete since AEAT's answer of 13-10-2026 (a new system keeps a chain of its own).
+
+Status: **research report and implementation, October 2026** (branch `feature/aeat-direct-investigation`). The direct client is built and tested against a fake AEAT; it has not talked to AEAT yet - see [Status on this branch](#status-on-this-branch-october-2026). Nothing reaches AEAT production.
 
 ## 1. Question
 

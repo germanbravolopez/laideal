@@ -25,15 +25,20 @@ For the full AEAT REST API field reference see [`rest_api.md`](./rest_api.md).
 MainWindow / RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog / Imprimir
         │
         ▼
-VerifactuIntegration (facade)
+VerifactuIntegration (facade: chain gate, splitGross of the amounts)
         │
-        ▼
-VerifactuManager (HTTP via QNetworkAccessManager)
-        │   ┌─────────────────────────┐
-        ├──▶│ VerifactuConfig         │  (NIF, name, ServiceKey, env)
-        └──▶│ VerifactuInvoice + Item │  (JSON payload)
-            └─────────────────────────┘
+        ├── gateway: VerifactuManager (REST via QNetworkAccessManager)
+        │       ├──▶ VerifactuConfig          (NIF, name, ServiceKey, env)
+        │       └──▶ VerifactuInvoice + Item  (JSON payload)
+        │
+        └── direct: AeatDirectBackend (SOAP to AEAT with the owner's certificate)
+                ├──▶ AeatRecord / AeatHash / AeatQr   (records, huella, QR)
+                ├──▶ AeatStore                        (aeat_chain, aeat_records)
+                ├──▶ AeatTransport + AeatCertificate  (WinHTTP, mutual TLS)
+                └──▶ AeatChainCheck                   (stored-chain verifier)
 ```
+
+Amounts: every invoice is split with `splitGross` (`verifactutypes.h`): the base rounded to cents and the cuota the rest, so base + cuota is always the amount charged, and the printed factura (`TicketRenderer`) shows the same split. Restore limit: a database restored from an older copy continues where AEAT is (the chain sync), but the chain verifier then counts the records only AEAT has as continuations, and a restore whose head is a cancellation waits on AEAT's answer (GZ44).
 
 All consumers go through `VerifactuIntegration` (or in the case of `SettingsDialog::testConnection`, a transient `VerifactuManager` with dialog-only values). The API is fully async — calls return a request ID immediately and the result arrives via `requestFinished`.
 

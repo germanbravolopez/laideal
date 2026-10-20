@@ -210,10 +210,13 @@ VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceN
     invoice.setSellerName(m_emitterName);
     invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
 
+    // The callers pass the gross over (1 + rate): split back from the gross in cents, so the
+    // record's base + cuota equal the amount charged and printed.
+    const GrossSplit split = splitGross(taxBase * (1.0 + taxRate / 100.0), taxRate);
     VerifactuTaxItem taxItem;
-    taxItem.setTaxBase(taxBase);
+    taxItem.setTaxBase(split.base);
     taxItem.setTaxRate(taxRate);
-    taxItem.setTaxAmount(taxBase * taxRate / 100.0);
+    taxItem.setTaxAmount(split.tax);
 
     invoice.addTaxItem(taxItem);
     invoice.calculateTotals();

@@ -308,13 +308,14 @@ void RectifyInvoiceDialog::onRectifyClicked()
     }
 
     const double ivaRate    = AppSettings::instance()->ivaRate();
-    const double divisor    = 1.0 + ivaRate / 100.0;
-    const double newTaxBase   = amountWithIva / divisor;
-    const double newTaxAmount = amountWithIva - newTaxBase;
+    const GrossSplit newSplit = splitGross(amountWithIva, ivaRate);
+    const double newTaxBase   = newSplit.base;
+    const double newTaxAmount = newSplit.tax;
 
     // For substitution we send the ORIGINAL values as RectificationTaxBase/Amount.
-    const double origTaxBase   = m_loadedImporteTotal / divisor;
-    const double origTaxAmount = m_loadedImporteTotal - origTaxBase;
+    const GrossSplit origSplit = splitGross(m_loadedImporteTotal, ivaRate);
+    const double origTaxBase   = origSplit.base;
+    const double origTaxAmount = origSplit.tax;
 
     // Refusals come before the number is claimed and the placeholder row inserted:
     // that row is income and would be offered for resubmission as a plain invoice.
