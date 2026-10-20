@@ -110,6 +110,97 @@ private slots:
         QSqlDatabase::removeDatabase("broken");
     }
 
+    // M1d: on a database the app already migrated, a second run changes nothing; on an
+    // unmigrated legacy one the "second" run still adds columns, which the check reports.
+    void test_checkMigrationsTwice_changesNothingOnAMigratedDatabase()
+    {
+        QTemporaryDir dir;
+        QVERIFY(seedShop(dir.filePath("shop.db")));
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "twice");
+        db.setDatabaseName(dir.filePath("shop.db"));
+        migrateDatabase(db);   // as M1 does first: the seed dropped the guard triggers to shape its rows
+        const SelfCheck::Check ok = SelfCheck::checkMigrationsTwice(db);
+        QCOMPARE(ok.id, QStringLiteral("M1d"));
+        QVERIFY2(ok.status == SelfCheck::Check::Pass, qPrintable(ok.reason));
+
+        db.setDatabaseName(dir.filePath("legacy.db"));
+        QVERIFY(db.open());
+        QVERIFY(QSqlQuery(db).exec("CREATE TABLE ingresos (n_recibo TEXT, cliente TEXT, fecha_recepcion TEXT, "
+                                   "fecha_pago TEXT, fecha_recogida TEXT, importe TEXT, pagado TEXT, estado TEXT, "
+                                   "cantidad TEXT, prenda TEXT, size TEXT, servicio TEXT, observaciones TEXT, "
+                                   "edit_lock TEXT NOT NULL, hash TEXT)"));
+        QVERIFY(QSqlQuery(db).exec("CREATE TABLE gastos (id INTEGER PRIMARY KEY, n_factura TEXT, servicio TEXT, "
+                                   "descripcion TEXT, empresa TEXT, fecha TEXT, iva TEXT, importe TEXT, edit_lock TEXT)"));
+        QVERIFY(QSqlQuery(db).exec("CREATE TABLE prendas (nombre TEXT, precio_limpieza TEXT, precio_plancha TEXT)"));
+        db.close();
+        const SelfCheck::Check changed = SelfCheck::checkMigrationsTwice(db);
+        QCOMPARE(changed.status, SelfCheck::Check::Fail);
+        QVERIFY2(changed.reason.contains("modifica"), qPrintable(changed.reason));
+        db = QSqlDatabase();
+        QSqlDatabase::removeDatabase("twice");
+    }
+
+    void test_checkSettings_readableFileAndExistingDatabase()
+    {
+        QTemporaryDir dir;
+        const QString db = dir.filePath("shop.db");
+        QFile dbFile(db);
+        QVERIFY(dbFile.open(QIODevice::WriteOnly));
+        dbFile.close();
+        const QString good = dir.filePath("settings.json");
+        QFile f(good);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("{\"database\":{}}");
+        f.close();
+        QCOMPARE(SelfCheck::checkSettings(good, db).status, SelfCheck::Check::Pass);
+        QCOMPARE(SelfCheck::checkSettings(dir.filePath("missing.json"), db).status, SelfCheck::Check::Fail);
+        QCOMPARE(SelfCheck::checkSettings(good, dir.filePath("gone.db")).status, SelfCheck::Check::Fail);
+        QCOMPARE(SelfCheck::checkSettings(good, QString()).status, SelfCheck::Check::Fail);
+        QFile bad(dir.filePath("bad.json"));
+        QVERIFY(bad.open(QIODevice::WriteOnly));
+        bad.write("not json");
+        bad.close();
+        QCOMPARE(SelfCheck::checkSettings(bad.fileName(), db).status, SelfCheck::Check::Fail);
+    }
+
+    // Under 3 days passes (boundary included); older, or a name without a time, fails.
+    void test_checkBackupAge_threeDayBoundary()
+    {
+        const QDateTime now(QDate(2026, 10, 20), QTime(12, 0));
+        const auto age = [&now](const QString &name) { return SelfCheck::checkBackupAge("C:/b/" + name, now); };
+        QCOMPARE(age("laideal_2026-10-20_080000.db").status, SelfCheck::Check::Pass);
+        QCOMPARE(age("laideal_2026-10-17_120000.db").status, SelfCheck::Check::Pass);   // exactly 3 days
+        const SelfCheck::Check old = age("laideal_2026-10-17_115959.db");
+        QCOMPARE(old.status, SelfCheck::Check::Fail);
+        QVERIFY2(old.reason.contains("3 días"), qPrintable(old.reason));
+        QCOMPARE(age("laideal_2026-09-01_090000.db").status, SelfCheck::Check::Fail);
+        QCOMPARE(age("other.db").status, SelfCheck::Check::Fail);
+        QCOMPARE(SelfCheck::checkBackupAge(QString(), now).status, SelfCheck::Check::Fail);
+    }
+
+    // M1e counts unreadable ingresos importes and gastos IVA values; the reason has counts only.
+    void test_checkMoney_countsUnreadableAmountsAndIva()
+    {
+        QTemporaryDir dir;
+        QVERIFY(seedShop(dir.filePath("shop.db")));
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "money");
+        db.setDatabaseName(dir.filePath("shop.db"));
+        QVERIFY(SelfCheck::checkMoney(db).status == SelfCheck::Check::Pass);
+
+        QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('7', '1.234,50', '0')"));
+        QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('8', 'abc', '0')"));
+        QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('9', '12,5', '0')"));   // readable
+        QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (2, 'G2', '7,5', '10.00')"));
+        QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (3, 'G3', NULL, '10.00')"));
+        QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (4, 'G4', '10', '10.00')"));  // fine
+        const SelfCheck::Check bad = SelfCheck::checkMoney(db);
+        QCOMPARE(bad.status, SelfCheck::Check::Fail);
+        QVERIFY2(bad.reason.startsWith("2 importe(s)") && bad.reason.contains("2 gasto(s)"), qPrintable(bad.reason));
+        QVERIFY(!bad.reason.contains("Proveedor") && !bad.reason.contains("G2"));
+        db = QSqlDatabase();
+        QSqlDatabase::removeDatabase("money");
+    }
+
     // M1c recomputes the stored AEAT chain: none or a valid one passes, an altered record fails
     // without naming the invoice.
     void test_checkChain()
@@ -205,7 +296,7 @@ private slots:
         const QString liveDb = shop.filePath("laideal.db");
         QVERIFY(seedShop(liveDb));
         QVERIFY(QDir().mkpath(shop.filePath("backups")));
-        QVERIFY(QFile::copy(liveDb, shop.filePath("backups/laideal_2026-10-18_090000.db")));
+        QVERIFY(QFile::copy(liveDb, shop.filePath("backups/laideal_" + QDateTime::currentDateTime().addDays(-1).toString("yyyy-MM-dd_HHmmss") + ".db")));
         QFile older(shop.filePath("backups/laideal_2026-01-01_090000.db"));   // not a database: never picked
         QVERIFY(older.open(QIODevice::WriteOnly));
         older.close();
@@ -236,7 +327,7 @@ private slots:
             auto *question = dialog.findChild<QGroupBox *>();
             for (int answered = 0; question && question->isVisibleTo(&dialog) && answered < 10; ++answered)
                 dialog.findChild<QPushButton *>("btnYes")->click();
-            QCOMPARE(dialog.checks().size(), 6);   // M1, M1c, M2, M2b, M3, M5
+            QCOMPARE(dialog.checks().size(), 10);   // M1a, M1b, M1, M1d, M1e, M1c, M2, M2b, M3, M5
             for (const SelfCheck::Check &c : dialog.checks()) {
                 if (c.id == QLatin1String("M3"))
                     QCOMPARE(c.status, SelfCheck::Check::Skip);   // printing off

@@ -37,6 +37,21 @@ QByteArray testSettings(const QByteArray &liveJson, const QString &dbCopy);
 // highest stored + 1.
 Check checkSchema(QSqlDatabase &db);
 
+// M1d: running the migrations a second time changes nothing (schema and every row stay
+// the same) and reports no failed statement.
+Check checkMigrationsTwice(QSqlDatabase &db);
+
+// M1a: the settings file is readable JSON and the database path it names exists.
+Check checkSettings(const QString &settingsFile, const QString &dbPath);
+
+// M1b: the newest backup (its name carries the time) is within BackupManager's warning
+// window, 3 days, of `now`. The reason names only the age.
+Check checkBackupAge(const QString &backupFile, const QDateTime &now);
+
+// M1e: ingresos rows whose importe is not a readable amount (moneyParse) and gastos whose
+// IVA is not a recognised rate (expenseIvaRate = -1). Fails when any; the reason has counts only.
+Check checkMoney(QSqlDatabase &db);
+
 // M1c: every stored AEAT record of both environments matches its huella and links to the
 // previous one (AeatChainCheck): an alteration of aeat_records is detected.
 Check checkChain(QSqlDatabase &db);

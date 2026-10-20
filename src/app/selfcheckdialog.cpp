@@ -178,9 +178,27 @@ bool SelfCheckDialog::prepareCopy(QString *error)
 
 void SelfCheckDialog::runAutomatic()
 {
+    const int m1a = addCheck(QStringLiteral("M1a"), QString());
+    m_checks[m1a] = SelfCheck::checkSettings(m_liveSettingsFile, m_liveDb);
+    showCheck(m1a);
+
+    const int m1b = addCheck(QStringLiteral("M1b"), QString());
+    m_checks[m1b] = SelfCheck::checkBackupAge(
+        SelfCheck::newestBackup(QDir(QFileInfo(m_liveDb).absolutePath()).filePath("backups")),
+        QDateTime::currentDateTime());
+    showCheck(m1b);
+
     const int m1 = addCheck(QStringLiteral("M1"), QString());
     m_checks[m1] = SelfCheck::checkSchema(m_db);
     showCheck(m1);
+
+    const int m1d = addCheck(QStringLiteral("M1d"), QString());
+    m_checks[m1d] = SelfCheck::checkMigrationsTwice(m_db);
+    showCheck(m1d);
+
+    const int m1e = addCheck(QStringLiteral("M1e"), QString());
+    m_checks[m1e] = SelfCheck::checkMoney(m_db);
+    showCheck(m1e);
 
     const int m1c = addCheck(QStringLiteral("M1c"), QString());
     m_checks[m1c] = SelfCheck::checkChain(m_db);

@@ -4,8 +4,10 @@
 #include "appsettings.h"
 #include "aeatchaincheck.h"
 #include "aeatstore.h"
+#include "backup_manager.h"
 #include "sql_lite.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -43,6 +45,31 @@ QString scalar(QSqlDatabase &db, const QString &sql, const QVariantMap &binds = 
     for (auto it = binds.cbegin(); it != binds.cend(); ++it)
         q.bindValue(it.key(), it.value());
     return q.exec() && q.next() ? q.value(0).toString() : QString();
+}
+
+// Digest of the whole database: every object's SQL and every row of every table.
+QByteArray databaseDigest(QSqlDatabase &db)
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    QStringList tables;
+    QSqlQuery objects(db);
+    if (!objects.exec(QStringLiteral("SELECT type, name, COALESCE(sql, '') FROM sqlite_master ORDER BY type, name")))
+        return {};
+    while (objects.next()) {
+        hash.addData((objects.value(0).toString() + objects.value(1).toString() + objects.value(2).toString()).toUtf8());
+        if (objects.value(0).toString() == QLatin1String("table") && !objects.value(1).toString().startsWith("sqlite_"))
+            tables << objects.value(1).toString();
+    }
+    for (const QString &table : tables) {
+        QSqlQuery rows(db);
+        if (!rows.exec(QStringLiteral("SELECT * FROM \"%1\" ORDER BY rowid").arg(table)))
+            return {};
+        const int columns = rows.record().count();
+        while (rows.next())
+            for (int i = 0; i < columns; ++i)
+                hash.addData((rows.value(i).isNull() ? QStringLiteral("\x01") : rows.value(i).toString()).toUtf8() + '\x1f');
+    }
+    return hash.result();
 }
 
 Check fail(Check c, const QString &reason) { c.status = Check::Fail; c.reason = reason; return c; }
@@ -107,6 +134,97 @@ Check checkSchema(QSqlDatabase &db)
         return fail(c, QStringLiteral("el siguiente número de ticket no es el último + 1"));
     c.status = Check::Pass;
     c.reason = QStringLiteral("migraciones sin errores, archivo íntegro, siguiente ticket = último + 1");
+    return c;
+}
+
+Check checkMigrationsTwice(QSqlDatabase &db)
+{
+    Check c{ QStringLiteral("M1d"), QStringLiteral("Base de datos real: repetir las migraciones no cambia nada") };
+    if (!db.open())
+        return fail(c, QStringLiteral("no se pudo abrir la copia de la base de datos"));
+    const QByteArray before = databaseDigest(db);
+    db.close();
+    int failures = 0;
+    bool migrated = false;
+    {
+        LogCapture capture;
+        migrated = migrateDatabase(db);
+        for (const QString &m : capture.messages)
+            failures += m.contains(QLatin1String("failed"), Qt::CaseInsensitive);
+    }
+    if (!db.open())
+        return fail(c, QStringLiteral("no se pudo abrir la copia de la base de datos"));
+    const QByteArray after = databaseDigest(db);
+    db.close();
+    if (!migrated || failures > 0)
+        return fail(c, QStringLiteral("la segunda ejecución de las migraciones falló (ver el log)"));
+    if (before.isEmpty() || before != after)
+        return fail(c, QStringLiteral("repetir las migraciones modifica la base de datos"));
+    c.status = Check::Pass;
+    c.reason = QStringLiteral("la segunda ejecución no cambia ninguna fila ni el esquema");
+    return c;
+}
+
+Check checkSettings(const QString &settingsFile, const QString &dbPath)
+{
+    Check c{ QStringLiteral("M1a"), QStringLiteral("Ajustes: archivo legible y base de datos existente") };
+    QFile file(settingsFile);
+    if (!file.open(QIODevice::ReadOnly))
+        return fail(c, QStringLiteral("no se puede leer el archivo de ajustes"));
+    if (!QJsonDocument::fromJson(file.readAll()).isObject())
+        return fail(c, QStringLiteral("el archivo de ajustes no es válido"));
+    if (dbPath.isEmpty() || !QFileInfo(dbPath).isFile())
+        return fail(c, QStringLiteral("la base de datos indicada en los ajustes no existe"));
+    c.status = Check::Pass;
+    c.reason = QStringLiteral("ajustes legibles y base de datos encontrada");
+    return c;
+}
+
+Check checkBackupAge(const QString &backupFile, const QDateTime &now)
+{
+    Check c{ QStringLiteral("M1b"), QStringLiteral("Copia de seguridad reciente") };
+    const QString name = QFileInfo(backupFile).completeBaseName();   // laideal_yyyy-MM-dd_HHmmss
+    const QDateTime taken = QDateTime::fromString(name.mid(8), QStringLiteral("yyyy-MM-dd_HHmmss"));
+    if (!name.startsWith(QLatin1String("laideal_")) || !taken.isValid())
+        return fail(c, QStringLiteral("no se puede leer la fecha de la copia de seguridad más reciente"));
+    const qint64 days = taken.daysTo(now);
+    if (!BackupManager::backupWarning(true, taken.toString(Qt::ISODate), QString(), now).isEmpty())
+        return fail(c, QStringLiteral("la copia más reciente es de hace %1 días (más de 3)").arg(days));
+    c.status = Check::Pass;
+    c.reason = QStringLiteral("la copia más reciente es de hace %1 día(s)").arg(days);
+    return c;
+}
+
+Check checkMoney(QSqlDatabase &db)
+{
+    Check c{ QStringLiteral("M1e"), QStringLiteral("Importes e IVA de gastos legibles") };
+    if (!db.open())
+        return fail(c, QStringLiteral("no se pudo abrir la copia de la base de datos"));
+    int badAmounts = 0, badIva = 0;
+    bool read = true;
+    QSqlQuery q(db);
+    if (q.exec(QStringLiteral("SELECT importe FROM ingresos"))) {
+        while (q.next())
+            badAmounts += q.value(0).isNull() || !moneyParse(q.value(0).toString(), nullptr);
+    } else {
+        read = false;
+    }
+    q.finish();
+    if (q.exec(QStringLiteral("SELECT iva FROM gastos"))) {
+        while (q.next())
+            badIva += expenseIvaRate(q.value(0)) < 0;
+    } else {
+        read = false;
+    }
+    q.finish();
+    db.close();
+    if (!read)
+        return fail(c, QStringLiteral("no se pudieron leer los importes de la base de datos"));
+    if (badAmounts > 0 || badIva > 0)
+        return fail(c, QStringLiteral("%1 importe(s) ilegible(s) en ingresos y %2 gasto(s) con IVA no reconocido")
+                           .arg(badAmounts).arg(badIva));
+    c.status = Check::Pass;
+    c.reason = QStringLiteral("todos los importes de ingresos y el IVA de los gastos son legibles");
     return c;
 }
 

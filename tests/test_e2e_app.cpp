@@ -3461,6 +3461,70 @@ private slots:
         form->close();
         QTRY_VERIFY(form.isNull());
     }
+
+    // Recogida's search modes beyond number / phone / reception date: the date box picks the
+    // column (Anulación finds the void date only), "/" and "-" both work, a name matches
+    // whatever the accents and case, and the two "nothing found" messages differ.
+    void test_recogida_searchModes()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6001", "h6001", "5.00", "01-03-2026"));
+        QVERIFY(E2e::seedGarment(m_db, "6002", "h6002", "6.00", "02-03-2026"));
+        QVERIFY(E2e::seedGarment(m_db, "6003", "h6003", "7.00", "12-03-2026"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = 'María García' WHERE n_recibo = '6001'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = 'José Pérez', estado = 'Anulado', "
+                                "verifactu_estado = 'ANULADA', fecha_anulacion = '12-03-2026' WHERE n_recibo = '6002'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = 'Ana Ruiz' WHERE n_recibo = '6003'"));
+
+        RecogPrendas rp(m_db);
+        const auto search = [&rp](const QString &text, const QString &dateMode = QStringLiteral("Recepción")) {
+            rp.findChild<QComboBox *>("cb_search_date")->setCurrentText(dateMode);
+            rp.findChild<QLineEdit *>("le_search")->setText(text);
+            QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+            QStringList tickets;
+            QAbstractItemModel *view = rp.findChild<QTableView *>("tableView")->model();
+            for (int r = 0; view && r < view->rowCount(); ++r)
+                tickets << view->data(view->index(r, INGRESOS_COL_N_RECIBO)).toString();
+            tickets.sort();
+            return tickets;
+        };
+        const auto message = [&rp]() { return rp.findChild<QLabel *>("lblResult")->text(); };
+
+        QCOMPARE(search("12-03-2026", "Anulación"), QStringList({ "6002" }));
+        QCOMPARE(search("12/03/2026", "Anulación"), QStringList({ "6002" }));
+        QCOMPARE(search("12-03-2026", "Recepción"), QStringList({ "6003" }));
+        QCOMPARE(search("01-03-2026", "Anulación"), QStringList());
+        QVERIFY2(message().contains("No se ha encontrado ninguna prenda"), qPrintable(message()));
+
+        QCOMPARE(search("garcia"), QStringList({ "6001" }));
+        QCOMPARE(search("MARÍA"), QStringList({ "6001" }));
+        QCOMPARE(search("jose perez"), QStringList({ "6002" }));
+        QVERIFY2(message().contains("1 prenda(s) encontrada(s)"), qPrintable(message()));
+        QCOMPARE(search("nadie"), QStringList());
+
+        QCOMPARE(search("600123456"), QStringList());                    // a phone no client has
+        QVERIFY2(message().contains("No hay ningún cliente con el teléfono"), qPrintable(message()));
+    }
+
+    // Cobrar clicked twice while the AEAT answers: the first click disables the button, so one
+    // invoice goes out and its reply settles the payment's rows.
+    void test_payDialog_secondPressWhileWaitingSendsNothingMore()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6010", "h6010a", "5.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "6010", "h6010b", "7.00", today()));
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("6010"));
+        auto *cobrar = dlg.findChild<QPushButton *>("btnCobrar");
+        cobrar->click();
+        cobrar->click();
+        QTRY_COMPARE_WITH_TIMEOUT(dlg.result(), int(QDialog::Accepted), 10000);
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado || '|' || verifactu_estado || '|' || verifactu_invoice_seq) "
+                        "FROM ingresos WHERE n_recibo='6010'"), QStringLiteral("SI|ENVIADA|0,SI|ENVIADA|0"));
+    }
 };
 
 QTEST_MAIN(TestE2eApp)

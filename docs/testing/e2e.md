@@ -53,6 +53,8 @@ Drives the real `PayDialog` as the Cobrar button does (load the ticket, untick g
 | Scenario | Flow | Checks |
 |----------|------|--------|
 | `test_payment_acceptedByAeat` | Cobrar → AEAT accepts | One Create with invoice id = bare ticket number and the service key; both garments paid, `ENVIADA`, CSV, `Huella`, payment date; no pop-up |
+| `test_gateway_http500_staysPendiente`, `_http401_`, `_malformedJson_`, `_droppedConnection_`, `_successWithoutCsv_` | The gateway answers 500, 401, malformed JSON, a dropped connection, or "success" without CSV | The rows stay paid and `PENDIENTE` with their InvoiceID, no CSV, never `ERROR` (the outcome is unknown) |
+| `test_gateway_stalledReply_endsAsNetworkErrorAtTheTransferTimeout` | The gateway never answers | NETWORK_ERROR at the 30 s transfer timeout (about 30 s) |
 | `test_partialPayments_eachEventIsItsOwnInvoice` | Pay one garment, later the other | Two invoices `200` and `200-1`; the second garment has seq 1 |
 | `test_noReplyInTime_staysPendiente_thenReconciledFromAeat` | AEAT replies after 7 s (PayDialog waits 5 s) | Payment kept `PENDIENTE`; the retry is answered "already exists" (`verifactuErrorIsDuplicate`); querying AEAT returns the accepted record, which matches and is adopted → `ENVIADA` with its CSV |
 | `test_aeatRejection_marksError` | AEAT rejects | Sale stays paid, estado `ERROR` with the reason |
@@ -101,6 +103,8 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 | `test_payDialog_storesThePaymentBeforeSubmitting` | Cobrar on two garments with a slow AEAT reply | Right after Cobrar, before AEAT answers, both rows are paid + `PENDIENTE` with InvoiceID 955; after the reply both are `ENVIADA`; one Create |
 | `test_payDialog_refusesZeroTotalAndNoIntegration` | Cobrar on a 0,00 garment; Cobrar with no Verifactu integration | Both refused in the panel; nothing paid, nothing sent |
 | `test_payDialog_garmentPaidMeanwhileStopsTheCharge` | Cobrar on two garments; one is paid from elsewhere after the dialog opened | Refused ("no se ha enviado nada"); the other stays unpaid `SIN COBRAR`; nothing sent |
+| `test_payDialog_secondPressWhileWaitingSendsNothingMore` | Cobrar pressed twice while AEAT answers | One Create; the rows end `ENVIADA` (Cobrar is ignored while a reply is pending) |
+| `test_recogida_searchModes` | Recogida search by Anulación date (`/` and `-`), Recepción vs Anulación on one date, accented / case-insensitive name, not found, unknown phone | The right rows, and the messages in the panel |
 | `test_payDialog_refusesUnmeasuredM2Garment` | Cobrar on an unpaid Jarapa (m2) with no size | Refused in the dialog ("no tiene tamaño"); still unpaid; nothing sent to AEAT |
 | `test_recogida_lateReplyAdoptedAfterPayDialogGivesUp` | Recogida → Cobrar… → Cobrar; AEAT answers after 7 s | PayDialog gives up at 5 s and the payment is kept `SI` / `PENDIENTE`; Recogida takes over the in-flight request and the late reply makes it `ENVIADA` with the CSV; the status bar says the factura with QR can be printed; one Create only |
 | `test_recogida_duplicateRetry_comparisonDialogAdoptsAeatCsv` | Verifactu dialog on an `ERROR` row → Reintentar; AEAT answers "duplicado", then the query returns the matching record | Reintentar and Consultar offered; the comparison dialog opens by itself, says the data match, shows AEAT's CSV, Actualizar enabled; after it the row is `ENVIADA` with AEAT's CSV and the confirmation shows |

@@ -199,6 +199,8 @@ void PayDialog::setFormEnabled(bool enabled)
 
 void PayDialog::onCobrarClicked()
 {
+    if (!m_pendingReqId.isEmpty())   // waiting for AEAT: a second press would charge another seq
+        return;
     QStringList hashes;
     QHash<QString, QString> amounts;   // hash -> the amount shown, in cents
     double total = 0.0;

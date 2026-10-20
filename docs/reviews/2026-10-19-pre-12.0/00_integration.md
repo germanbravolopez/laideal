@@ -233,8 +233,8 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P2 ✅ FIXED 20-10-2026 | logging | Rotation only at start; `.old` lost on a rename failure; silent when the file is not openable | In-session rotation; checks; fallback | S-M | logging |
 | P2 ✅ FIXED 20-10-2026 | CI | UI smoke not triggered by `src/` changes nor required for release (C1); `release.ps1` lacks ctest / zip (C3) | PR-to-master trigger; align `release.ps1` | S | 00 |
 | P2 ✅ FIXED 20-10-2026 | installer | Dead `.myp` association; stale DLLs never removed; no prompt for the self-check after an update | C5 | S | 00, updater |
-| P2 | tests | Self-check additions: twice-run migration, settings health, backup age, money / iva counts, chain verifier, export round trip | Section 5 | M | sql_lite, appsettings, backup, app, listado |
-| P2 | tests | E2E state races + gateway failure modes + Recogida search modes | Section 5 | M | app, recog_prendas, verifactu-gateway |
+| P2 ✅ FIXED 20-10-2026 | tests | Self-check additions: twice-run migration, settings health, backup age, money / iva counts, chain verifier, export round trip | Section 5 | M | sql_lite, appsettings, backup, app, listado |
+| P2 ✅ FIXED 20-10-2026 | tests | E2E state races + gateway failure modes + Recogida search modes | Section 5 | M | app, recog_prendas, verifactu-gateway |
 | P2 ✅ FIXED 20-10-2026 | docs | ai_agent_instructions, INDEX, docs/README, requirements, release skill drift (G2, G4, G5, G7, G8, G9); rest_api ServiceKey logging advice (G10) | Update; delete the advice | M | 00, all |
 | P2 ✅ FIXED 20-10-2026 | repo | `.gitignore` lacks `*.sqlite`, `*.pfx` / `*.p12` (fixture exception), settings copies | Add | S | 00 |
 | P2 ✅ FIXED 20-10-2026 | verifactu-direct | A client SOAP fault refuses a whole batch (up to 1000 records); a duplicate is adopted without checking amount and date; the restore head may be a cancellation (chain fork; GZ44 item 3) | Resend singly after a batch fault; query and compare before adopting; extend the settings marker to the full head | M | verifactu-direct, tracker:39 |
