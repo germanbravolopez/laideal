@@ -14,6 +14,7 @@
 #include "aeatdirectbackend.h"
 #include "appsettings.h"
 #include "fakeaeatserver.h"
+#include "imprimir.h"
 #include "modalautocloser.h"
 #include "pay_dialog.h"
 #include "sql_lite.h"
@@ -94,6 +95,22 @@ private:
     }
 
 private slots:
+    // An accepted row without a stored verification URL (an older gateway row) is reprinted
+    // without QR: the direct client never rebuilds the URL for today's environment.
+    void test_reprintWithoutStoredUrlHasNoQr()
+    {
+        exec("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, "
+             "estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, verifactu_csv, verifactu_estado, "
+             "verifactu_invoice_seq, verifactu_invoice_id) VALUES ('7300', 'Cliente E2E', '05-02-2026', '05-02-2026', '', "
+             "'10.00', 'SI', 'En tienda', '1', 'Camisa', '', 'Limp.', '', 0, 'h7300', 'A-GW7300', 'ENVIADA', 0, '7300')");
+        Imprimir dlg(m_db);
+        dlg.verifactuIntegration = m_verifactu;
+        dlg.isRecibo = false;
+        dlg.le_n_ticket->setText("7300");
+        dlg.getTicketInfo();
+        QVERIFY(dlg.resolveQrCode().isNull());
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());

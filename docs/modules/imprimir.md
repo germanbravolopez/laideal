@@ -136,7 +136,8 @@ fallback:
    gateway and direct client alike). It is never rebuilt from today's environment:
    after the production switch an older test invoice would otherwise get a
    production QR. Nor is it rebuilt from today's IVA rate. Only an older row without
-   that URL asks the backend (REST `/GetQrCode`, 5 s bounded wait; on timeout the
+   that URL (an old gateway row) asks the backend, and only the gateway: the direct client
+   prints it without QR rather than rebuild a URL that may not be the invoice's. The gateway (REST `/GetQrCode`, 5 s bounded wait; on timeout the
    ticket prints without a QR).
 
 `buildTicket()` rasters the resolved `QPixmap` into the ESC/POS stream

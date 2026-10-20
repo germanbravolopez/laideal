@@ -270,7 +270,13 @@ QPixmap Imprimir::resolveQrCode()
         }
     }
 
-    // No stored URL (older rows): ask the backend, waiting up to 5 s in a local event loop.
+    // No stored URL: only older gateway rows. The direct client would rebuild the URL from
+    // today's environment and IVA rate, which may not be the invoice's: no QR.
+    if (verifactuIntegration->isDirect()) {
+        qWarning() << "Imprimir::resolveQrCode:" << invoiceNumber << "has no stored verification URL - printed without QR";
+        return QPixmap();
+    }
+    // The gateway: ask it, waiting up to 5 s in a local event loop.
     // If it does not reply in time, print without QR (logged warning).
     const QString reqId = verifactuIntegration->generateQRAsync(
         invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
