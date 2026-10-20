@@ -70,6 +70,8 @@ public:
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
     // The same for one record only.
     void queryWithoutHashFor(const QString &invoiceNumber) { m_noHashFor.insert(invoiceNumber); }
+    // The record is held (a resend is a duplicate) but the query never returns it.
+    void hideFromQuery(const QString &invoiceNumber) { m_hidden.insert(invoiceNumber); }
     // Answers a query without the SistemaInformatico block even when it was asked for.
     void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
@@ -113,6 +115,7 @@ private:
     int m_pageSize = 0;
     bool m_queryByMonth = false;
     QSet<QString> m_noHashFor;
+    QSet<QString> m_hidden;
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     bool m_queryWithoutSystem = false;

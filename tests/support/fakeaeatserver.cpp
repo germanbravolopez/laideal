@@ -246,6 +246,8 @@ QByteArray FakeAeatServer::answer(const Request &request)
         }
         QString records;
         for (const SentRecord &h : held) {
+            if (m_hidden.contains(h.invoiceNumber))
+                continue;
             const bool cancelled = m_registered.contains(keyOf(h.issuerNif, QStringLiteral("Anulacion"), h.invoiceNumber));
             records += QStringLiteral(
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>%10</tik:IDEmisorFactura>"

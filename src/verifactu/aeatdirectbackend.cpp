@@ -21,6 +21,7 @@ const int kMonthsBack = 24;           // how far the first sync looks for the is
 const int kMonthsAlwaysQueried = 2;   // this month and the previous one, always
 
 QString s_endpointOverride;
+constexpr int kMaxUnverifiedDuplicates = 5;   // duplicate answers AEAT's query never confirms
 int s_retryDelaySeconds = 60;         // after a failed send, before trying again on its own
 
 QString operationOf(AeatStore::Kind kind)
@@ -869,6 +870,20 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
         // An empty or unreadable amount is missing evidence, never "another amount".
         bool amountRead = false;
         const double heldTotal = held ? held->totalAmount.trimmed().toDouble(&amountRead) : 0.0;
+        // AEAT answers "duplicate" but its query never shows the record: after a few rounds
+        // an ERROR to check by hand, never resend -> duplicate -> query for ever.
+        if (query.parsed && !query.fault && !held && ++m_unverifiedDuplicates[record.id] >= kMaxUnverifiedDuplicates) {
+            m_unverifiedDuplicates.remove(record.id);
+            VerifactuResult r = result;
+            r.status = VerifactuResult::ERROR;
+            r.csv.clear();
+            r.errorDescription = tr("La AEAT dice que ya tiene la factura %1 del %2, pero no la devuelve al consultarla: "
+                                    "compruébela con Consultar en AEAT.").arg(record.invoiceNumber, date);
+            qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "never shown by the query - marked ERROR";
+            m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
+            finishRecord(record, r, false);
+            return;
+        }
         if (!query.parsed || query.fault || !held || !amountRead) {
             // AEAT's record could not be read: still unknown, the record stays pending.
             qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "not verified -"

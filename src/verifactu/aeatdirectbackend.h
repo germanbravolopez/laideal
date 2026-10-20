@@ -168,6 +168,7 @@ private:
     QStringList                m_heldRequests; // requests waiting for the chain sync (no record yet)
     QList<qint64>              m_sendSingly;   // records of a batch AEAT faulted, resent one by one
     QSet<qint64>               m_verifying;    // duplicates whose AEAT record is being queried
+    QHash<qint64, int>         m_unverifiedDuplicates;   // rounds AEAT said "duplicate" but showed nothing
     bool                       m_releasing = false;
     bool                       m_chainReady = false;
     bool                       m_syncRunning = false;

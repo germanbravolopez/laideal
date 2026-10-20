@@ -325,6 +325,21 @@ private slots:
         QCOMPARE(m_server->requests().last().kind, QStringLiteral("Consulta"));   // checked before deciding
     }
 
+    // AEAT keeps answering "duplicate" while its query never shows the record: after a few
+    // rounds an ERROR (Consultar en AEAT), not an endless resend -> duplicate -> query.
+    void test_duplicateAeatNeverShowsEndsInError()
+    {
+        registerElsewhere({ "525" });
+        m_server->hideFromQuery("525");
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        const auto restore = qScopeGuard([] { AeatDirectBackend::setRetryDelaySeconds(3600); });
+        AeatDirectBackend backend(config(), m_db);
+        backend.submitInvoiceAsync(ticket("525", 10));
+        AeatStore store(m_db, "pruebas");
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "525").state, AeatStore::kRejected, 60000);
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "525").errorDescription.contains("Consultar en AEAT"));
+    }
+
     // Before a backend is replaced (Configuración), every request still waiting hears an
     // answer: a stored record PENDING (the next backend sends it), a request held for the
     // first chain sync NETWORK_ERROR (no record was generated).
