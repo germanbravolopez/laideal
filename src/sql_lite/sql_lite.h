@@ -133,6 +133,9 @@ bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const 
 
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
+// The differences (I-type rectificativas) already issued for `original`, neither refused nor
+// cancelled: what a new difference adds to. *ok is false when the read failed.
+double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok = nullptr);
 // The number of a rectificativa of `original` AEAT refused (paid row in ERROR), or empty:
 // redone, it is resent corrected under that same number (AEAT, 13-10-2026).
 QString refusedRectificationOf(QSqlDatabase &db, const QString &original);

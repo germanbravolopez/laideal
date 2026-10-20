@@ -1450,6 +1450,24 @@ QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
     return number;
 }
 
+double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok)
+{
+    if (ok) *ok = false;
+    if (dbNotConfigured(db, __func__)) return 0.0;
+    ConnectionScope scope(db);
+    QSqlQuery q(db);
+    q.prepare("SELECT COALESCE(SUM(" INGRESOS_IMPORTE_VALUE "), 0) FROM ingresos "
+              "WHERE verifactu_rectifies_n_recibo = :o AND verifactu_rectification_type = 'I' AND pagado = 'SI' "
+              "AND COALESCE(verifactu_estado, '') NOT IN ('ERROR', 'ANULADA')");
+    q.bindValue(":o", original);
+    if (!q.exec() || !q.next()) {
+        qWarning() << "rectifiedDifferences: read failed for" << original << "-" << q.lastError().text();
+        return 0.0;
+    }
+    if (ok) *ok = true;
+    return roundToCents(q.value(0).toDouble());
+}
+
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return QString();

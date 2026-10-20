@@ -287,6 +287,20 @@ void RectifyInvoiceDialog::onRectifyClicked()
         m_lblResult->setText(UiKit::errorHtml(tr("La diferencia no puede ser 0.")));
         return;
     }
+    // A difference never takes the invoice to 0 or below: that is a cancellation (Anular).
+    if (!isSubstitution) {
+        bool read = false;
+        const double earlier = rectifiedDifferences(db, m_loadedTicket, &read);
+        const double corrected = m_loadedImporteTotal + earlier + amountWithIva;
+        if (!read || corrected <= 0.005) {
+            m_lblResult->setText(UiKit::errorHtml(read
+                ? tr("Con esta diferencia la factura quedaría en %1 €: debe seguir siendo mayor que 0.")
+                      .arg(displayMoney(corrected))
+                : tr("No se pudieron leer las rectificativas anteriores del ticket."))
+                + "<br>" + tr("Para dejarla sin efecto, use Anular factura."));
+            return;
+        }
+    }
 
     // The rectificativa row is income dated on this day: never before the original
     // payment (its subtraction would land in a period that never counted it), and

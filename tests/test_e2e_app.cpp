@@ -1656,6 +1656,24 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '815'"), QStringLiteral("0"));
     }
 
+    // A difference never takes the invoice to 0 or below (that is Anular): refused before
+    // anything is numbered, stored or sent.
+    void test_rectify_differenceCannotMakeTheTotalNegative()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "816", "h816a", "20.00", today(), "A-ORIG0816"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("816");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(-25.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        const QString text = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("debe seguir siendo mayor que 0") && text.contains("Anular"), qPrintable(text));
+        QTest::qWait(300);
+        QCOMPARE(m_server.requestsTo("Create").size(), 0);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '816'"), QStringLiteral("0"));
+    }
+
     // While a rectificativa waits for AEAT, no other ticket can be searched, and the reply
     // settles the row of the ticket it was sent for.
     void test_rectify_replyAppliesToTheTicketItWasSentFor()

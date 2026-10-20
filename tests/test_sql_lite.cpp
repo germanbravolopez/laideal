@@ -201,6 +201,24 @@ private slots:
                         "WHERE n_recibo IN ('85', '86') ORDER BY n_recibo)"), QStringLiteral("ERROR,PENDIENTE"));
     }
 
+    // The differences already issued for a ticket: accepted or pending, never refused / cancelled.
+    void test_rectifiedDifferences()
+    {
+        RectificativaRow row;
+        row.original = "87"; row.type = "I"; row.label = "R5"; row.date = QDate(2026, 5, 4);
+        row.number = "88"; row.amount = -3.0;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        row.number = "89"; row.amount = -2.5;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        row.number = "90"; row.amount = -100.0;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        exec("UPDATE ingresos SET verifactu_estado = 'ERROR' WHERE n_recibo = '90'");
+        bool ok = false;
+        QCOMPARE(rectifiedDifferences(m_db, "87", &ok), -5.5);
+        QVERIFY(ok);
+        QCOMPARE(rectifiedDifferences(m_db, "999"), 0.0);
+    }
+
     // The start-up recovery's "Marcar como error" touches only that pending event.
     void test_markPendingEventUnreconciled()
     {
