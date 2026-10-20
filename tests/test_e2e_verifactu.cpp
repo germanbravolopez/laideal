@@ -115,6 +115,24 @@ class TestE2eVerifactu : public QObject
     }
 
 private slots:
+    // The gateway's rectificativas carry no RectificationItems: never sent in PRODUCTION.
+    void test_gatewayRectificativaRefusedInProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuProduction(false); });
+        s->setVerifactuProduction(true);
+        VerifactuIntegration production;
+        QVERIFY(production.initialize());
+        const int before = m_server.requestsTo("Create").size();
+        const QString id = production.submitRectificationAsync(
+            "1900", QDate::currentDate(), VerifactuInvoice::RECTIFICATION_R5, VerifactuInvoice::BY_DIFFERENCES,
+            -1.0, -0.21, 10.0, 2.10, 21.0, "x", "1899", QDate::currentDate());
+        QVERIFY(id.isEmpty());
+        QVERIFY2(production.getLastError().contains("PRODUCCIÓN"), qPrintable(production.getLastError()));
+        QTest::qWait(200);
+        QCOMPARE(m_server.requestsTo("Create").size(), before);
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());

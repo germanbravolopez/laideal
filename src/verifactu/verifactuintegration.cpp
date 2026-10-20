@@ -153,6 +153,14 @@ QString VerifactuIntegration::submitRectificationAsync(
         qWarning() << m_lastError;
         return QString();
     }
+    // The gateway's rectificativas carry no FacturasRectificadas (RectificationItems): fine in
+    // AEAT's pre-production, never as a real invoice. The direct client sends them.
+    if (m_manager && m_manager->getConfig()->getEnvironment() == VerifactuConfig::PRODUCTION) {
+        m_lastError = tr("Con IreneSolutions las rectificativas no se envían en PRODUCCIÓN (no indican la factura "
+                         "que rectifican). Use la conexión directa con la AEAT.");
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused with the gateway in production";
+        return QString();
+    }
     if (!VerifactuInvoice::isRectificationInvoiceType(invoiceType)) {
         m_lastError = "Tipo de factura no rectificativo";
         qWarning() << m_lastError;

@@ -40,7 +40,6 @@ From the [pre-12.0 review](reviews/2026-10-19-pre-12.0/README.md) of 19-10-2026 
 
 | Issue | File | Notes |
 |-------|------|-------|
-| Gateway rectificativas without `RectificationItems` | `src/verifactu/verifactuinvoice.cpp`, `verifactumanager.cpp` | The gateway's rectificativas do not send `FacturasRectificadas` (optional in AEAT's schema; the direct client sends it). Accepted for 12.0 while the gateway stays in pre-production (compliance decision 20-10-2026). Before `verifactu.production=true` with the gateway: serialise `m_rectifiedInvoices` or refuse gateway rectificativas. |
 | Direct client: a duplicate AEAT will not show is re-queried forever | `src/verifactu/aeatdirectbackend.cpp` (`verifyDuplicate`) | If AEAT keeps answering "duplicado" while its query never returns the record (date, period), resend -> duplicate -> query repeats every retry delay. After N rounds mark it ERROR with "Consultar en AEAT", or warn once. From the compliance audit of the P2 batch. |
 | Anular: the rectificativa guard sees one level only | `src/app/cancelinvoicedialog.cpp` | A rectificativa R1 itself substituted by R2 (R1 RECTIFICADA, R2 pointing at R1): cancelling the original is allowed and R2's amount stays in the books. Follow the chain; also move the guard's query into `sql_lite`. Rare. From the compliance audit. |
 | Configuración: a refused gateway key still says "No se pudo conectar" | `src/appsettings/settingsdialog.cpp` | `testConnection` now tells a refused key apart from a network failure; the Configuración message should say which. |
