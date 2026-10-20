@@ -17,6 +17,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 {
     // Again after Configuración: one backend at a time (two direct clients would both
     // send the outbox and ignore each other's AEAT wait time).
+    if (m_direct)
+        m_direct->releaseWaiters();         // the windows still waiting hear an answer
     delete m_direct;
     delete m_manager;
     m_direct = nullptr;

@@ -27,6 +27,7 @@
 #include "testschema.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
+#include "verifactumanager.h"
 #include "verifacturesponse.h"
 
 class TestE2eVerifactu : public QObject
@@ -135,6 +136,59 @@ private slots:
     void cleanupTestCase()
     {
         VerifactuConfig::setEndpointOverride(QString());
+    }
+
+    // Probar conexion: any answer used to read "Conexion correcta", a refused key (401,
+    // or a key error in the body) and a server error included. Only a plain refusal of
+    // the stub's missing fields proves the service and the key.
+    void test_testConnectionReportsARefusedKey()
+    {
+        VerifactuManager mgr;
+        mgr.getConfig()->setEmitterData("B00000000", "Tintoreria E2E");
+        mgr.getConfig()->setServiceKey("e2e-service-key");
+
+        FakeVerifactuServer::Reply missingFields;
+        missingFields.body = FakeVerifactuServer::rejectedReply("4102", "Falta el campo InvoiceID");
+        m_server.enqueue("Create", missingFields);
+        QVERIFY(mgr.testConnection().isSuccess());
+
+        FakeVerifactuServer::Reply unauthorized;
+        unauthorized.status = 401;
+        unauthorized.body = "{}";
+        m_server.enqueue("Create", unauthorized);
+        VerifactuResult r = mgr.testConnection();
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("Clave de servicio"), qPrintable(r.errorDescription));
+
+        FakeVerifactuServer::Reply badKey;
+        badKey.body = FakeVerifactuServer::rejectedReply("8001", "ServiceKey no valida");
+        m_server.enqueue("Create", badKey);
+        r = mgr.testConnection();
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("Clave de servicio"), qPrintable(r.errorDescription));
+
+        FakeVerifactuServer::Reply serverError;
+        serverError.status = 500;
+        serverError.body = "<html>oops</html>";
+        m_server.enqueue("Create", serverError);
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+
+        FakeVerifactuServer::Reply html;
+        html.body = "<html>portal</html>";
+        m_server.enqueue("Create", html);
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+        m_server.clear();
+
+        // Tripwire: under LAIDEAL_TEST=1 a request to any host but this machine is refused
+        // before it leaves (the host never resolves anyway).
+        const QByteArray previous = qgetenv("LAIDEAL_TEST");
+        qputenv("LAIDEAL_TEST", "1");
+        VerifactuConfig::setEndpointOverride("http://laideal-tripwire.invalid/Invoices");
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("TestHostGuard.*laideal-tripwire.invalid"));
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+        VerifactuConfig::setEndpointOverride(m_server.baseUrl());
+        qputenv("LAIDEAL_TEST", previous);
+        QVERIFY(m_server.requests().isEmpty());
     }
 
     void init()

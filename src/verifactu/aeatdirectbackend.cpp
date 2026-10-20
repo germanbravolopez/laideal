@@ -352,6 +352,10 @@ AeatRecord::Registration AeatDirectBackend::registrationFrom(const VerifactuInvo
 
 void AeatDirectBackend::answerLater(const QString &requestId, const VerifactuResult &result)
 {
+    if (m_releasing) {                      // the backend goes away: a queued answer would be lost
+        emit requestFinished(requestId, result);
+        return;
+    }
     QMetaObject::invokeMethod(this, [this, requestId, result]() {
         emit requestFinished(requestId, result);
     }, Qt::QueuedConnection);
@@ -410,7 +414,10 @@ QString AeatDirectBackend::storeAndQueue(
         return requestId;
     }
     // No record before the chain is synced: this request waits for it.
+    m_heldRequests << requestId;
     syncChain([this, requestId, kind, invoiceNumber, build](bool ok, const QString &message) {
+        if (!m_heldRequests.removeOne(requestId))
+            return;                         // already answered by releaseWaiters
         if (ok) {
             storeAndQueueNow(requestId, kind, invoiceNumber, build);
             return;
@@ -599,7 +606,19 @@ void AeatDirectBackend::sendPending()
 {
     if (m_inFlight)
         return;
-    const QList<AeatStore::Record> records = m_store.pending(1000, m_config.issuerNif);
+    QList<AeatStore::Record> records;
+    for (const AeatStore::Record &record : m_store.pending(1000, m_config.issuerNif))
+        if (!m_verifying.contains(record.id))
+            records << record;
+    // After a fault on a batch, its records go one at a time until each has an answer.
+    for (int i = 0; !m_sendSingly.isEmpty() && i < records.size(); ++i) {
+        if (m_sendSingly.contains(records[i].id)) {
+            records = { records[i] };
+            break;
+        }
+        if (i == records.size() - 1)
+            m_sendSingly.clear();
+    }
     if (records.isEmpty())
         return;
     if (!m_sendError.isEmpty()) {
@@ -614,9 +633,11 @@ void AeatDirectBackend::sendPending()
     }
     QStringList xmls;
     m_inFlightIds.clear();
+    m_inFlightRecords.clear();
     for (const AeatStore::Record &record : records) {
         xmls << record.xml;
         m_inFlightIds << record.id;
+        m_inFlightRecords.insert(record.id, record);
         m_store.markAttempt(record.id);
         m_store.markSending(record.id);
     }
@@ -625,6 +646,32 @@ void AeatDirectBackend::sendPending()
     m_inFlight = true;
     m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
                       [this](const AeatTransport::Response &response) { onSubmissionReply(response); });
+}
+
+void AeatDirectBackend::releaseWaiters()
+{
+    m_releasing = true;
+    VerifactuResult stored;
+    stored.status = VerifactuResult::PENDING;
+    stored.errorDescription = tr("Registro guardado, pendiente de envío: se enviará con la nueva configuración");
+    for (auto it = m_waiters.cbegin(); it != m_waiters.cend(); ++it)
+        for (const QString &requestId : it.value())
+            emit requestFinished(requestId, stored);
+    m_waiters.clear();
+    VerifactuResult held;
+    held.status = VerifactuResult::NETWORK_ERROR;
+    held.errorDescription = tr("No se ha generado el registro: la configuración cambió antes de comprobar la cadena");
+    const QStringList requests = m_heldRequests;
+    m_heldRequests.clear();
+    for (const QString &requestId : requests)
+        emit requestFinished(requestId, held);
+    m_releasing = false;
+}
+
+void AeatDirectBackend::answerWaiters(qint64 recordId, const VerifactuResult &result)
+{
+    for (const QString &requestId : m_waiters.take(recordId))
+        emit requestFinished(requestId, result);
 }
 
 void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord)
@@ -701,6 +748,12 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     }
 
     m_nextSendAllowed = QDateTime::currentDateTime().addSecs(parsed.fault ? s_retryDelaySeconds : parsed.waitSeconds);
+    if (parsed.fault && sent.size() > 1) {
+        isolateFaultedBatch(sent, parsed.faultText, reachedBefore);
+        return;
+    }
+    for (qint64 id : sent)
+        m_sendSingly.removeOne(id);
     qDebug() << "AeatDirectBackend: reply" << (parsed.fault ? QStringLiteral("SOAP fault ") + parsed.faultText : parsed.sendState)
              << "CSV" << parsed.csv << "- next submission in" << secondsUntilNextSend() << "s";
     QHash<qint64, AeatStore::Record> pendingById;
@@ -709,8 +762,14 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     bool unanswered = false;
     for (qint64 id : sent) {
         const AeatStore::Record record = pendingById.value(id);
-        if (!record.isValid())
+        if (!record.isValid()) {
+            // Settled meanwhile: its waiters still hear the invoice's stored answer.
+            const AeatStore::Record sentRecord = m_inFlightRecords.value(id);
+            const AeatStore::Record now = m_store.latest(sentRecord.kind, sentRecord.invoiceNumber, m_config.issuerNif);
+            if (m_waiters.contains(id))
+                answerWaiters(id, now.isValid() ? resultFromStored(now) : resultFromStored(sentRecord));
             continue;
+        }
         const QString operation = operationOf(record.kind);
         const AeatResponse::Line *line = parsed.fault ? nullptr : parsed.lineFor(record.invoiceNumber, operation);
         if (!parsed.fault && !line) {
@@ -739,12 +798,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
             m_store.markOutcome(record.id, AeatStore::kCancelledAtAeat, QString(), result.errorCode, result.errorDescription);
             finishRecord(record, result, false);
         } else if (line && line->duplicate && result.isSuccess()) {
-            // Ours only when an earlier send of it got to AEAT (the reply lost); if none
-            // did (no connection, TLS), AEAT already held another system's record.
-            const bool ours = reachedBefore.value(record.id, false);
-            m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
-                                result.csv, result.errorCode, result.errorDescription);
-            finishRecord(record, result, ours);
+            verifyDuplicate(record, result, reachedBefore.value(record.id, false));
         } else {
             m_store.markOutcome(record.id, result.isSuccess() ? AeatStore::kAccepted : AeatStore::kRejected,
                                 result.csv, result.errorCode, result.errorDescription);
@@ -756,4 +810,78 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     // Records created meanwhile, or left unanswered, go next.
     if (!m_store.pending(1, m_config.issuerNif).isEmpty())
         scheduleSend();
+}
+
+void AeatDirectBackend::isolateFaultedBatch(const QList<qint64> &sent, const QString &faultText,
+                                            const QHash<qint64, bool> &reachedBefore)
+{
+    // AEAT refused the whole message (often one malformed record): nothing was judged, so
+    // no record is refused yet. One by one, the faulty record is refused alone.
+    qWarning() << "AeatDirectBackend: SOAP fault on a batch of" << sent.size() << "records -" << faultText
+               << "- resending them one by one";
+    m_sendSingly = sent;
+    // AEAT judged none of them: this send does not count as reached, so a later duplicate is
+    // never taken for ours (one reached by an earlier send keeps it).
+    for (qint64 id : sent)
+        if (!reachedBefore.value(id))
+            m_store.markNotSent(id);
+    VerifactuResult r;
+    r.status = VerifactuResult::PENDING;
+    r.errorDescription = tr("La AEAT rechazó el envío conjunto (%1): se reenvía registro a registro").arg(faultText);
+    for (qint64 id : sent)
+        answerWaiters(id, r);
+    scheduleSend();
+}
+
+void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const VerifactuResult &result, bool reachedBefore)
+{
+    m_verifying.insert(record.id);
+    const QString envelope = AeatRecord::queryEnvelope(m_config.issuerName, m_config.issuerNif, record.issueDate.year(),
+                                                       record.issueDate.month(), record.invoiceNumber);
+    m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
+                      [this, record, result, reachedBefore](const AeatTransport::Response &response) {
+        m_verifying.remove(record.id);
+        const AeatResponse::Query query = AeatResponse::parseQuery(response.body);
+        const QString date = record.issueDate.toString(kDateFormat);
+        const AeatResponse::QueryRecord *held = nullptr;
+        for (const AeatResponse::QueryRecord &q : query.records)
+            if (q.invoiceNumber == record.invoiceNumber && q.issueDate == date)
+                held = &q;
+        // An empty or unreadable amount is missing evidence, never "another amount".
+        bool amountRead = false;
+        const double heldTotal = held ? held->totalAmount.trimmed().toDouble(&amountRead) : 0.0;
+        if (!query.parsed || query.fault || !held || !amountRead) {
+            // AEAT's record could not be read: still unknown, the record stays pending.
+            qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "not verified -"
+                       << (response.error.isEmpty() ? query.faultText : response.error);
+            m_nextSendAllowed = qMax(m_nextSendAllowed, QDateTime::currentDateTime().addSecs(s_retryDelaySeconds));
+            VerifactuResult r;
+            r.status = VerifactuResult::NETWORK_ERROR;
+            r.errorDescription = tr("La AEAT ya tiene la factura %1, pero no se ha podido comprobar su importe")
+                                     .arg(record.invoiceNumber);
+            answerWaiters(record.id, r);
+            scheduleSend();
+            return;
+        }
+        if (qAbs(heldTotal - record.total) > 0.005) {
+            VerifactuResult r = result;
+            r.status = VerifactuResult::ERROR;
+            r.csv.clear();
+            r.errorDescription = tr("La AEAT ya tiene la factura %1 del %2 con otro importe (%3 €, aquí %4 €): "
+                                    "no es esta factura.")
+                                     .arg(record.invoiceNumber, date, held->totalAmount, AeatHash::amountText(record.total));
+            qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "with another amount -" << held->totalAmount;
+            m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
+            finishRecord(record, r, false);
+        } else {
+            // Ours only when an earlier send of it got to AEAT (the reply lost) and AEAT's
+            // huella, when given, is our record's; else another system's record.
+            const bool ours = reachedBefore && (held->hash.isEmpty() || held->hash.compare(record.hash, Qt::CaseInsensitive) == 0);
+            m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
+                                result.csv, result.errorCode, result.errorDescription);
+            finishRecord(record, result, ours);
+        }
+        if (!m_store.pending(1, m_config.issuerNif).isEmpty())
+            scheduleSend();
+    });
 }

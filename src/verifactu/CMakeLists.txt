@@ -31,6 +31,7 @@ set(PROJECT_SOURCES
     aeatcertificate.cpp
     aeattransport.h
     aeattransport.cpp
+    testhostguard.h
     aeatdirectbackend.h
     aeatdirectbackend.cpp
     aeatselftest.h

@@ -13,10 +13,9 @@
 class VerifactuInvoice
 {
 public:
+    // Only F2 and its rectificativas: every other type needs a buyer, never recorded here.
     enum InvoiceType {
-        NORMAL,             // F1 - standard invoice
         SIMPLIFIED,         // F2 - simplified invoice
-        SUBSTITUTE,         // F3 - substitute for simplified
         RECTIFICATION_R1,   // R1 - corrective (legal error, art. 80.1/80.2/80.6 LIVA)
         RECTIFICATION_R2,   // R2 - corrective (art. 80.3 - buyer insolvency)
         RECTIFICATION_R3,   // R3 - corrective (art. 80.4 - bad debts)

@@ -1,5 +1,6 @@
 #include "verifactumanager.h"
 #include "verifacturesponse.h"
+#include "testhostguard.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
 #include <QJsonDocument>
@@ -257,9 +258,8 @@ VerifactuResult VerifactuManager::testConnection()
         return result;
     }
 
-    // POST a stub payload to /Create. The server rejects it (missing fields), but ANY
-    // HTTP response proves connectivity + auth. GET on the base URL hangs without ever
-    // responding, so POST to /Create is the only reliable probe.
+    // POST a stub payload to /Create (GET on the base URL never answers). The service
+    // refuses the stub for its missing fields; only a key refusal or a server error fails.
     QJsonObject probe;
     probe["ServiceKey"] = m_config->getServiceKey();
     QByteArray payload = QJsonDocument(probe).toJson(QJsonDocument::Compact);
@@ -286,6 +286,7 @@ VerifactuResult VerifactuManager::testConnection()
 
     QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     QString errStr = reply->errorString();
+    const QByteArray body = reply->readAll();
     reply->deleteLater();
 
     if (!httpStatus.isValid()) {
@@ -297,9 +298,44 @@ VerifactuResult VerifactuManager::testConnection()
         return result;
     }
 
+    result = connectionProbeResult(httpStatus.toInt(), body);
+    if (!result.isSuccess())
+        m_lastError = result.errorDescription;
+    qDebug() << "testConnection: HTTP" << httpStatus.toInt() << "status" << result.status << result.errorDescription;
+    return result;
+}
+
+VerifactuResult VerifactuManager::connectionProbeResult(int httpStatus, const QByteArray &body)
+{
+    VerifactuResult result;
+    const QString http = QString("HTTP %1").arg(httpStatus);
+    if (httpStatus == 401 || httpStatus == 403) {
+        result.status = VerifactuResult::ERROR;
+        result.errorDescription = "Clave de servicio no válida o sin permiso (" + http + ")";
+        return result;
+    }
+    if (httpStatus >= 500 || httpStatus < 200) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "El servidor respondió con un error (" + http + ")";
+        return result;
+    }
+    const VerifactuResult parsed = parseVerifactuResponse(body, VerifactuReply::Cancel);
+    if (parsed.status == VerifactuResult::NETWORK_ERROR) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Respuesta no válida del servidor (" + http + ")";
+        return result;
+    }
+    const bool keyRefused = parsed.errorCode == QLatin1String("8001")
+                            || parsed.errorDescription.contains("ServiceKey", Qt::CaseInsensitive)
+                            || parsed.errorDescription.contains("clave", Qt::CaseInsensitive);
+    if (parsed.status == VerifactuResult::ERROR && keyRefused) {
+        result.status = VerifactuResult::ERROR;
+        result.errorCode = parsed.errorCode;
+        result.errorDescription = "Clave de servicio no válida: " + parsed.errorDescription;
+        return result;
+    }
     result.status = VerifactuResult::SUCCESS;
-    result.errorDescription = QString("HTTP %1").arg(httpStatus.toInt());
-    qDebug() << "testConnection: reachable, HTTP" << httpStatus.toInt();
+    result.errorDescription = http;
     return result;
 }
 
@@ -321,7 +357,8 @@ QString VerifactuManager::getConfigurationInfo() const
 
 QNetworkRequest VerifactuManager::createNetworkRequest(const QString &endpoint) const
 {
-    QNetworkRequest request{QUrl(endpoint)};
+    // Under LAIDEAL_TEST a non-local host gets an empty URL: the request fails at once.
+    QNetworkRequest request{TestHostGuard::allows(QUrl(endpoint)) ? QUrl(endpoint) : QUrl()};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL/" + QString(PROJECT_VERSION));
     // A stalled connection would never answer: it ends as a NETWORK_ERROR (the row stays

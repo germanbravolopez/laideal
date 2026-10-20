@@ -63,22 +63,13 @@ private slots:
     }
 
     // ---- VerifactuTaxItem ---------------------------------------------------
-    void test_taxItemOperationTypeStrings()
-    {
-        QCOMPARE(VerifactuTaxItem::operationTypeToString(VerifactuTaxItem::S1), QStringLiteral("S1"));
-        QCOMPARE(VerifactuTaxItem::operationTypeToString(VerifactuTaxItem::S2), QStringLiteral("S2"));
-        QCOMPARE(VerifactuTaxItem::operationTypeToString(VerifactuTaxItem::N1), QStringLiteral("N1"));
-        QCOMPARE(VerifactuTaxItem::operationTypeToString(VerifactuTaxItem::N2), QStringLiteral("N2"));
-        QCOMPARE(VerifactuTaxItem::operationTypeToString(VerifactuTaxItem::EXEMPT), QStringLiteral("E1"));
-    }
-
     void test_taxItemJsonAndValidity()
     {
         const QJsonObject j = vatItem(21.0, 100.0, 21.0).toJson();
         QCOMPARE(j.value("TaxRate").toDouble(), 21.0);
         QCOMPARE(j.value("TaxBase").toDouble(), 100.0);
         QCOMPARE(j.value("TaxAmount").toDouble(), 21.0);
-        QCOMPARE(j.value("TaxType").toString(), QStringLiteral("S1")); // default operation type
+        QCOMPARE(j.value("TaxType").toString(), QStringLiteral("S1")); // the only operation type
 
         QVERIFY(vatItem(21.0, 100.0, 21.0).isValid());
         VerifactuTaxItem neg = vatItem(-5.0, 100.0, 0.0);
@@ -91,7 +82,6 @@ private slots:
     {
         QVERIFY(VerifactuInvoice::isRectificationInvoiceType(VerifactuInvoice::RECTIFICATION_R1));
         QVERIFY(VerifactuInvoice::isRectificationInvoiceType(VerifactuInvoice::RECTIFICATION_R5));
-        QVERIFY(!VerifactuInvoice::isRectificationInvoiceType(VerifactuInvoice::NORMAL));
         QVERIFY(!VerifactuInvoice::isRectificationInvoiceType(VerifactuInvoice::SIMPLIFIED));
 
         QCOMPARE(VerifactuInvoice::rectificationTypeToString(VerifactuInvoice::BY_SUBSTITUTION), QStringLiteral("S"));
@@ -138,16 +128,10 @@ private slots:
         f2.addTaxItem(vatItem(21.0, 100.0, 21.0));
         QVERIFY2(f2.isValid(), qPrintable(f2.getValidationError()));
 
-        // NORMAL (F1) requires a buyer.
-        VerifactuInvoice f1;
-        f1.setInvoiceNumber("3246");
-        f1.setInvoiceDate(QDate(2026, 6, 2));
-        f1.setInvoiceType(VerifactuInvoice::NORMAL);
-        f1.setSellerNIF("B12345678");
-        f1.setSellerName("La Ideal");
-        f1.addTaxItem(vatItem(21.0, 100.0, 21.0));
-        QVERIFY(!f1.isValid());
-        QVERIFY(f1.getValidationError().contains("comprador"));
+        // A default invoice is a simplified one (F2), the only kind the shop issues.
+        VerifactuInvoice plain;
+        QCOMPARE(plain.getInvoiceType(), VerifactuInvoice::SIMPLIFIED);
+        QCOMPARE(plain.invoiceTypeCode(), QStringLiteral("F2"));
     }
 
     void test_invoiceRectificationJson()
@@ -182,10 +166,25 @@ private slots:
 
         QCOMPARE(verifactuEstadoToString(VerifactuEstado::Enviada), QStringLiteral("ENVIADA"));
         QCOMPARE(verifactuEstadoToString(VerifactuEstado::Unpaid), QStringLiteral("SIN COBRAR"));
-        // PENDIENTE / empty / unknown all map to NotSubmitted.
+        // PENDIENTE and the legacy empty value are NotSubmitted.
         QVERIFY(verifactuEstadoFromString("PENDIENTE") == VerifactuEstado::NotSubmitted);
         QVERIFY(verifactuEstadoFromString("") == VerifactuEstado::NotSubmitted);
-        QVERIFY(verifactuEstadoFromString("garbage") == VerifactuEstado::NotSubmitted);
+        QVERIFY(verifactuEstadoFromString(QString()) == VerifactuEstado::NotSubmitted);
+    }
+
+    // Any other stored text is Unknown with a warning, never PENDIENTE: read as pending
+    // it would be offered for resending (an invoice AEAT may hold, sent twice). It is
+    // neither unsubmitted nor locally voidable, and is shown as stored.
+    void test_unknownEstadoIsNotResendable()
+    {
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown verifactu_estado.*garbage"));
+        QVERIFY(verifactuEstadoFromString("garbage") == VerifactuEstado::Unknown);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown verifactu_estado"));
+        QVERIFY(!verifactuEstadoIsUnsubmitted(verifactuEstadoFromString("ENVIADO")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown verifactu_estado"));
+        QCOMPARE(verifactuEstadoDisplay("Enviado?"), QStringLiteral("Enviado?"));
+        QCOMPARE(verifactuEstadoDisplay("enviada"), QStringLiteral("ENVIADA"));
+        QCOMPARE(verifactuEstadoForResult(VerifactuResult::NETWORK_ERROR), VerifactuEstado::NotSubmitted);
     }
 
     // Read-side safety net. PendingSubmitsDialog used to persist a literal "Error",

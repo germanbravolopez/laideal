@@ -11,10 +11,12 @@
 
 namespace AeatQr {
 
-// Modules per side of the symbol for `text` (21 for version 1, +4 per version).
+// Modules per side of the symbol for `text` (21 for version 1, +4 per version); 0 when
+// the text is too long for any symbol.
 int moduleCount(const QString &text);
 
 // The symbol as an image of `pixelsPerModule` pixels per module, quiet zone included.
+// A null image when the text is too long for any symbol.
 QImage image(const QString &text, int pixelsPerModule = 4);
 
 } // namespace AeatQr

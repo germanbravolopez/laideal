@@ -41,6 +41,14 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
+    // A sent rectificativa of the ticket (its n_recibo in *number, empty for none): cancel
+    // it first, or its amount stays in the books after the original is gone. False when
+    // the database could not be read.
+    bool liveRectificationOf(const QString &ticket, QString *number);
+    // The first press of a row's Anular says what will be cancelled; the second sends it.
+    void armCancellation(int row);
+    void disarmCancellation();
+
     struct Event {
         int     seq = 0;
         QString invoiceId;   // literal AEAT InvoiceID (bare n_recibo or "<n>-<seq>")
@@ -50,11 +58,12 @@ private:
         QDate   invoiceDate; // fecha_pago: the date AEAT registered the invoice under
     };
 
-    QLineEdit    *m_leTicketNum;
+    QLineEdit    *m_leTicketNum = nullptr;
     QPushButton  *m_btnSearch = nullptr;
-    QLabel       *m_lblHeader;
-    QTableWidget *m_table;
-    QLabel       *m_lblResult;
+    QLabel       *m_lblHeader = nullptr;
+    QTableWidget *m_table = nullptr;
+    QLabel       *m_lblResult = nullptr;
+    int           m_armedRow = -1;          // row whose button now reads "Confirmar anulación"
 
     QString          m_loadedTicket;
     QDate            m_receptionDate;       // fallback for old seq-0 invoices registered under it

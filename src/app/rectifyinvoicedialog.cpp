@@ -43,20 +43,22 @@ VerifactuInvoice::InvoiceType invoiceTypeFromIndex(int idx)
 RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
     : QDialog(parent), db(database)
 {
-    UiKit::setUpDialog(this, "Factura rectificativa Verifactu");
+    UiKit::setUpDialog(this, tr("Factura rectificativa Verifactu"));
 
     QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->addWidget(UiKit::introPanel(tr(
+        "Corrige en la AEAT una factura ya registrada con una factura rectificativa, que lleva su propio "
+        "número de ticket. Busque el ticket original, rellene los datos y envíela.")));
 
     // Search row -----------------------------------------------------------
     QHBoxLayout *searchRow = new QHBoxLayout();
-    searchRow->addWidget(new QLabel("Número de ticket original:"));
+    searchRow->addWidget(new QLabel(tr("Número de ticket original:")));
     m_leTicketNum = new QLineEdit();
     m_leTicketNum->setObjectName("leTicketNum");   // stable names for the e2e test bench
-    m_leTicketNum->setPlaceholderText("Ej: 24417");
+    m_leTicketNum->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leTicketNum);
-    QPushButton *btnSearch = new QPushButton("Buscar");
-    m_btnSearch = btnSearch;
-    searchRow->addWidget(btnSearch);
+    m_btnSearch = UiKit::secondaryButton(tr("Buscar"), "btnSearch");
+    searchRow->addWidget(m_btnSearch);
     layout->addLayout(searchRow);
 
     // Ticket info panel ----------------------------------------------------
@@ -67,11 +69,11 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     layout->addWidget(m_lblInfo);
 
     // Rectification form ---------------------------------------------------
-    m_grpForm = new QGroupBox("Datos de la rectificativa");
+    m_grpForm = new QGroupBox(tr("Datos de la rectificativa"));
     QVBoxLayout *formLayout = new QVBoxLayout(m_grpForm);
 
     QHBoxLayout *rowType = new QHBoxLayout();
-    rowType->addWidget(new QLabel("Tipo:"));
+    rowType->addWidget(new QLabel(tr("Tipo:")));
     m_cbInvoiceType = new QComboBox();
     m_cbInvoiceType->setObjectName("cbInvoiceType");
     m_cbInvoiceType->addItem("R1 - Error fundado en derecho (art. 80.1, 80.2 y 80.6 LIVA)");
@@ -84,9 +86,9 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     formLayout->addLayout(rowType);
 
     QHBoxLayout *rowMode = new QHBoxLayout();
-    rowMode->addWidget(new QLabel("Modo:"));
-    m_rbDifferences  = new QRadioButton("Por diferencias (I)");
-    m_rbSubstitution = new QRadioButton("Por sustitución (S)");
+    rowMode->addWidget(new QLabel(tr("Modo:")));
+    m_rbDifferences  = new QRadioButton(tr("Por diferencias (I)"));
+    m_rbSubstitution = new QRadioButton(tr("Por sustitución (S)"));
     m_rbSubstitution->setObjectName("rbSubstitution");
     m_rbDifferences->setObjectName("rbDifferences");
     m_rbDifferences->setChecked(true);
@@ -96,11 +98,8 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     formLayout->addLayout(rowMode);
 
     QHBoxLayout *rowDate = new QHBoxLayout();
-    rowDate->addWidget(new QLabel("Fecha rectificativa:"));
-    m_deRectifyDate = new QDateEdit(QDate::currentDate());
-    m_deRectifyDate->setObjectName("deRectifyDate");
-    m_deRectifyDate->setCalendarPopup(true);
-    m_deRectifyDate->setDisplayFormat("dd-MM-yyyy");
+    rowDate->addWidget(new QLabel(tr("Fecha rectificativa:")));
+    m_deRectifyDate = UiKit::dateEdit(QDate::currentDate(), "deRectifyDate");
     m_deRectifyDate->setMaximumDate(QDate::currentDate());   // AEAT refuses a future invoice date
     rowDate->addWidget(m_deRectifyDate);
     rowDate->addStretch();
@@ -120,9 +119,9 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     formLayout->addLayout(rowAmount);
 
     QHBoxLayout *rowDesc = new QHBoxLayout();
-    rowDesc->addWidget(new QLabel("Motivo:"));
+    rowDesc->addWidget(new QLabel(tr("Motivo:")));
     m_leDescription = new QLineEdit();
-    m_leDescription->setPlaceholderText("Opcional - descripción visible en la rectificativa");
+    m_leDescription->setPlaceholderText(tr("Opcional - descripción visible en la rectificativa"));
     rowDesc->addWidget(m_leDescription);
     formLayout->addLayout(rowDesc);
 
@@ -130,26 +129,24 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_grpForm->setEnabled(false);
 
     // Submit + result ------------------------------------------------------
-    m_btnRectify = new QPushButton("Enviar rectificativa a AEAT");
-    m_btnRectify->setObjectName("btnRectify");
+    // Not a primaryButton: Enter in a field never sends a rectificativa (11.1).
+    m_btnRectify = UiKit::secondaryButton(tr("Enviar rectificativa a AEAT"), "btnRectify");
     m_btnRectify->setEnabled(false);
-    layout->addWidget(m_btnRectify);
+    auto *actionRow = new QHBoxLayout();
+    actionRow->addStretch();
+    actionRow->addWidget(m_btnRectify);
+    layout->addLayout(actionRow);
 
-    m_lblResult = new QLabel();
-    m_lblResult->setObjectName("lblResult");
-    m_lblResult->setWordWrap(true);
+    m_lblResult = new UiKit::ResultPanel();
     layout->addWidget(m_lblResult);
-
-    QPushButton *btnClose = new QPushButton("Cerrar");
-    layout->addWidget(btnClose, 0, Qt::AlignRight);
+    layout->addLayout(UiKit::closeRow(this, tr("Cerrar")));
 
     // Wiring ---------------------------------------------------------------
-    connect(btnSearch,        &QPushButton::clicked,     this, &RectifyInvoiceDialog::onSearchClicked);
+    connect(m_btnSearch,      &QPushButton::clicked,     this, &RectifyInvoiceDialog::onSearchClicked);
     UiKit::onEnter(m_leTicketNum, [this]() { onSearchClicked(); });
     connect(m_btnRectify,     &QPushButton::clicked,     this, &RectifyInvoiceDialog::onRectifyClicked);
     connect(m_rbDifferences,  &QRadioButton::toggled,    this, &RectifyInvoiceDialog::onRectificationModeChanged);
     connect(m_rbSubstitution, &QRadioButton::toggled,    this, &RectifyInvoiceDialog::onRectificationModeChanged);
-    connect(btnClose,         &QPushButton::clicked,     this, &QDialog::accept);
 
     onRectificationModeChanged(); // set initial label
 }
@@ -157,9 +154,9 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
 void RectifyInvoiceDialog::onRectificationModeChanged()
 {
     if (m_rbSubstitution->isChecked())
-        m_lblAmount->setText("Importe TOTAL corregido (con IVA):");
+        m_lblAmount->setText(tr("Importe TOTAL corregido (con IVA):"));
     else
-        m_lblAmount->setText("Diferencia de importe (delta, con IVA):");
+        m_lblAmount->setText(tr("Diferencia de importe (delta, con IVA):"));
 }
 
 void RectifyInvoiceDialog::setFormEnabled(bool enabled)
@@ -181,24 +178,16 @@ void RectifyInvoiceDialog::onSearchClicked()
 
     db.open();
     QSqlQuery q(db);
-    q.prepare("SELECT cliente, fecha_recepcion, SUM(importe), verifactu_csv, verifactu_estado "
-              "FROM ingresos WHERE n_recibo = :num "
-              "GROUP BY cliente, fecha_recepcion, verifactu_csv, verifactu_estado "
-              "LIMIT 1");
+    q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) FROM ingresos WHERE n_recibo = :num");
     q.bindValue(":num", ticketNum);
-    q.exec();
-
-    if (!q.first()) {
-        m_lblInfo->setText("<i>Ticket no encontrado.</i>");
+    if (!q.exec() || !q.first() || q.value(0).isNull()) {
+        m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
         db.close();
         return;
     }
-
     const QString cliente = q.value(0).toString();
     const QString fecha   = q.value(1).toString();
-    const double  importe = q.value(2).toDouble();
-    const QString csv     = q.value(3).toString();
-    const QString estado  = q.value(4).toString();
+    q.finish();
 
     // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
     // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
@@ -212,28 +201,44 @@ void RectifyInvoiceDialog::onSearchClicked()
                  "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
     seqQ.bindValue(":num", ticketNum);
     const bool hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
+    seqQ.finish();
     db.close();
 
     if (hasPartialPays) {
         m_lblInfo->setText(
-            QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2<br>"
-                    "<i>Este ticket tiene varios pagos parciales. La rectificación "
-                    "individual de cada pago no está disponible en esta versión; "
-                    "rectificar desde la sede electrónica de la AEAT.</i>")
-            .arg(cliente, fecha));
+            tr("<b>Cliente:</b> %1<br><b>Fecha:</b> %2<br>"
+               "<i>Este ticket tiene varios pagos parciales. La rectificación "
+               "individual de cada pago no está disponible en esta versión; "
+               "rectificar desde la sede electrónica de la AEAT.</i>")
+            .arg(cliente.toHtmlEscaped(), fecha.toHtmlEscaped()));
         return;
     }
 
+    // The invoice is the seq-0 payment event (its paid rows only): unpaid garments of the
+    // ticket share n_recibo but were never part of it.
+    QVector<SubmittedInvoiceEvent> events;
+    if (!submittedInvoiceEvents(db, ticketNum, events)) {
+        m_lblInfo->setText(tr("<i>Error al leer el ticket.</i>"));
+        return;
+    }
+    SubmittedInvoiceEvent invoice;
+    for (const SubmittedInvoiceEvent &e : events)
+        if (e.seq == 0)
+            invoice = e;
+    const double  importe = invoice.importe;
+    const QString csv     = invoice.csv;
+    const QString estado  = invoice.estado;
+
     m_lblInfo->setText(
-        QString("<b>Cliente:</b> %1<br>"
-                "<b>Fecha:</b> %2<br>"
-                "<b>Importe total:</b> %3 €<br>"
-                "<b>CSV Verifactu:</b> %4<br>"
-                "<b>Estado:</b> %5")
-        .arg(cliente, fecha,
+        tr("<b>Cliente:</b> %1<br>"
+           "<b>Fecha:</b> %2<br>"
+           "<b>Importe total:</b> %3 €<br>"
+           "<b>CSV Verifactu:</b> %4<br>"
+           "<b>Estado:</b> %5")
+        .arg(cliente.toHtmlEscaped(), fecha.toHtmlEscaped(),
              displayMoney(importe),
-             csv.isEmpty() ? "-" : csv,
-             verifactuEstadoToString(verifactuEstadoFromString(estado))));
+             csv.isEmpty() ? QStringLiteral("-") : csv.toHtmlEscaped(),
+             verifactuEstadoDisplay(estado).toHtmlEscaped()));
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
     const QString pending = pendingRectificationOf(db, ticketNum);
@@ -255,15 +260,17 @@ void RectifyInvoiceDialog::onSearchClicked()
         m_sbAmount->setValue(m_rbDifferences->isChecked() ? 0.00 : importe);
         setFormEnabled(true);
     } else {
-        const QString reason = (estadoEnum == VerifactuEstado::Anulada)     ? "Este ticket está anulado en AEAT - no se puede rectificar."
-                             : (estadoEnum == VerifactuEstado::Rectificada) ? "Este ticket ya fue rectificado previamente."
+        const QString reason = (estadoEnum == VerifactuEstado::Anulada)     ? tr("Este ticket está anulado en AEAT - no se puede rectificar.")
+                             : (estadoEnum == VerifactuEstado::Rectificada) ? tr("Este ticket ya fue rectificado previamente.")
+                             : (estadoEnum == VerifactuEstado::Unknown)     ? tr("El estado Verifactu de este ticket no es válido: "
+                                                                                 "revíselo antes de rectificarlo.")
                              // AEAT, 13-10-2026: a refused record still exists in the system; it is resent
                              // corrected (same number), and a rectificativa follows if the amount or date change.
-                             : (estadoEnum == VerifactuEstado::Error)       ? "La AEAT rechazó esta factura. Reenvíela primero (Recogida de Prendas, "
-                                                                              "botón Verifactu\u2026, Reintentar); cuando la AEAT la acepte, si hay que "
-                                                                              "cambiar el importe o la fecha, rectifíquela aquí."
-                                                                            : "Este ticket no fue enviado a AEAT - no hay nada que rectificar.";
-        m_lblResult->setText(reason);
+                             : (estadoEnum == VerifactuEstado::Error)       ? tr("La AEAT rechazó esta factura. Reenvíela primero (Recogida de Prendas, "
+                                                                                 "botón Verifactu\u2026, Reintentar); cuando la AEAT la acepte, si hay que "
+                                                                                 "cambiar el importe o la fecha, rectifíquela aquí.")
+                                                                            : tr("Este ticket no fue enviado a AEAT - no hay nada que rectificar.");
+        m_lblResult->setText(UiKit::warnHtml(reason));
     }
 }
 
@@ -276,11 +283,11 @@ void RectifyInvoiceDialog::onRectifyClicked()
     const bool   isSubstitution = m_rbSubstitution->isChecked();
 
     if (isSubstitution && amountWithIva <= 0.0) {
-        m_lblResult->setText("<b style='color:red'>El importe corregido total debe ser mayor que 0.</b>");
+        m_lblResult->setText(UiKit::errorHtml(tr("El importe corregido total debe ser mayor que 0.")));
         return;
     }
     if (!isSubstitution && qFuzzyIsNull(amountWithIva)) {
-        m_lblResult->setText("<b style='color:red'>La diferencia no puede ser 0.</b>");
+        m_lblResult->setText(UiKit::errorHtml(tr("La diferencia no puede ser 0.")));
         return;
     }
 
@@ -290,13 +297,13 @@ void RectifyInvoiceDialog::onRectifyClicked()
     const QDate rectifyDate = m_deRectifyDate->date();
     const QDate lastPayment = ticketLastPaymentDate(db, m_loadedTicket);
     if (lastPayment.isValid() && rectifyDate < lastPayment) {
-        m_lblResult->setText(QString("<b style='color:red'>La fecha de la rectificativa no puede ser anterior "
-                                     "al cobro del ticket original (%1).</b>").arg(lastPayment.toString("dd-MM-yyyy")));
+        m_lblResult->setText(UiKit::errorHtml(tr("La fecha de la rectificativa no puede ser anterior "
+                                                 "al cobro del ticket original (%1).").arg(lastPayment.toString("dd-MM-yyyy"))));
         return;
     }
     if (quarterIsClosed(db, rectifyDate)) {
-        m_lblResult->setText("<b style='color:red'>La fecha de la rectificativa pertenece a un trimestre "
-                             "con la contabilidad cerrada. Elija una fecha de un periodo abierto.</b>");
+        m_lblResult->setText(UiKit::errorHtml(tr("La fecha de la rectificativa pertenece a un trimestre "
+                                                 "con la contabilidad cerrada. Elija una fecha de un periodo abierto.")));
         return;
     }
 
@@ -314,21 +321,21 @@ void RectifyInvoiceDialog::onRectifyClicked()
     const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
     // The shop only issues simplified invoices: the direct client corrects them with R5.
     if (m_verifactu->directBackend() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
-        m_lblResult->setText(UiKit::errorHtml("Con la conexión directa con la AEAT la rectificativa de un ticket "
-                                              "(factura simplificada) es siempre R5."));
+        m_lblResult->setText(UiKit::errorHtml(tr("Con la conexión directa con la AEAT la rectificativa de un ticket "
+                                                 "(factura simplificada) es siempre R5.")));
         return;
     }
     if (!m_verifactu->isConfigured()) {
-        m_lblResult->setText(UiKit::errorHtml("Verifactu no está configurado: no se ha creado la rectificativa."));
+        m_lblResult->setText(UiKit::errorHtml(tr("Verifactu no está configurado: no se ha creado la rectificativa.")));
         return;
     }
     if (const QString blocked = m_verifactu->invoicingBlockedReason(); !blocked.isEmpty()) {
-        m_lblResult->setText(UiKit::errorHtml(blocked));
+        m_lblResult->setText(UiKit::errorHtml(blocked.toHtmlEscaped()));
         return;
     }
 
     setFormEnabled(false);
-    m_lblResult->setText("Enviando rectificativa a AEAT...");
+    m_lblResult->setText(tr("Enviando rectificativa a AEAT..."));
 
     // Lazy-wire the signal on first use - m_verifactu is set by MainWindow after construction.
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
@@ -401,9 +408,8 @@ void RectifyInvoiceDialog::onRectifyClicked()
     if (m_pendingRectifyId.isEmpty()) {
         // Nothing was sent: its row (claimed or reused) is an error to redo, not PENDIENTE.
         markRectificationUnsent(db, m_newInvoiceNumber, tr("No se envió: Verifactu no configurado."));
-        m_lblResult->setText(
-            QString("<b style='color:red'>Verifactu no configurado:</b> %1")
-            .arg(m_verifactu->getLastError()));
+        m_lblResult->setText(UiKit::errorHtml(tr("Verifactu no configurado:")) + " "
+                             + m_verifactu->getLastError().toHtmlEscaped());
         setFormEnabled(true);
     }
 }
@@ -485,11 +491,10 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
     const bool localOk = applyRectificationResult(result);
 
     if (result.isSuccess() && localOk) {
-        m_lblResult->setText(
-            QString("<b style='color:green'>Rectificativa enviada.</b><br>"
-                    "Nuevo ticket: %1<br>CSV: %2")
-            .arg(m_newInvoiceNumber,
-                 result.csv.isEmpty() ? "(sin CSV)" : result.csv));
+        m_lblResult->setText(UiKit::okHtml(tr("Rectificativa enviada."))
+                             + "<br>" + tr("Nuevo ticket: %1<br>CSV: %2")
+                                            .arg(m_newInvoiceNumber.toHtmlEscaped(),
+                                                 result.csv.isEmpty() ? tr("(sin CSV)") : result.csv.toHtmlEscaped()));
         m_loadedTicket.clear();
         m_leTicketNum->clear();
         m_lblInfo->setText("-");
@@ -514,9 +519,8 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
                                            "Prendas antes de rehacerla."));
         setFormEnabled(true);
     } else {
-        m_lblResult->setText(
-            QString("<b style='color:red'>Error al rectificar:</b> %1")
-            .arg(result.errorDescription.toHtmlEscaped()));
+        m_lblResult->setText(UiKit::errorHtml(tr("Error al rectificar:")) + " "
+                             + result.errorDescription.toHtmlEscaped());
         setFormEnabled(true);
     }
 }
@@ -578,9 +582,10 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
     const int changed = applyRectificativaResult(db, m_newInvoiceNumber, m_submittedTicket, result, estado);
     if (result.isSuccess() && changed <= 0) {
         localOk = false;
-        m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo guardar "
-                                     "el nuevo ticket %1 en la base de datos local. Revise el log de depuración "
-                                     "antes de hacer la contabilidad.</b>").arg(m_newInvoiceNumber.toHtmlEscaped()));
+        m_lblResult->setText(UiKit::errorHtml(tr("La AEAT aceptó la rectificativa, pero no se pudo guardar "
+                                                 "el nuevo ticket %1 en la base de datos local. Revise el log de "
+                                                 "depuración antes de hacer la contabilidad.")
+                                                  .arg(m_newInvoiceNumber.toHtmlEscaped())));
     }
 
     // For substitution (S), mark the original rows as RECTIFICADA so they no longer
@@ -592,9 +597,10 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
         const QDate rectifiedOn = openPeriodDate(db, m_newInvoiceDate);
         if (!markTicketRectified(db, m_submittedTicket, rectifiedOn)) {
             localOk = false;
-            m_lblResult->setText(QString("<b style='color:red'>La AEAT aceptó la rectificativa, pero no se pudo marcar "
-                                         "el ticket %1 como RECTIFICADA en la base de datos local. Revise el log "
-                                         "de depuración antes de hacer la contabilidad.</b>").arg(m_submittedTicket.toHtmlEscaped()));
+            m_lblResult->setText(UiKit::errorHtml(tr("La AEAT aceptó la rectificativa, pero no se pudo marcar "
+                                                     "el ticket %1 como RECTIFICADA en la base de datos local. Revise "
+                                                     "el log de depuración antes de hacer la contabilidad.")
+                                                      .arg(m_submittedTicket.toHtmlEscaped())));
         }
     }
     db.close();

@@ -37,6 +37,10 @@ CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *
 void CancelInvoiceDialog::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
+    layout->addWidget(UiKit::introPanel(tr(
+        "Anula en la AEAT una factura ya registrada. Busque el ticket y pulse <b>Anular</b> en la "
+        "factura; la ventana indica qué se va a anular y se confirma con <b>Confirmar anulación</b>. "
+        "La anulación no se puede deshacer.")));
 
     auto *searchRow = new QHBoxLayout;
     searchRow->addWidget(new QLabel(tr("Número de ticket:")));
@@ -44,9 +48,8 @@ void CancelInvoiceDialog::buildUi()
     m_leTicketNum->setObjectName("leTicketNum");   // stable names for the e2e test bench
     m_leTicketNum->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leTicketNum);
-    auto *btnSearch = new QPushButton(tr("Buscar"));
-    m_btnSearch = btnSearch;
-    searchRow->addWidget(btnSearch);
+    m_btnSearch = UiKit::secondaryButton(tr("Buscar"), "btnSearch");
+    searchRow->addWidget(m_btnSearch);
     layout->addLayout(searchRow);
 
     m_lblHeader = new QLabel("-");
@@ -67,17 +70,12 @@ void CancelInvoiceDialog::buildUi()
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
     layout->addWidget(m_table);
 
-    m_lblResult = new QLabel;
-    m_lblResult->setObjectName("lblResult");
-    m_lblResult->setWordWrap(true);
+    m_lblResult = new UiKit::ResultPanel;
     layout->addWidget(m_lblResult);
+    layout->addLayout(UiKit::closeRow(this, tr("Cerrar")));
 
-    auto *btnClose = new QPushButton(tr("Cerrar"));
-    layout->addWidget(btnClose, 0, Qt::AlignRight);
-
-    connect(btnSearch,     &QPushButton::clicked,    this, &CancelInvoiceDialog::onSearchClicked);
+    connect(m_btnSearch, &QPushButton::clicked, this, &CancelInvoiceDialog::onSearchClicked);
     UiKit::onEnter(m_leTicketNum, [this]() { onSearchClicked(); });
-    connect(btnClose,      &QPushButton::clicked,    this, &QDialog::accept);
 }
 
 void CancelInvoiceDialog::onSearchClicked()
@@ -85,6 +83,7 @@ void CancelInvoiceDialog::onSearchClicked()
     if (!m_pendingCancelId.isEmpty())   // the reply belongs to the ticket shown
         return;
     m_lblResult->clear();
+    m_armedRow = -1;
     m_loadedTicket.clear();
     m_events.clear();
     m_table->setRowCount(0);
@@ -136,7 +135,7 @@ void CancelInvoiceDialog::onSearchClicked()
                              .arg(client.toHtmlEscaped(), date.toHtmlEscaped()));
 
     if (m_events.isEmpty()) {
-        m_lblResult->setText(tr("Este ticket no tiene envíos en AEAT."));
+        m_lblResult->setText(UiKit::warnHtml(tr("Este ticket no tiene envíos en AEAT.")));
         return;
     }
     rebuildTable();
@@ -150,6 +149,7 @@ void CancelInvoiceDialog::onSearchClicked()
 
 void CancelInvoiceDialog::rebuildTable()
 {
+    m_armedRow = -1;
     m_table->setRowCount(m_events.size());
     for (int row = 0; row < m_events.size(); ++row) {
         const Event &e = m_events[row];
@@ -159,12 +159,12 @@ void CancelInvoiceDialog::rebuildTable()
         m_table->setItem(row, COL_IMPORTE,
             new QTableWidgetItem(displayMoney(e.importe) + " €"));
         m_table->setItem(row, COL_ESTADO,
-            new QTableWidgetItem(verifactuEstadoToString(verifactuEstadoFromString(e.estado))));
+            new QTableWidgetItem(verifactuEstadoDisplay(e.estado)));
         m_table->setItem(row, COL_CSV,
             new QTableWidgetItem(e.csv.isEmpty() ? QStringLiteral("-") : e.csv));
 
         const VerifactuEstado st = verifactuEstadoFromString(e.estado);
-        auto *btn = new QPushButton(tr("Anular"));
+        auto *btn = UiKit::secondaryButton(tr("Anular"), QStringLiteral("btnCancel%1").arg(row));
         // Only ENVIADA events are AEAT-cancellable. ANULADA / RECTIFICADA /
         // ERROR / PENDIENTE all have no AEAT-side cancel to issue.
         btn->setEnabled(st == VerifactuEstado::Enviada);
@@ -197,12 +197,14 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     // today's quarter is itself closed, or that filed report would change.
     m_pendingCancelDate = QDate::currentDate();
     if (quarterIsClosed(db, m_pendingCancelDate)) {
-        m_lblResult->setText(tr("<b style='color:red'>El trimestre actual tiene la contabilidad cerrada. "
-                                "Revierta la contabilidad del trimestre actual para poder anular.</b>"));
+        disarmCancellation();
+        m_lblResult->setText(UiKit::errorHtml(tr("El trimestre actual tiene la contabilidad cerrada. "
+                                                 "Revierta la contabilidad del trimestre actual para poder anular.")));
         return;
     }
 
     if (const QString blocked = m_verifactu->numberingBlockedReason(); !blocked.isEmpty()) {
+        disarmCancellation();
         m_lblResult->setText(UiKit::errorHtml(blocked.toHtmlEscaped()));
         return;
     }
@@ -210,14 +212,35 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     // AEAT keys an invoice on (emisor, InvoiceID, date): cancel it under the date it
     // was issued with - the payment date, not the ticket's reception date.
     if (!e.invoiceDate.isValid()) {
+        disarmCancellation();
         qWarning() << "CancelInvoiceDialog: no payment date for" << e.invoiceId << "- cancellation not sent";
-        m_lblResult->setText(tr("<b style='color:red'>La factura %1 no tiene fecha de pago, "
-                                "no se puede anular en AEAT.</b><br>Compruebe qué tiene registrado la AEAT "
-                                "con \"Consultar en AEAT\" en Recogida de prendas.").arg(e.invoiceId.toHtmlEscaped()));
+        m_lblResult->setText(UiKit::errorHtml(tr("La factura %1 no tiene fecha de pago, no se puede anular en AEAT.")
+                                                  .arg(e.invoiceId.toHtmlEscaped()))
+                             + "<br>" + tr("Compruebe qué tiene registrado la AEAT con \"Consultar en AEAT\" en "
+                                           "Recogida de prendas."));
         return;
     }
+    QString rectificativa;
+    if (!liveRectificationOf(m_loadedTicket, &rectificativa)) {
+        disarmCancellation();
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo comprobar si el ticket tiene rectificativas: no se ha "
+                                                 "enviado nada a la AEAT.")));
+        return;
+    }
+    if (!rectificativa.isEmpty()) {
+        disarmCancellation();
+        m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa %1 de este ticket está registrada en la AEAT: "
+                                                 "anule antes la rectificativa (busque el ticket %1) y después esta factura.")
+                                                  .arg(rectificativa.toHtmlEscaped())));
+        return;
+    }
+    if (m_armedRow != row) {
+        armCancellation(row);
+        return;
+    }
+    disarmCancellation();
     setActionsEnabled(false);
-    m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId));
+    m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId.toHtmlEscaped()));
 
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &CancelInvoiceDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
@@ -230,11 +253,56 @@ void CancelInvoiceDialog::onCancelClicked(int row)
                             ? m_receptionDate : QDate();
     m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
     if (m_pendingCancelId.isEmpty()) {
-        m_lblResult->setText(QString("<b style='color:red'>Verifactu no configurado:</b> %1")
-                                 .arg(m_verifactu->getLastError()));
+        m_lblResult->setText(UiKit::errorHtml(tr("Verifactu no configurado:")) + " "
+                             + m_verifactu->getLastError().toHtmlEscaped());
         m_pendingCancelRow = -1;
         setActionsEnabled(true);
     }
+}
+
+void CancelInvoiceDialog::armCancellation(int row)
+{
+    disarmCancellation();
+    auto *btn = qobject_cast<QPushButton *>(m_table->cellWidget(row, COL_ACTION));
+    if (!btn)
+        return;
+    m_armedRow = row;
+    btn->setText(tr("Confirmar anulación"));
+    const Event &e = m_events[row];
+    m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la AEAT la factura %1 del %2 por %3 €.")
+                                             .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
+                                                  displayMoney(e.importe)))
+                         + "<br>" + tr("La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> para "
+                                       "enviarla, o busque otro ticket para no hacer nada."));
+}
+
+void CancelInvoiceDialog::disarmCancellation()
+{
+    if (m_armedRow >= 0)
+        if (auto *btn = qobject_cast<QPushButton *>(m_table->cellWidget(m_armedRow, COL_ACTION)))
+            btn->setText(tr("Anular"));
+    m_armedRow = -1;
+}
+
+bool CancelInvoiceDialog::liveRectificationOf(const QString &ticket, QString *number)
+{
+    number->clear();
+    if (!db.open()) {
+        qWarning() << "CancelInvoiceDialog: db.open() failed -" << db.lastError().text();
+        return false;
+    }
+    QSqlQuery q(db);
+    q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :t AND pagado = 'SI' "
+              "AND verifactu_estado = 'ENVIADA' ORDER BY CAST(n_recibo AS INTEGER) LIMIT 1");
+    q.bindValue(":t", ticket);
+    const bool read = q.exec();
+    if (!read)
+        qWarning() << "CancelInvoiceDialog: rectificativa lookup failed -" << q.lastError().text();
+    else if (q.next())
+        *number = q.value(0).toString();
+    q.finish();
+    db.close();
+    return read;
 }
 
 void CancelInvoiceDialog::done(int result)
@@ -301,13 +369,12 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         return;
     }
     if (!result.isSuccess()) {
-        QString text = QString("<b style='color:red'>Error al anular %1:</b> %2")
-                           .arg(e.invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped());
+        QString text = UiKit::errorHtml(tr("Error al anular %1:").arg(e.invoiceId.toHtmlEscaped()))
+                       + " " + result.errorDescription.toHtmlEscaped();
         if (!firstRejection.isEmpty())
-            text = tr("<b style='color:red'>Error al anular %1.</b><br>Con la fecha de pago: %2<br>"
-                      "Con la fecha de recepción: %3")
-                       .arg(e.invoiceId.toHtmlEscaped(), firstRejection.toHtmlEscaped(),
-                            result.errorDescription.toHtmlEscaped());
+            text = UiKit::errorHtml(tr("Error al anular %1.").arg(e.invoiceId.toHtmlEscaped()))
+                   + "<br>" + tr("Con la fecha de pago: %1<br>Con la fecha de recepción: %2")
+                                  .arg(firstRejection.toHtmlEscaped(), result.errorDescription.toHtmlEscaped());
         m_lblResult->setText(text);
         setActionsEnabled(true);
         return;
@@ -327,17 +394,17 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         // AEAT did cancel it: show it as such so its button cannot send a second
         // cancellation, and flag the missing local write.
         showEstado(e, VerifactuEstado::Anulada);
-        m_lblResult->setText(tr("<b style='color:red'>La AEAT aceptó la anulación de %1, pero no se pudo guardar "
-                                "en la base de datos local. Revise el log de depuración antes de hacer la "
-                                "contabilidad.</b>").arg(e.invoiceId.toHtmlEscaped()));
+        m_lblResult->setText(UiKit::errorHtml(tr("La AEAT aceptó la anulación de %1, pero no se pudo guardar "
+                                                 "en la base de datos local. Revise el log de depuración antes de "
+                                                 "hacer la contabilidad.").arg(e.invoiceId.toHtmlEscaped())));
         setActionsEnabled(true);
         return;
     }
 
     showEstado(e, VerifactuEstado::Anulada);
 
-    m_lblResult->setText(QString("<b style='color:green'>Anulación confirmada para %1.</b><br>CSV: %2")
-                             .arg(e.invoiceId.toHtmlEscaped(),
-                                  result.csv.isEmpty() ? e.csv.toHtmlEscaped() : result.csv.toHtmlEscaped()));
+    m_lblResult->setText(UiKit::okHtml(tr("Anulación confirmada para %1.").arg(e.invoiceId.toHtmlEscaped()))
+                         + "<br>" + tr("CSV: %1").arg(result.csv.isEmpty() ? e.csv.toHtmlEscaped()
+                                                                            : result.csv.toHtmlEscaped()));
     setActionsEnabled(true);
 }

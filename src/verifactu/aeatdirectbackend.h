@@ -25,14 +25,18 @@
 //    previous reply, retried on their own after a failure, and sent at the next
 //    start if the app closed first; outcomes nobody waited for are reported on
 //    recordSettled;
-//  - a duplicate of a record AEAT already holds from another system is accepted
-//    without claiming our record; a duplicate of an invoice AEAT holds as
-//    cancelled is reported and never registered again;
+//  - a duplicate is checked with a query first: AEAT's record must have our amount
+//    and date (else ERROR); one from another system is accepted without claiming our
+//    record; a duplicate of an invoice AEAT holds as cancelled is reported and never
+//    registered again;
+//  - a SOAP fault about the request on a batch is not taken as every record's refusal:
+//    the records are resent one by one, so only the faulty one is refused;
 //  - the QR is drawn locally (AeatQr), so it never depends on AEAT's reply.
 
 #include <QDateTime>
 #include <functional>
 #include <QHash>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QTimer>
@@ -122,6 +126,10 @@ public:
                                                      const AeatRecord::PreviousRecord &previous,
                                                      const QDateTime &generatedAt);
 
+    // Answers every request still waiting (before this backend is replaced): a stored
+    // record PENDING (the next backend sends it), one never generated NETWORK_ERROR.
+    void releaseWaiters();
+
     // AEAT endpoint of the environment; tests point it at a local fake server.
     static QString endpointUrl(bool testEnvironment);
     static void setEndpointOverride(const QString &url);
@@ -153,7 +161,12 @@ private:
     QDateTime                  m_nextSendAllowed;
     bool                       m_inFlight = false;
     QList<qint64>              m_inFlightIds;
+    QHash<qint64, AeatStore::Record> m_inFlightRecords;
     QHash<qint64, QStringList> m_waiters;      // record id -> request ids to answer
+    QStringList                m_heldRequests; // requests waiting for the chain sync (no record yet)
+    QList<qint64>              m_sendSingly;   // records of a batch AEAT faulted, resent one by one
+    QSet<qint64>               m_verifying;    // duplicates whose AEAT record is being queried
+    bool                       m_releasing = false;
     bool                       m_chainReady = false;
     bool                       m_syncRunning = false;
     bool                       m_firstSync = false;      // no sync with AEAT stored yet
@@ -171,6 +184,12 @@ private:
     void scheduleSend();
     void sendPending();
     void onSubmissionReply(const AeatTransport::Response &response);
+    // A client fault on a batch: keep its records pending and resend them singly.
+    void isolateFaultedBatch(const QList<qint64> &sent, const QString &faultText,
+                             const QHash<qint64, bool> &reachedBefore);
+    // A duplicate is claimed only once AEAT's record shows our amount and date.
+    void verifyDuplicate(const AeatStore::Record &record, const VerifactuResult &result, bool reachedBefore);
+    void answerWaiters(qint64 recordId, const VerifactuResult &result);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord = true);
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);

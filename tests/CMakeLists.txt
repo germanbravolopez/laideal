@@ -392,9 +392,7 @@ target_link_libraries(test_e2e_app PRIVATE
 )
 add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
-# Many fixed AEAT delays (5 s waits, slow fake replies): about 105 s on the CI runner,
-# past ctest's --timeout 120 default as the suite grows. The property overrides it.
-set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 300)
+set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # InstanceLock: one copy of the app per database.
 add_executable(test_instancelock test_instancelock.cpp)
@@ -424,9 +422,14 @@ set_tests_properties(selfcheck PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen
 # limit; ctest then prints the suite's output up to the hang.
 get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
+# Tripwire (src/verifactu/testhostguard.h): no test may reach a host but this machine.
+set_property(TEST ${_laideal_tests} APPEND PROPERTY ENVIRONMENT "LAIDEAL_TEST=1")
 # The direct client's suite drives the fake AEAT server through ~45 scenarios (~100 s
 # locally, more on a CI runner): a longer limit, still well short of a real hang.
 set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 300)
+# The app bench waits on many fixed AEAT delays (5 s waits, slow fake replies): about 105 s
+# on a CI runner, close to the 120 s above.
+set_tests_properties(e2e_app PROPERTIES TIMEOUT 300)
 
 # Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
 # the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port

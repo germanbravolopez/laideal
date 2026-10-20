@@ -196,7 +196,8 @@ QPixmap Imprimir::resolveQrCode()
             hasCsv = true;
         const VerifactuEstado e = verifactuEstadoFromString(
             sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString());
-        if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error) {
+        if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error
+            || e == VerifactuEstado::Unknown) {   // an unrecognised estado: no QR (nor leyenda)
             anyBlocking = true;
             break;
         }

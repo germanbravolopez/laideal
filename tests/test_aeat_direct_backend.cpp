@@ -18,6 +18,7 @@
 #include "aeatstore.h"
 #include "sql_lite.h"
 #include "fakeaeatserver.h"
+#include "testhostguard.h"
 #include "verifactuinvoice.h"
 
 class TestAeatDirectBackend : public QObject
@@ -275,6 +276,124 @@ private slots:
         QVERIFY2(resent.isSuccess(), qPrintable(resent.errorDescription));
         AeatStore store(m_db, "pruebas");
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "30839").state, AeatStore::kAccepted);
+    }
+
+    // A client SOAP fault on a batch (one malformed record refuses the whole message) is
+    // not every record's refusal: they stay pending, are resent one by one, and only the
+    // faulty one is refused. The waiting requests hear PENDING; the outcomes follow.
+    void test_clientFaultOnABatchIsolatesTheBadRecord()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        m_server->setWaitSeconds(2);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        m_server->faultWhenSending("3");
+        QHash<QString, VerifactuResult> answers;
+        connect(&backend, &VerifactuBackend::requestFinished,
+                [&answers](const QString &id, const VerifactuResult &r) { answers.insert(id, r); });
+        const QStringList ids = { backend.submitInvoiceAsync(ticket("2", 20)), backend.submitInvoiceAsync(ticket("3", 30)),
+                                  backend.submitInvoiceAsync(ticket("4", 40)) };
+        QTRY_VERIFY_WITH_TIMEOUT(answers.size() == 3, 15000);
+        for (const QString &id : ids)
+            QCOMPARE(answers.value(id).status, VerifactuResult::PENDING);
+        QCOMPARE(m_server->submissions().at(1).records.size(), 3);        // the batch, refused whole
+
+        AeatStore store(m_db, "pruebas");
+        QTRY_VERIFY_WITH_TIMEOUT(store.pending(10).isEmpty(), 30000);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "2").state, AeatStore::kAccepted);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "3").state, AeatStore::kRejected);
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "3").errorDescription.contains("4102"));
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "4").state, AeatStore::kAccepted);
+        const QList<FakeAeatServer::Request> sends = m_server->submissions();
+        for (int i = 2; i < sends.size(); ++i)
+            QCOMPARE(sends[i].records.size(), 1);                         // one by one after the fault
+        QVERIFY(m_server->registered().contains("Alta:2") && m_server->registered().contains("Alta:4"));
+    }
+
+    // AEAT answers "duplicate" but holds the number with another amount (e.g. a reused
+    // number after a restore in pre-production): not adopted, an ERROR saying why.
+    void test_duplicateWithOtherAmountIsNotAdopted()
+    {
+        registerElsewhere({ "520" });                                     // 10.00 + IVA there
+        AeatDirectBackend backend(config(), m_db);
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("520", 20)), 15000);
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("otro importe"), qPrintable(r.errorDescription));
+        QVERIFY(r.csv.isEmpty() && r.rawXml.isEmpty() && r.qrCode.isNull());
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "520").state, AeatStore::kRejected);
+        QCOMPARE(m_server->requests().last().kind, QStringLiteral("Consulta"));   // checked before deciding
+    }
+
+    // Before a backend is replaced (Configuración), every request still waiting hears an
+    // answer: a stored record PENDING (the next backend sends it), a request held for the
+    // first chain sync NETWORK_ERROR (no record was generated).
+    void test_waitersAnsweredWhenTheBackendIsReleased()
+    {
+        QList<QPair<QString, VerifactuResult>> heard;
+        const auto listen = [&heard](AeatDirectBackend &b) {
+            connect(&b, &VerifactuBackend::requestFinished,
+                    [&heard](const QString &id, const VerifactuResult &r) { heard.append({ id, r }); });
+        };
+        {
+            m_server->enqueue({ QByteArray(), 200, 3000 });               // the first sync's query, slow
+            AeatDirectBackend fresh(config(), m_db);
+            listen(fresh);
+            const QString held = fresh.submitInvoiceAsync(ticket("700", 10));
+            fresh.releaseWaiters();
+            QCOMPARE(heard.size(), 1);
+            QCOMPARE(heard[0].first, held);
+            QCOMPARE(heard[0].second.status, VerifactuResult::NETWORK_ERROR);
+            QTest::qWait(3500);                                           // the sync ends: no second answer
+            QCOMPARE(heard.size(), 1);
+        }
+        heard.clear();
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ QByteArray(), 200, 3000 });                   // the submission, slow
+        listen(backend);
+        const QString stored = backend.submitInvoiceAsync(ticket("701", 10));
+        QTRY_VERIFY_WITH_TIMEOUT(!m_server->submissions().isEmpty(), 10000);
+        backend.releaseWaiters();
+        QCOMPARE(heard.size(), 1);
+        QCOMPARE(heard[0].first, stored);
+        QCOMPARE(heard[0].second.status, VerifactuResult::PENDING);
+    }
+
+    // A record settled while its submission was in flight (no longer pending at the reply)
+    // still answers its waiters, from the store.
+    void test_waiterAnsweredWhenItsRecordSettledMeanwhile()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->enqueue({ QByteArray(), 200, 1500 });
+        const QString id = backend.submitInvoiceAsync(ticket("702", 10));
+        AeatStore store(m_db, "pruebas");
+        QTRY_VERIFY_WITH_TIMEOUT(!m_server->submissions().isEmpty(), 10000);
+        const AeatStore::Record record = store.latest(AeatStore::Kind::Registration, "702");
+        QVERIFY(store.markOutcome(record.id, AeatStore::kAccepted, "A-SETTLED", QString(), QString()));
+        const VerifactuResult r = waitFor(backend, id);
+        QVERIFY2(r.isSuccess(), qPrintable(r.errorDescription));
+        QCOMPARE(r.csv, QStringLiteral("A-SETTLED"));
+    }
+
+    // Tripwire: with LAIDEAL_TEST=1 (CTest sets it for every suite) the transport refuses
+    // any host but this machine before connecting. The refused host never resolves anyway.
+    void test_tripwireRefusesNonLocalHosts()
+    {
+        const QByteArray previous = qgetenv("LAIDEAL_TEST");
+        qputenv("LAIDEAL_TEST", "1");
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("TestHostGuard.*laideal-tripwire.invalid"));
+        const AeatTransport::Response r = AeatTransport::postBlocking("http://laideal-tripwire.invalid/soap", "<x/>", nullptr, 1000);
+        QVERIFY2(r.error.contains("refused"), qPrintable(r.error));
+        QVERIFY(!r.requestSent);
+        QVERIFY(TestHostGuard::allows(QUrl("http://127.0.0.1:1/x")));
+        QVERIFY(TestHostGuard::allows(QUrl("http://localhost:1/x")));
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("TestHostGuard.*agenciatributaria"));
+        QVERIFY(!TestHostGuard::allows(QUrl("https://www1.agenciatributaria.gob.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP")));
+        qputenv("LAIDEAL_TEST", "0");
+        QVERIFY(TestHostGuard::allows(QUrl("https://prewww1.aeat.es/x")));    // only the flag arms it
+        qputenv("LAIDEAL_TEST", previous);
     }
 
     // A fault from AEAT's side leaves the record pending; one about the request rejects it.

@@ -1,6 +1,7 @@
 #include "aeattransport.h"
 
 #include "aeatcertificate.h"
+#include "testhostguard.h"
 
 #include <QCoreApplication>
 #include <QPointer>
@@ -15,6 +16,24 @@
 #endif
 
 namespace {
+
+// Resolving the name and connecting take seconds when AEAT is reachable: an unreachable
+// host fails after these, not after the full timeout of each step.
+const int kResolveConnectMs = 10000;
+
+// The requests' own pool, never destroyed: the global one is waited for at exit, which
+// hung the closing app while AEAT did not answer. A send cut off this way counts as
+// possibly reached in the outbox, so nothing is lost.
+QThreadPool *requestPool()
+{
+    static QThreadPool *pool = [] {
+        auto *p = new QThreadPool;
+        p->setMaxThreadCount(4);
+        p->setExpiryTimeout(30000);
+        return p;
+    }();
+    return pool;
+}
 
 #ifdef Q_OS_WIN
 QString lastErrorText(const QString &step)
@@ -51,8 +70,12 @@ AeatTransport::Response AeatTransport::postBlocking(const QString &url, const QB
                                                     const void *certificateContext, int timeoutMs)
 {
     Response response;
-#ifdef Q_OS_WIN
     const QUrl parsed(url);
+    if (!TestHostGuard::allows(parsed)) {
+        response.error = QStringLiteral("LAIDEAL_TEST: request to %1 refused").arg(parsed.host());
+        return response;
+    }
+#ifdef Q_OS_WIN
     const bool secure = parsed.scheme() == QLatin1String("https");
     if (secure && !certificateContext) {
         response.error = QCoreApplication::translate("AeatTransport", "Falta el certificado electrónico para conectar con la AEAT");
@@ -64,7 +87,8 @@ AeatTransport::Response AeatTransport::postBlocking(const QString &url, const QB
         response.error = lastErrorText(QStringLiteral("WinHttpOpen"));
         return response;
     }
-    WinHttpSetTimeouts(session.h, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
+    const int resolveConnectMs = qMin(kResolveConnectMs, timeoutMs);
+    WinHttpSetTimeouts(session.h, resolveConnectMs, resolveConnectMs, timeoutMs, timeoutMs);
     const std::wstring host = parsed.host().toStdWString();
     const INTERNET_PORT port = INTERNET_PORT(parsed.port(secure ? 443 : 80));
     Handle connection{ WinHttpConnect(session.h, host.c_str(), port, 0) };
@@ -134,14 +158,17 @@ void AeatTransport::post(const QString &url, const QByteArray &body, const Done 
 #endif
     const int timeoutMs = m_timeoutMs;
     QPointer<AeatTransport> self(this);
-    QThreadPool::globalInstance()->start(QRunnable::create([self, url, body, context, timeoutMs, done]() {
+    requestPool()->start(QRunnable::create([self, url, body, context, timeoutMs, done]() {
         const Response response = postBlocking(url, body, context, timeoutMs);
 #ifdef Q_OS_WIN
         if (context)
             CertFreeCertificateContext(static_cast<PCCERT_CONTEXT>(context));
 #endif
         // Answered on the main thread, and only if the transport still exists then.
-        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, done, response]() {
+        QCoreApplication *app = QCoreApplication::instance();
+        if (!app)
+            return;                         // the app closed meanwhile
+        QMetaObject::invokeMethod(app, [self, done, response]() {
             if (self)
                 done(response);
         }, Qt::QueuedConnection);

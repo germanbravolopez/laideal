@@ -70,6 +70,17 @@ private slots:
     {
         QVERIFY(AeatQr::moduleCount(QString(200, 'A')) > AeatQr::moduleCount("A"));
     }
+
+    // Text beyond the largest symbol (a URL read from a damaged row) gives no image and a
+    // warning; the encoder's exception would otherwise end the app.
+    void test_tooLongTextGivesNoImage()
+    {
+        const QString huge(8000, QLatin1Char('x'));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("AeatQr: text of 8000 characters not encoded"));
+        QVERIFY(AeatQr::image(huge).isNull());
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("AeatQr: text of 8000 characters not encoded"));
+        QCOMPARE(AeatQr::moduleCount(huge), 0);
+    }
 };
 
 QTEST_MAIN(TestAeatQr)

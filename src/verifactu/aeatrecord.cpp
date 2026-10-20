@@ -103,6 +103,13 @@ QString escaped(const QString &text)
     return text.trimmed().toHtmlEscaped();
 }
 
+// NombreRazon / NombreRazonEmisor hold at most 120 characters (XSD): a longer name would
+// make AEAT refuse every record. Not part of the huella.
+QString issuerNameText(const QString &name)
+{
+    return name.trimmed().left(120);
+}
+
 } // namespace
 
 // The totals add up the line amounts as written (in cents), which is what AEAT checks
@@ -160,7 +167,7 @@ QString registrationXml(const Registration &r, const SystemInfo &system)
     w.start(QStringLiteral("RegistroAlta"), true);
     w.text(QStringLiteral("IDVersion"), kVersion);
     w.invoiceId(QStringLiteral("IDFactura"), r.invoice);
-    w.text(QStringLiteral("NombreRazonEmisor"), r.issuerName);
+    w.text(QStringLiteral("NombreRazonEmisor"), issuerNameText(r.issuerName));
     if (r.afterRejection) {
         w.text(QStringLiteral("Subsanacion"), QStringLiteral("S"));
         w.text(QStringLiteral("RechazoPrevio"), QStringLiteral("S"));
@@ -231,7 +238,7 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
                           "<sf:NIF>%5</sf:NIF></sf:ObligadoEmision></sfLR:Cabecera>%6"
                           "</sfLR:RegFactuSistemaFacturacion></soapenv:Body></soapenv:Envelope>")
         .arg(QString::fromLatin1(kSoapNs), QString::fromLatin1(kSuministroLRNs),
-             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerName), escaped(issuerNif), body);
+             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerNameText(issuerName)), escaped(issuerNif), body);
 }
 
 SystemInfo laIdealSystem(const QString &version, const QString &installationNumber)
@@ -262,7 +269,7 @@ QString queryEnvelope(const QString &issuerName, const QString &issuerNif, int y
                           "</sfLRC:PeriodoImputacion>%8</sfLRC:FiltroConsulta>%9"
                           "</sfLRC:ConsultaFactuSistemaFacturacion></soapenv:Body></soapenv:Envelope>")
         .arg(QString::fromLatin1(kSoapNs), QString::fromLatin1(kConsultaLRNs),
-             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerName), escaped(issuerNif),
+             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerNameText(issuerName)), escaped(issuerNif),
              QString::number(year), QStringLiteral("%1").arg(month, 2, 10, QLatin1Char('0')), number,
              showSystem ? QStringLiteral("<sfLRC:DatosAdicionalesRespuesta><sfLRC:MostrarSistemaInformatico>S"
                                          "</sfLRC:MostrarSistemaInformatico></sfLRC:DatosAdicionalesRespuesta>")

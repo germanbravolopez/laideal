@@ -162,11 +162,15 @@ def search_ticket(dialog, ticket: str):
 
 def cancel_invoice(app, ticket: str, row: int = 0):
     """Anular factura Verifactu: searches the ticket and presses the Anular button of the
-    invoice in `row`. Returns the dialog's result panel; the caller waits on the database."""
+    invoice in `row`, then the same button again, now "Confirmar anulación" (the first press
+    only says what will be cancelled). Returns the dialog's result panel; the caller waits
+    on the database."""
     dialog = open_dialog(app, "Facturas", "Anular factura Verifactu...", "Anular Factura")
     search_ticket(dialog, ticket)
     table = find(dialog, "table")
     columns = len(headers(table))
+    click_in_cell(table_cells(table)[row * columns + columns - 1], 0.5)
+    time.sleep(0.5)
     click_in_cell(table_cells(table)[row * columns + columns - 1], 0.5)
     if _has_message_box(app):
         app.answer("Sí")

@@ -558,6 +558,7 @@ private slots:
         QMetaObject::invokeMethod(&cancel, "onSearchClicked");
         auto *table = cancel.findChild<QTableWidget *>("table");
         qobject_cast<QPushButton *>(table->cellWidget(0, 5))->click();
+        qobject_cast<QPushButton *>(table->cellWidget(0, 5))->click();
         QTRY_VERIFY_WITH_TIMEOUT(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"), 20000);
         QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "778").state, AeatStore::kPending);
@@ -1533,8 +1534,10 @@ private slots:
         auto *result = dlg.findChild<QLabel *>("lblResult");
 
         QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));   // Confirmar anulación
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 10000);
         QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 1));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 1));   // Confirmar anulación
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 800-1"), 10000);
 
         const auto cancels = m_server.requestsTo("Cancel");
@@ -1566,6 +1569,7 @@ private slots:
         ticket->setText("810");
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");
         QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));   // Confirmar anulación
         QVERIFY(!ticket->isEnabled());
         ticket->setText("811");
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");                   // ignored while pending
@@ -1605,6 +1609,7 @@ private slots:
             dlg.findChild<QLineEdit *>("leTicketNum")->setText("831");
             QMetaObject::invokeMethod(&dlg, "onSearchClicked");
             QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+            QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));   // Confirmar anulación
             dlg.reject();
             auto *result = dlg.findChild<QLabel *>("lblResult");
             QVERIFY(result->text().contains("Esperando la respuesta de la AEAT"));
@@ -1702,6 +1707,7 @@ private slots:
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");
         QCOMPARE(dlg.findChild<QTableWidget *>("table")->rowCount(), 1);
         QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));   // Confirmar anulación
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 860"), 10000);
 
         const auto cancels = m_server.requestsTo("Cancel");
@@ -1732,10 +1738,102 @@ private slots:
         dlg.findChild<QLineEdit *>("leTicketNum")->setText("880");
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");
         QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));   // Confirmar anulación
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Con la fecha de recepción"), 10000);
         QVERIFY(result->text().contains("Factura ya anulada"));
         QVERIFY(result->text().contains("No existe"));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h880a'"), QStringLiteral("ENVIADA"));
+    }
+
+    // Anular asks first (A8): the first press only says what will be cancelled and turns
+    // the button into "Confirmar anulación"; a new search drops that; the second press sends.
+    void test_cancelInvoice_asksForConfirmationFirst()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "840", "h840a", "12.50", today(), "A-ORIG0840"));
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("840");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        auto *table = dlg.findChild<QTableWidget *>("table");
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        auto button = [table] { return qobject_cast<QPushButton *>(table->cellWidget(0, 5)); };
+
+        button()->click();
+        QCOMPARE(button()->text(), QStringLiteral("Confirmar anulación"));
+        QVERIFY2(result->text().contains("Se va a anular") && result->text().contains("12,50"),
+                 qPrintable(result->text()));
+        QTest::qWait(300);
+        QVERIFY(m_server.requestsTo("Cancel").isEmpty());
+
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");                   // a new search disarms it
+        QCOMPARE(button()->text(), QStringLiteral("Anular"));
+        button()->click();
+        QTest::qWait(300);
+        QVERIFY(m_server.requestsTo("Cancel").isEmpty());
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h840a'"), QStringLiteral("ENVIADA"));
+
+        button()->click();                                                    // Confirmar anulación
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 840"), 10000);
+        QCOMPARE(m_server.requestsTo("Cancel").size(), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h840a'"), QStringLiteral("ANULADA"));
+    }
+
+    // A9: an invoice with a sent rectificativa (by differences: the original stays ENVIADA)
+    // is not cancelled while the rectificativa stands, or its delta would stay income.
+    // Once the rectificativa itself is cancelled, the original can be.
+    void test_cancelInvoice_refusedWhileARectificativaIsSent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "845", "h845a", "10.00", today(), "A-ORIG0845"));
+        QVERIFY(E2e::seedSentGarment(m_db, "846", "h846a", "-2.00", today(), "A-RECT0846"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_rectifies_n_recibo = '845', "
+                                "verifactu_rectification_type = 'I', estado = 'Rectificativa' WHERE hash = 'h846a'"));
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        auto *ticket = dlg.findChild<QLineEdit *>("leTicketNum");
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        ticket->setText("845");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("rectificativa 846"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));    // never armed: still refused
+        QTest::qWait(300);
+        QVERIFY(m_server.requestsTo("Cancel").isEmpty());
+
+        ticket->setText("846");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada para 846"), 10000);
+
+        ticket->setText("845");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("Se va a anular"), qPrintable(result->text()));
+    }
+
+    // A10: Rectificar reads the ticket's invoice (its paid seq-0 rows), not an arbitrary
+    // group of rows: an unpaid garment of the same ticket neither hides the invoice nor
+    // adds to the original amount sent with a substitution.
+    void test_rectifyInvoice_mixedPaidUnpaidTicketUsesThePaidInvoice()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "850", "h850a", "12.10", today(), "A-ORIG0850"));
+        // Sorted first in any grouping: an empty estado / CSV group.
+        QVERIFY(E2e::seedGarment(m_db, "850", "h850b", "7.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = '' WHERE hash = 'h850b'"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("850");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        auto *amount = dlg.findChild<QDoubleSpinBox *>("sbAmount");
+        QVERIFY2(amount->isEnabled(), qPrintable(dlg.findChild<QLabel *>("lblResult")->text()));
+        dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+        amount->setValue(6.05);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(dlg.findChild<QLabel *>("lblResult")->text().contains("Rectificativa enviada"), 10000);
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        const double originalBase = creates[0].json.value("RectificationTaxBase").toDouble();
+        QVERIFY2(qAbs(originalBase - 10.00) < 0.01, qPrintable(QString::number(originalBase)));   // 12.10 / 1.21
     }
 
     // Anular factura while today's quarter is closed: refused before any request.

@@ -43,6 +43,9 @@ public:
     // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
     // /Create with a 10s setTransferTimeout - bounded wait, never blocks indefinitely.
     VerifactuResult testConnection();
+    // The probe's verdict from its HTTP status and body: SUCCESS only when the service
+    // answered and did not refuse the key (401/403, or a key error in the body).
+    static VerifactuResult connectionProbeResult(int httpStatus, const QByteArray &body);
 
 private:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;

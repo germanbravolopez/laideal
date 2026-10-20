@@ -235,6 +235,25 @@ private slots:
         writeSample("alta_escaped.xml", envelope);
     }
 
+    // NombreRazonEmisor and the envelopes' NombreRazon hold at most 120 characters: a
+    // longer issuer name is cut there (AEAT would refuse every record with a schema
+    // fault); the huella does not include it, so it is unchanged.
+    void test_longIssuerNameStaysValid()
+    {
+        Registration r = ticket("30950", 8.26);
+        const QString shortHash = hashOf(r);
+        r.issuerName = QString(130, QLatin1Char('N')) + "&";
+        QHash<QString, QString> t;
+        names(registrationXml(r, system()), &t);
+        QCOMPARE(t.value("NombreRazonEmisor"), QString(120, QLatin1Char('N')));
+        QCOMPARE(t.value("Huella"), shortHash);
+        const QString envelope = submissionEnvelope(r.issuerName, "89890001K", { registrationXml(r, system()) });
+        QVERIFY(envelope.contains("<sf:NombreRazon>" + QString(120, QLatin1Char('N')) + "</sf:NombreRazon>"));
+        QVERIFY(queryEnvelope(r.issuerName, "89890001K", 2026, 10, QString(), {}, true)
+                    .contains("<sf:NombreRazon>" + QString(120, QLatin1Char('N')) + "</sf:NombreRazon>"));
+        writeSample("alta_long_issuer_name.xml", envelope);
+    }
+
     // The query asks for one month of the issuer, optionally one invoice.
     void test_queryEnvelope()
     {

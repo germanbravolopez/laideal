@@ -4,18 +4,11 @@
 #include <QJsonObject>
 #include <QString>
 
-// Represents a single tax line (IVA, IGIC, etc.) within a Verifactu invoice.
+// Represents a single tax line (IVA) within a Verifactu invoice. Always operation
+// type S1 (subject, not exempt): the shop has no other.
 class VerifactuTaxItem
 {
 public:
-    enum OperationType {
-        S1,     // subject to tax (standard)
-        S2,     // reverse charge
-        N1,     // not subject (art. 7, 14)
-        N2,     // not subject (location rules)
-        EXEMPT
-    };
-
     VerifactuTaxItem();
 
     void setTaxRate(double rate) { m_taxRate = rate; }
@@ -30,13 +23,10 @@ public:
     bool isValid() const;
     QString getValidationError() const;
 
-    static QString operationTypeToString(OperationType type);
-
 private:
     double m_taxRate;
     double m_taxBase;
     double m_taxAmount;
-    OperationType m_operationType;
     mutable QString m_validationError;
 };
 

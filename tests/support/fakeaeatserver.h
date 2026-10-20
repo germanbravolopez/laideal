@@ -27,6 +27,7 @@ class FakeAeatServer : public QObject
 
 public:
     struct SentRecord {
+        QString issuerNif;        // IDEmisorFactura
         QString operation;        // Alta / Anulacion
         QString invoiceNumber;
         QString issueDate;
@@ -40,6 +41,7 @@ public:
     };
     struct Request {
         QString           kind;   // RegFactu / Consulta
+        QString           issuerNif;            // ObligadoEmision of the header
         QByteArray        body;
         QList<SentRecord> records;
         QString           queriedNumber;
@@ -72,6 +74,9 @@ public:
     void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
+    // Every submission carrying this invoice's record is refused whole with a client SOAP
+    // fault (a record that breaks the schema), however many other records it carries.
+    void faultWhenSending(const QString &invoiceNumber) { m_faultFor.insert(invoiceNumber); }
     // The next reply that includes this record has no line for it (AEAT did not report on it).
     void omitLineFor(const QString &invoiceNumber) { m_omitLine.insert(invoiceNumber); }
     // Query replies hold at most `records` (0: all), with IndicadorPaginacion S when more follow.
@@ -85,7 +90,8 @@ public:
     QList<Request> requests() const { return m_requests; }
     QList<Request> submissions() const;
     QList<SentRecord> sentRecords() const;
-    // Records AEAT holds as registered, keyed "Alta:30837".
+    // Records AEAT holds as registered, keyed "Alta:30837" (another issuer than the tests'
+    // default 89890001K: "B11111111|Alta:30837"); AEAT keys an invoice on its issuer too.
     QHash<QString, SentRecord> registered() const { return m_registered; }
 
     static QByteArray faultReply(const QString &code, const QString &text);
@@ -103,6 +109,7 @@ private:
     QHash<QString, QString> m_registeredRequestId;
     QHash<QString, QPair<QString, QString>> m_rejectNext;
     QSet<QString> m_omitLine;
+    QSet<QString> m_faultFor;
     int m_pageSize = 0;
     bool m_queryByMonth = false;
     QSet<QString> m_noHashFor;
