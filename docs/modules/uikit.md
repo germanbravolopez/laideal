@@ -35,3 +35,5 @@ Message boxes are kept only where they belong: confirming a destructive action (
 ## Windows built with it
 
 Generar / Revertir contabilidad, Formulario facturas, Añadir nuevas prendas, Generar listado de gastos, Imprimir (recibo / factura / factura completa), Listado windows and Nuevo cliente, Exportar registros AEAT, Cobrar, Envíos Verifactu pendientes, Actualización disponible, Acerca de Verifactu, Notas de la versión, Recogida de prendas (with its Verifactu and AEAT comparison windows), the main window (ticket entry). Rectificar factura and Anular factura are on the kit too (intro panel, result panel, secondary buttons: Enter never sends an invoice); Anular prendas follows the same layout with its own code (older than the kit). No window uses a `.ui` form any more.
+
+Colours: `UiKit::COLOR_OK` #1B7F3B, `COLOR_ERROR` #C62828, `COLOR_WARN` #8A5300 and `COLOR_LINK` #0B57D0, all at least 4.5:1 on white. `okHtml` / `warnHtml` / `errorHtml`, the Recogida / Listado text colours (`TextColorDelegate`) and links (`LinkDelegate`) use them.

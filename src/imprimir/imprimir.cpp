@@ -113,7 +113,7 @@ void Imprimir::getTicketInfo()
 {
     if (!sqlQueryModel)
         sqlQueryModel = new QSqlQueryModel(this);
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Anulado rows (locally voided garments) never appear on a printed recibo or
     // factura. The factura branch already filters pagado='SI' (Anulado is unpaid),
@@ -139,7 +139,6 @@ void Imprimir::getTicketInfo()
     }
     q.exec();
     sqlQueryModel->setQuery(std::move(q));
-    db.close();
 }
 
 QString Imprimir::displayInvoiceId() const
@@ -540,7 +539,7 @@ void Imprimir::onPrintClicked()
     // and the printed Nº matches what AEAT has on record.
     QList<QPair<int, QString>> events; // (seq, literal invoice_id; empty = bare n_recibo / legacy)
     if (!isRecibo) {
-        db.open();
+        ConnectionScope scope(db);
         QSqlQuery sq(db);
         sq.prepare("SELECT verifactu_invoice_seq, "
                    "       COALESCE(MAX(verifactu_invoice_id), '') "
@@ -554,7 +553,6 @@ void Imprimir::onPrintClicked()
             while (sq.next())
                 events.append({ sq.value(0).toInt(), sq.value(1).toString() });
         }
-        db.close();
     }
     const auto labelFor = [&ticket](const QPair<int, QString> &ev) {
         // Authoritative when set: literal column matches what AEAT received.

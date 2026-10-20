@@ -178,8 +178,8 @@ bool Facturas::parseGross(const QString &text, double *value)
 
 QString Facturas::existingInvoiceSummary()
 {
-    const bool wasOpen = db.isOpen();
-    if (!wasOpen && !db.open())
+    ConnectionScope scope(db);
+    if (!scope.isOpen())
         return QString();
     QString summary;
     {
@@ -191,8 +191,6 @@ QString Facturas::existingInvoiceSummary()
             summary = QString("del %1 por %2 €.").arg(q.value(0).toString().toHtmlEscaped(),
                                                        displayMoney(q.value(1).toString()));
     }
-    if (!wasOpen)
-        db.close();
     return summary;
 }
 
@@ -226,8 +224,8 @@ bool Facturas::saveFactura()
              << "fecha=" << m_deFecha->date().toString("dd-MM-yyyy")
              << "iva=" << m_cbIva->currentData().toString()
              << "importe=" << m_leImporte->text();
-    const bool wasOpen = db.isOpen();
-    if (!wasOpen && !db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qWarning() << "saveFactura: database not opened -" << db.lastError().text();
         return false;
     }
@@ -249,8 +247,6 @@ bool Facturas::saveFactura()
         if (!ok)
             qWarning() << "saveFactura INSERT failed for" << nFactura << "-" << q.lastError().text();
     }
-    if (!wasOpen)
-        db.close();
     return ok;
 }
 

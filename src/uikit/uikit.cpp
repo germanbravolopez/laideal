@@ -2,6 +2,7 @@
 
 #include <QAbstractButton>
 #include <QCollator>
+#include <QCoreApplication>
 #include <QDateEdit>
 #include <QDialog>
 #include <QFileInfo>
@@ -15,6 +16,11 @@
 #include <algorithm>
 
 namespace UiKit {
+
+const char *const COLOR_OK    = "#1B7F3B";
+const char *const COLOR_WARN  = "#8A5300";
+const char *const COLOR_ERROR = "#C62828";
+const char *const COLOR_LINK  = "#0B57D0";
 
 namespace {
 const int kPanelMargin = 8;
@@ -164,7 +170,8 @@ QHBoxLayout *closeRow(QDialog *dialog, const QString &text)
 {
     QHBoxLayout *row = new QHBoxLayout();
     row->addStretch();
-    QPushButton *close = secondaryButton(text, QStringLiteral("btnClose"));
+    QPushButton *close = secondaryButton(text.isEmpty() ? QCoreApplication::translate("UiKit", "Cerrar") : text,
+                                           QStringLiteral("btnClose"));
     QObject::connect(close, &QPushButton::clicked, dialog, &QDialog::close);
     row->addWidget(close);
     return row;
@@ -178,9 +185,9 @@ QStringList sortedNames(QStringList names)
     return names;
 }
 
-QString okHtml(const QString &text)    { return "<b style='color:green'>" + text + "</b>"; }
-QString warnHtml(const QString &text)  { return "<b style='color:#b26a00'>" + text + "</b>"; }
-QString errorHtml(const QString &text) { return "<b style='color:red'>" + text + "</b>"; }
+QString okHtml(const QString &text)    { return QStringLiteral("<b style='color:%1'>").arg(COLOR_OK) + text + "</b>"; }
+QString warnHtml(const QString &text)  { return QStringLiteral("<b style='color:%1'>").arg(COLOR_WARN) + text + "</b>"; }
+QString errorHtml(const QString &text) { return QStringLiteral("<b style='color:%1'>").arg(COLOR_ERROR) + text + "</b>"; }
 
 QString fileLinkHtml(const QString &file, const QString &label)
 {

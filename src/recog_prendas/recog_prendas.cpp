@@ -541,39 +541,40 @@ void RecogPrendas::on_pb_search_clicked()
         if (ok) {
             if (ui->le_search->text().length() >= 9) {
                 // Phone number - search tel_fijo OR movil
-                db.open();
-                QSqlQuery phoneQ(db);
-                phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
-                phoneQ.bindValue(":phone", ui->le_search->text());
-                phoneQ.bindValue(":movil", ui->le_search->text());
-                phoneQ.exec();
                 QString clientFromPhone;
-                if (phoneQ.first())
-                    clientFromPhone = phoneQ.value(0).toString();
-                else {
-                    m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
-                                                          .arg(ui->le_search->text().toHtmlEscaped())));
-                    searchProblem = true;
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery phoneQ(db);
+                    phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
+                    phoneQ.bindValue(":phone", ui->le_search->text());
+                    phoneQ.bindValue(":movil", ui->le_search->text());
+                    phoneQ.exec();
+                    if (phoneQ.first())
+                        clientFromPhone = phoneQ.value(0).toString();
+                    else {
+                        m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
+                                                              .arg(ui->le_search->text().toHtmlEscaped())));
+                        searchProblem = true;
+                    }
                 }
-                db.close();
 
                 if (!clientFromPhone.isNull()) {
-                    db.open();
+                    ConnectionScope scope(db);
                     QSqlQuery q(db);
                     q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
                     q.bindValue(":cliente", clientFromPhone);
                     loadEveryRow(sqlQueryModel, std::move(q));
-                    db.close();
                 }
             }
             else {
                 // Ticket number
-                db.open();
-                QSqlQuery q(db);
-                q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-                q.bindValue(":n_recibo", ui->le_search->text());
-                loadEveryRow(sqlQueryModel, std::move(q));
-                db.close();
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+                    q.bindValue(":n_recibo", ui->le_search->text());
+                    loadEveryRow(sqlQueryModel, std::move(q));
+                }
                 totalPriceActive = true;
             }
         }
@@ -588,21 +589,21 @@ void RecogPrendas::on_pb_search_clicked()
                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" :
                                (ui->cb_search_date->currentText() == "Anulación") ? "fecha_anulacion" : "";
             if (!dateSlash.isNull() || !dateDash.isNull()) {
-                db.open();
+                ConnectionScope scope(db);
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos WHERE " + dateType + " = :date");
                 q.bindValue(":date", date.toString("dd-MM-yyyy"));
                 loadEveryRow(sqlQueryModel, std::move(q));
-                db.close();
             }
             else {
                 // SQLite LIKE is ASCII-only and won't match García when searching "garcia".
                 // Load all rows and filter client-side so normalization handles diacritics.
-                db.open();
-                QSqlQuery q(db);
-                q.prepare("SELECT * FROM ingresos");
-                loadEveryRow(sqlQueryModel, std::move(q));   // the proxy filter needs every row
-                db.close();
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos");
+                    loadEveryRow(sqlQueryModel, std::move(q));   // the proxy filter needs every row
+                }
                 nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
                 qDebug() << "RecogPrendas::on_pb_search_clicked: name search loaded"
                          << sqlQueryModel->rowCount() << "rows; filter=" << nameSearchFilter;

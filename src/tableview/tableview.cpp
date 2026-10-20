@@ -4,9 +4,9 @@ TableView::TableView(QWidget *parent)
     : QTableView(parent)
 {
     // create context menu
-    context_menu = new QMenu(tr("Context menu"), this);
-    action1 = new QAction("Añadir fila", this);
-    action2 = new QAction("Eliminar fila", this);
+    context_menu = new QMenu(tr("Menú contextual"), this);
+    action1 = new QAction(tr("Añadir fila"), this);
+    action2 = new QAction(tr("Eliminar fila"), this);
     context_menu->addAction(action1);
     context_menu->addAction(action2);
     // connect context menu

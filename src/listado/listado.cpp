@@ -207,22 +207,31 @@ void Listado::populateTable()
             table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+        // Drop the delegates of the previous refresh so they do not pile up.
+        for (int col = 0; col < table_listado->model()->columnCount(); ++col)
+            table_listado->setItemDelegateForColumn(col, nullptr);
+        qDeleteAll(m_columnDelegates);
+        m_columnDelegates.clear();
+        auto setColumnDelegate = [this](int col, QAbstractItemDelegate *delegate) {
+            m_columnDelegates.append(delegate);
+            table_listado->setItemDelegateForColumn(col, delegate);
+        };
         // Configure NumberDelegate
         if (tableName == "prendas") {
-            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
+            setColumnDelegate(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
+            setColumnDelegate(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
         }
         else if (tableName == "gastos") {
-            table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
+            setColumnDelegate(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
             // edit_lock is the pre-accounting_closures lock flag, no longer read.
             table_listado->setColumnHidden(GASTOS_IDX_CONTAB, true);
         }
         if (tableName == "ingresos") {
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
+            setColumnDelegate(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+            setColumnDelegate(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
+            setColumnDelegate(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
+            setColumnDelegate(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
+            setColumnDelegate(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
             table_listado->horizontalHeader()->moveSection(INGRESOS_COL_VERIFACTU_URL_QR, INGRESOS_COL_VERIFACTU_ERROR);
             placeIngresosDateColumns(table_listado->horizontalHeader());
             // hash is not useful at user interface.

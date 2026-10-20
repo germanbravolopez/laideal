@@ -104,53 +104,53 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     m_ticketNum = ticketNum;
     m_table->setRowCount(0);
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
-              "importe, observaciones, pagado, hash, estado "
-              "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
-    q.bindValue(":n", ticketNum);
-    if (!q.exec()) {
-        qWarning() << "PayDialog::loadTicket: SELECT failed for ticket" << ticketNum
-                   << "-" << q.lastError().text();
-        db.close();
-        return false;
-    }
-
-    int unpaidCount  = 0;
-    while (q.next()) {
-        if (m_cliente.isEmpty()) {
-            m_cliente        = q.value(0).toString();
-            m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+    int unpaidCount = 0;
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
+                  "importe, observaciones, pagado, hash, estado "
+                  "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
+        q.bindValue(":n", ticketNum);
+        if (!q.exec()) {
+            qWarning() << "PayDialog::loadTicket: SELECT failed for ticket" << ticketNum
+                       << "-" << q.lastError().text();
+            return false;
         }
-        const QString pagado   = q.value(8).toString();
-        const QString estado   = q.value(10).toString();
-        if (pagado == "SI") continue;
-        // A locally voided garment (estado "Anulado") is never chargeable - it
-        // must not enter the payable set or it could be submitted to AEAT.
-        if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
 
-        const int r = m_table->rowCount();
-        m_table->insertRow(r);
+        while (q.next()) {
+            if (m_cliente.isEmpty()) {
+                m_cliente        = q.value(0).toString();
+                m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+            }
+            const QString pagado   = q.value(8).toString();
+            const QString estado   = q.value(10).toString();
+            if (pagado == "SI") continue;
+            // A locally voided garment (estado "Anulado") is never chargeable - it
+            // must not enter the payable set or it could be submitted to AEAT.
+            if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
 
-        auto *cell = new QTableWidgetItem;
-        cell->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        cell->setCheckState(Qt::Checked);
-        m_table->setItem(r, COL_CHECK, cell);
+            const int r = m_table->rowCount();
+            m_table->insertRow(r);
 
-        m_table->setItem(r, COL_QTY,     new QTableWidgetItem(q.value(2).toString()));
-        m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
-        m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
-        m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
-        auto *imp = new QTableWidgetItem(displayMoney(q.value(6).toString()));
-        imp->setData(Qt::UserRole, moneyText(q.value(6).toString()).toDouble());   // the shown text has a comma
-        imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        m_table->setItem(r, COL_AMOUNT,  imp);
-        m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
-        m_table->setItem(r, COL_HASH,    new QTableWidgetItem(q.value(9).toString()));
-        ++unpaidCount;
+            auto *cell = new QTableWidgetItem;
+            cell->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
+            cell->setCheckState(Qt::Checked);
+            m_table->setItem(r, COL_CHECK, cell);
+
+            m_table->setItem(r, COL_QTY,     new QTableWidgetItem(q.value(2).toString()));
+            m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
+            m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
+            m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
+            auto *imp = new QTableWidgetItem(displayMoney(q.value(6).toString()));
+            imp->setData(Qt::UserRole, moneyText(q.value(6).toString()).toDouble());   // the shown text has a comma
+            imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            m_table->setItem(r, COL_AMOUNT,  imp);
+            m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
+            m_table->setItem(r, COL_HASH,    new QTableWidgetItem(q.value(9).toString()));
+            ++unpaidCount;
+        }
     }
-    db.close();
 
     if (unpaidCount == 0) {
         qDebug() << "PayDialog::loadTicket: ticket" << ticketNum << "has no unpaid rows";

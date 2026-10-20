@@ -90,25 +90,22 @@ void CancelInvoiceDialog::onSearchClicked()
     const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
-    db.open();
-
     // Header: cliente + fecha_recepcion. Constants across rows of the same
     // ticket, so MIN is fine.
     QString client, date;
     {
+        ConnectionScope scope(db);
         QSqlQuery q(db);
         q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) "
                   "FROM ingresos WHERE n_recibo = :num");
         q.bindValue(":num", ticketNum);
         if (!q.exec() || !q.first() || q.value(0).isNull()) {
-            db.close();
             m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
             return;
         }
         client = q.value(0).toString();
         date   = q.value(1).toString();
     }
-    db.close();
     m_receptionDate = QDate::fromString(date, "dd-MM-yyyy");
 
     QVector<SubmittedInvoiceEvent> submitted;

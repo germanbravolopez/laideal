@@ -174,33 +174,35 @@ void RectifyInvoiceDialog::onSearchClicked()
     const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) FROM ingresos WHERE n_recibo = :num");
-    q.bindValue(":num", ticketNum);
-    if (!q.exec() || !q.first() || q.value(0).isNull()) {
-        m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
-        db.close();
-        return;
-    }
-    const QString cliente = q.value(0).toString();
-    const QString fecha   = q.value(1).toString();
-    q.finish();
+    QString cliente, fecha;
+    bool hasPartialPays = false;
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) FROM ingresos WHERE n_recibo = :num");
+        q.bindValue(":num", ticketNum);
+        if (!q.exec() || !q.first() || q.value(0).isNull()) {
+            m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
+            return;
+        }
+        cliente = q.value(0).toString();
+        fecha   = q.value(1).toString();
+        q.finish();
 
-    // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
-    // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
-    // applyRectificationResult() below issues `UPDATE ... WHERE n_recibo = X`
-    // which would mark every payment event's rows RECTIFICADA in one shot - that
-    // both loses per-seq AEAT alignment AND silently underreports quarterly
-    // income in `contabilidad` (RECTIFICADA is excluded from totals). Block
-    // until per-seq rectification is implemented.
-    QSqlQuery seqQ(db);
-    seqQ.prepare("SELECT COUNT(*) FROM ingresos "
-                 "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
-    seqQ.bindValue(":num", ticketNum);
-    const bool hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
-    seqQ.finish();
-    db.close();
+        // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
+        // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
+        // applyRectificationResult() below issues `UPDATE ... WHERE n_recibo = X`
+        // which would mark every payment event's rows RECTIFICADA in one shot - that
+        // both loses per-seq AEAT alignment AND silently underreports quarterly
+        // income in `contabilidad` (RECTIFICADA is excluded from totals). Block
+        // until per-seq rectification is implemented.
+        QSqlQuery seqQ(db);
+        seqQ.prepare("SELECT COUNT(*) FROM ingresos "
+                     "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
+        seqQ.bindValue(":num", ticketNum);
+        hasPartialPays = seqQ.exec() && seqQ.first() && seqQ.value(0).toInt() > 0;
+        seqQ.finish();
+    }
 
     if (hasPartialPays) {
         m_lblInfo->setText(
@@ -427,18 +429,25 @@ void RectifyInvoiceDialog::onRectifyClicked()
 
 bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double amountWithIva, bool isSubstitution)
 {
-    db.open();
-    QSqlQuery old(db);
-    old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
-                "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
-    old.bindValue(":n", refused);
-    old.bindValue(":o", m_submittedTicket);
-    const bool read = old.exec() && old.next();
-    const QDate oldDate = read ? QDate::fromString(old.value(0).toString(), "dd-MM-yyyy") : QDate();
-    const double oldAmount = read ? old.value(1).toDouble() : 0.0;
-    const bool oldSubstitution = read && old.value(2).toString() == QLatin1String("S");
-    old.finish();
-    db.close();
+    bool read = false;
+    QDate oldDate;
+    double oldAmount = 0.0;
+    bool oldSubstitution = false;
+    {
+        ConnectionScope scope(db);
+        QSqlQuery old(db);
+        old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
+                    "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
+        old.bindValue(":n", refused);
+        old.bindValue(":o", m_submittedTicket);
+        read = old.exec() && old.next();
+        if (read) {
+            oldDate = QDate::fromString(old.value(0).toString(), "dd-MM-yyyy");
+            oldAmount = old.value(1).toDouble();
+            oldSubstitution = old.value(2).toString() == QLatin1String("S");
+        }
+        old.finish();
+    }
     if (!read || !oldDate.isValid()) {                              // never rewrite a row we cannot read
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer la rectificativa rechazada %1: no se ha enviado nada.")
                                                   .arg(refused.toHtmlEscaped())));
@@ -613,6 +622,5 @@ bool RectifyInvoiceDialog::applyRectificationResult(const VerifactuResult &resul
                                                       .arg(m_submittedTicket.toHtmlEscaped())));
         }
     }
-    db.close();
     return localOk;
 }

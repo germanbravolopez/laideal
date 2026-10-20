@@ -189,13 +189,14 @@ void AddGarment::onSearchClicked()
     m_grpGarment->setEnabled(false);
     m_grpState->setEnabled(false);
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-    q.bindValue(":n_recibo", ticket);
-    q.exec();
-    m_ticketModel->setQuery(std::move(q));
-    db.close();
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", ticket);
+        q.exec();
+        m_ticketModel->setQuery(std::move(q));
+    }
     if (ticket.isEmpty() || m_ticketModel->rowCount() == 0) {
         m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
         return;

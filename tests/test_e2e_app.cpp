@@ -1520,7 +1520,7 @@ private slots:
         QCOMPARE(rp.findChild<QDateEdit *>("de_date_anul")->date(), QDate::currentDate());
         // A voided garment: "Anulada" in green, no NO / En tienda labels, no pickup date.
         const QString anulBadge = rp.findChild<QLabel *>("lbl_anul_badge")->text();
-        QVERIFY2(anulBadge.contains("Anulada") && anulBadge.contains("green"), qPrintable(anulBadge));
+        QVERIFY2(anulBadge.contains("Anulada") && anulBadge.contains("#1B7F3B"), qPrintable(anulBadge));
         QVERIFY(rp.findChild<QLabel *>("lbl_payment_badge")->text().isEmpty());
         QVERIFY(rp.findChild<QLabel *>("lbl_state_badge")->text().isEmpty());
         QCOMPARE(rp.findChild<QDateEdit *>("de_date_pickup")->text(), QStringLiteral("-"));

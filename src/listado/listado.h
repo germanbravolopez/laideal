@@ -70,6 +70,7 @@ private:
     bool rowLockedNow(int proxyRow);
 
     QSqlDatabase db;
+    QList<QAbstractItemDelegate *> m_columnDelegates;
     QLabel *m_lblIntro = nullptr;
     QPushButton *m_btnAdd = nullptr;
     QPushButton *m_btnDelete = nullptr;
