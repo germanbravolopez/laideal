@@ -133,6 +133,9 @@ bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const 
 
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
+// The accepted rectificativa still standing on `ticket`, following the chain (a rectificativa
+// itself substituted by a later one): empty when none. False when the read failed.
+bool liveRectificationOf(QSqlDatabase &db, const QString &ticket, QString *number);
 // The differences (I-type rectificativas) already issued for `original`, neither refused nor
 // cancelled: what a new difference adds to. *ok is false when the read failed.
 double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok = nullptr);

@@ -44,7 +44,6 @@ private:
     // A sent rectificativa of the ticket (its n_recibo in *number, empty for none): cancel
     // it first, or its amount stays in the books after the original is gone. False when
     // the database could not be read.
-    bool liveRectificationOf(const QString &ticket, QString *number);
     // The first press of a row's Anular says what will be cancelled; the second sends it.
     void armCancellation(int row);
     void disarmCancellation();

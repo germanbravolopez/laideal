@@ -201,6 +201,24 @@ private slots:
                         "WHERE n_recibo IN ('85', '86') ORDER BY n_recibo)"), QStringLiteral("ERROR,PENDIENTE"));
     }
 
+    // The rectificativa still standing on a ticket, through a chain: R1 substituted by R2.
+    void test_liveRectificationOfFollowsTheChain()
+    {
+        RectificativaRow row;
+        row.original = "91"; row.type = "S"; row.label = "R5"; row.date = QDate(2026, 5, 4); row.amount = 8.0;
+        row.number = "92";
+        QVERIFY(insertRectificativaRow(m_db, row));
+        row.original = "92"; row.number = "93"; row.amount = 7.0;
+        QVERIFY(insertRectificativaRow(m_db, row));
+        exec("UPDATE ingresos SET verifactu_estado = 'RECTIFICADA' WHERE n_recibo = '92'");
+        exec("UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE n_recibo = '93'");
+        QString live;
+        QVERIFY(liveRectificationOf(m_db, "91", &live));
+        QCOMPARE(live, QStringLiteral("93"));
+        QVERIFY(liveRectificationOf(m_db, "999", &live));
+        QVERIFY(live.isEmpty());
+    }
+
     // The differences already issued for a ticket: accepted or pending, never refused / cancelled.
     void test_rectifiedDifferences()
     {

@@ -1450,6 +1450,28 @@ QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
     return number;
 }
 
+bool liveRectificationOf(QSqlDatabase &db, const QString &ticket, QString *number)
+{
+    number->clear();
+    if (dbNotConfigured(db, __func__)) return false;
+    ConnectionScope scope(db);
+    QSqlQuery q(db);
+    q.prepare("WITH RECURSIVE chain(n) AS ("
+              "  SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :t AND pagado = 'SI' "
+              "  UNION SELECT i.n_recibo FROM ingresos i JOIN chain c ON i.verifactu_rectifies_n_recibo = c.n "
+              "    WHERE i.pagado = 'SI') "
+              "SELECT n_recibo FROM ingresos WHERE n_recibo IN (SELECT n FROM chain) AND pagado = 'SI' "
+              "  AND verifactu_estado = 'ENVIADA' ORDER BY CAST(n_recibo AS INTEGER) DESC LIMIT 1");
+    q.bindValue(":t", ticket);
+    if (!q.exec()) {
+        qWarning() << "liveRectificationOf: lookup failed for" << ticket << "-" << q.lastError().text();
+        return false;
+    }
+    if (q.next())
+        *number = q.value(0).toString();
+    return true;
+}
+
 double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok)
 {
     if (ok) *ok = false;

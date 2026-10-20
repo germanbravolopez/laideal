@@ -219,7 +219,7 @@ void CancelInvoiceDialog::onCancelClicked(int row)
         return;
     }
     QString rectificativa;
-    if (!liveRectificationOf(m_loadedTicket, &rectificativa)) {
+    if (!liveRectificationOf(db, m_loadedTicket, &rectificativa)) {
         disarmCancellation();
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo comprobar si el ticket tiene rectificativas: no se ha "
                                                  "enviado nada a la AEAT.")));
@@ -280,27 +280,6 @@ void CancelInvoiceDialog::disarmCancellation()
         if (auto *btn = qobject_cast<QPushButton *>(m_table->cellWidget(m_armedRow, COL_ACTION)))
             btn->setText(tr("Anular"));
     m_armedRow = -1;
-}
-
-bool CancelInvoiceDialog::liveRectificationOf(const QString &ticket, QString *number)
-{
-    number->clear();
-    if (!db.open()) {
-        qWarning() << "CancelInvoiceDialog: db.open() failed -" << db.lastError().text();
-        return false;
-    }
-    QSqlQuery q(db);
-    q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :t AND pagado = 'SI' "
-              "AND verifactu_estado = 'ENVIADA' ORDER BY CAST(n_recibo AS INTEGER) LIMIT 1");
-    q.bindValue(":t", ticket);
-    const bool read = q.exec();
-    if (!read)
-        qWarning() << "CancelInvoiceDialog: rectificativa lookup failed -" << q.lastError().text();
-    else if (q.next())
-        *number = q.value(0).toString();
-    q.finish();
-    db.close();
-    return read;
 }
 
 void CancelInvoiceDialog::done(int result)
