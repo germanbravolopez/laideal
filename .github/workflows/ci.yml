@@ -88,6 +88,16 @@ jobs:
           path: build/tests/preview_*.png
           if-no-files-found: ignore
 
+      # A failing suite on the runner may print nothing through ctest: its junit report
+      # names the failing test function and message.
+      - name: Upload test results on failure
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-results
+          path: build/test-results-*.xml
+          if-no-files-found: ignore
+
       # The release job reuses this exe instead of rebuilding, so upload it on
       # every push (covers the X.Y tag push that drives a release).
       - name: Upload artifact
