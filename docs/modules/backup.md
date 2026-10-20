@@ -57,6 +57,7 @@ The 4-year window matches the LGT tax-prescription period; the daily-for-30-days
 | `backup.enabled` | bool | `true` | gates `needsBackup()`; manual trigger is independent |
 | `backup.last_time` | string (ISO-8601) | empty | populated after each successful backup |
 | `backup.last_version` | string (`X.Y`) | empty | the version whose first start backed up the DB before migrating it |
+| `backup.second_folder` | string (path) | empty | optional second folder (a USB stick, another drive; Configuración → *Segunda carpeta de copias*): each verified backup is also copied there as `.part` + rename and pruned with the same retention. A failed copy leaves the main backup successful and shows why |
 | `backup.last_error` | string | empty | time + reason of the last failed backup (`recordFailure`); cleared by the next success |
 
 At every start MainWindow shows `BackupManager::currentBackupWarning()` in the result panel: backups switched off, or no correct backup for more than 3 days (with the last error). The pure `backupWarning(enabled, lastSuccess, lastError, now)` is unit-tested.

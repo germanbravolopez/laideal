@@ -146,7 +146,7 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 | Direct client internals | `verifactu.aeat_installation`, `verifactu.aeat_chain_marker` | Written by the app (installation number, chain marker); do not edit |
 | Startup recovery | `verifactu.pending_recovery_enabled`, `verifactu.pending_recovery_floor_date` | Whether the start lists PENDIENTE rows to resend, and the oldest date it considers |
 | Update check | `updater.check_on_startup` | `true` by default |
-| Backups | `backup.enabled`, `backup.last_time`, `backup.last_version` | Daily backup on/off (default on); the last two are written by the app |
+| Backups | `backup.enabled`, `backup.second_folder`, `backup.last_time`, `backup.last_version` | Daily backup on/off (default on); the last two are written by the app |
 
 The ingresos IVA rate is not a setting (fixed at 21 %). Obsolete keys of older versions are removed on load.
 

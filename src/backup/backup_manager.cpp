@@ -254,9 +254,38 @@ BackupManager::Result BackupManager::performBackup()
     res.finishedAt   = QDateTime::currentDateTime();
 
     const int pruned = pruneOldBackups();
+    copyToSecondFolder(res);
     qDebug() << "BackupManager: backup completed -" << finalPath
              << "(" << res.bytesWritten << "bytes, pruned" << pruned << "old copies)";
     return res;
+}
+
+void BackupManager::copyToSecondFolder(Result &res) const
+{
+    if (m_secondFolder.trimmed().isEmpty())
+        return;
+    // Same name, written as .part and renamed: a cut-off copy never looks like a backup there.
+    const QDir dir(m_secondFolder.trimmed());
+    const QString name = QFileInfo(res.backupPath).fileName();
+    const QString part = dir.filePath(name + kPartSuffix);
+    if (!QDir().mkpath(dir.absolutePath())) {
+        res.secondCopyError = tr("No se pudo usar la segunda carpeta de copias %1.").arg(dir.absolutePath());
+    } else {
+        removeStalePartFiles(dir.absolutePath());
+        QFile::remove(part);
+        if (!QFile::copy(res.backupPath, part) || QFileInfo(part).size() != res.bytesWritten
+            || !QFile::rename(part, dir.filePath(name))) {
+            QFile::remove(part);
+            res.secondCopyError = tr("No se pudo copiar la copia de seguridad a la segunda carpeta %1.").arg(dir.absolutePath());
+        } else {
+            res.secondCopyPath = dir.filePath(name);
+            QStringList names = dir.entryList({ QStringLiteral("laideal_*.db") }, QDir::Files, QDir::Name);
+            for (const QString &old : backupsToPrune(names, QDateTime::currentDateTime()))
+                QFile::remove(dir.filePath(old));
+        }
+    }
+    if (!res.secondCopyError.isEmpty())
+        qWarning() << "BackupManager:" << res.secondCopyError;
 }
 
 QStringList BackupManager::backupsToPrune(const QStringList &fileNames, const QDateTime &now)

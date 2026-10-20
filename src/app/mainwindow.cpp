@@ -133,6 +133,7 @@ MainWindow::MainWindow(QWidget *parent)
             // large DB) and uses its own dedicated DB connections, so run it on
             // a worker thread to keep the UI responsive; marshal the Result back
             // to the GUI thread (Qt::QueuedConnection on `this`) for the message.
+            m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
             QThread *worker = QThread::create([this]() {
                 const BackupManager::Result res = m_backupManager->performBackup();
                 QMetaObject::invokeMethod(this, [this, res]() {
@@ -141,6 +142,8 @@ MainWindow::MainWindow(QWidget *parent)
                     if (!res.success) {
                         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
                                           + "<br>" + res.errorMessage.toHtmlEscaped());
+                    } else if (!res.secondCopyError.isEmpty()) {
+                        m_result->setText(UiKit::warnHtml(res.secondCopyError.toHtmlEscaped()));
                     } else {
                         statusBar()->showMessage(
                             tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
@@ -451,8 +454,11 @@ void MainWindow::mainwindowInitialSettings()
     if (AppSettings::instance()->backupEnabled() && AppSettings::instance()->backupLastVersion() != version
         && QFile::exists(DB_PATH)) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
+        m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
         const BackupManager::Result res = m_backupManager->performBackup();
         QApplication::restoreOverrideCursor();
+        if (!res.secondCopyError.isEmpty())
+            startProblems << UiKit::warnHtml(res.secondCopyError.toHtmlEscaped());
         if (res.success) {
             AppSettings::instance()->setBackupLastVersion(version);
             BackupManager::recordSuccess(res);   // saves the settings
@@ -1713,6 +1719,7 @@ void MainWindow::onUpdaterCheckFailed(const QString &error)
 void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
+    m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
     const auto res = m_backupManager->performBackup();
     QApplication::restoreOverrideCursor();
     BackupManager::recordSuccess(res);
@@ -1724,5 +1731,8 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
         return;
     }
     m_result->setText(UiKit::okHtml(tr("Copia de seguridad creada (%1 KB).").arg(res.bytesWritten / 1024))
-                      + "<br>" + UiKit::fileLinkHtml(res.backupPath, tr("Copia")));
+                      + "<br>" + UiKit::fileLinkHtml(res.backupPath, tr("Copia"))
+                      + (!res.secondCopyPath.isEmpty() ? "<br>" + UiKit::fileLinkHtml(res.secondCopyPath, tr("Copia en la segunda carpeta"))
+                         : !res.secondCopyError.isEmpty() ? "<br>" + UiKit::warnHtml(res.secondCopyError.toHtmlEscaped())
+                                                          : QString()));
 }

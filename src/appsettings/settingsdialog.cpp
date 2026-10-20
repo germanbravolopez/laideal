@@ -75,6 +75,13 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     dbContainer->setLayout(dbLayout);
     fl->addRow(tr("Base de datos (.db):"), dbContainer);
 
+    m_backupSecondFolder = new QLineEdit(s->backupSecondFolder());
+    m_backupSecondFolder->setObjectName("leBackupSecondFolder");
+    m_backupSecondFolder->setPlaceholderText(tr("Opcional: un USB u otro disco"));
+    m_backupSecondFolder->setToolTip(tr("Cada copia de seguridad diaria se copia también aquí, con la misma "
+                                        "conservación. Vacío = solo junto a la base de datos."));
+    fl->addRow(tr("Segunda carpeta de copias:"), browseRow(m_backupSecondFolder, true, this));
+
     m_language = new QComboBox;
     m_language->addItem(tr("Español"), "es");
     m_language->addItem(tr("English"), "en");
@@ -356,6 +363,7 @@ void SettingsDialog::accept()
 
     s->setLanguage(m_language->currentData().toString());
     s->setDbPath(m_dbPath->text().trimmed());
+    s->setBackupSecondFolder(m_backupSecondFolder->text().trimmed());
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
     s->setPaperWidthMm(m_paperWidth->currentData().toInt());

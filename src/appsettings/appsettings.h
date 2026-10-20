@@ -156,6 +156,10 @@ public:
     QString backupLastError() const;
     void    setBackupLastError(const QString &v);
     // App version ("X.Y") whose database was backed up before migrating it.
+    // Optional second folder (a USB stick, another drive) each verified backup is copied to,
+    // with the same retention; empty = off.
+    QString backupSecondFolder() const;
+    void    setBackupSecondFolder(const QString &v);
     QString backupLastVersion() const;
     void    setBackupLastVersion(const QString &v);
 

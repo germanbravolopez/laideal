@@ -70,6 +70,29 @@ private slots:
         QVERIFY(!manager.needsBackup());
     }
 
+    // A second folder gets the same verified copy (never a .part); a folder that cannot be
+    // used leaves the main backup successful and says why.
+    void test_secondFolderGetsTheCopy()
+    {
+        BackupManager manager;
+        manager.setSecondFolder(m_dir.filePath("usb"));
+        const BackupManager::Result res = manager.performBackup();
+        QVERIFY2(res.success, qPrintable(res.errorMessage));
+        QVERIFY(res.secondCopyError.isEmpty());
+        QVERIFY(QFile::exists(res.secondCopyPath));
+        QCOMPARE(QFileInfo(res.secondCopyPath).size(), res.bytesWritten);
+        QCOMPARE(QDir(m_dir.filePath("usb")).entryList({ "*.part" }, QDir::Files).size(), 0);
+
+        QFile blocker(m_dir.filePath("not-a-folder"));
+        QVERIFY(blocker.open(QIODevice::WriteOnly));
+        blocker.close();
+        QTest::qWait(1100);                                             // a new second, a new name
+        manager.setSecondFolder(m_dir.filePath("not-a-folder"));
+        const BackupManager::Result blocked = manager.performBackup();
+        QVERIFY(blocked.success);
+        QVERIFY(!blocked.secondCopyError.isEmpty());
+    }
+
     // An unfinished copy left by a crash is removed by the next run and never counts.
     void test_stalePartFileRemoved()
     {

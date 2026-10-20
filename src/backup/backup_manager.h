@@ -21,6 +21,8 @@ public:
         QString errorMessage;   // localized Spanish message suitable for QMessageBox
         qint64  bytesWritten = 0;
         QDateTime finishedAt;   // when the copy was verified (success only)
+        QString secondCopyPath;   // the copy in the second folder, when one is set and it worked
+        QString secondCopyError;  // why the second copy failed (the main backup still succeeded)
     };
 
     // Snapshot the live DB via SQLite "VACUUM INTO" into "<name>.part", verify it
@@ -30,6 +32,10 @@ public:
     // touches AppSettings, so it can run on a worker thread: the caller records the
     // success with recordSuccess() on the GUI thread.
     Result performBackup();
+
+    // The second folder each verified backup is also copied to (pruned with the same
+    // retention); empty = none. Set on the GUI thread before performBackup().
+    void setSecondFolder(const QString &folder) { m_secondFolder = folder; }
 
     // Saves the time of a successful backup to AppSettings. GUI thread only.
     static void recordSuccess(const Result &result);
@@ -69,6 +75,8 @@ private:
     QString backupDirectory() const;
     static QString timestampedFileName();
     static void removeStalePartFiles(const QString &dir);
+    void copyToSecondFolder(Result &res) const;
+    QString m_secondFolder;
 };
 
 #endif // BACKUP_MANAGER_H

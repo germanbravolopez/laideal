@@ -410,6 +410,8 @@ QString AppSettings::backupLastTime() const           { return str({"backup", "l
 void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }
 QString AppSettings::backupLastError() const           { return str({"backup", "last_error"}); }
 void    AppSettings::setBackupLastError(const QString &v) { setStr({"backup", "last_error"}, v); }
+QString AppSettings::backupSecondFolder() const       { return str({"backup", "second_folder"}); }
+void    AppSettings::setBackupSecondFolder(const QString &v) { setStr({"backup", "second_folder"}, v); }
 QString AppSettings::backupLastVersion() const        { return str({"backup", "last_version"}); }
 void    AppSettings::setBackupLastVersion(const QString &v) { setStr({"backup", "last_version"}, v); }
 
