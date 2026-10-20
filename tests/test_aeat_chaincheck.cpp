@@ -118,6 +118,35 @@ private slots:
         QCOMPARE(AeatChainCheck::verify(chain()).continuations, 0);
     }
 
+    // With the anchors a sync adopted, a link to a record this database does not hold passes
+    // only when it is an anchor: a deleted record is then reported.
+    void test_anchorsMakeADeletedRecordVisible()
+    {
+        QStringList records = chain();
+        records.removeAt(2);                                    // the anulación is gone
+        const QSet<QString> none;
+        const AeatChainCheck::Result strict = AeatChainCheck::verify(records, &none);
+        QVERIFY(!strict.ok);
+        QCOMPARE(strict.failedIndex, 2);
+        const AeatChainCheck::Result lenient = AeatChainCheck::verify(records);
+        QVERIFY(lenient.ok);
+        QCOMPARE(lenient.continuationHashes.size(), 1);
+        const QSet<QString> adopted{ lenient.continuationHashes.first() };
+        QVERIFY(AeatChainCheck::verify(records, &adopted).ok);   // an adopted AEAT head
+    }
+
+    // A sync that moved the head back to an older stored record (the newest never reached
+    // AEAT) records it as an anchor: the next record linking to it is no alteration.
+    void test_anchoredHeadMovedBack()
+    {
+        QStringList records = chain().mid(0, 2);                 // A-1, A-2
+        const QString firstHash = AeatRecord::hashOf(alta("A-1", 10.0, {}, 0));
+        records << registrationXml(alta("A-3", 30.0, link("A-1", firstHash), 4), system());
+        QVERIFY(!AeatChainCheck::verify(records).ok);
+        const QSet<QString> adopted{ firstHash.toUpper() };
+        QVERIFY(AeatChainCheck::verify(records, &adopted).ok);
+    }
+
     // Each issuer is its own chain, even interleaved in the store.
     void test_issuersCheckedSeparately()
     {

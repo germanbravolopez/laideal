@@ -2,6 +2,7 @@
 
 #include "aeathash.h"
 
+#include <QSet>
 #include <QDebug>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -32,6 +33,10 @@ QString kindText(AeatStore::Kind kind)
 }
 
 } // namespace
+
+// An aeat_chain_anchors row with this issuer: anchors are kept since then (the store's
+// continuations of the day it was set up were taken as its first anchors).
+static const char kAnchorsTrackedMarker[] = "*tracked*";
 
 AeatStore::AeatStore(const QSqlDatabase &db, const QString &environment)
     : m_db(db), m_environment(environment)
@@ -76,7 +81,12 @@ bool AeatStore::ensureSchema()
         && q.exec("CREATE INDEX IF NOT EXISTS aeat_records_invoice ON aeat_records (environment, invoice_number, kind)")
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_sync ("
                   " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, synced_at TEXT NOT NULL,"
-                  " PRIMARY KEY (environment, issuer_nif))");
+                  " PRIMARY KEY (environment, issuer_nif))")
+        // Huellas the chain was made to continue from although this database does not hold
+        // their record (a sync adopted AEAT's head): the only links AeatChainCheck accepts so.
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_anchors ("
+                  " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, hash TEXT NOT NULL, adopted_at TEXT NOT NULL,"
+                  " PRIMARY KEY (environment, issuer_nif, hash))");
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
@@ -174,6 +184,53 @@ bool AeatStore::markChainSynced(const QString &issuerNif)
     const bool ok = q.exec();
     close(wasOpen);
     return ok;
+}
+
+bool AeatStore::addChainAnchor(const QString &issuerNif, const QString &hash)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("INSERT OR IGNORE INTO aeat_chain_anchors (environment, issuer_nif, hash, adopted_at) "
+              "VALUES (:e, :n, :h, :t)");
+    q.bindValue(":e", m_environment);
+    q.bindValue(":n", issuerNif);
+    q.bindValue(":h", hash.toUpper());
+    q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+    const bool ok = q.exec();
+    if (!ok)
+        qWarning() << "AeatStore::addChainAnchor failed -" << q.lastError().text();
+    q.finish();
+    close(wasOpen);
+    return ok;
+}
+
+QSet<QString> AeatStore::chainAnchors(bool *tracked)
+{
+    QSet<QString> out;
+    if (tracked) *tracked = false;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT issuer_nif, hash FROM aeat_chain_anchors WHERE environment = :e");
+    q.bindValue(":e", m_environment);
+    if (q.exec())
+        while (q.next()) {
+            if (q.value(0).toString() == QLatin1String(kAnchorsTrackedMarker))
+                { if (tracked) *tracked = true; }
+            else
+                out.insert(q.value(1).toString().toUpper());
+        }
+    q.finish();
+    close(wasOpen);
+    return out;
+}
+
+bool AeatStore::markAnchorsTracked()
+{
+    return addChainAnchor(QString::fromLatin1(kAnchorsTrackedMarker), QStringLiteral("-"));
 }
 
 QStringList AeatStore::recordXmls()

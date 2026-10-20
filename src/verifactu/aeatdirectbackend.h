@@ -103,7 +103,9 @@ public:
     }
     // Art. 8.1 RD 1007/2023: the stored records are recomputed and their links checked, so an
     // alteration is detected and reported.
-    AeatChainCheck::Result verifyStoredChain() { return AeatChainCheck::verify(m_store.recordXmls()); }
+    // Strict with the anchors the syncs adopted (a store from before them takes its current
+    // continuations as its first anchors, once).
+    AeatChainCheck::Result verifyStoredChain();
     QString issuerNif() const { return m_config.issuerNif; }
     // "pruebas" / "produccion", as the store keeps its records.
     QString environmentName() const { return m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"); }

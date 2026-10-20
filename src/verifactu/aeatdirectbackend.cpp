@@ -163,7 +163,8 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (tip->hash != head.hash) {
         const AeatRecord::PreviousRecord moved{
             { m_config.issuerNif, tip->invoiceNumber, QDate::fromString(tip->issueDate, kDateFormat) }, tip->hash, tip->generatedAt };
-        if (!m_store.setChainHead(m_config.issuerNif, moved)) {
+        // The next record links to this huella: an anchor the chain verifier accepts.
+        if (!m_store.addChainAnchor(m_config.issuerNif, tip->hash) || !m_store.setChainHead(m_config.issuerNif, moved)) {
             *message = tr("No se pudo guardar el punto de la cadena.");
             return false;
         }
@@ -692,6 +693,24 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
     // (the app never rewrites a settled row, so a second application changes nothing).
     if (answer.status == VerifactuResult::SUCCESS || answer.status == VerifactuResult::ERROR)
         emit recordSettled(record.invoiceNumber, record.kind == AeatStore::Kind::Cancellation, answer);
+}
+
+AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
+{
+    const QStringList xmls = m_store.recordXmls();
+    bool tracked = false;
+    QSet<QString> anchors = m_store.chainAnchors(&tracked);
+    if (!tracked) {
+        // A store from before the anchors: what it continues today is taken as given, once.
+        const AeatChainCheck::Result lenient = AeatChainCheck::verify(xmls);
+        if (!lenient.ok)
+            return lenient;
+        for (const QString &hash : lenient.continuationHashes)
+            if (m_store.addChainAnchor(m_config.issuerNif, hash))
+                anchors.insert(hash);
+        m_store.markAnchorsTracked();
+    }
+    return AeatChainCheck::verify(xmls, &anchors);
 }
 
 QString AeatDirectBackend::expiryWarning(const QDateTime &expiry, const QDateTime &now, int days)

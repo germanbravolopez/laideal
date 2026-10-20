@@ -5,6 +5,7 @@
 // is recomputed from its own XML and each record must link to the previous one.
 // Pure: no network, no database.
 
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -16,6 +17,7 @@ struct Result {
     QString problem;           // Spanish, user-facing; empty when ok
     int     failedIndex = -1;  // index in the input of the first bad record
     int     continuations = 0; // records linking to a huella only AEAT holds (restored copy)
+    QStringList continuationHashes;   // those huellas, upper-case
 };
 
 // `recordXmls`: the exact XML of every stored record, in generation order
@@ -24,7 +26,12 @@ struct Result {
 // another stored record than the previous one, or a second PrimerRegistro fails. A link
 // to a huella this database does not hold continues a record only AEAT has (a restored
 // copy) and is counted, since it cannot be told from a deleted record here.
-Result verify(const QStringList &recordXmls);
+//
+// With `anchors` (the huellas a chain sync adopted, AeatStore::chainAnchors), a link to a
+// huella this database does not hold, or to another stored record than the previous one
+// (the head moved back by a sync), is accepted only when it is an anchor: a deleted record
+// is then reported too.
+Result verify(const QStringList &recordXmls, const QSet<QString> *anchors = nullptr);
 
 } // namespace AeatChainCheck
 

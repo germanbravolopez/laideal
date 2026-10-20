@@ -105,7 +105,7 @@ Result fail(int index, int checked, const QString &problem)
 
 } // namespace
 
-Result verify(const QStringList &recordXmls)
+Result verify(const QStringList &recordXmls, const QSet<QString> *anchors)
 {
     QList<ParsedRecord> records;
     QHash<QString, QSet<QString>> knownHashes;   // issuer -> every stored huella
@@ -135,16 +135,20 @@ Result verify(const QStringList &recordXmls)
         const bool first = r.get(QStringLiteral("Encadenamiento/PrimerRegistro")) == QLatin1String("S");
         const QString linked = r.get(QStringLiteral("RegistroAnterior/Huella")).toUpper();
         const bool hasPrevious = lastHash.contains(issuer);
+        const bool anchored = anchors && anchors->contains(linked);
         bool linkOk;
         if (first)
             linkOk = !hasPrevious && linked.isEmpty();
         else if (hasPrevious && linked == lastHash.value(issuer))
             linkOk = true;
         else if (!linked.isEmpty() && !knownHashes.value(issuer).contains(linked)) {
-            linkOk = true;
-            ++out.continuations;
+            linkOk = !anchors || anchored;   // a continuation of a record only AEAT holds
+            if (linkOk) {
+                ++out.continuations;
+                out.continuationHashes << linked;
+            }
         } else
-            linkOk = false;
+            linkOk = anchored;               // the head a sync moved back to
         if (!linkOk)
             return fail(i, checked, QString::fromUtf8("El registro de la factura %1 no enlaza con el anterior.").arg(number));
 

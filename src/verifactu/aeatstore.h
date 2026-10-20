@@ -8,6 +8,7 @@
 // `environment`, each with its own chain. A connection that is already open stays
 // open (the app's table models read through it).
 
+#include <QSet>
 #include <QDate>
 #include <QDateTime>
 #include <QList>
@@ -82,6 +83,11 @@ public:
 
     // The XML of every record of this environment, for the chain sync.
     QStringList recordXmls();
+    // A huella the chain continues from although its record is not stored (an adopted head).
+    bool addChainAnchor(const QString &issuerNif, const QString &hash);
+    // The anchors of this environment; *tracked is false until markAnchorsTracked().
+    QSet<QString> chainAnchors(bool *tracked = nullptr);
+    bool markAnchorsTracked();
 
     // Builds and stores the next record of the issuer's chain in one transaction:
     // reads the head, calls `build` with it, inserts the record and moves the head to
