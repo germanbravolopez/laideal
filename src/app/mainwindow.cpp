@@ -103,6 +103,9 @@ MainWindow::MainWindow(QWidget *parent)
     QTimer::singleShot(4000, this, [this]() {
         auto *dlg = new PendingSubmitsDialog(db, this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->inFlight = [this](const QString &invoiceId) {
+            return m_verifactuIntegration && m_verifactuIntegration->isInFlight(invoiceId);
+        };
         if (!dlg->loadPending()) {
             dlg->deleteLater();
             return;
@@ -112,6 +115,8 @@ MainWindow::MainWindow(QWidget *parent)
                 return tr("Verifactu no está disponible.");
             if (const QString blocked = m_verifactuIntegration->numberingBlockedReason(); !blocked.isEmpty())
                 return blocked;
+            if (m_verifactuIntegration->isInFlight(verifactuInvoiceId(ticketNum, seq)))
+                return tr("Esta factura se está enviando ahora mismo: espere a la respuesta de la AEAT.");
             const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
             return reqId.isEmpty() ? m_verifactuIntegration->getLastError() : QString();
         };

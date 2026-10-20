@@ -1,6 +1,7 @@
 #ifndef VERIFACTUINTEGRATION_H
 #define VERIFACTUINTEGRATION_H
 
+#include <QHash>
 #include <QString>
 #include <QDate>
 #include <QPixmap>
@@ -116,6 +117,9 @@ public:
     bool verifyStoredChain(QString *problem, int *continuations) const;
     // Syncs the direct client's chain now; no-op with the gateway.
     void syncDirectChain(const std::function<void(bool ok, const QString &message)> &done);
+    // An invoice sent through this facade whose answer has not arrived yet: the start-up
+    // recovery never resends it (the window that sent it, or Recogida, applies its answer).
+    bool isInFlight(const QString &invoiceId) const;
     // UI test builds: sends the direct client to a fake AEAT at this URL.
     static void setAeatEndpointOverride(const QString &url);
 
@@ -132,6 +136,7 @@ private:
     QString m_emitterNif;
     QString m_emitterName;
     QString m_lastError;
+    QHash<QString, QString> m_inFlight;   // request id -> invoice id, until its answer
 
     bool loadEmitterConfiguration();
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,

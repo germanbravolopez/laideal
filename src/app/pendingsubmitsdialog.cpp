@@ -89,6 +89,8 @@ bool PendingSubmitsDialog::loadPending()
     // covers a slow-but-already-registered AEAT submission.
     const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(db, floorIso);
     for (const PendingVerifactuEvent &ev : events) {
+        if (inFlight && inFlight(verifactuInvoiceId(ev.nRecibo, ev.seq)))
+            continue;                                                   // being sent right now
         Entry e;
         e.ticketNum  = ev.nRecibo;
         e.seq        = ev.seq;

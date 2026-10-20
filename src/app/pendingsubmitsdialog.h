@@ -32,6 +32,9 @@ public:
     // Resends one pending invoice; returns why nothing was sent (empty when it was). The
     // row stays listed when nothing was sent.
     std::function<QString(const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount)> retry;
+    // True for an invoice still being sent (e.g. a Cobrar pressed right after start-up): it is
+    // not listed, since its own window applies the answer. Set before loadPending().
+    std::function<bool(const QString &invoiceId)> inFlight;
 
     struct Entry {
         QString ticketNum;

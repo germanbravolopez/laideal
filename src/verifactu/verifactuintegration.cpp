@@ -58,8 +58,12 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         m_backend = m_manager;
     }
 
-    connect(m_backend, &VerifactuBackend::requestFinished,
-            this, &VerifactuIntegration::requestFinished);
+    m_inFlight.clear();   // a new backend: the old one answered (or released) its waiters
+    connect(m_backend, &VerifactuBackend::requestFinished, this,
+            [this](const QString &requestId, const VerifactuResult &result) {
+        m_inFlight.remove(requestId);
+        emit requestFinished(requestId, result);
+    });
     connect(m_backend, &VerifactuBackend::queryFinished,
             this, &VerifactuIntegration::queryFinished);
     connect(m_backend, &VerifactuBackend::recordSettled,
@@ -92,7 +96,18 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
         return QString();
     }
 
-    return m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
+    const QString requestId = m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
+    if (!requestId.isEmpty())
+        m_inFlight.insert(requestId, invoiceNumber);
+    return requestId;
+}
+
+bool VerifactuIntegration::isInFlight(const QString &invoiceId) const
+{
+    for (auto it = m_inFlight.cbegin(); it != m_inFlight.cend(); ++it)
+        if (it.value() == invoiceId)
+            return true;
+    return false;
 }
 
 QString VerifactuIntegration::cancelInvoiceAsync(

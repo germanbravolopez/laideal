@@ -1074,6 +1074,29 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 15000);
     }
 
+    // An invoice still being sent (a Cobrar pressed right after start-up) is not offered by the
+    // start-up recovery: its own window applies the answer, a resend would duplicate it.
+    void test_pendingRecoverySkipsAnInvoiceBeingSent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "945", "h945p", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h945p'"));
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        const auto restore = qScopeGuard([] { AppSettings::instance()->setVerifactuPendingRecoveryEnabled(false); });
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        QVERIFY(!m_verifactu->submitSimplifiedInvoiceAsync("945", QDate::currentDate(), 9.0 / 1.21, 21.0, "x").isEmpty());
+        QVERIFY(m_verifactu->isInFlight("945"));
+        PendingSubmitsDialog dlg(m_db);
+        dlg.inFlight = [this](const QString &id) { return m_verifactu->isInFlight(id); };
+        const bool listed = dlg.loadPending();
+        const QTableWidget *table = dlg.findChild<QTableWidget *>();
+        for (int r = 0; listed && r < table->rowCount(); ++r)
+            for (int c = 0; c < table->columnCount(); ++c)
+                QVERIFY(!table->item(r, c) || table->item(r, c)->text() != QLatin1String("945"));
+        QTRY_VERIFY_WITH_TIMEOUT(!m_verifactu->isInFlight("945"), 10000);
+    }
+
     // The start-up Reintentar reports whether it sent anything: a refusal keeps the row
     // listed with the reason, a send removes it.
     void test_pendingRetryKeepsTheRowWhenNothingWasSent()
