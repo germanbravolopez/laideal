@@ -27,7 +27,6 @@
 #include "aeatexportdialog.h"
 #include "aeatcertificate.h"
 #include "aeatselftest.h"
-#include "aeatstore.h"
 #include "producerdeclaration.h"
 #include "reporthtml.h"
 #include "uikit.h"
@@ -46,7 +45,6 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QDialogButtonBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QCheckBox>
 #include <QComboBox>
@@ -549,25 +547,26 @@ void MainWindow::initializeVerifactu()
     else
         updateAeatEnvironment();
     settlePendingRectifications();
-    if (AeatDirectBackend *direct = m_verifactuIntegration->directBackend(); direct && m_verifactuIntegration->isConfigured()) {
+    if (m_verifactuIntegration->isDirect() && m_verifactuIntegration->isConfigured()) {
         QStringList warnings;   // HTML lines
-        if (!direct->sendingError().isEmpty())
+        if (const QString sendingError = m_verifactuIntegration->sendingError(); !sendingError.isEmpty())
             warnings << UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
-                                           "pueden enviar: %1").arg(direct->sendingError().toHtmlEscaped()));
+                                           "pueden enviar: %1").arg(sendingError.toHtmlEscaped()));
         if (const QString saveError = AppSettings::instance()->lastSaveError(); !saveError.isEmpty())
             warnings << UiKit::errorHtml(tr("No se puede guardar la configuración (%1): el número de instalación "
                                             "de la conexión directa podría cambiar al reiniciar. Avise al servicio técnico.")
                                              .arg(saveError.toHtmlEscaped()));
-        if (const QString expiry = direct->certificateExpiryWarning(); !expiry.isEmpty())
+        if (const QString expiry = m_verifactuIntegration->certificateExpiryWarning(); !expiry.isEmpty())
             warnings << UiKit::warnHtml(expiry.toHtmlEscaped());
-        const AeatChainCheck::Result chain = direct->verifyStoredChain();
-        if (!chain.ok) {
-            qCritical() << "MainWindow: the stored AEAT record chain does not verify -" << chain.problem;
+        QString chainProblem;
+        int chainContinuations = 0;
+        if (!m_verifactuIntegration->verifyStoredChain(&chainProblem, &chainContinuations)) {
+            qCritical() << "MainWindow: the stored AEAT record chain does not verify -" << chainProblem;
             warnings << UiKit::errorHtml(tr("La cadena de registros de la AEAT guardada no es correcta: %1")
-                                             .arg(chain.problem.toHtmlEscaped()))
+                                             .arg(chainProblem.toHtmlEscaped()))
                         + "<br>" + tr("Los registros se han modificado fuera de la aplicación. Avise al servicio técnico.");
-        } else if (chain.continuations > 0) {
-            qWarning() << "MainWindow: the stored chain continues" << chain.continuations
+        } else if (chainContinuations > 0) {
+            qWarning() << "MainWindow: the stored chain continues" << chainContinuations
                        << "record(s) not in this database (a restored copy)";
         }
         if (!warnings.isEmpty())
@@ -625,12 +624,11 @@ void MainWindow::onRecordSettled(const QString &invoiceId, bool cancellation, co
 
 void MainWindow::settlePendingRectifications()
 {
-    AeatDirectBackend *direct = m_verifactuIntegration->directBackend();
     for (const QString &number : pendingRectificationNumbers(db)) {
-        if (direct && direct->holdsPendingRecord(AeatStore::Kind::Registration, number))
+        if (m_verifactuIntegration->holdsPendingRegistration(number))
             continue;                                                   // it sends itself and settles
         VerifactuResult stored;
-        if (direct && direct->storedOutcome(AeatStore::Kind::Registration, number, &stored)) {
+        if (m_verifactuIntegration->storedRegistrationOutcome(number, &stored)) {
             qDebug() << "MainWindow: rectificativa" << number << "settled from its stored AEAT answer -"
                      << applySettledVerifactuResult(db, number, stored) << "row(s)";
             continue;
@@ -643,7 +641,7 @@ void MainWindow::settlePendingRectifications()
 void MainWindow::continueDirectChain()
 {
     // Our system's own chain, synced with AEAT before the first record (never the gateway's).
-    m_verifactuIntegration->directBackend()->syncChain(
+    m_verifactuIntegration->syncDirectChain(
         [this](bool ok, const QString &message) {
             qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
             const int atAeat = m_verifactuIntegration->highestNumberAtAeat();
@@ -971,7 +969,7 @@ void MainWindow::updateAeatEnvironment()
         m_aeatEnvironment->setObjectName("lblAeatEnvironment");
         statusBar()->addPermanentWidget(m_aeatEnvironment);
     }
-    const bool preProduction = m_verifactuIntegration && m_verifactuIntegration->directBackend()
+    const bool preProduction = m_verifactuIntegration && m_verifactuIntegration->isDirect()
                                && !AppSettings::instance()->aeatDirectProduction();
     m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
     m_aeatEnvironment->setVisible(preProduction);
@@ -993,6 +991,7 @@ void MainWindow::showRefusedInvoices()
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &RefusedInvoicesDialog::openTicket, this, [this, dlg](const QString &nRecibo, int seq) {
         auto *recogida = new RecogPrendas(db, this);
+        recogida->setAttribute(Qt::WA_DeleteOnClose);
         recogida->m_verifactuIntegration = m_verifactuIntegration;
         recogida->show();
         recogida->showTicket(nRecibo, seq);
@@ -1125,8 +1124,8 @@ bool MainWindow::printRecibo()
     // Save-time print: AEAT submission is in flight (async). DB still has empty CSV,
     // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
     // given a reprint via RecogPrendas after AEAT replies.
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(db, this);
+    auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -1142,8 +1141,8 @@ bool MainWindow::printRecibo()
 
 bool MainWindow::printFra(const QPixmap &qrCode, bool verifactuIssued)
 {
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(db, this);
+    auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -1328,6 +1327,7 @@ void MainWindow::on_actionIngresos_triggered()
     QString title = "Ingresos";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "ingresos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1342,6 +1342,7 @@ void MainWindow::on_actionGastos_triggered()
     QString title = "Gastos";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "gastos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1361,6 +1362,7 @@ void MainWindow::on_actionListado_de_prendas_triggered()
     QString title = "Listado de prendas";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "prendas";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1380,6 +1382,7 @@ void MainWindow::on_actionListado_de_clientes_triggered()
     QString title = "Listado de clientes";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "clientes";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1394,6 +1397,7 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     QString title = "Listado de proveedores";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "proveedores";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1408,6 +1412,7 @@ void MainWindow::on_actionListado_de_servicios_triggered()
     QString title = "Listado de servicios";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "servicios";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1421,6 +1426,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
 {
     RecogPrendas *ui_recog;
     ui_recog = new RecogPrendas(db, this);
+    ui_recog->setAttribute(Qt::WA_DeleteOnClose);
     ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
@@ -1430,6 +1436,7 @@ void MainWindow::on_actionRecibo_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1441,6 +1448,7 @@ void MainWindow::on_actionFactura_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1452,6 +1460,7 @@ void MainWindow::on_actionFactura_completa_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = true;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1463,6 +1472,7 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
 {
     Contabilidad *ui_contabilidad;
     ui_contabilidad = new Contabilidad(db, this);
+    ui_contabilidad->setAttribute(Qt::WA_DeleteOnClose);
     ui_contabilidad->show();
 }
 
@@ -1470,6 +1480,7 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
     ui_rev_cont = new Contabilidad(db, this);
+    ui_rev_cont->setAttribute(Qt::WA_DeleteOnClose);
     ui_rev_cont->revertirOn = true;
     ui_rev_cont->resetAllContents();
     ui_rev_cont->show();
@@ -1479,6 +1490,7 @@ void MainWindow::on_actionFormulario_facturas_triggered()
 {
     Facturas *ui_facturas;
     ui_facturas = new Facturas(db, this);
+    ui_facturas->setAttribute(Qt::WA_DeleteOnClose);
     ui_facturas->populateEmpresas();
     ui_facturas->populateServicios();
     ui_facturas->show();
@@ -1488,6 +1500,7 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
+    ui_add_garment->setAttribute(Qt::WA_DeleteOnClose);
     ui_add_garment->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
     };

@@ -630,6 +630,7 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_SERVICIO  , Qt::Horizontal, tr("Serv."));
         sqlQueryModel->setHeaderData(INGRESOS_COL_OBSERVACIONES   , Qt::Horizontal, tr("Obs."));
         // Set model to table
+        MySortFilterProxyModel *oldProxy = proxyModel;   // replaced on every refresh
         proxyModel = new MySortFilterProxyModel(this);
         // lessThan() keys on table_name to pick the date / numeric comparators.
         proxyModel->table_name = "ingresos";
@@ -637,6 +638,8 @@ void RecogPrendas::on_pb_search_clicked()
             proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
+        if (oldProxy)
+            oldProxy->deleteLater();
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         placeIngresosDateColumns(ui->tableView->horizontalHeader());
         // Hide internal columns not meant for display
@@ -940,7 +943,9 @@ bool RecogPrendas::printFactura(const QString &ticketNum, int invoiceSeq)
     ui_impr->le_n_ticket->setText(ticketNum);
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(false, false);
-    return AppSettings::instance()->enablePrinting() && ui_impr->printTicket();
+    const bool printed = AppSettings::instance()->enablePrinting() && ui_impr->printTicket();
+    ui_impr->deleteLater();
+    return printed;
 }
 
 void RecogPrendas::on_pb_verifactu_clicked()

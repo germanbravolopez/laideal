@@ -1,5 +1,4 @@
 #include "rectifyinvoicedialog.h"
-#include "aeatstore.h"
 
 #include <QComboBox>
 #include <QDateEdit>
@@ -21,7 +20,6 @@
 #include "sql_lite.h"
 #include "uikit.h"
 #include "aeatresponse.h"
-#include "aeatdirectbackend.h"
 
 namespace {
 
@@ -242,8 +240,7 @@ void RectifyInvoiceDialog::onSearchClicked()
 
     const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
     const QString pending = pendingRectificationOf(db, ticketNum);
-    const bool cancellationPending = m_verifactu && m_verifactu->directBackend()
-        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Cancellation, verifactuInvoiceId(ticketNum, 0));
+    const bool cancellationPending = m_verifactu && m_verifactu->holdsPendingCancellation(verifactuInvoiceId(ticketNum, 0));
     if (estadoEnum == VerifactuEstado::Enviada && cancellationPending) {
         m_lblResult->setText(UiKit::warnHtml(tr("La anulación de este ticket está pendiente de envío a la AEAT: "
                                                 "no se puede rectificar.")));
@@ -321,7 +318,7 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // that row is income and would be offered for resubmission as a plain invoice.
     const auto invoiceType = invoiceTypeFromIndex(m_cbInvoiceType->currentIndex());
     // The shop only issues simplified invoices: the direct client corrects them with R5.
-    if (m_verifactu->directBackend() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
+    if (m_verifactu->isDirect() && invoiceType != VerifactuInvoice::RECTIFICATION_R5) {
         m_lblResult->setText(UiKit::errorHtml(tr("Con la conexión directa con la AEAT la rectificativa de un ticket "
                                                  "(factura simplificada) es siempre R5.")));
         return;
@@ -345,8 +342,7 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // The number is claimed (placeholder row) before the round-trip; a refused one is
     // resent under its own number (AEAT, 13-10-2026), never beside a second one.
     const QString refused = refusedRectificationOf(db, m_loadedTicket);
-    if (!refused.isEmpty() && m_verifactu->directBackend()
-        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, refused)) {
+    if (!refused.isEmpty() && m_verifactu->holdsPendingRegistration(refused)) {
         m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
                                                 "se enviará sola.").arg(refused.toHtmlEscaped())));
         setFormEnabled(true);
@@ -465,8 +461,7 @@ RectifyInvoiceDialog::~RectifyInvoiceDialog()
     // rectificativa. As an error it is counted and redone under its number.
     if (m_pendingRectifyId.isEmpty() || !m_verifactu)
         return;
-    if (m_verifactu->directBackend()
-        && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, m_newInvoiceNumber))
+    if (m_verifactu->holdsPendingRegistration(m_newInvoiceNumber))
         return;                                                     // it sends itself and settles
     qWarning() << "RectifyInvoiceDialog: closed before AEAT answered rectificativa" << m_newInvoiceNumber;
     markRectificativaUnanswered(db, m_newInvoiceNumber, m_submittedTicket,
@@ -530,9 +525,9 @@ bool RectifyInvoiceDialog::queuedWithoutAnswer(const VerifactuResult &result) co
 {
     // Only when the record was generated: before the first chain sync none is, and the
     // row is an error to redo (under its number), not something that sends itself.
-    return m_verifactu && m_verifactu->directBackend()
+    return m_verifactu
            && (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING)
-           && m_verifactu->directBackend()->holdsPendingRecord(AeatStore::Kind::Registration, m_newInvoiceNumber);
+           && m_verifactu->holdsPendingRegistration(m_newInvoiceNumber);
 }
 
 RectificativaRow RectifyInvoiceDialog::rectificativaRow() const

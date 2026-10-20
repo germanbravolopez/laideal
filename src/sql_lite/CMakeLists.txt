@@ -5,7 +5,7 @@ add_library(sql_lite STATIC
 )
 target_link_libraries(sql_lite
     PRIVATE
-    Qt${QT_VERSION_MAJOR}::Gui   # verifactutypes.h (QPixmap); no Widgets: the data layer shows nothing
+    verifactu_types   # header-only; no Widgets: the data layer shows nothing
     Qt${QT_VERSION_MAJOR}::Sql
 )
 target_include_directories(sql_lite INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

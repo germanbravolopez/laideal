@@ -8,6 +8,7 @@
 
 #include "aeatrecord.h"
 #include "aeatstore.h"
+#include "sql_lite.h"
 
 class TestAeatStore : public QObject
 {
@@ -189,6 +190,29 @@ private slots:
         store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
         store.pending();
         QVERIFY(m_db.isOpen());
+    }
+
+    // sql_lite reads aeat_records with literal column names (it cannot link this library):
+    // run those two reads against the table AeatStore really creates, so a column change
+    // here fails this test.
+    void test_sqlLiteReadsTheRealTable()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TABLE ingresos (n_recibo TEXT, pagado TEXT, verifactu_invoice_seq INTEGER)"));
+        m_db.close();
+        QCOMPARE(aeatPendingRecordCount(m_db, "pruebas"), 0);
+        store.append(AeatStore::Kind::Registration, "89890001K", builder("7", "AAA"));
+        const auto b = store.append(AeatStore::Kind::Registration, "89890001K", builder("7-2", "BBB"));
+        store.append(AeatStore::Kind::Cancellation, "89890001K", builder("7-5", "CCC"));
+        QCOMPARE(aeatPendingRecordCount(m_db, "pruebas"), 3);
+        QCOMPARE(aeatPendingRecordCount(m_db, "produccion"), 0);
+        QVERIFY(store.markOutcome(b.id, AeatStore::kAccepted, "CSV", "", ""));
+        QCOMPARE(aeatPendingRecordCount(m_db, "pruebas"), 2);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "7", "pruebas"), 3);        // 7 and 7-2 used; the cancellation is not an alta
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "7", "produccion"), 0);
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "8", "pruebas"), 0);
     }
 };
 

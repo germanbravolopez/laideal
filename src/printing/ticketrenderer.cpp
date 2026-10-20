@@ -1,6 +1,6 @@
 #include "ticketrenderer.h"
 #include "escposbuilder.h"
-#include "../verifactu/verifactutypes.h"   // splitGross (header-only)
+#include "verifactutypes.h"   // splitGross (header-only)
 
 #include <QPainter>
 

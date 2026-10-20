@@ -8,5 +8,6 @@ target_link_libraries(add_garment
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     uikit
+    verifactu_types
 )
 target_include_directories(add_garment INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

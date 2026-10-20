@@ -1,8 +1,8 @@
 #include "pay_dialog.h"
-#include "aeatdirectbackend.h"
 
 #include "appsettings.h"
 #include "imprimir.h"
+#include <QScopeGuard>
 #include "sql_lite.h"
 #include "uikit.h"
 #include "verifactuintegration.h"
@@ -246,8 +246,7 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
-    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->directBackend()
-                                                                 ? m_verifactu->directBackend()->environmentName() : QString());
+    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName());
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum
@@ -368,6 +367,7 @@ void PayDialog::applyReply(int seq, const VerifactuResult &result)
 void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued)
 {
     auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo            = qrCode.isNull(); // recibo (no QR) when AEAT didn't reply
     ui_impr->isCompleteInvoice   = false;
     ui_impr->verifactuIntegration = nullptr;

@@ -22,6 +22,22 @@ void    setDbPath(const QString &path);
 QString dbPath();
 #define DB_PATH dbPath()
 
+// Opens the connection if it is closed and closes it again on destruction only if this scope
+// opened it, so a caller's open connection survives. Declare it before any QSqlQuery.
+class ConnectionScope
+{
+public:
+    explicit ConnectionScope(QSqlDatabase &db) : m_db(db), m_opened(!db.isOpen()) { if (m_opened) m_opened = db.open(); }
+    ~ConnectionScope() { if (m_opened) m_db.close(); }
+    ConnectionScope(const ConnectionScope &) = delete;
+    ConnectionScope &operator=(const ConnectionScope &) = delete;
+    bool isOpen() const { return m_db.isOpen(); }
+
+private:
+    QSqlDatabase &m_db;
+    bool m_opened;
+};
+
 // False when a migration step failed (logged): the schema may be half-migrated.
 bool migrateDatabase(QSqlDatabase &db);
 

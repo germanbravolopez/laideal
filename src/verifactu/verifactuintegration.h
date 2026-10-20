@@ -5,6 +5,7 @@
 #include <QDate>
 #include <QPixmap>
 #include <QSqlDatabase>
+#include <functional>
 #include "verifactumanager.h"
 
 class AeatDirectBackend;
@@ -94,8 +95,29 @@ public:
     QString numberingBlockedReason();
     // Why no invoice may be issued now: numbering blocked, or Verifactu not configured.
     QString invoicingBlockedReason();
-    // The direct AEAT client when it is the chosen connection, else nullptr.
+    // The direct AEAT client when it is the chosen connection, else nullptr. Only for what
+    // needs the client itself (settings self-test, AEAT export, tests); the app asks below.
     AeatDirectBackend *directBackend() const { return m_direct; }
+    bool isDirect() const { return m_direct != nullptr; }
+
+    // The direct client holds a registration / cancellation record for the invoice that is
+    // generated but not answered (it goes out on its own). Always false with the gateway.
+    bool holdsPendingRegistration(const QString &invoiceNumber) const;
+    bool holdsPendingCancellation(const QString &invoiceNumber) const;
+    // AEAT's stored answer to the invoice's latest registration; false while none or with the gateway.
+    bool storedRegistrationOutcome(const QString &invoiceNumber, VerifactuResult *result) const;
+    // "pruebas" / "produccion" for the direct client, empty with the gateway.
+    QString environmentName() const;
+    // Why the direct client cannot send now (its certificate), or empty.
+    QString sendingError() const;
+    QString certificateExpiryWarning() const;
+    // Recomputes the direct client's stored chain; true (nothing to check) with the gateway.
+    // On false `problem` is user-facing; `continuations` counts records linking to AEAT-only huellas.
+    bool verifyStoredChain(QString *problem, int *continuations) const;
+    // Syncs the direct client's chain now; no-op with the gateway.
+    void syncDirectChain(const std::function<void(bool ok, const QString &message)> &done);
+    // UI test builds: sends the direct client to a fake AEAT at this URL.
+    static void setAeatEndpointOverride(const QString &url);
 
 signals:
     void requestFinished(const QString &requestId, const VerifactuResult &result);

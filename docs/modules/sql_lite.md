@@ -85,13 +85,14 @@ The actual path is stored in `~/.laideal_settings.json` under the `db.path` key 
 ## Usage pattern
 
 ```cpp
-db.open();
-QSqlQuery q(db);
+ConnectionScope scope(db);   // opens if closed; closes on return only what it opened
+QSqlQuery q(db);             // declared after the scope, so it goes first
 q.prepare("SELECT col FROM table WHERE id = :id");
 q.bindValue(":id", value);
 q.exec();
-db.close();
 ```
+
+Every `sql_lite` function uses `ConnectionScope` (`sql_lite.h`): a connection the caller (or a window's model) holds open stays open, and early returns close correctly. `sql_lite` reads AeatStore's `aeat_records` table in two named helpers only (`pendingAeatRecordCount`, `aeatInvoiceNumbersOfTicket`); `test_aeat_store` runs them against the real table.
 
 Always use named parameters (`:param`). Never build SQL by string concatenation — SQL injection risk.
 

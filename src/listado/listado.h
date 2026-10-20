@@ -49,7 +49,7 @@ public:
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
     QSqlTableModel *model = nullptr;
-    MySortFilterProxyModel *proxyModel;
+    MySortFilterProxyModel *proxyModel = nullptr;
 
 private slots:
     void resizeWindowToTable();

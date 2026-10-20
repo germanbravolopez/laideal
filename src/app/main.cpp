@@ -8,7 +8,6 @@
 #include "sql_lite.h"
 #include "applogger.h"
 #ifdef LAIDEAL_UI_TEST
-#include "aeatdirectbackend.h"
 #include "reporthtml.h"
 #endif
 
@@ -51,7 +50,7 @@ int main(int argc, char *argv[])
             qCritical() << "main: --fake-aeat must be http://127.0.0.1:<port>, not" << fakeAeatUrl;
             return 1;
         }
-        AeatDirectBackend::setEndpointOverride(fakeAeatUrl);
+        VerifactuIntegration::setAeatEndpointOverride(fakeAeatUrl);
         qWarning() << "main: UI test build, AEAT replaced by the fake at" << fakeAeatUrl;
     }
 #endif

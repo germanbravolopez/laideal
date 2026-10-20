@@ -111,7 +111,8 @@ void Imprimir::showEvent(QShowEvent *event)
 
 void Imprimir::getTicketInfo()
 {
-    sqlQueryModel = new QSqlQueryModel(this);
+    if (!sqlQueryModel)
+        sqlQueryModel = new QSqlQueryModel(this);
     db.open();
     QSqlQuery q(db);
     // Anulado rows (locally voided garments) never appear on a printed recibo or

@@ -1,7 +1,7 @@
 #include "sql_lite.h"
 #include "ingresos_schema.h"
 
-#include "../verifactu/verifactutypes.h"
+#include "verifactutypes.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -188,8 +188,8 @@ bool migrateDatabase(QSqlDatabase &db)
 {
     if (dbNotConfigured(db, __func__)) return false;
     qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
-    const bool wasOpen = db.isOpen();
-    if (!wasOpen && !db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qCritical() << "migrateDatabase: the database cannot be opened -" << db.lastError().text();
         return false;
     }
@@ -503,8 +503,6 @@ bool migrateDatabase(QSqlDatabase &db)
                  << "verifactu_estado value(s)";
 
     q.finish();
-    if (!wasOpen)
-        db.close();
     return ok;
 }
 
@@ -514,7 +512,7 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
     if (dbNotConfigured(db, __func__)) return 0;
 
     int maxValue = 0;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Numeric MAX: n_recibo is TEXT, and a text MAX would rank "99999" above "100000"
     // (the next ticket would repeat a number) or "9999" above "31163".
@@ -531,7 +529,6 @@ int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const
         qCritical() << "readMaxValueInColumnFromTable: query error for column" << column << "in" << table
                     << "-" << q.lastError().text();
     }
-    db.close();
     return maxValue;
 }
 
@@ -544,7 +541,7 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
         : "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
 
     int value = 0;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.exec(query);
     if (q.isSelect()) {
@@ -556,7 +553,6 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
     } else {
         qCritical() << "readMaxNMinYearInColumnFromTable: query error for column" << column << "in" << table;
     }
-    db.close();
     return value;
 }
 
@@ -566,7 +562,7 @@ QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const Q
     if (dbNotConfigured(db, __func__)) return {};
 
     QStringList list;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     if (orderByColumn.isEmpty())
         q.exec("SELECT " + column + " FROM " + table + ";");
@@ -578,7 +574,6 @@ QStringList readColumnFromTable(QSqlDatabase &db, const QString &column, const Q
     } else {
         qCritical() << "readColumnFromTable: query error for column" << column << "in" << table;
     }
-    db.close();
     return list;
 }
 
@@ -587,7 +582,7 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
     if (dbNotConfigured(db, __func__)) return 0.0f;
 
     float price = 0.0f;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     if (service == "Limp.") {
         q.prepare("SELECT precio_limpieza FROM prendas WHERE nombre LIKE :garment");
@@ -613,7 +608,6 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
     } else {
         qCritical() << "readGarmentPrice: query error for garment" << garment << "service" << service;
     }
-    db.close();
     return price;
 }
 
@@ -624,7 +618,7 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
     if (dbNotConfigured(db, __func__)) return {};
 
     QString result;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Exact: "="; otherwise a prefix with % and _ taken literally.
     q.prepare("SELECT " + itemToGet + " FROM " + table + " WHERE " + columnToSearch
@@ -641,7 +635,6 @@ QString selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QS
     } else if (printMsg) {
         qCritical() << "selectFromWhereLike: query error for" << itemToSearch << "in column" << columnToSearch;
     }
-    db.close();
     return result;
 }
 
@@ -657,7 +650,7 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
     if (dbNotConfigured(db, __func__)) return false;
 
     qDebug() << "updateItemToClient: UPDATE clientes SET" << column;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
     q.bindValue(":item", item);
@@ -665,7 +658,6 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
     bool ok = q.exec();
     if (!ok)
         qWarning() << "updateItemToClient: failed to update column" << column << "-" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -676,7 +668,7 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
 
     // No name, phones nor address in the log: it is sent to support.
     qDebug() << "addNewClient: INSERT INTO clientes";
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) "
               "VALUES (:nombre, :tel_fijo, :direccion, :movil)");
@@ -687,7 +679,6 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     bool ok = q.exec();
     if (!ok)
         qWarning() << "addNewClient: failed to insert the client -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -696,7 +687,7 @@ bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString 
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = :est "
               "WHERE n_recibo = :n AND hash = :h");
@@ -707,7 +698,6 @@ bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString 
     bool ok = q.exec();
     if (!ok)
         qWarning() << "updateTicketPickup: UPDATE failed -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -715,7 +705,7 @@ bool markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString 
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Anulado rows stay Anulado - a voided garment is never revived to Recogido.
     // (estado IS NULL OR ...) so legacy rows with a NULL estado are still picked
@@ -728,7 +718,6 @@ bool markTicketPickedUp(QSqlDatabase &db, const QString &nRecibo, const QString 
     bool ok = q.exec();
     if (!ok)
         qWarning() << "markTicketPickedUp: UPDATE failed -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -737,7 +726,7 @@ bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QS
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET observaciones = :obs "
               "WHERE n_recibo = :n AND hash = :h");
@@ -747,7 +736,6 @@ bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QS
     bool ok = q.exec();
     if (!ok)
         qWarning() << "updateTicketObservations: UPDATE failed -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -775,7 +763,7 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
         return false;
     }
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET size = :sz, importe = :imp "
               "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
@@ -784,7 +772,6 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
     const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    db.close();
     return ok;
 }
 
@@ -797,7 +784,7 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
         return false;
     }
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp "
               "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
@@ -806,7 +793,6 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
     const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    db.close();
     return ok;
 }
 
@@ -814,7 +800,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
 {
     if (dbNotConfigured(db, __func__)) return QString();
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT cantidad, importe, " + closedQuarterSql("ingresos.fecha_pago")
               + " FROM ingresos WHERE n_recibo = :n AND hash = :h");
@@ -822,18 +808,15 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     q.bindValue(":h", hash);
     if (!q.exec() || !q.first()) {
         qWarning() << "splitGarmentRow: row not found -" << nRecibo << hash << q.lastError().text();
-        db.close();
         return QString();
     }
     const int qty = q.value(0).toInt();
     if (q.value(2).toBool()) {
         qWarning() << "splitGarmentRow: row is locked by Contabilidad -" << nRecibo << hash;
-        db.close();
         return QString();
     }
     if (nGarm < 1 || nGarm >= qty) {
         qWarning() << "splitGarmentRow: cannot split" << nGarm << "of" << qty << "on" << nRecibo << hash;
-        db.close();
         return QString();
     }
     // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
@@ -855,7 +838,6 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     // original row reduced and the split-off garments lost.
     if (!db.transaction()) {
         qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
-        db.close();
         return QString();
     }
     QSqlQuery u(db);
@@ -897,7 +879,6 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
                    << u.lastError().text() << i.lastError().text();
         db.rollback();
     }
-    db.close();
     return ok ? newHash : QString();
 }
 
@@ -910,7 +891,7 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
         return false;
     }
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET servicio = :serv, importe = :imp "
               "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
@@ -919,7 +900,6 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
     const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    db.close();
     return ok;
 }
 
@@ -944,7 +924,7 @@ bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Strict pagado='SI' (not "!= NO"): a blank must not read as paid. A ticket
     // with no rows is not "all paid" either, hence the total > 0 guard - otherwise
@@ -957,7 +937,6 @@ bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
         const int total = q.value(0).toInt();
         allPaid = total > 0 && q.value(1).toInt() == total;
     }
-    db.close();
     return allPaid;
 }
 
@@ -965,7 +944,7 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // The void date goes to fecha_anulacion; fecha_pago / fecha_recogida stay empty
     // because the garment was never paid nor collected. pagado stays "NO", so no
@@ -986,7 +965,6 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
         qWarning() << "voidGarmentRow: refused for" << nRecibo << hash << "(paid, sent, voided or locked)";
         ok = false;
     }
-    db.close();
     return ok;
 }
 
@@ -994,12 +972,11 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
     q.bindValue(":n", nRecibo);
     const bool paid = q.exec() && q.first() && q.value(0).toInt() > 0;
-    db.close();
     return paid;
 }
 
@@ -1043,9 +1020,8 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     const bool ok = execGarmentInsert(db, row);
-    db.close();
     return ok;
 }
 
@@ -1053,18 +1029,16 @@ bool insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows)
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     // All the garments of a ticket or none: a partial ticket would be re-saved under
     // the same number, or offered to AEAT for only part of its amount.
     if (!db.transaction()) {
         qWarning() << "insertGarmentRows: could not start a transaction -" << db.lastError().text();
-        db.close();
         return false;
     }
     for (const IngresoGarmentRow &row : rows) {
         if (!execGarmentInsert(db, row)) {
             db.rollback();
-            db.close();
             return false;
         }
     }
@@ -1073,7 +1047,6 @@ bool insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows)
         qWarning() << "insertGarmentRows: commit failed -" << db.lastError().text();
         db.rollback();
     }
-    db.close();
     return ok;
 }
 
@@ -1114,9 +1087,7 @@ static const QString kGastosPeriodWhere =
 bool quarterIsClosed(QSqlDatabase &db, int quarter, int year)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    // An open connection stays open: Listado asks while its table model reads through it.
-    const bool wasOpen = db.isOpen();
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT COUNT(*) FROM accounting_closures WHERE year = :y AND quarter = :q AND reopened_at IS NULL");
     q.bindValue(":y", year);
@@ -1129,8 +1100,6 @@ bool quarterIsClosed(QSqlDatabase &db, int quarter, int year)
         qCritical() << "quarterIsClosed: query failed for quarter" << quarter << year
                     << "- treated as closed -" << q.lastError().text();
     q.finish();
-    if (!wasOpen)
-        db.close();
     return closed;
 }
 
@@ -1143,8 +1112,7 @@ static bool writeClosure(QSqlDatabase &db, bool close, int quarter, int year, co
         qWarning() << "writeClosure: invalid quarter" << quarter << year;
         return false;
     }
-    const bool wasOpen = db.isOpen();
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     if (close) {
         q.prepare("INSERT INTO accounting_closures (year, quarter, closed_at, origin, report_file) "
@@ -1169,8 +1137,6 @@ static bool writeClosure(QSqlDatabase &db, bool close, int quarter, int year, co
         qWarning() << "writeClosure: quarter" << quarter << year << "not" << (close ? "closed" : "reopened")
                    << "(already so, or failed) -" << q.lastError().text();
     q.finish();
-    if (!wasOpen)
-        db.close();
     return ok;
 }
 
@@ -1188,8 +1154,7 @@ QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year)
 {
     QVector<QuarterClosure> closures;
     if (dbNotConfigured(db, __func__)) return closures;
-    const bool wasOpen = db.isOpen();
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT closed_at, reopened_at, origin, report_file FROM accounting_closures "
               "WHERE year = :y AND quarter = :q ORDER BY id");
@@ -1206,8 +1171,6 @@ QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year)
         closures.append(c);
     }
     q.finish();
-    if (!wasOpen)
-        db.close();
     return closures;
 }
 
@@ -1215,16 +1178,13 @@ QSet<int> closedQuarterKeys(QSqlDatabase &db)
 {
     QSet<int> keys;
     if (dbNotConfigured(db, __func__)) return keys;
-    const bool wasOpen = db.isOpen();
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     if (!q.exec("SELECT year, quarter FROM accounting_closures WHERE reopened_at IS NULL"))
         qWarning() << "closedQuarterKeys: query failed -" << q.lastError().text();
     while (q.next())
         keys.insert(quarterKey(q.value(1).toInt(), q.value(0).toInt()));
     q.finish();
-    if (!wasOpen)
-        db.close();
     return keys;
 }
 
@@ -1239,8 +1199,7 @@ bool quarterHasMovements(QSqlDatabase &db, int quarter, int year)
         return "substr(" + columns[i] + ", 4, 2) IN (:a" + n + ", :b" + n + ", :c" + n + ")"
                " AND substr(" + columns[i] + ", 7, 4) = :y" + n;
     };
-    const bool wasOpen = db.isOpen();
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT EXISTS (SELECT 1 FROM ingresos WHERE " + inQuarter(0) + ")"
               " OR EXISTS (SELECT 1 FROM ingresos WHERE " + inQuarter(1) + ")"
@@ -1258,8 +1217,6 @@ bool quarterHasMovements(QSqlDatabase &db, int quarter, int year)
     else
         qWarning() << "quarterHasMovements: query failed for quarter" << quarter << year << "-" << q.lastError().text();
     q.finish();
-    if (!wasOpen)
-        db.close();
     return any;
 }
 
@@ -1267,7 +1224,7 @@ QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int se
 {
     if (dbNotConfigured(db, __func__)) return {};
     QString xml;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT verifactu_xml FROM ingresos WHERE n_recibo = :n AND verifactu_invoice_seq = :s "
               "AND pagado = 'SI' AND COALESCE(verifactu_xml, '') != '' LIMIT 1");
@@ -1275,23 +1232,41 @@ QString verifactuEventRecordXml(QSqlDatabase &db, const QString &nRecibo, int se
     q.bindValue(":s", seq);
     if (q.exec() && q.next())
         xml = q.value(0).toString();
-    db.close();
     return xml;
+}
+
+// The only reads of aeat_records, a table AeatStore owns (src/verifactu/aeatstore.cpp):
+// sql_lite cannot link verifactu, so a column change there must be repeated here.
+// test_aeat_store runs both against the real table. A failed query (the table exists only
+// once the direct client was used) reads as nothing.
+static int pendingAeatRecordCount(QSqlDatabase &db, const QString &environment)
+{
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(*) FROM aeat_records WHERE state = 'PENDIENTE' AND environment = :e");
+    q.bindValue(":e", environment);
+    return q.exec() && q.next() ? q.value(0).toInt() : 0;
+}
+
+static QStringList aeatInvoiceNumbersOfTicket(QSqlDatabase &db, const QString &ticketNum, const QString &environment)
+{
+    QStringList numbers;
+    QSqlQuery q(db);
+    q.prepare("SELECT invoice_number FROM aeat_records WHERE kind = 'alta' "
+              "AND (invoice_number = :n OR invoice_number LIKE :prefix) AND (:e = '' OR environment = :e)");
+    q.bindValue(":n", ticketNum);
+    q.bindValue(":e", environment);
+    q.bindValue(":prefix", ticketNum + QStringLiteral("-%"));
+    if (q.exec())
+        while (q.next())
+            numbers << q.value(0).toString();
+    return numbers;
 }
 
 int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment)
 {
     if (dbNotConfigured(db, __func__)) return 0;
-    int count = 0;
-    db.open();
-    QSqlQuery q(db);
-    // The table is the direct client's; a failed query just means it was never used.
-    q.prepare("SELECT COUNT(*) FROM aeat_records WHERE state = 'PENDIENTE' AND environment = :e");
-    q.bindValue(":e", environment);
-    if (q.exec() && q.next())
-        count = q.value(0).toInt();
-    db.close();
-    return count;
+    ConnectionScope scope(db);
+    return pendingAeatRecordCount(db, environment);
 }
 
 // "31277" -> (31277, 0), "31277-1" -> (31277, 1).
@@ -1323,7 +1298,7 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
     if (changed > 0 && result.isSuccess()) {
         const QString original = rectifiedTicketOf(db, nRecibo);
         if (!original.isEmpty()) {
-            db.open();
+            ConnectionScope scope(db);
             QSqlQuery q(db);
             q.prepare("SELECT MIN(verifactu_rectification_type), MIN(fecha_pago) FROM ingresos "
                       "WHERE n_recibo = :n AND pagado = 'SI'");
@@ -1332,7 +1307,6 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
             const QString type = read ? q.value(0).toString() : QString();
             const QDate date = read ? QDate::fromString(q.value(1).toString(), "dd-MM-yyyy") : QDate();
             q.finish();
-            db.close();
             // Into an open period: a quarter closed meanwhile must not change.
             const QDate when = openPeriodDate(db, date);
             if (type == QLatin1String("S") && !markTicketRectified(db, original, when))
@@ -1356,8 +1330,9 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok)
 QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIso)
 {
     QVector<RefusedInvoice> invoices;
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return invoices;
+    if (dbNotConfigured(db, __func__)) return invoices;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return invoices;
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", SUM(" INGRESOS_IMPORTE_VALUE "), "
               "MAX(COALESCE(verifactu_error, '')), MAX(COALESCE(verifactu_rectifies_n_recibo, '') != '') "
@@ -1383,7 +1358,6 @@ QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIs
         invoices.append(r);
     }
     q.finish();
-    db.close();
     return invoices;
 }
 
@@ -1395,22 +1369,23 @@ int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso)
 QStringList pendingRectificationNumbers(QSqlDatabase &db)
 {
     QStringList out;
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return out;
+    if (dbNotConfigured(db, __func__)) return out;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return out;
     QSqlQuery q(db);
     if (q.exec("SELECT DISTINCT n_recibo FROM ingresos WHERE COALESCE(verifactu_rectifies_n_recibo, '') != '' "
                "AND pagado = 'SI' AND verifactu_estado = 'PENDIENTE'"))
         while (q.next())
             out << q.value(0).toString();
     q.finish();
-    db.close();
     return out;
 }
 
 bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QString &reason)
 {
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return false;
+    if (dbNotConfigured(db, __func__)) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     QSqlQuery q(db);
     // Only a placeholder with no answer at all: one AEAT answered without its CSV (the
     // gateway's PENDING, its reason stored) may be held by AEAT and stays PENDIENTE.
@@ -1422,14 +1397,14 @@ bool markRectificationUnsent(QSqlDatabase &db, const QString &number, const QStr
     const bool ok = q.exec() && q.numRowsAffected() > 0;
     if (!ok)
         qWarning() << "markRectificationUnsent: rectificativa" << number << "not updated -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
 bool markRectificationResent(QSqlDatabase &db, const QString &number)
 {
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return false;
+    if (dbNotConfigured(db, __func__)) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = 'PENDIENTE', verifactu_error = '' WHERE n_recibo = :n "
               "AND COALESCE(verifactu_rectifies_n_recibo, '') != '' AND verifactu_estado = 'ERROR'");
@@ -1437,49 +1412,48 @@ bool markRectificationResent(QSqlDatabase &db, const QString &number)
     const bool ok = q.exec() && q.numRowsAffected() > 0;
     if (!ok)
         qWarning() << "markRectificationResent: rectificativa" << number << "not updated -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
 QString pendingRectificationOf(QSqlDatabase &db, const QString &original)
 {
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return QString();
+    if (dbNotConfigured(db, __func__)) return QString();
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return QString();
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :o AND pagado = 'SI' "
               "AND verifactu_estado = 'PENDIENTE' LIMIT 1");
     q.bindValue(":o", original);
     const QString number = q.exec() && q.next() ? q.value(0).toString() : QString();
     q.finish();
-    db.close();
     return number;
 }
 
 QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
 {
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return QString();
+    if (dbNotConfigured(db, __func__)) return QString();
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return QString();
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :o AND pagado = 'SI' "
               "AND verifactu_estado = 'ERROR' ORDER BY CAST(n_recibo AS INTEGER) DESC LIMIT 1");
     q.bindValue(":o", original);
     const QString number = q.exec() && q.next() ? q.value(0).toString() : QString();
     q.finish();
-    db.close();
     return number;
 }
 
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
-    if (dbNotConfigured(db, __func__) || !db.open())
-        return QString();
+    if (dbNotConfigured(db, __func__)) return QString();
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return QString();
     QSqlQuery q(db);
     q.prepare("SELECT MIN(verifactu_rectifies_n_recibo) FROM ingresos "
               "WHERE n_recibo = :n AND COALESCE(verifactu_rectifies_n_recibo, '') != ''");
     q.bindValue(":n", nRecibo);
     const QString original = q.exec() && q.next() ? q.value(0).toString() : QString();
     q.finish();
-    db.close();
     return original;
 }
 
@@ -1491,9 +1465,9 @@ bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<
         qWarning() << "storeChargedGarments: the payment date of" << invoiceId << "is in a closed quarter";
         return false;
     }
-    if (!db.open() || !db.transaction()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen() || !db.transaction()) {
         qCritical() << "storeChargedGarments: no transaction -" << db.lastError().text();
-        db.close();
         return false;
     }
     QSqlQuery q(db);
@@ -1521,13 +1495,14 @@ bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<
     ok = ok && db.commit();
     if (!ok)
         db.rollback();
-    db.close();
     return ok;
 }
 
 bool markPendingEventUnreconciled(QSqlDatabase &db, const QString &nRecibo, int seq)
 {
-    if (dbNotConfigured(db, __func__) || !db.open()) return false;
+    if (dbNotConfigured(db, __func__)) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     QSqlQuery q(db);
     // Scoped by seq: a sibling event of the same ticket still PENDIENTE is left alone.
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
@@ -1541,7 +1516,6 @@ bool markPendingEventUnreconciled(QSqlDatabase &db, const QString &nRecibo, int 
     if (!ok)
         qWarning() << "markPendingEventUnreconciled: UPDATE failed for ticket" << nRecibo << "-" << q.lastError().text();
     q.finish();
-    db.close();
     return ok;
 }
 
@@ -1552,7 +1526,8 @@ bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row)
         qWarning() << "insertRectificativaRow: the date of" << row.number << "is in a closed quarter";
         return false;
     }
-    if (!db.open()) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     const QString date = row.date.toString("dd-MM-yyyy");
     QSqlQuery q(db);
     // A rectificativa row carries the verifactu_* set IngresoGarmentRow does not; AEAT's
@@ -1577,7 +1552,6 @@ bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row)
     if (!ok)
         qWarning() << "insertRectificativaRow: INSERT failed for" << row.number << "-" << q.lastError().text();
     q.finish();
-    db.close();
     return ok;
 }
 
@@ -1588,7 +1562,8 @@ bool resetRefusedRectificativa(QSqlDatabase &db, const RectificativaRow &row)
         qWarning() << "resetRefusedRectificativa: the new date of" << row.number << "is in a closed quarter";
         return false;
     }
-    if (!db.open()) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET fecha_recepcion = :f, fecha_pago = :f, importe = :imp, "
               "verifactu_rectification_type = :t, verifactu_estado = :pending, verifactu_error = '' "
@@ -1605,14 +1580,15 @@ bool resetRefusedRectificativa(QSqlDatabase &db, const RectificativaRow &row)
         qWarning() << "resetRefusedRectificativa: no refused row" << row.number << "of" << row.original
                    << "-" << q.lastError().text();
     q.finish();
-    db.close();
     return ok;
 }
 
 int applyRectificativaResult(QSqlDatabase &db, const QString &number, const QString &original,
                              const VerifactuResult &result, VerifactuEstado estado)
 {
-    if (dbNotConfigured(db, __func__) || !db.open()) return -1;
+    if (dbNotConfigured(db, __func__)) return -1;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return -1;
     const bool accepted = result.isSuccess();
     QSqlQuery q(db);
     // A refusal or an unknown outcome never rewrites an accepted row (a late duplicate).
@@ -1638,14 +1614,15 @@ int applyRectificativaResult(QSqlDatabase &db, const QString &number, const QStr
     else if (changed == 0 && !accepted)
         qWarning() << "applyRectificativaResult:" << number << "is already accepted - the late answer is ignored";
     q.finish();
-    db.close();
     return changed;
 }
 
 bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const QString &original,
                                  const QString &error)
 {
-    if (dbNotConfigured(db, __func__) || !db.open()) return false;
+    if (dbNotConfigured(db, __func__)) return false;
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return false;
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :e, verifactu_error = :err "
               "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o AND verifactu_estado = :pending");
@@ -1658,7 +1635,6 @@ bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const 
     if (!ok)
         qWarning() << "markRectificativaUnanswered: UPDATE failed for" << number << "-" << q.lastError().text();
     q.finish();
-    db.close();
     return ok;
 }
 
@@ -1677,7 +1653,8 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
                    << "instead of" << cancelDate << "(closed quarter)";
     // -1 only when the database answers that no paid row carries the InvoiceID: a read
     // failure is 0, so an accepted cancellation of a real ticket is never passed over.
-    if (!db.open())
+    ConnectionScope scope(db);
+    if (!scope.isOpen())
         return 0;
     int outcome = 0;   // 0 = mark it (if accepted)
     {
@@ -1695,7 +1672,6 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
             outcome = 2;                                            // already marked (its dialog did)
         }
     }
-    db.close();
     if (outcome == -1 || outcome == 2)
         return outcome;
     if (outcome == 3 || !result.isSuccess())
@@ -1708,7 +1684,7 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
     QStringList phones = { QString(), QString() }; // {tel_fijo, movil}
     if (dbNotConfigured(db, __func__)) return phones;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT tel_fijo, movil FROM clientes WHERE nombre = :n");
     q.bindValue(":n", client);
@@ -1718,7 +1694,6 @@ QStringList readClientPhones(QSqlDatabase &db, const QString &client)
     } else if (q.lastError().isValid()) {
         qWarning() << "readClientPhones: query error -" << q.lastError().text();
     }
-    db.close();
     return phones;
 }
 
@@ -1804,7 +1779,7 @@ bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
         placeholders += (i == 0 ? "?" : ", ?");
 
     qDebug() << "insertNewItemToTable: INSERT INTO" << table << "VALUES (" << items.count() << "items )";
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
     for (const QString &item : items)
@@ -1812,7 +1787,6 @@ bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -1840,7 +1814,7 @@ int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq
         return 0;
     }
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Only a row that is paid and NOT already settled may be reconciled. The
     // estado guard is the important one: ENVIADA already has its own CSV, and
@@ -1861,13 +1835,11 @@ int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq
     if (!q.exec()) {
         qWarning() << "reconcileVerifactuFromAeat: UPDATE failed for"
                    << verifactuInvoiceId(nRecibo, seq) << "-" << q.lastError().text();
-        db.close();
         return 0;
     }
     const int rows = q.numRowsAffected();
     qDebug() << "reconcileVerifactuFromAeat: reconciled" << rows << "row(s) of"
              << verifactuInvoiceId(nRecibo, seq) << "from AEAT, CSV:" << csv;
-    db.close();
     return rows;
 }
 
@@ -1875,7 +1847,8 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
 {
     PendingVerifactuEvent e;
     if (dbNotConfigured(db, __func__)) return e;
-    if (!db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qWarning() << "verifactuEventFor: db.open() failed -" << db.lastError().text();
         return e;
     }
@@ -1897,7 +1870,6 @@ PendingVerifactuEvent verifactuEventFor(QSqlDatabase &db, const QString &nRecibo
         e.cliente   = q.value(1).toString();
         e.importe   = roundToCents(q.value(2).toDouble());
     }
-    db.close();
     return e;
 }
 
@@ -1906,7 +1878,8 @@ bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
 {
     events.clear();
     if (dbNotConfigured(db, __func__)) return false;
-    if (!db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qWarning() << "submittedInvoiceEvents: db.open() failed -" << db.lastError().text();
         return false;
     }
@@ -1927,7 +1900,6 @@ bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
     if (!q.exec()) {
         qWarning() << "submittedInvoiceEvents: SELECT failed for ticket" << nRecibo
                    << "-" << q.lastError().text();
-        db.close();
         return false;
     }
     while (q.next()) {
@@ -1943,7 +1915,6 @@ bool submittedInvoiceEvents(QSqlDatabase &db, const QString &nRecibo,
             e.invoiceId = verifactuInvoiceId(nRecibo, e.seq);
         events.append(e);
     }
-    db.close();
     return true;
 }
 
@@ -1951,7 +1922,8 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
 {
     QVector<PendingVerifactuEvent> events;
     if (dbNotConfigured(db, __func__)) return events;
-    if (!db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qWarning() << "pendingVerifactuEvents: db.open() failed -" << db.lastError().text();
         return events;
     }
@@ -2002,7 +1974,6 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     q.bindValue(":floor", floorIso);
     if (!q.exec()) {
         qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
-        db.close();
         return events;
     }
     while (q.next()) {
@@ -2014,7 +1985,6 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         e.importe   = roundToCents(q.value(4).toDouble());
         events.append(e);
     }
-    db.close();
     return events;
 }
 
@@ -2025,7 +1995,8 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     if (undatedEvents)
         *undatedEvents = 0;
     if (dbNotConfigured(db, __func__)) return false;
-    if (!db.open()) {
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
         qWarning() << "aeatExportRecords: db.open() failed -" << db.lastError().text();
         return false;
     }
@@ -2054,7 +2025,6 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     q.bindValue(":to2",   to.toString(Qt::ISODate));
     if (!q.exec()) {
         qWarning() << "aeatExportRecords: SELECT failed -" << q.lastError().text();
-        db.close();
         return false;
     }
     while (q.next()) {
@@ -2092,7 +2062,6 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
             qWarning() << "aeatExportRecords:" << *undatedEvents
                        << "AEAT invoice(s) without a readable fecha_pago left out of every period";
     }
-    db.close();
     return true;
 }
 
@@ -2124,7 +2093,7 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
              << "csv=" << (result.isSuccess() ? result.csv : QString())
              << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
              << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_csv = :csv, verifactu_timestamp = :ts, "
               "verifactu_estado = :estado, verifactu_error = :error, verifactu_url_qr = :url, "
@@ -2162,7 +2131,6 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     else if ((changed = q.numRowsAffected()) == 0)
         qDebug() << "updateTicketVerifactuFields: no row changed for" << invoiceId
                  << "- already settled (ENVIADA / ANULADA / RECTIFICADA) or not paid";
-    db.close();
     return changed;
 }
 
@@ -2170,7 +2138,7 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QS
 {
     if (dbNotConfigured(db, __func__)) return 0;
     int next = 0;
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Count paid rows so a local-only event (Verifactu disabled, estado='')
     // still increments seq for the next event - otherwise two disabled-AEAT
@@ -2186,22 +2154,13 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QS
     // Nor a number the direct client already generated a record for (a payment whose
     // garments could not be stored as paid left no paid row behind): an InvoiceID names
     // one invoice. The table exists only once the direct connection was used.
-    QSqlQuery used(db);
-    used.prepare("SELECT invoice_number FROM aeat_records WHERE kind = 'alta' "
-                 "AND (invoice_number = :n OR invoice_number LIKE :prefix) AND (:e = '' OR environment = :e)");
-    used.bindValue(":n", ticketNum);
-    used.bindValue(":e", aeatEnvironment.isNull() ? QStringLiteral("") : aeatEnvironment);
-    used.bindValue(":prefix", ticketNum + QStringLiteral("-%"));
-    if (used.exec()) {
-        while (used.next()) {
-            const QString id = used.value(0).toString();
-            bool numeric = true;
-            const int seq = id == ticketNum ? 0 : id.mid(ticketNum.size() + 1).toInt(&numeric);
-            if (numeric)
-                next = qMax(next, seq + 1);
-        }
+    for (const QString &id : aeatInvoiceNumbersOfTicket(db, ticketNum,
+                                                       aeatEnvironment.isNull() ? QStringLiteral("") : aeatEnvironment)) {
+        bool numeric = true;
+        const int seq = id == ticketNum ? 0 : id.mid(ticketNum.size() + 1).toInt(&numeric);
+        if (numeric)
+            next = qMax(next, seq + 1);
     }
-    db.close();
     return next;
 }
 
@@ -2240,7 +2199,7 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
                                  QVector<IncomeTicketDetail> *buckets, int bucketCount,
                                  int (*bucketOf)(const QString &))
 {
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, cliente, fecha_pago, importe FROM ingresos WHERE " + kIngresosIncomeWhere
               + " ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER)");
@@ -2248,7 +2207,6 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {
         qWarning() << "collectIncomeTickets: query failed -" << q.lastError().text();
-        db.close();
         return false;
     }
     QVector<QHash<QString, int>> indexByTicket(bucketCount);
@@ -2274,7 +2232,6 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
             t.importe += importe.toDouble();
         t.garments++;
     }
-    db.close();
     return true;
 }
 
@@ -2284,7 +2241,7 @@ static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
                             QVector<ExpenseDetail> *buckets, int bucketCount,
                             int (*bucketOf)(const QString &))
 {
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT n_factura, empresa, servicio, fecha, iva, importe FROM gastos WHERE " + kGastosPeriodWhere
               + " ORDER BY " + kFechaGastoIso + ", id");
@@ -2292,7 +2249,6 @@ static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {
         qWarning() << "collectExpenses: query failed -" << q.lastError().text();
-        db.close();
         return false;
     }
     while (q.next()) {
@@ -2309,7 +2265,6 @@ static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
         e.importe  = e.invalidAmount ? 0.0 : importe.toDouble();
         buckets[bucket].append(e);
     }
-    db.close();
     return true;
 }
 
@@ -2319,7 +2274,7 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
                                    QVector<RegularizationDetail> *buckets, int bucketCount,
                                    int (*bucketOf)(const QString &))
 {
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, cliente, fecha_pago, fecha_anulacion, verifactu_estado, importe "
               "FROM ingresos WHERE " + kRegularizationWhere
@@ -2328,7 +2283,6 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {
         qWarning() << "collectRegularizations: query failed -" << q.lastError().text();
-        db.close();
         return false;
     }
     QVector<QHash<QString, int>> indexByTicket(bucketCount);
@@ -2361,7 +2315,6 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
             r.importe += importe.toDouble();
         r.garments++;
     }
-    db.close();
     return true;
 }
 
@@ -2425,7 +2378,7 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return QDate();
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT MAX(" + kFechaPagoIso + ") FROM ingresos WHERE n_recibo = :n AND pagado = 'SI'");
     q.bindValue(":n", nRecibo);
@@ -2434,7 +2387,6 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo)
         last = QDate::fromString(q.value(0).toString(), Qt::ISODate);
     else
         qWarning() << "ticketLastPaymentDate: query failed -" << q.lastError().text();
-    db.close();
     return last;
 }
 
@@ -2443,7 +2395,7 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
               "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha), "
@@ -2458,7 +2410,6 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     if (!ok)
         qWarning() << "markInvoiceSeqCancelled: UPDATE failed or matched no paid row for ticket" << nRecibo
                    << "seq" << seq << "-" << q.lastError().text();
-    db.close();
     return ok;
 }
 
@@ -2466,7 +2417,7 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    db.open();
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Never over a cancelled or already rectified invoice (a late acceptance).
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
@@ -2479,6 +2430,5 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
     const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
     if (!ok)
         qWarning() << "markTicketRectified: UPDATE failed or matched no paid row for ticket" << nRecibo << "-" << q.lastError().text();
-    db.close();
     return ok;
 }

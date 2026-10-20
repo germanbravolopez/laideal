@@ -17,10 +17,8 @@ target_link_libraries(test_sql_lite PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql
     Qt${QT_VERSION_MAJOR}::Widgets   # sql_lite references QMessageBox on error paths
     sql_lite
+    verifactu_types   # header-only: no need to link the whole verifactu lib and its Network dep
 )
-# verifactutypes.h is header-only (VerifactuResult + the estado helpers), so the
-# include path is enough - no need to link the whole verifactu lib and its Network dep.
-target_include_directories(test_sql_lite PRIVATE ${CMAKE_SOURCE_DIR}/src/verifactu)
 add_test(NAME sql_lite
     COMMAND test_sql_lite -o ${CMAKE_BINARY_DIR}/test-results-sql_lite.xml,junitxml -o -,txt)
 
@@ -184,6 +182,7 @@ target_link_libraries(test_aeat_store PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Sql
     verifactu
+    sql_lite        # the two reads of its aeat_records table
 )
 add_test(NAME aeat_store
     COMMAND test_aeat_store -o ${CMAKE_BINARY_DIR}/test-results-aeat_store.xml,junitxml -o -,txt)

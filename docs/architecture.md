@@ -12,7 +12,7 @@ MainWindow (src/app/)
   ├── Facturas          (src/facturas/)          — formal supplier invoice form
   ├── Contabilidad      (src/contabilidad/)      — accounting report generator
   ├── Imprimir          (src/imprimir/)          — receipt/invoice printing (orchestration)
-  │     └── printing    (src/printing/)          — ESC/POS byte builder + RAW spooler transport
+  │     └── printing    (src/printing/)          — ESC/POS byte builder + RAW spooler transport (also linked by appsettings, for the Status API diagnostic)
   ├── AddGarment        (src/add_garment/)       — add garments to existing ticket
   ├── BackupManager     (src/backup/)            — auto + manual SQLite snapshots (Verifactu Req. 4)
   ├── PendingSubmitsDialog (src/app/)            — startup recovery for verifactu_estado=PENDIENTE rows
@@ -359,3 +359,5 @@ AEAT QR validation (`aeathash.cpp`):
 ## Testing
 
 Testing is documented in [`docs/testing/`](testing/README.md): how to run the suites locally and in CI, the conventions and test patterns, how to add a suite, and the CI toolchain ([README](testing/README.md)); what each unit / integration suite covers ([unit_suites.md](testing/unit_suites.md)); the end-to-end test bench with the fake Verifactu and fake AEAT servers ([e2e.md](testing/e2e.md)); and the manual pre-release checklist ([smoke_test.md](testing/smoke_test.md)).
+
+Library layering: `verifactu` is a STATIC library (keyword `target_link_libraries`); its header-only `verifactu_types` INTERFACE target (`verifactutypes.h`: estados, `VerifactuResult`, `splitGross`) is what `sql_lite`, `add_garment`, `facturas` and `printing` link, so the base layer never links the Verifactu library. The app talks to the direct client through `VerifactuIntegration` only (`isDirect`, `holdsPendingRegistration`, `storedRegistrationOutcome`, `environmentName`, `sendingError`, `certificateExpiryWarning`, `verifyStoredChain`, `syncDirectChain`); `directBackend()` remains for the Configuración self-test, the AEAT export, the self-check and the tests.

@@ -1,7 +1,7 @@
 #include "add_garment.h"
 #include "sql_lite.h"
 #include "uikit.h"
-#include "../verifactu/verifactutypes.h"
+#include "verifactutypes.h"
 
 #include <QCheckBox>
 #include <QComboBox>

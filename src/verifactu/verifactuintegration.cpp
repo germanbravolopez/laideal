@@ -239,6 +239,59 @@ int VerifactuIntegration::highestNumberAtAeat() const
     return m_direct && m_direct->environmentName() == QLatin1String("produccion") ? m_direct->highestNumberAtAeat() : 0;
 }
 
+bool VerifactuIntegration::holdsPendingRegistration(const QString &invoiceNumber) const
+{
+    return m_direct && m_direct->holdsPendingRecord(AeatStore::Kind::Registration, invoiceNumber);
+}
+
+bool VerifactuIntegration::holdsPendingCancellation(const QString &invoiceNumber) const
+{
+    return m_direct && m_direct->holdsPendingRecord(AeatStore::Kind::Cancellation, invoiceNumber);
+}
+
+bool VerifactuIntegration::storedRegistrationOutcome(const QString &invoiceNumber, VerifactuResult *result) const
+{
+    return m_direct && m_direct->storedOutcome(AeatStore::Kind::Registration, invoiceNumber, result);
+}
+
+QString VerifactuIntegration::environmentName() const
+{
+    return m_direct ? m_direct->environmentName() : QString();
+}
+
+QString VerifactuIntegration::sendingError() const
+{
+    return m_direct ? m_direct->sendingError() : QString();
+}
+
+QString VerifactuIntegration::certificateExpiryWarning() const
+{
+    return m_direct ? m_direct->certificateExpiryWarning() : QString();
+}
+
+bool VerifactuIntegration::verifyStoredChain(QString *problem, int *continuations) const
+{
+    if (!m_direct)
+        return true;
+    const AeatChainCheck::Result chain = m_direct->verifyStoredChain();
+    if (problem)
+        *problem = chain.problem;
+    if (continuations)
+        *continuations = chain.continuations;
+    return chain.ok;
+}
+
+void VerifactuIntegration::syncDirectChain(const std::function<void(bool ok, const QString &message)> &done)
+{
+    if (m_direct)
+        m_direct->syncChain(done);
+}
+
+void VerifactuIntegration::setAeatEndpointOverride(const QString &url)
+{
+    AeatDirectBackend::setEndpointOverride(url);
+}
+
 QString VerifactuIntegration::numberingBlockedReason()
 {
     if (m_direct && m_direct->firstSyncRunning())

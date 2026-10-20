@@ -88,14 +88,13 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 ## Database rules
 
-- Always open and close `db` within the same function scope:
+- Open the connection with `ConnectionScope` (`sql_lite.h`), never a bare `db.open()` / `db.close()` pair: it closes only what it opened, so a caller's (or a model's) open connection survives, and early returns are safe:
   ```cpp
-  db.open();
-  QSqlQuery q;
+  ConnectionScope scope(db);
+  QSqlQuery q(db);                 // after the scope
   q.prepare("...");
   q.bindValue(":param", value);   // always use named params
   q.exec();
-  db.close();
   ```
 - **Never** build SQL by string concatenation — always use `:named_params` with `bindValue()`.
 - No hardcoded paths. The existing `DB_PATH` in `sql_lite.h` is a known issue, not a pattern to follow.

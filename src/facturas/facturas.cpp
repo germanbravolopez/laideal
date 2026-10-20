@@ -1,4 +1,4 @@
-#include "../verifactu/verifactutypes.h"   // splitGross (header-only, like sql_lite)
+#include "verifactutypes.h"   // splitGross (header-only, like sql_lite)
 #include "facturas.h"
 #include "sql_lite.h"
 #include "uikit.h"

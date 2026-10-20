@@ -149,6 +149,9 @@ void Listado::populateTable()
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
     if (QSqlDatabase::contains("qt_sql_default_connection")) {
+        // A refresh replaces the models: the old ones go once the view uses the new ones.
+        QSqlTableModel *oldModel = model;
+        MySortFilterProxyModel *oldProxy = proxyModel;
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable(tableName);
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
@@ -186,6 +189,10 @@ void Listado::populateTable()
         }
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
+        if (oldProxy)
+            oldProxy->deleteLater();
+        if (oldModel)
+            oldModel->deleteLater();
         if (tableName != "ingresos") {
             // Force-load all rows for smaller tables via fetchMore.
             while (model->canFetchMore(QModelIndex()))

@@ -2190,6 +2190,46 @@ private slots:
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
     }
+
+    // ConnectionScope closes only what it opened: a connection the caller holds open (a
+    // model reading through it) survives the sql_lite calls, a closed one is closed again,
+    // also after an early return and through a function that calls others.
+    void test_connectionScope_leavesTheConnectionAsFound()
+    {
+        insertRow("CS", "h1");
+        const auto calls = [this] {
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression("splitGarmentRow: row not found.*"));
+            QVERIFY(splitGarmentRow(m_db, "CS", "nope", 1).isEmpty());                 // early return
+            QCOMPARE(applySettledVerifactuCancellation(m_db, "NOPE", QDate::currentDate(), VerifactuResult()), -1);
+            QVERIFY(!ticketHasPaidGarment(m_db, "CS"));
+            QCOMPARE(readClientPhones(m_db, "nobody").size(), 2);
+            QVERIFY(voidGarmentRow(m_db, "CS", "h1"));
+        };
+        QVERIFY(m_db.open());
+        calls();
+        QVERIFY(m_db.isOpen());
+        m_db.close();
+
+        insertRow("CS", "h2");
+        QVERIFY(!m_db.isOpen());
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("splitGarmentRow: row not found.*"));
+        QVERIFY(splitGarmentRow(m_db, "CS", "nope", 1).isEmpty());
+        QVERIFY(!m_db.isOpen());
+        QVERIFY(voidGarmentRow(m_db, "CS", "h2"));
+        QVERIFY(!m_db.isOpen());
+        QCOMPARE(applySettledVerifactuCancellation(m_db, "NOPE", QDate::currentDate(), VerifactuResult()), -1);
+        QVERIFY(!m_db.isOpen());
+        QVERIFY(!ticketHasPaidGarment(m_db, "CS"));
+        QVERIFY(!m_db.isOpen());
+
+        {   // nested scopes: only the outermost one closes
+            ConnectionScope outer(m_db);
+            QVERIFY(outer.isOpen());
+            { ConnectionScope inner(m_db); QVERIFY(inner.isOpen()); }
+            QVERIFY(m_db.isOpen());
+        }
+        QVERIFY(!m_db.isOpen());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSqlLite)

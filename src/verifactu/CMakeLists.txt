@@ -56,9 +56,20 @@ set(PROJECT_SOURCES
     verifactuintegration.cpp
 )
 
-add_library(verifactu ${PROJECT_SOURCES})
+# Header-only: lets sql_lite, add_garment, facturas and printing use VerifactuResult, the
+# estado helpers and splitGross without linking the verifactu library.
+add_library(verifactu_types INTERFACE)
+target_include_directories(verifactu_types INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verifactu_types INTERFACE Qt${QT_VERSION_MAJOR}::Gui)   # QPixmap
 
+add_library(verifactu STATIC ${PROJECT_SOURCES})
+
+# Qt: the public headers expose QString, QPixmap and QSqlDatabase. appsettings is PUBLIC: the
+# tests include appsettings.h through verifactu. It links printing (StatusApiPrinter, the
+# "Probar Status API" diagnostic button in SettingsDialog), so anything linking verifactu
+# also links appsettings -> printing, although printing is otherwise used only by imprimir.
 target_link_libraries(verifactu
+    PUBLIC
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Network
@@ -67,7 +78,7 @@ target_link_libraries(verifactu
 )
 
 if(WIN32)
-    target_link_libraries(verifactu winhttp crypt32 ncrypt)
+    target_link_libraries(verifactu PRIVATE winhttp crypt32 ncrypt)
 endif()
 
 target_compile_definitions(verifactu PRIVATE
