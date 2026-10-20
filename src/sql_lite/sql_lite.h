@@ -4,6 +4,7 @@
 #include <QDate>
 #include <QDateTime>
 #include <QHash>
+#include <QMap>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -384,6 +385,7 @@ struct IncomeTicketDetail {
     double  importe  = 0.0;
     int     garments = 0;
     int     invalidAmounts = 0;   // garment rows whose importe uses a comma decimal: listed, not summed
+    QMap<int, double> invoices;   // verifactu_invoice_seq -> its gross: one AEAT invoice each
 };
 // One gastos row behind the Contabilidad gastos summary. iva is the stored rate
 // (0 = sin IVA), or -1 when the column is NULL.
@@ -404,6 +406,7 @@ struct RegularizationDetail {
     double  importe  = 0.0;
     int     garments = 0;
     int     invalidAmounts = 0;
+    QMap<int, double> invoices;   // verifactu_invoice_seq -> its gross
 };
 
 // Detail listings for the Contabilidad report over [startDate, endDate). They are

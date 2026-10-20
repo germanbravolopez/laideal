@@ -68,6 +68,10 @@ When **Incluir el detalle** is ticked, each period gets a **Detalle** block afte
 
 Both tables end with a note that per-line base/IVA are rounded to cents while the totals are computed unrounded. The total rows equal the summary by construction. The listings filter with the shared `kIngresosIncomeWhere` / `kGastosPeriodWhere` predicates in `sql_lite.cpp`. Trimestral and mensual reports append one Detalle block for the period, and the annual report one per quarter after the consolidated summary. The HTML comes from the pure statics `Contabilidad::createHtmlDetailIngresos` / `createHtmlDetailGastos`, which are unit-tested. They use the borderless, zebra-striped `ReportHtml::tableOpen()` style because these tables span pages.
 
+## IVA as invoiced
+
+The IVA repercutido (and the modelo 303 result) is the sum of each invoice's cuota as registered at AEAT: every payment event of a ticket (`verifactu_invoice_seq`, `IncomeTicketDetail::invoices`) is split on its own with `splitGross`, and regularisations the same way; the base is the gross minus that IVA. A gasto is one supplier invoice, split on its own too. The detail tables use the same split, so their totals equal the summary to the cent. Owner's decision 20-10-2026.
+
 ## Output
 
 Regenerating a quarter that is already closed never touches its filed report: the new PDF is written as `<name>_regenerado_YYYYMMDD[_N].pdf` (`Contabilidad::regeneratedPath`). Every PDF is written as `.part` and renamed (`ReportHtml::writePdf`), so a failed or locked write keeps the previous file.

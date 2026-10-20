@@ -2248,7 +2248,7 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
 {
     ConnectionScope scope(db);
     QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, cliente, fecha_pago, importe FROM ingresos WHERE " + kIngresosIncomeWhere
+    q.prepare("SELECT n_recibo, cliente, fecha_pago, importe, COALESCE(verifactu_invoice_seq, 0) FROM ingresos WHERE " + kIngresosIncomeWhere
               + " ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER)");
     q.bindValue(":start", start.toString("yyyy-MM-dd"));
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
@@ -2273,10 +2273,12 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
         }
         IncomeTicketDetail &t = tickets[it.value()];
         const QString importe = q.value(3).toString();
-        if (importe.contains(QLatin1Char(',')))
+        if (importe.contains(QLatin1Char(','))) {
             t.invalidAmounts++;
-        else
+        } else {
             t.importe += importe.toDouble();
+            t.invoices[q.value(4).toInt()] += importe.toDouble();
+        }
         t.garments++;
     }
     return true;
@@ -2323,8 +2325,8 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
 {
     ConnectionScope scope(db);
     QSqlQuery q(db);
-    q.prepare("SELECT n_recibo, cliente, fecha_pago, fecha_anulacion, verifactu_estado, importe "
-              "FROM ingresos WHERE " + kRegularizationWhere
+    q.prepare("SELECT n_recibo, cliente, fecha_pago, fecha_anulacion, verifactu_estado, importe, "
+              "COALESCE(verifactu_invoice_seq, 0) FROM ingresos WHERE " + kRegularizationWhere
               + " ORDER BY " + kFechaAnulacionIso + ", CAST(n_recibo AS INTEGER)");
     q.bindValue(":start", start.toString("yyyy-MM-dd"));
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
@@ -2356,10 +2358,12 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
         if (rowPago.isValid() && rowPago > QDate::fromString(r.fechaPago, "dd-MM-yyyy"))
             r.fechaPago = q.value(2).toString();
         const QString importe = q.value(5).toString();
-        if (importe.contains(QLatin1Char(',')))
+        if (importe.contains(QLatin1Char(','))) {
             r.invalidAmounts++;
-        else
+        } else {
             r.importe += importe.toDouble();
+            r.invoices[q.value(6).toInt()] += importe.toDouble();
+        }
         r.garments++;
     }
     return true;

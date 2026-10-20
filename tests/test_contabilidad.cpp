@@ -255,6 +255,23 @@ private slots:
 
     // A regularisation (cancellation of an earlier closed quarter's ticket) nets the
     // period's income without touching its ticket count.
+    // Modelo 303: the IVA is the sum of each invoice's cuota as registered (two invoices of
+    // 10,00 have 1,74 each = 3,48), not the IVA of the summed gross (20,00 -> 3,47).
+    void test_ivaIsTheSumOfTheInvoicedCuotas()
+    {
+        IncomeTicketDetail a; a.nRecibo = "1"; a.importe = 10.0; a.invoices = { { 0, 10.0 } };
+        IncomeTicketDetail b; b.nRecibo = "2"; b.importe = 20.0; b.invoices = { { 0, 10.0 }, { 1, 10.0 } };
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({ a, b }, {}, {}, 21.0,
+                                                                               QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(f.ingImporte, 30.0);
+        QCOMPARE(f.ingIva, 5.22);                   // 3 x 1,74
+        QCOMPARE(f.ingBase, 30.0 - 5.22);
+        ExpenseDetail g; g.nFactura = "F"; g.iva = 21; g.importe = 10.0;
+        const Contabilidad::PeriodFigures e = Contabilidad::figuresFromDetails({}, {}, { g, g }, 21.0,
+                                                                               QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(e.gas21Iva, 3.48);
+    }
+
     void test_figuresFromDetailsNetsRegularizations()
     {
         IncomeTicketDetail t; t.nRecibo = "50"; t.importe = 242.0;

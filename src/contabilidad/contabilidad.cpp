@@ -1,3 +1,4 @@
+#include "verifactutypes.h"   // splitGross
 #include "contabilidad.h"
 #include "sql_lite.h"
 #include "appsettings.h"
@@ -431,6 +432,17 @@ QString Contabilidad::periodSubtitle(int trimForYearConfig)
     return "Periodo: " + start.toString("dd-MM-yyyy") + " a " + endExclusive.addDays(-1).toString("dd-MM-yyyy");
 }
 
+// The IVA of a ticket's invoices as registered: each invoice's cuota on its own (splitGross).
+static double invoicedTax(const QMap<int, double> &invoices, double gross, double ivaRate)
+{
+    if (invoices.isEmpty())
+        return splitGross(gross, ivaRate).tax;    // one invoice (no per-seq amounts given)
+    double tax = 0.0;
+    for (double invoiceGross : invoices)
+        tax += splitGross(invoiceGross, ivaRate).tax;
+    return tax;
+}
+
 Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
     double ingImporte, int ingTickets, double gas10Importe, double gas21Importe,
     double gasNiImporte, int gasFacturas, double ivaRate)
@@ -473,6 +485,26 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
                                         netTicketCount(income, regularizations, periodStart, periodEnd),
                                         gas10, gas21, gasNi, expenses.size(), ivaRate);
     f.ingRegularizacion = regularizacion;
+
+    // Modelo 303 carries the IVA as invoiced: the sum of each invoice's cuota, rounded per
+    // invoice exactly as registered at AEAT (splitGross), not the IVA of the summed gross.
+    double ingIva = 0.0;
+    for (const IncomeTicketDetail &t : income)
+        ingIva += invoicedTax(t.invoices, t.importe, ivaRate);
+    for (const RegularizationDetail &r : regularizations)
+        ingIva -= invoicedTax(r.invoices, r.importe, ivaRate);
+    f.ingIva  = roundToCents(ingIva);
+    f.ingBase = f.ingImporte - f.ingIva;
+    // A supplier invoice is one invoice too: its cuota rounded on its own.
+    double gas10Iva = 0.0, gas21Iva = 0.0;
+    for (const ExpenseDetail &e : expenses) {
+        if (e.iva == 10)      gas10Iva += splitGross(e.importe, 10.0).tax;
+        else if (e.iva == 21) gas21Iva += splitGross(e.importe, 21.0).tax;
+    }
+    f.gas10Iva  = roundToCents(gas10Iva);
+    f.gas10Base = f.gas10Importe - f.gas10Iva;
+    f.gas21Iva  = roundToCents(gas21Iva);
+    f.gas21Base = f.gas21Importe - f.gas21Iva;
     return f;
 }
 
@@ -657,7 +689,7 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
     int flaggedTickets = 0;
     for (int i = 0; i < tickets.size(); i++) {
         const IncomeTicketDetail &t = tickets[i];
-        const double base = t.importe / (1.0 + ivaRate / 100.0);
+        const double base = t.importe - invoicedTax(t.invoices, t.importe, ivaRate);   // as the summary
         totalImporte += t.importe;
         totalBase += base;
         if (t.invalidAmounts > 0)
@@ -703,7 +735,7 @@ QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<Regularizat
     int flagged = 0;
     for (int i = 0; i < regularizations.size(); i++) {
         const RegularizationDetail &r = regularizations[i];
-        const double base = r.importe / (1.0 + ivaRate / 100.0);
+        const double base = r.importe - invoicedTax(r.invoices, r.importe, ivaRate);
         total += r.importe;
         totalBase += base;
         if (r.invalidAmounts > 0)
@@ -767,8 +799,8 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
                     + euroCell(e.importe) + "</tr>";
             continue;
         }
-        // Same base derivation as figuresFromTotals; iva 0 means sin IVA (base == importe).
-        const double base = e.iva > 0 ? e.importe / (1.0 + e.iva / 100.0) : e.importe;
+        // The summary's split (one supplier invoice); iva 0 means sin IVA (base == importe).
+        const double base = e.iva > 0 ? splitGross(e.importe, e.iva).base : e.importe;
         totalImporte += e.importe;
         totalBase += base;
         counted++;
