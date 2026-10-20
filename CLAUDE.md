@@ -25,7 +25,7 @@ Split a prompt into its tasks and give each one the cheapest tier that does it r
 |------|--------------------------|---------|-----------------------|
 | **Light** | `haiku` | Mechanical, repetitive, fully specified; the result is easy to check | Find files / call sites / where a string or object name is used (`Explore`); list what a doc or test file covers; apply the same small edit across many files to a given pattern; run the build or `ctest` and report only failures; tally counts for `docs/INDEX.md`; the dead-code scan |
 | **Standard** | `sonnet` | Clear intent, one module, bounded judgement | Implement a change the orchestrator has already designed; write or extend Qt Test / e2e / `tests/ui` scenarios (`test-engineer`); draft the `/update-docs` edits (milestone, tracker, INDEX, module doc); reproduce and localize a bug (`/debugging` steps 1-3); the coding-guidelines audit |
-| **Advanced** | `opus` (or the main session itself) | (**skip this step until `/release` process**) Design choices, cross-module or async changes, anything legal or irreversible, and every final review | Plans for tracker items with open choices; anything touching invoices, `verifactu_*` columns, estado, `n_recibo` numbering, the hash chain or the printed QR (`verifactu-compliance-auditor`); schema migrations; release decisions; the review gate below |
+| **Advanced** | `opus` (or the main session itself) | Design choices, cross-module or async changes, anything legal or irreversible, and every final review | Plans for tracker items with open choices; anything touching invoices, `verifactu_*` columns, estado, `n_recibo` numbering, the hash chain or the printed QR (`verifactu-compliance-auditor`); schema migrations; release decisions; the review gate below |
 
 When unsure between two tiers, pick the higher one for **code that ships** and the lower one for **read-only searches** (a weak search result is cheap to redo; a wrong edit is not).
 
@@ -42,7 +42,7 @@ When unsure between two tiers, pick the higher one for **code that ships** and t
 Before reporting a task finished, the orchestrator (or an `opus` subagent for large diffs) reviews the whole change against the request:
 
 1. Read the full `git diff`: correctness, edge cases, `/coding-guidelines`, no unrelated edits, no shop data or secrets.
-2. (**skip this step until `/release` process**) Changes touching Verifactu / invoices / numbering / the QR: run `verifactu-compliance-auditor` (Opus) and resolve every blocking finding.
+2. Changes touching Verifactu / invoices / numbering / the QR: run `verifactu-compliance-auditor` (Opus) and resolve every blocking finding.
 3. Build + `ctest` green (the run itself may be a `haiku` task; the orchestrator reads the result), docs updated per `/update-docs`.
 4. Findings are fixed or filed in the tracker right away, never left only in chat.
 
