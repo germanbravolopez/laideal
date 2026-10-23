@@ -299,7 +299,7 @@ private slots:
     }
 
     // j) and l) of the version being built: the shop's address from the settings (never in
-    // the source), the place fixed, the date left for the release that signs it.
+    // the source), the place fixed, the date the producer signed 12.0.
     void test_currentSignatureFromTheSettings()
     {
         QTemporaryDir dir;
@@ -309,8 +309,8 @@ private slots:
         const ProducerDeclaration::Signature now = ProducerDeclaration::currentSignature();
         QCOMPARE(now.postalAddress, QString::fromUtf8("Calle Mayor 1, bajo 2, 18001 Granada, España"));
         QCOMPARE(now.place, QString::fromUtf8("Granada, España"));
-        QVERIFY(!now.date.isValid());
-        QVERIFY(!ProducerDeclaration::isComplete(now));
+        QCOMPARE(now.date, QDate(2026, 10, 23));
+        QVERIFY(ProducerDeclaration::isComplete(now));
         AppSettings::instance()->setBusinessAddress(QString());
         AppSettings::instance()->setBusinessCity(QString());
         QVERIFY(ProducerDeclaration::currentSignature().postalAddress.isEmpty());

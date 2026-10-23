@@ -25,15 +25,15 @@ const char *const kMonths[] = { "enero", "febrero", "marzo", "abril", "mayo", "j
 
 Signature currentSignature()
 {
-    // j) the shop's address from the settings (never in the source); the date is set
-    // when the producer signs the version that ships.
+    // j) the shop's address from the settings (never in the source); the date is the day
+    // the producer signed the version that ships (12.0), set again for each such release.
     const AppSettings *s = AppSettings::instance();
     QStringList lines;
     for (const QString &line : { s->businessAddress().trimmed(), s->businessCity().trimmed() })
         if (!line.isEmpty())
             lines << line;
     const QString address = lines.join(QStringLiteral(", "));
-    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(),
+    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 10, 23),
              QString::fromUtf8("Granada, España") };
 }
 
