@@ -705,6 +705,27 @@ private slots:
         QTest::qWait(3500);                                                   // the late answer reaches nobody
     }
 
+    // A gateway answer without AEAT's CSV (PENDING) may already be registered: a second
+    // press on the same dialog never sends another rectificativa.
+    void test_rectifyGatewayPendingAnswerSendsNoSecond()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "786", "h786a", "10.00", today(), "A-ORIG0786"));
+        FakeVerifactuServer::Reply noCsv;
+        noCsv.body = FakeVerifactuServer::acceptedReply(QString());
+        m_server.enqueue("Create", noCsv);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("786");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY(dlg.findChild<QLabel *>("lblResult")->text().contains("no se ha confirmado"));
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTest::qWait(300);
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo = '786'"), QStringLiteral("1"));
+    }
+
     // At start, a rectificativa left PENDIENTE with nothing to send it (an earlier version
     // closed its dialog before the answer) becomes an error to redo, never a row that
     // blocks its ticket for good.

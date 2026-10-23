@@ -277,6 +277,11 @@ void RectifyInvoiceDialog::onRectifyClicked()
 {
     if (m_loadedTicket.isEmpty() || !m_verifactu) return;
     if (!m_pendingRectifyId.isEmpty()) return; // already in flight
+    if (!pendingRectificationOf(db, m_loadedTicket).isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml(tr("Este ticket ya tiene una rectificativa pendiente de la AEAT: "
+                                                "compruébela antes de rectificarlo de nuevo.")));
+        return;
+    }
 
     const double amountWithIva = m_sbAmount->value();
     const bool   isSubstitution = m_rbSubstitution->isChecked();
@@ -536,7 +541,8 @@ void RectifyInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, 
                                                  .arg(m_newInvoiceNumber.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
                              + "<br>" + tr("La AEAT puede tenerla: compruébelo con \"Consultar en AEAT\" en Recogida de "
                                            "Prendas antes de rehacerla."));
-        setFormEnabled(true);
+        m_loadedTicket.clear();
+        m_leTicketNum->clear();
     } else {
         m_lblResult->setText(UiKit::errorHtml(tr("Error al rectificar:")) + " "
                              + result.errorDescription.toHtmlEscaped());
