@@ -158,4 +158,26 @@ Result verify(const QStringList &recordXmls, const QSet<QString> *anchors)
     return out;
 }
 
+Result verifyTail(const QStringList &recordXmls, const QString &issuerNif, const QString &headHash,
+                  const QSet<QString> &anchors)
+{
+    Result out;
+    const QString head = headHash.trimmed().toUpper();
+    if (head.isEmpty() || anchors.contains(head))
+        return out;
+    QString tail;
+    for (const QString &xml : recordXmls) {
+        const ParsedRecord r = parse(xml);
+        if (r.valid && issuerOf(r).compare(issuerNif, Qt::CaseInsensitive) == 0)
+            tail = storedHashOf(r).toUpper();
+    }
+    if (tail != head) {
+        out.ok = false;
+        out.failedIndex = recordXmls.size();
+        out.problem = QString::fromUtf8("Falta el último registro de la cadena: la base de datos no guarda el registro "
+                                        "con el que enlazará el siguiente.");
+    }
+    return out;
+}
+
 } // namespace AeatChainCheck

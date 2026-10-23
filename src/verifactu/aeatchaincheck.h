@@ -33,6 +33,12 @@ struct Result {
 // is then reported too.
 Result verify(const QStringList &recordXmls, const QSet<QString> *anchors = nullptr);
 
+// The issuer's newest stored record must be the chain head (`headHash`, the huella the next
+// record will link to), unless the head is an anchor a sync adopted: otherwise the newest
+// record(s) were deleted. An empty head (chain not started) passes.
+Result verifyTail(const QStringList &recordXmls, const QString &issuerNif, const QString &headHash,
+                  const QSet<QString> &anchors);
+
 } // namespace AeatChainCheck
 
 #endif // AEATCHAINCHECK_H

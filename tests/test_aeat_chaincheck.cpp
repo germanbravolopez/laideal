@@ -4,6 +4,7 @@
 
 #include "aeatchaincheck.h"
 #include "aeatrecord.h"
+#include "aeatresponse.h"
 
 using namespace AeatRecord;
 
@@ -145,6 +146,22 @@ private slots:
         QVERIFY(!AeatChainCheck::verify(records).ok);
         const QSet<QString> adopted{ firstHash.toUpper() };
         QVERIFY(AeatChainCheck::verify(records, &adopted).ok);
+    }
+
+    // The newest record deleted: every link still holds, but the head is not the stored tail.
+    void test_deletedNewestRecordDetected()
+    {
+        const QStringList records = chain();
+        const QString head = AeatResponse::summarizeRecord(records.last()).hash;
+        QVERIFY(AeatChainCheck::verifyTail(records, "89890001K", head, {}).ok);
+        const QStringList shortened = records.mid(0, 3);
+        QVERIFY(AeatChainCheck::verify(shortened).ok);
+        const AeatChainCheck::Result r = AeatChainCheck::verifyTail(shortened, "89890001K", head, {});
+        QVERIFY(!r.ok);
+        QVERIFY(!r.problem.isEmpty());
+        QVERIFY(AeatChainCheck::verifyTail(shortened, "89890001K", head, { head.toUpper() }).ok);  // an adopted head
+        QVERIFY(AeatChainCheck::verifyTail({}, "89890001K", QString(), {}).ok);                     // chain not started
+        QVERIFY(!AeatChainCheck::verifyTail({}, "89890001K", head, {}).ok);                         // all deleted
     }
 
     // Each issuer is its own chain, even interleaved in the store.

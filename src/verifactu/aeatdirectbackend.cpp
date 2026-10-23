@@ -711,7 +711,18 @@ AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
                 anchors.insert(hash);
         m_store.markAnchorsTracked();
     }
-    return AeatChainCheck::verify(xmls, &anchors);
+    AeatChainCheck::Result result = AeatChainCheck::verify(xmls, &anchors);
+    bool headRead = false;
+    const QString head = m_store.chainHead(m_config.issuerNif, &headRead).hash;
+    if (result.ok && headRead) {
+        const AeatChainCheck::Result tail = AeatChainCheck::verifyTail(xmls, m_config.issuerNif, head, anchors);
+        if (!tail.ok) {
+            result.ok = false;
+            result.problem = tail.problem;
+            result.failedIndex = tail.failedIndex;
+        }
+    }
+    return result;
 }
 
 QString AeatDirectBackend::expiryWarning(const QDateTime &expiry, const QDateTime &now, int days)
