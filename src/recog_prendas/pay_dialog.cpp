@@ -340,7 +340,7 @@ void PayDialog::onVerifactuRequestFinished(const QString &requestId, const Verif
     if (requestId != m_pendingReqId) return; // not ours
     m_pendingReqId.clear();
     applyReply(m_pendingSeq, result);
-    printPartialFactura(m_pendingSeq, result.qrCode);
+    printPartialFactura(m_pendingSeq, result.qrCode, result.isSuccess() && !result.qrCode.isNull());
     accept();
 }
 

@@ -448,11 +448,11 @@ void MainWindow::mainwindowInitialSettings()
 {
     QStringList startProblems;   // HTML lines for the result panel
     m_backupManager = new BackupManager(this);
-    // A new version migrates the database: keep a copy of it as it was first.
+    // A new version migrates the database: keep a copy of it as it was first, also with
+    // automatic backups switched off (the data repairs never run without one).
     const QString version = Updater::currentVersion();
     bool rewriteData = true;   // false: no copy of the database as the previous version left it
-    if (AppSettings::instance()->backupEnabled() && AppSettings::instance()->backupLastVersion() != version
-        && QFile::exists(DB_PATH)) {
+    if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(DB_PATH)) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
         m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
         const BackupManager::Result res = m_backupManager->performBackup();
@@ -654,7 +654,8 @@ void MainWindow::settlePendingRectifications()
                      << applySettledVerifactuResult(db, number, stored) << "row(s)";
             continue;
         }
-        if (markRectificationUnsent(db, number, tr("Sin envío pendiente: rehágala en Rectificar factura.")))
+        if (markRectificationUnsent(db, number, tr("Sin respuesta de la AEAT: compruébela con \"Consultar en AEAT\" en Recogida de Prendas "
+                                                  "antes de rehacerla en Rectificar factura.")))
             qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
     }
 }
@@ -1250,7 +1251,8 @@ void MainWindow::on_pb_save_clicked()
                          << "isPaid=true qrBeforeReply=" << qrBeforeReply << "gotSuccessfulReply=" << gotSuccessfulReply
                          << "(either -> factura with QR + paid recibo, neither -> paid recibo)";
                 if (qrBeforeReply || gotSuccessfulReply) {
-                    printedWhat = printFra(qrCode, qrBeforeReply)
+                    // An accepted reply's QR always prints with the leyenda, also if its row write failed.
+                    printedWhat = printFra(qrCode, qrBeforeReply || gotSuccessfulReply)
                                       ? tr("Factura con QR (cliente) y recibo pagado (establecimiento) impresos.") : QString();
                 } else {
                     // AEAT has not confirmed within the bounded wait, but the request

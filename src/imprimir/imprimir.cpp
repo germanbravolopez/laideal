@@ -403,7 +403,7 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
-        // record the direct client has already generated and queued.
+        // record the direct client has queued, or of an accepted reply whose row write failed.
         const QString verifactuState = sqlQueryModel->data(
             sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
         d.verifactuVerifiable = verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)

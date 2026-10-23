@@ -62,6 +62,7 @@
 #include "rectifyinvoicedialog.h"
 #include "refusedinvoicesdialog.h"
 #include "sql_lite.h"
+#include "updater.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
@@ -287,6 +288,19 @@ private slots:
         m_server.clear();
         m_popups->clear();
         m_driver->clear();
+    }
+
+    // A new version copies the database before migrating it, also with automatic backups off.
+    void test_mainWindow_preMigrationCopyWithBackupsOff()
+    {
+        const QDir backups(QFileInfo(dbPath()).absolutePath() + "/backups");
+        const int before = backups.entryList({ "*.db" }, QDir::Files).size();
+        AppSettings::instance()->setBackupLastVersion("1.0");
+        { MainWindow mw; }
+        QCOMPARE(AppSettings::instance()->backupLastVersion(), Updater::currentVersion());
+        QCOMPARE(backups.entryList({ "*.db" }, QDir::Files).size(), before + 1);
+        { MainWindow mw; }                                                    // same version: no second copy
+        QCOMPARE(backups.entryList({ "*.db" }, QDir::Files).size(), before + 1);
     }
 
     // MainWindow: an unpaid ticket is stored SIN COBRAR and nothing is sent; a paid
@@ -740,6 +754,7 @@ private slots:
                                 "'PENDIENTE', 0, '795', 'S')"));
         MainWindow mw;
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h796a'"), QStringLiteral("ERROR"));
+        QVERIFY(scalar("SELECT verifactu_error FROM ingresos WHERE hash='h796a'").contains("Consultar en AEAT"));  // AEAT may hold it
         QVERIFY(pendingRectificationOf(m_db, "795").isEmpty());
     }
 
