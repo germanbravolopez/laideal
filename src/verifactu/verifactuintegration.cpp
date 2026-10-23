@@ -262,6 +262,13 @@ int VerifactuIntegration::highestNumberAtAeat() const
     return m_direct && m_direct->environmentName() == QLatin1String("produccion") ? m_direct->highestNumberAtAeat() : 0;
 }
 
+int VerifactuIntegration::highestRectificationAtAeat() const
+{
+    // Unlike tickets, the series is new and small: the direct store's own R- records of the
+    // current environment always count, so a number is never stored twice.
+    return m_direct ? m_direct->highestRectificationAtAeat() : 0;
+}
+
 bool VerifactuIntegration::holdsPendingRegistration(const QString &invoiceNumber) const
 {
     return m_direct && m_direct->holdsPendingRecord(AeatStore::Kind::Registration, invoiceNumber);

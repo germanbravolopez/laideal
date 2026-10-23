@@ -269,6 +269,11 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             const int number = r.invoiceNumber.section(QLatin1Char('-'), 0, 0).toInt(&numeric);
             if (numeric)
                 m_highestNumberAtAeat = qMax(m_highestNumberAtAeat, number);
+            if (r.invoiceNumber.startsWith(QLatin1String("R-"))) {
+                const int rectification = r.invoiceNumber.section(QLatin1Char('-'), 1, 1).toInt(&numeric);
+                if (numeric)
+                    m_highestRectificationAtAeat = qMax(m_highestRectificationAtAeat, rectification);
+            }
             // Without the SistemaInformatico block whose record it is cannot be told: as
             // unusable as a missing huella, never taken for another system's.
             if (r.systemId.isEmpty() || r.producerNif.isEmpty()) {

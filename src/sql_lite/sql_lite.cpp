@@ -1279,13 +1279,13 @@ int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment)
     return pendingAeatRecordCount(db, environment);
 }
 
-// "31277" -> (31277, 0), "31277-1" -> (31277, 1).
+// "31277" -> (31277, 0), "31277-1" -> (31277, 1); a rectificativa "R-5" is its own number (seq 0).
 static void splitInvoiceId(const QString &invoiceId, QString *nRecibo, int *seq)
 {
     *nRecibo = invoiceId.trimmed();
     *seq = 0;
     const int dash = nRecibo->lastIndexOf(QLatin1Char('-'));
-    if (dash > 0) {
+    if (dash > 0 && !(nRecibo->startsWith(QLatin1String("R-")) && dash == 1)) {
         bool numeric = false;
         const int parsed = nRecibo->mid(dash + 1).toInt(&numeric);
         if (numeric) {
@@ -1335,6 +1335,22 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok)
     if (!read)
         qCritical() << "nextTicketNumber: the highest ticket number could not be read - no number given";
     return read ? qMax(highest, highestAtAeat) + 1 : 0;
+}
+
+QString nextRectificationNumber(QSqlDatabase &db, int highestAtAeat, bool *ok)
+{
+    if (ok) *ok = false;
+    if (dbNotConfigured(db, __func__)) return QString();
+    ConnectionScope scope(db);
+    QSqlQuery q(db);
+    if (!q.exec("SELECT COALESCE(MAX(CAST(substr(n_recibo, 3) AS INTEGER)), 0) FROM ingresos "
+                "WHERE n_recibo LIKE 'R-%'") || !q.first()) {
+        qCritical() << "nextRectificationNumber: the highest rectificativa number could not be read -"
+                    << q.lastError().text();
+        return QString();
+    }
+    if (ok) *ok = true;
+    return QStringLiteral("R-%1").arg(qMax(q.value(0).toInt(), highestAtAeat) + 1);
 }
 
 QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIso)

@@ -1404,6 +1404,27 @@ private slots:
                         "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
     }
 
+    // Rectificativas count in their own series; tickets ignore it, and it ignores tickets.
+    void test_nextRectificationNumber_ownSeries()
+    {
+        bool ok = false;
+        QCOMPARE(nextRectificationNumber(m_db, 0, &ok), QStringLiteral("R-1"));
+        QVERIFY(ok);
+        insertIngreso("31200", "10-03-2026", "5.00", "SI", "ENVIADA", 0);
+        insertIngreso("R-9", "10-03-2026", "4.00", "SI", "ENVIADA", 0);
+        insertIngreso("R-10", "10-03-2026", "4.00", "SI", "ENVIADA", 0);
+        QCOMPARE(nextRectificationNumber(m_db, 0), QStringLiteral("R-11"));      // numeric, not text order
+        QCOMPARE(nextRectificationNumber(m_db, 20), QStringLiteral("R-21"));     // behind AEAT
+        QCOMPARE(nextTicketNumber(m_db, 0), 31201);
+        // Settled by its own number, never read as ticket "R", payment 9.
+        exec("UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE n_recibo = 'R-9'");
+        VerifactuResult accepted;
+        accepted.status = VerifactuResult::SUCCESS;
+        accepted.csv = "A-R9";
+        QCOMPARE(applySettledVerifactuResult(m_db, "R-9", accepted), 1);
+        QCOMPARE(scalar("SELECT verifactu_csv FROM ingresos WHERE n_recibo = 'R-9'"), QStringLiteral("A-R9"));
+    }
+
     // A legacy paid row with a NULL estado is adopted too (NULL NOT IN (...) is NULL).
     void test_reconcileVerifactuFromAeat_nullEstado()
     {

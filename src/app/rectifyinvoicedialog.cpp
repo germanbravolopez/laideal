@@ -370,10 +370,10 @@ void RectifyInvoiceDialog::onRectifyClicked()
         return;
     }
     bool numbered = true;
-    m_newInvoiceNumber = refused.isEmpty() ? QString::number(nextTicketNumber(db, m_verifactu->highestNumberAtAeat(), &numbered))
+    m_newInvoiceNumber = refused.isEmpty() ? nextRectificationNumber(db, m_verifactu->highestRectificationAtAeat(), &numbered)
                                            : refused;
     if (!numbered) {
-        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer el último número de ticket de la base de datos: no se "
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer el último número de rectificativa de la base de datos: no se "
                                                  "ha enviado nada a la AEAT.")));
         setFormEnabled(true);
         return;

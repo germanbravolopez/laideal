@@ -465,7 +465,7 @@ private slots:
         bool synced = false;
         direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
         QTRY_VERIFY(synced);
-        const QString number = QString::number(nextTicketNumber(m_db, direct.highestNumberAtAeat()));
+        const QString number = nextRectificationNumber(m_db, direct.highestRectificationAtAeat());
         aeat.server.rejectNext(number, "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
 
         const auto rectify = [this, &direct](double amount) -> QString {
@@ -1012,6 +1012,7 @@ private slots:
         dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
         QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
         const QString number = scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = '810'");
+        QVERIFY2(number.startsWith("R-"), qPrintable(number));               // its own series
         QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, number).state, AeatStore::kAccepted, 10000);
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE n_recibo = '" + number + "'"));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA', fecha_anulacion = '' WHERE n_recibo = '810'"));
@@ -2006,10 +2007,10 @@ private slots:
 
         const auto creates = m_server.requestsTo("Create");
         QCOMPARE(creates.size(), 1);
-        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("701"));
+        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("R-1"));   // its own series
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h700a'"), QStringLiteral("RECTIFICADA"));
         QCOMPARE(scalar("SELECT importe || '|' || verifactu_estado || '|' || verifactu_rectifies_n_recibo "
-                        "FROM ingresos WHERE n_recibo='701'"),
+                        "FROM ingresos WHERE n_recibo='R-1'"),
                  QStringLiteral("8.00|ENVIADA|700"));
     }
 

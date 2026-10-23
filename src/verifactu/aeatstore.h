@@ -83,6 +83,8 @@ public:
 
     // The XML of every record of this environment, for the chain sync.
     QStringList recordXmls();
+    // The highest "R-<n>" invoice number stored in this environment (0: none).
+    int highestRectificationNumber();
     // A huella the chain continues from although its record is not stored (an adopted head).
     bool addChainAnchor(const QString &issuerNif, const QString &hash);
     // The anchors of this environment; *tracked is false until markAnchorsTracked().

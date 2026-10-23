@@ -90,6 +90,7 @@ public:
     // The issuer's highest ticket number at the real AEAT (direct client in production, after
     // its sync), else 0: pre-production never moves the shop's numbering.
     int highestNumberAtAeat() const;
+    int highestRectificationAtAeat() const;   // the same for the "R-<n>" series
     // The pre-production self-test may touch the shop's chain (marker, records): see the module doc.
     static bool selfTestSharesShopChain(bool directAeat, bool aeatDirectProduction) { return directAeat && !aeatDirectProduction; }
     // Why no number may be taken now (first chain check running or failed: a failed one is retried).

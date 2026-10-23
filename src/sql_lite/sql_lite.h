@@ -159,6 +159,10 @@ bool markRectificationResent(QSqlDatabase &db, const QString &number);
 // The detail listings and readMaxValueInColumnFromTable set *ok false when their query
 // failed, so an unreadable database is never mistaken for an empty period.
 int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
+// Rectificativas have their own correlative series (art. 6.1.a RD 1619/2012, since 12.0):
+// "R-<n>", n one above the highest R- number stored or at AEAT. Empty with *ok false when
+// it cannot be read. Earlier rectificativas keep their ticket-series numbers.
+QString nextRectificationNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
 // Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
 // paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
 // any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can

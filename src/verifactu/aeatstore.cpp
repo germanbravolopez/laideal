@@ -233,6 +233,21 @@ bool AeatStore::markAnchorsTracked()
     return addChainAnchor(QString::fromLatin1(kAnchorsTrackedMarker), QStringLiteral("-"));
 }
 
+int AeatStore::highestRectificationNumber()
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return 0;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT COALESCE(MAX(CAST(substr(invoice_number, 3) AS INTEGER)), 0) FROM aeat_records "
+              "WHERE environment = :e AND invoice_number LIKE 'R-%'");
+    q.bindValue(":e", m_environment);
+    const int highest = q.exec() && q.next() ? q.value(0).toInt() : 0;
+    q.finish();
+    close(wasOpen);
+    return highest;
+}
+
 QStringList AeatStore::recordXmls()
 {
     QStringList out;
