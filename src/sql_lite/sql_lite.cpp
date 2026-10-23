@@ -99,16 +99,19 @@ static QString closureTimestamp()
 // gets a 'migration' closure; afterwards edit_lock is never read again, so a quarter
 // reopened later is not closed again by its stale flags. On an open db.
 // Req. 1 defence in depth, in the database itself: a row registered at AEAT is never
-// deleted, and a row AEAT accepted keeps its invoice identity. Only an actual change of
+// deleted, and a paid row AEAT accepted (also once cancelled or rectified, still exported)
+// keeps its invoice identity; recreated so an older build's ENVIADA-only version is replaced. Only an actual change of
 // those columns aborts; estado, fecha_anulacion and the pickup move on as before, and the
 // amount stays writable for Separar prendas (the two parts keep the invoice total).
 static const char *const kIngresosGuards[] = {
+    "DROP TRIGGER IF EXISTS ingresos_accepted_identity",
     "CREATE TRIGGER IF NOT EXISTS ingresos_registered_no_delete BEFORE DELETE ON ingresos "
     "WHEN COALESCE(OLD.verifactu_csv, '') != '' OR OLD.verifactu_estado IN ('ENVIADA', 'ANULADA', 'RECTIFICADA') "
     "BEGIN SELECT RAISE(ABORT, 'ingresos: a row registered at AEAT is never deleted'); END",
     "CREATE TRIGGER IF NOT EXISTS ingresos_accepted_identity BEFORE UPDATE OF n_recibo, fecha_pago, pagado, "
     "verifactu_csv, verifactu_xml, verifactu_hash, verifactu_invoice_id, verifactu_invoice_seq ON ingresos "
-    "WHEN OLD.verifactu_estado = 'ENVIADA' AND (NEW.n_recibo IS NOT OLD.n_recibo OR NEW.fecha_pago IS NOT OLD.fecha_pago "
+    "WHEN (OLD.verifactu_estado = 'ENVIADA' OR (OLD.verifactu_estado IN ('ANULADA', 'RECTIFICADA') AND OLD.pagado = 'SI')) "
+    "  AND (NEW.n_recibo IS NOT OLD.n_recibo OR NEW.fecha_pago IS NOT OLD.fecha_pago "
     "  OR NEW.pagado IS NOT OLD.pagado OR NEW.verifactu_csv IS NOT OLD.verifactu_csv "
     "  OR NEW.verifactu_xml IS NOT OLD.verifactu_xml OR NEW.verifactu_hash IS NOT OLD.verifactu_hash "
     "  OR NEW.verifactu_invoice_id IS NOT OLD.verifactu_invoice_id OR NEW.verifactu_invoice_seq IS NOT OLD.verifactu_invoice_seq) "

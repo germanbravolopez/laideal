@@ -994,7 +994,14 @@ private slots:
         QVERIFY(tryExec("UPDATE ingresos SET fecha_recogida = '06-05-2026', estado = 'Recogido' WHERE n_recibo = '63'"));
         QVERIFY(tryExec("UPDATE ingresos SET verifactu_estado = 'ANULADA', fecha_anulacion = '07-05-2026' WHERE n_recibo = '63'"));
         QVERIFY(!tryExec("DELETE FROM ingresos WHERE n_recibo = '63'"));                          // cancelled: still kept
-        QVERIFY(tryExec("UPDATE ingresos SET fecha_pago = '01-01-2026' WHERE n_recibo = '63'"));   // ANULADA is not frozen
+        QVERIFY(!tryExec("UPDATE ingresos SET fecha_pago = '01-01-2026' WHERE n_recibo = '63'"));  // a cancelled invoice keeps it
+        QVERIFY(!tryExec("UPDATE ingresos SET verifactu_xml = 'x' WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("UPDATE ingresos SET verifactu_estado = 'RECTIFICADA' WHERE n_recibo = '63'"));
+        QVERIFY(!tryExec("UPDATE ingresos SET n_recibo = '631' WHERE n_recibo = '63'"));          // so does a rectified one
+        insertIngreso("65", "", "5.00", "NO", "ANULADA", 0);
+        QVERIFY(migrateDatabase(m_db));
+        QVERIFY(!tryExec("UPDATE ingresos SET n_recibo = '632' WHERE n_recibo = '63'"));
+        QVERIFY(tryExec("UPDATE ingresos SET fecha_pago = '01-01-2026' WHERE n_recibo = '65'"));   // an unpaid one is not an invoice
     }
 
     // sql_lite F6: an amount is read strictly; garbage is refused, never stored as 0.00.
