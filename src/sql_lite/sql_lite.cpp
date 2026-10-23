@@ -1279,6 +1279,10 @@ int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment)
     return pendingAeatRecordCount(db, environment);
 }
 
+// Numeric order of n_recibo: tickets by number, then the rectificativas' own "R-<n>"
+// series above them by n (a text order would rank "99999" above "100000").
+#define N_RECIBO_ORDER "CASE WHEN n_recibo LIKE 'R-%' THEN 1000000000 + CAST(substr(n_recibo, 3) AS INTEGER) ELSE CAST(n_recibo AS INTEGER) END"
+
 // "31277" -> (31277, 0), "31277-1" -> (31277, 1); a rectificativa "R-5" is its own number (seq 0).
 static void splitInvoiceId(const QString &invoiceId, QString *nRecibo, int *seq)
 {
@@ -1368,7 +1372,7 @@ QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIs
               // floor or payment date never hides a refusal.
               "HAVING date(:floor) IS NULL OR MIN(" + kFechaPagoIso + ") IS NULL "
               "    OR MIN(" + kFechaPagoIso + ") >= date(:floor2) "
-              "ORDER BY MIN(" + kFechaPagoIso + ") DESC, CAST(n_recibo AS INTEGER) DESC");
+              "ORDER BY MIN(" + kFechaPagoIso + ") DESC, " N_RECIBO_ORDER " DESC");
     q.bindValue(":floor", floorIso);
     q.bindValue(":floor2", floorIso);
     if (!q.exec())
@@ -1462,7 +1466,7 @@ QString refusedRectificationOf(QSqlDatabase &db, const QString &original)
     if (!scope.isOpen()) return QString();
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo = :o AND pagado = 'SI' "
-              "AND verifactu_estado = 'ERROR' ORDER BY CAST(n_recibo AS INTEGER) DESC LIMIT 1");
+              "AND verifactu_estado = 'ERROR' ORDER BY " N_RECIBO_ORDER " DESC LIMIT 1");
     q.bindValue(":o", original);
     const QString number = q.exec() && q.next() ? q.value(0).toString() : QString();
     q.finish();
@@ -1480,7 +1484,7 @@ bool liveRectificationOf(QSqlDatabase &db, const QString &ticket, QString *numbe
               "  UNION SELECT i.n_recibo FROM ingresos i JOIN chain c ON i.verifactu_rectifies_n_recibo = c.n "
               "    WHERE i.pagado = 'SI') "
               "SELECT n_recibo FROM ingresos WHERE n_recibo IN (SELECT n FROM chain) AND pagado = 'SI' "
-              "  AND verifactu_estado = 'ENVIADA' ORDER BY CAST(n_recibo AS INTEGER) DESC LIMIT 1");
+              "  AND verifactu_estado = 'ENVIADA' ORDER BY " N_RECIBO_ORDER " DESC LIMIT 1");
     q.bindValue(":t", ticket);
     if (!q.exec()) {
         qWarning() << "liveRectificationOf: lookup failed for" << ticket << "-" << q.lastError().text();
@@ -2036,7 +2040,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "      || substr(fecha_recepcion, 4, 2) || '-' "
         "      || substr(fecha_recepcion, 1, 2) >= :floor "
         "GROUP BY n_recibo, verifactu_invoice_seq "
-        "ORDER BY CAST(n_recibo AS INTEGER) DESC, verifactu_invoice_seq");
+        "ORDER BY " N_RECIBO_ORDER " DESC, verifactu_invoice_seq");
     q.bindValue(":floor", floorIso);
     if (!q.exec()) {
         qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
@@ -2084,7 +2088,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
               // several days is one record, in the period it was issued.
               "HAVING (MIN(" + kFechaPagoIso + ") >= date(:from) AND MIN(" + kFechaPagoIso + ") <= date(:to)) "
               "    OR (MAX(" + kFechaAnulacionIso + ") >= date(:from2) AND MAX(" + kFechaAnulacionIso + ") <= date(:to2)) "
-              "ORDER BY MIN(" + kFechaPagoIso + "), CAST(n_recibo AS INTEGER), verifactu_invoice_seq");
+              "ORDER BY MIN(" + kFechaPagoIso + "), " N_RECIBO_ORDER ", verifactu_invoice_seq");
     q.bindValue(":from",  from.toString(Qt::ISODate));
     q.bindValue(":to",    to.toString(Qt::ISODate));
     q.bindValue(":from2", from.toString(Qt::ISODate));
@@ -2268,7 +2272,7 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
     ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, cliente, fecha_pago, importe, COALESCE(verifactu_invoice_seq, 0) FROM ingresos WHERE " + kIngresosIncomeWhere
-              + " ORDER BY " + kFechaPagoIso + ", CAST(n_recibo AS INTEGER)");
+              + " ORDER BY " + kFechaPagoIso + ", " N_RECIBO_ORDER);
     q.bindValue(":start", start.toString("yyyy-MM-dd"));
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {
@@ -2346,7 +2350,7 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
     QSqlQuery q(db);
     q.prepare("SELECT n_recibo, cliente, fecha_pago, fecha_anulacion, verifactu_estado, importe, "
               "COALESCE(verifactu_invoice_seq, 0) FROM ingresos WHERE " + kRegularizationWhere
-              + " ORDER BY " + kFechaAnulacionIso + ", CAST(n_recibo AS INTEGER)");
+              + " ORDER BY " + kFechaAnulacionIso + ", " N_RECIBO_ORDER);
     q.bindValue(":start", start.toString("yyyy-MM-dd"));
     q.bindValue(":end",   end.toString("yyyy-MM-dd"));
     if (!q.exec()) {

@@ -1423,6 +1423,12 @@ private slots:
         accepted.csv = "A-R9";
         QCOMPARE(applySettledVerifactuResult(m_db, "R-9", accepted), 1);
         QCOMPARE(scalar("SELECT verifactu_csv FROM ingresos WHERE n_recibo = 'R-9'"), QStringLiteral("A-R9"));
+        // The newest refused rectificativa of an original is the highest R-, above a pre-12.0 one.
+        insertIngreso("900", "10-03-2026", "4.00", "SI", "ERROR", 0);
+        insertIngreso("R-2", "10-03-2026", "4.00", "SI", "ERROR", 0);
+        insertIngreso("R-12", "10-03-2026", "4.00", "SI", "ERROR", 0);
+        exec("UPDATE ingresos SET verifactu_rectifies_n_recibo = '31200' WHERE n_recibo IN ('900', 'R-2', 'R-12')");
+        QCOMPARE(refusedRectificationOf(m_db, "31200"), QStringLiteral("R-12"));
     }
 
     // A legacy paid row with a NULL estado is adopted too (NULL NOT IN (...) is NULL).

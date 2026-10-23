@@ -118,9 +118,10 @@ public:
     bool firstSyncRunning() const { return !m_chainReady && m_syncRunning && m_firstSync; }
     // The issuer's highest ticket number AEAT returned in a sync, from any system (0: none seen).
     int highestNumberAtAeat() const { return m_highestNumberAtAeat; }
-    // The same for the rectificativas' own series ("R-<n>").
-    // ... and above those this database stored in its environment (a restored copy keeps them).
-    int highestRectificationAtAeat() { return qMax(m_highestRectificationAtAeat, m_store.highestRectificationNumber()); }
+    // The same for the rectificativas' own series ("R-<n>"), and the highest this database
+    // stored in its environment (a restored copy keeps them).
+    int highestRectificationAtAeat() const { return m_highestRectificationAtAeat; }
+    int highestStoredRectification() { return m_store.highestRectificationNumber(); }
 
     // Syncs the chain now (see above). `done(ok, message)`.
     using ChainDone = std::function<void(bool ok, const QString &message)>;
