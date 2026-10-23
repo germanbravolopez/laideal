@@ -23,7 +23,7 @@ Docs drift is heavy (`rest_api.md` describes a much older API surface, and `veri
 | Medium | docs / design | src/verifactu/verifactuconfig.h:55-56, :95-98 | `TEST_ENDPOINT == PROD_ENDPOINT`. The gateway's environment is decided by the ServiceKey; `verifactu.production` only changes the (unused) validation URL. README:190 and :294 ("validate in TESTING before switching verifactu.production") suggest the box routes invoices | Document that the key decides the environment and the box is cosmetic, or drop the box for the gateway. Mention it in the tracker's production-switch item | S |
 | Low | compliance | src/verifactu/verifactuconfig.h:57; aeathash.cpp:12 | Gateway production QR validation URL is `www2.aeat.es`, while the direct client and the AEAT spec use `www2.agenciatributaria.gob.es`. Its only consumer is `VerifactuManager::getValidationUrl` on the QR path, and no caller reads that value | Align it with `AeatHash`'s constant, or remove it together with the dead `getValidationUrl` (see the dead-code row) | S |
 | Low ✅ FIXED 20-10-2026 | security | src/verifactu/verifactumanager.cpp:250-304 | `testConnection` reports SUCCESS for any HTTP status (401 / 500 included), and the comment at :260 claims it "proves connectivity + auth". A wrong key looks "Conexión correcta" | Parse the probe body with `parseVerifactuResponse`: an invalid-key code (8001) becomes a "clave de servicio no válida" warning. Fix the comment | S |
-| Low | security | docs/modules/verifactu/rest_api.md:584-588 | The "Debugging" section tells you to `qDebug() << doc.toJson()` inside submit. That logs the ServiceKey in clear to ~/.laideal.log, undoing the redaction at verifactumanager.cpp:88-91 | Delete the section, or point to the existing redacted "Payload:" log line | S |
+| Low ✅ FIXED 23-10-2026 | security | docs/modules/verifactu/rest_api.md:584-588 | The "Debugging" section tells you to `qDebug() << doc.toJson()` inside submit. That logs the ServiceKey in clear to ~/.laideal.log, undoing the redaction at verifactumanager.cpp:88-91 | Delete the section, or point to the existing redacted "Payload:" log line | S |
 | Low | bug | src/verifactu/verifactumanager.cpp:104-106 | `validateConfiguration()` is called twice, and the diagnostic is ASCII "InvoiceID vacio" | Store the result in a local variable | S |
 | Low | bug | src/verifactu/verifacturesponse.cpp:69-70 | `firstString` turns a numeric JSON value into `'f',2`. If the gateway ever returns `InvoiceID` as a number, "31121" becomes "31121.00" and never matches (fails safe) | Use `'f',2` only for amount keys; IDs use `QString::number(v.toVariant().toLongLong())` | S |
 | Low | bug | src/verifactu/verifacturesponse.cpp:245 | `verifactuRemoteMatches` refuses totals <= 0, so a downward by-differences rectificativa can never be reconciled | Accept a non-zero total with matching sign, or document the limit | S |
@@ -39,19 +39,19 @@ Docs drift is heavy (`rest_api.md` describes a much older API surface, and `veri
 
 | Doc (file:line) | Code (file:line) | Drift |
 |---|---|---|
-| docs/modules/verifactu/README.md:16, :98; docs/architecture.md:216, :311; docs/INDEX.md:164, :192 | src/verifactu/verifactutypes.h:7-46 | `VerifactuEstado` and its helpers live in `verifactutypes.h`, not `verifactumanager.h`. INDEX:164 also lists only 4 of the 6 estados (it lacks SIN COBRAR and RECTIFICADA) |
+| docs/modules/verifactu/README.md:16, :98; docs/architecture.md:216, :311; docs/INDEX.md:164, :192 ✅ FIXED 23-10-2026 | src/verifactu/verifactutypes.h:7-46 | `VerifactuEstado` and its helpers live in `verifactutypes.h`, not `verifactumanager.h`. INDEX:164 also lists only 4 of the 6 estados (it lacks SIN COBRAR and RECTIFICADA) |
 | README.md:13-19 (source table) | src/verifactu/ | Missing `verifactubackend.h`, `verifactutypes.h` and `verifactutaxitem.h/cpp` (the table claims `verifactuinvoice` holds TaxItem) |
-| README.md:113 | verifactumanager.cpp:322-328 (only `testConnection` :269 sets a timeout) | Claims "VerifactuManager sets a 10 s transfer timeout". Async calls have none (also stated in pay_dialog.cpp:309) |
-| README.md:3 vs :156, :191 | verifactuintegration.cpp:34 | "via the gateway (until 11.x)" vs "the gateway (the default)" / default `irenesolutions`: inconsistent status |
+| README.md:113 ✅ FIXED 23-10-2026 | verifactumanager.cpp:322-328 (only `testConnection` :269 sets a timeout) | Claims "VerifactuManager sets a 10 s transfer timeout". Async calls have none (also stated in pay_dialog.cpp:309) |
+| README.md:3 vs :156, :191 ✅ FIXED 23-10-2026 | verifactuintegration.cpp:34 | "via the gateway (until 11.x)" vs "the gateway (the default)" / default `irenesolutions`: inconsistent status |
 | README.md:132 | verifacturesponse.cpp:60-73, :115-131 | Lists the envelopes as guesses and says "if you have one, pin the parser"; the code says `Items` is confirmed and the fields are pinned. The code also probes `Result` / `Invoices` |
 | README.md:198 | mainwindow.cpp invoicingBlockedReason; verifactuintegration.cpp:254-266 | "tickets save without an AEAT submission, with PENDIENTE": since 12.0 paid tickets are refused when not configured (README:103 itself says so) |
 | README.md:279 | same | "INVALID_CONFIG at save: Silent (logged only)": now refused with a message |
 | README.md:82 | verifactuintegration.cpp:121-125 | An empty return also happens for a non-rectificativa type in `submitRectificationAsync`, not only "not configured" |
 | README.md:190, :294 | verifactuconfig.h:55-56 | `verifactu.production` does not change the gateway endpoint (same URL); the key decides |
 | docs/architecture.md:295, :307; rest_api.md:478 | verifactuconfig.cpp:7-22; appsettings | "VerifactuConfig loads from an external .ini via QSettings": removed in 8.5; it is AppSettings with DPAPI |
-| docs/architecture.md:304 | aeathash.cpp:12 | Production QR URL `www2.aeat.es` (gateway constant) vs AEAT's `www2.agenciatributaria.gob.es` |
+| docs/architecture.md:304 ✅ FIXED 23-10-2026 | aeathash.cpp:12 | Production QR URL `www2.aeat.es` (gateway constant) vs AEAT's `www2.agenciatributaria.gob.es` |
 | verifactu-requirements.md:45, :84; INDEX.md:191; rest_api.md:260, :504 | verifacturesponse.cpp:110 | `VerifactuManager::processResponse()` no longer exists; it is `parseVerifactuResponse()` |
-| verifactu-requirements.md:105 | verifactumanager.cpp:216-218 | "URL per environment, see `VerifactuConfig::getValidationUrl()`": the gateway's printed QR comes from the gateway's image; the local URL is unused |
+| verifactu-requirements.md:105 ✅ FIXED 23-10-2026 | verifactumanager.cpp:216-218 | "URL per environment, see `VerifactuConfig::getValidationUrl()`": the gateway's printed QR comes from the gateway's image; the local URL is unused |
 | rest_api.md:21, :449, :468 | verifactuinvoice.cpp:28-62 | `Status`=`DRAFT` "used for testing": never sent |
 | rest_api.md:174 | verifactutaxitem.cpp:10-16 | "`m_taxType` (VAT = 01)": no such member; `Tax` is never sent |
 | rest_api.md:197, :454 | verifactutaxitem.h, .cpp:12 | "Implemented: S1, S2, N1, N2": only S1 can be reached; EXEMPT gives "E1" |
@@ -64,7 +64,7 @@ Docs drift is heavy (`rest_api.md` describes a much older API surface, and `veri
 | rest_api.md:420-425 | verifactumanager.cpp:169-174; README:250 | Cancel's required fields omit `CompanyName`, which the code sends and README calls mandatory |
 | rest_api.md:446-447, :438 | verifactuinvoice.cpp:89-93 | RelatedPartyID/Name "Complete" and F1/F3 "supported": never sent, rejected locally |
 | rest_api.md:491-512, :572 | verifactuintegration.h | Data flow names `submitSimplifiedInvoice()`, `submitInvoice()`, `saveTicket(VerifactuResult)`, `createAndSubmitInvoice()`, `generateQR()`, and a 3-argument `setEmitterData`: none exist |
-| rest_api.md:584-588 | verifactumanager.cpp:88-91 | Debug advice that logs the ServiceKey (see Findings) |
+| rest_api.md:584-588 ✅ FIXED 23-10-2026 | verifactumanager.cpp:88-91 | Debug advice that logs the ServiceKey (see Findings) |
 | rest_api.md:599 | - | "Real Decreto 1619/2012 (Verifactu)": Verifactu is RD 1007/2023 + Orden HAC/1177/2024; 1619/2012 is the invoicing regulation |
 | rest_api.md:71; README.md:282 | - | "InvoiceID unique, do not repeat on the same day": NumSerieFactura is unique per issuer, not per day |
 

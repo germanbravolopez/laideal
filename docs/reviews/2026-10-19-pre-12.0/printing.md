@@ -73,7 +73,7 @@ Reviewer scope: `src/printing/*`, vendored `src/third_party/qrcodegen` (integrat
 
 | ID | Proposed test (file) | Assertion |
 |----|---------------------|-----------|
-| T1 | `test_cp858TableMatchesReference` (`test_escpos.cpp`) | Static array of (Unicode, byte) for the full CP850/858 upper half written from the published table, NOT from the code; every code point maps to its byte (catches 0xDD vs 0xDE) and the round trip through `cp858ToUnicode` agrees. Includes I grave, m2 superscript, ordinal signs, euro |
+| T1 ✅ FIXED 23-10-2026 | `test_cp858TableMatchesReference` (`test_escpos.cpp`) | Static array of (Unicode, byte) for the full CP850/858 upper half written from the published table, NOT from the code; every code point maps to its byte (catches 0xDD vs 0xDE) and the round trip through `cp858ToUnicode` agrees. Includes I grave, m2 superscript, ordinal signs, euro |
 | T2 | `test_foldsTypographicPunctuation` | en dash, em dash, curly quotes become ASCII, not `?` (after F13) |
 | T3 | `test_controlCharactersNeverReachThePrinter` | `toCp858("a\x1b" "d\x05\x1d" "V\x42\nb\t")` contains no byte < 0x20; a client name with ESC/GS/LF renders a ticket whose command bytes equal those of the clean name |
 | T4 | `test_render58mmFitsEveryLine` | render a factura with long name/address/garment/client at 420 dots; decode with `EscPosPreview::interpret`, every text row <= 35 (header A) / 46 (font B) columns; no `GS v 0` wider than 420 dots |

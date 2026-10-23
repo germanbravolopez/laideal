@@ -50,10 +50,10 @@ Checked and found correct (no action): TEXT-affinity handling (`CAST` for MAX, 4
 | D4 | `docs/architecture.md:186` ("adds the 9 `verifactu_*` columns") | cpp:154-180 | The code adds 13 columns by ALTER (7 verifactu_*, rectifies_n_recibo, rectification_type, invoice_seq, invoice_id, fecha_anulacion, cancel_xml); `ingresos_schema.h:21-35` indices 15-27 = 13 columns. The schema table at architecture.md:195-226 is right; the bullet is stale. |
 | D5 | sql_lite.md:7-8 "Source files" | `src/sql_lite/ingresos_schema.h`, `CMakeLists.txt` | `ingresos_schema.h` (INGRESOS_COL_*, `INGRESOS_ESTADO_ANULADO`) and the `quarterKey` inlines are not listed; `tests/test_sql_lite.cpp:1497 test_ingresosSchema_matchesColumnIndices` is the guard and should be named. |
 | D6 | sql_lite.md:3 "Functions open and close the connection internally" | cpp:1043, 1071, 1116, 1143, 1167 | Closure functions and `quarterHasMovements` keep an already open connection open; the rest close it (F13). Say so, and list which are which. |
-| D7 | sql_lite.md:80-91 "Usage pattern" | coding-guidelines | Shows `db.open() ... db.close()` raw; not what the module does (it uses helpers, `dbNotConfigured`). `dbNotConfigured` is only in architecture.md:187. |
+| D7 ✅ FIXED 23-10-2026 | sql_lite.md:80-91 "Usage pattern" | coding-guidelines | Shows `db.open() ... db.close()` raw; not what the module does (it uses helpers, `dbNotConfigured`). `dbNotConfigured` is only in architecture.md:187. |
 | D8 | sql_lite.md:97, architecture.md:249 | cpp:46-63 | Fine, but neither says that a malformed/ISO-format date is "unlocked" (the guard reads `substr(...,7,4)`), nor that `quarterIsClosed` fails closed (cpp:1049). Add both lines. |
 | D9 | `docs/testing/unit_suites.md:40` "`insertGarmentRows` covered end to end by `test_mainWindow_failedInsertStopsTheSave`" | tests/test_e2e_app.cpp:2189 | Correct, but unit_suites.md "Misc" line (`genHash16, readMaxValue..., readClientPhones, removeSpecialChars`) gives the impression the rest of the read helpers are covered; they are not (section 3). |
-| D10 | `docs/modules/verifactu/verifactu-requirements.md` Req. 2 ("`nextTicketNumber` ... database's highest + 1") | cpp:1271 + F10 | Add that a failed read returns 0 today (until F10 is fixed). Req. 1 note on DB tamper: mention the optional triggers (F4) once added. |
+| D10 ✅ FIXED 23-10-2026 | `docs/modules/verifactu/verifactu-requirements.md` Req. 2 ("`nextTicketNumber` ... database's highest + 1") | cpp:1271 + F10 | Add that a failed read returns 0 today (until F10 is fixed). Req. 1 note on DB tamper: mention the optional triggers (F4) once added. |
 
 ## 3. Test gaps
 
@@ -68,16 +68,16 @@ NONE (no test in any suite): `readMaxNMinYearInColumnFromTable`, `readColumnFrom
 | Proposed test | Assertions | Effort |
 |---------------|-----------|--------|
 | `test_refusedInvoices_floorOrderingAndFlags` | two ERROR events (seq 0, seq 1) + one rectificativa ERROR + one pre-floor + one with unreadable date: list size, newest-first order, `fechaPago` = earliest by date, `importe` = SUM, `rectificativa` flag, empty/garbage floor hides nothing, count == size, ENVIADA/unpaid not listed | S |
-| `test_migrateDatabase_voidDateStepIsIdempotentWithoutDates` | row `Anulado/ANULADA/NO` with empty dates; run twice with `QTest::ignoreMessage` capture: second run logs no "moved the void date" (fails today - F7) | S |
+| `test_migrateDatabase_voidDateStepIsIdempotentWithoutDates` ✅ FIXED 23-10-2026 | row `Anulado/ANULADA/NO` with empty dates; run twice with `QTest::ignoreMessage` capture: second run logs no "moved the void date" (fails today - F7) | S |
 | `test_migrateDatabase_leavesClosedQuartersFiguresUnchanged` | seed legacy shapes (PENDIENTE unpaid, 3-decimal open amount, dup hash, comma gasto in open quarter), close Q, record `incomeTicketsBetweenDates`/`expensesBetweenDates`/`regularizations...` for every closed quarter before/after `migrateDatabase`: equal | M |
 | `test_migrateDatabase_twiceChangesNothing_fullFixture` | one fixture with every legacy shape; snapshot `SELECT * FROM ingresos ORDER BY rowid` + gastos + prendas after run 1 and run 2: identical | M |
-| `test_migrateDatabase_failedAlterIsLogged` | read-only/locked DB (second connection holding `BEGIN EXCLUSIVE`) -> a warning is logged and no later step claims success (after F8) | M |
-| `test_listings_reportFailure` | drop `gastos` / rename column, call listings with `ok*`: `ok == false`, vectors empty (after F1) | S |
-| `test_applySettledVerifactuCancellation_closesConnectionOnEveryPath` | for outcomes -1, 0 (failure result), 2, 1: `QVERIFY(!m_db.isOpen())` (fails today - F2) | S |
-| `test_applySettledVerifactuCancellation_closedCurrentQuarterMovesDate` | close current quarter; `fecha_anulacion` lands in next open quarter (after F3) | S |
-| `test_moneyText_garbageIsRefused` / `test_amountWriters_refuseUnparseableImporte` | `"abc"`, `"1.234,50"`, `""` -> writers return false, row unchanged; `insertGarmentRow` false (after F6) | S |
+| `test_migrateDatabase_failedAlterIsLogged` ✅ FIXED 23-10-2026 | read-only/locked DB (second connection holding `BEGIN EXCLUSIVE`) -> a warning is logged and no later step claims success (after F8) | M |
+| `test_listings_reportFailure` ✅ FIXED 23-10-2026 | drop `gastos` / rename column, call listings with `ok*`: `ok == false`, vectors empty (after F1) | S |
+| `test_applySettledVerifactuCancellation_closesConnectionOnEveryPath` ✅ FIXED 23-10-2026 | for outcomes -1, 0 (failure result), 2, 1: `QVERIFY(!m_db.isOpen())` (fails today - F2) | S |
+| `test_applySettledVerifactuCancellation_closedCurrentQuarterMovesDate` ✅ FIXED 23-10-2026 | close current quarter; `fecha_anulacion` lands in next open quarter (after F3) | S |
+| `test_moneyText_garbageIsRefused` / `test_amountWriters_refuseUnparseableImporte` ✅ FIXED 23-10-2026 | `"abc"`, `"1.234,50"`, `""` -> writers return false, row unchanged; `insertGarmentRow` false (after F6) | S |
 | `test_splitGarmentRow_commitFailureReturnsEmpty_andImporteRaceRefused` | second connection changes importe between read and write -> empty hash, rows unchanged (after F9) | M |
-| `test_nextTicketNumber_failedReadIsNotOne` | DB without `ingresos`: result is not 1 (after F10); plus `highestAtAeat` greater/smaller than local, text n_recibo "99999" vs "100000" | S |
+| `test_nextTicketNumber_failedReadIsNotOne` ✅ FIXED 23-10-2026 | DB without `ingresos`: result is not 1 (after F10); plus `highestAtAeat` greater/smaller than local, text n_recibo "99999" vs "100000" | S |
 | `test_reconcileVerifactuFromAeat_nullEstado` | NULL estado paid row is adopted (after F11) | S |
 | `test_insertGarmentRows_allOrNone_unit` | second row violates a NOT NULL (`edit_lock` missing via trigger/CHECK) -> 0 rows stored, returns false; success stores all; empty list returns true/false (decide) | S |
 | `test_insertNewItemToTable_bindsValues` | name `O'Brien"); DROP TABLE clientes;--` stored literally; wrong column count returns false and logs | S |
@@ -85,10 +85,10 @@ NONE (no test in any suite): `readMaxNMinYearInColumnFromTable`, `readColumnFrom
 | `test_selectFromWhereLike_exactAndPrefix` | exact vs prefix, case-insensitivity, `%`/`_` in the search text (documents F16), not-found returns empty without box (`printMsg=false`) | S |
 | `test_readColumnFromTable_orderAndEmpty` / `test_readMaxNMinYear_*` | ordered list, empty orderBy, min/max year over dd-MM-yyyy incl. empty table and NULL dates (success paths only, no box) | S |
 | `test_readGarmentPrice_limpPlanAndComma` | "Limp."/"Plan." prices; comma price and unknown garment paths need F18 first (return status); until then test via a dialog-closer (tests/support) | M |
-| `test_garmentImporte_negativeSizeIsZero` | `("1","-2",10) == 0` (after F14) | S |
+| `test_garmentImporte_negativeSizeIsZero` ✅ FIXED 23-10-2026 | `("1","-2",10) == 0` (after F14) | S |
 | `test_updateTicketPickup_doesNotReviveAnulado` | (after F20) | S |
 | `test_closedQuarterSql_isoDateIsUnlocked` | row with `fecha_pago='2026-03-15'` in a closed quarter is treated unlocked: pin down the behaviour (documents D8) | S |
-| `test_nextVerifactuInvoiceSeq_aeatRecordsWildcards` | `aeat_records` rows `12-1`, `123-1`, `12-x`: ticket "12" gives 2; environment filter; missing table returns paid-based value | S |
+| `test_nextVerifactuInvoiceSeq_aeatRecordsWildcards` ✅ FIXED 23-10-2026 | `aeat_records` rows `12-1`, `123-1`, `12-x`: ticket "12" gives 2; environment filter; missing table returns paid-based value | S |
 | `test_dbNotConfigured_allFunctionsReturnNeutral` | `QSqlDatabase` without database name: each public function returns its neutral value and never opens (table-driven over ~30 functions) | M |
 | `test_closureFunctions_leaveOpenConnectionOpen` | pre-open `m_db`: `quarterIsClosed`, `closeQuarter`, `reopenQuarter`, `quarterClosures`, `closedQuarterKeys`, `quarterHasMovements` keep it open (documented guarantee, untested) | S |
 

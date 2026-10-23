@@ -40,7 +40,7 @@ Line refs are to the real files.
 | uikit.md `okHtml` row | "Green success, amber..." | No mention that the text is NOT escaped; callers must escape. Add the contract. |
 | uikit.md `onEnter` row | "Runs once per press ... only while input is acceptable" | Matches uikit.cpp:36-45; but Enter is consumed (return true, uikit.cpp:42) even when input is not acceptable: say so. |
 | docs/testing/unit_suites.md:28 | test_uikit covers AmountSpinBox and Enter rules | Accurate but incomplete vs the module (no helpers, no ResultPanel, no sortedNames). |
-| docs/INDEX.md:136 | Lists `test_versioncompare` | No such file in tests/ (other module; supervisor to check). |
+| docs/INDEX.md:136 ✅ FIXED 23-10-2026 | Lists `test_versioncompare` | No such file in tests/ (other module; supervisor to check). |
 
 ## Test gaps
 

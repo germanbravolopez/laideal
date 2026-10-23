@@ -39,19 +39,19 @@ No secret is logged: `qDebug` lines print key names, paths and "encrypted" only.
 | Doc location | Says | Code reality |
 |--------------|------|--------------|
 | README.md:130 | `db.path` | `database.path` (appsettings.cpp:304). Same wrong key in docs/architecture.md:177 (`db.path`) and docs/modules/sql_lite.md:23 |
-| README.md:131 | IVA rate `app.ivaRate` "default VAT percentage" | Not a setting: fixed 21 % (appsettings.h:86); architecture.md:177 is right. Remove the row (UI smoke E2 even checks the dialog has no IVA field) |
-| README.md:132 | `report.*` "monthly/quarterly/annual HTML reports" | `reports.root` single root (appsettings.cpp:310); output is PDF in `Contabilidad/Listados` subfolders |
+| README.md:131 ✅ FIXED 23-10-2026 | IVA rate `app.ivaRate` "default VAT percentage" | Not a setting: fixed 21 % (appsettings.h:86); architecture.md:177 is right. Remove the row (UI smoke E2 even checks the dialog has no IVA field) |
+| README.md:132 ✅ FIXED 23-10-2026 | `report.*` "monthly/quarterly/annual HTML reports" | `reports.root` single root (appsettings.cpp:310); output is PDF in `Contabilidad/Listados` subfolders |
 | README.md:134 | `verifactu.name` | `verifactu.company_name` (appsettings.cpp:357). Same in docs/modules/verifactu/README.md:~187 |
 | README.md:135 | `verifactu.serviceKey` | `verifactu.service_key` (appsettings.cpp:361), stored `dpapi:v1:` encrypted. Same wrong key in verifactu/README.md:~188, architecture.md:319 area and INDEX.md:160 wording is fine |
 | README.md:136 | `verifactu.production` false/true | `verifactu.environment` = `TESTING` / `PRODUCTION` string (appsettings.cpp:364-365). Same in verifactu/README.md `verifactu.production` row |
-| README.md:129-136 (whole table) | Lists 8 settings | Missing: `print.enable` ("Yes"/"No" strings, not bool), `print.printer_name`, `print.paper_width_mm`, `print.use_status_api`, `business.phone`, `updater.check_on_startup`, `backup.enabled`/`backup.last_time`, `verifactu.connection`, `aeat_*` keys, `pending_recovery_enabled`/`pending_recovery_floor_date` (only in prose in verifactu README:120). Also `print.enable`/`use_status_api` are the only string-typed booleans; document the "Yes"/"No" format for anyone hand-editing the JSON (the UI smoke seed.py:56 relies on it) |
+| README.md:129-136 (whole table) ✅ FIXED 23-10-2026 | Lists 8 settings | Missing: `print.enable` ("Yes"/"No" strings, not bool), `print.printer_name`, `print.paper_width_mm`, `print.use_status_api`, `business.phone`, `updater.check_on_startup`, `backup.enabled`/`backup.last_time`, `verifactu.connection`, `aeat_*` keys, `pending_recovery_enabled`/`pending_recovery_floor_date` (only in prose in verifactu README:120). Also `print.enable`/`use_status_api` are the only string-typed booleans; document the "Yes"/"No" format for anyone hand-editing the JSON (the UI smoke seed.py:56 relies on it) |
 | docs/modules/verifactu/README.md:183-203 | Config table | Missing `verifactu.pending_recovery_enabled`, `pending_recovery_floor_date` (and its default 2026-09-01 and semantics: payment date vs reception date), `aeat_direct_production` OK. |
 | docs/modules/verifactu/README.md:~205 | "`initialize()` is non-fatal - it only warns if NIF or name is empty" | verifactuintegration.cpp:30-34 returns false and `qCritical`s |
 | docs/architecture.md:171 | Only the service key is encrypted, "`encryptSecretsAtRest()` ... legacy plaintext value" | Also `aeat_certificate_password` (appsettings.cpp:287). Also not documented: plaintext fallback on DPAPI failure; legacy `~/.verifactu_key` stays on disk |
 | docs/architecture.md:175-177 | Settings groups list | Lacks `print.use_status_api`, `backup.*`, `app.language` key name only in the previous paragraph, `verifactu.connection`, `aeat_*`, pending recovery; "Verifactu NIF/name/serviceKey/production" is not key names. Dialog description lacks the Direct-AEAT group, certificate choice, production confirmations, "Prueba con la AEAT", status API diagnostic |
 | docs/INDEX.md:136 | `test_settingsdialog` = "service-key show/hide toggle" | Also direct connection, production confirmations, self-test button state, leaving-direct guard |
 | docs/testing/unit_suites.md:76-77 | test_appsettings/test_settingsdialog description; "never accepted" | Dialog tests accept; direct-AEAT group and production guards untested in the doc. Update both |
-| docs/INDEX.md:171 | "All configurable settings (paths, IVA, ...)" | IVA is not configurable |
+| docs/INDEX.md:171 ✅ FIXED 23-10-2026 | "All configurable settings (paths, IVA, ...)" | IVA is not configurable |
 | appsettings.h:28, 161 | see finding 15 | |
 
 ## Test gaps
@@ -68,12 +68,12 @@ Behaviour -> test map (existing): DPAPI marker/round trip/passthrough/empty (tes
 | `test_migrateLegacyReportPaths` | `contabilidad_path=/r/Contabilidad` -> root `/r`; only `listados_prendas_path=/r/Listados/Prendas` -> `/r`; gastos only; unmatched suffix -> parent of contabilidad; legacy keys removed from the saved file; idempotent when `root` set; obsolete `print.template_path/script_path`, `app.icon_path` removed |
 | `test_corruptJsonFallsBackToDefaults` | invalid JSON: `loadFrom` false, defaults present, file untouched until save (and, after fix #4, `.corrupt` copy created) |
 | `test_saveLoadRoundTrip` | set every setter, `save()`, `loadFrom` same file, all getters equal; `.tmp` file absent afterwards |
-| `test_saveFailureReturnsFalse` | unwritable path (non-existing directory) returns false and does not throw |
+| `test_saveFailureReturnsFalse` ✅ FIXED 23-10-2026 | unwritable path (non-existing directory) returns false and does not throw |
 | `test_aeatCertificatePasswordEncryptedAtRest` | plaintext `aeat_certificate_password` in file -> encrypted on load; getter plaintext; same for setter (Windows: not in raw JSON) |
 | `test_decryptFailureClearsField` | `dpapi:v1:AAAA` (garbage) -> getter empty, `dpapiDecrypt("dpapi:v1:")` empty |
 | `test_serviceKeyUnicodeAndWhitespace` | round trip of a key with non-ASCII/space |
-| `test_aeatInstallationNumberStableAndPersisted` | first call creates `LAIDEAL-` + 8 hex upper, second call same, file on disk contains it without any other save (fails today: finding 1); reload returns same |
-| `test_chainMarkerPersisted` | `setAeatChainMarker` then reload from file returns it (fails today) |
+| `test_aeatInstallationNumberStableAndPersisted` ✅ FIXED 23-10-2026 | first call creates `LAIDEAL-` + 8 hex upper, second call same, file on disk contains it without any other save (fails today: finding 1); reload returns same |
+| `test_chainMarkerPersisted` ✅ FIXED 23-10-2026 | `setAeatChainMarker` then reload from file returns it (fails today) |
 | `test_environmentAndConnectionFlags` | `setVerifactuProduction(true)` stored `"PRODUCTION"`; unknown string e.g. `"production"` -> false (production only on exact value); `connection` other than `aeat` -> gateway; `aeatDirectProduction` default false |
 | `test_wrongTypesFallBackToDefaults` | `"updater":{"check_on_startup":"yes"}` -> default true; `paper_width_mm` as string -> 80; `print.enable` bool instead of string -> false |
 | `test_paperWidthStoredAsNumber` | `setPaperWidthMm(58)` -> JSON number 58 |
@@ -88,8 +88,8 @@ Behaviour -> test map (existing): DPAPI marker/round trip/passthrough/empty (tes
 | Proposed test | Assertions |
 |---------------|-----------|
 | `test_acceptSavesEveryGeneralField` | edit db path, printer, paper width 58, status API, updates, reports root, business fields, language en; accept; getters/JSON equal; all values trimmed |
-| `test_leavingDirectKeepsProductionOffOrAsks` (finding 2) | direct+production true, switch to gateway, confirm; after accept `aeatDirectProduction()==false`; switch back to direct: no flag silently true |
-| `test_gatewayProductionNeedsConfirmation` (finding 3) | after fix: checking PRODUCCION and answering No leaves TESTING |
+| `test_leavingDirectKeepsProductionOffOrAsks` (finding 2) ✅ FIXED 23-10-2026 | direct+production true, switch to gateway, confirm; after accept `aeatDirectProduction()==false`; switch back to direct: no flag silently true |
+| `test_gatewayProductionNeedsConfirmation` (finding 3) ✅ FIXED 23-10-2026 | after fix: checking PRODUCCION and answering No leaves TESTING |
 | `test_saveFailureShowsWarning` | read-only settings path: `QMessageBox` "No se pudo guardar", dialog still closes; `qWarning` expected |
 | `test_certificateThumbprintNotInStoreIsKept` (finding 9) | stored thumbprint absent from choices, accept: thumbprint unchanged |
 | `test_pendingRecoveryFloorRoundTrip` | stored `2026-09-01` shows 01-09-2026; invalid string shows fallback; accept stores ISO; checkbox round trips |

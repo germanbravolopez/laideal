@@ -212,7 +212,7 @@ Priority: **P0** blocker for 12.0 / **P1** before the 12.0 release (strongly adv
 | P1 ✅ FIXED 19-10-2026 | updater | Installer run without integrity check | Publish `.sha256` / use the asset digest; verify size + hash | M | updater |
 | P1 ✅ FIXED 19-10-2026 | contabilidad | The current (unfinished) quarter can be closed, blocking today's Cobrar; gastos IVA text parsed to 0 silently | Warn / refuse; strict parse to -1 (flag) | S | contabilidad |
 | P1 ✅ FIXED 19-10-2026 | docs | `architecture.md` lacks the direct client and `aeat_*` tables; README config keys wrong; tracker status | G1, G3, G6 | M | 00, appsettings, gateway |
-| P1 | tracker | This review's findings not filed | File P1-P3 in `progress_tracker.md` (memory rule) | S | 00 |
+| P1 ✅ FIXED 23-10-2026 | tracker | This review's findings not filed | File P1-P3 in `progress_tracker.md` (memory rule) | S | 00 |
 | P2 ✅ FIXED 20-10-2026 | sql_lite / all | Three policies for comma amounts; `moneyText` garbage gives 0; SQL `SUM` prefix; float sums | One strict stored-amount parser; double / cents everywhere; flag commas | M | 00, sql_lite F6, F21, recog #10, listado |
 | P2 ✅ FIXED 20-10-2026 | verifactu / facturas | Gross-to-base split duplicated, unrounded to the gateway; Contabilidad IVA vs per-record rounding | `splitGross` helper (X4); accountant decision on modelo 303 | M | verifactu-gateway, contabilidad, facturas |
 | P2 ✅ FIXED 20-10-2026 | architecture | `sql_lite` / `add_garment` include a verifactu header by relative path; facade leaks (X1, X2, X3, X5) | INTERFACE types target; facade methods; `AeatStore` reads | M | 00 |

@@ -40,15 +40,15 @@
 | :5 "a heading ... Añadir fila, Eliminar fila, Generar PDF" | Menus are `Archivo > Actualizar` and `Herramientas > Añadir/Eliminar/Generar` (listado.cpp:57-63); not described. | Add a "Menus and shortcuts" line. |
 | :36 "Add / delete rows via the buttons, the menu actions or the table's context menu" | True, but the context menu offers both entries on every table incl. ingresos/gastos where they only warn (tableview.cpp:8-11; listado.cpp:325, 339-342). | Say which tables really add/delete, or fix the menu. |
 | :34-41 (Features) | Does not list ingresos presentation: `DecimalCommaDelegate` for size (listado.cpp:214), `LinkDelegate` on the QR column and click-to-open (29-35, 217), `TextColorDelegate` for pagado/estado, hidden columns (hash, edit_lock, csv, xml, cancel_xml, verifactu_hash, seq, invoice_id; 221-232), `placeIngresosDateColumns` (219), gastos hidden `edit_lock` (210). | Add a short "Ingresos view" bullet; cross-link to tableview doc. |
-| :40 "`ingresos` ... `setEditTriggers(NoEditTriggers)`" | Accurate; but the proxy/model remain editable (see finding). The delete/add refusal messages for ingresos (listado.cpp:339-342, 329-331) are not documented. | Update after the hardening. |
-| :45-52 Data loading | Omits that filter and sort act only on loaded rows for ingresos and that sort is textual for `n_recibo`. | Document the limitation or fix it. |
+| :40 "`ingresos` ... `setEditTriggers(NoEditTriggers)`" ✅ FIXED 23-10-2026 | Accurate; but the proxy/model remain editable (see finding). The delete/add refusal messages for ingresos (listado.cpp:339-342, 329-331) are not documented. | Update after the hardening. |
+| :45-52 Data loading ✅ FIXED 23-10-2026 | Omits that filter and sort act only on loaded rows for ingresos and that sort is textual for `n_recibo`. | Document the limitation or fix it. |
 | :54-58 "Dependencies (CMake)" starts with a paragraph about `NumberFormatDelegate` (decimal display) | Misplaced; the CMake text (PUBLIC `tableview`; private `sql_lite`, `appsettings`, `reporthtml`, `uikit`, src/listado/CMakeLists.txt:7-15) is only partly given. | Move the delegate paragraph to Features; list the real link targets. |
 | :58 "exposes ... `NumberFormatDelegate`, `TextColorDelegate`" | Also `LinkDelegate`, `DecimalCommaDelegate`, `ingresoscolumns` are used (listado.h:25, cpp:5-7). | Complete the list. |
 | :28-29 signals "emitted after editing the clients/garments table" | They are emitted in `closeEvent` only (listado.cpp:385-394), i.e. on closing the window, for clientes and prendas; nothing for proveedores/servicios. | Reword to "when the window closes". |
 | :63 InsertNewItem "window-modal" | OK (insertnewitem.cpp:13). | none |
 | :66 GenListado | Does not mention the prendas PDF is not linked/verified (finding), the supplier IMPORTE TOTAL rows, the `Cerrado por contabilidad` column, or that the prendas listing sorts the shared proxy. | Add. |
 | docs/testing/e2e.md:126 "the Listado lock ... covered by the UI smoke" | The lock is also covered by two e2e tests (e2e.md:118-119). | Reword. |
-| docs/testing/unit_suites.md:25,98 | `test_genlistado` is listed correctly but `MySortFilterProxyModel` lock/validator behaviour has no unit suite entry (none exists). | Update when tests are added. |
+| docs/testing/unit_suites.md:25,98 ✅ FIXED 23-10-2026 | `test_genlistado` is listed correctly but `MySortFilterProxyModel` lock/validator behaviour has no unit suite entry (none exists). | Update when tests are added. |
 
 ## Test gaps
 

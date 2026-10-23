@@ -35,17 +35,17 @@ Coding-guidelines: English identifiers and comments, Spanish only in tr(); VACUU
 
 | Doc | Says | Code reality |
 |---|---|---|
-| docs/architecture.md:152 | `backupDirectory()` resolves "the configured root", default `<DocumentsLocation>/laideal_backups` | backup_manager.cpp:44-49: `<dbDir>/backups`, not configurable |
-| docs/architecture.md:158 | filename `...HHmmss.sqlite` | backup_manager.cpp:57 `.db` |
-| docs/architecture.md:155 | auto failure = `QMessageBox::warning` | mainwindow.cpp:132-134 sets the `m_result` label |
-| docs/architecture.md:156 | manual result in a `QMessageBox` | mainwindow.cpp:1631-1632 `m_result` + file link |
-| docs/modules/backup.md Wiring section | `QMessageBox` for manual and auto failure; no worker thread mentioned | worker thread (mainwindow.cpp:127-140); label |
-| docs/modules/verifactu/verifactu-requirements.md:58 | auto failure `QMessageBox` warning | m_result text (mainwindow.cpp:133) |
+| docs/architecture.md:152 ✅ FIXED 23-10-2026 | `backupDirectory()` resolves "the configured root", default `<DocumentsLocation>/laideal_backups` | backup_manager.cpp:44-49: `<dbDir>/backups`, not configurable |
+| docs/architecture.md:158 ✅ FIXED 23-10-2026 | filename `...HHmmss.sqlite` | backup_manager.cpp:57 `.db` |
+| docs/architecture.md:155 ✅ FIXED 23-10-2026 | auto failure = `QMessageBox::warning` | mainwindow.cpp:132-134 sets the `m_result` label |
+| docs/architecture.md:156 ✅ FIXED 23-10-2026 | manual result in a `QMessageBox` | mainwindow.cpp:1631-1632 `m_result` + file link |
+| docs/modules/backup.md Wiring section ✅ FIXED 23-10-2026 | `QMessageBox` for manual and auto failure; no worker thread mentioned | worker thread (mainwindow.cpp:127-140); label |
+| docs/modules/verifactu/verifactu-requirements.md:58 ✅ FIXED 23-10-2026 | auto failure `QMessageBox` warning | m_result text (mainwindow.cpp:133) |
 | docs/modules/backup.md ("Restore UI") | copy "the `.sqlite` file" | files are `.db` |
-| docs/modules/backup.md retention table | "31 days - 4 years" | code: `< 30` days kept (backup_manager.cpp:196), `> 1460` days deleted (:199) |
+| docs/modules/backup.md retention table ✅ FIXED 23-10-2026 | "31 days - 4 years" | code: `< 30` days kept (backup_manager.cpp:196), `> 1460` days deleted (:199) |
 | docs/modules/backup.md:~21, architecture.md:149 | VACUUM INTO "without exclusive lock, session not interrupted" | read lock held for the copy in rollback-journal mode; commits wait |
 | docs/modules/backup.md "Why in-app" | `performBackup()` "callable from any context" | not safe against itself or AppSettings from threads |
-| backup_manager.h:262-263 | negative count = scan error | never negative |
+| backup_manager.h:262-263 ✅ FIXED 23-10-2026 | negative count = scan error | never negative |
 
 ## Test gaps
 
