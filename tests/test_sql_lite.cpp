@@ -1404,6 +1404,15 @@ private slots:
                         "AND pagado = 'NO'"), QStringLiteral("SIN COBRAR"));
     }
 
+    // A legacy paid row with a NULL estado is adopted too (NULL NOT IN (...) is NULL).
+    void test_reconcileVerifactuFromAeat_nullEstado()
+    {
+        insertIngreso("K2", "10-03-2026", "50.00", "SI", "ERROR", /*seq=*/0);
+        exec("UPDATE ingresos SET verifactu_estado = NULL WHERE n_recibo = 'K2'");
+        QCOMPARE(reconcileVerifactuFromAeat(m_db, "K2", 0, "A-NULL01", "https://aeat.example/v"), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = 'K2'"), QStringLiteral("ENVIADA"));
+    }
+
     // The refusals. A settled row must never be re-stamped from a query: ENVIADA
     // already carries its own CSV, and ANULADA / RECTIFICADA were deliberately
     // superseded, so overwriting either would revive a cancelled invoice.

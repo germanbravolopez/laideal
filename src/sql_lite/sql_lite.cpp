@@ -1874,7 +1874,7 @@ int reconcileVerifactuFromAeat(QSqlDatabase &db, const QString &nRecibo, int seq
               "verifactu_url_qr = :url, verifactu_timestamp = :ts, "
               "verifactu_error = '', verifactu_invoice_id = :id "
               "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
-              "  AND verifactu_estado NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
+              "  AND COALESCE(verifactu_estado, '') NOT IN ('ENVIADA', 'ANULADA', 'RECTIFICADA')");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Enviada));
     q.bindValue(":csv",    csv);
     q.bindValue(":url",    validationUrl);
