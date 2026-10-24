@@ -13,6 +13,10 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QVector>
+
+#include <algorithm>
+#include <atomic>
 
 namespace {
 // Connection names are unique so the backup never piggy-backs on the app's
@@ -20,11 +24,19 @@ namespace {
 // cycles in sql_lite helpers).
 constexpr const char *kSnapshotConnectionName = "laideal_backup_snapshot";
 constexpr const char *kVerifyConnectionName   = "laideal_backup_verify";
+constexpr const char *kPartSuffix             = ".part";
+
+// One backup at a time in the process: the automatic one runs on a worker thread
+// and the manual one on the GUI thread, and both use the connection names above.
+std::atomic<bool> s_running{ false };
 
 // Daily-for-30-days + monthly-for-4-years window. Older copies are removed
 // by pruneOldBackups().
 constexpr int kKeepEveryDays   = 30;
 constexpr int kKeepMonthlyYears = 4;
+constexpr int kKeepNewest       = 3;    // never pruned, whatever their age
+constexpr int kMaxClockGapDays  = 45;   // a larger gap to "now" means the clock is suspect
+constexpr int kWarnAfterDays    = 3;    // last successful backup older than this is reported
 
 QString errorIfNotOk(QSqlQuery &q, const QString &context)
 {
@@ -58,6 +70,15 @@ QString BackupManager::timestampedFileName()
         .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss"));
 }
 
+void BackupManager::removeStalePartFiles(const QString &dir)
+{
+    // Left by a run that was cut off (crash, power cut); none is being written now.
+    QDir d(dir);
+    for (const QString &name : d.entryList({ QStringLiteral("laideal_*.db") + kPartSuffix }, QDir::Files))
+        if (QFile::remove(d.filePath(name)))
+            qWarning() << "BackupManager: removed an unfinished copy" << name;
+}
+
 bool BackupManager::needsBackup(qint64 minIntervalSeconds) const
 {
     if (!AppSettings::instance()->backupEnabled())
@@ -68,12 +89,66 @@ bool BackupManager::needsBackup(qint64 minIntervalSeconds) const
     const QDateTime lastTime = QDateTime::fromString(last, Qt::ISODate);
     if (!lastTime.isValid())
         return true;
-    return lastTime.secsTo(QDateTime::currentDateTime()) >= minIntervalSeconds;
+    // A last time in the future (the clock was wrong then) must not stop backups.
+    const qint64 elapsed = lastTime.secsTo(QDateTime::currentDateTime());
+    return elapsed < 0 || elapsed >= minIntervalSeconds;
+}
+
+void BackupManager::recordSuccess(const Result &result)
+{
+    if (!result.success)
+        return;
+    AppSettings::instance()->setBackupLastTime(result.finishedAt.toString(Qt::ISODate));
+    AppSettings::instance()->setBackupLastError(QString());
+    if (!AppSettings::instance()->save())
+        qWarning() << "BackupManager: could not save the backup time to the settings";
+}
+
+void BackupManager::recordFailure(const Result &result)
+{
+    if (result.success)
+        return;
+    AppSettings::instance()->setBackupLastError(
+        QDateTime::currentDateTime().toString(Qt::ISODate) + QLatin1Char(' ') + result.errorMessage);
+    if (!AppSettings::instance()->save())
+        qWarning() << "BackupManager: could not save the backup error to the settings";
+}
+
+QString BackupManager::backupWarning(bool enabled, const QString &lastSuccessIso,
+                                     const QString &lastError, const QDateTime &now)
+{
+    if (!enabled)
+        return tr("Las copias de seguridad automáticas están desactivadas.");
+    const QDateTime last = QDateTime::fromString(lastSuccessIso, Qt::ISODate);
+    const bool tooOld = !last.isValid() || last.addDays(kWarnAfterDays) < now;
+    if (!tooOld)
+        return QString();
+    QString msg = last.isValid()
+        ? tr("La última copia de seguridad correcta es del %1 (hace más de %2 días).")
+              .arg(last.toString("dd/MM/yyyy HH:mm")).arg(kWarnAfterDays)
+        : tr("Todavía no se ha hecho ninguna copia de seguridad correcta.");
+    if (!lastError.isEmpty())
+        msg += tr(" Último error: %1").arg(lastError);
+    return msg;
+}
+
+QString BackupManager::currentBackupWarning()
+{
+    AppSettings *s = AppSettings::instance();
+    return backupWarning(s->backupEnabled(), s->backupLastTime(), s->backupLastError(),
+                         QDateTime::currentDateTime());
 }
 
 BackupManager::Result BackupManager::performBackup()
 {
     Result res;
+    if (s_running.exchange(true)) {
+        res.errorMessage = tr("Ya hay una copia de seguridad en curso; espere a que termine.");
+        qWarning() << "BackupManager: a backup is already running";
+        return res;
+    }
+    struct Release { ~Release() { s_running = false; } } release;
+
     const QString sourcePath = dbPath();
     if (sourcePath.isEmpty() || !QFile::exists(sourcePath)) {
         res.errorMessage = tr("No se encuentra la base de datos en %1.").arg(sourcePath);
@@ -82,7 +157,15 @@ BackupManager::Result BackupManager::performBackup()
     }
 
     const QString dir = backupDirectory();
-    const QString target = QDir(dir).filePath(timestampedFileName());
+    removeStalePartFiles(dir);
+    const QString finalPath = QDir(dir).filePath(timestampedFileName());
+    if (QFile::exists(finalPath)) {
+        // Same second as the previous copy: that one is kept, never overwritten.
+        res.errorMessage = tr("Ya se ha hecho una copia hace un momento (%1).").arg(QFileInfo(finalPath).fileName());
+        qWarning() << "BackupManager: a copy with this timestamp already exists -" << finalPath;
+        return res;
+    }
+    const QString target = finalPath + kPartSuffix;
 
     // Step 1: VACUUM INTO produces a transactionally-consistent point-in-time
     // copy without requiring exclusive access on the live DB.
@@ -93,6 +176,7 @@ BackupManager::Result BackupManager::performBackup()
     {
         QSqlDatabase snap = QSqlDatabase::addDatabase("QSQLITE", kSnapshotConnectionName);
         snap.setDatabaseName(sourcePath);
+        snap.setConnectOptions("QSQLITE_BUSY_TIMEOUT=30000");   // wait out a ticket being saved
         if (!snap.open()) {
             res.errorMessage = tr("No se pudo abrir la base de datos para copia: %1")
                                    .arg(snap.lastError().text());
@@ -157,19 +241,51 @@ BackupManager::Result BackupManager::performBackup()
         QFile::remove(target);
         return res;
     }
+    if (!QFile::rename(target, finalPath)) {
+        res.errorMessage = tr("No se pudo dar el nombre final a la copia %1.").arg(QFileInfo(finalPath).fileName());
+        qWarning() << "BackupManager: rename" << target << "->" << finalPath << "failed";
+        QFile::remove(target);
+        return res;
+    }
 
     res.success      = true;
-    res.backupPath   = target;
-    res.bytesWritten = QFileInfo(target).size();
-
-    AppSettings::instance()->setBackupLastTime(
-        QDateTime::currentDateTime().toString(Qt::ISODate));
-    AppSettings::instance()->save();
+    res.backupPath   = finalPath;
+    res.bytesWritten = QFileInfo(finalPath).size();
+    res.finishedAt   = QDateTime::currentDateTime();
 
     const int pruned = pruneOldBackups();
-    qDebug() << "BackupManager: backup completed -" << target
+    copyToSecondFolder(res);
+    qDebug() << "BackupManager: backup completed -" << finalPath
              << "(" << res.bytesWritten << "bytes, pruned" << pruned << "old copies)";
     return res;
+}
+
+void BackupManager::copyToSecondFolder(Result &res) const
+{
+    if (m_secondFolder.trimmed().isEmpty())
+        return;
+    // Same name, written as .part and renamed: a cut-off copy never looks like a backup there.
+    const QDir dir(m_secondFolder.trimmed());
+    const QString name = QFileInfo(res.backupPath).fileName();
+    const QString part = dir.filePath(name + kPartSuffix);
+    if (!QDir().mkpath(dir.absolutePath())) {
+        res.secondCopyError = tr("No se pudo usar la segunda carpeta de copias %1.").arg(dir.absolutePath());
+    } else {
+        removeStalePartFiles(dir.absolutePath());
+        QFile::remove(part);
+        if (!QFile::copy(res.backupPath, part) || QFileInfo(part).size() != res.bytesWritten
+            || !QFile::rename(part, dir.filePath(name))) {
+            QFile::remove(part);
+            res.secondCopyError = tr("No se pudo copiar la copia de seguridad a la segunda carpeta %1.").arg(dir.absolutePath());
+        } else {
+            res.secondCopyPath = dir.filePath(name);
+            QStringList names = dir.entryList({ QStringLiteral("laideal_*.db") }, QDir::Files, QDir::Name);
+            for (const QString &old : backupsToPrune(names, QDateTime::currentDateTime()))
+                QFile::remove(dir.filePath(old));
+        }
+    }
+    if (!res.secondCopyError.isEmpty())
+        qWarning() << "BackupManager:" << res.secondCopyError;
 }
 
 QStringList BackupManager::backupsToPrune(const QStringList &fileNames, const QDateTime &now)
@@ -178,35 +294,51 @@ QStringList BackupManager::backupsToPrune(const QStringList &fileNames, const QD
     static const QRegularExpression namePattern(
         R"(^laideal_(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})\.db$)");
 
-    // Sort ascending so the timestamp prefix orders chronologically; the
-    // monthly window then keeps the earliest survivor of each month.
-    QStringList sorted = fileNames;
-    sorted.sort();
-
-    QSet<QString> monthlyKept; // "yyyy-MM" already has a survivor
-    QStringList toDelete;
-    for (const QString &name : sorted) {
+    struct Copy { QString name; QDateTime ts; };
+    QVector<Copy> copies;
+    for (const QString &name : fileNames) {
         const auto m = namePattern.match(name);
         if (!m.hasMatch()) continue; // not one of ours: ignore (keep)
         const QDateTime ts(QDate(m.captured(1).toInt(), m.captured(2).toInt(), m.captured(3).toInt()),
                            QTime(m.captured(4).toInt(), m.captured(5).toInt(), m.captured(6).toInt()));
-        if (!ts.isValid()) continue;
+        if (ts.isValid())
+            copies.append({ name, ts });
+    }
+    // Newest first.
+    std::sort(copies.begin(), copies.end(), [](const Copy &a, const Copy &b) {
+        return a.ts != b.ts ? a.ts > b.ts : a.name > b.name;
+    });
+    if (copies.isEmpty())
+        return {};
 
-        const qint64 ageDays = ts.daysTo(now);
-        if (ageDays < kKeepEveryDays) {
+    // A wrong clock must not decide what is deleted: a "now" before the newest copy
+    // or long after it, or a jump between the two newest copies, prunes nothing.
+    const QDateTime newest = copies.first().ts;
+    if (now < newest || newest.addDays(kMaxClockGapDays) < now)
+        return {};
+    if (copies.size() > 1 && copies.at(1).ts.addDays(kMaxClockGapDays) < newest)
+        return {};
+
+    QSet<QString> monthlyKept; // "yyyy-MM" already has a survivor (the last copy of the month)
+    QStringList toDelete;
+    for (int i = 0; i < copies.size(); ++i) {
+        const Copy &c = copies.at(i);
+        if (i < kKeepNewest)
+            continue; // always keep the newest copies
+        if (c.ts.addDays(kKeepEveryDays) > now)
             continue; // recent: keep every copy
-        }
-        if (ageDays > kKeepMonthlyYears * 365) {
-            toDelete << name; // beyond the retention window
+        if (c.ts.addYears(kKeepMonthlyYears) < now) {
+            toDelete << c.name; // beyond the retention window
             continue;
         }
-        // Monthly window: keep the first survivor per (year, month), delete the rest.
-        const QString monthKey = ts.toString("yyyy-MM");
+        // Monthly window, newest first: the first copy seen of a month is its last one.
+        const QString monthKey = c.ts.toString("yyyy-MM");
         if (!monthlyKept.contains(monthKey))
             monthlyKept.insert(monthKey);
         else
-            toDelete << name;
+            toDelete << c.name;
     }
+    toDelete.sort();
     return toDelete;
 }
 

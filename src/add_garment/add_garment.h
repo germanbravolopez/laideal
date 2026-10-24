@@ -1,6 +1,7 @@
 #ifndef ADDGARMENT_H
 #define ADDGARMENT_H
 
+#include <functional>
 #include <QDate>
 #include <QDialog>
 #include <QSqlDatabase>
@@ -13,7 +14,7 @@ class QLineEdit;
 class QSqlQueryModel;
 namespace UiKit { class ResultPanel; }
 
-// Herramientas -> Añadir nuevas prendas: adds one garment to an existing receipt
+// Tickets -> Añadir nuevas prendas: adds one garment to an existing receipt
 // that has no paid garment yet (a paid receipt is an invoice AEAT holds). The
 // receipt is searched first; the form only opens for it, and the save is refused
 // if the number was retyped or the receipt was charged meanwhile. Built in code
@@ -27,6 +28,9 @@ public:
     // Types the receipt number and searches it, as the operator would.
     void loadTicket(const QString &ticketNum);
     bool ticketFound = false;
+    // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
+    // Unset: paid garments are refused.
+    std::function<QString()> invoicingBlocked;
 
 signals:
     // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does).

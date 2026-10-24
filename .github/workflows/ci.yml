@@ -44,6 +44,11 @@ jobs:
           & "$bin\g++.exe" --version | Select-Object -First 1
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      # The aeat_xsd test validates the direct AEAT client's XML against the official
+      # AEAT schemas with Python + lxml (it is skipped where lxml is missing).
+      - name: Install lxml for the AEAT schema check
+        run: python -m pip install --quiet lxml
+
       - name: Configure CMake
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
 
@@ -81,6 +86,16 @@ jobs:
         with:
           name: ticket-previews
           path: build/tests/preview_*.png
+          if-no-files-found: ignore
+
+      # A failing suite on the runner may print nothing through ctest: its junit report
+      # names the failing test function and message.
+      - name: Upload test results on failure
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-results
+          path: build/test-results-*.xml
           if-no-files-found: ignore
 
       # The release job reuses this exe instead of rebuilding, so upload it on
@@ -167,6 +182,18 @@ jobs:
           New-Item -ItemType Directory -Path "releases\${{ github.ref_name }}" -Force
           Copy-Item $exe.FullName -Destination "releases\${{ github.ref_name }}\"
 
+      # A UI-test build (CMake LAIDEAL_UI_TEST, ui-smoke.yml) can send AEAT records to a
+      # local fake AEAT through --fake-aeat; it must never be released.
+      - name: Refuse a UI-test build
+        shell: pwsh
+        run: |
+          $exe = "releases\${{ github.ref_name }}\laideal.exe"
+          $marker = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes('--fake-aeat'))
+          if ([BitConverter]::ToString([IO.File]::ReadAllBytes($exe)).Contains($marker)) {
+            throw "laideal.exe is a UI-test build (--fake-aeat): it must never be released."
+          }
+          Write-Host "Not a UI-test build."
+
       - name: Run windeployqt
         shell: pwsh
         run: |
@@ -176,13 +203,17 @@ jobs:
           # Fail loudly if the MinGW compiler runtime or Qt core were not deployed -
           # the installed app would otherwise crash on launch on a clean machine with
           # a missing-DLL error. The build job never runs windeployqt, so this is the
-          # only place that guards the packaging step.
+          # only place that guards the packaging step. Without the SQLite driver there
+          # is no database; without the TLS backend every HTTPS call (AEAT, gateway,
+          # updater) fails.
           $required = @(
             'libgcc_s_seh-1.dll',
             'libstdc++-6.dll',
             'libwinpthread-1.dll',
             'Qt6Core.dll',
-            'platforms\qwindows.dll'
+            'platforms\qwindows.dll',
+            'sqldrivers\qsqlite.dll',
+            'tls\qschannelbackend.dll'
           )
           foreach ($d in $required) {
             if (-not (Test-Path (Join-Path $stage $d))) {
@@ -249,7 +280,11 @@ jobs:
             gh release delete $ver --yes
             if ($LASTEXITCODE -ne 0) { throw "Failed to delete existing release $ver" }
           }
-          gh release create $ver $zip $installer --title "Release $ver" --notes-file $notes
+          # The updater runs the installer only when its SHA-256 matches this file.
+          $checksum = "$installer.sha256"
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          [System.IO.File]::WriteAllText((Join-Path $PWD $checksum), "$hash  laideal_setup_$ver.exe`n")
+          gh release create $ver $zip $installer $checksum --title "Release $ver" --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
 
       - name: Clean up staging

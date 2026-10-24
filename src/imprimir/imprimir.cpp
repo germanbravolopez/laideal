@@ -1,4 +1,7 @@
+#include "aeatqr.h"
 #include "imprimir.h"
+
+#include <QSet>
 #include "sql_lite.h"
 #include "appsettings.h"
 #include "uikit.h"
@@ -108,8 +111,9 @@ void Imprimir::showEvent(QShowEvent *event)
 
 void Imprimir::getTicketInfo()
 {
-    sqlQueryModel = new QSqlQueryModel(this);
-    db.open();
+    if (!sqlQueryModel)
+        sqlQueryModel = new QSqlQueryModel(this);
+    ConnectionScope scope(db);
     QSqlQuery q(db);
     // Anulado rows (locally voided garments) never appear on a printed recibo or
     // factura. The factura branch already filters pagado='SI' (Anulado is unpaid),
@@ -124,18 +128,17 @@ void Imprimir::getTicketInfo()
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
                   "AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
                   "AND (estado IS NULL OR estado != :anulado)");
-        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":n_recibo", le_n_ticket->text().trimmed());
         q.bindValue(":seq", invoiceSeq);
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     } else {
         q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo "
                   "AND (estado IS NULL OR estado != :anulado)");
-        q.bindValue(":n_recibo", le_n_ticket->text());
+        q.bindValue(":n_recibo", le_n_ticket->text().trimmed());
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     }
     q.exec();
     sqlQueryModel->setQuery(std::move(q));
-    db.close();
 }
 
 QString Imprimir::displayInvoiceId() const
@@ -148,7 +151,7 @@ QString Imprimir::displayInvoiceId() const
         invoiceIds << sqlQueryModel->data(
             sqlQueryModel->index(r, INGRESOS_COL_VERIFACTU_INVOICE_ID)).toString();
     }
-    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text());
+    return verifactuDisplayInvoiceId(invoiceIds, le_n_ticket->text().trimmed());
 }
 
 bool Imprimir::checkTicketPaid(int row)
@@ -169,6 +172,7 @@ bool Imprimir::checkAnyItemPaid()
 
 QPixmap Imprimir::resolveQrCode()
 {
+    m_qrFromQueuedRecord = false;
     if (!qrCode.isNull())
         return qrCode;
 
@@ -192,12 +196,13 @@ QPixmap Imprimir::resolveQrCode()
             hasCsv = true;
         const VerifactuEstado e = verifactuEstadoFromString(
             sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString());
-        if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error) {
+        if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada || e == VerifactuEstado::Error
+            || e == VerifactuEstado::Unknown) {   // an unrecognised estado: no QR (nor leyenda)
             anyBlocking = true;
             break;
         }
     }
-    if (!hasCsv || anyBlocking)
+    if (anyBlocking)
         return QPixmap();
 
     // Prefer the literal AEAT InvoiceID stored at submit time so the QR matches
@@ -214,6 +219,8 @@ QPixmap Imprimir::resolveQrCode()
     // unfiltered legacy reprint path.
     QDate invoiceDate;
     for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        if (!checkTicketPaid(row))
+            continue;
         invoiceDate = QDate::fromString(
             sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString(), "dd-MM-yyyy");
         if (invoiceDate.isValid()) break;
@@ -221,16 +228,55 @@ QPixmap Imprimir::resolveQrCode()
     if (!invoiceDate.isValid())
         return QPixmap();
 
+    // The QR describes the invoice AEAT received: the paid rows of ONE payment event.
     double total = 0.0;
+    QSet<int> seqs;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
+        if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() != QLatin1String("SI"))
+            continue;
         total += sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
+        seqs.insert(sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
+    }
+    if (seqs.size() > 1) {
+        qWarning() << "Imprimir::resolveQrCode: rows of" << seqs.size() << "payment events loaded - no QR";
+        return QPixmap();
     }
 
     double ivaRate = AppSettings::instance()->ivaRate();
     double taxBase = total / (1.0 + ivaRate / 100.0);
 
-    // Reprint path: fire async QR fetch and wait up to 5s in a local event loop.
-    // If AEAT does not reply in time, print without QR (logged warning).
+    if (!hasCsv) {
+        // Not confirmed by AEAT yet: only the direct client, whose record is generated,
+        // chained and queued, has a QR (the one printed at issue), with its leyenda.
+        const QPixmap queued = verifactuIntegration->qrBeforeReply(invoiceNumber, invoiceDate, taxBase, ivaRate);
+        if (queued.isNull())
+            return QPixmap();
+        m_qrFromQueuedRecord = true;
+        qrCode = queued;
+        return qrCode;
+    }
+
+    // Reprint of an accepted invoice: the verification URL stored with AEAT's answer, drawn
+    // as issued. Never rebuilt from today's environment (after the production switch an
+    // older test invoice would get a production QR) nor from today's IVA rate.
+    for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+        if (!checkTicketPaid(row))
+            continue;
+        const QString url = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_URL_QR)).toString();
+        if (url.startsWith(QLatin1String("https://"))) {
+            qrCode = QPixmap::fromImage(AeatQr::image(url, 5));
+            return qrCode;
+        }
+    }
+
+    // No stored URL: only older gateway rows. The direct client would rebuild the URL from
+    // today's environment and IVA rate, which may not be the invoice's: no QR.
+    if (verifactuIntegration->isDirect()) {
+        qWarning() << "Imprimir::resolveQrCode:" << invoiceNumber << "has no stored verification URL - printed without QR";
+        return QPixmap();
+    }
+    // The gateway: ask it, waiting up to 5 s in a local event loop.
+    // If it does not reply in time, print without QR (logged warning).
     const QString reqId = verifactuIntegration->generateQRAsync(
         invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
     if (reqId.isEmpty()) {
@@ -270,6 +316,12 @@ int Imprimir::paperDots() const
 
 void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 {
+    // Nothing to print (unknown number, every garment voided): never a blank ticket.
+    if (!sqlQueryModel || sqlQueryModel->rowCount() == 0) {
+        qWarning() << "Imprimir::buildTicket: no printable rows for ticket" << le_n_ticket->text() << "- nothing built";
+        m_ticketBytes.clear();
+        return;
+    }
     AppSettings *settings = AppSettings::instance();
 
     TicketData d;
@@ -286,6 +338,25 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     const QString client = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString();
     d.clientName     = client;
     d.receptionDate  = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-", "/");
+
+    // A factura shows its date of issue - the payment date, as in the QR - and says so
+    // when the invoice was cancelled or rectified since.
+    m_lastVoidedMarker.clear();
+    if (!isRecibo) {
+        for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+            if (!checkTicketPaid(row))
+                continue;
+            if (d.issueDate.isEmpty())
+                d.issueDate = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString().replace("-", "/");
+            const VerifactuEstado e = verifactuEstadoFromString(
+                sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString());
+            if (e == VerifactuEstado::Anulada || e == VerifactuEstado::Rectificada) {
+                d.voidedMarker = e == VerifactuEstado::Anulada ? QStringLiteral("ANULADA") : QStringLiteral("RECTIFICADA");
+                d.voidedDate   = sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_ANULACION)).toString().replace("-", "/");
+            }
+        }
+        m_lastVoidedMarker = d.voidedMarker;
+    }
 
     // Complete invoice: billing address (typed, else the client's) + DNI / NIF (typed).
     if (isCompleteInvoice) {
@@ -305,10 +376,10 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         const QString size = QString::number(
             sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_SIZE)).toFloat(), 'f', 2);
         if (size != "" && size != "0.00")
-            garmentName.append(" - " + size);
+            garmentName.append(" - " + displayDecimal(size));
         g.name = garmentName;
         const double importe = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toDouble();
-        g.amount = QString::number(importe, 'f', 2);
+        g.amount = displayMoney(importe);
         d.garments.append(g);
         total += importe;
     }
@@ -320,17 +391,24 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 
     // Verifactu QR - facturas only. Recibos are claim tickets, not tax documents:
     // they carry no Verifactu metadata, so a QR would mislead the customer into
-    // thinking the receipt was submitted to AEAT. Raster the AEAT-issued pixmap
-    // verbatim so the printed QR is byte-exact with what AEAT registered.
+    // thinking the receipt was submitted to AEAT. The symbol is the one issued (the
+    // same modules), redrawn at the size the Orden requires.
     const QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
-        d.qr = qr.scaled(192, 192, Qt::KeepAspectRatio, Qt::SmoothTransformation).toImage();
+        d.qr = TicketRenderer::printableQr(qr.toImage());
+        if (d.qr.isNull()) {
+            qWarning() << "Imprimir: QR not readable, printed as received";
+            d.qr = qr.toImage();
+        }
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
-        // still PENDIENTE, in ERROR, or ANULADA.
+        // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
+        // record the direct client has queued, or of an accepted reply whose row write failed.
         const QString verifactuState = sqlQueryModel->data(
             sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
-        d.verifactuVerifiable = (verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada));
+        d.verifactuVerifiable = verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)
+                                || ((verifactuIssued || m_qrFromQueuedRecord)
+                                    && verifactuState == verifactuEstadoToString(VerifactuEstado::NotSubmitted));
     }
 
     d.timestamp = QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss");
@@ -445,6 +523,11 @@ void Imprimir::onPrintClicked()
             lines << problem.toHtmlEscaped().replace('\n', "<br>");
         return lines.isEmpty() ? QString() : "<br>" + UiKit::errorHtml(lines.join("<br>"));
     };
+    if (isCompleteInvoice && m_leDni->text().trimmed().isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml("Escriba el DNI / NIF del cliente.")
+                             + "<br>La factura completa lleva el NIF de quien la pide (art. 7.2 RD 1619/2012).");
+        return;
+    }
     invoiceSeq = -1;
 
     // Factura path: enumerate the (seq, invoice_id) pairs that have actually
@@ -456,7 +539,7 @@ void Imprimir::onPrintClicked()
     // and the printed Nº matches what AEAT has on record.
     QList<QPair<int, QString>> events; // (seq, literal invoice_id; empty = bare n_recibo / legacy)
     if (!isRecibo) {
-        db.open();
+        ConnectionScope scope(db);
         QSqlQuery sq(db);
         sq.prepare("SELECT verifactu_invoice_seq, "
                    "       COALESCE(MAX(verifactu_invoice_id), '') "
@@ -470,7 +553,6 @@ void Imprimir::onPrintClicked()
             while (sq.next())
                 events.append({ sq.value(0).toInt(), sq.value(1).toString() });
         }
-        db.close();
     }
     const auto labelFor = [&ticket](const QPair<int, QString> &ev) {
         // Authoritative when set: literal column matches what AEAT received.
@@ -506,7 +588,8 @@ void Imprimir::onPrintClicked()
             getTicketInfo();
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
             sendIfEnabled();
-            printed << labelFor(ev);
+            printed << labelFor(ev) + (m_lastVoidedMarker.isEmpty()
+                                           ? QString() : " (" + m_lastVoidedMarker.toLower() + ", sin QR)");
         }
         m_lblResult->setText(UiKit::okHtml("Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".")
                              + printingOff + problems());
@@ -519,6 +602,11 @@ void Imprimir::onPrintClicked()
     if (!isRecibo && events.size() == 1)
         invoiceSeq = events.first().first;
     getTicketInfo();
+    if (sqlQueryModel->rowCount() == 0) {
+        m_lblResult->setText(UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + " no tiene prendas que imprimir "
+                                             "(todas anuladas)."));
+        return;
+    }
     if (!isRecibo && !checkAnyItemPaid()) {
         m_lblResult->setText(UiKit::warnHtml("No hay ninguna prenda pagada en el recibo Nº " + ticket.toHtmlEscaped() + ".")
                              + "<br>Una factura solo se emite por lo cobrado; imprima el recibo.");
@@ -543,10 +631,13 @@ void Imprimir::onPrintClicked()
                              + printingOff + problems());
         return;
     }
+    const QString noQr = !m_lastVoidedMarker.isEmpty()
+        ? "<br>" + UiKit::warnHtml("La factura está " + m_lastVoidedMarker.toLower()
+                                   + ": la copia lo indica y no lleva código QR.")
+        : qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
+                            "o AEAT no respondió a tiempo."
+                          : QString();
     m_lblResult->setText(UiKit::okHtml((isCompleteInvoice ? "Factura completa " : "Factura ")
                                        + displayInvoiceId().toHtmlEscaped() + " impresa.")
-                         + (qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
-                                              "o AEAT no respondió a tiempo."
-                                            : QString())
-                         + printingOff + problems());
+                         + noQr + printingOff + problems());
 }

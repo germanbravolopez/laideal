@@ -13,12 +13,15 @@ docs/
 ├── ai_agent_instructions.md           (agent onboarding — start here)
 ├── architecture.md                    (modules, DB schema, data flow, known issues)
 ├── progress_tracker.md                (current status, blocking / open issues)
-├── completed_milestones.md            (finished work history + archive)
+├── completed_milestones.md            (finished work history since 11.0)
+├── completed_milestones_archive.md    (10.13 and before)
+├── reviews/2026-10-19-pre-12.0/      (pre-12.0 review: module reports + integration backlog)
 ├── testing/
 │   ├── README.md                      (how to run the tests, conventions, patterns)
 │   ├── unit_suites.md                 (what each unit / integration suite covers)
-│   ├── e2e.md                         (end-to-end bench, fake Verifactu server)
-│   └── smoke_test.md                  (manual pre-release checklist — run before the release commit)
+│   ├── e2e.md                         (end-to-end bench, fake Verifactu and fake AEAT servers)
+│   ├── smoke_test.md                  (what still needs a person: before the release, and the shop's self-check after installing)
+│   └── ui_smoke.md                    (automated UI smoke test — installed app over UI Automation)
 └── modules/
     ├── mainwindow.md                  (MainWindow — central controller)
     ├── sql_lite.md                    (database free-function API)
@@ -26,6 +29,7 @@ docs/
     ├── recog_prendas.md               (garment pickup panel)
     ├── facturas.md                    (formal supplier invoice form)
     ├── uikit.md                       (shared dialog style)
+    ├── backup.md                      (automatic and manual SQLite backups)
     ├── contabilidad.md                (accounting reports and period locking)
     ├── imprimir.md                    (receipt/invoice print orchestration — ESC/POS)
     ├── printing.md                    (ESC/POS core: builder, renderer, RAW spooler)
@@ -35,7 +39,8 @@ docs/
     │   └── 01..05 + command reference (model/specs, control methods, command subset, plan)
     └── verifactu/                     (AEAT digital invoicing module)
         ├── README.md                  (module reference — start here)
-        ├── rest_api.md                (AEAT REST API field reference)
+        ├── rest_api.md                (gateway REST API as researched; may be outdated)
+        ├── aeat-direct-investigation.md  (research: direct AEAT client vs IreneSolutions)
         └── verifactu-requirements.md  (RD 1007/2023 + Orden HAC/1177/2024 audit vs code)
 ```
 
@@ -48,11 +53,14 @@ docs/
 | [ai_agent_instructions.md](./ai_agent_instructions.md) | Agent onboarding, critical issues, file map, rules | 5 min |
 | [architecture.md](./architecture.md) | Full module reference, DB schema, data flow | 15 min |
 | [progress_tracker.md](./progress_tracker.md) | Current status, blocking / open issues, backlog | 2 min |
-| [completed_milestones.md](./completed_milestones.md) | Finished work history, newest first | As needed |
+| [completed_milestones.md](./completed_milestones.md) | Finished work history since 11.0, newest first | As needed |
+| [completed_milestones_archive.md](./completed_milestones_archive.md) | Milestones of 10.13 and before | Never (history) |
+| [reviews/2026-10-19-pre-12.0/](./reviews/2026-10-19-pre-12.0/README.md) | Pre-12.0 deep review: per-module findings, doc drift, test gaps; integration report §6 is the prioritised backlog | Read when picking up a tracker item that cites it |
 | [testing/README.md](./testing/README.md) | Testing overview: running the suites, conventions, patterns | When writing tests |
 | [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
-| [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu server | When testing a flow |
-| [testing/smoke_test.md](./testing/smoke_test.md) | Manual pre-release checklist — network, printer, migration, UI wiring | Run before each release |
+| [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu / AEAT servers | When testing a flow |
+| [testing/smoke_test.md](./testing/smoke_test.md) | What still needs a person — part 1 before the release (look, AEAT pre-production), part 2 the shop user's *Comprobar tras actualizar* (real schema, data, printer, installer pages) | Part 1 before each release, after the UI smoke test |
+| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test (CI) and the local AEAT pre-production run | Before each release; when changing a window or flow it covers |
 | [INDEX.md](./INDEX.md) | Quick-find: every file, concept, topic | As needed |
 
 ## Module Documentation
@@ -76,7 +84,8 @@ docs/
 | Document | Description | Read time |
 |----------|-------------|-----------|
 | [README.md](./modules/verifactu/README.md) | Module reference: architecture, public API, configuration, DB schema, integration points, environments, errors | 10 min |
-| [rest_api.md](./modules/verifactu/rest_api.md) | AEAT REST API complete field reference | 15 min |
+| [rest_api.md](./modules/verifactu/rest_api.md) | The gateway's REST API as researched (may be outdated; the code is authoritative) | 15 min |
+| [aeat-direct-investigation.md](./modules/verifactu/aeat-direct-investigation.md) | Research: talking to AEAT directly instead of through IreneSolutions, with a phased recommendation | 10 min |
 | [verifactu-requirements.md](./modules/verifactu/verifactu-requirements.md) | Legal-compliance audit: RD 1007/2023 + Orden HAC/1177/2024 requirements vs La Ideal coverage | 10 min |
 
 ---

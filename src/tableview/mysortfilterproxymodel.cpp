@@ -1,7 +1,9 @@
 #include "mysortfilterproxymodel.h"
 #include "ingresos_schema.h"
+#include "sql_lite.h"
 #include <QtWidgets>
 #include <QMessageBox>
+#include <QDebug>
 
 MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)
@@ -26,21 +28,29 @@ bool MySortFilterProxyModel::rowLocked(int proxyRow) const
 {
     if (table_name != QLatin1String("gastos"))
         return false;
-    return index(proxyRow, GASTOS_IDX_CONTAB).data().toInt() == 1;
+    const QDate fecha = QDate::fromString(index(proxyRow, GASTOS_IDX_FECHA).data().toString().trimmed(), "dd-MM-yyyy");
+    return closedQuarters.contains(quarterKey(fecha));
 }
 
 Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
 {
     Qt::ItemFlags f = QSortFilterProxyModel::flags(index);
-    if (index.isValid() && rowLocked(index.row()))
+    // Invoice rows have no edit path at all (Verifactu req. 1): not only a view flag.
+    if (table_name == QLatin1String("ingresos"))
+        f &= ~Qt::ItemIsEditable;
+    else if (index.isValid() && rowLocked(index.row()))
         f &= ~Qt::ItemIsEditable;
     return f;
 }
 
 bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
+    if (table_name == QLatin1String("ingresos")) {
+        qWarning() << "MySortFilterProxyModel: write to ingresos refused (column" << index.column() << ")";
+        return false;
+    }
     if (role == Qt::EditRole && editValidator) {
-        const QString refusal = editValidator(index.column(), value);
+        const QString refusal = editValidator(index, value);
         if (!refusal.isEmpty()) {
             emit editRefused(refusal);
             return false;
@@ -56,21 +66,39 @@ void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, 
     invalidateFilter();
 }
 
+void MySortFilterProxyModel::setFilters(const QRegularExpression &regex, const QString &normalizedText, int column)
+{
+    m_ownRegex = regex;
+    m_normalizedFilterText = normalizedText;
+    m_filterColumn = column;
+    invalidateFilter();   // one pass for both
+}
+
+int MySortFilterProxyModel::searchColumnCount() const
+{
+    const int columns = sourceModel() ? sourceModel()->columnCount() : 0;
+    // ingresos: up to Observaciones; the columns after it hold Verifactu metadata
+    // (csv / hash / url / ...) that is not user-facing and must not be searched.
+    const int limit = table_name == QLatin1String("ingresos") ? INGRESOS_COL_OBSERVACIONES + 1 : 10;
+    return qMin(columns, limit);
+}
+
+double MySortFilterProxyModel::numericValue(const QString &text, bool *ok)
+{
+    return QString(text).trimmed().replace(',', '.').toDouble(ok);
+}
+
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
                                               const QModelIndex &sourceParent) const
 {
-    const QRegularExpression re = filterRegularExpression();
+    const QRegularExpression re = m_ownRegex.pattern().isEmpty() ? filterRegularExpression() : m_ownRegex;
     const bool hasRegex = !re.pattern().isEmpty();
     const bool hasNormalized = !m_normalizedFilterText.isEmpty();
 
     if (!hasRegex && !hasNormalized)
         return true;
 
-    // Search only the first 10 source columns. ingresos has 24 columns but the
-    // verifactu_* metadata (csv / xml / hash / url / estado / error / rectifies / ...)
-    // lives past column 14 and is not user-facing - we'd surface noise (and risk
-    // leaking the chained hash into the visible filter) by scanning it.
-    int colCount = qMin(sourceModel()->columnCount(), 10);
+    const int colCount = searchColumnCount();
     for (int c = 0; c < colCount; ++c) {
         QModelIndex idx = sourceModel()->index(sourceRow, c, sourceParent);
         QString cellText = sourceModel()->data(idx).toString();
@@ -92,17 +120,31 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     QVariant leftData = sourceModel()->data(left);
     QVariant rightData = sourceModel()->data(right);
 
-    if ((table_name == "gastos" && left.column() == GASTOS_IDX_FECHA) ||
-        (table_name == "ingresos" &&
-                     (left.column() == INGRESOS_COL_FECHA_RECEPCION ||
-                      left.column() == INGRESOS_COL_FECHA_PAGO ||
-                      left.column() == INGRESOS_COL_FECHA_RECOGIDA)))
-        return QDate::fromString(leftData.toString(), "dd-MM-yyyy") < QDate::fromString(rightData.toString(), "dd-MM-yyyy");
-    else if ((table_name == "gastos"   && (left.column() == GASTOS_IDX_IMPORTE || left.column() == GASTOS_IDX_ID)) ||
-             (table_name == "ingresos" && left.column() == INGRESOS_COL_IMPORTE) ||
-             (table_name == "prendas"  && (left.column() == LIST_PRENDAS_IDX_LIMP || left.column() == LIST_PRENDAS_IDX_PLAN)))
-        return leftData.toFloat() < rightData.toFloat();
-    else
-        return QString::localeAwareCompare(leftData.toString(), rightData.toString()) < 0;
-}
+    const int col = left.column();
+    const bool isDate = (table_name == "gastos" && col == GASTOS_IDX_FECHA)
+                        || (table_name == "ingresos"
+                            && (col == INGRESOS_COL_FECHA_RECEPCION || col == INGRESOS_COL_FECHA_PAGO
+                                || col == INGRESOS_COL_FECHA_RECOGIDA || col == INGRESOS_COL_FECHA_ANULACION));
+    if (isDate) {
+        // An empty or invalid date is an invalid QDate and sorts first.
+        return QDate::fromString(leftData.toString().trimmed(), "dd-MM-yyyy")
+               < QDate::fromString(rightData.toString().trimmed(), "dd-MM-yyyy");
+    }
 
+    const bool isNumber = (table_name == "gastos" && (col == GASTOS_IDX_IMPORTE || col == GASTOS_IDX_ID))
+                          || (table_name == "ingresos"
+                              && (col == INGRESOS_COL_N_RECIBO || col == INGRESOS_COL_IMPORTE
+                                  || col == INGRESOS_COL_CANTIDAD || col == INGRESOS_COL_SIZE
+                                  || col == INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO))
+                          || (table_name == "prendas" && (col == LIST_PRENDAS_IDX_LIMP || col == LIST_PRENDAS_IDX_PLAN));
+    if (isNumber) {
+        bool leftOk = false, rightOk = false;
+        const double l = numericValue(leftData.toString(), &leftOk);
+        const double r = numericValue(rightData.toString(), &rightOk);
+        if (leftOk && rightOk)
+            return l < r;
+        if (leftOk != rightOk)
+            return !leftOk;   // blank / non-numeric first, like an empty date
+    }
+    return QString::localeAwareCompare(leftData.toString(), rightData.toString()) < 0;
+}

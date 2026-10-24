@@ -1,198 +1,47 @@
-# Smoke Test — manual pre-release checklist
+# Smoke test — what still needs a person
 
-Run this on the working branch **before** the version-bump commit of a release (step 1 of the
-`/release` skill). It is short on purpose: everything that a test can check by itself is in
-`ctest` (17 suites). The end-to-end bench drives PayDialog, MainWindow, Anular prendas, Anular
-factura, Rectificar, the recovery dialog, the reprint QR rules and Contabilidad generate / lock /
-revert against a fake AEAT server; see [e2e.md](e2e.md). The unit suites cover the migrations,
-the accounting figures, the estado rules and the AEAT reply parsing.
+Everything else is automated:
 
-This checklist covers only what `ctest` cannot see: the release build starting on a real database
-schema, the real printer, PDF and screen rendering, menu and button wiring, the Listado editing
-lock, the backup, the language switch and the installer.
+- `ctest`: the unit suites and the end-to-end bench ([unit_suites.md](unit_suites.md), [e2e.md](e2e.md)).
+- The **UI smoke test** on a disposable runner ([ui_smoke.md](ui_smoke.md), `ui-smoke.yml`): the installed app driven like a person, from the first start and its migrations, through Recogida, Cobrar, printing, Contabilidad and the quarter lock, to backup, language and the installer's language.
+- The **AEAT pre-production run** as a local script ([ui_smoke.md](ui_smoke.md#aeat-pre-production-run)).
+
+What is left needs either eyes before the release (part 1), or the shop's real data and printer after it is installed (part 2, the self-check the shop user runs).
 
 ---
 
-## 0. Safety rules — read before touching anything
+## 1. Before the release (you, after `ui-smoke.yml` is green, `/release` step 1)
 
-**The smoke test never contacts AEAT.** It runs with the Verifactu **service key removed** from the
-settings, so the app treats Verifactu as not configured and every submit, cancel, rectify, QR and
-query path is skipped locally. Never run it with a key: `TEST_ENDPOINT` and `PROD_ENDPOINT` in
-`verifactuconfig.h` are the same IreneSolutions URL, so a smoke ticket sent with the shop's key
-lands in the shop's own AEAT records. Its number would also collide with a real ticket the shop
-issues later.
+| # | Area | Step | Expected |
+|---|------|------|----------|
+| M4 | Look | The `ui-smoke` artifact: `steps/*.png` and the PDFs under `reports/` | Texts, buttons and groups legible and aligned, nothing cut off; the Contabilidad `_detalle` PDF and the listado PDF render |
+| M6 | AEAT (only when the release changes the direct AEAT client) | The pre-production script with the certificate ([how](ui_smoke.md#aeat-pre-production-run)) | Every step passes; keep its `report.md` |
 
-*Possible future change:* if IreneSolutions confirms that production uses a different URL from testing, a test key would only ever reach the AEAT test environment and the real-AEAT checks could come back. The conditions, including a fresh ticket-number base per run, are in the "Switch Verifactu to PRODUCTION" row of `docs/progress_tracker.md`. Until then, keep the key removed.
+On a PC with a copy of the shop's data you can also run part 2 before publishing, with the new build: `laideal.exe --self-check`.
 
-**Never test against the live database.** Work on a copy of a backup, with `ingresos` and `gastos`
-emptied (step 1.3), so the only tickets are the seeded ones below.
+## 2. After installing at the shop: *Comprobar tras actualizar* (the shop user)
 
-**Restore your settings afterwards** (step 1.1 backs them up, the Teardown restores them).
+The installer adds **Start → La Ideal - Comprobar tras actualizar** (`laideal.exe --self-check`, `src/app/selfcheck*`). The shop user runs it once after installing the release, answers its questions and sends back the report it saves on the Desktop (`comprobacion_laideal_<version>_<date>.txt`).
 
----
+**Safety:**
+- It works on a copy of the newest backup (`<db folder>/backups/laideal_*.db`) with a copy of the settings in a temporary folder, both deleted at the end.
+- `~/.laideal_settings.json` and the live database are only read. The suite checks this byte for byte (`test_selfcheck`).
+- The Verifactu client is never started, so nothing reaches AEAT or the gateway. The copied settings are also on the direct client in pre-production with no gateway key.
+- The factura's QR is drawn from the verification URL stored with the invoice.
 
-## 1. Setup
+| # | Check | How | Correct when |
+|---|-------|-----|--------------|
+| M1 | Real schema and numbering | Automatic: the migrations run on the copy | No migration statement fails; `PRAGMA integrity_check` is `ok`; `ingresos` has every column and `accounting_closures` exists; the next ticket number is the highest stored + 1 |
+| M1a | Settings health | Automatic | The settings file is readable JSON and its database path exists |
+| M1b | Backup age | Automatic | The newest backup is at most 3 days old (`BackupManager::backupWarning`) |
+| M1d | Migrations run twice | Automatic | A second `migrateDatabase` changes no schema object or row (SHA-256 of the copy) and logs no failed statement |
+| M1e | Money sanity | Automatic | Counts only: `ingresos` rows with an unreadable importe (`moneyParse`) and gastos with an unrecognised IVA |
+| M1c | AEAT record chain | Automatic | Every stored `aeat_records` record (both environments) matches its huella and links to the previous one (`AeatChainCheck`); the reason names only the record's position |
+| M2 | Real data | Automatic | The newest ticket loads with its garments and the search by its client finds it |
+| M2b | The last closed quarter | Shown, then asked: the quarter's income, IVA, gastos and IVA settlement, recomputed without closing anything ("Abrir el informe presentado" opens the filed PDF when it is in the Contabilidad folder) | The user confirms they match the report filed for that quarter |
+| M3 | Printer and QR | Prints the recibo and the factura of the newest ticket AEAT holds, then asks (skipped when printing is off in Configuración or no invoice has been sent yet) | Both copies printed and cut, accents legible, and a phone scanning the QR opens AEAT's page |
+| M5 | Installer | Asked | The installer's information page showed the release notes in the chosen language with correct accents |
 
-1. **Back up the settings** (they hold the service key, encrypted):
-   ```powershell
-   Copy-Item "$env:USERPROFILE\.laideal_settings.json" "$env:USERPROFILE\.laideal_settings.pre-smoke.json"
-   ```
-2. **Copy a backup snapshot** and start a clean log:
-   ```powershell
-   Copy-Item "<db folder>/backups/laideal_<newest>.db" "$env:USERPROFILE\Desktop\laideal_SMOKE.db" -Force
-   Move-Item "$env:USERPROFILE\.laideal.log" "$env:USERPROFILE\.laideal.log.old" -Force -ErrorAction SilentlyContinue
-   ```
-3. **Empty ingresos and gastos** in the copy ([DB Browser for SQLite](https://sqlitebrowser.org/)
-   → Execute SQL → Write Changes). `clientes` and `prendas` stay, so prices and client search work.
-   ```sql
-   DELETE FROM ingresos;
-   DELETE FROM gastos;
-   ```
-4. **Point the settings at the copy and remove the key.** With the app closed, edit
-   `%USERPROFILE%\.laideal_settings.json` in a text editor:
-   - `"database"` → `"path"`: the full path of `laideal_SMOKE.db` (forward slashes).
-   - `"verifactu"` → `"service_key"`: `""` (empty string).
-5. **Safety check: first launch.** Start the new build. It **must** show *"No se pudo inicializar
-   Verifactu … Clave de servicio no configurada"*. **If that warning does not appear, close the app
-   and stop**: the key is still set. Accept it; Configuración must show the smoke database
-   path. This first launch also runs the migrations on the copy's schema (Block A). Close the app.
-6. **Seed the smoke tickets** (after the first launch, so the schema already has every column).
-   Ticket numbers are plain integers; since `ingresos` is empty, the app's next ticket is 6.
-   The block starts by emptying both tables, so running it twice cannot duplicate a row (the
-   tables have no key that would reject one). Afterwards `SELECT COUNT(*) FROM ingresos` is 6 and
-   `SELECT COUNT(*) FROM gastos` is 1.
-   ```sql
-   DELETE FROM ingresos;
-   DELETE FROM gastos;
-   -- 1: unpaid, two garments -> partial payment through Recogida, Recogida total
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_estado,verifactu_invoice_seq)
-   VALUES ('1','SMOKE','15-09-2026','','','12.00','NO','En tienda','1','Camisa','','Limp.','','0','smokehash000001','SIN COBRAR',0);
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_estado,verifactu_invoice_seq)
-   VALUES ('1','SMOKE','15-09-2026','','','8.00','NO','En tienda','1','Pantalon','','Plan.','','0','smokehash000002','SIN COBRAR',0);
-   -- 2: unpaid -> Anular prendas
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_estado,verifactu_invoice_seq)
-   VALUES ('2','SMOKE','15-09-2026','','','10.00','NO','En tienda','1','Falda','','Limp.','','0','smokehash000003','SIN COBRAR',0);
-   -- 3: paid, left PENDIENTE -> recovery dialog
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_estado,verifactu_invoice_seq)
-   VALUES ('3','SMOKE','15-09-2026','15-09-2026','','30.00','SI','En tienda','1','Abrigo','','Limp.','','0','smokehash000004','PENDIENTE',0);
-   -- 4: paid and sent (fake CSV) -> reprint layout, Q3 income
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_csv,verifactu_estado,verifactu_invoice_seq,verifactu_invoice_id)
-   VALUES ('4','SMOKE','16-09-2026','16-09-2026','','24.20','SI','En tienda','1','Jersey','','Limp.','','0','smokehash000005','SMOKE-CSV-4','ENVIADA',0,'4');
-   -- 5: paid in Q3, cancelled in Q4 -> regularisation in the Q4 report
-   INSERT INTO ingresos (n_recibo,cliente,fecha_recepcion,fecha_pago,fecha_recogida,importe,pagado,estado,cantidad,prenda,size,servicio,observaciones,edit_lock,hash,verifactu_csv,verifactu_estado,verifactu_invoice_seq,verifactu_invoice_id,fecha_anulacion)
-   VALUES ('5','SMOKE','15-09-2026','15-09-2026','','12.10','SI','En tienda','1','Vestido','','Limp.','','0','smokehash000006','SMOKE-CSV-5','ANULADA',0,'5','01-10-2026');
-   -- One gasto in Q3
-   INSERT INTO gastos (id,n_factura,servicio,descripcion,empresa,fecha,iva,importe,edit_lock)
-   VALUES (1,'SMOKE-G1','Suministros','Smoke','SMOKE','20-09-2026',21,'60.50',0);
-   ```
+The report lists each check with CORRECTO / FALLO / OMITIDO, a reason without shop data (no names, numbers or amounts) and the user's note. A FALLO is investigated with `/debugging` from the report and the shop's log (`~/.laideal.log`, Ayuda → Log de depuración). The shop keeps working with the release unless the failure blocks it; if it does, reinstall the previous release from GitHub.
 
-Verification query used throughout:
-
-```sql
-SELECT n_recibo,prenda,pagado,estado,verifactu_estado,fecha_pago,fecha_anulacion
-FROM ingresos ORDER BY CAST(n_recibo AS INTEGER), rowid;
-```
-
-**Teardown** (after the last block): close the app, then restore the settings and keep the log.
-```powershell
-Copy-Item "$env:USERPROFILE\.laideal_settings.pre-smoke.json" "$env:USERPROFILE\.laideal_settings.json" -Force
-```
-
----
-
-## Block A — Start-up on a real schema
-
-| # | Step | Expected |
-|---|------|----------|
-| A1 | First launch (step 1.5) | Starts; the log has the `migrateDatabase` lines and no SQL error |
-| A2 | Relaunch after seeding | Starts; no migration line repeats (idempotent); after ~4 s "Envíos Verifactu pendientes" lists ticket **3** only |
-| A3 | Log | None of `Submitting invoice`, `Cancelling invoice`, `Querying AEAT`, `Generating QR`, `Server response` anywhere in the run. Paid tickets log `Verifactu not configured` instead |
-
-A3 is the AEAT safety check: repeat it at the end.
-
-## Block B — Ticket screens and wiring
-
-| # | Step | Expected |
-|---|------|----------|
-| B1 | Recovery dialog: **Posponer**, restart | It appears again (nothing written) |
-| B2 | Recovery dialog: **Marcar como error** | Ticket 3 reads `ERROR` (upper-case) in Recogida; its Verifactu dialog shows **Reintentar envío a AEAT** (do not press it) |
-| B3 | Recogida → search ticket 1 by number | Importe total shows 20,00 € (what is owed, not 0); the window is the new layout (search group, table, Prenda / Estado / Ticket groups, result panel) and every message appears in its result panel, not in pop-ups |
-| B4 | Recogida → ticket 1 (still unpaid) → select a garment → **Añadir prendas…** (opens with ticket 1 found), add one garment **unpaid**, Cerrar | Recogida reports "1 prenda(s) añadidas"; the added garment reads `SIN COBRAR`; ticket 1 now has three garments |
-| B5 | Recogida → ticket 1 → **Cobrar…** → untick everything but the Camisa → **Cobrar** | Only the Camisa is charged; the other two stay `NO` / `SIN COBRAR` |
-| B6 | Herramientas → Añadir nuevas prendas on ticket 1 again | Refused in the window's result panel: "El recibo Nº 1 ya tiene prendas pagadas…" - a ticket with a paid garment has an invoice at AEAT and cannot grow |
-| B6b | Recogida → search ticket 2 → select a garment → **Anular prendas…** (opens with ticket 2 loaded) → tick → confirm → Cerrar | Recogida reports the voided garment in its result panel; the row reads `Anulado`, **NO in green**, Pago and Recogida empty, Anulación = today (also in the Anulación date under Recogida, with a red "Anulada"); Herramientas no longer lists Anular prendas. A Pago-date search does not list it; an Anulación-date search does, with Importe total 0 |
-| B7 | Columns | Recogida and Listado → ingresos show Recepción · Pago · Recogida · Anulación side by side |
-| B8 | Listado / búsqueda | Accent-insensitive client search works; the estado column shows `SIN COBRAR`; PDF export works |
-| B9 | Herramientas → Anular factura / Rectificar | Both show "Verifactu no configurado" (correct in smoke mode; their flows are in `test_e2e_app`) |
-
-## Block C — Printing · *printer connected, printing on*
-
-| # | Step | Expected |
-|---|------|----------|
-| C1 | Save a new **unpaid** ticket in MainWindow | Recibo prints (client copy + shop copy); next ticket number advances; the main window is the new layout (Cliente / Ticket / Prendas groups, Guardar ticket) and the result panel summarises the saved ticket. Picking a garment before typing its quantity fills 1; an m2 garment shows 0,00 until its size is typed |
-| C2 | Save a new **paid** ticket | A recibo with `IMPORTE PAGADO`, no QR (no AEAT in smoke mode) |
-| C3 | Imprimir → Factura for ticket 4 (then Factura completa with a DNI typed in the window) | Factura layout correct (header, lines, IVA split, legal text); no QR in smoke mode; the window stays open and reports the print in its result panel; the complete one shows Dirección and the typed DNI |
-
-The QR itself is checked by `test_e2e_app` (when it is requested) and `test_ticket_preview` (how it renders).
-
-## Block D — Contabilidad and the quarter lock
-
-| # | Step | Expected |
-|---|------|----------|
-| D1 | Contabilidad → Trimestral, Q3 2026 (no lock), **Incluir el detalle de tickets y facturas** ticked, Generar contabilidad | PDF `..._detalle.pdf` opens: ingresos 66.30 € from 3 tickets (3, 4, 5), gastos 60.50 € (columns IVA 21 %, IVA 10 %, Subtotal con IVA, Sin IVA, Total); IVA and resumen blocks render; the annex tables at the end add up to the summary; the rounding note shows. No pop-up: the result shows in the window with a link that opens the PDF; the dialog stays open over the main window, which cannot be used until Cerrar. Texts, buttons and groups are legible and aligned |
-| D2 | Contabilidad → Trimestral, Q4 2026 | "Anulaciones / rectificaciones del periodo" shows ticket 5 at −12.10 € with its annex table; Q3 regenerated is unchanged. (Ticket 5 was paid in Q3, so Q3 counted it as income; Q4, where it was cancelled, takes it back. Paid and cancelled in the same quarter, the two lines net to 0.) |
-| D3 | Contabilidad → Anual 2026 | PDF renders and ends with the tickets / gastos tables |
-| D4 | Lock box; same Q3 without the detail box; Comprobar bloqueo | "Bloquear el trimestre" greyed out in Mensual and Anual, enabled in Trimestral, disabled in Revertir contabilidad. Without the detail box the PDF (no `_detalle`) has only the summary. Comprobar bloqueo says Q3 2026 is not locked (after D5: locked) |
-| D5 | Contabilidad → Trimestral Q3 2026 with **Bloquear el trimestre**. Then (a) Listado → Gastos: double-click the SMOKE-G1 expense; (b) Añadir factura de gastos dated 20-09-2026; (c) the same form dated today | (a) "Edición bloqueada" in the listado's result panel; (b) refused with "Trimestre bloqueado"; (c) saved. (The ingresos list is read-only for every row, locked or not: invoices change only through Recogida / Anular / Rectificar, so there is nothing to try there. Closed-quarter refusals of Cobrar, Anular factura and Rectificar are covered by the e2e suites.) |
-| D6 | Revertir contabilidad Q3 2026, then Listado → Gastos: double-click SMOKE-G1 | Editable again |
-
-D5 is the highest-value item: it is the only manual check left on a financial control.
-
-## Block E — Settings, backup, language, installer
-
-| # | Area | Check |
-|---|------|-------|
-| E1 | Backup | Herramientas → Hacer copia de seguridad ahora succeeds (the copy goes next to the smoke DB) |
-| E2 | IVA | Configuración → General has no "Tipo de IVA" field; tickets and reports use 21 % |
-| E3 | Language | Configuración → Idioma English → OK: a Sí/No dialog reads Yes/No and Ayuda → Notas de la versión opens the English notes, no restart. Back to Español: Spanish again |
-| E4 | Installer | Run the setup in Spanish and in English: the information page shows the notes in that language with correct accents; on a machine without settings the app starts in the installer's language |
-
-Then the Teardown, and A3 once more on the final log.
-
----
-
-## The real AEAT round trip
-
-Not checked by hand, since that would register smoke tickets in the shop's AEAT records. The
-end-to-end bench covers it against the fake server: the accepted reply and QR request, the late
-reply adopted in Recogida, the duplicate → "Consultar en AEAT" comparison dialog
-(`test_e2e_verifactu`, `test_e2e_app`). The one real-AEAT check left is a single real ticket right
-after the production switch (see that row in `docs/progress_tracker.md`).
-
-## Findings from the 10.9 run
-
-Three bugs found here that the automated suite could not reach, all fixed:
-
-1. **`PendingSubmitsDialog` persisted a literal `'Error'`** instead of the canonical `ERROR`.
-   `verifactuEstadoFromString()` compared exactly, so those rows decoded as *un-submitted* and
-   silently lost their "Reintentar envío a AEAT" button. Fixed at the writer, normalised in
-   `migrateDatabase`, and the reader is now case-insensitive as a net. SQL filters compare
-   case-sensitively, so the stored value — not just the C++ read — had to be corrected.
-2. **"Consultar en AEAT" was hidden on settled rows**, which blocked the only way to verify what
-   AEAT holds for a registered invoice. Now offered on any paid row (the query is read-only); the
-   adopt button stays disabled where there is nothing to adopt.
-3. **The payment date field was inert.** Nothing ever wrote it back — its only writer was the dead
-   `PAY_YES` path — so edits were silently discarded. Made display-only: `fecha_pago` is part of the
-   AEAT invoice identity, so editing it after submission would break both retry and reconciliation.
-
-Also confirmed by this run:
-
-- The migration moved **zero money**. Income per quarter was identical to the cent against a genuine
-  pre-migration snapshot, while `PENDIENTE 349 → 30` and `SIN COBRAR 0 → 319` (349 = 30 + 319, and
-  nothing else moved). The 18 678 legacy NULL-estado rows were untouched, which is exactly why the
-  backfill is scoped to the literal `'PENDIENTE'`.
-- The `GetFilteredList` query endpoint works and **its `InvoiceID` filter is applied server-side**
-  (`Count: 1` for a specific id). This contradicted an earlier design note claiming no lookup
-  endpoint existed — see `docs/modules/verifactu/README.md`.
-- Pre-2024 tickets sit permanently in `ERROR` ("fecha de años anteriores al 2024"). These are
-  legitimate AEAT rejections, not lost replies, and can never be reconciled.
+The one real-AEAT check that stays out of every test is a single real ticket right after the production switch (see that row in `docs/progress_tracker.md`).

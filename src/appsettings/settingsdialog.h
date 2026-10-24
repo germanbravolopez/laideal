@@ -18,6 +18,12 @@ public:
 
 public:
     void browsePath(QLineEdit *target, bool directory);
+    // The owner's certificates in the Windows store, as (label, thumbprint), for the
+    // direct AEAT connection. Given by MainWindow: this module does not read the store.
+    void setCertificateChoices(const QList<QPair<QString, QString>> &choices);
+    // Records the direct connection generated and AEAT has not confirmed: while there
+    // are any, the connection cannot be switched back to the gateway.
+    void setDirectPendingCount(int count) { m_directPending = count; }
 
 signals:
     // Emitted when the user clicks "Probar conexión" in the Verifactu tab.
@@ -27,6 +33,9 @@ signals:
                                  const QString &name,
                                  const QString &serviceKey,
                                  bool production);
+    // "Prueba con la AEAT": the direct connection's self-test with the form's values.
+    void aeatSelfTestRequested(const QString &nif, const QString &name, const QString &thumbprint,
+                               const QString &certificateFile, const QString &certificatePassword);
 
 private slots:
     void accept() override;
@@ -39,6 +48,7 @@ private:
 
     class QComboBox *m_language;      // "es" / "en" (Qt standard-dialog language)
     QLineEdit *m_dbPath;
+    QLineEdit *m_backupSecondFolder = nullptr;
     QCheckBox *m_enablePrinting;
     class QComboBox *m_printerName;   // editable: queue name, blank = default printer
     class QComboBox *m_paperWidth;    // 58 / 80 mm
@@ -58,6 +68,17 @@ private:
     QCheckBox *m_vProduction;
     QCheckBox *m_vPendingRecoveryEnabled;
     class QDateEdit *m_vPendingRecoveryFloor;
+    class QComboBox *m_vConnection;       // gateway / direct AEAT
+    class QComboBox *m_vCertificate;      // a store thumbprint, or "" for a .pfx file
+    QLineEdit *m_vCertFile;
+    QLineEdit *m_vCertPassword;
+    QWidget   *m_vCertFileRow;
+    QWidget   *m_vDirectGroup;
+    QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
+    int        m_directPending = 0;
+
+    QString selectedThumbprint() const;
+    void updateDirectRows();
 };
 
 #endif // SETTINGSDIALOG_H

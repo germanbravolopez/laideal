@@ -1,0 +1,125 @@
+#ifndef FAKEAEATSERVER_H
+#define FAKEAEATSERVER_H
+
+// A local stand-in for the AEAT VERI*FACTU SOAP service, for the direct client's
+// tests: plain HTTP on 127.0.0.1 (no TLS, no certificate), pointed at with
+// AeatDirectBackend::setEndpointOverride(server.url()). Like AEAT it registers
+// every new record (Correcto, with a CSV), answers a record it already holds with
+// the duplicate reply (Incorrecto 3000 + RegistroDuplicado), reports the wait time
+// before the next submission, and answers queries from what it registered.
+// Replies follow the official response schemas (see tests/fixtures/aeat-responses).
+
+#include <QByteArray>
+#include <QDateTime>
+#include <QHash>
+#include <QSet>
+#include <QList>
+#include <QObject>
+#include <QQueue>
+#include <QString>
+
+class QTcpServer;
+class QTcpSocket;
+
+class FakeAeatServer : public QObject
+{
+    Q_OBJECT
+
+public:
+    struct SentRecord {
+        QString issuerNif;        // IDEmisorFactura
+        QString operation;        // Alta / Anulacion
+        QString invoiceNumber;
+        QString issueDate;
+        QString total;            // ImporteTotal (Alta)
+        QString hash;             // the record's own Huella
+        QString previousHash;     // Huella in its chain block (empty for the first)
+        QString generatedAt;      // FechaHoraHusoGenRegistro
+        QString systemId;         // IdSistemaInformatico / producer NIF of the system that
+        QString producerNif;      //   generated it (SistemaInformatico block)
+        bool    afterRejection = false;
+    };
+    struct Request {
+        QString           kind;   // RegFactu / Consulta
+        QString           issuerNif;            // ObligadoEmision of the header
+        QByteArray        body;
+        QList<SentRecord> records;
+        QString           queriedNumber;
+        bool              showSystem = false;   // query asked for MostrarSistemaInformatico
+        QString           pageAfter;            // ClavePaginacion: the last number of the previous page
+        int               year = 0;             // PeriodoImputacion asked for
+        int               month = 0;
+        QDateTime         receivedAt;
+    };
+    struct Reply {
+        QByteArray body;          // empty: the default AEAT-like answer
+        int  status = 200;
+        int  delayMs = 0;
+        bool drop = false;        // close the connection without answering
+        bool dropAfterRegistering = false;   // register the records, then lose the answer
+    };
+
+    explicit FakeAeatServer(QObject *parent = nullptr);
+    ~FakeAeatServer() override;
+
+    bool start();
+    QString url() const;
+
+    void setWaitSeconds(int seconds) { m_waitSeconds = seconds; }
+    // Query replies without the records' Huella / chain block (both optional in the schema).
+    void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
+    // The same for one record only.
+    void queryWithoutHashFor(const QString &invoiceNumber) { m_noHashFor.insert(invoiceNumber); }
+    // The record is held (a resend is a duplicate) but the query never returns it.
+    void hideFromQuery(const QString &invoiceNumber) { m_hidden.insert(invoiceNumber); }
+    // Answers a query without the SistemaInformatico block even when it was asked for.
+    void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
+    // The next record of `invoiceNumber` is rejected with this code (once).
+    void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
+    // Every submission carrying this invoice's record is refused whole with a client SOAP
+    // fault (a record that breaks the schema), however many other records it carries.
+    void faultWhenSending(const QString &invoiceNumber) { m_faultFor.insert(invoiceNumber); }
+    // The next reply that includes this record has no line for it (AEAT did not report on it).
+    void omitLineFor(const QString &invoiceNumber) { m_omitLine.insert(invoiceNumber); }
+    // Query replies hold at most `records` (0: all), with IndicadorPaginacion S when more follow.
+    void setQueryPageSize(int records) { m_pageSize = records; }
+    // Queries return only the records whose invoice date is in the asked month, as AEAT
+    // does (off by default: most tests use fixed dates).
+    void setQueryByMonth(bool on) { m_queryByMonth = on; }
+    // The next request gets `reply` instead of the default answer.
+    void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
+
+    QList<Request> requests() const { return m_requests; }
+    QList<Request> submissions() const;
+    QList<SentRecord> sentRecords() const;
+    // Records AEAT holds as registered, keyed "Alta:30837" (another issuer than the tests'
+    // default 89890001K: "B11111111|Alta:30837"); AEAT keys an invoice on its issuer too.
+    QHash<QString, SentRecord> registered() const { return m_registered; }
+
+    static QByteArray faultReply(const QString &code, const QString &text);
+
+private:
+    void onNewConnection();
+    void handle(QTcpSocket *socket);
+    QByteArray answer(const Request &request);
+
+    QTcpServer *m_server = nullptr;
+    QHash<QTcpSocket *, QByteArray> m_buffers;
+    QQueue<Reply> m_scripted;
+    QList<Request> m_requests;
+    QHash<QString, SentRecord> m_registered;
+    QHash<QString, QString> m_registeredRequestId;
+    QHash<QString, QPair<QString, QString>> m_rejectNext;
+    QSet<QString> m_omitLine;
+    QSet<QString> m_faultFor;
+    int m_pageSize = 0;
+    bool m_queryByMonth = false;
+    QSet<QString> m_noHashFor;
+    QSet<QString> m_hidden;
+    int m_waitSeconds = 0;
+    bool m_queryWithoutHashes = false;
+    bool m_queryWithoutSystem = false;
+    int m_counter = 0;
+};
+
+#endif // FAKEAEATSERVER_H

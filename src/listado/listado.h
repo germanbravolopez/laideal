@@ -48,12 +48,13 @@ public:
 
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
-    QSqlTableModel *model;
-    MySortFilterProxyModel *proxyModel;
+    QSqlTableModel *model = nullptr;
+    MySortFilterProxyModel *proxyModel = nullptr;
 
 private slots:
     void resizeWindowToTable();
     void textFilterChanged();
+    void loadEveryRow();
     void on_actionActualizar_triggered();
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
@@ -65,8 +66,11 @@ private:
     void setupUi();
     // Explanation and available buttons for tableName.
     void configureForTable();
+    // rowLocked() against the closed quarters read now, which also refreshes the view's.
+    bool rowLockedNow(int proxyRow);
 
     QSqlDatabase db;
+    QList<QAbstractItemDelegate *> m_columnDelegates;
     QLabel *m_lblIntro = nullptr;
     QPushButton *m_btnAdd = nullptr;
     QPushButton *m_btnDelete = nullptr;

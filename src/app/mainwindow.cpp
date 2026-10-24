@@ -6,6 +6,7 @@
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QUrl>
+#include <QScopeGuard>
 #include "listado.h"
 #include "recog_prendas.h"
 #include "imprimir.h"
@@ -17,11 +18,17 @@
 #include "settingsdialog.h"
 #include "verifactumanager.h"
 #include "verifactuconfig.h"
+#include "verifacturesponse.h"
 #include "updaterdialog.h"
 #include "pendingsubmitsdialog.h"
+#include "refusedinvoicesdialog.h"
 #include "version.h"
 #include "aeatexport.h"
 #include "aeatexportdialog.h"
+#include "aeatcertificate.h"
+#include "aeatselftest.h"
+#include "producerdeclaration.h"
+#include "reporthtml.h"
 #include "uikit.h"
 #include <QTimer>
 #include <QThread>
@@ -35,8 +42,9 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QDateEdit>
-#include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
+#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QCheckBox>
 #include <QComboBox>
@@ -44,6 +52,7 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QKeySequence>
+#include <QPointer>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -56,8 +65,22 @@ MainWindow::MainWindow(QWidget *parent)
     buildUi();
     db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(DB_PATH);
+    db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=15000");   // a save waits out a backup's read
     mainwindowInitialSettings();
     initializeVerifactu();
+
+    // Refused invoices stay in view until resent (the customer may hold their factura):
+    // refreshed on every AEAT outcome, and regularly for those settled in other windows.
+    m_refusedInvoices = new QLabel(this);
+    m_refusedInvoices->setObjectName("lblRefusedInvoices");
+    m_refusedInvoices->setToolTip(tr("Pulse para ver cuáles son y abrirlas en Recogida de Prendas"));
+    connect(m_refusedInvoices, &QLabel::linkActivated, this, &MainWindow::showRefusedInvoices);
+    statusBar()->addPermanentWidget(m_refusedInvoices);
+    updateAeatEnvironment();
+    updateRefusedInvoices();
+    auto *refusedTimer = new QTimer(this);
+    connect(refusedTimer, &QTimer::timeout, this, &MainWindow::updateRefusedInvoices);
+    refusedTimer->start(30000);
 
     m_updater = new Updater(this);
     connect(m_updater, &Updater::updateAvailable,    this, &MainWindow::onUpdateAvailable);
@@ -80,14 +103,23 @@ MainWindow::MainWindow(QWidget *parent)
     QTimer::singleShot(4000, this, [this]() {
         auto *dlg = new PendingSubmitsDialog(db, this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->inFlight = [this](const QString &invoiceId) {
+            return m_verifactuIntegration && m_verifactuIntegration->isInFlight(invoiceId);
+        };
         if (!dlg->loadPending()) {
             dlg->deleteLater();
             return;
         }
-        connect(dlg, &PendingSubmitsDialog::retryRequested,
-                this, [this](const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount) {
-            verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
-        });
+        dlg->retry = [this](const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount) {
+            if (!m_verifactuIntegration)
+                return tr("Verifactu no está disponible.");
+            if (const QString blocked = m_verifactuIntegration->numberingBlockedReason(); !blocked.isEmpty())
+                return blocked;
+            if (m_verifactuIntegration->isInFlight(verifactuInvoiceId(ticketNum, seq)))
+                return tr("Esta factura se está enviando ahora mismo: espere a la respuesta de la AEAT.");
+            const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount, seq);
+            return reqId.isEmpty() ? m_verifactuIntegration->getLastError() : QString();
+        };
         dlg->open();
     });
 
@@ -95,19 +127,23 @@ MainWindow::MainWindow(QWidget *parent)
     // it doesn't block the first paint of the window. Silent on success - the
     // operator only sees a message if the backup fails (since the regulatory
     // requirement is durable storage, a failed snapshot is worth surfacing).
-    m_backupManager = new BackupManager(this);
     if (m_backupManager->needsBackup()) {
         QTimer::singleShot(3000, this, [this]() {
             // performBackup() does VACUUM INTO + integrity_check (seconds on a
             // large DB) and uses its own dedicated DB connections, so run it on
             // a worker thread to keep the UI responsive; marshal the Result back
             // to the GUI thread (Qt::QueuedConnection on `this`) for the message.
+            m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
             QThread *worker = QThread::create([this]() {
                 const BackupManager::Result res = m_backupManager->performBackup();
                 QMetaObject::invokeMethod(this, [this, res]() {
+                    BackupManager::recordSuccess(res);   // settings are written on the GUI thread
+                    BackupManager::recordFailure(res);
                     if (!res.success) {
                         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
                                           + "<br>" + res.errorMessage.toHtmlEscaped());
+                    } else if (!res.secondCopyError.isEmpty()) {
+                        m_result->setText(UiKit::warnHtml(res.secondCopyError.toHtmlEscaped()));
                     } else {
                         statusBar()->showMessage(
                             tr("Copia de seguridad creada (%1).").arg(res.backupPath), 8000);
@@ -115,6 +151,7 @@ MainWindow::MainWindow(QWidget *parent)
                 }, Qt::QueuedConnection);
             });
             connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+            m_backupThread = worker;
             worker->start();
         });
     }
@@ -122,6 +159,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // Closing during the automatic backup waits for it: a cut-off copy is only a .part file,
+    // but the thread must not outlive the window it reports to.
+    if (m_backupThread)
+        m_backupThread->wait();
     delete ui;
 }
 
@@ -133,21 +174,21 @@ void MainWindow::buildUi()
     resize(1240, 760);
 
     // Actions (names as in the former .ui: the on_action<Name>_triggered slots connect by name).
-    QAction *actionRecibo = new QAction(tr("Recibo"), this);
+    QAction *actionRecibo = new QAction(tr("Recibo..."), this);
     actionRecibo->setObjectName("actionRecibo");
     actionRecibo->setToolTip(tr("Imprimir recibo"));
     actionRecibo->setShortcut(QKeySequence("Alt+P, R"));
-    QAction *actionFactura = new QAction(tr("Factura"), this);
+    QAction *actionFactura = new QAction(tr("Factura..."), this);
     actionFactura->setObjectName("actionFactura");
     actionFactura->setToolTip(tr("Imprimir factura"));
     actionFactura->setShortcut(QKeySequence("Alt+P, F"));
-    QAction *actionRecogida_de_prendas = new QAction(tr("Recogida de prendas"), this);
+    QAction *actionRecogida_de_prendas = new QAction(tr("Recogida de prendas..."), this);
     actionRecogida_de_prendas->setObjectName("actionRecogida_de_prendas");
     actionRecogida_de_prendas->setShortcut(QKeySequence("Alt+R"));
-    QAction *actionFormulario_facturas = new QAction(tr("Añadir factura de gastos"), this);
+    QAction *actionFormulario_facturas = new QAction(tr("Añadir factura de gastos..."), this);
     actionFormulario_facturas->setObjectName("actionFormulario_facturas");
     actionFormulario_facturas->setShortcut(QKeySequence("Alt+F"));
-    QAction *actionGenerar_contabilidad = new QAction(tr("Generar contabilidad"), this);
+    QAction *actionGenerar_contabilidad = new QAction(tr("Generar contabilidad..."), this);
     actionGenerar_contabilidad->setObjectName("actionGenerar_contabilidad");
     actionGenerar_contabilidad->setShortcut(QKeySequence("Alt+G"));
     QAction *actionIngresos = new QAction(tr("Ingresos"), this);
@@ -174,7 +215,7 @@ void MainWindow::buildUi()
     actionListado_de_servicios->setObjectName("actionListado_de_servicios");
     actionListado_de_servicios->setToolTip(tr("Visualizar listado de servicios"));
     actionListado_de_servicios->setShortcut(QKeySequence("Alt+Shift+S"));
-    QAction *actionFactura_completa = new QAction(tr("Factura completa"), this);
+    QAction *actionFactura_completa = new QAction(tr("Factura completa..."), this);
     actionFactura_completa->setObjectName("actionFactura_completa");
     actionFactura_completa->setToolTip(tr("Imprimir factura completa"));
     actionFactura_completa->setShortcut(QKeySequence("Alt+P, Alt+F"));
@@ -182,78 +223,79 @@ void MainWindow::buildUi()
     actionCerrar->setObjectName("actionCerrar");
     actionCerrar->setToolTip(tr("Cerrar aplicación"));
     actionCerrar->setShortcut(QKeySequence("Alt+C"));
-    QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad"), this);
+    // No shortcut: reopening a closed quarter is never one key press away.
+    QAction *actionRevertir_contabilidad = new QAction(tr("Revertir contabilidad..."), this);
     actionRevertir_contabilidad->setObjectName("actionRevertir_contabilidad");
-    actionRevertir_contabilidad->setShortcut(QKeySequence("Alt+Shift+R"));
-    QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas"), this);
+    QAction *actionAnadir_nuevas_prendas = new QAction(tr("Añadir nuevas prendas..."), this);
     actionAnadir_nuevas_prendas->setObjectName("actionAnadir_nuevas_prendas");
     actionAnadir_nuevas_prendas->setToolTip(tr("Añadir nuevas prendas a un ticket guardado"));
     actionAnadir_nuevas_prendas->setShortcut(QKeySequence("Alt+Shift+N"));
-    QAction *actionLimpiar_base_de_datos = new QAction(tr("Limpiar base de datos"), this);
-    actionLimpiar_base_de_datos->setObjectName("actionLimpiar_base_de_datos");
-    actionLimpiar_base_de_datos->setToolTip(tr("Limpiar comas ',' en importes guardados en la base de datos"));
-    actionLimpiar_base_de_datos->setShortcut(QKeySequence("Alt+L"));
-    QAction *actionCrear_hash_en_ingresos = new QAction(tr("Crear hash en ingresos"), this);
-    actionCrear_hash_en_ingresos->setObjectName("actionCrear_hash_en_ingresos");
-    actionCrear_hash_en_ingresos->setToolTip(tr("Crear hashes para los recibos que no tengan ya un hash en ingresos"));
     QAction *actionAnular_factura_verifactu = new QAction(tr("Anular factura Verifactu..."), this);
     actionAnular_factura_verifactu->setObjectName("actionAnular_factura_verifactu");
     actionAnular_factura_verifactu->setToolTip(tr("Anular una factura previamente enviada a la AEAT a través de Verifactu"));
+    actionAnular_factura_verifactu->setShortcut(QKeySequence("Alt+A"));
     QAction *actionRectificar_factura_verifactu = new QAction(tr("Rectificar factura Verifactu..."), this);
     actionRectificar_factura_verifactu->setObjectName("actionRectificar_factura_verifactu");
     actionRectificar_factura_verifactu->setToolTip(tr("Emitir una factura rectificativa (R1-R5) de una factura previamente enviada a la AEAT (Art. 8.2.a RD 1007/2023)"));
+    actionRectificar_factura_verifactu->setShortcut(QKeySequence("Alt+T"));
     QAction *actionExportar_registros_aeat = new QAction(tr("Exportar registros AEAT (XML)..."), this);
     actionExportar_registros_aeat->setObjectName("actionExportar_registros_aeat");
     actionExportar_registros_aeat->setToolTip(tr("Exporta los XML AEAT de los tickets de un rango de fechas a un único archivo (Art. 14.1 RD 1007/2023)"));
-    QAction *actionMostrar_log = new QAction(tr("Log de depuración..."), this);
+    QAction *actionMostrar_log = new QAction(tr("Log de depuración"), this);
     actionMostrar_log->setObjectName("actionMostrar_log");
     actionMostrar_log->setToolTip(tr("Muestra la ubicación del archivo de log para enviar al soporte técnico"));
-    QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu..."), this);
+    QAction *actionAcerca_de_Verifactu = new QAction(tr("Acerca de Verifactu"), this);
     actionAcerca_de_Verifactu->setObjectName("actionAcerca_de_Verifactu");
-    actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático (Art. 13 RD 1007/2023)"));
-    QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora..."), this);
+    actionAcerca_de_Verifactu->setToolTip(tr("Declaración responsable del productor del sistema informático "
+                                              "(art. 13 RD 1007/2023, art. 15 Orden HAC/1177/2024)"));
+    QAction *actionHacer_copia_de_seguridad = new QAction(tr("Hacer copia de seguridad ahora"), this);
     actionHacer_copia_de_seguridad->setObjectName("actionHacer_copia_de_seguridad");
     actionHacer_copia_de_seguridad->setToolTip(tr("Crea una copia íntegra de la base de datos en la carpeta de copias (Art. 8.2.c RD 1007/2023)"));
-    QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones..."), this);
+    QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones"), this);
     actionBuscar_actualizaciones->setObjectName("actionBuscar_actualizaciones");
     actionBuscar_actualizaciones->setToolTip(tr("Comprueba en GitHub si hay una versión más reciente y la instala"));
-    QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión..."), this);
+    QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión"), this);
     actionNotas_de_la_version->setObjectName("actionNotas_de_la_version");
     actionNotas_de_la_version->setToolTip(tr("Muestra el historial de cambios de todas las versiones publicadas"));
 
-    // Menus
-    QMenu *menuArchivo = menuBar()->addMenu(tr("Archivo"));
-    menuArchivo->setObjectName("menuArchivo");
-    menuArchivo->setToolTipsVisible(true);
-    menuArchivo->addAction(actionLimpiar_base_de_datos);
-    menuArchivo->addAction(actionCrear_hash_en_ingresos);
+    QAction *actionConfiguracion = new QAction(tr("Configuración..."), this);
+    actionConfiguracion->setObjectName("actionConfiguracion");
+    actionConfiguracion->setToolTip(tr("Datos del negocio, base de datos, impresora y conexión con la AEAT"));
+
+    // Menus, one per kind of work. The UI smoke test opens them by their visible text.
+    // "..." marks an entry that opens a window to fill in or choose from before anything
+    // happens; one that acts at once or only shows something has none.
+    const auto addMenu = [this](const QString &title, const char *name) {
+        QMenu *menu = menuBar()->addMenu(title);
+        menu->setObjectName(name);
+        menu->setToolTipsVisible(true);
+        return menu;
+    };
+    QMenu *menuArchivo = addMenu(tr("Archivo"), "menuArchivo");
+    menuArchivo->addAction(actionConfiguracion);
+    menuArchivo->addAction(actionHacer_copia_de_seguridad);
     menuArchivo->addSeparator();
     menuArchivo->addAction(actionCerrar);
-    QMenu *menuHerramientas = menuBar()->addMenu(tr("Herramientas"));
-    menuHerramientas->setObjectName("menuHerramientas");
-    menuHerramientas->setToolTipsVisible(true);
-    menuHerramientas->addAction(actionRecogida_de_prendas);
-    menuHerramientas->addAction(actionAnadir_nuevas_prendas);
-    QMenu *menuImprimir_ticket = menuHerramientas->addMenu(tr("Imprimir"));
+    QMenu *menuTickets = addMenu(tr("Tickets"), "menuTickets");
+    menuTickets->addAction(actionRecogida_de_prendas);
+    menuTickets->addAction(actionAnadir_nuevas_prendas);
+    QMenu *menuImprimir_ticket = menuTickets->addMenu(tr("Imprimir"));
     menuImprimir_ticket->setObjectName("menuImprimir_ticket");
     menuImprimir_ticket->setToolTipsVisible(true);
     menuImprimir_ticket->addAction(actionRecibo);
     menuImprimir_ticket->addAction(actionFactura);
     menuImprimir_ticket->addAction(actionFactura_completa);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionAnular_factura_verifactu);
-    menuHerramientas->addAction(actionRectificar_factura_verifactu);
-    menuHerramientas->addAction(actionExportar_registros_aeat);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionFormulario_facturas);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionGenerar_contabilidad);
-    menuHerramientas->addAction(actionRevertir_contabilidad);
-    menuHerramientas->addSeparator();
-    menuHerramientas->addAction(actionHacer_copia_de_seguridad);
-    QMenu *menuVisualizar = menuBar()->addMenu(tr("Ver"));
-    menuVisualizar->setObjectName("menuVisualizar");
-    menuVisualizar->setToolTipsVisible(true);
+    QMenu *menuFacturas = addMenu(tr("Facturas"), "menuFacturas");
+    menuFacturas->addAction(actionAnular_factura_verifactu);
+    menuFacturas->addAction(actionRectificar_factura_verifactu);
+    menuFacturas->addSeparator();
+    menuFacturas->addAction(actionExportar_registros_aeat);
+    QMenu *menuContabilidad = addMenu(tr("Contabilidad"), "menuContabilidad");
+    menuContabilidad->addAction(actionFormulario_facturas);
+    menuContabilidad->addSeparator();
+    menuContabilidad->addAction(actionGenerar_contabilidad);
+    menuContabilidad->addAction(actionRevertir_contabilidad);
+    QMenu *menuVisualizar = addMenu(tr("Ver"), "menuVisualizar");
     menuVisualizar->addAction(actionIngresos);
     menuVisualizar->addAction(actionGastos);
     menuVisualizar->addSeparator();
@@ -261,16 +303,14 @@ void MainWindow::buildUi()
     menuVisualizar->addAction(actionListado_de_clientes);
     menuVisualizar->addAction(actionListado_de_proveedores);
     menuVisualizar->addAction(actionListado_de_servicios);
-    QMenu *menuAyuda = menuBar()->addMenu(tr("Ayuda"));
-    menuAyuda->setObjectName("menuAyuda");
-    menuAyuda->setToolTipsVisible(true);
+    QMenu *menuAyuda = addMenu(tr("Ayuda"), "menuAyuda");
     menuAyuda->addAction(actionBuscar_actualizaciones);
     menuAyuda->addAction(actionNotas_de_la_version);
+    menuAyuda->addAction(actionMostrar_log);
     menuAyuda->addSeparator();
     menuAyuda->addAction(actionAcerca_de_Verifactu);
 
-    ui->menuArchivo = menuArchivo;
-    ui->actionMostrar_log = actionMostrar_log;
+    ui->actionConfiguracion = actionConfiguracion;
 
     QWidget *central = new QWidget(this);
     QVBoxLayout *layout = new QVBoxLayout(central);
@@ -334,6 +374,7 @@ void MainWindow::buildUi()
     ui->le_nr_ticket->setFont(numberFont);
     ui->le_nr_ticket->setMaximumWidth(160);
     ui->de_date_recep = UiKit::dateEdit(QDate::currentDate(), "de_date_recep");
+    ui->de_date_recep->setMaximumDate(QDate::currentDate());   // a paid ticket's invoice date
     ui->de_date_recep->setToolTip(tr("Fecha de recepción de las prendas."));
     ui->pb_payment = new QCheckBox(tr("Pagado al dejarlo"));
     ui->pb_payment->setObjectName("pb_payment");
@@ -405,12 +446,53 @@ void MainWindow::buildUi()
 
 void MainWindow::mainwindowInitialSettings()
 {
-    migrateDatabase(db);
+    QStringList startProblems;   // HTML lines for the result panel
+    m_backupManager = new BackupManager(this);
+    // A new version migrates the database: keep a copy of it as it was first, also with
+    // automatic backups switched off (the data repairs never run without one).
+    const QString version = Updater::currentVersion();
+    bool rewriteData = true;   // false: no copy of the database as the previous version left it
+    if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(DB_PATH)) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
+        const BackupManager::Result res = m_backupManager->performBackup();
+        QApplication::restoreOverrideCursor();
+        if (!res.secondCopyError.isEmpty())
+            startProblems << UiKit::warnHtml(res.secondCopyError.toHtmlEscaped());
+        if (res.success) {
+            AppSettings::instance()->setBackupLastVersion(version);
+            BackupManager::recordSuccess(res);   // saves the settings
+        } else {
+            BackupManager::recordFailure(res);
+            rewriteData = false;
+            startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
+                                                  .arg(res.errorMessage).toHtmlEscaped())
+                             + "<br>" + tr("Las reparaciones de datos de esta versión esperan a que la copia se haga "
+                                           "(se reintenta al iniciar de nuevo).");
+        }
+    }
+    if (!migrateDatabase(db, rewriteData))
+        startProblems << UiKit::errorHtml(tr("La base de datos no se ha actualizado del todo para esta versión. "
+                                             "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
+    // Req. 4: backups switched off, or none correct for days, stay visible at every start.
+    if (const QString backup = BackupManager::currentBackupWarning(); !backup.isEmpty())
+        startProblems << UiKit::warnHtml(backup.toHtmlEscaped());
+    if (!startProblems.isEmpty())
+        m_result->setText(startProblems.join("<br>"));
 
-    // Settings action - prepended to Archivo menu
-    QAction *actionConfig = new QAction(tr("Configuración..."), this);
-    connect(actionConfig, &QAction::triggered, this, [this]() {
+    connect(ui->actionConfiguracion, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
+        QList<QPair<QString, QString>> certificates;
+        for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
+            certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, c.expiry.toString("dd-MM-yyyy")), c.thumbprint);
+        dlg.setCertificateChoices(certificates);
+        dlg.setDirectPendingCount(aeatPendingRecordCount(db, AppSettings::instance()->aeatDirectProduction()
+                                                                  ? QStringLiteral("produccion") : QStringLiteral("pruebas")));
+        connect(&dlg, &SettingsDialog::aeatSelfTestRequested, &dlg,
+                [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
+                             const QString &file, const QString &password) {
+            runAeatSelfTest(&dlg, nif, name, thumbprint, file, password);
+        });
         connect(&dlg, &SettingsDialog::testConnectionRequested,
                 &dlg, [&dlg](const QString &nif, const QString &name,
                              const QString &serviceKey, bool production) {
@@ -433,6 +515,12 @@ void MainWindow::mainwindowInitialSettings()
                 QMessageBox::information(&dlg, tr("Conexión correcta"),
                     tr("Servidor accesible (%1).\n\nEntorno: %2\nNIF: %3\nEndpoint: %4")
                         .arg(result.errorDescription, env, nif, endpoint));
+            } else if (result.status == VerifactuResult::ERROR) {
+                // The server answered and refused the key (testConnection's only ERROR).
+                QMessageBox::warning(&dlg, tr("Clave rechazada"),
+                    tr("El servidor responde, pero ha rechazado la clave de servicio: compruébela.\n\n"
+                       "Detalle: %1\nEntorno: %2\nEndpoint: %3")
+                        .arg(result.errorDescription, env, endpoint));
             } else {
                 QMessageBox::warning(&dlg, tr("Conexión fallida"),
                     tr("No se pudo conectar al servidor.\n\nDetalle: %1\nEntorno: %2\nEndpoint: %3")
@@ -444,9 +532,6 @@ void MainWindow::mainwindowInitialSettings()
             initializeVerifactu();
         }
     });
-    ui->menuArchivo->insertAction(ui->menuArchivo->actions().first(), actionConfig);
-    ui->menuArchivo->insertAction(ui->menuArchivo->actions().at(1), ui->actionMostrar_log);
-    ui->menuArchivo->insertSeparator(ui->menuArchivo->actions().at(2));
 
     // Table settings
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
@@ -465,7 +550,11 @@ void MainWindow::mainwindowInitialSettings()
 
 void MainWindow::initializeVerifactu()
 {
-    m_verifactuIntegration = new VerifactuIntegration(this);
+    // One integration for the window's life, re-initialised after Configuración: the
+    // windows that hold it keep working, and its connections are made once.
+    const bool first = !m_verifactuIntegration;
+    if (first)
+        m_verifactuIntegration = new VerifactuIntegration(this);
 
     if (!m_verifactuIntegration->initialize()) {
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
@@ -474,8 +563,170 @@ void MainWindow::initializeVerifactu()
                           + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
+    if (first)
+        connectVerifactu();
+    else
+        updateAeatEnvironment();
+    settlePendingRectifications();
+    if (m_verifactuIntegration->isDirect() && m_verifactuIntegration->isConfigured()) {
+        QStringList warnings;   // HTML lines
+        if (const QString sendingError = m_verifactuIntegration->sendingError(); !sendingError.isEmpty())
+            warnings << UiKit::warnHtml(tr("Conexión directa con la AEAT: los registros se guardan pero no se "
+                                           "pueden enviar: %1").arg(sendingError.toHtmlEscaped()));
+        if (const QString saveError = AppSettings::instance()->lastSaveError(); !saveError.isEmpty())
+            warnings << UiKit::errorHtml(tr("No se puede guardar la configuración (%1): el número de instalación "
+                                            "de la conexión directa podría cambiar al reiniciar. Avise al servicio técnico.")
+                                             .arg(saveError.toHtmlEscaped()));
+        if (const QString expiry = m_verifactuIntegration->certificateExpiryWarning(); !expiry.isEmpty())
+            warnings << UiKit::warnHtml(expiry.toHtmlEscaped());
+        QString chainProblem;
+        int chainContinuations = 0;
+        if (!m_verifactuIntegration->verifyStoredChain(&chainProblem, &chainContinuations)) {
+            qCritical() << "MainWindow: the stored AEAT record chain does not verify -" << chainProblem;
+            warnings << UiKit::errorHtml(tr("La cadena de registros de la AEAT guardada no es correcta: %1")
+                                             .arg(chainProblem.toHtmlEscaped()))
+                        + "<br>" + tr("Los registros se han modificado fuera de la aplicación. Avise al servicio técnico.");
+        } else if (chainContinuations > 0) {
+            qWarning() << "MainWindow: the stored chain continues" << chainContinuations
+                       << "record(s) not in this database (a restored copy)";
+        }
+        if (!warnings.isEmpty())
+            m_result->setText(warnings.join("<br>"));
+        continueDirectChain();
+    }
+}
+
+void MainWindow::connectVerifactu()
+{
     connect(m_verifactuIntegration, &VerifactuIntegration::requestFinished,
             this, &MainWindow::onVerifactuRequestFinished);
+    // Direct client: outcomes nobody waited for (records sent at start or retried on
+    // their own) still settle their rows.
+    connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
+    // Any finished chain sync: AEAT may hold later numbers than the one on screen.
+    connect(m_verifactuIntegration, &VerifactuIntegration::chainChecked, this, [this](bool ok) {
+        if (!ok || m_saving)
+            return;                                                 // a save resets the form itself
+        setNextTicketNumber();
+        if (m_numberingRefused)
+            m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
+        m_numberingRefused = false;
+    });
+}
+
+void MainWindow::onRecordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result)
+{
+    if (cancellation) {
+        // AEAT holds the invoice cancelled: the books must say so (dated today, in an open quarter).
+        const int applied = applySettledVerifactuCancellation(db, invoiceId, QDate::currentDate(), result);
+        if (applied < 0 || applied == 2) {
+            // No ticket behind it (the self-test's record), or its dialog already marked it.
+            qDebug() << "MainWindow: AEAT settled the cancellation of" << invoiceId
+                     << (applied < 0 ? "(no ticket)" : "(already marked)") << "-"
+                     << (result.isSuccess() ? "accepted" : result.errorDescription);
+            return;
+        }
+        const bool marked = applied > 0;
+        qWarning() << "MainWindow: AEAT settled the cancellation of" << invoiceId << "outside its dialog -"
+                   << (result.isSuccess() ? "accepted" : result.errorDescription) << "- marked" << marked;
+        m_result->setText(result.isSuccess()
+            ? UiKit::okHtml(tr("La AEAT ha registrado la anulación de la factura %1.").arg(invoiceId.toHtmlEscaped()))
+                  + (marked ? QString() : "<br>" + UiKit::errorHtml(tr("No se pudo marcar como anulada: revísela en Anular factura.")))
+            : UiKit::errorHtml(tr("La AEAT no ha aceptado la anulación de la factura %1: %2")
+                                   .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped())));
+        return;
+    }
+    const int rows = applySettledVerifactuResult(db, invoiceId, result);
+    qDebug() << "MainWindow: AEAT settled" << invoiceId << "-" << rows << "row(s) updated";
+    updateRefusedInvoices();
+    if (rows > 0)
+        showVerifactuRejection(invoiceId, result);
+}
+
+void MainWindow::settlePendingRectifications()
+{
+    for (const QString &number : pendingRectificationNumbers(db)) {
+        if (m_verifactuIntegration->holdsPendingRegistration(number))
+            continue;                                                   // it sends itself and settles
+        VerifactuResult stored;
+        if (m_verifactuIntegration->storedRegistrationOutcome(number, &stored)) {
+            qDebug() << "MainWindow: rectificativa" << number << "settled from its stored AEAT answer -"
+                     << applySettledVerifactuResult(db, number, stored) << "row(s)";
+            continue;
+        }
+        if (markRectificationUnsent(db, number, tr("Sin respuesta de la AEAT: compruébela con \"Consultar en AEAT\" en Recogida de Prendas "
+                                                  "antes de rehacerla en Rectificar factura.")))
+            qWarning() << "MainWindow: rectificativa" << number << "left PENDIENTE with nothing to send it - marked ERROR";
+    }
+}
+
+void MainWindow::continueDirectChain()
+{
+    // Our system's own chain, synced with AEAT before the first record (never the gateway's).
+    m_verifactuIntegration->syncDirectChain(
+        [this](bool ok, const QString &message) {
+            qDebug() << "MainWindow: direct AEAT chain -" << ok << message;
+            const int atAeat = m_verifactuIntegration->highestNumberAtAeat();
+            bool localRead = false;
+            const int local = readMaxValueInColumnFromTable(db, "n_recibo", "ingresos", &localRead);
+            if (localRead && atAeat > local) {
+                // Restored from an older backup: AEAT already holds later numbers.
+                qWarning() << "MainWindow: AEAT holds ticket numbers up to" << atAeat << "- the database only" << local;
+                m_result->setText(UiKit::warnHtml(tr("La AEAT ya tiene facturas de este sistema hasta el nº %1 y esta base "
+                                                     "de datos llega al %2 (¿restaurada de una copia anterior?). El "
+                                                     "siguiente ticket será el %3.").arg(atAeat).arg(local).arg(atAeat + 1)));
+                if (!m_saving)                                      // a save resets the form itself
+                    setNextTicketNumber();
+            }
+            if (!ok)
+                m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
+            statusBar()->showMessage(tr("Conexión directa con la AEAT: %1").arg(message), 10000);
+        });
+}
+
+void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
+                                 const QString &certificateFile, const QString &certificatePassword)
+{
+    if (nif.isEmpty() || name.isEmpty()) {
+        QMessageBox::warning(parent, tr("Datos incompletos"), tr("Introduce el NIF y el nombre del emisor antes de la prueba."));
+        return;
+    }
+    QDialog dlg(parent);
+    UiKit::setUpDialog(&dlg, tr("Prueba con la AEAT"), 620);
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->addWidget(UiKit::introPanel(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas "
+                                           "de la AEAT, sin efectos tributarios, con el certificado elegido.")));
+    auto *panel = new UiKit::ResultPanel(tr("Conectando con la AEAT..."));
+    panel->setObjectName("lblSelfTest");
+    layout->addWidget(panel);
+    layout->addLayout(UiKit::closeRow(&dlg));
+
+    AeatDirectBackend::Config c;
+    c.testEnvironment = true;
+    c.issuerNif = nif;
+    c.issuerName = name;
+    c.system = AeatRecord::laIdealSystem(QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR),
+                                         AppSettings::instance()->aeatInstallationNumber());
+    c.certificateThumbprint = thumbprint;
+    c.certificatePath = certificateFile;
+    c.certificatePassword = certificatePassword;
+    AppSettings *settings = AppSettings::instance();
+    const bool shopInPreProduction = VerifactuIntegration::selfTestSharesShopChain(settings->verifactuDirectAeat(),
+                                                                                 settings->aeatDirectProduction());
+    if (shopInPreProduction) {
+        c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
+        c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
+    }
+    AeatSelfTest selfTest(c, db);
+    if (shopInPreProduction)
+        connect(&selfTest, &AeatSelfTest::recordSettled, this, &MainWindow::onRecordSettled);
+    QStringList lines;
+    connect(&selfTest, &AeatSelfTest::progress, &dlg, [&lines, panel](bool ok, const QString &text) {
+        lines << (ok ? UiKit::okHtml(text.toHtmlEscaped()) : UiKit::errorHtml(text.toHtmlEscaped()));
+        panel->setText(lines.join("<br>"));
+    });
+    QTimer::singleShot(0, &selfTest, &AeatSelfTest::run);
+    dlg.exec();
 }
 
 void MainWindow::resetAllContents()
@@ -491,6 +742,7 @@ void MainWindow::resetAllContents()
     ui->le_cost_total->clear();
     ui->le_mobile->clear();
     ui->le_phone->clear();
+    ui->de_date_recep->setMaximumDate(QDate::currentDate());
     ui->de_date_recep->setDate(QDate::currentDate());
     ui->pb_payment->setChecked(false);
     on_pb_payment_toggled(false);
@@ -502,7 +754,14 @@ void MainWindow::resetAllContents()
 
 void MainWindow::setNextTicketNumber()
 {
-    ui->le_nr_ticket->setText(QString::number(readMaxValueInColumnFromTable(db, "n_recibo", "ingresos") + 1));
+    bool read = false;
+    const int next = nextTicketNumber(db, m_verifactuIntegration ? m_verifactuIntegration->highestNumberAtAeat() : 0,
+                                      &read);
+    // Never a guessed number: without the highest stored one no ticket is saved.
+    ui->le_nr_ticket->setText(read ? QString::number(next) : QString());
+    if (!read && m_result)
+        m_result->setText(UiKit::errorHtml(tr("No se pudo leer el último número de ticket de la base de datos."))
+                          + "<br>" + tr("No se puede guardar ningún ticket hasta que se pueda leer; revise el log de depuración."));
 }
 
 void MainWindow::populateCbClient()
@@ -564,7 +823,7 @@ void MainWindow::setGarmentPrice(int garmentRow, QString garmentText, QString se
     // An m2 garment is priced by its size; until it is measured it is 0, not one m2.
     const double importe = garmentUnmeasured(garmentText, size) ? 0.0
         : garmentImporte(qntyItem->text(), size, readGarmentPrice(db, garmentText, serviceText));
-    auto *amount = new QTableWidgetItem(QString::number(importe, 'f', 2));
+    auto *amount = new QTableWidgetItem(displayMoney(importe));
     amount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui->table_ticket->setItem(garmentRow, TABLE_TICKET_PRIC, amount);
 }
@@ -609,8 +868,20 @@ bool MainWindow::validateTicket()
         m_result->setText(UiKit::errorHtml(reason) + "<br>" + tr("No se ha guardado nada."));
         return false;
     };
+    if (ui->le_nr_ticket->text().toInt() <= 0)
+        return refuse(tr("No hay número de ticket: no se pudo leer el último de la base de datos."));
     if (ui->cb_client->currentText().trimmed().isEmpty())
         return refuse(tr("No se ha introducido ningún cliente."));
+    if (m_verifactuIntegration) {
+        const QString blocked = m_verifactuIntegration->numberingBlockedReason();
+        m_numberingRefused = !blocked.isEmpty();
+        if (m_numberingRefused)
+            return refuse(blocked);
+        const QString notInvoiced = ui->pb_payment->isChecked() ? m_verifactuIntegration->invoicingBlockedReason()
+                                                                : QString();
+        if (!notInvoiced.isEmpty())
+            return refuse(notInvoiced + " " + tr("Puede guardar el ticket sin cobrar."));
+    }
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
@@ -711,6 +982,74 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     return reqId;
 }
 
+void MainWindow::updateAeatEnvironment()
+{
+    // The direct client registers in AEAT's test environment unless production was chosen:
+    // real sales must never go there unnoticed.
+    if (!m_aeatEnvironment) {
+        m_aeatEnvironment = new QLabel(this);
+        m_aeatEnvironment->setObjectName("lblAeatEnvironment");
+        statusBar()->addPermanentWidget(m_aeatEnvironment);
+    }
+    const bool preProduction = m_verifactuIntegration && m_verifactuIntegration->isDirect()
+                               && !AppSettings::instance()->aeatDirectProduction();
+    m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
+    m_aeatEnvironment->setVisible(preProduction);
+}
+
+void MainWindow::updateRefusedInvoices()
+{
+    const int refused = refusedInvoiceCount(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate());
+    // A link: the count opens the list of those invoices (showRefusedInvoices).
+    m_refusedInvoices->setText("<a href=\"refused\" style=\"text-decoration:none\">"
+                               + UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: pulse aquí para ver "
+                                                     "cuáles y reenviarlas", "", refused)) + "</a>");
+    m_refusedInvoices->setVisible(refused > 0);
+}
+
+void MainWindow::showRefusedInvoices()
+{
+    auto *dlg = new RefusedInvoicesDialog(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate(), this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &RefusedInvoicesDialog::openTicket, this, [this, dlg](const QString &nRecibo, int seq) {
+        auto *recogida = new RecogPrendas(db, this);
+        recogida->setAttribute(Qt::WA_DeleteOnClose);
+        recogida->m_verifactuIntegration = m_verifactuIntegration;
+        recogida->show();
+        recogida->showTicket(nRecibo, seq);
+        // Back in the list, a resent invoice is gone.
+        QPointer<RefusedInvoicesDialog> list(dlg);
+        connect(recogida, &QObject::destroyed, this, [this, list] {
+            if (list)
+                list->reload();
+            updateRefusedInvoices();
+        });
+    });
+    dlg->show();
+}
+
+void MainWindow::showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result)
+{
+    // A definitive refusal can come after the customer got the factura with its QR:
+    // it stays in the panel, not only in the status bar, until someone resends it.
+    if (result.status != VerifactuResult::ERROR
+        || verifactuErrorIsDuplicate(result.errorCode, result.errorDescription))
+        return;
+    m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
+                                           .arg(invoiceId.toHtmlEscaped(), result.errorDescription.toHtmlEscaped()))
+                      + "<br>" + tr("Reenvíela desde Recogida de Prendas (botón Verifactu\u2026) después de corregir la causa."));
+}
+
+QPixmap MainWindow::verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
+                                           int seq) const
+{
+    if (!m_verifactuIntegration)
+        return QPixmap();
+    const double ivaRate = AppSettings::instance()->ivaRate();
+    return m_verifactuIntegration->qrBeforeReply(verifactuInvoiceId(ticketNum, seq), invoiceDate,
+                                                 Facturas::taxBaseFromGross(totalAmount, ivaRate), ivaRate);
+}
+
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
@@ -740,7 +1079,9 @@ void MainWindow::onVerifactuRequestFinished(const QString &requestId, const Veri
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
         qWarning() << "Verifactu submission failed for ticket" << ticketNum << "-" << result.errorDescription;
+        showVerifactuRejection(verifactuInvoiceId(ticketNum, seq), result);
     }
+    updateRefusedInvoices();
 }
 
 bool MainWindow::saveTicket(double &storedTotal)
@@ -776,7 +1117,6 @@ bool MainWindow::saveTicket(double &storedTotal)
             r.servicio       = cbService->currentText();
             r.observaciones  = ui->table_ticket->item(row, TABLE_TICKET_OBSE)
                                    ? ui->table_ticket->item(row, TABLE_TICKET_OBSE)->text() : QString("");
-            r.editLock       = "0";
             r.hash           = genHash16();
             // An unpaid row has no invoice to send, so it is SIN COBRAR, not PENDIENTE;
             // a paid one starts PENDIENTE and the async AEAT submit patches it on reply.
@@ -806,8 +1146,8 @@ bool MainWindow::printRecibo()
     // Save-time print: AEAT submission is in flight (async). DB still has empty CSV,
     // so the QR cannot be fetched yet. Print without QR/CSV; the customer can be
     // given a reprint via RecogPrendas after AEAT replies.
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(db, this);
+    auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
@@ -821,21 +1161,23 @@ bool MainWindow::printRecibo()
     return ui_impr->printTicket() && printed;
 }
 
-bool MainWindow::printFra(const QPixmap &qrCode)
+bool MainWindow::printFra(const QPixmap &qrCode, bool verifactuIssued)
 {
-    Imprimir *ui_impr;
-    ui_impr = new Imprimir(db, this);
+    auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = nullptr;
     ui_impr->qrCode = qrCode;
+    ui_impr->verifactuIssued = verifactuIssued;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(true, false);
     if (!AppSettings::instance()->enablePrinting())
         return false;
     const bool printed = ui_impr->printTicket();
-    ui_impr->buildTicket(false, false);
+    ui_impr->isRecibo = true;
+    ui_impr->buildTicket(false, true);
     return ui_impr->printTicket() && printed;
 }
 
@@ -850,6 +1192,16 @@ void MainWindow::on_pb_payment_toggled(bool checked)
 
 void MainWindow::on_pb_save_clicked()
 {
+    // The number on screen is the ticket being printed until the form resets; a click
+    // during the wait for AEAT would save a second ticket under it.
+    if (m_saving)
+        return;
+    m_saving = true;
+    ui->pb_save->setEnabled(false);
+    const auto saved = qScopeGuard([this] {
+        m_saving = false;
+        ui->pb_save->setEnabled(true);
+    });
     {
         if (validateTicket()) {
             m_clientNote.clear();
@@ -865,16 +1217,19 @@ void MainWindow::on_pb_save_clicked()
                 // Nothing is sent nor printed for a ticket that was not stored whole.
                 m_result->setText(UiKit::errorHtml(tr("No se pudo guardar el ticket %1 completo.").arg(ticketNum))
                                   + "<br>" + tr("No se ha guardado ninguna prenda ni se ha enviado a AEAT o impreso. "
-                                                "Revise el log (Archivo → Log de depuración) antes de repetirlo."));
+                                                "Revise el log (Ayuda → Log de depuración) antes de repetirlo."));
                 return;
             }
             if (isPaid) {
                 const QString reqId = verifactuSubmitInvoice(ticketNum, invoiceDate, totalAmount);
 
-                QPixmap qrCode;
+                // The direct client's QR needs no answer from AEAT (which may make the
+                // next submission wait up to TiempoEsperaEnvio): print at once.
+                QPixmap qrCode = reqId.isEmpty() ? QPixmap() : verifactuQrBeforeReply(ticketNum, invoiceDate, totalAmount);
+                const bool qrBeforeReply = !qrCode.isNull();
                 bool gotSuccessfulReply = false;
 
-                if (!reqId.isEmpty()) {
+                if (!reqId.isEmpty() && !qrBeforeReply) {
                     QEventLoop loop;
                     QTimer timeout;
                     timeout.setSingleShot(true);
@@ -893,10 +1248,12 @@ void MainWindow::on_pb_save_clicked()
                 }
 
                 qDebug() << "saveTicket: ticket" << ticketNum
-                         << "isPaid=true gotSuccessfulReply=" << gotSuccessfulReply
-                         << "(true -> printFra with QR, false -> printRecibo with Importe pagado)";
-                if (gotSuccessfulReply) {
-                    printedWhat = printFra(qrCode) ? tr("Factura con QR impresa.") : QString();
+                         << "isPaid=true qrBeforeReply=" << qrBeforeReply << "gotSuccessfulReply=" << gotSuccessfulReply
+                         << "(either -> factura with QR + paid recibo, neither -> paid recibo)";
+                if (qrBeforeReply || gotSuccessfulReply) {
+                    // An accepted reply's QR always prints with the leyenda, also if its row write failed.
+                    printedWhat = printFra(qrCode, qrBeforeReply || gotSuccessfulReply)
+                                      ? tr("Factura con QR (cliente) y recibo pagado (establecimiento) impresos.") : QString();
                 } else {
                     // AEAT has not confirmed within the bounded wait, but the request
                     // may still be in flight (the transport timeout is longer). Print
@@ -924,7 +1281,7 @@ void MainWindow::on_pb_save_clicked()
             resetAllContents();
             m_result->setText(UiKit::okHtml(tr("Ticket %1 guardado: %2, %3 prenda(s), %4 €, %5.")
                                                 .arg(ticketNum, client.toHtmlEscaped()).arg(garments)
-                                                .arg(moneyText(totalAmount).replace('.', ','),
+                                                .arg(displayMoney(totalAmount),
                                                      isPaid ? tr("pagado") : tr("sin cobrar")))
                               + "<br>" + (printedWhat.isEmpty()
                                               ? tr("No se ha impreso (impresión desactivada o impresora sin respuesta).")
@@ -962,12 +1319,12 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
             QTableWidgetItem *priceItem = ui->table_ticket->item(rowCnt, column);
             if (priceItem && !priceItem->text().isEmpty()) {
                 const double priceValue = priceItem->text().replace(',', '.').toDouble();
-                priceItem->setText(moneyText(priceValue));
+                priceItem->setText(displayMoney(priceValue));
                 priceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 totalPrice += roundToCents(priceValue);
             }
         }
-        ui->le_cost_total->setText(moneyText(totalPrice));
+        ui->le_cost_total->setText(displayMoney(totalPrice));
     }
 }
 
@@ -993,6 +1350,7 @@ void MainWindow::on_actionIngresos_triggered()
     QString title = "Ingresos";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "ingresos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1007,6 +1365,7 @@ void MainWindow::on_actionGastos_triggered()
     QString title = "Gastos";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "gastos";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1019,7 +1378,6 @@ void MainWindow::on_actionGastos_triggered()
 void MainWindow::repopulatePrendas()
 {
     setGarmentToCbAndPopulate(0);
-    cleanDatabase(false);
 }
 
 void MainWindow::on_actionListado_de_prendas_triggered()
@@ -1027,6 +1385,7 @@ void MainWindow::on_actionListado_de_prendas_triggered()
     QString title = "Listado de prendas";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "prendas";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1046,6 +1405,7 @@ void MainWindow::on_actionListado_de_clientes_triggered()
     QString title = "Listado de clientes";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "clientes";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1060,6 +1420,7 @@ void MainWindow::on_actionListado_de_proveedores_triggered()
     QString title = "Listado de proveedores";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "proveedores";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1074,6 +1435,7 @@ void MainWindow::on_actionListado_de_servicios_triggered()
     QString title = "Listado de servicios";
     Listado *ui_listado;
     ui_listado = new Listado(db, this);
+    ui_listado->setAttribute(Qt::WA_DeleteOnClose);
     ui_listado->tableName = "servicios";    ui_listado->setObjectName(title);
     ui_listado->lbl_title->setText(title);
     ui_listado->setWindowTitle(title);
@@ -1087,6 +1449,7 @@ void MainWindow::on_actionRecogida_de_prendas_triggered()
 {
     RecogPrendas *ui_recog;
     ui_recog = new RecogPrendas(db, this);
+    ui_recog->setAttribute(Qt::WA_DeleteOnClose);
     ui_recog->m_verifactuIntegration = m_verifactuIntegration;
     //ui_recog->setWindowState(Qt::WindowMaximized);
     ui_recog->show();
@@ -1096,6 +1459,7 @@ void MainWindow::on_actionRecibo_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = true;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1107,6 +1471,7 @@ void MainWindow::on_actionFactura_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = false;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1118,6 +1483,7 @@ void MainWindow::on_actionFactura_completa_triggered()
 {
     Imprimir *ui_impr;
     ui_impr = new Imprimir(db, this);
+    ui_impr->setAttribute(Qt::WA_DeleteOnClose);
     ui_impr->isRecibo = false;
     ui_impr->isCompleteInvoice = true;
     ui_impr->verifactuIntegration = m_verifactuIntegration;
@@ -1129,6 +1495,7 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
 {
     Contabilidad *ui_contabilidad;
     ui_contabilidad = new Contabilidad(db, this);
+    ui_contabilidad->setAttribute(Qt::WA_DeleteOnClose);
     ui_contabilidad->show();
 }
 
@@ -1136,6 +1503,7 @@ void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
     ui_rev_cont = new Contabilidad(db, this);
+    ui_rev_cont->setAttribute(Qt::WA_DeleteOnClose);
     ui_rev_cont->revertirOn = true;
     ui_rev_cont->resetAllContents();
     ui_rev_cont->show();
@@ -1145,37 +1513,20 @@ void MainWindow::on_actionFormulario_facturas_triggered()
 {
     Facturas *ui_facturas;
     ui_facturas = new Facturas(db, this);
+    ui_facturas->setAttribute(Qt::WA_DeleteOnClose);
     ui_facturas->populateEmpresas();
     ui_facturas->populateServicios();
     ui_facturas->show();
-}
-
-void MainWindow::on_actionLimpiar_base_de_datos_triggered()
-{
-    cleanDatabase(true);
-}
-
-void MainWindow::cleanDatabase(bool print)
-{
-    // Change the cursor to a loading icon
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    int gastosCnt = updateComasInDecimalData(db, "gastos", "importe");
-    int ingresosCnt = updateComasInDecimalData(db, "ingresos", "importe");
-    ingresosCnt += updateComasInDecimalData(db, "ingresos", "size");
-    int prendasCnt = updateComasInDecimalData(db, "prendas", "precio_limpieza");
-    prendasCnt += updateComasInDecimalData(db, "prendas", "precio_plancha");
-    // Restore the cursor to default
-    QApplication::restoreOverrideCursor();
-    if (print)
-        m_result->setText(UiKit::okHtml(tr("Limpieza de la base de datos terminada."))
-                          + "<br>" + tr("Importes con ',' corregidos: %1 en gastos, %2 en ingresos, %3 en la lista de prendas.")
-                                         .arg(gastosCnt).arg(ingresosCnt).arg(prendasCnt));
 }
 
 void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
 {
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
+    ui_add_garment->setAttribute(Qt::WA_DeleteOnClose);
+    ui_add_garment->invoicingBlocked = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
+    };
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
     // PENDIENTE for the startup recovery.
     connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,
@@ -1183,107 +1534,6 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
         verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0);
     });
     ui_add_garment->show();
-}
-
-void MainWindow::on_actionCrear_hash_en_ingresos_triggered()
-{
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-
-    db.open();
-
-    // Phase A: fill empty / NULL hashes. UPDATE keyed on rowid (SQLite's
-    // intrinsic per-row identifier) instead of the all-fields equality used
-    // by the legacy version, which could stamp two rows with the same hash
-    // when ticket lines happened to be identical across every column.
-    int filled = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT rowid FROM ingresos WHERE hash IS NULL OR hash = ''")) {
-            QList<qint64> emptyRowids;
-            while (q.next())
-                emptyRowids.append(q.value(0).toLongLong());
-            QSqlQuery u(db);
-            u.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
-            for (qint64 rid : emptyRowids) {
-                u.bindValue(":h",   genHash16());
-                u.bindValue(":rid", rid);
-                if (u.exec()) ++filled;
-                else qWarning() << "Crear hash: fill UPDATE failed for rowid" << rid
-                                 << "-" << u.lastError().text();
-            }
-        } else {
-            qWarning() << "Crear hash: SELECT empties failed -" << q.lastError().text();
-        }
-    }
-
-    // Phase B: resolve collisions (legacy data from the pre-QUuid genHash16
-    // era). For every hash shared by >1 row, keep the first row's hash and
-    // regenerate the rest with the new UUID-based hash so the column ends
-    // up globally unique.
-    int regenerated = 0;
-    int remainingGroups = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT hash FROM ingresos "
-                   "WHERE hash IS NOT NULL AND hash != '' "
-                   "GROUP BY hash HAVING COUNT(*) > 1")) {
-            QStringList collidingHashes;
-            while (q.next())
-                collidingHashes.append(q.value(0).toString());
-
-            QSqlQuery picker(db);
-            QSqlQuery upd(db);
-            upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
-            for (const QString &h : collidingHashes) {
-                picker.prepare("SELECT rowid FROM ingresos WHERE hash = :h ORDER BY rowid");
-                picker.bindValue(":h", h);
-                if (!picker.exec()) {
-                    qWarning() << "Crear hash: group SELECT failed for hash" << h
-                               << "-" << picker.lastError().text();
-                    continue;
-                }
-                bool skipFirst = true;
-                while (picker.next()) {
-                    if (skipFirst) { skipFirst = false; continue; }
-                    upd.bindValue(":h",   genHash16());
-                    upd.bindValue(":rid", picker.value(0).toLongLong());
-                    if (upd.exec()) ++regenerated;
-                    else qWarning() << "Crear hash: regen UPDATE failed for rowid"
-                                     << picker.value(0) << "-" << upd.lastError().text();
-                }
-            }
-            remainingGroups = collidingHashes.size(); // before regen
-        } else {
-            qWarning() << "Crear hash: collision SELECT failed -" << q.lastError().text();
-        }
-    }
-
-    // Phase C: defensive re-check - after Phase B the column should be unique;
-    // anything still in there indicates a logic error worth surfacing.
-    int stillColliding = 0;
-    {
-        QSqlQuery q(db);
-        if (q.exec("SELECT COUNT(*) FROM (SELECT hash FROM ingresos "
-                   "WHERE hash IS NOT NULL AND hash != '' "
-                   "GROUP BY hash HAVING COUNT(*) > 1)")) {
-            if (q.next()) stillColliding = q.value(0).toInt();
-        }
-    }
-    db.close();
-
-    QApplication::restoreOverrideCursor();
-
-    qDebug() << "Crear hash: filled=" << filled
-             << "collision_groups=" << remainingGroups
-             << "regenerated=" << regenerated
-             << "still_colliding_groups=" << stillColliding;
-
-    const QString body = tr("Tabla de ingresos: %1 fila(s) sin hash rellenadas, %2 grupo(s) de hash duplicado "
-                            "detectados, %3 fila(s) regeneradas.").arg(filled).arg(remainingGroups).arg(regenerated);
-    m_result->setText(stillColliding > 0
-        ? UiKit::warnHtml(tr("Quedan %1 grupo(s) de hash duplicado: vuelva a ejecutar la acción; si persiste, "
-                             "consulte el log.").arg(stillColliding)) + "<br>" + body
-        : UiKit::okHtml(tr("Hashes de ingresos revisados.")) + "<br>" + body);
 }
 
 void MainWindow::on_actionAnular_factura_verifactu_triggered()
@@ -1341,48 +1591,57 @@ void MainWindow::on_actionMostrar_log_triggered()
 // and the software version vary across installations.
 void MainWindow::on_actionAcerca_de_Verifactu_triggered()
 {
-    AppSettings *s = AppSettings::instance();
-    const QString nif     = s->verifactuNif().isEmpty()    ? QStringLiteral("-") : s->verifactuNif();
-    const QString name    = !s->verifactuName().isEmpty()  ? s->verifactuName()
-                          : (!s->businessName().isEmpty() ? s->businessName() : QStringLiteral("-"));
-    const QString address = s->businessAddress().isEmpty() ? QStringLiteral("-") : s->businessAddress();
-    const QString city    = s->businessCity().isEmpty()    ? QStringLiteral("-") : s->businessCity();
     const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);
-    const QString software = QStringLiteral("La Ideal");
+    const QString declaration = ProducerDeclaration::html(version);
 
     QDialog dlg(this);
-    UiKit::setUpDialog(&dlg, "Acerca de Verifactu", 600);
+    UiKit::setUpDialog(&dlg, tr("Acerca de Verifactu"), 640);
+    auto *layout = new QVBoxLayout(&dlg);
 
-    QVBoxLayout *layout = new QVBoxLayout(&dlg);
-
-    QLabel *body = UiKit::introPanel(QString());
-    body->setTextFormat(Qt::RichText);
-    body->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    body->setText(
-        QString("<h3 align=\"center\">DECLARACIÓN RESPONSABLE</h3>"
-                "<p align=\"center\"><i>Artículo 13 del Real Decreto 1007/2023, de 5 de diciembre</i></p>"
-                "<p><b>%1</b>, con NIF <b>%2</b> y domicilio en %3, %4, "
-                "en calidad de productor del sistema informático de facturación denominado "
-                "<b>%5</b> versión <b>%6</b>,</p>"
-                "<p><b>DECLARA</b> bajo su responsabilidad:</p>"
-                "<p>Que el sistema informático arriba identificado cumple con todos los requisitos "
-                "establecidos en el Real Decreto 1007/2023, de 5 de diciembre, por el que se aprueba "
-                "el Reglamento que establece los requisitos que deben adoptar los sistemas informáticos "
-                "de facturación, y en la Orden HAC/1177/2024, de 17 de octubre, que lo desarrolla.</p>"
-                "<p>Que el sistema opera en modalidad <b>VERI*FACTU</b>, remitiendo automáticamente "
-                "los registros de facturación a la Agencia Estatal de Administración Tributaria (AEAT) "
-                "en el momento de su generación.</p>"
-                "<p>Que el sistema se utiliza en una instalación <b>monoperador</b>: existe un único "
-                "usuario operativo, identificado de forma implícita por la sesión de Windows del puesto "
-                "en el que se ejecuta. Bajo este alcance se da por cumplido el requisito de trazabilidad "
-                "por usuario establecido en el artículo 8.1 del Real Decreto 1007/2023. La incorporación "
-                "de un segundo operador exigirá habilitar previamente la identificación individual por "
-                "evento de facturación.</p>")
-            .arg(name.toHtmlEscaped(), nif.toHtmlEscaped(),
-                 address.toHtmlEscaped(), city.toHtmlEscaped(),
-                 software, version));
+    auto *body = new QTextEdit(&dlg);
+    body->setObjectName("txtDeclaration");
+    body->setReadOnly(true);
+    body->setHtml(declaration);
+    body->setMinimumHeight(420);
     layout->addWidget(body);
-    layout->addLayout(UiKit::closeRow(&dlg));
+
+    auto *panel = new UiKit::ResultPanel(QString(), &dlg);
+    panel->setObjectName("lblResult");
+    QStringList notes;
+    if (!ProducerDeclaration::isComplete())
+        notes << UiKit::warnHtml(tr("Faltan datos del productor (dirección, fecha y lugar de la firma): "
+                                    "la declaración está pendiente de firmar."));
+    // Art. 15.4: another producer's component brings its own declaración.
+    if (!AppSettings::instance()->verifactuDirectAeat())
+        notes << UiKit::warnHtml(tr("Con la conexión a través de IreneSolutions, su servicio es un componente de otro "
+                                    "productor y necesita su propia declaración responsable (art. 15.4 de la Orden "
+                                    "HAC/1177/2024)."));
+    panel->setText(notes.join("<br>"));
+    panel->setVisible(!notes.isEmpty());
+    layout->addWidget(panel);
+
+    auto *row = new QHBoxLayout;
+    auto *save = UiKit::secondaryButton(tr("Guardar como PDF..."), "btnSavePdf");
+    row->addWidget(save);
+    row->addStretch();
+    auto *close = UiKit::primaryButton(tr("Cerrar"), "btnClose");
+    row->addWidget(close);
+    layout->addLayout(row);
+    connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
+    // Art. 15.3: the client can have it in a free, common format.
+    connect(save, &QPushButton::clicked, &dlg, [&dlg, panel, declaration, version]() {
+        const QString suggested = QDir(AppSettings::instance()->reportsRoot())
+                                      .filePath(QStringLiteral("declaracion_responsable_La_Ideal_%1.pdf").arg(version));
+        const QString file = QFileDialog::getSaveFileName(&dlg, tr("Guardar la declaración responsable"), suggested,
+                                                          tr("PDF (*.pdf)"));
+        if (file.isEmpty())
+            return;
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        const bool written = ReportHtml::writePdf(file, QStringLiteral("<html><body>%1</body></html>").arg(declaration));
+        panel->setVisible(true);
+        panel->setText(written ? UiKit::okHtml(tr("Declaración guardada en %1").arg(file.toHtmlEscaped()))
+                               : UiKit::errorHtml(tr("No se pudo guardar %1").arg(file.toHtmlEscaped())));
+    });
 
     dlg.exec();
 }
@@ -1462,8 +1721,11 @@ void MainWindow::onUpdaterCheckFailed(const QString &error)
 void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
+    m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
     const auto res = m_backupManager->performBackup();
     QApplication::restoreOverrideCursor();
+    BackupManager::recordSuccess(res);
+    BackupManager::recordFailure(res);
 
     if (!res.success) {
         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad."))
@@ -1471,5 +1733,8 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
         return;
     }
     m_result->setText(UiKit::okHtml(tr("Copia de seguridad creada (%1 KB).").arg(res.bytesWritten / 1024))
-                      + "<br>" + UiKit::fileLinkHtml(res.backupPath, tr("Copia")));
+                      + "<br>" + UiKit::fileLinkHtml(res.backupPath, tr("Copia"))
+                      + (!res.secondCopyPath.isEmpty() ? "<br>" + UiKit::fileLinkHtml(res.secondCopyPath, tr("Copia en la segunda carpeta"))
+                         : !res.secondCopyError.isEmpty() ? "<br>" + UiKit::warnHtml(res.secondCopyError.toHtmlEscaped())
+                                                          : QString()));
 }

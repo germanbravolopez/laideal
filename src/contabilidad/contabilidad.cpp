@@ -1,3 +1,4 @@
+#include "verifactutypes.h"   // splitGross
 #include "contabilidad.h"
 #include "sql_lite.h"
 #include "appsettings.h"
@@ -141,13 +142,6 @@ bool Contabilidad::lockOptionAvailable(ConfigMode mode, bool reverting)
     return mode == Trimestral && !reverting;
 }
 
-int Contabilidad::combinedLockState(int ingresosLock, int gastosLock)
-{
-    if (ingresosLock == 2 && gastosLock == 2)
-        return 2;
-    return (ingresosLock == 1 || gastosLock == 1) ? 1 : 0;
-}
-
 QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail)
 {
     const QString suffix = withDetail ? QStringLiteral("_detalle.pdf") : QStringLiteral(".pdf");
@@ -160,16 +154,34 @@ QString Contabilidad::reportRelativePath(ConfigMode mode, int unit, int year, bo
     return QString();
 }
 
+QString Contabilidad::regeneratedPath(const QString &file, const QDate &date)
+{
+    if (!QFileInfo::exists(file))
+        return file;
+    const QFileInfo info(file);
+    const QString stem = info.absolutePath() + "/" + info.completeBaseName() + "_regenerado_"
+                         + date.toString("yyyyMMdd");
+    const QString ext = info.suffix().isEmpty() ? QString() : "." + info.suffix();
+    QString candidate = stem + ext;
+    for (int n = 2; QFileInfo::exists(candidate); ++n)
+        candidate = stem + "_" + QString::number(n) + ext;
+    return candidate;
+}
+
 QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year)
 {
     const auto quarterLine = [&db, year](int q) {
         const QString name = "El trimestre " + QString::number(q) + " de " + QString::number(year);
-        switch (combinedLockState(readLockForQuarter(db, "ingresos", q, year),
-                                  readLockForQuarter(db, "gastos", q, year))) {
-        case 1:  return name + " está bloqueado (contabilidad realizada).";
-        case 0:  return name + " no está bloqueado.";
-        default: return name + " no tiene registros de ingresos ni de gastos.";
-        }
+        const QVector<QuarterClosure> closures = quarterClosures(db, q, year);
+        const QuarterClosure last = closures.value(closures.size() - 1);
+        if (!closures.isEmpty() && !last.reopenedAt.isValid())
+            return name + " está bloqueado (contabilidad realizada"
+                   + (last.migrated ? QString() : " el " + last.closedAt.toString("dd-MM-yyyy 'a las' hh:mm")) + ").";
+        if (!closures.isEmpty())
+            return name + " no está bloqueado (contabilidad revertida el "
+                   + last.reopenedAt.toString("dd-MM-yyyy 'a las' hh:mm") + ").";
+        return name + (quarterHasMovements(db, q, year) ? " no está bloqueado."
+                                                         : " no tiene registros de ingresos ni de gastos.");
     };
     if (mode == Trimestral)
         return quarterLine(unit);
@@ -193,8 +205,14 @@ void Contabilidad::onCheckLockClicked()
     m_lblResult->showInfo(message);
 }
 
+QDate Contabilidad::quarterLastDay(int quarter, int year)
+{
+    return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1);
+}
+
 void Contabilidad::onGenerateClicked()
 {
+    m_dataReadFailed = false;   // only this action's own read may report a failure
     const int trim = m_sbPeriod->value();
     const int year = m_sbYear->value();
     const QString quarterName = "del trimestre " + QString::number(trim) + " de " + QString::number(year);
@@ -209,60 +227,71 @@ void Contabilidad::onGenerateClicked()
                                        + "<br>Compruebe la carpeta de Contabilidad y que el PDF anterior no esté abierto."
                                  : okHtml("Informe generado.");
     } else {
-        // Read the lock across the whole quarter, not just its last month: a quarter
-        // with income only in its first months would otherwise read as "no data".
-        const int editLock = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
-                                               readLockForQuarter(db, "gastos", trim, year));
-        switch (editLock) {
-        case 0:     // not done yet
-            if (revertirOn) {
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not done (editLock = 0)";
+        const bool closed = quarterIsClosed(db, trim, year);
+        if (revertirOn) {
+            if (!closed) {
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not closed";
                 message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
+            } else if (!reopenQuarter(db, trim, year)) {
+                message = errorHtml("No se pudo revertir la contabilidad " + quarterName + ".")
+                          + "<br>El trimestre sigue bloqueado.";
             } else {
-                file = generateContabilidad(invalidAmounts);
-                if (file.isEmpty()) {
-                    // Never close a quarter without its report.
-                    qWarning() << "Contabilidad: trim" << trim << "year" << year << "report not written, not locked";
-                    message = errorHtml("No se pudo guardar el informe " + quarterName + ".")
-                              + "<br>El trimestre no se ha bloqueado. Compruebe la carpeta de Contabilidad "
-                                "(Configuración) y que el PDF anterior no esté abierto.";
-                    break;
-                }
-                const bool lock = m_chkLock->isChecked();
-                if (lock)
-                    updateLock();
-                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated, lock =" << lock;
-                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
-                          + (lock ? "El trimestre se ha bloqueado: sus ingresos y gastos ya no se pueden modificar."
-                                  : "El trimestre no se ha bloqueado: se pueden realizar modificaciones posteriores.");
-            }
-            break;
-        case 1:     // done (locked)
-            if (revertirOn) {
-                updateLock();
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "reverted (editLock = 0)";
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "reopened";
                 message = okHtml("Contabilidad " + quarterName + " revertida.") + "<br>"
                           + "El trimestre vuelve a estar abierto.";
-            } else {
-                file = generateContabilidad(invalidAmounts);
-                qDebug() << "Contabilidad: trim" << trim << "year" << year << "already locked, report regenerated";
-                message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
-                          + "<br>" + (file.isEmpty() ? errorHtml("No se pudo guardar el informe de nuevo.")
-                                                     : QString("Documentación generada de nuevo."));
             }
-            break;
-        default:
-            qWarning() << "Contabilidad: no ingresos nor gastos for trim" << trim << "year" << year;
+        } else if (closed) {
+            file = generateContabilidad(invalidAmounts, /*keepFiledReport=*/true);
+            qDebug() << "Contabilidad: trim" << trim << "year" << year << "already closed, report regenerated as" << file;
+            message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
+                      + "<br>" + (file.isEmpty() ? errorHtml("No se pudo guardar el informe de nuevo.")
+                                                 : QString("Documentación generada de nuevo; el informe ya presentado se conserva."));
+        } else if (!quarterHasMovements(db, trim, year)) {
+            qWarning() << "Contabilidad: no ingresos, gastos nor cancellations for trim" << trim << "year" << year;
             message = warnHtml("No hay registros de ingresos ni de gastos " + quarterName + ".");
-            break;
+        } else {
+            file = generateContabilidad(invalidAmounts);
+            if (file.isEmpty()) {
+                // Never close a quarter without its report.
+                qWarning() << "Contabilidad: trim" << trim << "year" << year << "report not written, not locked";
+                message = errorHtml("No se pudo guardar el informe " + quarterName + ".")
+                          + "<br>El trimestre no se ha bloqueado. Compruebe la carpeta de Contabilidad "
+                            "(Configuración) y que el PDF anterior no esté abierto.";
+            } else if (!m_chkLock->isChecked()) {
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated, not locked";
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          "El trimestre no se ha bloqueado: se pueden realizar modificaciones posteriores.";
+            } else if (QDate::currentDate() < quarterLastDay(trim, year)) {
+                // Closing an unfinished quarter would refuse every payment of today.
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "not ended, not locked";
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          + warnHtml("El trimestre no se ha bloqueado: todavía no ha terminado. Se puede bloquear "
+                                     "a partir de su último día, el " + quarterLastDay(trim, year).toString("dd-MM-yyyy") + ".");
+            } else if (!closeQuarter(db, trim, year, QFileInfo(file).fileName())) {
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          + errorHtml("No se pudo bloquear el trimestre.") + " Vuelva a intentarlo.";
+            } else {
+                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated and closed";
+                message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
+                          "El trimestre se ha bloqueado: sus ingresos y gastos ya no se pueden modificar.";
+                if (QDate::currentDate() == quarterLastDay(trim, year))
+                    message += "<br>" + warnHtml("Hoy es su último día: los cobros de hoy ya no se pueden registrar "
+                                                 "hasta que se revierta.");
+            }
         }
+    }
+    if (m_dataReadFailed) {
+        qCritical() << "Contabilidad: the period's data could not be read - no report, nothing closed";
+        message = errorHtml("No se pudieron leer los datos de la base de datos: no se ha generado el informe "
+                            "ni se ha bloqueado el trimestre.") + "<br>Revise el log de depuración (Ayuda) y vuelva a intentarlo.";
     }
     if (!file.isEmpty())
         message += "<br>" + fileLinkHtml(file);
     if (invalidAmounts > 0)
-        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal: "
-                                              "no se han sumado y aparecen marcados en el detalle. Utilice la "
-                                              "herramienta de limpiado de importes decimales.").arg(invalidAmounts));
+        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal "
+                                              "o gasto(s) con un tipo de IVA no reconocido: no se han sumado y "
+                                              "aparecen marcados en el detalle. Revíselos antes "
+                                              "de presentar el informe.").arg(invalidAmounts));
     m_lblResult->setText(message);
 }
 
@@ -280,7 +309,7 @@ void Contabilidad::onConfigChanged()
     m_sbPeriod->setVisible(currentMode() != Anual);
 }
 
-QString Contabilidad::generateContabilidad(int &invalidAmounts)
+QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledReport)
 {
     const int year = m_sbYear->value();
     const double ivaRate = AppSettings::ivaRate();
@@ -288,14 +317,21 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
     const QString detailTitle = withDetail ? QStringLiteral(" · Detalle") : QString();
     QString contabilidadHtml;
     invalidAmounts = 0;
+    m_dataReadFailed = false;
 
     if (currentMode() == Trimestral || currentMode() == Mensual) {
         QDate start, endExclusive;
         periodRange(0, start, endExclusive);
         // One fetch per table: the summary and the detail tables use the same rows.
-        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive);
-        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive);
-        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, endExclusive);
+        bool incomeRead = false, expensesRead = false, regsRead = false;
+        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(db, start, endExclusive, &incomeRead);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(db, start, endExclusive, &expensesRead);
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(db, start, endExclusive, &regsRead);
+        // An unreadable database is never reported (and closed) as an empty period.
+        if (!incomeRead || !expensesRead || !regsRead) {
+            m_dataReadFailed = true;
+            return QString();
+        }
         invalidAmounts = invalidAmountCount(income, regs, expenses);
 
         QString title, subtitle = periodSubtitle(0);
@@ -303,8 +339,8 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
             title = "Contabilidad - Trimestre " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
         }
         else {
-            // Closing is quarterly: the month reads closed when its quarter is (even a
-            // month without rows, which readLockForMonthAndYear would report as open).
+            // Closing is quarterly: the month reads closed when its quarter is, even a
+            // month without rows.
             const bool cerrada = quarterIsClosed(db, QDate(year, m_sbPeriod->value(), 1));
             title = "Reporte Mensual - Mes " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
             subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
@@ -319,12 +355,16 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
         contabilidadHtml = ReportHtml::documentOpen("Reporte Anual - " + QString::number(year) + detailTitle);
         // One scan per table for the whole year, bucketed by quarter; each quarter's
         // figures and detail tables come from the same rows.
-        const QuarterlyDetails details = annualDetailsByQuarter(db, year);
+        bool detailsRead = false;
+        const QuarterlyDetails details = annualDetailsByQuarter(db, year, &detailsRead);
+        if (!detailsRead) {
+            m_dataReadFailed = true;
+            return QString();
+        }
         PeriodFigures annual;
         for (int trim = 1; trim < 5; trim++) {
             const int i = trim - 1;
-            const bool cerrada = combinedLockState(readLockForQuarter(db, "ingresos", trim, year),
-                                                   readLockForQuarter(db, "gastos", trim, year)) == 1;
+            const bool cerrada = quarterIsClosed(db, trim, year);
             QDate quarterStart, quarterEnd;
             periodRangeFor(Anual, trim, year, quarterStart, quarterEnd);
             const PeriodFigures f = figuresFromDetails(details.income[i], details.regularizations[i],
@@ -346,8 +386,11 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts)
     }
     if (invalidAmounts > 0)
         qCritical() << "Contabilidad::generateContabilidad:" << invalidAmounts << "comma-decimal importe(s) not summed";
-    const QString file = AppSettings::instance()->contabilidadPath()
+    QString file = AppSettings::instance()->contabilidadPath()
             + reportRelativePath(currentMode(), currentMode() == Anual ? 0 : m_sbPeriod->value(), year, withDetail);
+    // The report filed for a closed quarter is never overwritten or deleted.
+    if (keepFiledReport)
+        file = regeneratedPath(file, QDate::currentDate());
     QDir().mkpath(QFileInfo(file).absolutePath());
     return ReportHtml::writePdf(file, contabilidadHtml) ? file : QString();
 }
@@ -387,6 +430,17 @@ QString Contabilidad::periodSubtitle(int trimForYearConfig)
     QDate start, endExclusive;
     periodRange(trimForYearConfig, start, endExclusive);
     return "Periodo: " + start.toString("dd-MM-yyyy") + " a " + endExclusive.addDays(-1).toString("dd-MM-yyyy");
+}
+
+// The IVA of a ticket's invoices as registered: each invoice's cuota on its own (splitGross).
+static double invoicedTax(const QMap<int, double> &invoices, double gross, double ivaRate)
+{
+    if (invoices.isEmpty())
+        return splitGross(gross, ivaRate).tax;    // one invoice (no per-seq amounts given)
+    double tax = 0.0;
+    for (double invoiceGross : invoices)
+        tax += splitGross(invoiceGross, ivaRate).tax;
+    return tax;
 }
 
 Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
@@ -431,6 +485,26 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
                                         netTicketCount(income, regularizations, periodStart, periodEnd),
                                         gas10, gas21, gasNi, expenses.size(), ivaRate);
     f.ingRegularizacion = regularizacion;
+
+    // Modelo 303 carries the IVA as invoiced: the sum of each invoice's cuota, rounded per
+    // invoice exactly as registered at AEAT (splitGross), not the IVA of the summed gross.
+    double ingIva = 0.0;
+    for (const IncomeTicketDetail &t : income)
+        ingIva += invoicedTax(t.invoices, t.importe, ivaRate);
+    for (const RegularizationDetail &r : regularizations)
+        ingIva -= invoicedTax(r.invoices, r.importe, ivaRate);
+    f.ingIva  = roundToCents(ingIva);
+    f.ingBase = f.ingImporte - f.ingIva;
+    // A supplier invoice is one invoice too: its cuota rounded on its own.
+    double gas10Iva = 0.0, gas21Iva = 0.0;
+    for (const ExpenseDetail &e : expenses) {
+        if (e.iva == 10)      gas10Iva += splitGross(e.importe, 10.0).tax;
+        else if (e.iva == 21) gas21Iva += splitGross(e.importe, 21.0).tax;
+    }
+    f.gas10Iva  = roundToCents(gas10Iva);
+    f.gas10Base = f.gas10Importe - f.gas10Iva;
+    f.gas21Iva  = roundToCents(gas21Iva);
+    f.gas21Base = f.gas21Importe - f.gas21Iva;
     return f;
 }
 
@@ -486,43 +560,9 @@ int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
     for (const RegularizationDetail &r : regularizations)
         n += r.invalidAmounts;
     for (const ExpenseDetail &e : expenses)
-        n += e.invalidAmount ? 1 : 0;
+        n += e.invalidAmount || e.iva < 0 ? 1 : 0;   // either is left out of the sums
     return n;
 }
-
-void Contabilidad::updateLock()
-{
-    // Doing the contabilidad locks the period (edit_lock = 1); reverting unlocks it (0).
-    const int lockValue = revertirOn ? 0 : 1;
-    const int year = m_sbYear->value();
-    switch (m_sbPeriod->value()) {
-    case 1:
-        updateLockForMonth(db, lockValue, 1, year);
-        updateLockForMonth(db, lockValue, 2, year);
-        updateLockForMonth(db, lockValue, 3, year);
-        break;
-    case 2:
-        updateLockForMonth(db, lockValue, 4, year);
-        updateLockForMonth(db, lockValue, 5, year);
-        updateLockForMonth(db, lockValue, 6, year);
-        break;
-    case 3:
-        updateLockForMonth(db, lockValue, 7, year);
-        updateLockForMonth(db, lockValue, 8, year);
-        updateLockForMonth(db, lockValue, 9, year);
-        break;
-    case 4:
-        updateLockForMonth(db, lockValue, 10, year);
-        updateLockForMonth(db, lockValue, 11, year);
-        updateLockForMonth(db, lockValue, 12, year);
-        break;
-    default:
-        break;
-    }
-    qDebug() << "Contabilidad::updateLock: edit_lock set to" << lockValue
-             << "for trim" << m_sbPeriod->value() << "year" << year;
-}
-
 
 QString Contabilidad::renderSection(const PeriodFigures &f, const QString &summaryHeading)
 {
@@ -649,7 +689,7 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
     int flaggedTickets = 0;
     for (int i = 0; i < tickets.size(); i++) {
         const IncomeTicketDetail &t = tickets[i];
-        const double base = t.importe / (1.0 + ivaRate / 100.0);
+        const double base = t.importe - invoicedTax(t.invoices, t.importe, ivaRate);   // as the summary
         totalImporte += t.importe;
         totalBase += base;
         if (t.invalidAmounts > 0)
@@ -695,7 +735,7 @@ QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<Regularizat
     int flagged = 0;
     for (int i = 0; i < regularizations.size(); i++) {
         const RegularizationDetail &r = regularizations[i];
-        const double base = r.importe / (1.0 + ivaRate / 100.0);
+        const double base = r.importe - invoicedTax(r.invoices, r.importe, ivaRate);
         total += r.importe;
         totalBase += base;
         if (r.invalidAmounts > 0)
@@ -759,8 +799,8 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
                     + euroCell(e.importe) + "</tr>";
             continue;
         }
-        // Same base derivation as figuresFromTotals; iva 0 means sin IVA (base == importe).
-        const double base = e.iva > 0 ? e.importe / (1.0 + e.iva / 100.0) : e.importe;
+        // The summary's split (one supplier invoice); iva 0 means sin IVA (base == importe).
+        const double base = e.iva > 0 ? splitGross(e.importe, e.iva).base : e.importe;
         totalImporte += e.importe;
         totalBase += base;
         counted++;

@@ -412,3 +412,12 @@ public licenses.
 
 Creative Commons may be contacted at creativecommons.org.
 
+
+
+-------------------------------------------------------------------------
+
+Third-party notices
+
+QR Code generator library (qrcodegen), Copyright (c) Project Nayuki,
+MIT License, https://www.nayuki.io/page/qr-code-generator-library
+Vendored unchanged in src/third_party/qrcodegen.

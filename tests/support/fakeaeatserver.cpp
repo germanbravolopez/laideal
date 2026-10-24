@@ -1,0 +1,343 @@
+#include "fakeaeatserver.h"
+
+#include <algorithm>
+
+#include <QPointer>
+#include <QStringList>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QTimer>
+#include <QXmlStreamReader>
+
+namespace {
+
+const QString kNs = QStringLiteral("https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/");
+
+const QString kDefaultIssuer = QStringLiteral("89890001K");
+
+QString keyOf(const QString &issuerNif, const QString &operation, const QString &invoiceNumber)
+{
+    const QString key = operation + QLatin1Char(':') + invoiceNumber;
+    return issuerNif.isEmpty() || issuerNif == kDefaultIssuer ? key : issuerNif + QLatin1Char('|') + key;
+}
+
+QString envelope(const QString &payload)
+{
+    return QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\"?><env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                          "<env:Header/><env:Body Id=\"Body\">%1</env:Body></env:Envelope>").arg(payload);
+}
+
+// Reads the records (or the queried number) out of a request body.
+FakeAeatServer::Request parseRequest(const QByteArray &body)
+{
+    FakeAeatServer::Request request;
+    request.body = body;
+    request.receivedAt = QDateTime::currentDateTime();
+    QXmlStreamReader r(body);
+    QStringList path;
+    FakeAeatServer::SentRecord record;
+    while (!r.atEnd()) {
+        r.readNext();
+        if (r.isStartElement()) {
+            const QString name = r.name().toString();
+            path << name;
+            if (name == QLatin1String("RegFactuSistemaFacturacion"))
+                request.kind = QStringLiteral("RegFactu");
+            else if (name == QLatin1String("ConsultaFactuSistemaFacturacion"))
+                request.kind = QStringLiteral("Consulta");
+            else if (name == QLatin1String("RegistroAlta") || name == QLatin1String("RegistroAnulacion")) {
+                record = FakeAeatServer::SentRecord();
+                record.operation = name == QLatin1String("RegistroAlta") ? QStringLiteral("Alta") : QStringLiteral("Anulacion");
+            }
+        } else if (r.isEndElement()) {
+            const QString name = path.takeLast();
+            if (name == QLatin1String("RegistroAlta") || name == QLatin1String("RegistroAnulacion"))
+                request.records << record;
+        } else if (r.isCharacters() && !r.isWhitespace() && !path.isEmpty()) {
+            const QString name = path.last();
+            const QString text = r.text().toString();
+            if (name == QLatin1String("NIF") && path.contains(QStringLiteral("ObligadoEmision"))) {
+                request.issuerNif = text;
+                continue;
+            }
+            if (request.kind == QLatin1String("Consulta")) {
+                if (name == QLatin1String("NumSerieFactura") && path.contains(QStringLiteral("ClavePaginacion")))
+                    request.pageAfter = text;
+                else if (name == QLatin1String("NumSerieFactura"))
+                    request.queriedNumber = text;
+                else if (name == QLatin1String("MostrarSistemaInformatico"))
+                    request.showSystem = (text == QLatin1String("S"));
+                else if (name == QLatin1String("Ejercicio"))
+                    request.year = text.toInt();
+                else if (name == QLatin1String("Periodo"))
+                    request.month = text.toInt();
+                continue;
+            }
+            const bool inChain = path.contains(QStringLiteral("Encadenamiento"));
+            if (inChain) {
+                if (name == QLatin1String("Huella"))
+                    record.previousHash = text;
+                continue;
+            }
+            if (path.contains(QStringLiteral("SistemaInformatico"))) {
+                if (name == QLatin1String("IdSistemaInformatico"))
+                    record.systemId = text;
+                else if (name == QLatin1String("NIF"))
+                    record.producerNif = text;
+                continue;
+            }
+            if (path.contains(QStringLiteral("FacturasRectificadas")))
+                continue;
+            if (name == QLatin1String("IDEmisorFactura") || name == QLatin1String("IDEmisorFacturaAnulada"))
+                record.issuerNif = text;
+            else if (name == QLatin1String("NumSerieFactura") || name == QLatin1String("NumSerieFacturaAnulada"))
+                record.invoiceNumber = text;
+            else if (name == QLatin1String("FechaExpedicionFactura") || name == QLatin1String("FechaExpedicionFacturaAnulada"))
+                record.issueDate = text;
+            else if (name == QLatin1String("ImporteTotal"))
+                record.total = text;
+            else if (name == QLatin1String("Huella"))
+                record.hash = text;
+            else if (name == QLatin1String("FechaHoraHusoGenRegistro"))
+                record.generatedAt = text;
+            else if (name == QLatin1String("RechazoPrevio"))
+                record.afterRejection = (text == QLatin1String("S"));
+        }
+    }
+    return request;
+}
+
+} // namespace
+
+FakeAeatServer::FakeAeatServer(QObject *parent)
+    : QObject(parent), m_server(new QTcpServer(this))
+{
+    connect(m_server, &QTcpServer::newConnection, this, &FakeAeatServer::onNewConnection);
+}
+
+FakeAeatServer::~FakeAeatServer() = default;
+
+bool FakeAeatServer::start()
+{
+    return m_server->listen(QHostAddress::LocalHost, 0);
+}
+
+QString FakeAeatServer::url() const
+{
+    return QStringLiteral("http://127.0.0.1:%1/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP").arg(m_server->serverPort());
+}
+
+void FakeAeatServer::rejectNext(const QString &invoiceNumber, const QString &code, const QString &description)
+{
+    m_rejectNext.insert(invoiceNumber, { code, description });
+}
+
+QList<FakeAeatServer::Request> FakeAeatServer::submissions() const
+{
+    QList<Request> out;
+    for (const Request &r : m_requests)
+        if (r.kind == QLatin1String("RegFactu"))
+            out << r;
+    return out;
+}
+
+QList<FakeAeatServer::SentRecord> FakeAeatServer::sentRecords() const
+{
+    QList<SentRecord> out;
+    for (const Request &r : submissions())
+        out += r.records;
+    return out;
+}
+
+QByteArray FakeAeatServer::faultReply(const QString &code, const QString &text)
+{
+    return QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\"?><env:Envelope xmlns:env=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                          "<env:Body><env:Fault><faultcode>%1</faultcode><faultstring>%2</faultstring></env:Fault></env:Body></env:Envelope>")
+        .arg(code, text).toUtf8();
+}
+
+void FakeAeatServer::onNewConnection()
+{
+    while (QTcpSocket *socket = m_server->nextPendingConnection()) {
+        connect(socket, &QTcpSocket::readyRead, this, [this, socket]() { handle(socket); });
+        connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+            m_buffers.remove(socket);
+            socket->deleteLater();
+        });
+    }
+}
+
+void FakeAeatServer::handle(QTcpSocket *socket)
+{
+    QByteArray &buf = m_buffers[socket];
+    buf += socket->readAll();
+    const int headerEnd = buf.indexOf("\r\n\r\n");
+    if (headerEnd < 0)
+        return;
+    int contentLength = 0;
+    for (const QByteArray &line : buf.left(headerEnd).split('\n')) {
+        if (line.toLower().startsWith("content-length:"))
+            contentLength = line.mid(15).trimmed().toInt();
+    }
+    if (buf.size() < headerEnd + 4 + contentLength)
+        return;
+    const Request request = parseRequest(buf.mid(headerEnd + 4, contentLength));
+    m_buffers.remove(socket);
+    m_requests << request;
+
+    Reply reply;
+    if (!m_scripted.isEmpty())
+        reply = m_scripted.dequeue();
+    if (reply.drop) {
+        socket->abort();
+        return;
+    }
+    const QByteArray body = reply.body.isEmpty() ? answer(request) : reply.body;
+    if (reply.dropAfterRegistering) {
+        socket->abort();
+        return;
+    }
+    const QByteArray statusLine = reply.status == 200 ? QByteArray("200 OK") : QByteArray::number(reply.status) + " Error";
+    QPointer<QTcpSocket> guard(socket);
+    auto send = [guard, body, statusLine]() {
+        if (!guard)
+            return;
+        guard->write("HTTP/1.1 " + statusLine + "\r\nContent-Type: text/xml; charset=utf-8\r\nContent-Length: "
+                     + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+        guard->disconnectFromHost();
+    };
+    if (reply.delayMs > 0)
+        QTimer::singleShot(reply.delayMs, this, send);
+    else
+        send();
+}
+
+QByteArray FakeAeatServer::answer(const Request &request)
+{
+    if (request.kind == QLatin1String("Consulta")) {
+        // One invoice, or (no number) every registration held.
+        QList<SentRecord> held;
+        for (auto it = m_registered.cbegin(); it != m_registered.cend(); ++it) {
+            const QDate issued = QDate::fromString(it.value().issueDate, QStringLiteral("dd-MM-yyyy"));
+            if (m_queryByMonth && (issued.year() != request.year || issued.month() != request.month))
+                continue;
+            if (!request.issuerNif.isEmpty() && keyOf(request.issuerNif, QString(), QString())
+                                                    != keyOf(it.value().issuerNif, QString(), QString()))
+                continue;                               // another issuer's records
+            if (it.value().operation == QLatin1String("Alta")
+                && (request.queriedNumber.isEmpty() || it.value().invoiceNumber == request.queriedNumber))
+                held << it.value();
+        }
+        // A stable order (as generated) for paging: after ClavePaginacion, at most a page.
+        std::sort(held.begin(), held.end(), [](const SentRecord &a, const SentRecord &b) {
+            return a.generatedAt != b.generatedAt ? a.generatedAt < b.generatedAt : a.invoiceNumber < b.invoiceNumber;
+        });
+        if (!request.pageAfter.isEmpty()) {
+            int after = -1;
+            for (int i = 0; i < held.size(); ++i)
+                if (held[i].invoiceNumber == request.pageAfter)
+                    after = i;
+            held = held.mid(after + 1);
+        }
+        bool morePages = false;
+        if (m_pageSize > 0 && held.size() > m_pageSize) {
+            held = held.mid(0, m_pageSize);
+            morePages = true;
+        }
+        QString records;
+        for (const SentRecord &h : held) {
+            if (m_hidden.contains(h.invoiceNumber))
+                continue;
+            const bool cancelled = m_registered.contains(keyOf(h.issuerNif, QStringLiteral("Anulacion"), h.invoiceNumber));
+            records += QStringLiteral(
+                "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>%10</tik:IDEmisorFactura>"
+                "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
+                "<tikLRRC:DatosRegistroFacturacion><tikLRRC:ImporteTotal>%3</tikLRRC:ImporteTotal>%8%9"
+                "<tikLRRC:FechaHoraHusoGenRegistro>%7</tikLRRC:FechaHoraHusoGenRegistro>%4"
+                "</tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>89890001K</tik:NIFPresentador>"
+                "<tik:TimestampPresentacion>2026-10-10T10:00:05+02:00</tik:TimestampPresentacion><tik:IdPeticion>%5</tik:IdPeticion>"
+                "</tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-10T10:00:05+02:00"
+                "</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>%6</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro>"
+                "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
+                .arg(h.invoiceNumber, h.issueDate, h.total,
+                     (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
+                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>").arg(h.hash),
+                     m_registeredRequestId.value(keyOf(h.issuerNif, QStringLiteral("Alta"), h.invoiceNumber)),
+                     cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), h.generatedAt,
+                     (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
+                     : h.previousHash.isEmpty()
+                         ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
+                         : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"
+                                          "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash),
+                     !request.showSystem || m_queryWithoutSystem ? QString()
+                     : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
+                                      "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
+                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>1</tik:NumeroInstalacion>"
+                                      "</tikLRRC:SistemaInformatico>").arg(h.producerNif, h.systemId))
+                .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif);
+        }
+        return envelope(QStringLiteral(
+            "<tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tikLRRC=\"%1RespuestaConsultaLR.xsd\" xmlns:tik=\"%1SuministroInformacion.xsd\">"
+            "<tikLRRC:Cabecera><tik:IDVersion>1.0</tik:IDVersion><tik:ObligadoEmision><tik:NombreRazon>X</tik:NombreRazon><tik:NIF>89890001K</tik:NIF>"
+            "</tik:ObligadoEmision></tikLRRC:Cabecera><tikLRRC:PeriodoImputacion><tikLRRC:Ejercicio>2026</tikLRRC:Ejercicio>"
+            "<tikLRRC:Periodo>10</tikLRRC:Periodo></tikLRRC:PeriodoImputacion><tikLRRC:IndicadorPaginacion>%4</tikLRRC:IndicadorPaginacion>"
+            "<tikLRRC:ResultadoConsulta>%2</tikLRRC:ResultadoConsulta>%3</tikLRRC:RespuestaConsultaFactuSistemaFacturacion>")
+            .arg(kNs, records.isEmpty() ? QStringLiteral("SinDatos") : QStringLiteral("ConDatos"), records,
+                 morePages ? QStringLiteral("S") : QStringLiteral("N"))).toUtf8();
+    }
+
+    for (const SentRecord &record : request.records)
+        if (m_faultFor.contains(record.invoiceNumber))
+            return faultReply(QStringLiteral("env:Client"),
+                              QStringLiteral("Codigo[4102].El XML no cumple el esquema. Registro %1").arg(record.invoiceNumber));
+    const QString requestId = QStringLiteral("2026101000%1").arg(++m_counter, 5, 10, QLatin1Char('0'));
+    QString lines;
+    int accepted = 0;
+    for (const SentRecord &record : request.records) {
+        if (m_omitLine.remove(record.invoiceNumber))
+            continue;                                   // not registered, not reported
+        const QString key = keyOf(record.issuerNif, record.operation, record.invoiceNumber);
+        QString state = QStringLiteral("Correcto");
+        QString extra;
+        if (m_rejectNext.contains(record.invoiceNumber)) {
+            const auto rejection = m_rejectNext.take(record.invoiceNumber);
+            state = QStringLiteral("Incorrecto");
+            extra = QStringLiteral("<tikR:CodigoErrorRegistro>%1</tikR:CodigoErrorRegistro>"
+                                   "<tikR:DescripcionErrorRegistro>%2</tikR:DescripcionErrorRegistro>").arg(rejection.first, rejection.second);
+        } else if (m_registered.contains(key)) {
+            state = QStringLiteral("Incorrecto");
+            extra = QStringLiteral("<tikR:CodigoErrorRegistro>3000</tikR:CodigoErrorRegistro>"
+                                   "<tikR:DescripcionErrorRegistro>Registro de facturación duplicado.</tikR:DescripcionErrorRegistro>"
+                                   "<tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>%1</tik:IdPeticionRegistroDuplicado>"
+                                   "<tik:EstadoRegistroDuplicado>%2</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado>")
+                        .arg(m_registeredRequestId.value(key),
+                             // An alta of an invoice AEAT holds as cancelled, and a repeated
+                             // anulación (AEAT answers with the invoice's state: Anulada).
+                             record.operation == QLatin1String("Anulacion")
+                                     || (record.operation == QLatin1String("Alta")
+                                         && m_registered.contains(keyOf(record.issuerNif, QStringLiteral("Anulacion"),
+                                                                        record.invoiceNumber)))
+                                 ? QStringLiteral("Anulada") : QStringLiteral("Correcta"));
+        } else {
+            m_registered.insert(key, record);
+            m_registeredRequestId.insert(key, requestId);
+            ++accepted;
+        }
+        lines += QStringLiteral("<tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>89890001K</tik:IDEmisorFactura>"
+                                "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura>"
+                                "</tikR:IDFactura><tikR:Operacion><tik:TipoOperacion>%3</tik:TipoOperacion></tikR:Operacion>"
+                                "<tikR:EstadoRegistro>%4</tikR:EstadoRegistro>%5</tikR:RespuestaLinea>")
+                     .arg(record.invoiceNumber, record.issueDate, record.operation, state, extra);
+    }
+    const QString sendState = accepted == request.records.size() ? QStringLiteral("Correcto")
+                              : accepted == 0                    ? QStringLiteral("Incorrecto")
+                                                                 : QStringLiteral("ParcialmenteCorrecto");
+    const QString csv = accepted > 0 ? QStringLiteral("<tikR:CSV>A-FAKE%1</tikR:CSV>").arg(m_counter, 10, 10, QLatin1Char('0')) : QString();
+    return envelope(QStringLiteral(
+        "<tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR=\"%1RespuestaSuministro.xsd\" xmlns:tik=\"%1SuministroInformacion.xsd\">"
+        "%2<tikR:DatosPresentacion><tik:NIFPresentador>89890001K</tik:NIFPresentador><tik:TimestampPresentacion>2026-10-10T10:00:05+02:00"
+        "</tik:TimestampPresentacion></tikR:DatosPresentacion><tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>X</tik:NombreRazon>"
+        "<tik:NIF>89890001K</tik:NIF></tik:ObligadoEmision></tikR:Cabecera><tikR:TiempoEsperaEnvio>%3</tikR:TiempoEsperaEnvio>"
+        "<tikR:EstadoEnvio>%4</tikR:EstadoEnvio>%5</tikR:RespuestaRegFactuSistemaFacturacion>")
+        .arg(kNs, csv, QString::number(m_waitSeconds), sendState, lines)).toUtf8();
+}

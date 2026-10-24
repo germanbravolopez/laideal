@@ -29,7 +29,11 @@ public:
                   const QUrl &installerUrl,
                   QWidget *parent = nullptr);
 
+public slots:
+    void reject() override;
+
 private slots:
+    void onLaterClicked();
     void onUpdateClicked();
     void onDownloadProgress(qint64 received, qint64 total);
     void onDownloadFinished(const QString &localPath);
@@ -39,6 +43,7 @@ private:
     Updater *m_updater;
     QUrl m_installerUrl;
     QString m_latestVersion;
+    bool m_downloading = false;
 
     QLabel       *m_header;
     UiKit::ResultPanel *m_lblResult = nullptr;

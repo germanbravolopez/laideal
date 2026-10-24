@@ -1,5 +1,6 @@
 #include "textcolordelegate.h"
 #include "ingresos_schema.h"
+#include "uikit.h"
 #include <QApplication>
 #include <QPainter>
 #include <QTableView>
@@ -27,8 +28,8 @@ void TextColorDelegate::initStyleOption(QStyleOptionViewItem* option, const QMod
 
     QColor textColor;
     switch (classify(text, rowEstado, rowVerifactuEstado)) {
-    case TextColor::Green:   textColor = QColor(0, 180, 0);  break; // Darker green
-    case TextColor::Red:     textColor = QColor(210, 0, 0);  break; // Darker red
+    case TextColor::Green:   textColor = QColor(UiKit::COLOR_OK);    break;
+    case TextColor::Red:     textColor = QColor(UiKit::COLOR_ERROR); break;
     case TextColor::Default: textColor = option->palette.text().color(); break;
     }
 

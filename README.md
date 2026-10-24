@@ -7,7 +7,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](./License.txt)
 
-Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt** (5.15+/6.x) on Windows, using a local SQLite database.
+Desktop management software for a dry-cleaning and laundry shop. Built with **C++17 + Qt 6.4.3** on Windows (MinGW + Ninja), using a local SQLite database.
 
 ---
 
@@ -18,9 +18,9 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Garment pickup** — mark items as paid and collected; edit sizes, prices, and observations; split garment rows
 - **Printing** — receipts and invoices printed as direct ESC/POS over the Windows RAW spooler (10.0+, no Excel/Office dependency); configurable printer queue and 58/80 mm paper width, with an optional Epson Status API layer for paper-out / cover-open detection
 - **Supplier invoices** — invoice entry form with automatic IVA/base calculation
-- **Accounting reports** — monthly, quarterly, and annual HTML reports; period locking to prevent back-dated entry
+- **Accounting reports** — monthly, quarterly, and annual PDF reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
-- **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026)
+- **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026): through the Irene Solutions gateway, or (12.0) directly with AEAT using the owner's certificate; *Comprobar tras actualizar* (`--self-check`) checks an update on a copy of the newest backup
 - **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
 - **In-app release notes** — Ayuda → Notas de la versión shows the full version history, offline, in the configured language (`releases_notes.txt` English / `releases_notes_es.txt` Spanish, both bundled).
 
@@ -30,34 +30,42 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 | Dependency | Version |
 |------------|---------|
-| Qt | 5.15+ or 6.x |
+| Qt | 6.4.3 (MinGW 64-bit); Qt 5 is not tested |
 | Qt modules | Widgets, Sql, PrintSupport, Network |
 | CMake | 3.5+ |
-| Compiler | C++17-compatible (MSVC or MinGW) |
-| OS | Windows 10 / 11 |
+| Compiler | MinGW 11.2 (C++17), built with Ninja |
+| OS | Windows 10 / 11 only (WinHTTP, CNG and DPAPI are used) |
 
 ---
 
 ## Build
 
-From a PowerShell prompt in the repo root:
+There are four build folders, one per purpose. Each is a separate CMake tree, so they coexist (all are git-ignored by `build*`):
+
+| Folder | What it builds | For | How |
+|--------|----------------|-----|-----|
+| `build/` | The app (Release) and the test suites | Running the app, `ctest` | [Release build](#release-build) below |
+| `build-debug/` | The app (Debug) | Debugging in VSCode (F5) | [Debug in VSCode](#debug-in-vscode) below |
+| `build-uitest/` | The **UI-test** app (`-DLAIDEAL_UI_TEST=ON`, with the `--fake-aeat` switch) and the tools `fake_aeat_server` / `escpos_preview` | The UI smoke test and the AEAT pre-production dry run on this PC | [UI-test build](#ui-test-build) below |
+| `build-release/` | The installer `laideal_setup_X.Y.exe` (clean configure, `windeployqt`, Inno Setup) | A release without CI | `releases\release.ps1 X.Y` - see [CONTRIBUTING.md](./CONTRIBUTING.md#local-fallback-releasesreleaseps1) |
+
+Every command below runs from a PowerShell prompt in the repo root, after putting the toolchain on `PATH` for the session:
 
 ```powershell
-# Add Qt + MinGW + CMake + Ninja to PATH for this shell session
 $env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
+```
 
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build --output-on-failure   # run the test suite
+> The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
+
+### Release build
+
+```powershell
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release    # once (configure)
+cmake --build build                                   # the app + every test suite
+ctest --test-dir build --output-on-failure            # run the test suites
 ```
 
 The executable lands at `build\src\app\laideal.exe`. Qt Creator users can also open `CMakeLists.txt` directly and build with the *Release* configuration - it handles its own toolchain setup.
-
-### Tests
-
-`tests/` holds Qt Test suites registered with CTest (built automatically as part of the normal build). Run them with `ctest --test-dir build --output-on-failure`. They cover the `sql_lite` free functions (accounting totals + Verifactu estado filters, accounting locks, invoice-seq, client lookup, hashing) against a throwaway SQLite DB, and `MySortFilterProxyModel`'s diacritic-insensitive filter. CI runs them on every push/PR and the release workflow runs them as a **hard gate** between build and publish, so a failing test aborts the release.
-
-> The Ninja generator (not MinGW Makefiles) is used deliberately. `mingw32-make` writes per-recipe temp `.bat` files under `%TEMP%` and shells out to `cmd.exe`; on systems where antivirus / Controlled Folder Access blocks executing scripts from `%TEMP%`, every parallel job dies with `Access is denied (e=5)`. Ninja calls compilers directly via `CreateProcess`, so it avoids the issue and is also faster.
 
 ### Debug in VSCode
 
@@ -65,10 +73,9 @@ The repo ships `.vscode/{settings,launch,tasks}.json` for debugging via the CMak
 
 **Press F5** (launch config **Debug laideal (MinGW gdb)**): the build task configures `build-debug/` if needed (its `dependsOn` runs "CMake: configure (Debug)" first — CMake no-ops an already-valid cache, so it's free on repeat runs) and compiles `laideal`, then gdb (`C:\Qt\Tools\mingw1120_64\bin\gdb.exe`) launches the exe — breakpoints set in the editor are honored, step-into skips Qt internals. The Debug tree is separate from the Release `build/` so the two coexist. The alternative config **Debug current CMake launch target** follows whatever target you select in the CMake Tools status bar.
 
-The terminal equivalent (mirrors §Build but into `build-debug/` with the Debug type):
+The terminal equivalent (with the toolchain on `PATH` as above):
 
 ```powershell
-$env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64\bin;C:\Qt\6.4.3\mingw_64\bin;$env:PATH"
 cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.4.3/mingw_64
 cmake --build build-debug --target laideal
 ```
@@ -76,6 +83,38 @@ cmake --build build-debug --target laideal
 If you installed Qt to a non-default path, edit the hardcoded `C:\Qt\...` entries in `.vscode/settings.json` and `.vscode/launch.json` to match.
 
 **Troubleshooting — F5 fails / no `laideal.exe` gets built:** a stale half-configured `build-debug/` (holds `CMakeCache.txt` + `CMakeFiles/` but **no `build.ninja`**, cache shows `CMAKE_MAKE_PROGRAM-NOTFOUND`) from a `cmake` configure that ran without `C:\Qt\Tools\Ninja` on PATH. Fix: `Remove-Item -Recurse -Force build-debug`, then F5 again (the configure step re-runs with the correct PATH). A healthy Debug tree always contains `build.ninja`.
+
+### UI-test build
+
+Needed only to run the UI smoke test or the AEAT pre-production dry run on this PC (CI builds its own). Never install it at the shop: a release refuses an exe with the `--fake-aeat` switch, and CMake warns while the option is ON. Keep it in this separate folder, because the option is cached per folder.
+
+```powershell
+cmake -B build-uitest -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON   # once (configure)
+cmake --build build-uitest --target laideal fake_aeat_server escpos_preview     # after each change
+```
+
+The test scripts are Python (pywinauto) and run from a virtual environment in `.venv/` (git-ignored), created once:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r tests\ui\requirements.txt   # again after requirements.txt changes
+```
+
+Then run them as listed in [Tests](#tests).
+
+### Tests
+
+Five kinds of test, from the fastest to the one that needs a person. Each row links to the document with the full steps; the commands run from the repository root.
+
+| Suite | Where it runs | How to run it | Options | Steps |
+|-------|---------------|---------------|---------|-------|
+| **Unit + end-to-end suites** (`tests/test_*.cpp`, CTest: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | Locally after any build; CI (`ci.yml`) on every push / PR, and as the release gate | `ctest --test-dir build --output-on-failure` | `-R <regex>` runs some suites (e.g. `-R e2e`); `aeat_xsd` is skipped unless Python has `lxml` (`python -m pip install lxml`) | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
+| **UI smoke test, CI** (`tests/ui/smoke.py`: the installed app driven like a person, blocks A-E, against a fake AEAT) | GitHub `windows-latest` runner, about 9 min | `gh workflow run ui-smoke.yml --ref <branch>`, then `gh run watch` | Also runs on pushes touching `tests/ui/` or `tests/tools/`; results in the job summary and the `ui-smoke` artifact | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#where-it-runs) |
+| **UI smoke test, local** (the same script on this PC; it takes the mouse and keyboard for about 4 min) | This PC, from the [UI-test build](#ui-test-build) and its `.venv` | `.\.venv\Scripts\python.exe .\tests\ui\smoke.py --exe .\build-uitest\src\app\laideal.exe --tools .\build-uitest\tests --out ui-smoke-out` | `--blocks AB` (some blocks), `--printer LaIdeal-Smoke` (block C, after `tests/ui/printer.py install`), `--installer <setup.exe>` (E4, disposable machines only), `--out <folder>` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#smoke-test-against-the-fake-aeat) |
+| **AEAT pre-production run** (`tests/ui/aeat_preproduction.py`: paid ticket, two payments, cancellation, R5 rectifications, export, against AEAT's test environment) | **Locally only**, on a PC with the issuer's FNMT certificate | `.\.venv\Scripts\python.exe .\tests\ui\aeat_preproduction.py --exe .\build-uitest\src\app\laideal.exe --settings-from C:\Users\gebra\work\tintoreria\documents\prueba-aeat-settings.json --out aeat-run` | `--dry-run --tools .\build-uitest\tests` runs it against the fake AEAT with the UI-test build (no certificate; CI does this on every UI smoke run) | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#aeat-pre-production-run) |
+| **Smoke test** (part 1: how screens / PDFs look, AEAT pre-production; part 2: *Comprobar tras actualizar*, the shop's real schema, data and printer) | Part 1 on this PC before each release; part 2 on the shop PC after installing | Part 1: follow the checklist. Part 2: Start → La Ideal - Comprobar tras actualizar (`laideal.exe --self-check`) | M6 only when the release changes the direct AEAT client; part 2 works on a copy of the newest backup and saves a report on the Desktop | [docs/testing/smoke_test.md](docs/testing/smoke_test.md) |
+
+Before the local rows, have the toolchain `PATH` line of [Build](#build) in the session. The local UI smoke test and the pre-production dry run need the [UI-test build](#ui-test-build); every Python row needs its `.venv`. The real pre-production run drives a normal build of the branch (`build\src\app\laideal.exe`). How to write tests, and every suite, are in [docs/testing/](docs/testing/README.md).
 
 ---
 
@@ -90,14 +129,26 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 | Setting | Key in JSON | Notes |
 |---------|-------------|-------|
 | Language | `app.language` | `es` or `en` — language of Qt's standard dialogs (Sí/No, Aceptar/Cancelar, etc.) and of Ayuda → Notas de la versión. Applied live when Configuración is accepted. On first run it takes the language chosen in the installer (default `es`). The rest of the app is still Spanish |
-| Database path | `db.path` | Full path to the SQLite `.db` file |
-| IVA rate | `app.ivaRate` | Default VAT percentage (e.g. `21`) |
-| Report output paths | `report.*` | Directories for monthly/quarterly/annual HTML reports |
-| Business name / address / city | `business.*` | Printed on receipts and invoices |
+| Database path | `database.path` | Full path to the SQLite `.db` file |
+| Printing on/off | `print.enable` | `"Yes"` / `"No"` (text). Guards the actual print call |
+| Printer queue | `print.printer_name` | RAW target queue; empty = the Windows default printer |
+| Paper width | `print.paper_width_mm` | 58 or 80 (default 80) |
+| Epson Status API | `print.use_status_api` | `"Yes"` / `"No"`; paper-out / cover-open detection |
+| Report root folder | `reports.root` | One folder; PDFs go to `Contabilidad`, `Listados/Prendas` and `Listados/Gastos` below it |
+| Business name / address / city / phone | `business.name`, `business.address`, `business.city`, `business.phone` | Printed on receipts and invoices |
 | Verifactu NIF | `verifactu.nif` | Issuer tax ID (NIF) |
-| Verifactu company name | `verifactu.name` | Issuer name as registered with AEAT |
-| Verifactu ServiceKey | `verifactu.serviceKey` | Obtain at https://facturae.irenesolutions.com/verifactu/go |
-| Verifactu environment | `verifactu.production` | `false` = TESTING, `true` = production |
+| Verifactu company name | `verifactu.company_name` | Issuer name as registered with AEAT |
+| Verifactu connection | `verifactu.connection` | `irenesolutions` (gateway) or `aeat` (direct client) |
+| Gateway ServiceKey | `verifactu.service_key` | Stored encrypted (Windows DPAPI). Obtain at https://facturae.irenesolutions.com/verifactu/go |
+| Gateway environment | `verifactu.environment` | `TESTING` or `PRODUCTION` |
+| Direct client production | `verifactu.aeat_direct_production` | `false` = AEAT pre-production, `true` = production |
+| Direct client certificate | `verifactu.aeat_certificate_thumbprint`, `verifactu.aeat_certificate_file`, `verifactu.aeat_certificate_password` | Windows store thumbprint, or a .pfx file and its password (stored encrypted) |
+| Direct client internals | `verifactu.aeat_installation`, `verifactu.aeat_chain_marker` | Written by the app (installation number, chain marker); do not edit |
+| Startup recovery | `verifactu.pending_recovery_enabled`, `verifactu.pending_recovery_floor_date` | Whether the start lists PENDIENTE rows to resend, and the oldest date it considers |
+| Update check | `updater.check_on_startup` | `true` by default |
+| Backups | `backup.enabled`, `backup.second_folder`, `backup.last_time`, `backup.last_version` | Daily backup on/off (default on); the last two are written by the app |
+
+The ingresos IVA rate is not a setting (fixed at 21 %). Obsolete keys of older versions are removed on load.
 
 The application icon is embedded in the executable (Windows resource + Qt resource) so no `.ico` path needs to be configured by the user.
 
@@ -133,126 +184,9 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
 
 ---
 
-## Development workflow
+## Contributing
 
-**Never commit directly to `master`.** `master` only ever moves through merges from a working branch, and every commit on `master` corresponds to a release tag.
-
-1. Create or check out a working branch (e.g. `develop`, or a feature branch like `feature/fix-search`):
-   ```powershell
-   git checkout -b develop
-   ```
-2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (status / open issues), `docs/completed_milestones.md`, the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
-3. Before merging to `master`, the branch must be **release-ready**:
-   - All planned changes are applied and reviewed.
-   - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
-   - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, and the root `README.md` if a user-visible behaviour or build/release step changed.
-   - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
-   - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new X.Y section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time; CI fails the release if either section is missing. Keep both files UTF-8 **with BOM** so the installer renders accents.
-   - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
-   Commit the version bump + notes on the branch as a single `release X.Y` commit.
-4. Merge the branch to `master` through a pull request, with a merge commit so the release shows up as a single point on `master`'s history. `master` has a branch protection rule that requires a PR, so this is the path of least resistance. With the [GitHub CLI](https://cli.github.com/):
-   ```powershell
-   git push -u origin develop
-   gh pr create --base master --head develop `
-       --title "Release X.Y" `
-       --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
-   gh pr merge develop --merge --admin --delete-branch=false
-   git checkout master
-   git pull --ff-only origin master
-   ```
-   `--merge` produces the merge commit (NOT `--squash`, NOT `--rebase`). `--admin` lets the merge proceed despite required-reviews on a solo project. `--delete-branch=false` keeps `develop` alive for the next cycle.
-
-   Fallback if `gh` is unavailable or the PR can't merge cleanly, do it locally:
-   ```powershell
-   git checkout master
-   git merge --no-ff develop -m "Merge branch 'develop' for release X.Y"
-   git push origin master
-   ```
-   The push will be flagged as `Bypassed rule violations` but admins can override - decide whether to tighten or relax the rule afterwards.
-
-   The merge commit on `master` is the release commit that gets tagged in the next step.
-5. Tag the merge commit on `master` and push the tag:
-   ```powershell
-   git tag -a X.Y -m "Release X.Y"
-   git push origin X.Y
-   ```
-6. **Pushing the tag in step 5 is the publish trigger** - the `release` job in `.github/workflows/ci.yml` runs on any `X.Y` tag, after the `build` job (incl. the `ctest` gate) passes, and packages + publishes the GitHub Release automatically (artifacts + notes) reusing the exe the build job produced. Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
-
-After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
-
----
-
-## Release procedure
-
-This section covers the **build, installer, and publish step**. The end-to-end flow (branching, version bump, merge, tag, push) lives in [Development workflow](#development-workflow) above.
-
-### Automated (default): push the tag, CI does the rest
-
-The release is the second stage of the CI workflow: `.github/workflows/ci.yml` has a `release` job that `needs: build` and runs only on an `X.Y` tag push (`if: startsWith(github.ref, 'refs/tags/')`). So a tag push runs the normal `build` job (configure -> build -> **`ctest` hard gate**), and only if that passes does the `release` job package + publish on a `windows-latest` runner - **reusing the exe the build job already produced instead of recompiling**:
-
-1. (build job) Configure -> build (Release) -> **`ctest` (hard gate: a failing test aborts before the release job runs)** -> uploads `laideal.exe` as the `laideal` artifact.
-2. (release job) Validates the tag equals `project(laideal VERSION X.Y ...)` in `CMakeLists.txt` (fails fast on mismatch).
-3. Installs Qt 6.4.3 MinGW (via `jurplel/install-qt-action`, for `windeployqt` + the runtime DLLs) and Inno Setup 6 - no rebuild.
-4. Downloads the `laideal` artifact -> stage `laideal.exe` -> `windeployqt` (and asserts the MinGW + Qt runtime DLLs were deployed) -> zip -> Inno Setup installer.
-5. Extracts the `X.Y` section from `releases_notes_es.txt` and `releases_notes.txt` (fails if either is missing/empty) and publishes a GitHub Release `X.Y` with a bilingual body (Spanish, then English - also what the in-app updater shows) with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and that section as the body. Idempotent: a pre-existing release for the tag is replaced (the tag is kept).
-
-So the normal release is just `git tag X.Y && git push origin X.Y` (step 5 of Development workflow). Watch it with `gh run watch` or the Actions tab. The published assets and the bare `X.Y` tag are what the in-app updater consumes - no manual `gh release create`.
-
-### Local fallback: `releases\release.ps1`
-
-The same pipeline (configure -> build -> `windeployqt` -> zip -> Inno Setup installer) runs in one command via `releases\release.ps1` for offline builds or when you need the artifacts without publishing. No Qt cmd prompt needed - the script loads the Qt environment itself. It does **not** publish to GitHub; attach the artifacts manually (see the `gh release create` snippet at the end of this section).
-
-**Release toolchain** (pinned by `releases\release.ps1`):
-
-| Tool | Expected location |
-|------|-------------------|
-| Qt (MinGW 64-bit) | `C:\Qt\6.4.3\mingw_64` |
-| CMake | `C:\Qt\Tools\CMake_64` |
-| MinGW | `C:\Qt\Tools\mingw1120_64` |
-| Ninja | `C:\Qt\Tools\Ninja` |
-| Inno Setup 6 | `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` |
-| PowerShell | 5.1+ (ships with Windows 10/11) |
-
-To repoint at a different Qt / CMake / Ninja install, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` / `$NinjaBinDir` constants at the top of `releases\release.ps1`.
-
-From any PowerShell prompt in the repo root (after `CMakeLists.txt` has been bumped to the target version on the working branch):
-
-```powershell
-.\releases\release.ps1 X.Y
-```
-
-(or from cmd: `releases\release.bat X.Y`). The script aborts up front if the supplied version does not match `CMakeLists.txt`, or if a staging dir for that version already exists.
-
-Artifact:
-
-- `build-release\laideal_setup_X.Y.exe` - Inno Setup installer (the only artifact; `build-release\` is gitignored and wiped on each run, so nothing accumulates in `releases\`)
-
-When using this local fallback, attach it manually (the automated workflow above does it for you). With the [GitHub CLI](https://cli.github.com/) installed, the publish step mirrors what the `ci.yml` release job runs:
-
-```powershell
-$ver = 'X.Y'
-# Extract just the new X.Y section from both notes files into a temp .md so the
-# GitHub release body shows only this release's bullets - Spanish first, then
-# English, the same bilingual body the ci.yml release job publishes (and the
-# in-app updater shows). The files use Markdown-compatible indentation, so the
-# regex just drops the version line and the rest is trimmed.
-$tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
-function Get-Section([string]$file) {
-    $raw = Get-Content $file -Raw
-    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
-    if (-not $m.Success) { throw "No section for $ver found in $file" }
-    return $m.Groups[1].Value.TrimEnd()
-}
-$body = "## Español`n`n$(Get-Section 'releases_notes_es.txt')`n`n## English`n`n$(Get-Section 'releases_notes.txt')"
-Set-Content -Path $tmpNotes -Value $body -Encoding utf8
-
-gh release create $ver `
-    build-release/laideal_setup_$ver.exe `
-    --title "Release $ver" `
-    --notes-file $tmpNotes
-
-Remove-Item $tmpNotes
-```
+How to work on the code, test it, and cut a release (branching, version bump, merge, tag, the CI release job and the local `release.ps1` fallback): [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 

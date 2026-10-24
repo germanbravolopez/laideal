@@ -7,6 +7,7 @@
 // secondary buttons and the closing row. A dialog is built in code from these
 // pieces, so a change of style is made here once.
 
+#include <QDoubleSpinBox>
 #include <QLabel>
 #include <QString>
 #include <QStringList>
@@ -47,12 +48,19 @@ QDateEdit *dateEdit(const QDate &date, const QString &objectName);
 // the key go on to the dialog's default button too, which then ran a second time
 // (Imprimir printed twice) or ran another action (a search also pressed Añadir prenda).
 void onEnter(QLineEdit *edit, std::function<void()> action);
-// Right-aligned "Cerrar" (objectName btnClose) that closes the dialog.
-QHBoxLayout *closeRow(QDialog *dialog, const QString &text = QStringLiteral("Cerrar"));
+// Right-aligned "Cerrar" (default text; objectName btnClose) that closes the dialog.
+QHBoxLayout *closeRow(QDialog *dialog, const QString &text = QString());
 
 // Names for a list or combo box in Spanish alphabetical order: case-insensitive, an
 // accented letter next to the plain one (Álvarez beside Alvarez, not after Z).
 QStringList sortedNames(QStringList names);
+
+// Accessible text colours (at least 4.5:1 on white), shared by the result-panel phrases
+// and the table delegates.
+extern const char *const COLOR_OK;       // green
+extern const char *const COLOR_WARN;     // amber
+extern const char *const COLOR_ERROR;    // red
+extern const char *const COLOR_LINK;     // blue
 
 // Result-panel phrases: green success, amber nothing done / attention, red error.
 QString okHtml(const QString &text);
@@ -69,6 +77,16 @@ class ResultPanel : public QLabel
 public:
     explicit ResultPanel(const QString &initialText = QString(), QWidget *parent = nullptr);
     void showInfo(const QString &plainText);   // neutral text, newlines kept
+};
+
+// Amount field: shows the decimal comma whatever the language, and takes "," or "."
+// as the decimal key (the numeric keypad sends either, depending on Windows).
+class AmountSpinBox : public QDoubleSpinBox
+{
+public:
+    explicit AmountSpinBox(QWidget *parent = nullptr);
+    QValidator::State validate(QString &input, int &pos) const override;
+    double valueFromText(const QString &text) const override;
 };
 
 } // namespace UiKit

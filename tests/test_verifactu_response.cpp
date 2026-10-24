@@ -17,11 +17,17 @@ class TestVerifactuResponse : public QObject
     Q_OBJECT
 
 private slots:
-    void test_invalidJsonIsError()
+    // A body that is not JSON (a proxy page, a truncated reply) or has no ResultCode says
+    // nothing about AEAT: unknown outcome, never a refusal that would drop the invoice.
+    void test_unreadableReplyIsUnknownNotRefused()
     {
-        const VerifactuResult r = parseVerifactuResponse(QByteArray("this is not json"));
-        QCOMPARE(r.status, VerifactuResult::ERROR);
+        VerifactuResult r = parseVerifactuResponse(QByteArray("<html>Proxy error</html>"));
+        QCOMPARE(r.status, VerifactuResult::NETWORK_ERROR);
         QVERIFY(!r.errorDescription.isEmpty());
+        r = parseVerifactuResponse(QByteArray(R"({"Message":"An error has occurred."})"));
+        QCOMPARE(r.status, VerifactuResult::NETWORK_ERROR);
+        r = parseVerifactuResponse(QByteArray("this is not json"), VerifactuReply::Cancel);
+        QCOMPARE(r.status, VerifactuResult::NETWORK_ERROR);
     }
 
     void test_resultCodeErrorUsesResultMessage()
@@ -67,9 +73,17 @@ private slots:
         QCOMPARE(r.rawHash, QStringLiteral("ABCDEF0123"));
     }
 
-    void test_successWithoutReturn()
+    // A sent invoice always has AEAT's CSV: a submit "success" without one is pending (to
+    // be checked), never ENVIADA. A cancellation may answer without a CSV.
+    void test_submitSuccessWithoutCsvIsPending()
     {
-        const VerifactuResult r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0})"));
+        VerifactuResult r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0})"));
+        QCOMPARE(r.status, VerifactuResult::PENDING);
+        r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0,"Return":{"CSV":""}})"));
+        QCOMPARE(r.status, VerifactuResult::PENDING);
+        r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0,"Return":{"CSV":"A-123"}})"));
+        QCOMPARE(r.status, VerifactuResult::SUCCESS);
+        r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0})"), VerifactuReply::Cancel);
         QCOMPARE(r.status, VerifactuResult::SUCCESS);
     }
 
@@ -87,7 +101,7 @@ private slots:
         const QString b64 = QString::fromLatin1(png.toBase64());
 
         const QByteArray json = QStringLiteral(R"({"ResultCode":0,"Return":"%1"})").arg(b64).toUtf8();
-        const VerifactuResult r = parseVerifactuResponse(json, /*isQrRequest=*/true);
+        const VerifactuResult r = parseVerifactuResponse(json, VerifactuReply::Qr);
         QCOMPARE(r.status, VerifactuResult::SUCCESS);
         QVERIFY(!r.qrCode.isNull());
     }

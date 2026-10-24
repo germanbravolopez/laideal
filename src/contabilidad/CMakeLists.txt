@@ -11,5 +11,6 @@ target_link_libraries(contabilidad
     appsettings
     reporthtml
     uikit
+    verifactu_types                 # splitGross: the IVA as invoiced
 )
 target_include_directories(contabilidad INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

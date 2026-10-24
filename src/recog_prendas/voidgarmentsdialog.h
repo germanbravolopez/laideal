@@ -18,7 +18,7 @@ namespace UiKit { class ResultPanel; }
 // so voiding is a pure DB update - estado -> "Anulado", verifactu_estado ->
 // "ANULADA" - with no AEAT anulacion. Paid/ENVIADA rows are shown but not
 // selectable; those must be cancelled via "Anular Factura Verifactu". Opened from
-// Recogida de prendas (Anular prendas…) with the selected ticket loaded. Built in
+// Recogida de prendas (Anular prendas...) with the selected ticket loaded. Built in
 // code with the shared UiKit style.
 class VoidGarmentsDialog : public QDialog
 {

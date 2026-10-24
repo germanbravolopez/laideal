@@ -81,8 +81,8 @@ top to bottom:
 | Block | Content |
 |-------|---------|
 | Header (centered) | `business.name` double-size; then `verifactu.company_name`, `NIF`, `business.address`, `business.city`, `Tlf:` (bold), closed by a `=` rule |
-| Document type | `Recibo` or `FACTURA SIMPLIFICADA` |
-| Identity | `Nº:` (bold, right), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice) |
+| Document type | `Recibo` or `FACTURA SIMPLIFICADA`. A reprint of a cancelled or rectified invoice adds `*** FACTURA ANULADA ***` / `*** FACTURA RECTIFICADA ***` and, under the identity block, "Factura anulada el <fecha_anulacion>. Esta copia no es una factura en vigor."; it never carries a QR or leyenda |
+| Identity | `Nº:` (bold, right), `Fecha de expedición:` (facturas: the paid rows' `fecha_pago`, the date in the QR and at AEAT; art. 7 RD 1619/2012), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice; the window refuses a completa without a typed DNI / NIF). A completa keeps the `FACTURA SIMPLIFICADA` heading: its AEAT record is F2, and art. 7.2 RD 1619/2012 lets a simplificada carry the recipient's NIF and address |
 | Garment table | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura); long names word-wrap |
 | Totals (bold) | recibo: `TOTAL (IVA incl.)`; factura: `Base Imponible` + `IVA (rate%)` + `TOTAL` |
 | Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker (`Copia para el cliente` / `... establecimiento`) |
@@ -116,6 +116,8 @@ with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
 
 ## Verifactu QR
 
+Never blank, never merged: the ticket number is trimmed before loading; `buildTicket` builds nothing when no row is printable (unknown number, every garment voided) and the dialog says so instead of "impreso"; `resolveQrCode` sums only the paid rows and draws no QR when the loaded paid rows belong to more than one payment event (`invoiceSeq` -1 over a partially paid ticket), so a QR always describes an invoice AEAT received.
+
 A QR is printed on **facturas only** (recibos are claim tickets, not tax
 documents). `resolveQrCode()` is unchanged by the ESC/POS migration — order of
 fallback:
@@ -129,9 +131,14 @@ fallback:
    AEAT). `displayInvoiceId()` gathers the `verifactu_invoice_id` column and
    delegates the selection (first non-empty literal, else bare `n_recibo`) to the
    pure, unit-tested `sql_lite::verifactuDisplayInvoiceId` seam.
-3. When eligible and `verifactuIntegration` is configured, fetch the QR
-   asynchronously via REST `/GetQrCode` with a 5 s bounded wait; on timeout the
-   ticket prints without a QR.
+3. An accepted invoice is reprinted with the QR drawn (`AeatQr::image`) from the
+   verification URL stored with AEAT's answer (`verifactu_url_qr` of its paid rows,
+   gateway and direct client alike). It is never rebuilt from today's environment:
+   after the production switch an older test invoice would otherwise get a
+   production QR. Nor is it rebuilt from today's IVA rate. Only an older row without
+   that URL (an old gateway row) asks the backend, and only the gateway: the direct client
+   prints it without QR rather than rebuild a URL that may not be the invoice's. The gateway (REST `/GetQrCode`, 5 s bounded wait; on timeout the
+   ticket prints without a QR).
 
 `buildTicket()` rasters the resolved `QPixmap` into the ESC/POS stream
 (`qr.scaled(192,192).toImage()` → `EscPosBuilder::rasterImage()`, `GS v 0`), so

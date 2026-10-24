@@ -2,6 +2,7 @@
 name: test-engineer
 description: Qt Test + CTest specialist for this repo. Given a change, a bug, or a module, finds the coverage gap and writes Qt Test cases that follow the project's seam patterns (pure helper, throwaway SQLite DB in QTemporaryDir, captured AEAT response fixture, offscreen QPA), then proves each new test can fail. Use when a fix or feature needs regression coverage, to audit a module's test gaps, or to write a failing test that reproduces a bug before it is fixed.
 tools: Read, Grep, Glob, Edit, Write, Bash, PowerShell
+model: sonnet
 skills: coding-guidelines
 ---
 

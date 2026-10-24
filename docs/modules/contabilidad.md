@@ -30,18 +30,19 @@ Modes are the `Contabilidad::ConfigMode` enum (`Mensual=0`, `Trimestral=1`, `Anu
 
 ## On accept
 
-In Trimestral mode the quarter's lock state is read first via `sql_lite::readLockForQuarter()` for **both** `ingresos` and `gastos` (all three months in one query each), merged by `Contabilidad::combinedLockState`. The quarter is "no data" only if both tables are empty, and locked if either is, so a quarter with only gastos can be closed and reverted too. The closed/open labels in the Mensual and Anual headers use the same merge. Then:
+In Trimestral mode the quarter's state is read first from `accounting_closures` (`sql_lite::quarterIsClosed()`): a closed quarter is one with a closure not yet reopened, whatever rows it has. Then:
 
-1. `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF. If the PDF could not be written (`writePdf` false: a folder in its place, the old PDF open in a viewer, no permission) the result panel shows the error and **the quarter is not locked** - a quarter is never closed without its report.
-2. `updateLock()` sets `edit_lock` on all affected `ingresos` and `gastos` rows (via `updateLockForMonth`):
-   - `revertirOn=false` → sets `edit_lock=1` (locks the period)
-   - `revertirOn=true` → sets `edit_lock=0` (unlocks the period)
+- **Revertir**: a closed quarter is reopened (`reopenQuarter`: its closure gets `reopened_at` and is never deleted); an open one reports that there is nothing to revert.
+- **Already closed**: the report is generated again; the quarter stays closed.
+- **Unreadable data**: if any listing query fails (`*ok` false) no report is written and nothing is closed; the panel says the data could not be read.
+- **No movements** (`quarterHasMovements`: no payment, cancellation or gasto dated in it): a warning, no report and no close.
+- **Otherwise**: `generateContabilidad()` builds the report (see [Report content](#report-content)) and writes it to PDF. If the PDF could not be written (`writePdf` false: a folder in its place, the old PDF open in a viewer, no permission) the result panel shows the error and **the quarter is not closed** - a quarter is never closed without its report. With *Bloquear el trimestre* ticked, `closeQuarter()` then adds the closure with the report's file name. That happens only from the quarter's last day on (`Contabilidad::quarterLastDay`): earlier, the report is written but the quarter stays open, with an amber note giving the first day it can be closed. Closing a quarter that has not ended would refuse every payment of today. On the last day itself the closure goes ahead, with a warning that today's payments can no longer be recorded until it is reverted. A gasto whose IVA text is not a whole number (`sql_lite::expenseIvaRate`: NULL, empty, "21,5", "abc") reads as unrecognised (-1). It is left out of the sums, flagged in the detail, and counted in the red result-panel warning with the comma-decimal amounts. A quarter whose only movement is the cancellation of an earlier quarter's invoice is closed like any other.
 
 The **Bloquear el trimestre** checkbox is enabled only in Trimestral mode and never while reverting (`Contabilidad::lockOptionAvailable`). Switching to Mensual or Anual unticks and greys it out, because only the quarterly flow closes the books.
 
 **Incluir el detalle de tickets y facturas** (unticked by default, disabled while reverting) adds the [detail tables](#detail-tables-audit-annex) to the report; without it the PDF has only the summary blocks. The two versions are separate files (`Contabilidad::reportRelativePath`): `contabilidad_trimestral_<year>_<q>.pdf`, `Mensual/reporte_mensual_<year>_<m>.pdf`, `Anual/reporte_anual_<year>.pdf`, and the same names ending in `_detalle.pdf` for the detailed one, whose title also ends in "· Detalle".
 
-**Comprobar bloqueo** shows in the result panel whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`): a quarter reads locked / not locked / no records (the same `combinedLockState` merge), a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
+**Comprobar bloqueo** shows in the result panel whether the selected period is closed, without generating anything (`Contabilidad::lockStatusMessage`, from `quarterClosures`): a quarter reads locked with the date it was closed (no date for one carried over from the old `edit_lock` flags), not locked with the date it was reverted, not locked, or without records; a month reports its quarter (`quarterIsClosed`), a year lists its four quarters.
 
 ## Report content
 
@@ -67,7 +68,13 @@ When **Incluir el detalle** is ticked, each period gets a **Detalle** block afte
 
 Both tables end with a note that per-line base/IVA are rounded to cents while the totals are computed unrounded. The total rows equal the summary by construction. The listings filter with the shared `kIngresosIncomeWhere` / `kGastosPeriodWhere` predicates in `sql_lite.cpp`. Trimestral and mensual reports append one Detalle block for the period, and the annual report one per quarter after the consolidated summary. The HTML comes from the pure statics `Contabilidad::createHtmlDetailIngresos` / `createHtmlDetailGastos`, which are unit-tested. They use the borderless, zebra-striped `ReportHtml::tableOpen()` style because these tables span pages.
 
+## IVA as invoiced
+
+The IVA repercutido (and the modelo 303 result) is the sum of each invoice's cuota as registered at AEAT: every payment event of a ticket (`verifactu_invoice_seq`, `IncomeTicketDetail::invoices`) is split on its own with `splitGross`, and regularisations the same way; the base is the gross minus that IVA. A gasto is one supplier invoice, split on its own too. The detail tables use the same split, so their totals equal the summary to the cent. Owner's decision 20-10-2026.
+
 ## Output
+
+Regenerating a quarter that is already closed never touches its filed report: the new PDF is written as `<name>_regenerado_YYYYMMDD[_N].pdf` (`Contabilidad::regeneratedPath`). Every PDF is written as `.part` and renamed (`ReportHtml::writePdf`), so a failed or locked write keeps the previous file.
 
 The report (PDF) is written to `AppSettings::instance()->contabilidadPath()` (= `<reports.root>/Contabilidad`) and opened automatically via `QDesktopServices::openUrl()`. Trimestral reports land directly in that folder; mensual reports under `Contabilidad/Mensual`, anual reports under `Contabilidad/Anual` (appended in `contabilidad.cpp`). `QDir::mkpath()` is called on demand.
 
@@ -82,7 +89,7 @@ A filed quarter must not change when one of its tickets is later cancelled at th
 - still counts as income in its **payment period** (`kIngresosIncomeWhere` lets it through), so regenerating that period reproduces its figures, closed or not;
 - is subtracted in the period containing `fecha_anulacion`. `sql_lite::regularizationsBetweenDates()` (annual: `QuarterlyDetails::regularizations`) lists it, `figuresFromDetails` nets it out of income (`PeriodFigures::ingRegularizacion`), the Ingresos table shows "Ingresos del periodo" / "Anulaciones / rectificaciones del periodo" / net "Importe total", and the detail annex adds an **Anulaciones y rectificaciones del periodo** table with negative amounts.
 
-When the payment and the cancellation fall in the same period the two lines net out, so that period's figure equals simply leaving the ticket out. Two guards keep a filed report from moving. The rectificativa date must fall in an open quarter (`RectifyInvoiceDialog`, via `sql_lite::quarterIsClosed`). A cancellation is refused while today's quarter is closed (`CancelInvoiceDialog`), because the subtraction is dated today. `quarterIsClosed` checks the whole quarter across `ingresos` and `gastos`, so a month without rows inside a closed quarter still reads as closed. Cancellations made before 10.12 have no `fecha_anulacion` and stay excluded from their own period.
+When the payment and the cancellation fall in the same period the two lines net out, so that period's figure equals simply leaving the ticket out. Two guards keep a filed report from moving. The rectificativa date must fall in an open quarter (`RectifyInvoiceDialog`, via `sql_lite::quarterIsClosed`). A cancellation is refused while today's quarter is closed (`CancelInvoiceDialog`), because the subtraction is dated today. A refused rectificativa counted in a quarter closed since is resent with its own date, amount and mode, its row untouched; the original's subtraction then goes to an open period (`sql_lite::openPeriodDate`: today, or the first day of the next open quarter when today's is closed). `quarterIsClosed` checks the whole quarter across `ingresos` and `gastos`, so a month without rows inside a closed quarter still reads as closed. Cancellations made before 10.12 have no `fecha_anulacion` and stay excluded from their own period.
 
 Garments **voided in place** (Anular prendas) also get `fecha_anulacion`, but they are unpaid (`pagado = 'NO'`), so they are never income nor a regularisation.
 

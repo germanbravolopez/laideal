@@ -107,15 +107,18 @@ QPixmap decodeVerifactuImageBase64(const QString &base64)
     return pixmap;
 }
 
-VerifactuResult parseVerifactuResponse(const QByteArray &response, bool isQrRequest)
+VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuReply kind)
 {
     VerifactuResult result;
+    const bool isQrRequest = kind == VerifactuReply::Qr;
 
     QJsonDocument doc = QJsonDocument::fromJson(response);
 
-    if (!doc.isObject()) {
-        result.status = VerifactuResult::ERROR;
-        result.errorDescription = "Respuesta inválida del servidor";
+    // A proxy page, a truncated body or a reply without ResultCode says nothing about
+    // AEAT: unknown outcome (the row stays pending and is checked), not a refusal.
+    if (!doc.isObject() || !doc.object().value("ResultCode").isDouble()) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Respuesta no válida del servidor: no se sabe si la AEAT la registró";
         return result;
     }
 
@@ -157,6 +160,11 @@ VerifactuResult parseVerifactuResponse(const QByteArray &response, bool isQrRequ
             }
         } else {
             result.status = VerifactuResult::SUCCESS;
+        }
+        // A sent invoice always has AEAT's CSV: without it the outcome is unknown.
+        if (kind == VerifactuReply::Submit && result.status == VerifactuResult::SUCCESS && result.csv.isEmpty()) {
+            result.status = VerifactuResult::PENDING;
+            result.errorDescription = "La respuesta no trae el CSV de la AEAT: se comprobará más tarde";
         }
     } else {
         result.status = VerifactuResult::ERROR;

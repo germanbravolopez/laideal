@@ -5,7 +5,9 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDesktopServices>
+#include <QFile>
 #include <QFileInfo>
+#include <QPageSize>
 #include <QPrinter>
 #include <QTextDocument>
 #include <QUrl>
@@ -35,9 +37,9 @@ QString documentOpen(const QString &title, const QString &subtitle)
 
     QString identity;
     if (!s->verifactuNif().isEmpty())
-        identity += "NIF: " + s->verifactuNif();
+        identity += "NIF: " + s->verifactuNif().toHtmlEscaped();
     if (!s->businessPhone().isEmpty())
-        identity += (identity.isEmpty() ? QString() : " &middot; ") + "Tel: " + s->businessPhone();
+        identity += (identity.isEmpty() ? QString() : " &middot; ") + "Tel: " + s->businessPhone().toHtmlEscaped();
 
     QString html =
     "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
@@ -46,9 +48,9 @@ QString documentOpen(const QString &title, const QString &subtitle)
         "<table width='100%' style='border:0;'>"
             "<tr>"
                 "<td style='border:0; vertical-align:top;'>"
-                    "<span style='font-size:16px; font-weight:bold; color:#2c3e50;'>" + s->businessName() + "</span><br>"
-                    "<span>" + s->businessAddress() + "</span><br>"
-                    "<span>" + s->businessCity() + "</span>"
+                    "<span style='font-size:16px; font-weight:bold; color:#2c3e50;'>" + s->businessName().toHtmlEscaped() + "</span><br>"
+                    "<span>" + s->businessAddress().toHtmlEscaped() + "</span><br>"
+                    "<span>" + s->businessCity().toHtmlEscaped() + "</span>"
                     + (identity.isEmpty() ? QString() : "<br><span>" + identity + "</span>") +
                 "</td>"
                 "<td style='border:0; text-align:right; vertical-align:top; color:#566573;'>"
@@ -132,18 +134,31 @@ bool writePdf(const QString &file, const QString &html)
     QPrinter printer(QPrinter::PrinterResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setPageSize(QPageSize::A4);
-    // A report left by an earlier run must not pass for this one.
-    QFile::remove(file);
-    printer.setOutputFileName(file);
+    // Printed beside the target and moved over it only once complete: a failed or
+    // cut-off print never destroys the report already there.
+    const QString partFile = file + QStringLiteral(".part");
+    QFile::remove(partFile);
+    printer.setOutputFileName(partFile);
     printer.setPageMargins(QMarginsF(15, 15, 15, 15));
     document.print(&printer);
-    const QFileInfo written(file);
+    const QFileInfo written(partFile);
     if (!written.isFile() || written.size() == 0) {
         qWarning() << "ReportHtml::writePdf: could not write" << file;
+        QFile::remove(partFile);
         return false;
     }
-    if (s_openGeneratedReports)
-        QDesktopServices::openUrl(QUrl::fromLocalFile(file));
+    if (QFile::exists(file) && !QFile::remove(file)) {
+        qWarning() << "ReportHtml::writePdf: the existing" << file << "is locked (open in a viewer?)";
+        QFile::remove(partFile);
+        return false;
+    }
+    if (!QFile::rename(partFile, file)) {
+        qWarning() << "ReportHtml::writePdf: could not move the report to" << file;
+        QFile::remove(partFile);
+        return false;
+    }
+    if (s_openGeneratedReports && !QDesktopServices::openUrl(QUrl::fromLocalFile(file)))
+        qWarning() << "ReportHtml::writePdf: could not open" << file;
     return true;
 }
 

@@ -40,6 +40,9 @@ public:
     bool isRecibo = true, isCompleteInvoice = false;
     VerifactuIntegration *verifactuIntegration = nullptr;
     QPixmap qrCode;
+    // The direct AEAT client generated and queued the invoice's record: a VERI*FACTU
+    // invoice, legend printed although AEAT has not answered yet (row still PENDIENTE).
+    bool verifactuIssued = false;
     // -1 (default): print every row of n_recibo (legacy / full-ticket flow).
     // >=0: scope getTicketInfo to rows with verifactu_invoice_seq = invoiceSeq,
     // so partial-payment events (8.5+) print only the garments charged that time.
@@ -70,6 +73,8 @@ private slots:
     void onPrintClicked();
 
 private:
+    // The last resolveQrCode() drew the QR of the direct client's queued record.
+    bool m_qrFromQueuedRecord = false;
     void buildUi();
     bool checkTicketPaid(int row);
     bool checkAnyItemPaid();
@@ -97,6 +102,7 @@ private:
     UiKit::ResultPanel *m_lblResult = nullptr;
     QString      m_eventsTicket;           // the ticket m_cbEvent was filled for
     QStringList  m_printProblems;          // collected while the dialog is shown
+    QString      m_lastVoidedMarker;        // of the last buildTicket(): ANULADA / RECTIFICADA / empty
 };
 
 #endif // IMPRIMIR_H

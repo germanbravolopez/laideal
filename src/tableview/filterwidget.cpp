@@ -22,16 +22,16 @@ FilterWidget::FilterWidget(QWidget *parent)
 
     menu->addSeparator();
     m_patternGroup->setExclusive(true);
-    QAction *patternAction = menu->addAction("Expresión Regular");
+    QAction *patternAction = menu->addAction(tr("Expresión Regular"));
     patternAction->setCheckable(true);
     patternAction->setChecked(true);
     patternAction->setData(QVariant(int(RegularExpression)));
     m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction("Comodín");
+    patternAction = menu->addAction(tr("Comodín"));
     patternAction->setCheckable(true);
     patternAction->setData(QVariant(int(Wildcard)));
     m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction("Texto Fijo");
+    patternAction = menu->addAction(tr("Texto Fijo"));
     patternAction->setData(QVariant(int(FixedString)));
     patternAction->setCheckable(true);
     m_patternGroup->addAction(patternAction);

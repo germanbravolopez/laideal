@@ -7,11 +7,11 @@ disable-model-invocation: true
 
 # /release — Ship a Release X.Y End-to-End
 
-Executes the full release flow described in the **Development workflow** and **Release procedure** sections of the root `README.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
+Executes the full release flow described in the **Development workflow** and **Release procedure** sections of `CONTRIBUTING.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
-The root `README.md` is the source of truth. If a step here ever drifts from the README, the README wins; update this skill afterwards (`/update-skills`).
+`CONTRIBUTING.md` (Development workflow and Release procedure) is the source of truth. If a step here ever drifts from it, CONTRIBUTING wins; update this skill afterwards (`/update-skills`).
 
 ---
 
@@ -29,7 +29,7 @@ If any precondition fails, stop and surface the problem — don't try to "fix it
 
 ## Steps
 
-### 1. Pre-flight the release-ready checklist (README step 3)
+### 1. Pre-flight the release-ready checklist (CONTRIBUTING workflow step 3)
 
 The working branch must be release-ready before the version-bump commit. Verify each item; if missing, fix it and stage the change for the bump commit (do not commit yet):
 
@@ -39,7 +39,9 @@ The working branch must be release-ready before the version-bump commit. Verify 
 - [ ] **`docs/progress_tracker.md`** — Current Status "Latest release" describes only the new release (no "previous release" trailer).
 - [ ] **`docs/completed_milestones.md`** — the milestone entries cover what shipped; suffix the top `### Post-<X.Y> development` header with `(shipped in X.Y)`.
 - [ ] **`docs/` and `README.md`** — run the `/update-docs` skill (or follow its checklist by hand); if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
-- [ ] **Manual smoke test** — work through `docs/testing/smoke_test.md` on a copy of a backup with `ingresos` / `gastos` emptied and the Verifactu service key removed, so it **never contacts AEAT** (its setup and safety check say how). It covers what `ctest` cannot: the release build on a real schema, the real printer, PDF / screen rendering, menu wiring, the Listado lock, backup, language and installer — the 10.9 run found three bugs the suite could not have caught. Skip only for a docs-only release. For what a release changes, prefer a `test_e2e_app` scenario; add a smoke row only for what no test can see. A bug found here is fixed on the working branch with `/debugging` (root cause + regression test), then re-checked.
+- [ ] **Declaración responsable (`src/verifactu/producerdeclaration.cpp`, `currentSignature`)** — when the release changes invoicing or the Verifactu records (always for 12.0), set the signature date to the release day (Germán signs the declaración for this version). The address comes from the settings and the place is fixed.
+- [ ] **Automated UI smoke test** — `gh workflow run ui-smoke.yml --ref <branch>`, then `gh run watch`: blocks A-E of the smoke test on the installed UI-test build against the fake AEAT (see `docs/testing/ui_smoke.md`). It must be green; read its `report.md` and glance at the step screenshots in the `ui-smoke` artifact. When the release changes the direct AEAT client, also run `tests/ui/aeat_preproduction.py` locally with the certificate (AEAT pre-production) and keep its report.
+- [ ] **Smoke test, part 1** — after the UI smoke test is green, `docs/testing/smoke_test.md` part 1: look through the `ui-smoke` artifact (M4) and, when the release changes the direct AEAT client, keep the pre-production report (M6). Skip only for a docs-only release. Part 2 (*Comprobar tras actualizar*, `laideal.exe --self-check`) is run by the shop user after installing; with a copy of the shop's data here you can run it before publishing too. For what a release changes, prefer a `test_e2e_app` scenario or a UI smoke step (`tests/ui/`); add a self-check or manual row only for what no test can see. A bug found here or in the shop's report is fixed on the working branch with `/debugging` (root cause + regression test), then re-checked.
 - [ ] **Coding-guidelines audit (optional, recommended after a large cycle)** — delegate to the `guidelines-auditor` subagent (method in `.claude/skills/coding-guidelines/audit.md`) and fold real Tier-1 findings into the release or into the tracker.
 - [ ] **Bundled Qt translation (only if Qt was upgraded since the last release)** — `resources/i18n/qtbase_es.qm` is copied from `C:\Qt\<version>\mingw_64\translations\qtbase_es.qm` and embedded in the exe (the release runs windeployqt `--no-translations`). If the Qt version bumped, refresh this file from the new Qt so the Spanish standard-dialog strings match the shipped Qt. If Qt is unchanged, no-op.
 
@@ -72,7 +74,7 @@ If the build **or any test** fails, **stop**. Fix on the working branch, commit,
 
 This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
 
-### 4. Open a GitHub PR to `master` (README step 4)
+### 4. Open a GitHub PR to `master` (CONTRIBUTING workflow step 4)
 
 `master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Push the working branch and open the PR — but do **not** merge yet; step 5 reviews the diff first.
 
@@ -138,7 +140,7 @@ git pull --ff-only origin master
 
 Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
-### 7. Tag the merge commit (README step 5)
+### 7. Tag the merge commit (CONTRIBUTING workflow step 5)
 
 ```powershell
 git tag -a X.Y -m "Release X.Y"
@@ -155,7 +157,7 @@ The tag push in step 7 kicked off `ci.yml` (the `build` job, then the gated `rel
 gh run watch (gh run list --workflow=ci.yml --branch X.Y --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that both assets are present and both halves render as clean bulleted lists.
+On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` + `laideal_setup_X.Y.exe.sha256` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that all three assets are present (without the `.sha256` the in-app updater refuses the installer) and both halves render as clean bulleted lists.
 
 **If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` or `releases_notes_es.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
 
@@ -180,6 +182,7 @@ Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
     build-release/laideal_setup_$ver.exe `
+    build-release/laideal_setup_$ver.exe.sha256 `
     --title "Release $ver" `
     --notes-file $tmpNotes
 

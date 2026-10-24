@@ -30,12 +30,24 @@ public:
 
     VerifactuIntegration *m_verifactu = nullptr;
 
+protected:
+    // Esc, the window's X and Cerrar all end here: refused while AEAT has not answered,
+    // or the outcome of an invoice AEAT may already hold would be lost.
+    void done(int result) override;
+
 private slots:
     void onSearchClicked();
     void onCancelClicked(int row);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
+    // A sent rectificativa of the ticket (its n_recibo in *number, empty for none): cancel
+    // it first, or its amount stays in the books after the original is gone. False when
+    // the database could not be read.
+    // The first press of a row's Anular says what will be cancelled; the second sends it.
+    void armCancellation(int row);
+    void disarmCancellation();
+
     struct Event {
         int     seq = 0;
         QString invoiceId;   // literal AEAT InvoiceID (bare n_recibo or "<n>-<seq>")
@@ -45,10 +57,12 @@ private:
         QDate   invoiceDate; // fecha_pago: the date AEAT registered the invoice under
     };
 
-    QLineEdit    *m_leTicketNum;
-    QLabel       *m_lblHeader;
-    QTableWidget *m_table;
-    QLabel       *m_lblResult;
+    QLineEdit    *m_leTicketNum = nullptr;
+    QPushButton  *m_btnSearch = nullptr;
+    QLabel       *m_lblHeader = nullptr;
+    QTableWidget *m_table = nullptr;
+    QLabel       *m_lblResult = nullptr;
+    int           m_armedRow = -1;          // row whose button now reads "Confirmar anulación"
 
     QString          m_loadedTicket;
     QDate            m_receptionDate;       // fallback for old seq-0 invoices registered under it
@@ -58,10 +72,16 @@ private:
     QDate            m_pendingFallbackDate; // set while a reception-date retry is still possible
     QString          m_firstRejection;      // AEAT's answer to the first attempt, kept for the operator
     int              m_pendingCancelRow = -1; // row index in m_events for the in-flight cancel
+    // The ticket and invoice the in-flight cancellation was sent for: the reply applies to
+    // them, whatever the window shows by then.
+    QString          m_pendingTicket;
+    Event            m_pendingEvent;
     QSqlDatabase     db;
 
     void buildUi();
     void rebuildTable();
+    int actionColumnWidth() const;
+    void fitTableWidth();
     void setActionsEnabled(bool enabled);
 };
 

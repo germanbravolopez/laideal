@@ -1,5 +1,19 @@
 ﻿Versiones:
 
+12.0
+- Nuevo: la barra de menús se organiza por tareas: Tickets, Facturas y Contabilidad sustituyen a Herramientas; la copia de seguridad está en Archivo y el log en Ayuda. 'Revertir contabilidad' ya no tiene atajo de teclado; 'Anular factura' y 'Rectificar factura' tienen Alt+A y Alt+T.
+- Nuevo: 'La Ideal - Comprobar tras actualizar' en el menú Inicio comprueba la nueva versión con sus datos y su impresora, sobre una copia, y guarda un informe para enviarlo.
+- Nuevo: una segunda carpeta para las copias de seguridad (por ejemplo un disco USB o una carpeta sincronizada), en Configuración.
+- Al actualizar, el programa guarda siempre una copia de la base de datos antes de cambiarla, también con las copias automáticas desactivadas.
+- Las facturas rectificativas nuevas tienen su propia serie de numeración: R-1, R-2...
+- Los importes se muestran con coma decimal en todas las ventanas y también en los recibos y facturas impresos.
+- Facturas rechazadas por la AEAT: el aviso rojo de la barra de estado se puede pulsar; muestra cuáles son y abre Recogida de Prendas en cada ticket. Ya no cuenta los tickets anteriores a Verifactu.
+- Contabilidad: cada cierre de trimestre queda guardado con su fecha, también si se revierte; un trimestre que solo tiene anulaciones de facturas anteriores se puede cerrar. El IVA repercutido es la suma del IVA de cada factura tal como se registró.
+- Cobrar avisa si la contabilidad cerró el trimestre mientras se enviaba el cobro a la AEAT.
+- Verifactu: correcciones en el envío, el reenvío y la rectificación de facturas, en la numeración y en los avisos de envíos pendientes o rechazados.
+- Retirados de Archivo 'Limpiar base de datos' y 'Crear hash en ingresos': lo que corregían se arregla solo al abrir el programa.
+- Preparada la conexión directa con la AEAT para el paso a producción; en esta versión la tienda sigue con la conexión actual, en el entorno de pruebas.
+
 11.2
 - Corrección: desde la 11.0, "Anular prendas" no anulaba prendas sin cobrar ("0 prenda(s) anuladas... se han cobrado, enviado o bloqueado"), y en "Recogida de Prendas" tampoco se podía cambiar el tamaño, el precio, la cantidad o el servicio de una prenda sin cobrar, ni separarla. Todo vuelve a funcionar; las prendas cobradas, enviadas a la AEAT o cerradas en la contabilidad siguen protegidas.
 - Seguridad: el número del siguiente ticket se calcula como número, para que siga contando bien a partir del 99999.

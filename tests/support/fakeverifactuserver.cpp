@@ -86,10 +86,12 @@ void FakeVerifactuServer::handle(QTcpSocket *socket)
     }
     const QByteArray json = reply.body.isEmpty() ? defaultReply(endpoint) : reply.body;
     QPointer<QTcpSocket> guard(socket);
-    auto send = [guard, json]() {
+    const QByteArray statusLine = "HTTP/1.1 " + QByteArray::number(reply.status)
+                                  + (reply.status == 200 ? " OK" : " Error");
+    auto send = [guard, json, statusLine]() {
         if (!guard)
             return;
-        guard->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+        guard->write(statusLine + "\r\nContent-Type: application/json\r\nContent-Length: "
                      + QByteArray::number(json.size()) + "\r\nConnection: close\r\n\r\n" + json);
         guard->disconnectFromHost();
     };

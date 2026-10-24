@@ -1,5 +1,7 @@
 # 05 — Implementation Plan
 
+> **Historical (Excel era).** This page describes the printing path before 10.0 (Excel/QXlsx/cscript), kept as design background. The shipped code is `src/printing/` and `src/imprimir/`; see [`../printing.md`](../printing.md) and [`../imprimir.md`](../imprimir.md).
+
 Proposed design for replacing the Excel/QXlsx/cscript path with direct ESC/POS over the RAW
 Windows spooler. It is written to fit the project's conventions: Qt 5/6 + C++17, CMake module
 libraries under `src/`, free-function/pure-helper seams for unit tests (see the Qt Test suites

@@ -174,7 +174,7 @@ void RecogPrendas::buildUi()
     ui->lbl_total->setFont(totalFont);
     ui->lbl_total->setToolTip(tr("Suma de las prendas listadas (sin anuladas ni rectificadas)."));
     t->addWidget(ui->lbl_total);
-    ui->pb_pay_all = UiKit::primaryButton(tr("Cobrar…"), "pb_pay_all");
+    ui->pb_pay_all = UiKit::primaryButton(tr("Cobrar\u2026"), "pb_pay_all");
     ui->pb_pay_all->setToolTip(tr("Cobrar las prendas pendientes del ticket seleccionado."));
     t->addWidget(ui->pb_pay_all);
     ui->pb_pku_all = UiKit::secondaryButton(tr("Recoger todo"), "pb_pku_all");
@@ -191,17 +191,17 @@ void RecogPrendas::buildUi()
     splitRow->addWidget(new QLabel(tr("prenda(s)")));
     splitRow->addStretch();
     t->addLayout(splitRow);
-    ui->pb_add = UiKit::secondaryButton(tr("Añadir prendas…"), "pb_add");
+    ui->pb_add = UiKit::secondaryButton(tr("Añadir prendas\u2026"), "pb_add");
     ui->pb_add->setToolTip(tr("Añadir prendas al ticket seleccionado (solo si aún no tiene prendas pagadas)."));
     t->addWidget(ui->pb_add);
-    ui->pb_void = UiKit::secondaryButton(tr("Anular prendas…"), "pb_void");
+    ui->pb_void = UiKit::secondaryButton(tr("Anular prendas\u2026"), "pb_void");
     ui->pb_void->setToolTip(tr("Anular prendas no cobradas ni entregadas del ticket seleccionado "
                                "(recibo erróneo o cambio de opinión)."));
     t->addWidget(ui->pb_void);
     ui->pb_print = UiKit::secondaryButton(tr("Imprimir factura"), "pb_print");
     ui->pb_print->setToolTip(tr("Reimprimir la factura del pago de la prenda seleccionada."));
     t->addWidget(ui->pb_print);
-    ui->pb_verifactu = UiKit::secondaryButton(tr("Verifactu…"), "pb_verifactu");
+    ui->pb_verifactu = UiKit::secondaryButton(tr("Verifactu\u2026"), "pb_verifactu");
     ui->pb_verifactu->setToolTip(tr("Ver información de Verifactu para el ticket seleccionado."));
     t->addWidget(ui->pb_verifactu);
     t->addStretch();
@@ -302,10 +302,16 @@ void RecogPrendas::resetAllContents()
     ui->tableView->setModel(sqlQueryModel);
 }
 
+bool RecogPrendas::rowClickedLocked()
+{
+    const QString fechaPago = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString();
+    return quarterIsClosed(db, QDate::fromString(fechaPago, "dd-MM-yyyy"));
+}
+
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     QString failure;   // a write that was refused or failed, reported after the refresh
-    bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
+    const bool editLock = rowClickedLocked();
     static const char *const opNames[] = {
         "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
         "QTY", "SERVICE", "PRICE", "SEPARATE_GARM"
@@ -419,15 +425,15 @@ void RecogPrendas::updateRowClickedToFields()
     // findText returns -1 for a legacy service not in the list -> blank rather than a wrong value.
     ui->cb_servic->setCurrentIndex(ui->cb_servic->findText(
         sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SERVICIO)).toString()));
-    ui->le_size->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString());
-    ui->le_price->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString());
+    ui->le_size->setText(displayDecimal(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_SIZE)).toString()));
+    ui->le_price->setText(displayMoney(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_IMPORTE)).toString()));
     ui->le_obsv->setText(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_OBSERVACIONES)).toString());
     const QString rowEstado = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_ESTADO)).toString();
     // A locally voided garment (estado "Anulado") is read-only everywhere except
     // observations: it can never be paid, picked up, split or re-priced again.
     const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
     const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI";
-    const bool editLock = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_EDIT_LOCK)).toBool();
+    const bool editLock = rowClickedLocked();
     // Quantity / service / importe / size are editable only before payment (and while
     // not accounting-locked or voided): a paid row was already submitted to AEAT.
     const bool priceEditable = !isAnulado && !isPaid && !editLock;
@@ -478,12 +484,28 @@ void RecogPrendas::updateRowClickedToFields()
 
 double RecogPrendas::calculatePrice()
 {
-    if (ui->le_size->text().contains(",")) {
-        QStringList sizeSplitted = ui->le_size->text().split(",");
-        ui->le_size->setText(sizeSplitted.first() + "." + sizeSplitted.last());
-    }
     return garmentImporte(ui->le_qty->text(), ui->le_size->text(),
                           readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
+}
+
+void RecogPrendas::showTicket(const QString &nRecibo, int seq)
+{
+    ui->le_search->setText(nRecibo);
+    on_pb_search_clicked();
+    QAbstractItemModel *view = ui->tableView->model();
+    if (!view || view->rowCount() == 0)
+        return;
+    int pick = 0;
+    for (int r = 0; r < view->rowCount(); ++r) {
+        const int source = proxyModel->mapToSource(view->index(r, 0)).row();
+        if (sqlQueryModel->data(sqlQueryModel->index(source, INGRESOS_COL_VERIFACTU_ESTADO)).toString() == QLatin1String("ERROR")
+                && (seq < 0 || sqlQueryModel->data(sqlQueryModel->index(source, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt() == seq)) {
+            pick = r;
+            break;
+        }
+    }
+    ui->tableView->selectRow(pick);
+    on_tableView_clicked(view->index(pick, 0));
 }
 
 void RecogPrendas::on_le_search_returnPressed()
@@ -494,6 +516,16 @@ void RecogPrendas::on_le_search_returnPressed()
 void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
 {
     on_pb_search_clicked();
+}
+
+// QSqlQueryModel fetches in batches of 256 and fetchMore() needs the connection open:
+// drain the result before the caller closes it, or a long search is cut silently.
+static void loadEveryRow(QSqlQueryModel *model, QSqlQuery &&q)
+{
+    q.exec();
+    model->setQuery(std::move(q));
+    while (model->canFetchMore())
+        model->fetchMore();
 }
 
 void RecogPrendas::on_pb_search_clicked()
@@ -509,41 +541,40 @@ void RecogPrendas::on_pb_search_clicked()
         if (ok) {
             if (ui->le_search->text().length() >= 9) {
                 // Phone number - search tel_fijo OR movil
-                db.open();
-                QSqlQuery phoneQ(db);
-                phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
-                phoneQ.bindValue(":phone", ui->le_search->text());
-                phoneQ.bindValue(":movil", ui->le_search->text());
-                phoneQ.exec();
                 QString clientFromPhone;
-                if (phoneQ.first())
-                    clientFromPhone = phoneQ.value(0).toString();
-                else {
-                    m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
-                                                          .arg(ui->le_search->text().toHtmlEscaped())));
-                    searchProblem = true;
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery phoneQ(db);
+                    phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
+                    phoneQ.bindValue(":phone", ui->le_search->text());
+                    phoneQ.bindValue(":movil", ui->le_search->text());
+                    phoneQ.exec();
+                    if (phoneQ.first())
+                        clientFromPhone = phoneQ.value(0).toString();
+                    else {
+                        m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
+                                                              .arg(ui->le_search->text().toHtmlEscaped())));
+                        searchProblem = true;
+                    }
                 }
-                db.close();
 
                 if (!clientFromPhone.isNull()) {
-                    db.open();
+                    ConnectionScope scope(db);
                     QSqlQuery q(db);
                     q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
                     q.bindValue(":cliente", clientFromPhone);
-                    q.exec();
-                    sqlQueryModel->setQuery(std::move(q));
-                    db.close();
+                    loadEveryRow(sqlQueryModel, std::move(q));
                 }
             }
             else {
                 // Ticket number
-                db.open();
-                QSqlQuery q(db);
-                q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-                q.bindValue(":n_recibo", ui->le_search->text());
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
-                db.close();
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+                    q.bindValue(":n_recibo", ui->le_search->text());
+                    loadEveryRow(sqlQueryModel, std::move(q));
+                }
                 totalPriceActive = true;
             }
         }
@@ -558,30 +589,21 @@ void RecogPrendas::on_pb_search_clicked()
                                (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" :
                                (ui->cb_search_date->currentText() == "Anulación") ? "fecha_anulacion" : "";
             if (!dateSlash.isNull() || !dateDash.isNull()) {
-                db.open();
+                ConnectionScope scope(db);
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos WHERE " + dateType + " = :date");
                 q.bindValue(":date", date.toString("dd-MM-yyyy"));
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
-                db.close();
+                loadEveryRow(sqlQueryModel, std::move(q));
             }
             else {
                 // SQLite LIKE is ASCII-only and won't match García when searching "garcia".
                 // Load all rows and filter client-side so normalization handles diacritics.
-                db.open();
-                QSqlQuery q(db);
-                q.prepare("SELECT * FROM ingresos");
-                q.exec();
-                sqlQueryModel->setQuery(std::move(q));
-                // QSqlQueryModel lazy-fetches in 256-row batches and fetchMore() needs the
-                // db connection open. Drain the full result set here, BEFORE closing - if
-                // we close first, canFetchMore() returns false and the proxy filter only
-                // sees the first 256 rows, silently dropping tickets for prolific clients
-                // (or any client whose receipts landed past row 256 of ingresos).
-                while (sqlQueryModel->canFetchMore())
-                    sqlQueryModel->fetchMore();
-                db.close();
+                {
+                    ConnectionScope scope(db);
+                    QSqlQuery q(db);
+                    q.prepare("SELECT * FROM ingresos");
+                    loadEveryRow(sqlQueryModel, std::move(q));   // the proxy filter needs every row
+                }
                 nameSearchFilter = MySortFilterProxyModel::removeDiacritics(ui->le_search->text()).toLower();
                 qDebug() << "RecogPrendas::on_pb_search_clicked: name search loaded"
                          << sqlQueryModel->rowCount() << "rows; filter=" << nameSearchFilter;
@@ -608,8 +630,8 @@ void RecogPrendas::on_pb_search_clicked()
         sqlQueryModel->setHeaderData(INGRESOS_COL_SIZE     , Qt::Horizontal, tr("Tam."));
         sqlQueryModel->setHeaderData(INGRESOS_COL_SERVICIO  , Qt::Horizontal, tr("Serv."));
         sqlQueryModel->setHeaderData(INGRESOS_COL_OBSERVACIONES   , Qt::Horizontal, tr("Obs."));
-        sqlQueryModel->setHeaderData(INGRESOS_COL_EDIT_LOCK, Qt::Horizontal, tr("Bloqueo"));
         // Set model to table
+        MySortFilterProxyModel *oldProxy = proxyModel;   // replaced on every refresh
         proxyModel = new MySortFilterProxyModel(this);
         // lessThan() keys on table_name to pick the date / numeric comparators.
         proxyModel->table_name = "ingresos";
@@ -617,6 +639,8 @@ void RecogPrendas::on_pb_search_clicked()
             proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
+        if (oldProxy)
+            oldProxy->deleteLater();
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         placeIngresosDateColumns(ui->tableView->horizontalHeader());
         // Hide internal columns not meant for display
@@ -635,6 +659,7 @@ void RecogPrendas::on_pb_search_clicked()
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_SEQ,         true);
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_ID,          true);
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(ui->tableView, this));
         ui->tableView->resizeColumnsToContents();
@@ -651,7 +676,7 @@ void RecogPrendas::on_pb_search_clicked()
                 if (!garmentExcludedFromTotals(vEstado))
                     totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toFloat();
             }
-            ui->lbl_total->setText(tr("Importe total: %1 €").arg(moneyText(totalPrice).replace('.', ',')));
+            ui->lbl_total->setText(tr("Importe total: %1 €").arg(displayMoney(totalPrice)));
         }
         else
             ui->lbl_total->setText(tr("Importe total: -"));
@@ -694,9 +719,12 @@ void RecogPrendas::on_pb_add_clicked()
     const QString ticketNum = ui->le_nr_ticket->text();
     if (ticketNum.isEmpty())
         return;
-    // The same window as Herramientas -> Añadir nuevas prendas, on the selected ticket.
+    // The same window as Tickets -> Añadir nuevas prendas, on the selected ticket.
     // It deletes itself on close; window-modal over Recogida while it is open.
     auto *dlg = new AddGarment(db, this);
+    dlg->invoicingBlocked = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
+    };
     dlg->setWindowModality(Qt::WindowModal);
     auto added = QSharedPointer<int>::create(0);
     connect(dlg, &AddGarment::garmentSaved, this, [added](const QString &) { ++*added; });
@@ -773,7 +801,7 @@ void RecogPrendas::on_le_size_editingFinished()
             && !garmentUnmeasured(ui->le_garm->text(), ui->le_size->text())) {
         const double price = calculatePrice();
         if (price > 0) {
-            ui->le_price->setText(moneyText(price));
+            ui->le_price->setText(displayMoney(price));
             updateDb(SIZE_AND_PRICE);
         }
     }
@@ -814,9 +842,9 @@ void RecogPrendas::on_pb_pay_all_clicked()
     // Adopt a submission the dialog gave up waiting on, so a late reply still
     // patches the row instead of dying with the dialog.
     connect(&dlg, &PayDialog::submitAdopted, this,
-            [this](const QString &reqId, const QString &ticketNum, int seq) {
+            [this](const QString &reqId, const QString &ticketNum, int seq, bool facturaPrinted) {
         ensureVerifactuConnected();
-        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/true });
+        m_pendingSubmits.insert(reqId, { ticketNum, seq, /*adopted=*/!facturaPrinted });
         qDebug() << "RecogPrendas: adopted in-flight submit" << reqId
                  << "for" << verifactuInvoiceId(ticketNum, seq);
     });
@@ -827,11 +855,11 @@ void RecogPrendas::on_pb_pay_all_clicked()
     }
     const bool charged = dlg.exec() == QDialog::Accepted;
     on_pb_search_clicked();
-    if (charged && dlg.unstoredGarments() > 0)
-        m_result->setText(UiKit::errorHtml(tr("%1 prenda(s) del ticket %2 no se han guardado como cobradas.")
-                                               .arg(dlg.unstoredGarments()).arg(ticketNum.toHtmlEscaped()))
-                          + "<br>" + tr("La factura ya se ha enviado a AEAT con ellas (se han bloqueado o cobrado "
-                                        "mientras tanto). Revise el ticket antes de seguir."));
+    if (charged && !dlg.notSentReason().isEmpty())
+        m_result->setText(UiKit::okHtml(tr("Ticket %1 cobrado.").arg(ticketNum.toHtmlEscaped()))
+                          + "<br>" + UiKit::warnHtml(tr("La factura no se ha enviado a AEAT: %1")
+                                                         .arg(dlg.notSentReason().toHtmlEscaped()))
+                          + "<br>" + tr("Queda pendiente y se reenvía al iniciar la aplicación (Facturas pendientes)."));
     else if (charged)
         m_result->setText(UiKit::okHtml(tr("Ticket %1 cobrado.").arg(ticketNum.toHtmlEscaped()))
                           + "<br>" + tr("El envío a AEAT se confirma en la barra de estado."));
@@ -880,6 +908,22 @@ void RecogPrendas::on_pb_print_clicked()
                   rowClickedCell, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt();
     }
     const QString ticketNum = ui->le_nr_ticket->text();
+    if (seq < 0) {
+        // No row chosen: a factura is one payment event, never several merged into one.
+        QVector<SubmittedInvoiceEvent> events;
+        if (!submittedInvoiceEvents(db, ticketNum, events) || events.isEmpty()) {
+            m_result->setText(UiKit::warnHtml(tr("El ticket %1 no tiene ninguna factura que reimprimir.")
+                                                  .arg(ticketNum.toHtmlEscaped())));
+            return;
+        }
+        if (events.size() > 1) {
+            m_result->setText(UiKit::warnHtml(tr("El ticket %1 tiene %2 facturas (pagos parciales).")
+                                                  .arg(ticketNum.toHtmlEscaped()).arg(events.size()))
+                              + "<br>" + tr("Seleccione una prenda del pago que quiera reimprimir."));
+            return;
+        }
+        seq = events.first().seq;
+    }
     const bool printed = printFactura(ticketNum, seq);
     resetAllContents();
     m_result->setText(printed ? UiKit::okHtml(tr("Factura del ticket %1 impresa.").arg(ticketNum.toHtmlEscaped()))
@@ -900,7 +944,9 @@ bool RecogPrendas::printFactura(const QString &ticketNum, int invoiceSeq)
     ui_impr->le_n_ticket->setText(ticketNum);
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(false, false);
-    return AppSettings::instance()->enablePrinting() && ui_impr->printTicket();
+    const bool printed = AppSettings::instance()->enablePrinting() && ui_impr->printTicket();
+    ui_impr->deleteLater();
+    return printed;
 }
 
 void RecogPrendas::on_pb_verifactu_clicked()
@@ -993,8 +1039,17 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
     // its original fecha_pago. The old version sent the bare n_recibo with the
     // whole ticket's importe on the reception date, which for a partial-pay event
     // meant a wrong amount under an ID belonging to a different event.
-    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
     const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+    if (!rectifiedTicketOf(db, ticketNum).isEmpty()) {
+        // Its record is an R5 with the corrected invoice: a retry would send a plain F2.
+        qWarning() << "retryVerifactuSubmit: refused for rectificativa" << invoiceId;
+        m_result->setText(UiKit::errorHtml(tr("El ticket %1 es una rectificativa: no se reenvía como factura.")
+                                               .arg(invoiceId.toHtmlEscaped()))
+                          + "<br>" + tr("Si la AEAT la rechazó, hágala de nuevo en Rectificar factura: se reenvía "
+                                        "corregida con el mismo número."));
+        return;
+    }
+    const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
     const QDate invoiceDate = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
     if (ev.nRecibo.isEmpty() || !invoiceDate.isValid()) {
         qWarning() << "retryVerifactuSubmit: no paid event" << invoiceId
@@ -1036,7 +1091,7 @@ void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
         return;
     }
 
-    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId);
+    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId, QDate::fromString(ev.fechaPago, "dd-MM-yyyy"));
     if (reqId.isEmpty()) return;
 
     statusBar()->showMessage(tr("Consultando %1 en AEAT...").arg(invoiceId));
@@ -1117,8 +1172,8 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    const QString localAmount = QString::number(ev.importe, 'f', 2);
-    const QString remoteAmount = rec.totalAmount > 0 ? QString::number(rec.totalAmount, 'f', 2)
+    const QString localAmount = displayMoney(ev.importe);
+    const QString remoteAmount = rec.totalAmount > 0 ? displayMoney(rec.totalAmount)
                                                      : QString("-");
     const QStringList fields = { tr("Nº factura"), tr("Fecha"), tr("Importe"), tr("CSV") };
     const QStringList remote = { rec.invoiceId, rec.invoiceDate, remoteAmount, rec.csv };
@@ -1217,6 +1272,14 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
         statusBar()->showMessage(
             tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        // A definitive refusal can come after the customer got the factura with its QR:
+        // it stays in the panel until someone resends it.
+        if (result.status == VerifactuResult::ERROR
+            && !verifactuErrorIsDuplicate(result.errorCode, result.errorDescription))
+            m_result->setText(UiKit::errorHtml(tr("AEAT ha rechazado la factura %1: %2")
+                                                   .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped(),
+                                                        result.errorDescription.toHtmlEscaped()))
+                              + "<br>" + tr("Reenvíela con el botón Verifactu\u2026 después de corregir la causa."));
         // "Already exists" means AEAT HAS the invoice and we lost the reply, so a
         // further retry can only fail the same way. Close the loop here: ask AEAT
         // what it holds and offer to adopt its CSV.

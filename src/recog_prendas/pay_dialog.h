@@ -36,15 +36,23 @@ public:
     // the ticket is not found or every row is already paid (caller should
     // not show the dialog in that case).
     bool loadTicket(const QString &ticketNum);
-    // Garments charged (sent to AEAT) that could not be stored as paid afterwards.
-    int unstoredGarments() const { return m_unstoredHashes.size(); }
+    // Why the stored payment's invoice was not sent (empty when it was): it stays
+    // PENDIENTE and the start-up recovery resends it.
+    QString notSentReason() const { return m_notSentReason; }
+    QDate paymentDate() const { return m_pendingFechaPago; }
 
 signals:
     // Emitted when the bounded wait expires with the request still in flight.
     // This dialog dies with exec(), so RecogPrendas adopts the reqId and applies
     // the reply if it still arrives - otherwise a late SUCCESS (and its CSV) is
     // lost and the row stays falsely PENDIENTE.
-    void submitAdopted(const QString &requestId, const QString &ticketNum, int seq);
+    // facturaPrinted: the customer already has the factura with the QR (direct client).
+    void submitAdopted(const QString &requestId, const QString &ticketNum, int seq, bool facturaPrinted);
+
+protected:
+    // Esc, the window's X and Cerrar all end here: refused while AEAT has not answered,
+    // or the outcome of an invoice AEAT may already hold would be lost.
+    void done(int result) override;
 
 private slots:
     void onCobrarClicked();
@@ -55,11 +63,10 @@ private:
     void buildUi();
     void setFormEnabled(bool enabled);
     void recomputeTotal();
-    void persistPayment(int seq, const VerifactuResult &result);
-    // Stamp the just-paid rows of this seq as PENDIENTE (used when AEAT did not
-    // confirm in time - the submission outcome is unknown, not a failure).
-    void markPendingVerifactu(int seq);
-    void printPartialFactura(int seq, const QPixmap &qrCode);
+    // Stores the selected garments as paid + PENDIENTE under this seq, all or none.
+    bool storePayment(int seq);
+    void applyReply(int seq, const VerifactuResult &result);
+    void printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued = false);
 
     QString m_ticketNum;
     QString m_cliente;
@@ -78,7 +85,7 @@ private:
     int         m_pendingSeq = -1;
     QStringList m_pendingHashes;
     QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
-    QStringList             m_unstoredHashes;
+    QString                 m_notSentReason;
     QDate       m_pendingFechaPago;
 };
 

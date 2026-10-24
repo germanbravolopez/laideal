@@ -79,7 +79,7 @@ Anything non-obvious, common failure modes, or follow-up actions.
 name: agent-name
 description: What it does and when to delegate to it. Add "Use proactively ..." to encourage automatic delegation.
 tools: Glob, Grep, Read          # allowlist; omit to inherit all tools
-model: sonnet                    # optional
+model: sonnet                    # tier per CLAUDE.md "Model orchestration": haiku | sonnet | opus
 ---
 
 System prompt for the subagent: role, job, exclusions, output format.
