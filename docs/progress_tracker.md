@@ -15,7 +15,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `feature/aeat-direct-investigation`
 
-**Latest release**: [12.0](https://github.com/germanbravolopez/laideal/releases/tag/12.0) — menus organised by task, the post-update self-check (*Comprobar tras actualizar*), decimal comma everywhere, a clickable list of AEAT-refused invoices, quarter closes kept with their date, a second backup folder and a copy before every update, rectificativas in their own `R-<n>` series, per-invoice IVA in Contabilidad, many Verifactu fixes, and the direct AEAT client ready for production. The shop stays on the IreneSolutions gateway in its TEST environment.
+**Latest release**: [12.1](https://github.com/germanbravolopez/laideal/releases/tag/12.1) — bug-fix release on 12.0: Añadir prendas could not add an unpaid garment since 11.2 (a null payment date against the shop's NOT NULL columns); the post-update check is ticked in the installer, asked for once after an update, reachable from Ayuda, and lists what to send. The test schemas are now the shop's. The shop stays on the IreneSolutions gateway in its TEST environment.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->

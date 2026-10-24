@@ -1,5 +1,9 @@
 ﻿Versiones:
 
+12.1
+- Corrección: desde la 11.2, "Añadir prendas" no podía añadir una prenda sin cobrar a un ticket ("NOT NULL constraint failed: ingresos.fecha_pago"). Ya funciona.
+- Comprobar tras actualizar: el instalador la deja marcada al terminar (y ya no abre el programa); el primer inicio tras una actualización recuerda ejecutarla; también está en Ayuda → Comprobar tras actualizar…, y al terminar indica qué enviar (el informe, el registro del programa y una foto de la primera factura impresa).
+
 12.0
 - Nuevo: la barra de menús se organiza por tareas: Tickets, Facturas y Contabilidad sustituyen a Herramientas; la copia de seguridad está en Archivo y el log en Ayuda. 'Revertir contabilidad' ya no tiene atajo de teclado; 'Anular factura' y 'Rectificar factura' tienen Alt+A y Alt+T.
 - Nuevo: 'La Ideal - Comprobar tras actualizar' en el menú Inicio comprueba la nueva versión con sus datos y su impresora, sobre una copia, y guarda un informe para enviarlo.
