@@ -1,5 +1,9 @@
 ﻿Releases:
 
+12.1
+- Bug fix: since 11.2, "Añadir prendas" could not add an unpaid garment to a ticket ("NOT NULL constraint failed: ingresos.fecha_pago"). It works again.
+- Comprobar tras actualizar: the installer leaves it ticked on its last page (and no longer opens the program); the first start after an update reminds you to run it; it is also in Ayuda → Comprobar tras actualizar…, and when it finishes it lists what to send (the report, the program's log and a photo of the first printed invoice).
+
 12.0
 - New: the menu bar is organised by task: Tickets, Facturas and Contabilidad replace Herramientas; the backup is in Archivo and the log in Ayuda. 'Revertir contabilidad' no longer has a shortcut; 'Anular factura' and 'Rectificar factura' have Alt+A and Alt+T.
 - New: 'La Ideal - Comprobar tras actualizar' in the Start menu checks the new version with your data and printer, on a copy, and saves a report to send.

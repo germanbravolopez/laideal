@@ -507,9 +507,10 @@ private slots:
         QVERIFY(!expenses[2].invalidAmount);
     }
 
-    void test_expensesBetweenDates_nullIvaIsNotSinIva()
+    // A blank IVA (the shop's NOT NULL column holds '' at worst) is unknown, never SIN IVA.
+    void test_expensesBetweenDates_blankIvaIsNotSinIva()
     {
-        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '10-03-2026', '50.00', NULL)");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '10-03-2026', '50.00', '')");
         exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (2, 'F-2', '11-03-2026', '40.00', 0)");
         const QVector<ExpenseDetail> e = expensesBetweenDates(m_db, QDate(2026, 3, 1), QDate(2026, 4, 1));
         QCOMPARE(e.size(), 2);
@@ -755,8 +756,8 @@ private slots:
              "('3', '10-05-2026', 'c', '0'), ('4', '10-08-2026', 'd', ''),"        // open quarters
              "('5', '', 'e', '1'), ('6', 'garbage', 'f', '1'), ('7', '10-13-2026', 'g', '1'),"  // no real quarter
              "('8', '10-02-1999', 'h', '1')");                                    // year out of range
-        exec("INSERT INTO gastos (n_factura, fecha, importe, edit_lock) VALUES "
-             "('F1', '15-08-2025', '5.00', '1'), ('F2', '01-11-2025', '5.00', '0'), ('F3', '', '5.00', '1')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, edit_lock) VALUES "
+             "(1, 'F1', '15-08-2025', '5.00', '1'), (2, 'F2', '01-11-2025', '5.00', '0'), (3, 'F3', '', '5.00', '1')");
         QVERIFY(migrateDatabase(m_db));
 
         QCOMPARE(closedQuarterKeys(m_db), (QSet<int>{ quarterKey(1, 2026), quarterKey(3, 2025) }));
@@ -866,7 +867,7 @@ private slots:
         QVERIFY(!quarterHasMovements(m_db, 2, 2026));
         QVERIFY(!quarterHasMovements(m_db, 1, 2025));
 
-        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES ('F1', '15-08-2026', '5.00')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES (1, 'F1', '15-08-2026', '5.00')");
         QVERIFY(quarterHasMovements(m_db, 3, 2026));                                // gasto only
         QVERIFY(!quarterHasMovements(m_db, 4, 2026));
 
@@ -1907,8 +1908,8 @@ private slots:
     // ambiguous and left alone.
     void test_migrateDatabase_replacesTheDecimalCommaOutsideInvoices()
     {
-        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES "
-             "('OPEN', '10-05-2026', '5,50'), ('CLOSED', '10-02-2026', '6,50'), ('BOTH', '10-05-2026', '1.234,50')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES "
+             "(1, 'OPEN', '10-05-2026', '5,50'), (2, 'CLOSED', '10-02-2026', '6,50'), (3, 'BOTH', '10-05-2026', '1.234,50')");
         exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', ' 2,5', '1,75')");
         exec("INSERT INTO ingresos (n_recibo, hash, importe, pagado, edit_lock) VALUES ('P1', 'p1', '3,10', 'SI', '0')");
         QVERIFY(closeQuarter(m_db, 1, 2026, ""));
@@ -2162,8 +2163,8 @@ private slots:
         row.nRecibo         = "30877";      // existing ticket the garment is added to
         row.cliente         = "Salvador";
         row.fechaRecepcion  = "01-07-2026";
-        row.fechaPago       = "";           // added unpaid
-        row.fechaRecogida   = "";
+        row.fechaPago       = QString();    // added unpaid: AddGarment leaves both null
+        row.fechaRecogida   = QString();
         row.importe         = "11.00";
         row.pagado          = "NO";
         row.estado          = "En tienda";
@@ -2175,6 +2176,43 @@ private slots:
         QVERIFY(insertGarmentRow(m_db, row));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='addGarmentHash'"),
                  QStringLiteral("PENDIENTE"));
+    }
+
+    // The shop's table refuses NULL in its text columns (11.2: "NOT NULL constraint failed:
+    // ingresos.fecha_pago" adding an unpaid garment): null fields are stored as ''.
+    void test_insertGarmentRow_nullFieldsOnNotNullColumns()
+    {
+        QTemporaryDir dir;
+        QSqlDatabase strict = QSqlDatabase::addDatabase("QSQLITE", "strict_not_null");
+        strict.setDatabaseName(dir.filePath("strict.db"));
+        QVERIFY(strict.open());
+        QVERIFY(QSqlQuery(strict).exec(
+            "CREATE TABLE ingresos (n_recibo TEXT NOT NULL, cliente TEXT NOT NULL, fecha_recepcion TEXT NOT NULL, "
+            "fecha_pago TEXT NOT NULL, fecha_recogida TEXT NOT NULL, importe TEXT NOT NULL, pagado TEXT NOT NULL, "
+            "estado TEXT NOT NULL, cantidad TEXT NOT NULL, prenda TEXT NOT NULL, size TEXT NOT NULL, "
+            "servicio TEXT NOT NULL, observaciones TEXT NOT NULL, edit_lock TEXT NOT NULL, hash TEXT NOT NULL)"));
+        strict.close();
+        QVERIFY(migrateDatabase(strict));
+        IngresoGarmentRow row;
+        row.nRecibo = "31366";
+        row.cliente = "Cliente";
+        row.fechaRecepcion = "20-10-2026";
+        row.importe = "7.00";
+        row.pagado = "NO";
+        row.estado = "En tienda";
+        row.cantidad = "1";
+        row.prenda = "Chaqueta";
+        row.hash = "strictHash";
+        row.verifactuEstado = "SIN COBRAR";          // fecha_pago, fecha_recogida, size, servicio... left null
+        QVERIFY(insertGarmentRow(strict, row));
+        QVERIFY(strict.open());
+        QSqlQuery q(strict);
+        QVERIFY(q.exec("SELECT fecha_pago, fecha_recogida, size FROM ingresos WHERE hash = 'strictHash'") && q.next());
+        QCOMPARE(q.value(0).toString() + "|" + q.value(1).toString() + "|" + q.value(2).toString(), QStringLiteral("||"));
+        q.finish();
+        strict.close();
+        strict = QSqlDatabase();
+        QSqlDatabase::removeDatabase("strict_not_null");
     }
 
     // AddGarment gate: garments may only be appended to an unpaid ticket (a paid
@@ -2276,11 +2314,10 @@ private slots:
         insertRow("TP", "hA");                 // normal row (estado 'NO')
         insertRow("TP", "hB");                 // will be voided below
         QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
-        // Legacy row with a NULL estado must still be picked up (the != 'Anulado'
-        // filter is NULL-guarded; SQLite treats NULL != x as NULL, i.e. excluded).
+        // Legacy row with a blank estado (the shop's column is NOT NULL) must still be picked up.
         exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, importe, pagado, "
              "estado, cantidad, prenda, hash) "
-             "VALUES ('0', 'TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
+             "VALUES ('0', 'TP', 'Cli', '01-04-2026', '5.00', 'NO', '', '1', 'Camisa', 'hC')");
 
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
@@ -2291,7 +2328,7 @@ private slots:
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"), QString());
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hB'"),
                  QDate::currentDate().toString("dd-MM-yyyy"));
-        // The NULL-estado legacy row is picked up like any normal row.
+        // The blank-estado legacy row is picked up like any normal row.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
     }

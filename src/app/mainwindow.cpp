@@ -28,6 +28,7 @@
 #include "aeatcertificate.h"
 #include "aeatselftest.h"
 #include "producerdeclaration.h"
+#include "selfcheck.h"
 #include "reporthtml.h"
 #include "uikit.h"
 #include <QTimer>
@@ -43,6 +44,7 @@
 #include <QPushButton>
 #include <QDateEdit>
 #include <QDir>
+#include <QProcess>
 #include <QFileDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -68,6 +70,8 @@ MainWindow::MainWindow(QWidget *parent)
     db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=15000");   // a save waits out a backup's read
     mainwindowInitialSettings();
     initializeVerifactu();
+    if (!m_updateNotice.isEmpty())
+        m_result->setText(m_result->text().isEmpty() ? m_updateNotice : m_result->text() + "<br><br>" + m_updateNotice);
 
     // Refused invoices stay in view until resent (the customer may hold their factura):
     // refreshed on every AEAT outcome, and regularly for those settled in other windows.
@@ -254,6 +258,9 @@ void MainWindow::buildUi()
     QAction *actionBuscar_actualizaciones = new QAction(tr("Buscar actualizaciones"), this);
     actionBuscar_actualizaciones->setObjectName("actionBuscar_actualizaciones");
     actionBuscar_actualizaciones->setToolTip(tr("Comprueba en GitHub si hay una versión más reciente y la instala"));
+    QAction *actionComprobar_tras_actualizar = new QAction(tr("Comprobar tras actualizar..."), this);
+    actionComprobar_tras_actualizar->setObjectName("actionComprobar_tras_actualizar");
+    actionComprobar_tras_actualizar->setToolTip(tr("Comprueba esta versión con una copia de sus datos y su impresora, y guarda un informe para enviarlo"));
     QAction *actionNotas_de_la_version = new QAction(tr("Notas de la versión"), this);
     actionNotas_de_la_version->setObjectName("actionNotas_de_la_version");
     actionNotas_de_la_version->setToolTip(tr("Muestra el historial de cambios de todas las versiones publicadas"));
@@ -306,6 +313,7 @@ void MainWindow::buildUi()
     QMenu *menuAyuda = addMenu(tr("Ayuda"), "menuAyuda");
     menuAyuda->addAction(actionBuscar_actualizaciones);
     menuAyuda->addAction(actionNotas_de_la_version);
+    menuAyuda->addAction(actionComprobar_tras_actualizar);
     menuAyuda->addAction(actionMostrar_log);
     menuAyuda->addSeparator();
     menuAyuda->addAction(actionAcerca_de_Verifactu);
@@ -451,6 +459,10 @@ void MainWindow::mainwindowInitialSettings()
     // A new version migrates the database: keep a copy of it as it was first, also with
     // automatic backups switched off (the data repairs never run without one).
     const QString version = Updater::currentVersion();
+    // The version that ran before this start: 12.0 did not record it yet, so its pre-migration
+    // copy's version stands in (read before this start's copy moves it on).
+    const QString previousVersion = AppSettings::instance()->lastStartedVersion().isEmpty()
+        ? AppSettings::instance()->backupLastVersion() : AppSettings::instance()->lastStartedVersion();
     bool rewriteData = true;   // false: no copy of the database as the previous version left it
     if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(DB_PATH)) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -474,6 +486,16 @@ void MainWindow::mainwindowInitialSettings()
     if (!migrateDatabase(db, rewriteData))
         startProblems << UiKit::errorHtml(tr("La base de datos no se ha actualizado del todo para esta versión. "
                                              "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
+    // Once per update: ask for the post-update check and its report (added after the
+    // Verifactu start-up messages, which replace the panel).
+    if (SelfCheck::isFirstStartAfterUpdate(previousVersion, version))
+        m_updateNotice = UiKit::warnHtml(tr("La Ideal se ha actualizado a la versión %1.").arg(version))
+                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar…</b> (o Inicio → La Ideal - Comprobar "
+                                       "tras actualizar) y envíe el informe que guarda en el escritorio.");
+    if (AppSettings::instance()->lastStartedVersion() != version) {
+        AppSettings::instance()->setLastStartedVersion(version);
+        AppSettings::instance()->save();
+    }
     // Req. 4: backups switched off, or none correct for days, stay visible at every start.
     if (const QString backup = BackupManager::currentBackupWarning(); !backup.isEmpty())
         startProblems << UiKit::warnHtml(backup.toHtmlEscaped());
@@ -1575,6 +1597,16 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
 void MainWindow::on_actionExportar_registros_aeat_triggered()
 {
     (new AeatExportDialog(db, this))->show();
+}
+
+void MainWindow::on_actionComprobar_tras_actualizar_triggered()
+{
+    // Its own process, as from the Start menu: the check swaps in a copy of the settings.
+    const bool started = QProcess::startDetached(QCoreApplication::applicationFilePath(),
+        { QStringLiteral("--settings"), AppSettings::instance()->filePath(), QStringLiteral("--self-check") });
+    m_result->setText(started ? tr("La comprobación se abre en su propia ventana; este programa puede seguir abierto.")
+                              : UiKit::errorHtml(tr("No se pudo iniciar la comprobación: use Inicio → La Ideal - "
+                                                    "Comprobar tras actualizar.")));
 }
 
 void MainWindow::on_actionMostrar_log_triggered()

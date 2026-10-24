@@ -127,6 +127,7 @@ private slots:
     void on_actionRectificar_factura_verifactu_triggered();
     void on_actionExportar_registros_aeat_triggered();
     void on_actionMostrar_log_triggered();
+    void on_actionComprobar_tras_actualizar_triggered();
     void on_actionAcerca_de_Verifactu_triggered();
     void on_actionBuscar_actualizaciones_triggered();
     void on_actionNotas_de_la_version_triggered();
@@ -172,6 +173,7 @@ private:
 
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;
+    QString m_updateNotice;   // the first start of a new version asks for the post-update check
     QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration = nullptr;
     bool m_saving = false;                      // inside on_pb_save_clicked (it may wait for AEAT)

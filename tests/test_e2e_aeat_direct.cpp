@@ -174,7 +174,9 @@ private slots:
         seedGarment("200", "h200b", "5.00");
         QVERIFY(pay("200", QDate(2026, 2, 11), { "h200b" }));
         QVERIFY(pay("200", QDate(2026, 2, 12)));
-        QTRY_COMPARE(m_server.sentRecords().last().invoiceNumber, QStringLiteral("200-1"));
+        // Never last() of an empty list: on a slow runner nothing may have been sent yet.
+        QTRY_VERIFY(!m_server.sentRecords().isEmpty()
+                    && m_server.sentRecords().last().invoiceNumber == QStringLiteral("200-1"));
         const QList<FakeAeatServer::SentRecord> sent = m_server.sentRecords();
         QCOMPARE(sent.last().invoiceNumber, QStringLiteral("200-1"));
         QCOMPARE(sent.last().total, QStringLiteral("5.00"));

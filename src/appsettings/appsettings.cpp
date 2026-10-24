@@ -414,6 +414,8 @@ QString AppSettings::backupSecondFolder() const       { return str({"backup", "s
 void    AppSettings::setBackupSecondFolder(const QString &v) { setStr({"backup", "second_folder"}, v); }
 QString AppSettings::backupLastVersion() const        { return str({"backup", "last_version"}); }
 void    AppSettings::setBackupLastVersion(const QString &v) { setStr({"backup", "last_version"}, v); }
+QString AppSettings::lastStartedVersion() const       { return str({"app", "last_started_version"}); }
+void    AppSettings::setLastStartedVersion(const QString &v) { setStr({"app", "last_started_version"}, v); }
 
 // ---------------------------------------------------------------------------
 // JSON helpers

@@ -27,6 +27,13 @@ QString dbPath() { return s_dbPath; }
 // Private helpers
 // ---------------------------------------------------------------------------
 
+// A null QString binds as SQL NULL, which the shop's NOT NULL columns refuse (an unpaid
+// AddGarment row has no fecha_pago): every text value an INSERT binds goes through here.
+static QString notNull(const QString &value)
+{
+    return value.isNull() ? QStringLiteral("") : value;
+}
+
 // Guard used at the top of every function that opens the database.
 // Returns true if the path is missing, so callers can early-return.
 static bool dbNotConfigured(const QSqlDatabase &db, const char *caller)
@@ -682,10 +689,10 @@ bool addNewClient(QSqlDatabase &db, const QString &client, const QString &telFij
     QSqlQuery q(db);
     q.prepare("INSERT INTO clientes (nombre, tel_fijo, direccion, movil) "
               "VALUES (:nombre, :tel_fijo, :direccion, :movil)");
-    q.bindValue(":nombre",    client);
-    q.bindValue(":tel_fijo",  telFijo);
-    q.bindValue(":direccion", direccion);
-    q.bindValue(":movil",     movil);
+    q.bindValue(":nombre",    notNull(client));
+    q.bindValue(":tel_fijo",  notNull(telFijo));
+    q.bindValue(":direccion", notNull(direccion));
+    q.bindValue(":movil",     notNull(movil));
     bool ok = q.exec();
     if (!ok)
         qWarning() << "addNewClient: failed to insert the client -" << q.lastError().text();
@@ -1005,21 +1012,21 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
               "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
               ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
               ":observaciones, '0', :hash, :verifactu_estado)");
-    q.bindValue(":n_recibo",         row.nRecibo);
-    q.bindValue(":cliente",          row.cliente);
-    q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
-    q.bindValue(":fecha_pago",       row.fechaPago);
-    q.bindValue(":fecha_recogida",   row.fechaRecogida);
-    q.bindValue(":importe",          moneyText(row.importe));
-    q.bindValue(":pagado",           row.pagado);
-    q.bindValue(":estado",           row.estado);
-    q.bindValue(":cantidad",         row.cantidad);
-    q.bindValue(":prenda",           row.prenda);
-    q.bindValue(":size",             row.size);
-    q.bindValue(":servicio",         row.servicio);
-    q.bindValue(":observaciones",    row.observaciones);
-    q.bindValue(":hash",             row.hash);
-    q.bindValue(":verifactu_estado", row.verifactuEstado);
+    q.bindValue(":n_recibo",         notNull(row.nRecibo));
+    q.bindValue(":cliente",          notNull(row.cliente));
+    q.bindValue(":fecha_recepcion",  notNull(row.fechaRecepcion));
+    q.bindValue(":fecha_pago",       notNull(row.fechaPago));
+    q.bindValue(":fecha_recogida",   notNull(row.fechaRecogida));
+    q.bindValue(":importe",          notNull(moneyText(row.importe)));
+    q.bindValue(":pagado",           notNull(row.pagado));
+    q.bindValue(":estado",           notNull(row.estado));
+    q.bindValue(":cantidad",         notNull(row.cantidad));
+    q.bindValue(":prenda",           notNull(row.prenda));
+    q.bindValue(":size",             notNull(row.size));
+    q.bindValue(":servicio",         notNull(row.servicio));
+    q.bindValue(":observaciones",    notNull(row.observaciones));
+    q.bindValue(":hash",             notNull(row.hash));
+    q.bindValue(":verifactu_estado", notNull(row.verifactuEstado));
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertGarmentRow: INSERT failed for" << row.nRecibo << row.hash << "-" << q.lastError().text();
@@ -1627,7 +1634,7 @@ bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row)
               "VALUES (:n, :cliente, :f, :f, '', :imp, 'SI', 'Rectificativa', '1', :prenda, '', '', :obs, '0', :hash, "
               "  '', '', :estado, '', '', '', '', :orig, :type)");
     q.bindValue(":n",       row.number);
-    q.bindValue(":cliente", row.client);
+    q.bindValue(":cliente", notNull(row.client));
     q.bindValue(":f",       date);                  // a rectificativa always reflects a paid operation
     q.bindValue(":imp",     moneyText(QString::number(row.amount, 'f', 2)));
     q.bindValue(":prenda",  QStringLiteral("Rectificativa de ticket %1").arg(row.original));
@@ -1871,7 +1878,7 @@ bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
     QSqlQuery q(db);
     q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
     for (const QString &item : items)
-        q.addBindValue(item);
+        q.addBindValue(notNull(item));
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();

@@ -290,6 +290,39 @@ private slots:
         m_driver->clear();
     }
 
+    // After an update the first start asks once for the post-update check; later starts do not.
+    void test_mainWindow_asksForTheCheckOnceAfterAnUpdate()
+    {
+        AppSettings::instance()->setLastStartedVersion("1.0");
+        AppSettings::instance()->setBackupLastVersion(Updater::currentVersion());   // no pre-migration copy here
+        {
+            MainWindow mw;
+            QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        }
+        QCOMPARE(AppSettings::instance()->lastStartedVersion(), Updater::currentVersion());
+        MainWindow again;
+        QVERIFY(!again.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        QVERIFY(again.findChild<QAction *>("actionComprobar_tras_actualizar"));
+    }
+
+    // From 12.0, which did not record the started version: its pre-migration copy's version
+    // tells the update. With neither (a first installation) nothing is asked.
+    void test_mainWindow_asksForTheCheckAfterAnUpdateFrom12_0()
+    {
+        AppSettings::instance()->setLastStartedVersion(QString());
+        AppSettings::instance()->setBackupLastVersion("12.0");
+        {
+            MainWindow mw;
+            QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        }
+        AppSettings::instance()->setLastStartedVersion(QString());
+        AppSettings::instance()->setBackupLastVersion(QString());
+        MainWindow firstInstall;
+        QVERIFY(!firstInstall.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        AppSettings::instance()->setBackupLastVersion(Updater::currentVersion());
+        QTest::qWait(1100);   // copies are named by the second: the next test's must not collide
+    }
+
     // A new version copies the database before migrating it, also with automatic backups off.
     void test_mainWindow_preMigrationCopyWithBackupsOff()
     {
@@ -1542,7 +1575,7 @@ private slots:
                  "actionRectificar_factura_verifactu", "|", "actionExportar_registros_aeat" }));
         QCOMPARE(entries("menuContabilidad"), QStringList({ "actionFormulario_facturas", "|",
                  "actionGenerar_contabilidad", "actionRevertir_contabilidad" }));
-        QCOMPARE(entries("menuAyuda"), QStringList({ "actionBuscar_actualizaciones", "actionNotas_de_la_version",
+        QCOMPARE(entries("menuAyuda"), QStringList({ "actionBuscar_actualizaciones", "actionNotas_de_la_version", "actionComprobar_tras_actualizar",
                  "actionMostrar_log", "|", "actionAcerca_de_Verifactu" }));
         QVERIFY(!mw.findChild<QMenu *>("menuHerramientas"));
         // Reopening a closed quarter is never one key press away; the Verifactu corrections have their own.
@@ -1553,7 +1586,7 @@ private slots:
         QCOMPARE(action("actionRectificar_factura_verifactu")->shortcut(), QKeySequence("Alt+T"));
         QCOMPARE(action("actionGenerar_contabilidad")->shortcut(), QKeySequence("Alt+G"));
         // "..." only on an entry that opens a window to fill in or choose from first.
-        const QStringList withDots = { "actionConfiguracion", "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas",
+        const QStringList withDots = { "actionConfiguracion", "actionComprobar_tras_actualizar", "actionRecogida_de_prendas", "actionAnadir_nuevas_prendas",
             "actionRecibo", "actionFactura", "actionFactura_completa", "actionAnular_factura_verifactu",
             "actionRectificar_factura_verifactu", "actionExportar_registros_aeat", "actionFormulario_facturas",
             "actionGenerar_contabilidad", "actionRevertir_contabilidad" };

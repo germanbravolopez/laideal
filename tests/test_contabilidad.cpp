@@ -142,7 +142,7 @@ private slots:
 
             QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no tiene registros de ingresos ni de gastos."));
             db.open();
-            QSqlQuery(db).exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES ('F1', '10-02-2026', '5.00')");
+            QSqlQuery(db).exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES (1, 'F1', '10-02-2026', '5.00')");
             db.close();
             QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no está bloqueado."));
 

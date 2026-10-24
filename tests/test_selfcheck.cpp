@@ -55,6 +55,14 @@ class TestSelfCheck : public QObject
     }
 
 private slots:
+    // The check is asked for once, on the first start of a newer version, never on a first install.
+    void test_isFirstStartAfterUpdate()
+    {
+        QVERIFY(SelfCheck::isFirstStartAfterUpdate("11.2", "12.0"));
+        QVERIFY(!SelfCheck::isFirstStartAfterUpdate("12.0", "12.0"));
+        QVERIFY(!SelfCheck::isFirstStartAfterUpdate(QString(), "12.0"));
+    }
+
     void test_newestBackup()
     {
         QTemporaryDir dir;
@@ -191,7 +199,7 @@ private slots:
         QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('8', 'abc', '0')"));
         QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('9', '12,5', '0')"));   // readable
         QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (2, 'G2', '7,5', '10.00')"));
-        QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (3, 'G3', NULL, '10.00')"));
+        QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (3, 'G3', '', '10.00')"));
         QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (4, 'G4', '10', '10.00')"));  // fine
         const SelfCheck::Check bad = SelfCheck::checkMoney(db);
         QCOMPARE(bad.status, SelfCheck::Check::Fail);
