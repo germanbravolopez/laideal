@@ -507,9 +507,10 @@ private slots:
         QVERIFY(!expenses[2].invalidAmount);
     }
 
-    void test_expensesBetweenDates_nullIvaIsNotSinIva()
+    // A blank IVA (the shop's NOT NULL column holds '' at worst) is unknown, never SIN IVA.
+    void test_expensesBetweenDates_blankIvaIsNotSinIva()
     {
-        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '10-03-2026', '50.00', NULL)");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (1, 'F-1', '10-03-2026', '50.00', '')");
         exec("INSERT INTO gastos (id, n_factura, fecha, importe, iva) VALUES (2, 'F-2', '11-03-2026', '40.00', 0)");
         const QVector<ExpenseDetail> e = expensesBetweenDates(m_db, QDate(2026, 3, 1), QDate(2026, 4, 1));
         QCOMPARE(e.size(), 2);
@@ -755,8 +756,8 @@ private slots:
              "('3', '10-05-2026', 'c', '0'), ('4', '10-08-2026', 'd', ''),"        // open quarters
              "('5', '', 'e', '1'), ('6', 'garbage', 'f', '1'), ('7', '10-13-2026', 'g', '1'),"  // no real quarter
              "('8', '10-02-1999', 'h', '1')");                                    // year out of range
-        exec("INSERT INTO gastos (n_factura, fecha, importe, edit_lock) VALUES "
-             "('F1', '15-08-2025', '5.00', '1'), ('F2', '01-11-2025', '5.00', '0'), ('F3', '', '5.00', '1')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe, edit_lock) VALUES "
+             "(1, 'F1', '15-08-2025', '5.00', '1'), (2, 'F2', '01-11-2025', '5.00', '0'), (3, 'F3', '', '5.00', '1')");
         QVERIFY(migrateDatabase(m_db));
 
         QCOMPARE(closedQuarterKeys(m_db), (QSet<int>{ quarterKey(1, 2026), quarterKey(3, 2025) }));
@@ -866,7 +867,7 @@ private slots:
         QVERIFY(!quarterHasMovements(m_db, 2, 2026));
         QVERIFY(!quarterHasMovements(m_db, 1, 2025));
 
-        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES ('F1', '15-08-2026', '5.00')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES (1, 'F1', '15-08-2026', '5.00')");
         QVERIFY(quarterHasMovements(m_db, 3, 2026));                                // gasto only
         QVERIFY(!quarterHasMovements(m_db, 4, 2026));
 
@@ -1907,8 +1908,8 @@ private slots:
     // ambiguous and left alone.
     void test_migrateDatabase_replacesTheDecimalCommaOutsideInvoices()
     {
-        exec("INSERT INTO gastos (n_factura, fecha, importe) VALUES "
-             "('OPEN', '10-05-2026', '5,50'), ('CLOSED', '10-02-2026', '6,50'), ('BOTH', '10-05-2026', '1.234,50')");
+        exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES "
+             "(1, 'OPEN', '10-05-2026', '5,50'), (2, 'CLOSED', '10-02-2026', '6,50'), (3, 'BOTH', '10-05-2026', '1.234,50')");
         exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', ' 2,5', '1,75')");
         exec("INSERT INTO ingresos (n_recibo, hash, importe, pagado, edit_lock) VALUES ('P1', 'p1', '3,10', 'SI', '0')");
         QVERIFY(closeQuarter(m_db, 1, 2026, ""));
@@ -2313,11 +2314,10 @@ private slots:
         insertRow("TP", "hA");                 // normal row (estado 'NO')
         insertRow("TP", "hB");                 // will be voided below
         QVERIFY(voidGarmentRow(m_db, "TP", "hB"));
-        // Legacy row with a NULL estado must still be picked up (the != 'Anulado'
-        // filter is NULL-guarded; SQLite treats NULL != x as NULL, i.e. excluded).
+        // Legacy row with a blank estado (the shop's column is NOT NULL) must still be picked up.
         exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, importe, pagado, "
              "estado, cantidad, prenda, hash) "
-             "VALUES ('0', 'TP', 'Cli', '01-04-2026', '5.00', 'NO', NULL, '1', 'Camisa', 'hC')");
+             "VALUES ('0', 'TP', 'Cli', '01-04-2026', '5.00', 'NO', '', '1', 'Camisa', 'hC')");
 
         QVERIFY(markTicketPickedUp(m_db, "TP", "10-04-2026"));
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hA'"), QStringLiteral("Recogido"));
@@ -2328,7 +2328,7 @@ private slots:
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hB'"), QString());
         QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE hash='hB'"),
                  QDate::currentDate().toString("dd-MM-yyyy"));
-        // The NULL-estado legacy row is picked up like any normal row.
+        // The blank-estado legacy row is picked up like any normal row.
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hC'"), QStringLiteral("Recogido"));
         QCOMPARE(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hC'"), QStringLiteral("10-04-2026"));
     }
