@@ -719,6 +719,43 @@ private slots:
         QTest::qWait(3500);                                                   // the late answer reaches nobody
     }
 
+    // A substitution after a difference would replace the original but leave the difference
+    // standing (books and AEAT 1 € off): it is refused, and the ticket is corrected by differences.
+    void test_rectifySubstitutionAfterADifferenceRefused()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "787", "h787a", "8.50", today(), "A-ORIG0787"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("787");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QRadioButton *>("rbDifferences")->setChecked(true);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(-1.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY(result->text().contains("Rectificativa enviada"));
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("787");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(5.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QVERIFY2(result->text().contains("por diferencias"), qPrintable(result->text()));
+        QCOMPARE(m_server.requestsTo("Create").size(), 1);
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash = 'h787a'"), QStringLiteral("ENVIADA"));
+    }
+
+    // Anular factura: the row button is wide enough for "Confirmar anulación" once armed.
+    void test_cancelInvoice_confirmButtonFitsItsText()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "788", "h788a", "8.50", today(), "A-ORIG0788"));
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("788");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        auto *btn = dlg.findChild<QPushButton *>("btnCancel0");
+        QVERIFY(btn);
+        QVERIFY(btn->minimumWidth() > btn->fontMetrics().horizontalAdvance("Confirmar anulación"));
+    }
+
     // A gateway answer without AEAT's CSV (PENDING) may already be registered: a second
     // press on the same dialog never sends another rectificativa.
     void test_rectifyGatewayPendingAnswerSendsNoSecond()

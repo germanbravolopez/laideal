@@ -140,6 +140,9 @@ bool liveRectificationOf(QSqlDatabase &db, const QString &ticket, QString *numbe
 // The differences (I-type rectificativas) already issued for `original`, neither refused nor
 // cancelled: what a new difference adds to. *ok is false when the read failed.
 double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok = nullptr);
+// How many of those differences exist (they may sum to 0). A substitution is refused while
+// any does: it would replace the original but leave the differences standing.
+int differenceRectificationCount(QSqlDatabase &db, const QString &original, bool *ok = nullptr);
 // The number of a rectificativa of `original` AEAT refused (paid row in ERROR), or empty:
 // redone, it is resent corrected under that same number (AEAT, 13-10-2026).
 QString refusedRectificationOf(QSqlDatabase &db, const QString &original);

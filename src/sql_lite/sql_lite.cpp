@@ -1513,6 +1513,24 @@ double rectifiedDifferences(QSqlDatabase &db, const QString &original, bool *ok)
     return roundToCents(q.value(0).toDouble());
 }
 
+int differenceRectificationCount(QSqlDatabase &db, const QString &original, bool *ok)
+{
+    if (ok) *ok = false;
+    if (dbNotConfigured(db, __func__)) return 0;
+    ConnectionScope scope(db);
+    QSqlQuery q(db);
+    q.prepare("SELECT COUNT(DISTINCT n_recibo) FROM ingresos "
+              "WHERE verifactu_rectifies_n_recibo = :o AND verifactu_rectification_type = 'I' AND pagado = 'SI' "
+              "AND COALESCE(verifactu_estado, '') NOT IN ('ERROR', 'ANULADA')");
+    q.bindValue(":o", original);
+    if (!q.exec() || !q.next()) {
+        qWarning() << "differenceRectificationCount: read failed for" << original << "-" << q.lastError().text();
+        return 0;
+    }
+    if (ok) *ok = true;
+    return q.value(0).toInt();
+}
+
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo)
 {
     if (dbNotConfigured(db, __func__)) return QString();

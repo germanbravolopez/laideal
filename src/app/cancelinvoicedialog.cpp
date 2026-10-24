@@ -160,6 +160,8 @@ void CancelInvoiceDialog::rebuildTable()
 
         const VerifactuEstado st = verifactuEstadoFromString(e.estado);
         auto *btn = UiKit::secondaryButton(tr("Anular"), QStringLiteral("btnCancel%1").arg(row));
+        // Wide enough for the text it shows when armed.
+        btn->setMinimumWidth(btn->fontMetrics().horizontalAdvance(tr("Confirmar anulación")) + 32);
         // Only ENVIADA events are AEAT-cancellable. ANULADA / RECTIFICADA /
         // ERROR / PENDIENTE all have no AEAT-side cancel to issue.
         btn->setEnabled(st == VerifactuEstado::Enviada);

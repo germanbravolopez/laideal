@@ -290,6 +290,17 @@ void RectifyInvoiceDialog::onRectifyClicked()
         m_lblResult->setText(UiKit::errorHtml(tr("El importe corregido total debe ser mayor que 0.")));
         return;
     }
+    if (isSubstitution) {
+        bool read = false;
+        const int differences = differenceRectificationCount(db, m_loadedTicket, &read);
+        if (!read || differences > 0) {
+            m_lblResult->setText(UiKit::errorHtml(read
+                ? tr("Este ticket ya tiene rectificativas por diferencias: siga corrigiéndolo por diferencias.")
+                : tr("No se pudieron leer las rectificativas anteriores del ticket."))
+                + "<br>" + tr("Una sustitución reemplazaría la factura original pero dejaría vigentes esas diferencias."));
+            return;
+        }
+    }
     if (!isSubstitution && qFuzzyIsNull(amountWithIva)) {
         m_lblResult->setText(UiKit::errorHtml(tr("La diferencia no puede ser 0.")));
         return;

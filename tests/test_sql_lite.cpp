@@ -1431,6 +1431,19 @@ private slots:
         QCOMPARE(refusedRectificationOf(m_db, "31200"), QStringLiteral("R-12"));
     }
 
+    // Differences counted by rectificativa, also when they cancel out; refused ones do not count.
+    void test_differenceRectificationCount()
+    {
+        insertIngreso("R-3", "10-03-2026", "1.00", "SI", "ENVIADA", 0);
+        insertIngreso("R-4", "10-03-2026", "-1.00", "SI", "ENVIADA", 0);
+        insertIngreso("R-5", "10-03-2026", "2.00", "SI", "ERROR", 0);
+        exec("UPDATE ingresos SET verifactu_rectifies_n_recibo = '400', verifactu_rectification_type = 'I'");
+        bool ok = false;
+        QCOMPARE(differenceRectificationCount(m_db, "400", &ok), 2);
+        QVERIFY(ok);
+        QCOMPARE(differenceRectificationCount(m_db, "401"), 0);
+    }
+
     // A legacy paid row with a NULL estado is adopted too (NULL NOT IN (...) is NULL).
     void test_reconcileVerifactuFromAeat_nullEstado()
     {
