@@ -48,3 +48,6 @@ _site/
 # Python packaging metadata (pip install -e .)
 *.egg-info/
 __pycache__/
+
+# Local AEAT pre-production run (tests/ui/aeat_preproduction.py): database, settings, logs
+aeat-run/

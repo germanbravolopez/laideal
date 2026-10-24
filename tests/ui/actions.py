@@ -144,13 +144,23 @@ def _has_message_box(app, wait: float = 3.0) -> bool:
 
 # --- Ticket dialogs --------------------------------------------------------------------------
 
+AEAT_REPLY_WAIT = 240   # a cancel / rectify dialog closes only once AEAT answered
+
 def open_dialog(app, top: str, item: str, title: str):
     app.menu(top, item)
     return app.window(title=title)
 
 
-def close_dialog(dialog):
-    find_text(dialog, "Cerrar", "Button").click_input()
+def close_dialog(dialog, timeout: float = 10.0):
+    """Presses Cerrar until the window is gone: a dialog waiting on AEAT refuses to close
+    until it answers (the direct client spaces its submissions by up to 60 s)."""
+    def closed():
+        if not dialog.exists(timeout=0):
+            return True
+        find_text(dialog, "Cerrar", "Button").click_input()
+        time.sleep(1)
+        return not dialog.exists(timeout=0)
+    wait_for(closed, timeout, "the dialog to close")
 
 
 def search_ticket(dialog, ticket: str):
@@ -176,7 +186,7 @@ def cancel_invoice(app, ticket: str, row: int = 0):
         app.answer("Sí")
     time.sleep(2)
     message = text(find(dialog, "lblResult"))
-    close_dialog(dialog)
+    close_dialog(dialog, AEAT_REPLY_WAIT)
     return message
 
 
@@ -200,7 +210,7 @@ def rectify_invoice(app, ticket: str, substitution: bool, amount: str, date: str
         app.answer("Sí")
     time.sleep(2)
     message = text(find(dialog, "lblResult"))
-    close_dialog(dialog)
+    close_dialog(dialog, AEAT_REPLY_WAIT)
     return message
 
 
