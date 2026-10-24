@@ -459,6 +459,10 @@ void MainWindow::mainwindowInitialSettings()
     // A new version migrates the database: keep a copy of it as it was first, also with
     // automatic backups switched off (the data repairs never run without one).
     const QString version = Updater::currentVersion();
+    // The version that ran before this start: 12.0 did not record it yet, so its pre-migration
+    // copy's version stands in (read before this start's copy moves it on).
+    const QString previousVersion = AppSettings::instance()->lastStartedVersion().isEmpty()
+        ? AppSettings::instance()->backupLastVersion() : AppSettings::instance()->lastStartedVersion();
     bool rewriteData = true;   // false: no copy of the database as the previous version left it
     if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(DB_PATH)) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -484,7 +488,7 @@ void MainWindow::mainwindowInitialSettings()
                                              "Avise al servicio técnico antes de seguir (los detalles están en el registro)."));
     // Once per update: ask for the post-update check and its report (added after the
     // Verifactu start-up messages, which replace the panel).
-    if (SelfCheck::isFirstStartAfterUpdate(AppSettings::instance()->lastStartedVersion(), version))
+    if (SelfCheck::isFirstStartAfterUpdate(previousVersion, version))
         m_updateNotice = UiKit::warnHtml(tr("La Ideal se ha actualizado a la versión %1.").arg(version))
                          + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar…</b> (o Inicio → La Ideal - Comprobar "
                                        "tras actualizar) y envíe el informe que guarda en el escritorio.");

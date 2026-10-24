@@ -305,6 +305,24 @@ private slots:
         QVERIFY(again.findChild<QAction *>("actionComprobar_tras_actualizar"));
     }
 
+    // From 12.0, which did not record the started version: its pre-migration copy's version
+    // tells the update. With neither (a first installation) nothing is asked.
+    void test_mainWindow_asksForTheCheckAfterAnUpdateFrom12_0()
+    {
+        AppSettings::instance()->setLastStartedVersion(QString());
+        AppSettings::instance()->setBackupLastVersion("12.0");
+        {
+            MainWindow mw;
+            QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        }
+        AppSettings::instance()->setLastStartedVersion(QString());
+        AppSettings::instance()->setBackupLastVersion(QString());
+        MainWindow firstInstall;
+        QVERIFY(!firstInstall.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
+        AppSettings::instance()->setBackupLastVersion(Updater::currentVersion());
+        QTest::qWait(1100);   // copies are named by the second: the next test's must not collide
+    }
+
     // A new version copies the database before migrating it, also with automatic backups off.
     void test_mainWindow_preMigrationCopyWithBackupsOff()
     {

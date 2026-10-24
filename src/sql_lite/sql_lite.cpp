@@ -27,8 +27,6 @@ QString dbPath() { return s_dbPath; }
 // Private helpers
 // ---------------------------------------------------------------------------
 
-// Guard used at the top of every function that opens the database.
-// Returns true if the path is missing, so callers can early-return.
 // A null QString binds as SQL NULL, which the shop's NOT NULL columns refuse (an unpaid
 // AddGarment row has no fecha_pago): every text value an INSERT binds goes through here.
 static QString notNull(const QString &value)
@@ -36,6 +34,8 @@ static QString notNull(const QString &value)
     return value.isNull() ? QStringLiteral("") : value;
 }
 
+// Guard used at the top of every function that opens the database.
+// Returns true if the path is missing, so callers can early-return.
 static bool dbNotConfigured(const QSqlDatabase &db, const char *caller)
 {
     if (!db.databaseName().isEmpty())
