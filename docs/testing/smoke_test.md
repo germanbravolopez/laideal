@@ -4,7 +4,7 @@ Everything else is automated:
 
 - `ctest`: the unit suites and the end-to-end bench ([unit_suites.md](unit_suites.md), [e2e.md](e2e.md)).
 - The **UI smoke test** on a disposable runner ([ui_smoke.md](ui_smoke.md), `ui-smoke.yml`): the installed app driven like a person, from the first start and its migrations, through Recogida, Cobrar, printing, Contabilidad and the quarter lock, to backup, language and the installer's language.
-- The **AEAT pre-production run** as a local script ([ui_smoke.md](ui_smoke.md#the-aeat-pre-production-run-local)).
+- The **AEAT pre-production run** as a local script ([ui_smoke.md](ui_smoke.md#aeat-pre-production-run)).
 
 What is left needs either eyes before the release (part 1), or the shop's real data and printer after it is installed (part 2, the self-check the shop user runs).
 
@@ -15,7 +15,7 @@ What is left needs either eyes before the release (part 1), or the shop's real d
 | # | Area | Step | Expected |
 |---|------|------|----------|
 | M4 | Look | The `ui-smoke` artifact: `steps/*.png` and the PDFs under `reports/` | Texts, buttons and groups legible and aligned, nothing cut off; the Contabilidad `_detalle` PDF and the listado PDF render |
-| M6 | AEAT (only when the release changes the direct AEAT client) | The pre-production script with the certificate ([how](ui_smoke.md#the-aeat-pre-production-run-local)) | Every step passes; keep its `report.md` |
+| M6 | AEAT (only when the release changes the direct AEAT client) | The pre-production script with the certificate ([how](ui_smoke.md#aeat-pre-production-run)) | Every step passes; keep its `report.md` |
 
 On a PC with a copy of the shop's data you can also run part 2 before publishing, with the new build: `laideal.exe --self-check`.
 

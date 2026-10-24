@@ -90,51 +90,57 @@ Qt 6 publishes a widget's `objectName` as its UIA **AutomationId**, so the scrip
 - **Date fields** take typing section by section only (`set_date`: Shift+Right selects a section).
 - **A table's cell editor** is not in the table's tree, but it has the keyboard focus (`focused_control_type`).
 
-## The AEAT pre-production run (local)
+## Running the scripts locally
 
-`aeat_preproduction.py` is the automated form of the `laideal-prueba-aeat` kit. Run it on a PC with the issuer's certificate and a build of this branch:
+Both scripts run from the repository root, in a PowerShell session with the toolchain `PATH` line of README §Build (the build tree loads Qt's DLLs from it), after the [UI-test build and the `.venv`](../../README.md#ui-test-build) (README §Build). Each takes the mouse and keyboard while it runs: do not touch them, and keep the screen unlocked (a locked screen blocks input and screenshots).
 
-```bash
-.venv/Scripts/python tests/ui/aeat_preproduction.py --exe "<folder>/laideal.exe" \
-    --settings-from "$USERPROFILE/work/tintoreria/documents/prueba-aeat-settings.json" --out aeat-run
+| | Smoke test (`smoke.py`) | AEAT pre-production run (`aeat_preproduction.py`) |
+|---|---|---|
+| **What for** | The same blocks A-E as CI, on your PC: to reproduce or debug a CI failure | `/release` gate M6 when the release changes the direct AEAT client: the real AEAT test service accepts what the app sends |
+| **AEAT** | The fake AEAT (a local process) | AEAT **pre-production**, with the issuer's certificate |
+| **Needs** | Nothing else | The certificate in the Windows store and its settings file |
+| **Duration** | About 3-4 minutes | About 10 minutes (AEAT spaces submissions by up to 60 s) |
+| **Results** | `ui-smoke-out\` | `aeat-run\` (git-ignored) |
+
+### Smoke test against the fake AEAT
+
+```powershell
+.\.venv\Scripts\python.exe .\tests\ui\printer.py install          # once, for block C
+.\.venv\Scripts\python.exe .\tests\ui\smoke.py --exe .\build-uitest\src\app\laideal.exe `
+    --tools .\build-uitest\tests --out ui-smoke-out --printer LaIdeal-Smoke
 ```
 
-- **The settings file**: `%USERPROFILE%/work/tintoreria/documents/prueba-aeat-settings.json`, outside the repository (it names the issuer). It is the kit's settings with Germán's issuer (75929840D) and his FNMT certificate's store thumbprint, so it works only on a PC whose Windows store holds that certificate. For another issuer, copy it and set `verifactu.nif`, `company_name` and the certificate.
+- **Partial runs**: `--blocks AB` runs only some blocks (block A's start-up and seeding still happen first).
+- **Without a printer queue**: leave out `--printer`; block C is skipped.
+- **Installer step**: `--installer <setup.exe>` adds E4, which reinstalls in place; use it on a disposable machine only.
+- **Results**: `ui-smoke-out\report.md`, a screenshot per step in `steps\`, and for a failed step every window's control tree in `failures\<step>\`.
+
+### AEAT pre-production run
+
+`aeat_preproduction.py` is the automated form of the `laideal-prueba-aeat` kit. It stays local because the certificate must not become a secret of a public repository.
+
+```powershell
+.\.venv\Scripts\python.exe .\tests\ui\aeat_preproduction.py --exe .\build-uitest\src\app\laideal.exe --settings-from C:\Users\gebra\work\tintoreria\documents\prueba-aeat-settings.json --out aeat-run
+```
+
+- **The settings file**: `prueba-aeat-settings.json`, outside the repository (it names the issuer). It is the kit's settings with Germán's issuer (75929840D) and his FNMT certificate's store thumbprint, so it works only on a PC whose Windows store holds that certificate. For another issuer, copy it and set `verifactu.nif`, `company_name` and the certificate.
 - **What it takes from it**: only the issuer's NIF, name and certificate (store thumbprint, or `.pfx` file + password, DPAPI-encrypted for the same Windows user).
 - **What it forces**: a new synthetic database, the direct client, the test environment, PRODUCCIÓN off.
 - **Safety stop**: the script kills the app unless the status bar says *PRUEBAS* and every AEAT URL in the log starts with `https://prewww1.aeat.es/`. It checks once at the start and once at the end.
 - **Ticket numbers**: they start at `9DDDhhmm + 1` (day of the year, time). That is eight digits like the kit's `90000001`, because Recogida reads a nine-digit search as a phone number. They stay above the shop's numbers and those of earlier runs.
+- **`--out`** must be a new or empty folder: delete or rename `aeat-run` before running again. On the shop PC the run's lines go to that PC's `~/.laideal.log` (marked PRUEBAS); prefer another PC with the certificate.
+- **Waiting**: each AEAT answer is awaited for up to 4 minutes, and Anular / Rectificar close only once AEAT has answered.
+- **Results**: `aeat-run\report.md` ends with every invoice's estado, CSV and AEAT error; a failed step leaves every window's control tree in `failures\<step>\`.
+- **Dry run**: `--dry-run --tools .\build-uitest\tests` runs the same script against the fake AEAT. CI runs it that way on every ui-smoke run, so the script is known to work before it is pointed at AEAT.
 
 The steps:
 1. Safety check, and the first chain sync.
 2. A paid ticket.
 3. A ticket paid in two payments through Recogida.
 4. The cancellation of its first payment.
-5. R5 rectifications of the first ticket, by differences and by substitution.
+5. R5 rectifications of the first ticket, by differences and by substitution (numbered `R-<n>` since 12.0).
 6. Exportar registros AEAT of the day.
 7. The log check again.
-
-`--out` must be a new or empty folder. On the shop PC the run's lines go to that PC's `~/.laideal.log` (marked PRUEBAS); prefer another PC with the certificate.
-
-Each AEAT answer is awaited for up to 4 minutes, because AEAT asks for up to 60 s between submissions. `report.md` ends with every invoice's estado, CSV and AEAT error.
-
-It stays local because the certificate must not become a secret of a public repository. `--dry-run --tools <folder>` runs the same script against the fake AEAT with the UI-test build. CI runs it that way on every ui-smoke run, so the script is known to work before it is pointed at AEAT.
-
-## Running it locally
-
-First the [UI-test build and the `.venv`](../../README.md#ui-test-build) (README §Build). Then, from the repository root, in a PowerShell session with the toolchain `PATH` line of README §Build (the build tree loads Qt's DLLs from it):
-
-```powershell
-.venv\Scripts\python.exe tests\ui\printer.py install          # once, for block C
-.venv\Scripts\python.exe tests\ui\smoke.py --exe build-uitest\src\app\laideal.exe `
-    --tools build-uitest\tests --out ui-smoke-out --printer LaIdeal-Smoke
-```
-
-- **Partial runs**: `--blocks AB` runs only some blocks (block A's start-up and seeding still happen first).
-- **Without a printer queue**: leave out `--printer`; block C is skipped.
-- **Installer step**: `--installer <setup.exe>` adds E4, which reinstalls in place; use it on a disposable machine only.
-- **During a run**: it takes the mouse and keyboard for about 3-4 minutes, so do not touch them, and keep the screen unlocked (a locked screen blocks input and screenshots).
-- **Results**: `ui-smoke-out\report.md`, a screenshot per step in `steps\`, and for a failed step every window's control tree in `failures\<step>\`.
 
 ## Files
 
