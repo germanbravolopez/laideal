@@ -11,6 +11,9 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 
 ## Completed Milestones
 
+### Post-12.1 development — October 2026
+- [x] **`aeat_direct_backend` no longer flakes on a slow runner** (CI 39999937611 `test_query`, master CI 40122432472 `test_laterSyncKeepsWhatAeatAlreadyAnswered`): the suite's `waitFor` gave up after 10 s, and `registerElsewhere` then returned an empty huella that the test compared against. The wait is 30 s, and `registerElsewhere` logs a submission that did not succeed.
+
 ### Post-12.0 development — October 2026 (shipped in 12.1)
 - [x] **The test schemas are the shop's** (24-10-2026, read from the shop's database): every original column NOT NULL, `gastos.id` NUMERIC NOT NULL without a key, `prendas` keyed by `nombre` (`testschema.h`, `seed.py`; `DEFAULT ''` is the tests' only addition, for their seeding INSERTs, while every app INSERT names all the columns). Every text value an `sql_lite` INSERT binds goes through `notNull()` (garment rows, rectificativa client, `addNewClient`, `insertNewItemToTable`). Seeds that put NULL in a column the shop declares NOT NULL now use ''.
 - [x] **Añadir prendas works again on the shop's database** (shop report, log of 20-10-2026, since 11.2): adding an unpaid garment failed with "NOT NULL constraint failed: ingresos.fecha_pago". AddGarment leaves `fechaPago` / `fechaRecogida` as null `QString`s, which bind as SQL NULL, and the shop's `ingresos` declares its columns NOT NULL; Guardar ticket passes empty strings, so it never failed. `execGarmentInsert` now binds every text column through `notNull()` (''). The test schemas (`testschema.h`, `seed.py`) lack the shop's NOT NULL, which is why no test saw it: `test_insertGarmentRow_nullFieldsOnNotNullColumns` builds a table with NOT NULL on every column and fails on the old code.
