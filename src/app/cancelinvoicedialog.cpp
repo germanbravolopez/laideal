@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTableWidget>
@@ -62,7 +63,9 @@ void CancelInvoiceDialog::buildUi()
     m_table->setHorizontalHeaderLabels(
         { tr("InvoiceID"), tr("Fecha factura"), tr("Importe"), tr("Estado"), tr("CSV"), tr("Acción") });
     m_table->horizontalHeader()->setSectionResizeMode(COL_CSV, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(COL_ACTION, QHeaderView::ResizeToContents);
+    // Fixed, as wide as the button's armed text: a header sized to the button's hint would clip it.
+    m_table->horizontalHeader()->setSectionResizeMode(COL_ACTION, QHeaderView::Fixed);
+    m_table->setColumnWidth(COL_ACTION, actionColumnWidth());
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -142,6 +145,29 @@ void CancelInvoiceDialog::onSearchClicked()
     }
 }
 
+int CancelInvoiceDialog::actionColumnWidth() const
+{
+    return fontMetrics().horizontalAdvance(tr("Confirmar anulación")) + 48;
+}
+
+void CancelInvoiceDialog::fitTableWidth()
+{
+    // Every column readable without scrolling: the window grows with the table.
+    int width = 2 * m_table->frameWidth() + m_table->verticalScrollBar()->sizeHint().width();
+    for (int column = 0; column < COL_COUNT; ++column) {
+        if (column == COL_ACTION) {
+            width += actionColumnWidth();
+            continue;
+        }
+        int widest = m_table->horizontalHeader()->sectionSizeHint(column);
+        for (int row = 0; row < m_table->rowCount(); ++row)
+            if (const QTableWidgetItem *item = m_table->item(row, column))
+                widest = qMax(widest, m_table->fontMetrics().horizontalAdvance(item->text()) + 24);
+        width += widest;
+    }
+    m_table->setMinimumWidth(width);
+}
+
 void CancelInvoiceDialog::rebuildTable()
 {
     m_armedRow = -1;
@@ -160,14 +186,13 @@ void CancelInvoiceDialog::rebuildTable()
 
         const VerifactuEstado st = verifactuEstadoFromString(e.estado);
         auto *btn = UiKit::secondaryButton(tr("Anular"), QStringLiteral("btnCancel%1").arg(row));
-        // Wide enough for the text it shows when armed.
-        btn->setMinimumWidth(btn->fontMetrics().horizontalAdvance(tr("Confirmar anulación")) + 32);
         // Only ENVIADA events are AEAT-cancellable. ANULADA / RECTIFICADA /
         // ERROR / PENDIENTE all have no AEAT-side cancel to issue.
         btn->setEnabled(st == VerifactuEstado::Enviada);
         connect(btn, &QPushButton::clicked, this, [this, row]() { onCancelClicked(row); });
         m_table->setCellWidget(row, COL_ACTION, btn);
     }
+    fitTableWidth();
 }
 
 void CancelInvoiceDialog::setActionsEnabled(bool enabled)

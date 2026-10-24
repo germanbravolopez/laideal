@@ -80,6 +80,8 @@ private:
 
     void buildUi();
     void rebuildTable();
+    int actionColumnWidth() const;
+    void fitTableWidth();
     void setActionsEnabled(bool enabled);
 };
 

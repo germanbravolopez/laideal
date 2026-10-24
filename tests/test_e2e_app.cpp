@@ -753,7 +753,14 @@ private slots:
         QMetaObject::invokeMethod(&dlg, "onSearchClicked");
         auto *btn = dlg.findChild<QPushButton *>("btnCancel0");
         QVERIFY(btn);
-        QVERIFY(btn->minimumWidth() > btn->fontMetrics().horizontalAdvance("Confirmar anulación"));
+        auto *table = dlg.findChild<QTableWidget *>("table");
+        const int column = table->columnCount() - 1;
+        QVERIFY(table->columnWidth(column) > btn->fontMetrics().horizontalAdvance("Confirmar anulación"));
+        int columns = 0;
+        for (int c = 0; c < table->columnCount(); ++c)
+            columns += c == column ? table->columnWidth(c)
+                                   : table->fontMetrics().horizontalAdvance(table->item(0, c)->text());
+        QVERIFY(table->minimumWidth() >= columns);                           // the window fits every column
     }
 
     // A gateway answer without AEAT's CSV (PENDING) may already be registered: a second
