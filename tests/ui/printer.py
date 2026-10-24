@@ -8,6 +8,8 @@ would overwrite its file on every job and lose the second copy of a ticket.
 
     python tests/ui/printer.py install [--name LaIdeal-Smoke] [--port 9100]   (as administrator)
     python tests/ui/printer.py remove  [--name LaIdeal-Smoke] [--port 9100]
+    python tests/ui/printer.py listen --out print-jobs --tools build-uitest/tests [--port 9100]
+        (for a manual run: captures and decodes every job until Ctrl+C)
 
 Captured jobs are decoded with escpos_preview.exe (tests/tools), the reader of
 test_ticket_preview: <job>.txt is an ASCII mock ("[QR wxh]" for the QR image).
@@ -103,10 +105,35 @@ def decode(tools: Path, job: Path) -> str:
     return prefix.with_suffix(".txt").read_text(encoding="utf-8")
 
 
+def listen(out: Path, tools: Path, port: int) -> None:
+    """Captures jobs for a manual run and prints each one's ASCII mock as it arrives."""
+    import time
+    capture = JobCapture(out, port)
+    print(f"Listening on 127.0.0.1:{port}; jobs go to {out}. Ctrl+C to stop.")
+    shown = 0
+    try:
+        while True:
+            time.sleep(0.5)
+            while shown < capture.count():
+                job = capture.jobs[shown]
+                shown += 1
+                print(f"===== {job.name} =====")
+                print(decode(tools, job) if tools else "(no --tools: not decoded)")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        capture.stop()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("action", choices=["install", "remove"])
+    parser.add_argument("action", choices=["install", "remove", "listen"])
     parser.add_argument("--name", default=QUEUE)
     parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--out", type=Path, default=Path("print-jobs"), help="listen: folder for the jobs")
+    parser.add_argument("--tools", type=Path, help="listen: the folder with escpos_preview.exe")
     args = parser.parse_args()
-    (install if args.action == "install" else remove)(args.name, args.port)
+    if args.action == "listen":
+        listen(args.out, args.tools, args.port)
+    else:
+        (install if args.action == "install" else remove)(args.name, args.port)

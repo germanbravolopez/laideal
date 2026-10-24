@@ -51,3 +51,6 @@ __pycache__/
 
 # Local AEAT pre-production run (tests/ui/aeat_preproduction.py): database, settings, logs
 aeat-run/
+
+# Print jobs captured by tests/ui/printer.py listen
+print-jobs/

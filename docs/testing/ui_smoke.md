@@ -79,6 +79,13 @@ Blocks run in this order on one database, as a person would. A failed step stops
 
 Adding the queue needed no administrator rights on this PC. `printer.py remove` deletes it.
 
+**By hand** (to see what a manual run prints, without the shop's printer): install the queue once and start the listener in its own PowerShell window. Then enable printing on `LaIdeal-Smoke`: in Configuración → Impresión, or in the settings file before starting the app (`print.enable` `"Yes"`, `print.printer_name` `"LaIdeal-Smoke"`). Every recibo and factura then appears in the listener's window as an ASCII mock (`[QR wxh]` marks the QR), and in `print-jobs\` as `.prn`, `.txt` and `.png` (open the PNG to see the paper, QR included).
+
+```powershell
+.\.venv\Scripts\python.exe .\tests\ui\printer.py install            # once
+.\.venv\Scripts\python.exe .\tests\ui\printer.py listen --tools .\build-uitest\tests --out print-jobs
+```
+
 ## Finding widgets
 
 Qt 6 publishes a widget's `objectName` as its UIA **AutomationId**, so the scripts use the names the e2e bench uses with `findChild` (`pb_save`, `lblResult`, `tableView`, `btnCobrar`…). Menu actions carry their window's prefix (`MainWindow.actionGastos`), so `find` matches the last segment. What the spike and the blocks found:
