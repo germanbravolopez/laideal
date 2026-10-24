@@ -152,16 +152,20 @@ def open_dialog(app, top: str, item: str, title: str):
 
 
 def close_dialog(dialog, timeout: float = 10.0):
-    """Presses Cerrar (then Esc) until the window is gone."""
+    """Presses Cerrar until the window is no longer shown (Qt hides a closed dialog, and UIA
+    still lists it, so only its visibility tells)."""
+    def gone():
+        try:
+            return not dialog.is_visible()
+        except Exception:
+            return True
+    find_text(dialog, "Cerrar", "Button").click_input()
     def closed():
-        if not dialog.exists(timeout=0):
+        if gone():
             return True
         find_text(dialog, "Cerrar", "Button").click_input()
         time.sleep(1)
-        if dialog.exists(timeout=0):
-            dialog.type_keys("{ESC}")
-            time.sleep(1)
-        return not dialog.exists(timeout=0)
+        return gone()
     wait_for(closed, timeout, "the dialog to close")
 
 
