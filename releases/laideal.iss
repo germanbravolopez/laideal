@@ -1,4 +1,4 @@
-; Inno Setup installer script for La Ideal.
+﻿; Inno Setup installer script for La Ideal.
 ;
 ; Compile from the command line:
 ;   ISCC.exe /DMyAppVersion=<version> laideal.iss
@@ -90,5 +90,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Name: "{autoprograms}\{#MyAppName} - Comprobar tras actualizar"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--self-check"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--self-check"; Description: "Comprobar la instalacion tras actualizar (--self-check)"; Flags: nowait postinstall skipifsilent unchecked
+; After an update the check is what the shop should run first: ticked; starting the app is not.
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent unchecked
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--self-check"; Description: "Comprobar la instalación (recomendado tras actualizar)"; Flags: nowait postinstall skipifsilent

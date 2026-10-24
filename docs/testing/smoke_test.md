@@ -21,7 +21,13 @@ On a PC with a copy of the shop's data you can also run part 2 before publishing
 
 ## 2. After installing at the shop: *Comprobar tras actualizar* (the shop user)
 
-The installer adds **Start → La Ideal - Comprobar tras actualizar** (`laideal.exe --self-check`, `src/app/selfcheck*`). The shop user runs it once after installing the release, answers its questions and sends back the report it saves on the Desktop (`comprobacion_laideal_<version>_<date>.txt`).
+The shop user runs `laideal.exe --self-check` (`src/app/selfcheck*`) once after installing the release, answers its questions and sends back what its last screen lists. Since 12.1 it is reached four ways:
+- the installer's last page, **Comprobar la instalación (recomendado tras actualizar)**, ticked by default (*Ejecutar La Ideal* is unticked);
+- **Start → La Ideal - Comprobar tras actualizar**;
+- **Ayuda → Comprobar tras actualizar…** in the app, any time (its own process, with the same settings file);
+- the first start of a new version says so once in the result panel (`app.last_started_version`; never on a first installation).
+
+Its last screen lists what to send: the report it saves on the Desktop (`comprobacion_laideal_<version>_<date>.txt`), the app's log (`~/.laideal.log`, linked) and a photo of the first paid factura printed with the new version (QR and leyenda).
 
 **Safety:**
 - It works on a copy of the newest backup (`<db folder>/backups/laideal_*.db`) with a copy of the settings in a temporary folder, both deleted at the end.

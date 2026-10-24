@@ -55,6 +55,14 @@ class TestSelfCheck : public QObject
     }
 
 private slots:
+    // The check is asked for once, on the first start of a newer version, never on a first install.
+    void test_isFirstStartAfterUpdate()
+    {
+        QVERIFY(SelfCheck::isFirstStartAfterUpdate("11.2", "12.0"));
+        QVERIFY(!SelfCheck::isFirstStartAfterUpdate("12.0", "12.0"));
+        QVERIFY(!SelfCheck::isFirstStartAfterUpdate(QString(), "12.0"));
+    }
+
     void test_newestBackup()
     {
         QTemporaryDir dir;

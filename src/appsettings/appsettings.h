@@ -162,6 +162,9 @@ public:
     void    setBackupSecondFolder(const QString &v);
     QString backupLastVersion() const;
     void    setBackupLastVersion(const QString &v);
+    // The version that last started (the one-time "run the check" notice after an update).
+    QString lastStartedVersion() const;
+    void    setLastStartedVersion(const QString &v);
 
 private:
     AppSettings();

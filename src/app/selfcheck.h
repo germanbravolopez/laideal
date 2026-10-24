@@ -78,6 +78,11 @@ Check checkData(QSqlDatabase &db, const QString &contabilidadPath, DataFacts &fa
 // The report the user sends back: version, date and one line per check (status, reason,
 // note). It carries no shop data beyond what the user typed in a note.
 QString reportText(const QVector<Check> &checks, const QString &version, const QDateTime &when);
+// The first start of a newer version (never a first installation): the moment to ask for the check.
+inline bool isFirstStartAfterUpdate(const QString &lastStarted, const QString &current)
+{
+    return !lastStarted.isEmpty() && lastStarted != current;
+}
 
 } // namespace SelfCheck
 

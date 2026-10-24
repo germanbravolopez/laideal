@@ -1,5 +1,7 @@
 #include "selfcheckdialog.h"
 
+#include "applogger.h"
+
 #include "aeatqr.h"
 #include "appsettings.h"
 #include "imprimir.h"
@@ -318,9 +320,17 @@ void SelfCheckDialog::finish()
     qDebug() << "SelfCheckDialog: finished, all ok =" << allOk << "report" << m_reportFile << "written" << written;
     const QString outcome = allOk ? UiKit::okHtml(tr("Comprobación terminada: todo correcto."))
                                   : UiKit::errorHtml(tr("Comprobación terminada con fallos."));
-    m_result->setText(outcome + "<br>" + tr("Las copias de los datos se han borrado.") + "<br>"
-                      + (written ? tr("Envíe el informe: ") + UiKit::fileLinkHtml(m_reportFile, QFileInfo(m_reportFile).fileName())
-                                 : UiKit::errorHtml(tr("No se pudo guardar el informe en el escritorio."))));
+    const QString logFile = AppLogger::logFilePath();
+    m_result->setText(outcome + "<br>" + tr("Las copias de los datos se han borrado.") + "<br><br>"
+                      + (written ? QString() : UiKit::errorHtml(tr("No se pudo guardar el informe en el escritorio.")) + "<br>")
+                      + tr("<b>Envíe al soporte técnico, antes de cerrar:</b>") + "<ol>"
+                      + "<li>" + (written ? tr("El informe de esta comprobación, en el escritorio: ")
+                                              + UiKit::fileLinkHtml(m_reportFile, QFileInfo(m_reportFile).fileName())
+                                          : tr("Una foto de esta ventana.")) + "</li>"
+                      + "<li>" + tr("El registro del programa: ") + UiKit::fileLinkHtml(logFile, QDir::toNativeSeparators(logFile))
+                      + "</li>"
+                      + "<li>" + tr("Una foto de la primera factura cobrada que imprima con esta versión (el código QR y el "
+                                    "texto «Factura verificable en la sede electrónica de la AEAT» debajo).") + "</li></ol>");
 }
 
 void SelfCheckDialog::cleanUp()

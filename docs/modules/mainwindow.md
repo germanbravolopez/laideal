@@ -17,7 +17,7 @@ The menu bar has one menu per kind of work, all built in `MainWindow::buildUi()`
 | **Facturas** | Anular factura Verifactu… (Alt+A) · Rectificar factura Verifactu… (Alt+T) · Exportar registros AEAT (XML)… |
 | **Contabilidad** | Añadir factura de gastos… (Alt+F) · Generar contabilidad… (Alt+G) · Revertir contabilidad… (no shortcut, so a closed quarter is never reopened by one key press) |
 | **Ver** | Ingresos (Alt+Shift+I) · Gastos (Alt+Shift+G) · Listado de prendas / clientes / proveedores / servicios (Alt+Shift+P / C / O / S) |
-| **Ayuda** | Buscar actualizaciones · Notas de la versión · Log de depuración · Acerca de Verifactu |
+| **Ayuda** | Buscar actualizaciones · Notas de la versión · Comprobar tras actualizar… · Log de depuración · Acerca de Verifactu |
 
 "…" marks an entry that opens a window to fill in or choose from before anything happens; an entry that acts at once (the backup, the update check) or only shows something (Ver, the release notes, the log, Acerca de Verifactu) has none. The top bar repeats Recogida de prendas, Añadir prendas and Factura de gastos as quick buttons. `Configuración…` is created with the other actions and connected in the constructor once the database is migrated.
 
