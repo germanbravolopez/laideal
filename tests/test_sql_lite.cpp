@@ -2162,8 +2162,8 @@ private slots:
         row.nRecibo         = "30877";      // existing ticket the garment is added to
         row.cliente         = "Salvador";
         row.fechaRecepcion  = "01-07-2026";
-        row.fechaPago       = "";           // added unpaid
-        row.fechaRecogida   = "";
+        row.fechaPago       = QString();    // added unpaid: AddGarment leaves both null
+        row.fechaRecogida   = QString();
         row.importe         = "11.00";
         row.pagado          = "NO";
         row.estado          = "En tienda";
@@ -2175,6 +2175,43 @@ private slots:
         QVERIFY(insertGarmentRow(m_db, row));
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='addGarmentHash'"),
                  QStringLiteral("PENDIENTE"));
+    }
+
+    // The shop's table refuses NULL in its text columns (11.2: "NOT NULL constraint failed:
+    // ingresos.fecha_pago" adding an unpaid garment): null fields are stored as ''.
+    void test_insertGarmentRow_nullFieldsOnNotNullColumns()
+    {
+        QTemporaryDir dir;
+        QSqlDatabase strict = QSqlDatabase::addDatabase("QSQLITE", "strict_not_null");
+        strict.setDatabaseName(dir.filePath("strict.db"));
+        QVERIFY(strict.open());
+        QVERIFY(QSqlQuery(strict).exec(
+            "CREATE TABLE ingresos (n_recibo TEXT NOT NULL, cliente TEXT NOT NULL, fecha_recepcion TEXT NOT NULL, "
+            "fecha_pago TEXT NOT NULL, fecha_recogida TEXT NOT NULL, importe TEXT NOT NULL, pagado TEXT NOT NULL, "
+            "estado TEXT NOT NULL, cantidad TEXT NOT NULL, prenda TEXT NOT NULL, size TEXT NOT NULL, "
+            "servicio TEXT NOT NULL, observaciones TEXT NOT NULL, edit_lock TEXT NOT NULL, hash TEXT NOT NULL)"));
+        strict.close();
+        QVERIFY(migrateDatabase(strict));
+        IngresoGarmentRow row;
+        row.nRecibo = "31366";
+        row.cliente = "Cliente";
+        row.fechaRecepcion = "20-10-2026";
+        row.importe = "7.00";
+        row.pagado = "NO";
+        row.estado = "En tienda";
+        row.cantidad = "1";
+        row.prenda = "Chaqueta";
+        row.hash = "strictHash";
+        row.verifactuEstado = "SIN COBRAR";          // fecha_pago, fecha_recogida, size, servicio... left null
+        QVERIFY(insertGarmentRow(strict, row));
+        QVERIFY(strict.open());
+        QSqlQuery q(strict);
+        QVERIFY(q.exec("SELECT fecha_pago, fecha_recogida, size FROM ingresos WHERE hash = 'strictHash'") && q.next());
+        QCOMPARE(q.value(0).toString() + "|" + q.value(1).toString() + "|" + q.value(2).toString(), QStringLiteral("||"));
+        q.finish();
+        strict.close();
+        strict = QSqlDatabase();
+        QSqlDatabase::removeDatabase("strict_not_null");
     }
 
     // AddGarment gate: garments may only be appended to an unpaid ticket (a paid

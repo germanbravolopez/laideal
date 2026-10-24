@@ -990,6 +990,13 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo)
     return paid;
 }
 
+// A null QString binds as SQL NULL, which the shop's NOT NULL columns refuse (an unpaid
+// AddGarment row has no fecha_pago): every text column gets '' instead.
+static QString notNull(const QString &value)
+{
+    return value.isNull() ? QStringLiteral("") : value;
+}
+
 // Runs the INSERT on an already open db; the callers open, close and own the transaction.
 static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
@@ -1005,21 +1012,21 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
               "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
               ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
               ":observaciones, '0', :hash, :verifactu_estado)");
-    q.bindValue(":n_recibo",         row.nRecibo);
-    q.bindValue(":cliente",          row.cliente);
-    q.bindValue(":fecha_recepcion",  row.fechaRecepcion);
-    q.bindValue(":fecha_pago",       row.fechaPago);
-    q.bindValue(":fecha_recogida",   row.fechaRecogida);
-    q.bindValue(":importe",          moneyText(row.importe));
-    q.bindValue(":pagado",           row.pagado);
-    q.bindValue(":estado",           row.estado);
-    q.bindValue(":cantidad",         row.cantidad);
-    q.bindValue(":prenda",           row.prenda);
-    q.bindValue(":size",             row.size);
-    q.bindValue(":servicio",         row.servicio);
-    q.bindValue(":observaciones",    row.observaciones);
-    q.bindValue(":hash",             row.hash);
-    q.bindValue(":verifactu_estado", row.verifactuEstado);
+    q.bindValue(":n_recibo",         notNull(row.nRecibo));
+    q.bindValue(":cliente",          notNull(row.cliente));
+    q.bindValue(":fecha_recepcion",  notNull(row.fechaRecepcion));
+    q.bindValue(":fecha_pago",       notNull(row.fechaPago));
+    q.bindValue(":fecha_recogida",   notNull(row.fechaRecogida));
+    q.bindValue(":importe",          notNull(moneyText(row.importe)));
+    q.bindValue(":pagado",           notNull(row.pagado));
+    q.bindValue(":estado",           notNull(row.estado));
+    q.bindValue(":cantidad",         notNull(row.cantidad));
+    q.bindValue(":prenda",           notNull(row.prenda));
+    q.bindValue(":size",             notNull(row.size));
+    q.bindValue(":servicio",         notNull(row.servicio));
+    q.bindValue(":observaciones",    notNull(row.observaciones));
+    q.bindValue(":hash",             notNull(row.hash));
+    q.bindValue(":verifactu_estado", notNull(row.verifactuEstado));
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertGarmentRow: INSERT failed for" << row.nRecibo << row.hash << "-" << q.lastError().text();
