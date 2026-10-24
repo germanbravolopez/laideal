@@ -145,7 +145,7 @@ The steps:
 2. A paid ticket.
 3. A ticket paid in two payments through Recogida.
 4. The cancellation of its first payment.
-5. R5 rectifications of the first ticket, by differences and by substitution (numbered `R-<n>` since 12.0).
+5. R5 rectifications, numbered `R-<n>` since 12.0: the first ticket by differences, a new paid ticket by substitution (a substitution is refused on a ticket with differences).
 6. Exportar registros AEAT of the day.
 7. The log check again.
 

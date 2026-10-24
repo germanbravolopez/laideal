@@ -9,7 +9,7 @@ answered:
     2  a paid ticket                                  -> ENVIADA with AEAT's CSV
     3  a ticket paid in two payments (Recogida)       -> two invoices, both ENVIADA
     4  the cancellation of the first payment          -> ANULADA
-    5  rectifications R5 of the step-2 ticket, by differences and by substitution
+    5  rectifications R5: the step-2 ticket by differences, a new paid ticket by substitution
     6  the export of the AEAT records of the day
     7  the log: every request went to prewww1.aeat.es
 
@@ -136,7 +136,8 @@ def main():
         with contextlib.suppress(StepFailed):
             steps(run, expected, base)
         invoices = run.rows("SELECT n_recibo, prenda, verifactu_invoice_id, verifactu_estado, verifactu_csv, "
-                            "verifactu_error FROM ingresos WHERE CAST(n_recibo AS INTEGER) > ? ORDER BY rowid", base)
+                            "verifactu_error FROM ingresos WHERE CAST(n_recibo AS INTEGER) > ? OR n_recibo LIKE 'R-%' "
+                            "ORDER BY rowid", base)
         run.notes = ["| Ticket | Garment | Invoice | Estado | CSV | AEAT error |", "|---|---|---|---|---|---|"] + [
             "| " + " | ".join(str(v or "").replace("|", "/") for v in row) + " |" for row in invoices]
     finally:
@@ -179,17 +180,23 @@ def steps(run, expected: str, base: int):
         cancel_invoice(app, second, row=0)
         wait_estado(run, "n_recibo=? AND prenda='Camisa'", (second,), "ANULADA", f"cancellation of {second}")
 
-    with run.step("P3", "5", "Rectifications R5 of the first ticket: by differences, then by substitution"):
-        for substitution, amount in ((False, "-1,00"), (True, "5,00")):
-            before = run.scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo=?", first)
-            rectify_invoice(app, first, substitution, amount)
+    with run.step("P3", "5", "Rectifications R5: by differences of the first ticket, by substitution of a new one"):
+        # A substitution is refused on a ticket that has differences (since 12.0): a third ticket.
+        third, _ = save_ticket(app, "PRUEBA AEAT", ["Camisa"], paid=True, timeout=AEAT_WAIT)
+        wait_estado(run, "n_recibo=? LIMIT 1", (third,), "ENVIADA", f"ticket {third}")
+        for ticket, substitution, amount in ((first, False, "-1,00"), (third, True, "5,00")):
+            before = run.scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo=?", ticket)
+            rectify_invoice(app, ticket, substitution, amount)
             wait_for(lambda: run.scalar("SELECT COUNT(*) FROM ingresos WHERE verifactu_rectifies_n_recibo=?",
-                                        first) > before, 30, "the rectifying ticket")
+                                        ticket) > before, 30, "the rectifying ticket")
             number = run.scalar("SELECT n_recibo FROM ingresos WHERE verifactu_rectifies_n_recibo=? "
-                                "ORDER BY rowid DESC LIMIT 1", first)
+                                "ORDER BY rowid DESC LIMIT 1", ticket)
+            run.check(number.startswith("R-"), f"rectificativa numbered {number}, expected R-<n>")
             wait_estado(run, "n_recibo=?", (number,), "ENVIADA", f"rectification {number}")
         run.check(run.scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo=? LIMIT 1", first)
-                  == "RECTIFICADA", f"ticket {first} is not RECTIFICADA")
+                  == "ENVIADA", f"ticket {first} (by differences) is no longer ENVIADA")
+        run.check(run.scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo=? LIMIT 1", third)
+                  == "RECTIFICADA", f"ticket {third} is not RECTIFICADA")
 
     with run.step("P3", "6", "Exportar registros AEAT of the day"):
         message, path = export_aeat_records(app, today(), today())

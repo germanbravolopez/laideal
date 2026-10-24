@@ -152,15 +152,26 @@ def open_dialog(app, top: str, item: str, title: str):
 
 
 def close_dialog(dialog, timeout: float = 10.0):
-    """Presses Cerrar until the window is gone: a dialog waiting on AEAT refuses to close
-    until it answers (the direct client spaces its submissions by up to 60 s)."""
+    """Presses Cerrar (then Esc) until the window is gone."""
     def closed():
         if not dialog.exists(timeout=0):
             return True
         find_text(dialog, "Cerrar", "Button").click_input()
         time.sleep(1)
+        if dialog.exists(timeout=0):
+            dialog.type_keys("{ESC}")
+            time.sleep(1)
         return not dialog.exists(timeout=0)
     wait_for(closed, timeout, "the dialog to close")
+
+
+def wait_aeat_answer(dialog):
+    """A cancel / rectify dialog waits on AEAT (the direct client spaces its submissions by up
+    to 60 s): its panel says so until the answer. Returns the panel's final text."""
+    def answered():
+        message = text(find(dialog, "lblResult"))
+        return message if message and "Enviando" not in message and "Esperando" not in message else None
+    return wait_for(answered, AEAT_REPLY_WAIT, "AEAT's answer")
 
 
 def search_ticket(dialog, ticket: str):
@@ -185,8 +196,8 @@ def cancel_invoice(app, ticket: str, row: int = 0):
     if _has_message_box(app):
         app.answer("Sí")
     time.sleep(2)
-    message = text(find(dialog, "lblResult"))
-    close_dialog(dialog, AEAT_REPLY_WAIT)
+    message = wait_aeat_answer(dialog)
+    close_dialog(dialog)
     return message
 
 
@@ -209,8 +220,8 @@ def rectify_invoice(app, ticket: str, substitution: bool, amount: str, date: str
     if _has_message_box(app):
         app.answer("Sí")
     time.sleep(2)
-    message = text(find(dialog, "lblResult"))
-    close_dialog(dialog, AEAT_REPLY_WAIT)
+    message = wait_aeat_answer(dialog)
+    close_dialog(dialog)
     return message
 
 
