@@ -133,6 +133,34 @@ private slots:
         QCOMPARE(m_server.requestsTo("Create").size(), before);
     }
 
+    // A missing ServiceKey is reported as such, not as an unreadable issuer configuration.
+    void test_missingServiceKeyIsReportedAsSuch()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuServiceKey("e2e-service-key"); });
+        s->setVerifactuServiceKey(QString());
+        VerifactuIntegration noKey;
+        QVERIFY(!noKey.initialize());
+        QVERIFY2(noKey.getLastError().contains("Clave de servicio no configurada"), qPrintable(noKey.getLastError()));
+    }
+
+    // Initialising again (Configuración) never drops a reply still in flight: its result
+    // still reaches the facade's signal.
+    void test_reinitialiseKeepsAnInFlightReply()
+    {
+        VerifactuIntegration integration;
+        QVERIFY(integration.initialize());
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 800;
+        m_server.enqueue("Create", slow);
+        QSignalSpy finished(&integration, &VerifactuIntegration::requestFinished);
+        const QString id = integration.submitSimplifiedInvoiceAsync("1950", QDate::currentDate(), 10.0, 21.0, "x");
+        QVERIFY(!id.isEmpty());
+        QVERIFY(integration.initialize());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+        QCOMPARE(finished.first().first().toString(), id);
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());

@@ -1416,6 +1416,52 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" / ")));
     }
 
+    // Limpiar, the menus and the edits are dead while a paid save waits for AEAT: the
+    // factura and the recibo print the ticket being saved, not a cleared form.
+    void test_mainWindow_resetDuringTheAeatWaitDoesNotMovePrint()
+    {
+        MainWindow mw;
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Espera");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1500;
+        m_server.enqueue("Create", slow);
+        bool inputDisabled = false;
+        QString garmentDuringWait;
+        QTimer::singleShot(400, &mw, [&] {
+            inputDisabled = !mw.centralWidget()->isEnabled() && !mw.menuBar()->isEnabled();
+            mw.findChild<QPushButton *>("pb_reset")->click();
+            garmentDuringWait = qobject_cast<QComboBox *>(table->cellWidget(0, 1))->currentText();
+        });
+        clickSave(mw);
+        QVERIFY(inputDisabled);
+        QCOMPARE(garmentDuringWait, QStringLiteral("Camisa"));
+        QVERIFY(mw.centralWidget()->isEnabled() && mw.menuBar()->isEnabled());
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '" + ticket + "'"),
+                 QStringLiteral("ENVIADA"));
+    }
+
+    // A typed garment that is not in the price list has no price: the save is refused
+    // instead of dropping the row.
+    void test_mainWindow_unpricedGarmentRowRefused()
+    {
+        MainWindow mw;
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Precio");
+        enterGarment(mw, "Camisa", "1");
+        table->setItem(1, 0, new QTableWidgetItem("1"));
+        qobject_cast<QComboBox *>(table->cellWidget(1, 1))->setCurrentText("Prenda Inventada");
+        QVERIFY(!table->item(1, 5) || table->item(1, 5)->text().isEmpty());
+        clickSave(mw);
+        const QString shown = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains("La prenda de la fila 2 no tiene precio"), qPrintable(shown));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
+    }
+
     // MainWindow: Save without a client is refused in the result panel and stores nothing.
     void test_mainWindow_saveWithoutClient_refused()
     {
