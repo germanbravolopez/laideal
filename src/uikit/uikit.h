@@ -25,10 +25,10 @@ namespace UiKit {
 
 // Window flags shared by every dialog: no "?" help button, no minimise (a dialog
 // is never sent behind its window). Sets the title and a minimum width. Also the
-// dialog's Enter rule: Enter in a field presses the primary button, or nothing when
-// the dialog has none (Qt would press whichever button it made the default, e.g. a
+// dialog's Enter rule: Enter in a text field (line edit, spin or date box, editable
+// combo) presses the primary button of this dialog, or nothing when the dialog has none (Qt would press whichever button it made the default, e.g. a
 // Buscar that resets the form); Enter on a focused button presses that button; a
-// held key is not repeated. A field whose Enter means something else uses onEnter.
+// held key is not repeated; Enter on a table, list, check box or fixed combo does nothing. A field whose Enter means something else uses onEnter.
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth = 520);
 
 // Window heading (bold, larger than the app font), for windows that list data.

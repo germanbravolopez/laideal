@@ -171,18 +171,13 @@ QString GenListado::generate_html_gastos_table()
 
     // add each line of data
     int row_printed = 0;
-    QString client, client_prev_row, importe, iva, base;
-    float importe_tot = 0.0;
+    QString client, client_prev_row;
+    qint64 importe_tot = 0;   // cents
     for (int row = 0; row < model->rowCount(); row++) {
         // print row based on previous analysis
         if (check_years_invoice_type_for_row(row)) {
-            // calculate iva and base
-            importe = QString::number(model->index(row, 7).data().toFloat(), 'f', 2);
-            if (model->index(row, 6).data().toString() == "21" || model->index(row, 6).data().toString() == "10")
-                base = QString::number(importe.toFloat() / (1 + (model->index(row, 6).data().toFloat() / 100)), 'f', 2);
-            else
-                base = QString::number(importe.toFloat(), 'f', 2);
-            iva = QString::number(importe.toFloat() - base.toFloat(), 'f', 2);
+            const GastoAmounts amounts = splitGasto(model->index(row, 7).data().toString(),
+                                                    model->index(row, 6).data().toString());
 
             // generate new row if group per clients
             if (m_cbGroup->currentText() == C_PROVEEDORES) {
@@ -195,12 +190,12 @@ QString GenListado::generate_html_gastos_table()
                         html_table += "<tr style='background-color: #f6f7f9;'>";
                     // set total costs row
                     html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
-                                        "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot) +
+                                        "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot / 100.0) +
                                         "</td></tr>";
-                    importe_tot = 0.0;
+                    importe_tot = 0;
                     row_printed++;
                 }
-                importe_tot += importe.toFloat();
+                importe_tot += amounts.importeCents;
                 client_prev_row = client;
             }
             // set background color for even rows
@@ -213,9 +208,9 @@ QString GenListado::generate_html_gastos_table()
                                 "<td>" + model->index(row, 2).data().toString().toHtmlEscaped() + "</td>"
                                 "<td>" + model->index(row, 4).data().toString().toHtmlEscaped() + "</td>"
                                 "<td>" + model->index(row, 5).data().toString().toHtmlEscaped() + "</td>"
-                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(iva.toFloat()) + "</td>"
-                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(base.toFloat()) + "</td>"
-                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(importe.toFloat()) + "</td>";
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.ivaCents / 100.0) + "</td>"
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.baseCents / 100.0) + "</td>"
+                                "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.importeCents / 100.0) + "</td>";
             if (m_cbType->currentText() == C_INCL_TODOS) {
                 if (rowClosed(row))
                     html_table += "<td>Si</td>";
@@ -235,7 +230,7 @@ QString GenListado::generate_html_gastos_table()
             html_table += "<tr style='background-color: #f6f7f9;'>";
         // set total costs row
         html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
-                            "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot) +
+                            "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot / 100.0) +
                             "</td></tr>";
     }
     html_table += "</tbody></table>" + ReportHtml::documentClose();
@@ -243,6 +238,21 @@ QString GenListado::generate_html_gastos_table()
         return C_NO_ROWS;
     else
         return html_table;
+}
+
+GenListado::GastoAmounts GenListado::splitGasto(const QString &importe, const QString &iva)
+{
+    double amount = 0.0;
+    moneyParse(importe, &amount);
+    double rate = 0.0;
+    if (!moneyParse(iva, &rate) || rate <= 0.0)
+        rate = 0.0;
+    GastoAmounts result;
+    result.importeCents = qRound64(amount * 100.0);
+    result.baseCents = rate > 0.0 ? qRound64(result.importeCents / (1.0 + rate / 100.0))
+                                  : result.importeCents;
+    result.ivaCents = result.importeCents - result.baseCents;
+    return result;
 }
 
 bool GenListado::shouldPrintGastoRow(bool allYears, const QString &selectedYear,

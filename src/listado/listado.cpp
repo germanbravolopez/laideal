@@ -300,10 +300,15 @@ void Listado::textFilterChanged()
     const bool filtering = !filter_widget->text().isEmpty();
     if (filtering)
         loadEveryRow();
-    // Regex plus the normalized text (so a search without tildes matches names that
-    // have them), applied in a single pass.
-    proxyModel->setFilters(regularExpression,
-                           MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
+    // One mode at a time: a plain case-insensitive search also ignores tildes ("jose"
+    // finds "José"); case-sensitive, wildcard and regex searches use the regex alone.
+    const bool plainSearch = s == FilterWidget::FixedString
+                             && filter_widget->caseSensitivity() == Qt::CaseInsensitive;
+    if (plainSearch)
+        proxyModel->setFilters(QRegularExpression(),
+                               MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
+    else
+        proxyModel->setFilters(regularExpression, QString());
     // Sizing every row per keystroke is slow on big tables: only when the filter is cleared.
     if (!filtering) {
         table_listado->resizeColumnsToContents();

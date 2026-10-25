@@ -6,6 +6,7 @@
 #include <QDesktopServices>
 #include <QAbstractItemModel>
 #include <QSet>
+#include <QtGlobal>
 #include <QSqlDatabase>
 
 #define C_FECHAS      "Fechas"
@@ -42,6 +43,12 @@ public:
     // Whether a gastos row passes the year + accounting-type filter.
     static bool shouldPrintGastoRow(bool allYears, const QString &selectedYear,
                                     const QString &rowYear, bool onlyClosed, bool rowClosed);
+
+    // The importe of a gasto split into base and IVA, in whole cents so sums stay exact.
+    // `iva` is the rate as typed ("21", "10", "4", "21.0", "21,0"); zero or unreadable
+    // means no IVA (base == importe); an unreadable importe counts as 0.
+    struct GastoAmounts { qint64 importeCents; qint64 baseCents; qint64 ivaCents; };
+    static GastoAmounts splitGasto(const QString &importe, const QString &iva);
 
 private slots:
     void onGenerateClicked();

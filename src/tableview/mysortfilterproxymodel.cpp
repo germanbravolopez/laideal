@@ -97,16 +97,20 @@ bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
 
     if (!hasRegex && !hasNormalized)
         return true;
+    // The modes are exclusive: a regex narrows by itself (case option included) and an
+    // invalid one matches nothing, so the typo shows as an empty list.
+    if (hasRegex && !re.isValid())
+        return false;
 
     const int colCount = searchColumnCount();
     for (int c = 0; c < colCount; ++c) {
         QModelIndex idx = sourceModel()->index(sourceRow, c, sourceParent);
         QString cellText = sourceModel()->data(idx).toString();
 
-        if (hasRegex && cellText.contains(re))
-            return true;
-
-        if (hasNormalized && (m_filterColumn == -1 || c == m_filterColumn)) {
+        if (hasRegex) {
+            if (cellText.contains(re))
+                return true;
+        } else if (m_filterColumn == -1 || c == m_filterColumn) {
             if (removeDiacritics(cellText).toLower().contains(m_normalizedFilterText))
                 return true;
         }
