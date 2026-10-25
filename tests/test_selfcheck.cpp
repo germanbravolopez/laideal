@@ -186,7 +186,8 @@ private slots:
         QCOMPARE(SelfCheck::checkBackupAge(QString(), now).status, SelfCheck::Check::Fail);
     }
 
-    // M1e counts unreadable ingresos importes and gastos IVA values; the reason has counts only.
+    // M1e counts unreadable ingresos importes and gastos IVA values; the reason names the tickets
+    // (not the suppliers), and a trailing-dot amount such as "6." is readable.
     void test_checkMoney_countsUnreadableAmountsAndIva()
     {
         QTemporaryDir dir;
@@ -198,12 +199,14 @@ private slots:
         QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('7', '1.234,50', '0')"));
         QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('8', 'abc', '0')"));
         QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('9', '12,5', '0')"));   // readable
+        QVERIFY(E2e::exec(db, "INSERT INTO ingresos (n_recibo, importe, edit_lock) VALUES ('10', '6.', '0')"));    // readable
         QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (2, 'G2', '7,5', '10.00')"));
         QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (3, 'G3', '', '10.00')"));
         QVERIFY(E2e::exec(db, "INSERT INTO gastos (id, n_factura, iva, importe) VALUES (4, 'G4', '10', '10.00')"));  // fine
         const SelfCheck::Check bad = SelfCheck::checkMoney(db);
         QCOMPARE(bad.status, SelfCheck::Check::Fail);
-        QVERIFY2(bad.reason.startsWith("2 importe(s)") && bad.reason.contains("2 gasto(s)"), qPrintable(bad.reason));
+        QVERIFY2(bad.reason.startsWith("2 importe(s)") && bad.reason.contains("2 gasto(s)")
+                 && bad.reason.endsWith("(tickets: 7, 8)"), qPrintable(bad.reason));
         QVERIFY(!bad.reason.contains("Proveedor") && !bad.reason.contains("G2"));
         db = QSqlDatabase();
         QSqlDatabase::removeDatabase("money");

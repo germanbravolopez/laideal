@@ -1836,7 +1836,7 @@ QString moneyText(const QString &value)
 
 bool moneyParse(const QString &text, double *value)
 {
-    static const QRegularExpression rx(QStringLiteral(R"(^[+-]?\d+([.,]\d+)?$)"));
+    static const QRegularExpression rx(QStringLiteral(R"(^[+-]?\d+([.,]\d*)?$)"));
     const QString t = text.trimmed();
     if (!rx.match(t).hasMatch())
         return false;

@@ -1012,7 +1012,9 @@ private slots:
         QVERIFY(moneyParse("12,50", &v) && qFuzzyCompare(v, 12.5));
         QVERIFY(moneyParse(" 7.25 ", &v) && qFuzzyCompare(v, 7.25));
         QVERIFY(moneyParse("-3", &v) && qFuzzyCompare(v, -3.0));
-        for (const char *bad : { "1.234,50", "abc", "", "12,", ",5", "1e3", "inf", "5 €" })
+        QVERIFY(moneyParse("6.", &v) && qFuzzyCompare(v, 6.0));     // the shop's older rows store "6." for 6 euros
+        QVERIFY(moneyParse("12,", &v) && qFuzzyCompare(v, 12.0));
+        for (const char *bad : { "1.234,50", "abc", "", ".", ",5", "1e3", "inf", "5 €" })
             QVERIFY2(!moneyParse(bad, &v), bad);
         insertRow("60", "h60a");
         QVERIFY(!updateGarmentQtyAndImporte(m_db, "60", "h60a", "2", "abc"));

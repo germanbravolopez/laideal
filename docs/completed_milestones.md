@@ -12,6 +12,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 ## Completed Milestones
 
 ### Post-12.1 development — October 2026
+- [x] **M1e reads the shop's trailing-dot amounts and names the tickets** (shop's 12.1 check of 25-10-2026: "10 importe(s) ilegible(s)"). Read from the shop's database: nine rows store amounts as `6.`, `13.`…, which `moneyParse` refused because it required digits after the separator, although the totals already read them right; the tenth (ticket 25869, July 2024, paid) has an empty importe and counts as 0, left as it is. `moneyParse` now takes an optional fraction after the separator (`6.`, `12,`; `.` and `,5` still refused), and M1e lists the unreadable tickets' numbers after its counts. The M2b cent differences are the per-invoice IVA rounding, kept. Tests: `test_moneyParse_strict`, `test_checkMoney_countsUnreadableAmountsAndIva`.
 - [x] **`aeat_direct_backend` no longer flakes on a slow runner** (CI 39999937611 `test_query`, master CI 40122432472 `test_laterSyncKeepsWhatAeatAlreadyAnswered`): the suite's `waitFor` gave up after 10 s, and `registerElsewhere` then returned an empty huella that the test compared against. The wait is 30 s, and `registerElsewhere` logs a submission that did not succeed.
 
 ### Post-12.0 development — October 2026 (shipped in 12.1)

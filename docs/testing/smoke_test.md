@@ -41,7 +41,7 @@ Its last screen lists what to send: the report it saves on the Desktop (`comprob
 | M1a | Settings health | Automatic | The settings file is readable JSON and its database path exists |
 | M1b | Backup age | Automatic | The newest backup is at most 3 days old (`BackupManager::backupWarning`) |
 | M1d | Migrations run twice | Automatic | A second `migrateDatabase` changes no schema object or row (SHA-256 of the copy) and logs no failed statement |
-| M1e | Money sanity | Automatic | Counts only: `ingresos` rows with an unreadable importe (`moneyParse`) and gastos with an unrecognised IVA |
+| M1e | Money sanity | Automatic | Counts of `ingresos` rows with an unreadable importe (`moneyParse`, with their ticket numbers) and gastos with an unrecognised IVA (counts only) |
 | M1c | AEAT record chain | Automatic | Every stored `aeat_records` record (both environments) matches its huella and links to the previous one (`AeatChainCheck`); the reason names only the record's position |
 | M2 | Real data | Automatic | The newest ticket loads with its garments and the search by its client finds it |
 | M2b | The last closed quarter | Shown, then asked: the quarter's income, IVA, gastos and IVA settlement, recomputed without closing anything ("Abrir el informe presentado" opens the filed PDF when it is in the Contabilidad folder) | The user confirms they match the report filed for that quarter |

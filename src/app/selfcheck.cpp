@@ -200,12 +200,14 @@ Check checkMoney(QSqlDatabase &db)
     Check c{ QStringLiteral("M1e"), QStringLiteral("Importes e IVA de gastos legibles") };
     if (!db.open())
         return fail(c, QStringLiteral("no se pudo abrir la copia de la base de datos"));
-    int badAmounts = 0, badIva = 0;
+    int badIva = 0;
+    QStringList badTickets;
     bool read = true;
     QSqlQuery q(db);
-    if (q.exec(QStringLiteral("SELECT importe FROM ingresos"))) {
+    if (q.exec(QStringLiteral("SELECT n_recibo, importe FROM ingresos"))) {
         while (q.next())
-            badAmounts += q.value(0).isNull() || !moneyParse(q.value(0).toString(), nullptr);
+            if (q.value(1).isNull() || !moneyParse(q.value(1).toString(), nullptr))
+                badTickets << q.value(0).toString();
     } else {
         read = false;
     }
@@ -220,9 +222,13 @@ Check checkMoney(QSqlDatabase &db)
     db.close();
     if (!read)
         return fail(c, QStringLiteral("no se pudieron leer los importes de la base de datos"));
-    if (badAmounts > 0 || badIva > 0)
-        return fail(c, QStringLiteral("%1 importe(s) ilegible(s) en ingresos y %2 gasto(s) con IVA no reconocido")
-                           .arg(badAmounts).arg(badIva));
+    if (!badTickets.isEmpty() || badIva > 0) {
+        QString reason = QStringLiteral("%1 importe(s) ilegible(s) en ingresos y %2 gasto(s) con IVA no reconocido")
+                             .arg(badTickets.size()).arg(badIva);
+        if (!badTickets.isEmpty())
+            reason += QStringLiteral(" (tickets: %1)").arg(badTickets.join(QStringLiteral(", ")));
+        return fail(c, reason);
+    }
     c.status = Check::Pass;
     c.reason = QStringLiteral("todos los importes de ingresos y el IVA de los gastos son legibles");
     return c;
