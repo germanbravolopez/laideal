@@ -120,7 +120,8 @@ void VoidGarmentsDialog::onSearchClicked()
             g.verifactuEstado = q.value(5).toString();
             g.estado          = q.value(6).toString();
             g.voidable        = garmentIsLocallyVoidable(g.pagado, g.verifactuEstado)
-                                && g.estado != QLatin1String(INGRESOS_ESTADO_ANULADO);
+                                && g.estado != QLatin1String(INGRESOS_ESTADO_ANULADO)
+                                && g.estado != QLatin1String("Recogido");
             if (client.isEmpty()) client = q.value(7).toString();
             if (date.isEmpty())   date   = q.value(8).toString();
             m_garments.append(g);
@@ -154,11 +155,13 @@ void VoidGarmentsDialog::rebuildTable()
         m_table->setItem(row, COL_PRENDA,  new QTableWidgetItem(g.prenda));
         m_table->setItem(row, COL_CANT,    new QTableWidgetItem(g.cantidad));
         m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(displayMoney(g.importe) + " €"));
-        // Reason a row is not selectable: already voided, or paid/sent to AEAT
-        // (must go through "Anular Factura Verifactu").
+        // Reason a row is not selectable: already voided, handed to the client, or
+        // paid/sent to AEAT (must go through "Anular Factura Verifactu").
         QString estadoText = g.estado;
         if (g.estado == QLatin1String(INGRESOS_ESTADO_ANULADO))
             estadoText = tr("Anulado");
+        else if (g.estado == QLatin1String("Recogido"))
+            estadoText = tr("Entregada: cobrar o anular factura");
         else if (!g.voidable)
             estadoText = tr("Pagado/enviado - usar Anular Factura");
         m_table->setItem(row, COL_ESTADO, new QTableWidgetItem(estadoText));
@@ -168,7 +171,8 @@ void VoidGarmentsDialog::rebuildTable()
     m_btnVoid->setEnabled(anyVoidable);
     if (!anyVoidable)
         m_lblResult->setText(UiKit::warnHtml(tr("Este recibo no tiene prendas que se puedan anular aquí."))
-                             + "<br>" + tr("Las pagadas se anulan con Anular factura Verifactu."));
+                             + "<br>" + tr("Las ya entregadas al cliente no se pueden anular aquí: se cobran, y se anulan con "
+                                          "Anular factura Verifactu. Las pagadas se anulan con Anular factura Verifactu."));
 }
 
 void VoidGarmentsDialog::onVoidSelectedClicked()

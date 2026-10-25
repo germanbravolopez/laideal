@@ -2662,6 +2662,148 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
     }
 
+    // A hand-typed price survives Enter in the quantity box and a service pick; a changed
+    // quantity keeps the typed unit price, a changed service keeps the typed importe.
+    void test_recogida_manualPriceSurvivesQtyAndServiceEdits()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "970", "h970a", "7.00", today()));      // list price is 3,50: typed
+        QVERIFY(E2e::seedGarment(m_db, "971", "h971a", "3.50", today()));      // list price
+        RecogPrendas rp(m_db);
+        const auto importe = [this](const QString &hash) {
+            return scalar("SELECT importe FROM ingresos WHERE hash='" + hash + "'");
+        };
+        QVERIFY(selectRow(rp, "970", "h970a"));
+        QMetaObject::invokeMethod(&rp, "on_le_qty_editingFinished");
+        QCOMPARE(importe("h970a"), QStringLiteral("7.00"));
+        rp.findChild<QLineEdit *>("le_qty")->setText("2");
+        QMetaObject::invokeMethod(&rp, "on_le_qty_editingFinished");
+        QCOMPARE(scalar("SELECT cantidad || '|' || importe FROM ingresos WHERE hash='h970a'"), QStringLiteral("2|14.00"));
+        QMetaObject::invokeMethod(&rp, "on_cb_servic_activated", Q_ARG(int, 0));    // same service again
+        QCOMPARE(importe("h970a"), QStringLiteral("14.00"));
+        rp.findChild<QComboBox *>("cb_servic")->setCurrentText("Plan.");
+        QMetaObject::invokeMethod(&rp, "on_cb_servic_activated", Q_ARG(int, 1));
+        QCOMPARE(scalar("SELECT servicio || '|' || importe FROM ingresos WHERE hash='h970a'"), QStringLiteral("Plan.|14.00"));
+
+        // A row at the price list is still re-priced.
+        QVERIFY(selectRow(rp, "971", "h971a"));
+        rp.findChild<QLineEdit *>("le_qty")->setText("2");
+        QMetaObject::invokeMethod(&rp, "on_le_qty_editingFinished");
+        QCOMPARE(importe("h971a"), QStringLiteral("7.00"));
+        rp.findChild<QComboBox *>("cb_servic")->setCurrentText("Plan.");
+        QMetaObject::invokeMethod(&rp, "on_cb_servic_activated", Q_ARG(int, 1));
+        QCOMPARE(importe("h971a"), QStringLiteral("4.00"));
+    }
+
+    // A refresh re-runs the submitted search, not the text being typed, and reselects the
+    // garment by identity: when it leaves the result nothing stays selected.
+    void test_recogida_refreshKeepsTheSubmittedSearchAndTheGarment()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "960", "h960a", "5.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "960", "h960b", "6.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "961", "h961a", "8.00", today()));
+        QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET estado='Recogido', fecha_recogida='%1'").arg(today())));
+        RecogPrendas rp(m_db);
+        rp.findChild<QComboBox *>("cb_search_date")->setCurrentIndex(2);       // Recogida
+        QVERIFY(selectRow(rp, today(), "h960a"));
+        auto *view = rp.findChild<QTableView *>("tableView");
+        QCOMPARE(view->model()->rowCount(), 3);
+        rp.findChild<QLineEdit *>("le_search")->setText("something being typed");
+        rp.findChild<QCheckBox *>("pb_state")->setChecked(false);              // un-pick h960a: it leaves the result
+        QCOMPARE(view->model()->rowCount(), 2);                                // the submitted date, not the typed text
+        QVERIFY(!rp.isCellClicked);
+        QVERIFY(rp.findChild<QLineEdit *>("le_nr_ticket")->text().isEmpty());
+        QVERIFY(rp.findChild<QLineEdit *>("le_garm")->text().isEmpty());
+        QVERIFY(!rp.findChild<QPushButton *>("pb_pay_all")->isEnabled());
+    }
+
+    // An AEAT reply refreshes Recogida in the background without clearing what the
+    // operator is typing and without switching to the text in the search box.
+    void test_recogida_replyRefreshKeepsWhatIsBeingTyped()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "962", "h962a", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado='ERROR' WHERE hash='h962a'"));
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "962", "h962a"));
+        rp.findChild<QLineEdit *>("le_search")->setText("nobody");
+        QMetaObject::invokeMethod(&rp, "retryVerifactuSubmit", Q_ARG(QString, QStringLiteral("962")), Q_ARG(int, 0));
+        QTest::keyClicks(rp.findChild<QLineEdit *>("le_obsv"), "lleva mancha");
+        QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h962a'"),
+                                  QStringLiteral("ENVIADA"), 10000);
+        QTRY_VERIFY(rp.findChild<QTableView *>("tableView")->model()->rowCount() == 1);
+        QVERIFY(rp.isCellClicked);
+        QCOMPARE(rp.findChild<QLineEdit *>("le_obsv")->text(), QStringLiteral("lleva mancha"));
+        QCOMPARE(rp.findChild<QLineEdit *>("le_nr_ticket")->text(), QStringLiteral("962"));
+    }
+
+    // Void: a garment already handed to the client is not offered for voiding.
+    void test_voidGarments_refusesAGarmentHandedToTheClient()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "963", "h963a", "5.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "963", "h963b", "6.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado='Recogido' WHERE hash='h963b'"));
+        VoidGarmentsDialog dlg(m_db);
+        dlg.loadTicket("963");
+        auto *table = dlg.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 2);
+        QVERIFY(table->item(0, 0)->flags().testFlag(Qt::ItemIsUserCheckable));
+        QVERIFY(!table->item(1, 0)->flags().testFlag(Qt::ItemIsUserCheckable));
+        QVERIFY2(table->item(1, 4)->text().contains("Entregada"), qPrintable(table->item(1, 4)->text()));
+        table->item(1, 0)->setCheckState(Qt::Checked);
+        dlg.findChild<QPushButton *>("btnVoid")->click();
+        QCOMPARE(dlg.voidedCount(), 0);
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='h963b'"), QStringLiteral("Recogido"));
+    }
+
+    // The Importe total adds in double: 30000 rows of 3,33 are 99900,00, not a float's drift.
+    void test_recogida_totalOfManyRowsKeepsTheCents()
+    {
+        QVERIFY(E2e::exec(m_db, "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 30000) "
+                                "INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, "
+                                "  pagado, estado, cantidad, prenda, size, servicio, observaciones, edit_lock, hash, "
+                                "  verifactu_estado, verifactu_invoice_seq) "
+                                "SELECT '5400', 'Hotel Grande', '03-03-2025', '', '', '3.33', 'NO', 'En tienda', '1', "
+                                "  'Camisa', '', 'Limp.', '', 0, 'h5400-' || x, 'SIN COBRAR', 0 FROM n"));
+        RecogPrendas rp(m_db);
+        rp.findChild<QLineEdit *>("le_search")->setText("5400");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        const QString total = rp.findChild<QLabel *>("lbl_total")->text();
+        QVERIFY2(total.contains("99900,00"), qPrintable(total));
+    }
+
+    // Reintentar says why nothing was sent instead of doing nothing.
+    void test_recogida_retrySaysWhyNothingWasSent()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "964", "h964a", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado='ERROR' WHERE hash='h964a'"));
+        {
+            RecogPrendas rp(m_db);
+            const auto result = [&rp]() { return rp.findChild<QLabel *>("lblResult")->text(); };
+            QMetaObject::invokeMethod(&rp, "retryVerifactuSubmit", Q_ARG(QString, QStringLiteral("964")), Q_ARG(int, 0));
+            QVERIFY2(result().contains("no está configurado"), qPrintable(result()));
+        }
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        aeat.server.enqueue({ QByteArray(), 200, 0, true });
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        bool done = false;
+        direct.directBackend()->syncChain([&done](bool, const QString &) { done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+        QVERIFY(direct.directBackend()->chainSyncFailed());
+        aeat.server.enqueue({ QByteArray(), 200, 0, true });
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = &direct;
+        const auto result = [&rp]() { return rp.findChild<QLabel *>("lblResult")->text(); };
+        QMetaObject::invokeMethod(&rp, "retryVerifactuSubmit", Q_ARG(QString, QStringLiteral("964")), Q_ARG(int, 0));
+        QVERIFY2(result().contains("cadena de registros") && result().contains("no se ha enviado"), qPrintable(result()));
+        QTRY_VERIFY_WITH_TIMEOUT(!direct.directBackend()->firstSyncRunning(), 15000);
+    }
+
     // Recogida reports a refused write instead of a success, after its table refresh:
     // Separar on a row locked by Contabilidad, and a negative hand-typed price.
     void test_recogida_refusedWritesAreReported()
