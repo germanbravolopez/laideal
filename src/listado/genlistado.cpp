@@ -80,7 +80,7 @@ void GenListado::set_cb_fechas()
     m_cbYear->addItems(fechas_list);
 }
 
-void GenListado::print_table()
+bool GenListado::print_table()
 {
     model->sort(0, Qt::AscendingOrder);
     QString html_table_prendas = generate_html_prendas_table();
@@ -92,7 +92,8 @@ void GenListado::print_table()
     // create directory in case it does not exists
     if (!QFile::exists(path))
         QDir().mkpath(path);
-    ReportHtml::writePdf(path + filename, html_table_prendas);
+    m_lastPrintedFile = path + filename;
+    return ReportHtml::writePdf(m_lastPrintedFile, html_table_prendas);
 }
 
 QString GenListado::generate_html_prendas_table()
@@ -117,7 +118,7 @@ QString GenListado::generate_html_prendas_table()
         else
             html_table += "<tr style='background-color: #f6f7f9;'>";
         // set row content
-        html_table += "<td>" + model->index(row, 0).data().toString() + "</td>";
+        html_table += "<td>" + model->index(row, 0).data().toString().toHtmlEscaped() + "</td>";
         if (model->index(row, 1).data().toFloat() == 0.0)
             html_table += "<td></td>";
         else
@@ -144,8 +145,15 @@ QString GenListado::generate_html_gastos_table_with_specific_conditions()
     return generate_html_gastos_table();
 }
 
+bool GenListado::rowClosed(int row) const
+{
+    const QDate fecha = QDate::fromString(model->index(row, GASTOS_IDX_FECHA).data().toString().trimmed(), "dd-MM-yyyy");
+    return m_closedQuarters.contains(quarterKey(fecha));
+}
+
 QString GenListado::generate_html_gastos_table()
 {
+    m_closedQuarters = closedQuarterKeys(db);
     QString html_table = ReportHtml::documentOpen("Listado de Gastos")
             + ReportHtml::tableOpen() +
                 "<thead>"
@@ -201,15 +209,15 @@ QString GenListado::generate_html_gastos_table()
             else
                 html_table += "<tr style='background-color: #f6f7f9;'>";
             // set row content
-            html_table +="<td>" + model->index(row, 1).data().toString() + "</td>"
-                                "<td>" + model->index(row, 2).data().toString() + "</td>"
-                                "<td>" + model->index(row, 4).data().toString() + "</td>"
-                                "<td>" + model->index(row, 5).data().toString() + "</td>"
+            html_table +="<td>" + model->index(row, 1).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 2).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 4).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, 5).data().toString().toHtmlEscaped() + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(iva.toFloat()) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(base.toFloat()) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(importe.toFloat()) + "</td>";
             if (m_cbType->currentText() == C_INCL_TODOS) {
-                if (model->index(row, 8).data().toBool())
+                if (rowClosed(row))
                     html_table += "<td>Si</td>";
                 else
                     html_table += "<td>No</td>";
@@ -253,7 +261,7 @@ bool GenListado::check_years_invoice_type_for_row(int row)
         m_cbYear->currentText(),
         model->index(row, GASTOS_IDX_FECHA).data().toString().mid(6, 4),
         m_cbType->currentText() == C_CONTAB_CERR,
-        model->index(row, GASTOS_IDX_CONTAB).data().toBool());
+        rowClosed(row));
 }
 
 QString GenListado::filenameSuffix(const QString &agrupar, const QString &tipoGastos,

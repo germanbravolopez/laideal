@@ -1,12 +1,14 @@
 # Testing — La Ideal
 
-How the application is tested, how to run the tests, and where each kind of test is documented. Three layers, from fastest to most manual:
+How the application is tested, how to run the tests, and where each kind of test is documented. Five layers, from fastest to most manual (the root `README.md` §Tests lists the command for each):
 
 | Layer | What it proves | Where | Runs |
 |-------|----------------|-------|------|
 | **Unit / integration suites** | Pure logic and the `sql_lite` DB functions, each module in isolation | `tests/test_*.cpp` — see [unit_suites.md](unit_suites.md) | `ctest`, every CI run |
-| **End-to-end test bench** | Real objects working together (PayDialog, MainWindow and the app dialogs + Verifactu client + HTTP + DB) against a fake Verifactu server | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
-| **Manual smoke test** | What no automated test can see: the release build on a real schema, the real printer, PDF / screen rendering, menu wiring, the Listado lock, backup, language, installer. Never contacts AEAT | [smoke_test.md](smoke_test.md) | Before each release (`/release` step 1) |
+| **End-to-end test bench** | Real objects working together (PayDialog, MainWindow and the app dialogs + Verifactu client + HTTP + DB) against a fake Verifactu server (gateway) and a fake AEAT server (direct client) | `tests/test_e2e_*.cpp` + `tests/support/` — see [e2e.md](e2e.md) | `ctest`, every CI run |
+| **Automated UI smoke test** | The installed UI-test build driven like a person over UI Automation (pywinauto): smoke test blocks A-E (installer, menus and windows, Cobrar, printing through a captured queue, Contabilidad and the lock, language) against a fake AEAT on a synthetic DB; the AEAT pre-production run as a local script | `tests/ui/` + `tests/tools/` + `.github/workflows/ui-smoke.yml` — see [ui_smoke.md](ui_smoke.md) | `workflow_dispatch` before each release (`/release` step 1), pushes to `tests/ui/` |
+| **Smoke test** | What no automated test can see. Part 1 (you): how screens / PDFs look, AEAT pre-production. Part 2 (the shop user, after installing): *Comprobar tras actualizar* (`laideal.exe --self-check`) on a copy of the newest backup: the real schema and data, the printer and QR, the installer pages; sends no invoice, saves a report | [smoke_test.md](smoke_test.md); `src/app/selfcheck*`, `test_selfcheck` | Part 1 before each release (`/release` step 1); part 2 after each install |
+| **Self-check** | The installed app on the shop PC after an update: `laideal.exe --self-check` (*Comprobar tras actualizar*) works on a copy of the newest backup (schema, data, chain, printer, QR), sends no invoice and saves a report; it is part 2 of the smoke test | `src/app/selfcheck*`, `tests/test_selfcheck.cpp` | After each install |
 
 ---
 
@@ -33,7 +35,7 @@ A suite can also be run directly for its full per-function report, e.g. `build\t
 - **Throwaway state only.** DB tests create SQLite files in a `QTemporaryDir`; settings tests point `AppSettings` at a throwaway file with `loadFrom()`. No test may read or write the real database, `~/.laideal_settings.json` or the real AEAT.
 - **Application type.** `QTEST_GUILESS_MAIN` (no display) by default; `QTEST_MAIN` under `QT_QPA_PLATFORM=offscreen` (CTest `ENVIRONMENT` property) when a `QPixmap`, widget or header is involved.
 - **Prove each new test can fail**: temporarily break the production line it guards, watch it fail, restore. A test that passes against the bug guards nothing.
-- **Hangs fail fast.** Every suite has a 120 s CTest `TIMEOUT` (set for all tests at the end of `tests/CMakeLists.txt`; CI also passes `--timeout 120`) and the CI build job has `timeout-minutes: 45`.
+- **Hangs fail fast.** Every suite has a 120 s CTest `TIMEOUT` (set for all tests at the end of `tests/CMakeLists.txt`; CI also passes `--timeout 120`) except `aeat_direct_backend`, which gets 300 s (about 100 s locally, 115 s on the CI runner), and the CI build job has `timeout-minutes: 45`.
 - **Executable names** must not contain `update`, `setup` or `install`: Windows' UAC installer heuristic flags them and CTest fails with `BAD_COMMAND` (hence `test_versioncompare` for the updater).
 
 ### Patterns, by kind of logic

@@ -42,6 +42,26 @@ QString defaultPrinterName()
     if (!GetDefaultPrinterW(buf.data(), &len)) return QString();
     return QString::fromWCharArray(buf.data());
 }
+
+// Spanish reason when the spooler holds the queue (offline, worked offline, not available),
+// else empty.
+// A powered-off printer still accepts RAW jobs, which would print later as a duplicate.
+QString offlineReason(HANDLE hPrinter)
+{
+    DWORD needed = 0;
+    GetPrinterW(hPrinter, 2, nullptr, 0, &needed);
+    if (needed == 0) return QString();
+    std::vector<BYTE> buf(needed);
+    if (!GetPrinterW(hPrinter, 2, buf.data(), needed, &needed)) return QString();
+    const auto *info = reinterpret_cast<const PRINTER_INFO_2W *>(buf.data());
+    const DWORD st = info->Status;
+    if ((info->Attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE) || (st & PRINTER_STATUS_OFFLINE)
+        || (st & PRINTER_STATUS_NOT_AVAILABLE))
+        return QString::fromUtf8("la impresora está apagada o desconectada");
+    // Paper out, cover open or an error are left to the Epson Status API: the spooler's
+    // own flags for them can be stale with some drivers, and would stop the printing.
+    return QString();
+}
 } // namespace
 #endif
 
@@ -60,6 +80,16 @@ bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QS
     HANDLE hPrinter = nullptr;
     if (!OpenPrinterW(const_cast<LPWSTR>(wQueue.c_str()), &hPrinter, nullptr))
         return fail(QStringLiteral("No se pudo abrir la impresora '%1': %2").arg(queue, winError()));
+
+    if (escpos.isEmpty()) {
+        ClosePrinter(hPrinter);
+        return fail(QStringLiteral("No hay nada que imprimir."));
+    }
+    const QString offline = offlineReason(hPrinter);
+    if (!offline.isEmpty()) {
+        ClosePrinter(hPrinter);
+        return fail(QStringLiteral("No se ha enviado a '%1': %2.").arg(queue, offline));
+    }
 
     // RAW datatype: the spooler forwards the bytes to the device verbatim.
     std::wstring docName = L"La Ideal ticket";

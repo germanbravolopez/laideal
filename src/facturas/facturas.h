@@ -10,7 +10,7 @@ class QLineEdit;
 class QPushButton;
 namespace UiKit { class ResultPanel; }
 
-// Herramientas -> Formulario facturas: records one expense invoice (gastos) per
+// Contabilidad -> Añadir factura de gastos: records one expense invoice (gastos) per
 // save, IVA included; base and cuota are derived as the amount is typed. Built in
 // code with the shared UiKit style; every outcome is shown in the result panel.
 class Facturas : public QDialog
@@ -28,6 +28,10 @@ public:
     static double taxBaseFromGross(double gross, double ivaRate);
     static double taxAmountFromGross(double gross, double ivaRate);
 
+    // Parses the typed importe (comma or point decimals). False for empty text,
+    // signs, exponents, inf / nan, zero and anything over 999999999.
+    static bool parseGross(const QString &text, double *value = nullptr);
+
 private slots:
     void onSaveClicked();
     void resetAllContents();
@@ -37,6 +41,8 @@ private:
     void buildUi();
     // Empty when the form can be saved, else the reason (rich text for the panel).
     QString validationError();
+    // "del dd-MM-yyyy por X €." of the stored invoice with the typed number and supplier, else empty.
+    QString existingInvoiceSummary();
     bool saveFactura();
 
     QSqlDatabase db;

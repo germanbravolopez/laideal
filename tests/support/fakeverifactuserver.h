@@ -28,6 +28,7 @@ public:
         QByteArray body;        // JSON body; empty = the endpoint's default reply
         int  delayMs = 0;       // hold the reply back (simulates a slow AEAT)
         bool drop = false;      // close the connection without answering
+        int  status = 200;      // HTTP status of the answer (401: a refused ServiceKey)
     };
     struct Request {
         QString     endpoint;   // last path segment: Create, Cancel, GetFilteredList, GetQrCode

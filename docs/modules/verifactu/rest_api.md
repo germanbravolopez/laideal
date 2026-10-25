@@ -1,5 +1,7 @@
 # REST API Field Reference — Verifactu
 
+> **Historical / may be outdated.** This page describes the Irene Solutions gateway's REST API as it was researched, not a guaranteed contract. The code (`src/verifactu/verifactumanager.cpp`, `verifacturesponse.cpp`) is authoritative for what is actually sent and parsed. The direct AEAT client (`aeat*.cpp`) does not use this API.
+
 ## Overview
 
 This document maps the official Verifactu REST API fields (Irene Solutions) to the LAIDEAL implementation.
@@ -580,15 +582,6 @@ Either provide BuyerID + BuyerName, or change to invoice type F2.
 
 ### "TaxBase o TaxAmount inválidos"
 Verify: `TaxAmount = TaxBase * TaxRate / 100.0`
-
----
-
-## Debugging: Log the full JSON
-
-```cpp
-// In verifactumanager.cpp, inside submitInvoice():
-qDebug() << "JSON sent:" << doc.toJson();
-```
 
 ---
 

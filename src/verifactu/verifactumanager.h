@@ -6,13 +6,15 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include "verifactuconfig.h"
+#include "verifacturesponse.h"
 #include "verifactuinvoice.h"
 #include "verifactutypes.h"
+#include "verifactubackend.h"
 
-// Async REST client for the Verifactu AEAT API. All invoice operations return
+// Async REST client for the IreneSolutions Verifactu gateway (one VerifactuBackend). All invoice operations return
 // immediately with a request ID; the result arrives via the requestFinished signal
 // so the UI never blocks on AEAT latency.
-class VerifactuManager : public QObject
+class VerifactuManager : public VerifactuBackend
 {
     Q_OBJECT
 
@@ -26,23 +28,24 @@ public:
     // the requestFinished signal to pick up its own result. Validation errors and
     // invalid-config cases also arrive via the signal (queued) so callers have a
     // uniform handling path.
-    QString submitInvoiceAsync(const VerifactuInvoice &invoice);
-    QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate);
-    QString generateQRAsync(const VerifactuInvoice &invoice);
+    QString submitInvoiceAsync(const VerifactuInvoice &invoice) override;
+    QString cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate) override;
+    QString generateQRAsync(const VerifactuInvoice &invoice) override;
     // Asks AEAT/Irene Solutions what it holds for an InvoiceID (GetFilteredList).
     // Result arrives via queryFinished, NOT requestFinished, so it can never be
     // mistaken for a submission reply by the existing handlers.
-    QString queryInvoiceAsync(const QString &invoiceNumber);
+    QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
     QString getConfigurationInfo() const;
+    bool isConfigured() const override { return m_config->isValid(); }
+    QString configurationInfo() const override { return getConfigurationInfo(); }
 
     // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
     // /Create with a 10s setTransferTimeout - bounded wait, never blocks indefinitely.
     VerifactuResult testConnection();
-
-signals:
-    void requestFinished(const QString &requestId, const VerifactuResult &result);
-    void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
+    // The probe's verdict from its HTTP status and body: SUCCESS only when the service
+    // answered and did not refuse the key (401/403, or a key error in the body).
+    static VerifactuResult connectionProbeResult(int httpStatus, const QByteArray &body);
 
 private:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;
@@ -51,7 +54,6 @@ private:
     VerifactuConfig *m_config;
     QNetworkAccessManager *m_networkManager;
     QString m_lastError;
-    int m_requestCounter;
 
     QString nextRequestId();
     QNetworkRequest createNetworkRequest(const QString &endpoint) const;
@@ -61,7 +63,7 @@ private:
     // Queues an error so callers see it via requestFinished, same as a real reply.
     void emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description);
     // Connects reply finished to a lambda that processes the response and emits requestFinished.
-    void wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest);
+    void wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind);
 };
 
 #endif // VERIFACTUMANAGER_H

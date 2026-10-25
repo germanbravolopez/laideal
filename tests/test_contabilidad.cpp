@@ -5,9 +5,14 @@
 #include <QtTest>
 #include <QDate>
 #include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
 
 #include "contabilidad.h"
 #include "reporthtml.h"
+#include "sql_lite.h"
+#include "support/testschema.h"
 
 class TestContabilidad : public QObject
 {
@@ -52,6 +57,27 @@ private slots:
                  QStringLiteral("/Mensual/reporte_mensual_2026_11_detalle.pdf"));
         QCOMPARE(Contabilidad::reportRelativePath(Contabilidad::Anual, 0, 2026, false),
                  QStringLiteral("/Anual/reporte_anual_2026.pdf"));
+    }
+
+    // A regenerated report of a closed quarter never takes the filed PDF's name.
+    void test_regeneratedPath_keepsFiledReport()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString filed = dir.filePath("contabilidad_trimestral_2026_1.pdf");
+        const QDate day(2026, 4, 20);
+        QCOMPARE(Contabilidad::regeneratedPath(filed, day), filed);   // nothing filed yet
+        QFile f(filed);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("filed");
+        f.close();
+        const QString first = Contabilidad::regeneratedPath(filed, day);
+        QCOMPARE(first, dir.filePath("contabilidad_trimestral_2026_1_regenerado_20260420.pdf"));
+        QFile g(first);
+        QVERIFY(g.open(QIODevice::WriteOnly));
+        g.close();
+        QCOMPARE(Contabilidad::regeneratedPath(filed, day),
+                 dir.filePath("contabilidad_trimestral_2026_1_regenerado_20260420_2.pdf"));
     }
 
     void test_trimestralQuarters()
@@ -101,14 +127,64 @@ private slots:
         QVERIFY(!Contabilidad::lockOptionAvailable(Contabilidad::Anual, false));
     }
 
-    void test_combinedLockState()
+    // The "Comprobar bloqueo" text reads the quarter's closure history.
+    void test_lockStatusMessage_followsTheClosureHistory()
     {
-        QCOMPARE(Contabilidad::combinedLockState(2, 2), 2);   // no rows in either table
-        QCOMPARE(Contabilidad::combinedLockState(2, 0), 0);   // gastos-only quarter, open
-        QCOMPARE(Contabilidad::combinedLockState(2, 1), 1);   // gastos-only quarter, locked
-        QCOMPARE(Contabilidad::combinedLockState(0, 2), 0);   // ingresos-only, open
-        QCOMPARE(Contabilidad::combinedLockState(1, 0), 1);   // either locked -> locked
-        QCOMPARE(Contabilidad::combinedLockState(0, 0), 0);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString conn = "test_contabilidad_lock";
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+            db.setDatabaseName(dir.filePath("lock.db"));
+            QVERIFY(TestSchema::create(db));
+            const auto msg = [&db](int q) { return Contabilidad::lockStatusMessage(db, Contabilidad::Trimestral, q, 2026); };
+            const QRegularExpression stamp(R"( el \d{2}-\d{2}-\d{4} a las \d{2}:\d{2}\)\.$)");
+
+            QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no tiene registros de ingresos ni de gastos."));
+            db.open();
+            QSqlQuery(db).exec("INSERT INTO gastos (id, n_factura, fecha, importe) VALUES (1, 'F1', '10-02-2026', '5.00')");
+            db.close();
+            QCOMPARE(msg(1), QStringLiteral("El trimestre 1 de 2026 no está bloqueado."));
+
+            QVERIFY(closeQuarter(db, 1, 2026, "q1.pdf"));
+            QVERIFY2(msg(1).startsWith("El trimestre 1 de 2026 está bloqueado (contabilidad realizada el "), qPrintable(msg(1)));
+            QVERIFY2(msg(1).contains(stamp), qPrintable(msg(1)));
+
+            QVERIFY(reopenQuarter(db, 1, 2026));
+            QVERIFY2(msg(1).startsWith("El trimestre 1 de 2026 no está bloqueado (contabilidad revertida el "), qPrintable(msg(1)));
+            QVERIFY2(msg(1).contains(stamp), qPrintable(msg(1)));
+
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Mensual, 2, 2026),
+                     QStringLiteral("El mes 2 de 2026 pertenece al trimestre 1, que no está bloqueado."));
+            QVERIFY(closeQuarter(db, 1, 2026, "q1.pdf"));
+            QVERIFY(Contabilidad::lockStatusMessage(db, Contabilidad::Mensual, 3, 2026).endsWith("que está bloqueado."));
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Anual, 0, 2026).split(QLatin1Char(0x0A)).size(), 4);
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(conn);
+    }
+
+    // A quarter closed by the old edit_lock flag has no real close date.
+    void test_lockStatusMessage_migratedClosureHasNoDate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString conn = "test_contabilidad_lock_migrated";
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+            db.setDatabaseName(dir.filePath("lock.db"));
+            QVERIFY(TestSchema::create(db));
+            db.open();
+            QSqlQuery q(db);
+            QVERIFY(q.exec("DROP TABLE accounting_closures"));
+            QVERIFY(q.exec("INSERT INTO ingresos (n_recibo, fecha_pago, edit_lock, hash) VALUES ('1', '10-02-2026', '1', 'a')"));
+            q.finish();
+            db.close();
+            migrateDatabase(db);
+            QCOMPARE(Contabilidad::lockStatusMessage(db, Contabilidad::Trimestral, 1, 2026),
+                     QStringLiteral("El trimestre 1 de 2026 está bloqueado (contabilidad realizada)."));
+        }
+        QSqlDatabase::removeDatabase(conn);
     }
 
     void test_detailIngresosRowsAndTotal()
@@ -179,6 +255,23 @@ private slots:
 
     // A regularisation (cancellation of an earlier closed quarter's ticket) nets the
     // period's income without touching its ticket count.
+    // Modelo 303: the IVA is the sum of each invoice's cuota as registered (two invoices of
+    // 10,00 have 1,74 each = 3,48), not the IVA of the summed gross (20,00 -> 3,47).
+    void test_ivaIsTheSumOfTheInvoicedCuotas()
+    {
+        IncomeTicketDetail a; a.nRecibo = "1"; a.importe = 10.0; a.invoices = { { 0, 10.0 } };
+        IncomeTicketDetail b; b.nRecibo = "2"; b.importe = 20.0; b.invoices = { { 0, 10.0 }, { 1, 10.0 } };
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({ a, b }, {}, {}, 21.0,
+                                                                               QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(f.ingImporte, 30.0);
+        QCOMPARE(f.ingIva, 5.22);                   // 3 x 1,74
+        QCOMPARE(f.ingBase, 30.0 - 5.22);
+        ExpenseDetail g; g.nFactura = "F"; g.iva = 21; g.importe = 10.0;
+        const Contabilidad::PeriodFigures e = Contabilidad::figuresFromDetails({}, {}, { g, g }, 21.0,
+                                                                               QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(e.gas21Iva, 3.48);
+    }
+
     void test_figuresFromDetailsNetsRegularizations()
     {
         IncomeTicketDetail t; t.nRecibo = "50"; t.importe = 242.0;
@@ -259,6 +352,24 @@ private slots:
         d.income[0] = {a};
         d.income[1] = {a, b};                                        // T1 paid across Q1 and Q2
         QCOMPARE(Contabilidad::yearTicketCount(d, 2026), 2);
+    }
+
+    // A quarter can be closed from its last day on.
+    void test_quarterLastDay()
+    {
+        QCOMPARE(Contabilidad::quarterLastDay(1, 2026), QDate(2026, 3, 31));
+        QCOMPARE(Contabilidad::quarterLastDay(2, 2026), QDate(2026, 6, 30));
+        QCOMPARE(Contabilidad::quarterLastDay(3, 2026), QDate(2026, 9, 30));
+        QCOMPARE(Contabilidad::quarterLastDay(4, 2026), QDate(2026, 12, 31));
+    }
+
+    // A gasto with an unrecognised IVA rate is left out of the sums, so it is counted
+    // with the comma amounts for the result-panel warning.
+    void test_unrecognisedIvaCounted()
+    {
+        ExpenseDetail bad; bad.nFactura = "F-8"; bad.iva = -1; bad.importe = 50.0;
+        ExpenseDetail ok;  ok.nFactura = "F-1"; ok.iva = 21;  ok.importe = 121.0;
+        QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, ok}), 1);
     }
 
     void test_invalidAmountsFlagged()

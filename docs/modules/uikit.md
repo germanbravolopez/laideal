@@ -14,10 +14,11 @@ The shared look of the application's windows, in one place. Every dialog is buil
 | `UiKit::heading(text)` | Bold title, five points over the app font — for windows that list data (Listado). |
 | `UiKit::introPanel(text)` | Framed explanation at the top: what the window does, in one or two sentences. Rich text allowed. |
 | `UiKit::primaryButton(text, objectName)` | The action the window exists for: bold, default (Enter), at least 220 px wide. One per window, at the right of its row. |
-| `UiKit::secondaryButton(text, objectName)` | Any other action; never takes Enter from the primary one. |
+| `UiKit::secondaryButton(text, objectName)` | Any other action; never takes Enter from the primary one. A focused secondary button (Cerrar included) pressed with Enter presses itself, never the primary one (`setUpDialog`'s Enter filter clicks the dialog's focused button first). |
 | `UiKit::onEnter(lineEdit, action)` | Enter in a field runs `action` and stops there (an event filter consumes the key). Use it instead of `QLineEdit::returnPressed`, which lets the key go on to the dialog's default button: that button then ran too (Imprimir printed twice; a ticket search also pressed Añadir prenda / Anular seleccionadas). Runs once per press (auto-repeat ignored) and only while the field's input is acceptable. Used by Imprimir, Añadir prendas, Anular prendas, Anular factura and Rectificar factura. |
 | `UiKit::dateEdit(date, objectName)` | Calendar popup, `dd-MM-yyyy`, wide enough for the whole date. |
 | `UiKit::closeRow(dialog, text = "Cerrar")` | Right-aligned closing button (`btnClose`) that closes the dialog. |
+| `UiKit::AmountSpinBox` | `QDoubleSpinBox` that shows the decimal comma whatever the language and takes "," or "." as the decimal key (the numeric keypad sends either). Used for the Rectificar factura amount. |
 | `UiKit::ResultPanel` | Framed `QLabel` (`lblResult`) where the window reports **every** outcome instead of message boxes; rich text, links open the file or URL. `showInfo(plain)` for neutral text, `setText(html)` with the phrases below. |
 | `UiKit::sortedNames(list)` | Names for a list or combo box in Spanish alphabetical order: case-insensitive, accents in place (`QCollator`, es_ES) — a plain `ORDER BY` would put "Álvarez" after "Zurita". |
 | `UiKit::okHtml` / `warnHtml` / `errorHtml` | Green success, amber "nothing done / attention", red error. |
@@ -33,4 +34,6 @@ Message boxes are kept only where they belong: confirming a destructive action (
 
 ## Windows built with it
 
-Generar / Revertir contabilidad, Formulario facturas, Añadir nuevas prendas, Generar listado de gastos, Imprimir (recibo / factura / factura completa), Listado windows and Nuevo cliente, Exportar registros AEAT, Cobrar, Envíos Verifactu pendientes, Actualización disponible, Acerca de Verifactu, Notas de la versión, Recogida de prendas (with its Verifactu and AEAT comparison windows), the main window (ticket entry). Rectificar factura, Anular factura and Anular prendas follow the same layout with their own code (older than the kit). No window uses a `.ui` form any more.
+Generar / Revertir contabilidad, Formulario facturas, Añadir nuevas prendas, Generar listado de gastos, Imprimir (recibo / factura / factura completa), Listado windows and Nuevo cliente, Exportar registros AEAT, Cobrar, Envíos Verifactu pendientes, Actualización disponible, Acerca de Verifactu, Notas de la versión, Recogida de prendas (with its Verifactu and AEAT comparison windows), the main window (ticket entry). Rectificar factura and Anular factura are on the kit too (intro panel, result panel, secondary buttons: Enter never sends an invoice); Anular prendas follows the same layout with its own code (older than the kit). No window uses a `.ui` form any more.
+
+Colours: `UiKit::COLOR_OK` #1B7F3B, `COLOR_ERROR` #C62828, `COLOR_WARN` #8A5300 and `COLOR_LINK` #0B57D0, all at least 4.5:1 on white. `okHtml` / `warnHtml` / `errorHtml`, the Recogida / Listado text colours (`TextColorDelegate`) and links (`LinkDelegate`) use them.

@@ -66,6 +66,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 - No fixed point sizes or pixel stylesheets: use the app font, or a size relative to it.
 - Give the widgets a test drives camelCase object names (`leFra`, `btnSave`, `lblResult`); the `pb_` / `le_` prefixes above are for the remaining `.ui` forms.
 - PDFs go through `ReportHtml::writePdf`.
+- **Decimals on screen and on paper use the comma**, whatever the language: `displayMoney()` for an amount ("12,50", no thousands separator), `displayDecimal()` for a stored size, `NumberFormatDelegate` / `DecimalCommaDelegate` for table columns, `UiKit::AmountSpinBox` for an amount spin box, `ReportHtml::formatEuro` in reports ("1.234,56 €"). The database, the maths and the AEAT XML keep the dot (`moneyText`). Any field the user types a decimal into accepts "," and "." (`moneyText(text)` / `.replace(',', '.')`); never parse a shown amount back with a plain `toDouble()`.
 
 ---
 
@@ -87,19 +88,22 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 ## Database rules
 
-- Always open and close `db` within the same function scope:
+- Open the connection with `ConnectionScope` (`sql_lite.h`), never a bare `db.open()` / `db.close()` pair: it closes only what it opened, so a caller's (or a model's) open connection survives, and early returns are safe:
   ```cpp
-  db.open();
-  QSqlQuery q;
+  ConnectionScope scope(db);
+  QSqlQuery q(db);                 // after the scope
   q.prepare("...");
   q.bindValue(":param", value);   // always use named params
   q.exec();
-  db.close();
   ```
 - **Never** build SQL by string concatenation — always use `:named_params` with `bindValue()`.
 - No hardcoded paths. The existing `DB_PATH` in `sql_lite.h` is a known issue, not a pattern to follow.
 
 ---
+
+## What never goes into the log
+
+`~/.laideal.log` is sent to support: never log a secret (the service key, the certificate password; the gateway payload is logged with the key redacted) nor a client's personal data (name, phones, address, DNI). Log ticket numbers, invoice ids, counts, amounts, states and SQL error text instead.
 
 ## Error handling
 

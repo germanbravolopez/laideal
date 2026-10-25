@@ -1,6 +1,8 @@
 #ifndef VERIFACTUTYPES_H
 #define VERIFACTUTYPES_H
 
+#include <cmath>
+#include <QDebug>
 #include <QPixmap>
 #include <QString>
 
@@ -11,7 +13,8 @@ enum class VerifactuEstado {
     Enviada,       // "ENVIADA"     - successfully submitted to AEAT
     Anulada,       // "ANULADA"     - cancelled via AEAT
     Rectificada,   // "RECTIFICADA" - superseded by a substitution rectificativa (R1-R5 with S)
-    Error          // "ERROR"       - submission or cancellation failed
+    Error,         // "ERROR"       - submission or cancellation failed
+    Unknown        // any other stored text: never resent, cancelled or rectified
 };
 
 inline QString verifactuEstadoToString(VerifactuEstado e)
@@ -23,15 +26,13 @@ inline QString verifactuEstadoToString(VerifactuEstado e)
     case VerifactuEstado::Anulada:      return QStringLiteral("ANULADA");
     case VerifactuEstado::Rectificada:  return QStringLiteral("RECTIFICADA");
     case VerifactuEstado::Error:        return QStringLiteral("ERROR");
+    case VerifactuEstado::Unknown:      return QStringLiteral("DESCONOCIDO");
     }
     return QStringLiteral("PENDIENTE");
 }
 
-// Case-insensitive on purpose: the column spans app versions, and a value that
-// is merely mis-cased ("Error") would otherwise fall through to the NotSubmitted
-// default and be silently misread as un-submitted. This is a read-side safety net
-// only - the SQL filters elsewhere compare case-sensitively, so writers must still
-// emit the canonical upper-case form via verifactuEstadoToString().
+// Case-insensitive on purpose (a mis-cased "Error" from older versions); writers still
+// emit the canonical form, the SQL filters compare case-sensitively.
 inline VerifactuEstado verifactuEstadoFromString(const QString &s)
 {
     const QString u = s.toUpper();
@@ -40,7 +41,18 @@ inline VerifactuEstado verifactuEstadoFromString(const QString &s)
     if (u == QLatin1String("ANULADA"))     return VerifactuEstado::Anulada;
     if (u == QLatin1String("RECTIFICADA")) return VerifactuEstado::Rectificada;
     if (u == QLatin1String("ERROR"))       return VerifactuEstado::Error;
-    return VerifactuEstado::NotSubmitted; // covers "PENDIENTE" and legacy empty/NULL
+    if (u.isEmpty() || u == QLatin1String("PENDIENTE"))   // legacy empty / NULL too
+        return VerifactuEstado::NotSubmitted;
+    // Read as PENDIENTE it would be resent: an invoice AEAT may hold, sent twice.
+    qWarning() << "verifactuEstadoFromString: unknown verifactu_estado" << s << "- treated as not resendable";
+    return VerifactuEstado::Unknown;
+}
+
+// The estado as the operator should read it: an unknown value is shown as stored.
+inline QString verifactuEstadoDisplay(const QString &stored)
+{
+    const VerifactuEstado e = verifactuEstadoFromString(stored);
+    return e == VerifactuEstado::Unknown ? stored : verifactuEstadoToString(e);
 }
 
 // True for the two states that mean "AEAT has not accepted this row (yet)".
@@ -129,6 +141,23 @@ inline VerifactuEstado verifactuEstadoForResult(VerifactuResult::Status s)
     // NETWORK_ERROR / PENDING / INVALID_CONFIG: unknown or never sent.
     default:                       return VerifactuEstado::NotSubmitted;
     }
+}
+
+// A gross amount (IVA included) split the way it is invoiced and printed: the base rounded
+// to cents (half away from zero) and the tax the rest, so base + tax is always the gross.
+struct GrossSplit {
+    double base = 0.0;
+    double tax = 0.0;
+};
+inline GrossSplit splitGross(double gross, double ratePercent)
+{
+    const auto cents = [](double v) {
+        const double c = v * 100.0;
+        return std::round(c + (c >= 0.0 ? 1e-6 : -1e-6)) / 100.0;
+    };
+    const double g = cents(gross);
+    const double base = cents(g / (1.0 + ratePercent / 100.0));
+    return { base, cents(g - base) };
 }
 
 #endif // VERIFACTUTYPES_H

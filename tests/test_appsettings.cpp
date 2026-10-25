@@ -145,6 +145,60 @@ private slots:
 
     // A plaintext service key on disk is encrypted at rest on load: the getter
     // still returns plaintext, and the file is rewritten with the encrypted value.
+    // The direct client's NumeroInstalacion and chain marker are written to the file at
+    // once: every record carries the number, so a crash before another save must not
+    // give the next run a different one.
+    void test_installationNumberAndChainMarkerPersistAtOnce()
+    {
+        const QString path = loadJson(R"({"database":{"path":"x.db"}})");
+        const QString number = AppSettings::instance()->aeatInstallationNumber();
+        QVERIFY(number.startsWith("LAIDEAL-"));
+        QCOMPARE(rawValue(path, "verifactu", "aeat_installation"), number);
+        AppSettings::instance()->setAeatChainMarker("30839|ABC");
+        QCOMPARE(rawValue(path, "verifactu", "aeat_chain_marker"), QStringLiteral("30839|ABC"));
+        AppSettings::instance()->loadFrom(path);                       // the next run
+        QCOMPARE(AppSettings::instance()->aeatInstallationNumber(), number);
+    }
+
+    // A settings file that cannot be read is kept aside before defaults apply: the next
+    // save would otherwise overwrite the only copy of the database path and credentials.
+    void test_corruptFileKeptAside()
+    {
+        const QString path = loadJson("{ this is not json");
+        QVERIFY(!QFile::exists(path));
+        const QStringList aside = QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + ".corrupt-*" });
+        QCOMPARE(aside.size(), 1);
+        QFile kept(m_dir.filePath(aside.first()));
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QCOMPARE(kept.readAll(), QByteArray("{ this is not json"));
+    }
+
+    // A failed save is remembered for the start-up message, and cleared by the next good one.
+    void test_lastSaveErrorReported()
+    {
+        const QString path = loadJson(R"({"database":{"path":"a.db"}})");
+        QVERIFY(AppSettings::instance()->save());
+        QVERIFY(AppSettings::instance()->lastSaveError().isEmpty());
+        QVERIFY(QFile::remove(path));
+        QVERIFY(QDir().mkpath(path));                                        // a folder where the file goes
+        QVERIFY(!AppSettings::instance()->save());
+        QVERIFY(!AppSettings::instance()->lastSaveError().isEmpty());
+        QVERIFY(QDir(path).removeRecursively());
+        QVERIFY(AppSettings::instance()->save());
+        QVERIFY(AppSettings::instance()->lastSaveError().isEmpty());
+    }
+
+    // The save replaces the file in one step and leaves no temporary file behind.
+    void test_saveIsAtomic()
+    {
+        const QString path = loadJson(R"({"database":{"path":"a.db"}})");
+        AppSettings::instance()->setDbPath("b.db");
+        QVERIFY(AppSettings::instance()->save());
+        QCOMPARE(QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + "*" }).size(), 1);
+        QCOMPARE(QJsonDocument::fromJson([&path] { QFile f(path); f.open(QIODevice::ReadOnly); return f.readAll(); }())
+                     .object().value("database").toObject().value("path").toString(), QStringLiteral("b.db"));
+    }
+
     void test_encryptSecretsAtRestMigration()
     {
         const QString plain = "plaintext-service-key-XyZ987";

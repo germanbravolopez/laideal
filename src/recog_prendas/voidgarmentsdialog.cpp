@@ -96,36 +96,36 @@ void VoidGarmentsDialog::onSearchClicked()
     const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
-    db.open();
     QString client, date;
-    QSqlQuery q(db);
-    q.prepare("SELECT hash, prenda, cantidad, importe, pagado, verifactu_estado, "
-              "estado, cliente, fecha_recepcion "
-              "FROM ingresos WHERE n_recibo = :num ORDER BY rowid");
-    q.bindValue(":num", ticketNum);
-    if (!q.exec()) {
-        qWarning() << "VoidGarmentsDialog: SELECT failed for ticket"
-                   << ticketNum << "-" << q.lastError().text();
-        db.close();
-        m_lblResult->setText(UiKit::errorHtml(tr("Error al leer el ticket.")));
-        return;
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT hash, prenda, cantidad, importe, pagado, verifactu_estado, "
+                  "estado, cliente, fecha_recepcion "
+                  "FROM ingresos WHERE n_recibo = :num ORDER BY rowid");
+        q.bindValue(":num", ticketNum);
+        if (!q.exec()) {
+            qWarning() << "VoidGarmentsDialog: SELECT failed for ticket"
+                       << ticketNum << "-" << q.lastError().text();
+            m_lblResult->setText(UiKit::errorHtml(tr("Error al leer el ticket.")));
+            return;
+        }
+        while (q.next()) {
+            Garment g;
+            g.hash            = q.value(0).toString();
+            g.prenda          = q.value(1).toString();
+            g.cantidad        = q.value(2).toString();
+            g.importe         = q.value(3).toString();
+            g.pagado          = q.value(4).toString();
+            g.verifactuEstado = q.value(5).toString();
+            g.estado          = q.value(6).toString();
+            g.voidable        = garmentIsLocallyVoidable(g.pagado, g.verifactuEstado)
+                                && g.estado != QLatin1String(INGRESOS_ESTADO_ANULADO);
+            if (client.isEmpty()) client = q.value(7).toString();
+            if (date.isEmpty())   date   = q.value(8).toString();
+            m_garments.append(g);
+        }
     }
-    while (q.next()) {
-        Garment g;
-        g.hash            = q.value(0).toString();
-        g.prenda          = q.value(1).toString();
-        g.cantidad        = q.value(2).toString();
-        g.importe         = q.value(3).toString();
-        g.pagado          = q.value(4).toString();
-        g.verifactuEstado = q.value(5).toString();
-        g.estado          = q.value(6).toString();
-        g.voidable        = garmentIsLocallyVoidable(g.pagado, g.verifactuEstado)
-                            && g.estado != QLatin1String(INGRESOS_ESTADO_ANULADO);
-        if (client.isEmpty()) client = q.value(7).toString();
-        if (date.isEmpty())   date   = q.value(8).toString();
-        m_garments.append(g);
-    }
-    db.close();
 
     if (m_garments.isEmpty()) {
         m_lblResult->setText(UiKit::warnHtml(tr("No se ha encontrado el recibo Nº %1.").arg(ticketNum.toHtmlEscaped())));
@@ -153,7 +153,7 @@ void VoidGarmentsDialog::rebuildTable()
 
         m_table->setItem(row, COL_PRENDA,  new QTableWidgetItem(g.prenda));
         m_table->setItem(row, COL_CANT,    new QTableWidgetItem(g.cantidad));
-        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(g.importe + " €"));
+        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(displayMoney(g.importe) + " €"));
         // Reason a row is not selectable: already voided, or paid/sent to AEAT
         // (must go through "Anular Factura Verifactu").
         QString estadoText = g.estado;

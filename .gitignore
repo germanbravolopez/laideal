@@ -16,6 +16,14 @@ build*
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+
+# certificates and settings copies (the test certificates under tests/fixtures are synthetic)
+*.pfx
+*.p12
+!tests/fixtures/**/*.p12
+.laideal_settings*.json
+laideal_settings*.json
 
 # qtcreator generated files
 *.pro.user*
@@ -29,6 +37,20 @@ build*
 # local settings
 .claude/settings.local.json
 
+# Python virtual environment (docs/testing/ui_smoke.md)
+.venv/
+ui-smoke-out/
+
 # MkDocs documentation site build output (see mkdocs.yml / .github/workflows/docs.yml)
 site/
 _site/
+
+# Python packaging metadata (pip install -e .)
+*.egg-info/
+__pycache__/
+
+# Local AEAT pre-production run (tests/ui/aeat_preproduction.py): database, settings, logs
+aeat-run/
+
+# Print jobs captured by tests/ui/printer.py listen
+print-jobs/

@@ -31,8 +31,13 @@ struct TicketData {
     QString invoiceId;                  // displayInvoiceId()
     QString clientName;
     QString receptionDate;              // already normalised ('-' -> '/')
+    QString issueDate;                  // facturas: fecha de expedición (the payment date AEAT holds)
     QString clientAddress;              // complete-invoice only
-    QString clientDni;                  // complete-invoice only
+    QString clientDni;                  // complete-invoice only; no DNI line when empty
+    // A reprint of an invoice no longer in force: "ANULADA" or "RECTIFICADA" (and the
+    // date it happened). Printed prominently; such a copy carries no QR or leyenda.
+    QString voidedMarker;
+    QString voidedDate;
 
     // Body
     QList<TicketGarmentLine> garments;
@@ -55,6 +60,10 @@ class TicketRenderer
 public:
     // paperDots = printable width in dots (576 @80mm, 420 @58mm).
     static QByteArray render(const TicketData &d, int paperDots = 576);
+
+    // Any QR image redrawn module by module at whole dots per module: 30-40 mm (art. 21.1
+    // of the Orden), plus the quiet zone. Null when no QR symbol can be read from it.
+    static QImage printableQr(const QImage &qr);
 };
 
 #endif // TICKETRENDERER_H

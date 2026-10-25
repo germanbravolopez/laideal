@@ -1,5 +1,6 @@
 #include "verifactumanager.h"
 #include "verifacturesponse.h"
+#include "testhostguard.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
 #include <QJsonDocument>
@@ -14,7 +15,7 @@
 #include <QPointer>
 
 VerifactuManager::VerifactuManager(QObject *parent)
-    : QObject(parent), m_config(nullptr), m_networkManager(nullptr), m_requestCounter(0)
+    : VerifactuBackend(parent), m_config(nullptr), m_networkManager(nullptr)
 {
     m_config = new VerifactuConfig();
     m_networkManager = new QNetworkAccessManager(this);
@@ -22,11 +23,13 @@ VerifactuManager::VerifactuManager(QObject *parent)
 
 VerifactuManager::~VerifactuManager()
 {
+    delete m_config;    // not a QObject: owned here
 }
 
 QString VerifactuManager::nextRequestId()
 {
-    return QStringLiteral("req-%1").arg(++m_requestCounter);
+    static int counter = 0;     // unique across every manager of the run (see AeatDirectBackend)
+    return QStringLiteral("req-%1").arg(++counter);
 }
 
 void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description)
@@ -40,9 +43,9 @@ void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Sta
     }, Qt::QueuedConnection);
 }
 
-void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, bool isQrRequest)
+void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind)
 {
-    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, isQrRequest]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, kind]() {
         VerifactuResult result;
         if (reply->error() != QNetworkReply::NoError) {
             result.status = VerifactuResult::NETWORK_ERROR;
@@ -52,7 +55,7 @@ void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, boo
         } else {
             QByteArray responseData = reply->readAll();
             logResponse(responseData);
-            result = parseVerifactuResponse(responseData, isQrRequest);
+            result = parseVerifactuResponse(responseData, kind);
         }
         reply->deleteLater();
         emit requestFinished(reqId, result);
@@ -90,12 +93,13 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-    wireReply(reqId, reply, false);
+    wireReply(reqId, reply, VerifactuReply::Submit);
     return reqId;
 }
 
-QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber)
+QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
+    Q_UNUSED(invoiceDate)   // the gateway finds the invoice by its ID alone
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration() || invoiceNumber.isEmpty()) {
@@ -179,7 +183,7 @@ QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const
     qDebug() << "Cancelling invoice" << invoiceNumber << "(" << reqId << ")";
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-    wireReply(reqId, reply, false);
+    wireReply(reqId, reply, VerifactuReply::Cancel);
     return reqId;
 }
 
@@ -221,7 +225,7 @@ QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
         } else {
             QByteArray responseData = reply->readAll();
             logResponse(responseData);
-            result = parseVerifactuResponse(responseData, true);
+            result = parseVerifactuResponse(responseData, VerifactuReply::Qr);
             result.validationUrl = validationUrl;
         }
         reply->deleteLater();
@@ -254,9 +258,8 @@ VerifactuResult VerifactuManager::testConnection()
         return result;
     }
 
-    // POST a stub payload to /Create. The server rejects it (missing fields), but ANY
-    // HTTP response proves connectivity + auth. GET on the base URL hangs without ever
-    // responding, so POST to /Create is the only reliable probe.
+    // POST a stub payload to /Create (GET on the base URL never answers). The service
+    // refuses the stub for its missing fields; only a key refusal or a server error fails.
     QJsonObject probe;
     probe["ServiceKey"] = m_config->getServiceKey();
     QByteArray payload = QJsonDocument(probe).toJson(QJsonDocument::Compact);
@@ -283,6 +286,7 @@ VerifactuResult VerifactuManager::testConnection()
 
     QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     QString errStr = reply->errorString();
+    const QByteArray body = reply->readAll();
     reply->deleteLater();
 
     if (!httpStatus.isValid()) {
@@ -294,9 +298,44 @@ VerifactuResult VerifactuManager::testConnection()
         return result;
     }
 
+    result = connectionProbeResult(httpStatus.toInt(), body);
+    if (!result.isSuccess())
+        m_lastError = result.errorDescription;
+    qDebug() << "testConnection: HTTP" << httpStatus.toInt() << "status" << result.status << result.errorDescription;
+    return result;
+}
+
+VerifactuResult VerifactuManager::connectionProbeResult(int httpStatus, const QByteArray &body)
+{
+    VerifactuResult result;
+    const QString http = QString("HTTP %1").arg(httpStatus);
+    if (httpStatus == 401 || httpStatus == 403) {
+        result.status = VerifactuResult::ERROR;
+        result.errorDescription = "Clave de servicio no válida o sin permiso (" + http + ")";
+        return result;
+    }
+    if (httpStatus >= 500 || httpStatus < 200) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "El servidor respondió con un error (" + http + ")";
+        return result;
+    }
+    const VerifactuResult parsed = parseVerifactuResponse(body, VerifactuReply::Cancel);
+    if (parsed.status == VerifactuResult::NETWORK_ERROR) {
+        result.status = VerifactuResult::NETWORK_ERROR;
+        result.errorDescription = "Respuesta no válida del servidor (" + http + ")";
+        return result;
+    }
+    const bool keyRefused = parsed.errorCode == QLatin1String("8001")
+                            || parsed.errorDescription.contains("ServiceKey", Qt::CaseInsensitive)
+                            || parsed.errorDescription.contains("clave", Qt::CaseInsensitive);
+    if (parsed.status == VerifactuResult::ERROR && keyRefused) {
+        result.status = VerifactuResult::ERROR;
+        result.errorCode = parsed.errorCode;
+        result.errorDescription = "Clave de servicio no válida: " + parsed.errorDescription;
+        return result;
+    }
     result.status = VerifactuResult::SUCCESS;
-    result.errorDescription = QString("HTTP %1").arg(httpStatus.toInt());
-    qDebug() << "testConnection: reachable, HTTP" << httpStatus.toInt();
+    result.errorDescription = http;
     return result;
 }
 
@@ -318,9 +357,13 @@ QString VerifactuManager::getConfigurationInfo() const
 
 QNetworkRequest VerifactuManager::createNetworkRequest(const QString &endpoint) const
 {
-    QNetworkRequest request{QUrl(endpoint)};
+    // Under LAIDEAL_TEST a non-local host gets an empty URL: the request fails at once.
+    QNetworkRequest request{TestHostGuard::allows(QUrl(endpoint)) ? QUrl(endpoint) : QUrl()};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, "LAIDEAL/" + QString(PROJECT_VERSION));
+    // A stalled connection would never answer: it ends as a NETWORK_ERROR (the row stays
+    // pending and is checked), so no request waits forever.
+    request.setTransferTimeout(30000);
     return request;
 }
 

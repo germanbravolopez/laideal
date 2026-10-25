@@ -43,7 +43,7 @@ AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent
     m_leFile = new QLineEdit();
     m_leFile->setObjectName("leFile");
     fileRow->addWidget(m_leFile, 1);
-    QPushButton *btnChoose = UiKit::secondaryButton("Elegir…", "btnChoose");
+    QPushButton *btnChoose = UiKit::secondaryButton("Elegir\u2026", "btnChoose");
     fileRow->addWidget(btnChoose);
     layout->addWidget(grpFile);
 

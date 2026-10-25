@@ -4,7 +4,7 @@
 #include <QJsonObject>
 
 VerifactuInvoice::VerifactuInvoice()
-    : m_invoiceType(NORMAL), m_totalAmount(0.0), m_totalTaxAmount(0.0)
+    : m_invoiceType(SIMPLIFIED), m_totalAmount(0.0), m_totalTaxAmount(0.0)
 {
 }
 
@@ -83,13 +83,6 @@ bool VerifactuInvoice::isValid() const
         return false;
     }
 
-    // Only F2 (simplified) and its rectificativas are issued: every other type needs
-    // a buyer, which this app never records.
-    if (m_invoiceType != SIMPLIFIED && !isRectificationInvoiceType(m_invoiceType)) {
-        m_validationError = "NIF del comprador no configurado";
-        return false;
-    }
-
     if (m_taxItems.isEmpty()) {
         m_validationError = "La factura debe tener al menos un item de impuesto";
         return false;
@@ -113,15 +106,13 @@ QString VerifactuInvoice::getValidationError() const
 QString VerifactuInvoice::invoiceTypeToString(InvoiceType type) const
 {
     switch (type) {
-        case NORMAL:           return "F1";  // standard invoice
         case SIMPLIFIED:       return "F2";  // simplified invoice
-        case SUBSTITUTE:       return "F3";  // substitute for simplified
         case RECTIFICATION_R1: return "R1";  // corrective - legal error
         case RECTIFICATION_R2: return "R2";  // corrective - buyer insolvency
         case RECTIFICATION_R3: return "R3";  // corrective - bad debts
         case RECTIFICATION_R4: return "R4";  // corrective - other
         case RECTIFICATION_R5: return "R5";  // corrective on simplified invoices
-        default:               return "F1";
+        default:               return "F2";
     }
 }
 

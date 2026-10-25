@@ -11,10 +11,13 @@
 // VerifactuManager so it can be unit-tested without a live network or a
 // VerifactuManager instance (it depends only on its inputs - no member state).
 //
-// isQrRequest = true means the reply is a GetQrCode response whose "Return" is
-// the base64 image directly; otherwise "Return" is the invoice result object
-// (CSV / ValidationUrl / Xml / QrCode, or an invoice-level ErrorCode).
-VerifactuResult parseVerifactuResponse(const QByteArray &response, bool isQrRequest = false);
+// The kind of request the reply answers. Qr: "Return" is the base64 image directly;
+// otherwise "Return" is the invoice result object (CSV / ValidationUrl / Xml / QrCode,
+// or an invoice-level ErrorCode). A body that is not JSON, or has no ResultCode, is a
+// NETWORK_ERROR (AEAT's answer is unknown), never a refusal; a Submit "success" without
+// a CSV is PENDING (to be checked), never a sent invoice.
+enum class VerifactuReply { Submit, Cancel, Qr };
+VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuReply kind = VerifactuReply::Submit);
 
 // Pure parser for a GetFilteredList (invoice query) reply. The vendor does not
 // publish this response schema - its own client parses it untyped - so this

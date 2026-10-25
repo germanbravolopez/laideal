@@ -11,11 +11,18 @@
 | `docs/ai_agent_instructions.md` | **Start here** — project briefing, critical issues, file map, agent rules |
 | `docs/architecture.md` | Module details, DB schema, data flow, known issues, dependencies |
 | `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
-| `docs/completed_milestones.md` | Completed milestones (newest first) and the Archive |
-| `docs/testing/README.md` | **Testing overview** — the three layers (unit suites, end-to-end bench, manual smoke test), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
+| `docs/completed_milestones.md` | Completed milestones since 11.0 (newest first) |
+| `docs/completed_milestones_archive.md` | Milestones of 10.13 and before |
+| `docs/reviews/2026-10-19-pre-12.0/` | Pre-12.0 deep review: one report per `src/` module plus the integration report with the prioritised backlog (P0 / P1 filed in the tracker) |
+| `CONTRIBUTING.md` (root) | **How to contribute**: rules for every change (branch, test, compliance review, docs, commit style), the development workflow (branching, version bump, merge, tag) and the release procedure (CI release job, local `release.ps1` fallback) |
+| `docs/testing/README.md` | **Testing overview** — the five layers (unit suites, end-to-end bench, UI smoke test, manual smoke test, post-update self-check), how to run them locally and in CI, conventions, patterns, adding a suite, CI toolchain |
 | `docs/testing/unit_suites.md` | What every `tests/test_*.cpp` suite covers, grouped by module |
 | `docs/testing/e2e.md` | End-to-end test bench: safety rules, `FakeVerifactuServer`, `ModalAutoCloser`, `ModalDriver`, `testschema.h`, `e2efixture.h`, the `test_e2e_verifactu` and `test_e2e_app` scenarios |
-| `docs/testing/smoke_test.md` | **Manual pre-release checklist** — what `ctest` cannot cover: real network, real printer, the migration on real data, screens not yet automated |
+| `docs/testing/ui_smoke.md` | **Automated UI smoke test**: smoke blocks A-E on the installed UI-test build (CMake `LAIDEAL_UI_TEST`, `--fake-aeat`) driven over UI Automation (pywinauto) on a `windows-latest` runner, against the fake AEAT on a synthetic DB; captured printer queue; the local AEAT pre-production script; how Qt widgets show in UIA (nested dialogs, cell widgets, checkable cells, dates); `tests/ui/`, `tests/tools/`, `.github/workflows/ui-smoke.yml` |
+| `docs/testing/smoke_test.md` | **Smoke test** — part 1 before the release (look of screens / PDFs, AEAT pre-production), part 2 the shop user's *Comprobar tras actualizar* (`laideal.exe --self-check`) after installing |
+| `src/app/instancelock.h/.cpp` | One copy of the app per database (`QLockFile` keyed on the database path) |
+| `src/app/refusedinvoicesdialog.h/.cpp` | Facturas rechazadas: the list behind the red status-bar count; opens Recogida on the selected ticket |
+| `src/app/selfcheck.h/.cpp`, `src/app/selfcheckdialog.h/.cpp` | Post-update self-check: copies the newest backup and the settings, runs M1/M2, asks M2b/M3/M5, writes the report, deletes the copies (`test_selfcheck`) |
 | `docs/INDEX.md` | This file |
 | `docs/README.md` | Docs folder navigation table |
 | `docs/modules/mainwindow.md` | MainWindow methods, save flow, table column constants |
@@ -25,10 +32,13 @@
 | `docs/modules/facturas.md` | Supplier invoice form, validation, auto-calculation |
 | `docs/modules/contabilidad.md` | Accounting report modes, period locking, revertirOn |
 | `docs/modules/imprimir.md` | Receipt/invoice print orchestration (ESC/POS), layout modes, QR |
+| `docs/modules/backup.md` | Automatic and manual SQLite backups: API, retention, settings, wiring (Verifactu Req. 4) |
+| `docs/modules/uikit.md` | Shared dialog style (`UiKit`): window setup, explanation panel, result panel, buttons, HTML helpers |
 | `docs/modules/printing.md` | ESC/POS printing core: EscPosBuilder, TicketRenderer, ThermalPrinter (RAW spooler) |
 | `docs/modules/add_garment.md` | Add-garment workflow, price calculation, validation |
 | `docs/modules/verifactu/README.md` | Verifactu module reference: architecture, public API, configuration, DB schema, integration points, environments, errors |
-| `docs/modules/verifactu/rest_api.md` | AEAT REST API complete field reference |
+| `docs/modules/verifactu/rest_api.md` | The gateway's REST API as researched (may be outdated; the code is authoritative) |
+| `docs/modules/verifactu/aeat-direct-investigation.md` | Research (Oct 2026): submitting to AEAT directly instead of via IreneSolutions - services, mutual TLS, huella and chain, what to build, legal duties, timing, recommendation |
 | `docs/modules/verifactu/verifactu-requirements.md` | Legal-compliance audit: each RD 1007/2023 / Orden HAC/1177/2024 requirement mapped to La Ideal coverage status |
 | `docs/modules/printer/README.md` | **Printer research dossier** (background for the shipped ESC/POS code): Epson TM-T20III model/specs, control methods, ESC/POS command subset, current-flow analysis, and the implementation plan (5 files + index). Runtime reference: `docs/modules/printing.md` |
 
@@ -75,6 +85,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Invoice rectification dialog (R1-R5) | `src/app/rectifyinvoicedialog.h` | `.cpp` |
 | Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | AEAT records export (XML envelope writer) | `src/app/aeatexport.h` | `.cpp` |
+| AEAT records export dialog | `src/app/aeatexportdialog.h` | `.cpp` |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |
@@ -91,8 +102,22 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Epson Status API transport (optional) | `src/printing/statusapiprinter.h` | `.cpp` |
 | Add garments to ticket | `src/add_garment/add_garment.h` | `.cpp` |
 | Verifactu facade | `src/verifactu/verifactuintegration.h` | `.cpp` |
-| Verifactu REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
+| Verifactu gateway REST manager | `src/verifactu/verifactumanager.h` | `.cpp` |
+| Verifactu estado enum, `VerifactuResult` | `src/verifactu/verifactutypes.h` | - |
+| Gateway reply parser (pure) | `src/verifactu/verifacturesponse.h` | `.cpp` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` | `.cpp` |
+| Verifactu backend interface (gateway / direct AEAT) | `src/verifactu/verifactubackend.h` | - |
+| AEAT record hash (huella) + QR URL, direct client | `src/verifactu/aeathash.h` | `.cpp` |
+| Stored AEAT chain verifier (art. 8.1 detection), direct client | `src/verifactu/aeatchaincheck.h` | `.cpp` |
+| AEAT records + SOAP envelopes, direct client | `src/verifactu/aeatrecord.h` | `.cpp` |
+| AEAT replies, record summary, chain tip | `src/verifactu/aeatresponse.h` | `.cpp` |
+| AEAT chain head + record outbox (tables aeat_chain / aeat_records) | `src/verifactu/aeatstore.h` | `.cpp` |
+| Verifactu QR drawn locally (vendored qrcodegen) | `src/verifactu/aeatqr.h` | `.cpp` |
+| Owner's certificate (Windows store / .pfx) | `src/verifactu/aeatcertificate.h` | `.cpp` |
+| WinHTTP SOAP transport with client certificate | `src/verifactu/aeattransport.h` | `.cpp` |
+| Direct AEAT backend | `src/verifactu/aeatdirectbackend.h` | `.cpp` |
+| Direct AEAT proof of concept (self-test) | `src/verifactu/aeatselftest.h` | `.cpp` |
+| Declaración responsable (art. 15 Orden HAC/1177/2024) | `src/verifactu/producerdeclaration.h` | `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` | `.cpp` |
 | Verifactu tax-item model | `src/verifactu/verifactutaxitem.h` | `.cpp` |
 | In-app updater (GitHub releases) | `src/updater/updater.h` | `.cpp` |
@@ -112,12 +137,14 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 
 | File | Purpose |
 |------|---------|
-| `CMakeLists.txt` | Root CMake — project 8.0, adds all subdirectories |
+| `CMakeLists.txt` | Root CMake — project 11.2, adds all subdirectories |
 | `src/app/CMakeLists.txt` | Main executable target (`laideal`) |
 | `src/tableview/CMakeLists.txt` | Single `tableview` static library (TableView, MySortFilterProxyModel, FilterWidget, NumberFormatDelegate, TextColorDelegate, LinkDelegate) |
 | `src/listado/CMakeLists.txt` | `listado` static library; links `tableview` as PUBLIC |
 | `src/<module>/CMakeLists.txt` | Per-module static library targets (incl. `src/printing` — ESC/POS, links `winspool` on Windows) |
-| `tests/` (18 Qt Test + CTest suites, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture + `testschema.h`, the shop schema built through `migrateDatabase`) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare`, `test_uikit` (the Enter rules). Run `ctest --test-dir build` |
+| `tests/` (29 CTest tests: 28 Qt Test suites + the `aeat_xsd` schema check, incl. the `test_e2e_verifactu` and `test_e2e_app` end-to-end bench with `tests/support/` fake Verifactu server + pop-up closer + modal-dialog driver + shared fixture + `testschema.h`, the shop schema built through `migrateDatabase`) | `test_sql_lite` (+`garmentImporte`, DB write seams, `garmentIsLocallyVoidable`/`voidGarmentRow`), `test_mysortfilterproxymodel`, `test_textcolordelegate` (`classify` colour rule incl. Anulado→green), `test_verifactu_response`, `test_verifactu_models`, `test_aeat_hash` (official AEAT huella / QR vectors), `test_aeat_chaincheck` (stored-chain verifier), `test_aeat_record` + `aeat_xsd` (records against the official XSDs), `test_aeat_response`, `test_aeat_store`, `test_aeat_qr`, `test_aeat_direct_backend` + `test_e2e_aeat_direct` (against `support/fakeaeatserver`), `test_appsettings` (DPAPI + `loadFrom` getters), `test_settingsdialog` (service-key show/hide toggle, offscreen), `test_facturas` (IVA split), `test_genlistado`, `test_backup_manager`, `test_contabilidad`, `test_escpos` (ESC/POS builder + renderer + `PrinterStatus` ASB decode), `test_ticket_preview` (renders sample recibo/factura to PNG + ASCII), `test_reporthtml`, `test_versioncompare` (the exe of `test_updater.cpp`; CTest name `version_compare`), `test_uikit` (the Enter rules), `test_instancelock`, `test_selfcheck`. Run `ctest --test-dir build` |
+| `tests/ui/` (Python + pywinauto) | The automated UI smoke test: `smoke.py` (runner), `block_a.py`…`block_e.py`, `actions.py` (operator flows), `laideal_ui.py` (UIA helpers), `seed.py`, `printer.py` (capturing printer queue), `aeat_preproduction.py` (local AEAT pre-production run + `--dry-run`) - see `docs/testing/ui_smoke.md` |
+| `tests/tools/` | `fake_aeat_server` (the fake AEAT as a process) and `escpos_preview` (decodes captured ESC/POS jobs with `tests/support/escpospreview.h`, shared with `test_ticket_preview`); built with the tests, not CTest suites |
 | `.github/scripts/Render-TestSummary.ps1` | Renders the foldable per-suite/per-method test report from `build/test-results-*.xml` into the GitHub step summary, and appends the `test_ticket_preview` ASCII receipt in a fenced block (GitHub strips inline images from summaries; the graphical PNG renders live in `docs/modules/printer/` + the `ticket-previews` artifact). Called by the `ci.yml` build job; also runnable locally. |
 | `mkdocs.yml` | MkDocs Material config for the documentation site: theme (light/dark toggle, search), `docs/` tree as nav, and `validation:` settings that demote cross-repo links (to `src/` + root files) to build warnings so a non-strict `mkdocs build` stays green |
 | `pyproject.toml` | Hosts the docs build tooling only (no Python package shipped): the `docs` optional-dependency group (`pip install ".[docs]"` → `mkdocs-material`) |
@@ -131,51 +158,52 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Term | Definition |
 |------|-----------|
 | Recibo / Ticket | Customer visit receipt. One ticket = N rows in `ingresos` sharing the same `n_recibo` |
-| Factura | Formal invoice (different from receipt). Stored in `gastos` table via Facturas form |
+| Factura | Two meanings. The simplified sales invoice the shop issues for a paid ticket: built from the `ingresos` rows and sent to AEAT. The supplier invoice entered in the Facturas form: stored in `gastos` |
 | Prenda | Garment item (clothing, rug, curtain, etc.) |
 | Limp. | "Limpieza" — cleaning service |
 | Plan. | "Plancha" — ironing service |
-| edit_lock | Column in `ingresos`: `0` = editable, `1` = locked by accounting close |
+| accounting_closures | Table of Contabilidad's quarterly closes (append-only close / reopen history); a row is locked when its date is in a closed quarter |
+| edit_lock | Legacy lock column in `ingresos` / `gastos`, replaced by `accounting_closures` (only read by its one-time migration) |
 | hash | 16-char alphanumeric identifier on each `ingresos` row for deduplication |
 | CSV (Verifactu) | "Código de Seguridad de la Versión" — the unique code AEAT issues per invoice |
 | ServiceKey | API key for the Verifactu REST service. External — not in source control. Stored encrypted at rest in `~/.laideal_settings.json` via Windows DPAPI (per-user, `dpapi:v1:` prefix); `AppSettings` getter/setter decrypt/encrypt transparently |
 | Trimestre | Quarter (Q1–Q4) — the unit for accounting lock and report generation |
 | QR (Verifactu) | QR image generated per invoice, shown to client for AEAT validation |
 | TESTING / PRODUCTION | Verifactu environments. TESTING uses fictitious data. PRODUCTION submits to AEAT |
-| VerifactuEstado | `enum class` in `verifactumanager.h` representing the DB-persisted `verifactu_estado` value: `NotSubmitted`↔`"PENDIENTE"`, `Enviada`↔`"ENVIADA"`, `Anulada`↔`"ANULADA"`, `Error`↔`"ERROR"`. Use `verifactuEstadoToString()` / `verifactuEstadoFromString()` to convert |
+| VerifactuEstado | `enum class` in `verifactutypes.h` representing the DB-persisted `verifactu_estado` value: `Unpaid`↔`"SIN COBRAR"`, `NotSubmitted`↔`"PENDIENTE"`, `Enviada`↔`"ENVIADA"`, `Anulada`↔`"ANULADA"`, `Rectificada`↔`"RECTIFICADA"`, `Error`↔`"ERROR"`. Use `verifactuEstadoToString()` / `verifactuEstadoFromString()` to convert |
 
 ## Topics → File Map
 
 | Topic | Where to look |
 |-------|--------------|
 | Ticket save flow (complete) | `src/app/mainwindow.cpp` (`saveTicket`) + `docs/modules/mainwindow.md` |
-| All configurable settings (paths, IVA, printing toggle, business info) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
+| All configurable settings (database and report paths, printing, business info, Verifactu connection and certificate, updater, backup; not the IVA rate, which is fixed) | `src/appsettings/appsettings.h` + `docs/architecture.md` (AppSettings section) |
 | Reports root and hardcoded subdirs (Contabilidad / Listados/Prendas / Listados/Gastos) | `src/appsettings/appsettings.h` (`reportsRoot`, `contabilidadPath`, `listadosPrendasPath`, `listadosGastosPath`) |
 | Printer queue + paper width settings | `src/appsettings/appsettings.h` (`printerName`, `paperWidthMm`) — edited in SettingsDialog → General |
 | DB path configuration | `src/appsettings/appsettings.h` (`dbPath`), set in `main.cpp` |
 | Verifactu call during save | `src/app/mainwindow.cpp` (`verifactuSubmitInvoice`) |
-| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`) — pixmap from save flow or REST `/GetQrCode`, rastered into the ESC/POS stream (`EscPosBuilder::rasterImage`); the legal verification leyenda prints below the QR when `verifactu_estado == ENVIADA` |
-| Accounting lock check | `src/sql_lite/sql_lite.h` (`readLockForMonthAndYear`) |
+| Verifactu QR on printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`) — pixmap from the save flow, drawn locally by the direct client (`qrBeforeReply`), or the gateway's REST `/GetQrCode`, rastered into the ESC/POS stream (`EscPosBuilder::rasterImage`); the legal verification leyenda prints below the QR when `verifactu_estado == ENVIADA` |
+| Accounting lock check | `src/sql_lite/sql_lite.h` (`quarterIsClosed`, `closeQuarter`, `reopenQuarter`, `quarterClosures`) |
 | Hash generation | `src/sql_lite/sql_lite.h` (`genHash16`) |
 | Print flow (ESC/POS) | `docs/modules/imprimir.md` (orchestration) + `docs/modules/printing.md` (ESC/POS core) + `src/imprimir/imprimir.h` |
 | ESC/POS command subset / code page (PC858) | `docs/modules/printer/03_escpos_command_reference.md` + `src/printing/escposbuilder.cpp` (`toCp858`) |
 | Ticket conditions (RGPD, RD 1453/1987 clauses) | `src/printing/ticketrenderer.cpp` (`copyForClient` guard) + `docs/modules/imprimir.md` (General conditions block table) |
 | How to add a new module | `CMakeLists.txt` + create `src/<name>/CMakeLists.txt` |
 | Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
-| How to read customer bug logs | `~/.laideal.log` on customer machine; Archivo → Log de depuración… shows the path and an "Abrir archivo" button that opens the log directly |
+| How to read customer bug logs | `~/.laideal.log` on customer machine; Ayuda → Log de depuración shows the path and an "Abrir archivo" button that opens the log directly |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
 | Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
-| Release procedure | Root `README.md` |
-| Verifactu REST API fields | `docs/modules/verifactu/rest_api.md` |
+| Development workflow, release procedure | Root `CONTRIBUTING.md` |
+| Gateway REST API fields (as researched) | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |
 | Verifactu XML export for Hacienda (Art. 14.1) | `src/app/aeatexportdialog.cpp` (`AeatExportDialog`, opened by `MainWindow::on_actionExportar_registros_aeat_triggered`), records from `sql_lite::aeatExportRecords` (one per payment event), XML written by `src/app/aeatexport.cpp`; column `verifactu_xml` in `ingresos`; envelope format documented in `docs/modules/verifactu/README.md` (Integration points) |
-| Verifactu chained hash (AEAT "Huella", Art. 12) | column `verifactu_hash` in `ingresos`; extraction in `VerifactuManager::processResponse()` (regex over `Return.Xml`) → `VerifactuResult::rawHash` |
-| verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactumanager.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
+| Verifactu chained hash (AEAT "Huella", Art. 12) | column `verifactu_hash` in `ingresos`; extraction in `parseVerifactuResponse()` (`verifacturesponse.cpp`, regex over `Return.Xml`); the direct client computes it (`aeathash.cpp`) → `VerifactuResult::rawHash` |
+| verifactu_estado string values / VerifactuEstado enum | `src/verifactu/verifactutypes.h` (`VerifactuEstado` enum + `verifactuEstadoToString/FromString`) |
 | Accounting correctness with cancelled invoices (ANULADA) | `src/sql_lite/sql_lite.cpp` (`kIngresosIncomeWhere`, `incomeTicketsBetweenDates`) + `docs/modules/contabilidad.md` |
 | Verifactu integration points (save, retry, cancel, print) | `docs/modules/verifactu/README.md` (Integration points section) |
 | Open issues and blockers | `docs/progress_tracker.md` |
 | Known technical debt | `docs/architecture.md` (Known Issues) |
 | Version history | `releases_notes.txt` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` + `src/updater/updaterdialog.h`; setting `updater.check_on_startup` in `~/.laideal_settings.json`; in-place install via `releases/laideal.iss` (`CloseApplications=yes`, `RestartApplications=yes`) |
-| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Herramientas → Hacer copia de seguridad ahora...) | `src/backup/backup_manager.h/.cpp`; settings `backup.directory` / `backup.enabled` / `backup.last_time`; auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
+| Automated SQLite backup (Verifactu Req. 4) + manual trigger (Archivo → Hacer copia de seguridad ahora) | `src/backup/backup_manager.h/.cpp`; settings `backup.enabled` / `backup.last_time` / `backup.last_version` (directory: `backups/` next to the DB); auto path scheduled from `MainWindow` constructor via `QTimer::singleShot(3000)` when `needsBackup()`; see `docs/modules/backup.md` |
 | In-app version history (Ayuda → Notas de la versión) | `src/app/mainwindow.cpp` (`on_actionNotas_de_la_version_triggered`) reads the bundled `:/docs/releases_notes.txt` resource (declared in `resources/laideal.qrc`); the file is the same one Inno Setup's `InfoBeforeFile` shows at install time |

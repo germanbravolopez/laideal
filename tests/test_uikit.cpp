@@ -55,6 +55,24 @@ private:
     }
 
 private slots:
+    // The amount field shows the decimal comma whatever the language and takes "," or
+    // "." as the decimal key, so the numeric keypad works either way.
+    void test_amountSpinBox_commaShownEitherKeyTyped()
+    {
+        UiKit::AmountSpinBox box;
+        box.setDecimals(2);
+        box.setRange(-1000, 1000);
+        box.setValue(12.5);
+        QCOMPARE(box.text(), QStringLiteral("12,50"));
+        for (const QString &typed : { QStringLiteral("7.25"), QStringLiteral("7,25") }) {
+            box.selectAll();
+            QTest::keyClicks(&box, typed);
+            box.interpretText();
+            QCOMPARE(box.value(), 7.25);
+        }
+        QCOMPARE(box.text(), QStringLiteral("7,25"));
+    }
+
     // Enter in a field presses the primary button, once, and never another one.
     void test_enterInFieldPressesPrimary()
     {
@@ -81,6 +99,22 @@ private slots:
         Form f(true);
         press(f.other);
         QCOMPARE(f.otherClicks, 1);
+        QCOMPARE(f.primaryClicks, 0);
+    }
+
+    // Enter on a focused secondary button (not auto-default, like Cerrar) presses that
+    // button, never the primary action.
+    void test_enterOnFocusedSecondaryButtonPressesIt()
+    {
+        Form f(true);
+        auto *secondary = UiKit::secondaryButton("Cerrar", "btnClose");
+        f.dialog.layout()->addWidget(secondary);
+        secondary->show();                                                 // added after the dialog was shown
+        int secondaryClicks = 0;
+        QObject::connect(secondary, &QPushButton::clicked, [&secondaryClicks] { ++secondaryClicks; });
+        QVERIFY(!secondary->autoDefault());
+        press(secondary);
+        QCOMPARE(secondaryClicks, 1);
         QCOMPARE(f.primaryClicks, 0);
     }
 

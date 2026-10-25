@@ -27,6 +27,7 @@
 #include "testschema.h"
 #include "verifactuconfig.h"
 #include "verifactuintegration.h"
+#include "verifactumanager.h"
 #include "verifacturesponse.h"
 
 class TestE2eVerifactu : public QObject
@@ -42,6 +43,10 @@ class TestE2eVerifactu : public QObject
     void exec(const QString &sql)
     {
         m_db.open();
+        // Test data is shaped by hand: the Req. 1 guard triggers go first.
+        for (const char *drop : { "DROP TRIGGER IF EXISTS ingresos_registered_no_delete",
+                                  "DROP TRIGGER IF EXISTS ingresos_accepted_identity" })
+            QSqlQuery(m_db).exec(QString::fromLatin1(drop));
         QSqlQuery q(m_db);
         QVERIFY2(q.exec(sql), qPrintable(q.lastError().text() + " :: " + sql));
         m_db.close();
@@ -95,7 +100,39 @@ class TestE2eVerifactu : public QObject
         return dlg.result() == QDialog::Accepted;
     }
 
+    // The gateway failure modes below all mean "AEAT may or may not have the invoice": the sale
+    // stays paid, the row is PENDIENTE with its InvoiceID kept and no CSV (the start-up
+    // recovery resends it), and it is never ERROR, which is for a refusal.
+    void expectLeftPendiente(const QString &nRecibo, const QString &hash)
+    {
+        const QString where = QStringLiteral(" FROM ingresos WHERE hash='%1'").arg(hash);
+        QCOMPARE(scalar("SELECT pagado" + where), QStringLiteral("SI"));
+        QCOMPARE(scalar("SELECT verifactu_estado" + where), QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT verifactu_invoice_id" + where), nRecibo);
+        QCOMPARE(scalar("SELECT COALESCE(verifactu_csv, '')" + where), QString());
+        QVERIFY(!m_server.requestsTo("Create").isEmpty());
+        QVERIFY(m_popups->messages().isEmpty());
+    }
+
 private slots:
+    // The gateway's rectificativas carry no RectificationItems: never sent in PRODUCTION.
+    void test_gatewayRectificativaRefusedInProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuProduction(false); });
+        s->setVerifactuProduction(true);
+        VerifactuIntegration production;
+        QVERIFY(production.initialize());
+        const int before = m_server.requestsTo("Create").size();
+        const QString id = production.submitRectificationAsync(
+            "1900", QDate::currentDate(), VerifactuInvoice::RECTIFICATION_R5, VerifactuInvoice::BY_DIFFERENCES,
+            -1.0, -0.21, 10.0, 2.10, 21.0, "x", "1899", QDate::currentDate());
+        QVERIFY(id.isEmpty());
+        QVERIFY2(production.getLastError().contains("PRODUCCIÓN"), qPrintable(production.getLastError()));
+        QTest::qWait(200);
+        QCOMPARE(m_server.requestsTo("Create").size(), before);
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());
@@ -133,10 +170,64 @@ private slots:
         VerifactuConfig::setEndpointOverride(QString());
     }
 
+    // Probar conexion: any answer used to read "Conexion correcta", a refused key (401,
+    // or a key error in the body) and a server error included. Only a plain refusal of
+    // the stub's missing fields proves the service and the key.
+    void test_testConnectionReportsARefusedKey()
+    {
+        VerifactuManager mgr;
+        mgr.getConfig()->setEmitterData("B00000000", "Tintoreria E2E");
+        mgr.getConfig()->setServiceKey("e2e-service-key");
+
+        FakeVerifactuServer::Reply missingFields;
+        missingFields.body = FakeVerifactuServer::rejectedReply("4102", "Falta el campo InvoiceID");
+        m_server.enqueue("Create", missingFields);
+        QVERIFY(mgr.testConnection().isSuccess());
+
+        FakeVerifactuServer::Reply unauthorized;
+        unauthorized.status = 401;
+        unauthorized.body = "{}";
+        m_server.enqueue("Create", unauthorized);
+        VerifactuResult r = mgr.testConnection();
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("Clave de servicio"), qPrintable(r.errorDescription));
+
+        FakeVerifactuServer::Reply badKey;
+        badKey.body = FakeVerifactuServer::rejectedReply("8001", "ServiceKey no valida");
+        m_server.enqueue("Create", badKey);
+        r = mgr.testConnection();
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY2(r.errorDescription.contains("Clave de servicio"), qPrintable(r.errorDescription));
+
+        FakeVerifactuServer::Reply serverError;
+        serverError.status = 500;
+        serverError.body = "<html>oops</html>";
+        m_server.enqueue("Create", serverError);
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+
+        FakeVerifactuServer::Reply html;
+        html.body = "<html>portal</html>";
+        m_server.enqueue("Create", html);
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+        m_server.clear();
+
+        // Tripwire: under LAIDEAL_TEST=1 a request to any host but this machine is refused
+        // before it leaves (the host never resolves anyway).
+        const QByteArray previous = qgetenv("LAIDEAL_TEST");
+        qputenv("LAIDEAL_TEST", "1");
+        VerifactuConfig::setEndpointOverride("http://laideal-tripwire.invalid/Invoices");
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("TestHostGuard.*laideal-tripwire.invalid"));
+        QCOMPARE(mgr.testConnection().status, VerifactuResult::NETWORK_ERROR);
+        VerifactuConfig::setEndpointOverride(m_server.baseUrl());
+        qputenv("LAIDEAL_TEST", previous);
+        QVERIFY(m_server.requests().isEmpty());
+    }
+
     void init()
     {
         exec("DELETE FROM ingresos");
         exec("DELETE FROM gastos");
+        TestSchema::resetClosures(m_db);
         m_server.clear();
         m_popups->clear();
     }
@@ -236,11 +327,85 @@ private slots:
         QVERIFY(scalar("SELECT verifactu_error FROM ingresos WHERE hash='h400a'").contains("NIF del emisor"));
     }
 
+    void test_gateway_http500_staysPendiente()
+    {
+        seedGarment("410", "h410a", "11.00");
+        FakeVerifactuServer::Reply down;
+        down.status = 500;   // with a body that would be accepted: the HTTP status alone must decide
+        down.body = FakeVerifactuServer::acceptedReply("A-FAKE500");
+        m_server.enqueue("Create", down);
+        QVERIFY(payThroughDialog("410", QDate(2026, 2, 10)));
+        expectLeftPendiente("410", "h410a");
+    }
+
+    void test_gateway_http401_staysPendiente()
+    {
+        seedGarment("411", "h411a", "11.00");
+        FakeVerifactuServer::Reply refused;
+        refused.status = 401;
+        refused.body = FakeVerifactuServer::acceptedReply("A-FAKE401");
+        m_server.enqueue("Create", refused);
+        QVERIFY(payThroughDialog("411", QDate(2026, 2, 10)));
+        expectLeftPendiente("411", "h411a");
+    }
+
+    void test_gateway_malformedJson_staysPendiente()
+    {
+        seedGarment("412", "h412a", "11.00");
+        FakeVerifactuServer::Reply garbage;
+        garbage.body = "{\"ResultCode\": 0, \"Return\": {\"CSV\": ";   // truncated body
+        m_server.enqueue("Create", garbage);
+        QVERIFY(payThroughDialog("412", QDate(2026, 2, 10)));
+        expectLeftPendiente("412", "h412a");
+    }
+
+    void test_gateway_droppedConnection_staysPendiente()
+    {
+        seedGarment("413", "h413a", "11.00");
+        FakeVerifactuServer::Reply dropped;
+        dropped.drop = true;
+        m_server.enqueue("Create", dropped);
+        m_server.enqueue("Create", dropped);   // Qt resends once on a connection closed before any answer
+        QVERIFY(payThroughDialog("413", QDate(2026, 2, 10)));
+        expectLeftPendiente("413", "h413a");
+    }
+
+    // ResultCode 0 without the CSV AEAT returns for a registered invoice is not a success.
+    void test_gateway_successWithoutCsv_staysPendiente()
+    {
+        seedGarment("414", "h414a", "11.00");
+        FakeVerifactuServer::Reply noCsv;
+        noCsv.body = R"({"ResultCode":0,"Return":{}})";
+        m_server.enqueue("Create", noCsv);
+        QVERIFY(payThroughDialog("414", QDate(2026, 2, 10)));
+        expectLeftPendiente("414", "h414a");
+    }
+
+    // A stalled gateway ends at the client's 30 s transfer timeout as a network error (the
+    // caller then keeps the row pending); without the timeout the request would wait for the
+    // fake's reply, sent after 36 s.
+    void test_gateway_stalledReply_endsAsNetworkErrorAtTheTransferTimeout()
+    {
+        FakeVerifactuServer::Reply stalled;
+        stalled.delayMs = 36000;
+        m_server.enqueue("Create", stalled);
+        QSignalSpy finished(m_verifactu, &VerifactuIntegration::requestFinished);
+        QElapsedTimer clock;
+        clock.start();
+        const QString id = m_verifactu->submitSimplifiedInvoiceAsync("415", QDate(2026, 2, 10), 10.0, 21.0, "Servicios");
+        QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty() && finished.last().at(0).toString() == id, 45000);
+        const VerifactuResult result = finished.last().at(1).value<VerifactuResult>();
+        QCOMPARE(result.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY2(clock.elapsed() >= 28000 && clock.elapsed() < 35000, qPrintable(QString::number(clock.elapsed())));
+        QCOMPARE(verifactuEstadoForResult(result.status), VerifactuEstado::NotSubmitted);
+    }
+
     // A payment dated in a closed quarter is refused in the dialog's result panel, and nothing is sent.
     void test_paymentIntoClosedQuarter_refusedAndNothingSent()
     {
-        exec("INSERT INTO ingresos (n_recibo, fecha_pago, importe, pagado, edit_lock, hash, verifactu_estado) "
-             "VALUES ('499', '10-01-2026', '5.00', 'SI', 1, 'h499', 'ENVIADA')");   // January closed
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_estado) "
+             "VALUES ('0', '499', '10-01-2026', '5.00', 'SI', 'h499', 'ENVIADA')");
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));                                   // Q1 closed
         seedGarment("500", "h500a", "18.00");
         QString result;
         QVERIFY(!payThroughDialog("500", QDate(2026, 1, 20), {}, 2000, &result));
@@ -258,8 +423,7 @@ private slots:
         seedGarment("600", "h600a", "50.00");
         seedGarment("600", "h600b", "30.00");
         QVERIFY(payThroughDialog("600", QDate(2026, 2, 10), {"h600b"}));
-        for (int month = 1; month <= 3; ++month)
-            updateLockForMonth(m_db, 1, month, 2026);
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
 
         QSignalSpy cancelled(m_verifactu, &VerifactuIntegration::requestFinished);
         const QString cancelId = m_verifactu->cancelInvoiceAsync("600", QDate(2026, 2, 10));

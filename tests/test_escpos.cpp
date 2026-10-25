@@ -82,6 +82,36 @@ private slots:
         QCOMPARE(got, expected);
     }
 
+    // Independent of the preview decoder: every mapped glyph against hard-coded PC858 values.
+    void test_cp858TableAgainstReference()
+    {
+        struct Ref { ushort u; uchar b; };
+        static const Ref ref[] = {
+            {0xC7,0x80},{0xFC,0x81},{0xE9,0x82},{0xE2,0x83},{0xE4,0x84},{0xE0,0x85},{0xE7,0x87},{0xEA,0x88},
+            {0xEB,0x89},{0xE8,0x8A},{0xEF,0x8B},{0xEE,0x8C},{0xEC,0x8D},{0xC4,0x8E},{0xC9,0x90},{0xF4,0x93},
+            {0xF6,0x94},{0xF2,0x95},{0xFB,0x96},{0xF9,0x97},{0xD6,0x99},{0xDC,0x9A},{0xA3,0x9C},{0xE1,0xA0},
+            {0xED,0xA1},{0xF3,0xA2},{0xFA,0xA3},{0xF1,0xA4},{0xD1,0xA5},{0xAA,0xA6},{0xBA,0xA7},{0xBF,0xA8},
+            {0xAC,0xAA},{0xBD,0xAB},{0xBC,0xAC},{0xA1,0xAD},{0xAB,0xAE},{0xBB,0xAF},{0xC1,0xB5},{0xC2,0xB6},
+            {0xC0,0xB7},{0xA9,0xB8},{0xE3,0xC6},{0xC3,0xC7},{0xCA,0xD2},{0xCB,0xD3},{0xC8,0xD4},{0x20AC,0xD5},
+            {0xCD,0xD6},{0xCE,0xD7},{0xCF,0xD8},{0xCC,0xDE},{0xD3,0xE0},{0xD4,0xE2},{0xD2,0xE3},{0xD5,0xE5},
+            {0xDA,0xE9},{0xDB,0xEA},{0xD9,0xEB},{0xDD,0xED},{0xB4,0xEF},{0xB0,0xF8},{0xB7,0xFA},
+        };
+        for (const Ref &r : ref) {
+            const QByteArray got = EscPosBuilder::toCp858(QString(QChar(r.u)));
+            QVERIFY2(got.size() == 1 && uchar(got[0]) == r.b,
+                     qPrintable(QString("U+%1 -> 0x%2").arg(r.u, 4, 16).arg(uchar(got[0]), 2, 16)));
+        }
+        // 0xDD is the broken bar in PC858, never a letter.
+        QCOMPARE(EscPosBuilder::toCp858(QString(QChar(0x00CC))), QByteArray::fromHex("DE"));
+    }
+
+    void test_controlCharactersBecomeSpaces()
+    {
+        const QString s = QString("A") + QChar(0x1B) + "p" + QChar(0x0A) + QChar(0x0D) + QChar(0x09)
+                          + QChar(0x1D) + QChar(0x7F) + "B";
+        QCOMPARE(EscPosBuilder::toCp858(s), QByteArray("A p     B"));
+    }
+
     void test_unmappedCharBecomesQuestionMark()
     {
         // U+2192 (rightwards arrow) has no PC858 glyph.
@@ -146,7 +176,7 @@ private slots:
         QVERIFY(out.contains("123"));
         QVERIFY(out.contains("Camisa"));
         QVERIFY(out.contains("TOTAL (IVA incl.):"));
-        QVERIFY(out.contains("7.50"));
+        QVERIFY(out.contains("7,50"));
         QVERIFY(out.contains("(Copia para el cliente)"));
         QVERIFY(out.endsWith(CUT_BYTES));
     }
@@ -190,12 +220,66 @@ private slots:
         const QByteArray out = TicketRenderer::render(d, 576);
         QVERIFY(out.contains("FACTURA SIMPLIFICADA"));
         QVERIFY(out.contains("Base Imponible:"));
-        QVERIFY(out.contains("100.00"));        // 121 / 1.21
+        QVERIFY(out.contains("100,00"));        // 121 / 1.21
         QVERIFY(out.contains("IVA (21%):"));
-        QVERIFY(out.contains("21.00"));         // 121 - 100
+        QVERIFY(out.contains("21,00"));         // 121 - 100
         QVERIFY(out.contains("TOTAL:"));
         // No recibo copy marker on a factura.
         QVERIFY(!out.contains("Copia para el cliente"));
+    }
+
+    // Art. 7 RD 1619/2012: a factura prints its date of issue (the payment date in the
+    // QR), apart from the reception date; a recibo does not.
+    void test_renderFacturaIssueDate()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.invoiceId = "55";
+        d.receptionDate = "01/02/2026";
+        d.issueDate = "10/02/2026";
+        const QByteArray factura = TicketRenderer::render(d, 576);
+        QVERIFY(factura.contains("Fecha de expedici"));
+        QVERIFY(factura.contains("10/02/2026"));
+        QVERIFY(factura.contains("01/02/2026"));
+        d.isRecibo = true;
+        QVERIFY(!TicketRenderer::render(d, 576).contains("Fecha de expedici"));
+    }
+
+    // A reprint of a cancelled or rectified invoice says so and carries no QR or leyenda.
+    void test_renderVoidedFacturaMarked()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.invoiceId = "56";
+        d.qr = QImage(29, 29, QImage::Format_Mono);
+        d.qr.fill(0);
+        d.verifactuVerifiable = true;
+        const QByteArray valid = TicketRenderer::render(d, 576);
+        QVERIFY(valid.contains("Factura verificable"));
+        d.voidedMarker = "ANULADA";
+        d.voidedDate = "12/02/2026";
+        const QByteArray voided = TicketRenderer::render(d, 576);
+        QVERIFY(voided.contains("*** FACTURA ANULADA ***"));
+        QVERIFY(voided.contains("anulada el 12/02/2026"));
+        QVERIFY(voided.contains("factura en vigor"));   // wrapped: the end of the note
+        QVERIFY(!voided.contains("Factura verificable"));
+        const QByteArray raster("\x1d\x76\x30", 3);       // GS v 0: the QR image
+        QVERIFY(valid.contains(raster));
+        QVERIFY(!voided.contains(raster));
+        d.voidedMarker = "RECTIFICADA";
+        QVERIFY(TicketRenderer::render(d, 576).contains("*** FACTURA RECTIFICADA ***"));
+    }
+
+    // A completa without a typed DNI prints no empty "DNI:" line.
+    void test_renderCompleteInvoiceWithoutDni()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.isCompleteInvoice = true;
+        d.clientAddress = "Calle Mayor 1";
+        QVERIFY(!TicketRenderer::render(d, 576).contains("DNI:"));
+        d.clientDni = "12345678Z";
+        QVERIFY(TicketRenderer::render(d, 576).contains("DNI: 12345678Z"));
     }
 
     // --- TicketRenderer: a QR is rastered when present ---

@@ -2,6 +2,7 @@
 
 #include "appsettings.h"
 #include "imprimir.h"
+#include <QScopeGuard>
 #include "sql_lite.h"
 #include "uikit.h"
 #include "verifactuintegration.h"
@@ -14,7 +15,6 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -104,59 +104,53 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     m_ticketNum = ticketNum;
     m_table->setRowCount(0);
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
-              "importe, observaciones, pagado, hash, edit_lock, estado "
-              "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
-    q.bindValue(":n", ticketNum);
-    if (!q.exec()) {
-        qWarning() << "PayDialog::loadTicket: SELECT failed for ticket" << ticketNum
-                   << "-" << q.lastError().text();
-        db.close();
-        return false;
-    }
-
-    int unpaidCount  = 0;
-    int lockedCount  = 0;
-    while (q.next()) {
-        if (m_cliente.isEmpty()) {
-            m_cliente        = q.value(0).toString();
-            m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+    int unpaidCount = 0;
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT cliente, fecha_recepcion, cantidad, prenda, size, servicio, "
+                  "importe, observaciones, pagado, hash, estado "
+                  "FROM ingresos WHERE n_recibo = :n ORDER BY rowid");
+        q.bindValue(":n", ticketNum);
+        if (!q.exec()) {
+            qWarning() << "PayDialog::loadTicket: SELECT failed for ticket" << ticketNum
+                       << "-" << q.lastError().text();
+            return false;
         }
-        const QString pagado   = q.value(8).toString();
-        const bool    editLock = q.value(10).toBool();
-        const QString estado   = q.value(11).toString();
-        if (pagado == "SI") continue;
-        // A locally voided garment (estado "Anulado") is never chargeable - it
-        // must not enter the payable set or it could be submitted to AEAT.
-        if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
-        // edit_lock=1 means the row's quarter has been closed by contabilidad
-        // (`updateLockForMonth`); skip it so the locked row never enters the
-        // selectable set. Unpaid rows usually have edit_lock=0 (the lock keys
-        // on fecha_pago LIKE), so this is mostly a defensive filter.
-        if (editLock) { ++lockedCount; continue; }
 
-        const int r = m_table->rowCount();
-        m_table->insertRow(r);
+        while (q.next()) {
+            if (m_cliente.isEmpty()) {
+                m_cliente        = q.value(0).toString();
+                m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+            }
+            const QString pagado   = q.value(8).toString();
+            const QString estado   = q.value(10).toString();
+            if (pagado == "SI") continue;
+            // A locally voided garment (estado "Anulado") is never chargeable - it
+            // must not enter the payable set or it could be submitted to AEAT.
+            if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
 
-        auto *cell = new QTableWidgetItem;
-        cell->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
-        cell->setCheckState(Qt::Checked);
-        m_table->setItem(r, COL_CHECK, cell);
+            const int r = m_table->rowCount();
+            m_table->insertRow(r);
 
-        m_table->setItem(r, COL_QTY,     new QTableWidgetItem(q.value(2).toString()));
-        m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
-        m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
-        m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
-        auto *imp = new QTableWidgetItem(moneyText(q.value(6).toString()));
-        imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        m_table->setItem(r, COL_AMOUNT,  imp);
-        m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
-        m_table->setItem(r, COL_HASH,    new QTableWidgetItem(q.value(9).toString()));
-        ++unpaidCount;
+            auto *cell = new QTableWidgetItem;
+            cell->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
+            cell->setCheckState(Qt::Checked);
+            m_table->setItem(r, COL_CHECK, cell);
+
+            m_table->setItem(r, COL_QTY,     new QTableWidgetItem(q.value(2).toString()));
+            m_table->setItem(r, COL_GARMENT, new QTableWidgetItem(q.value(3).toString()));
+            m_table->setItem(r, COL_SIZE,    new QTableWidgetItem(q.value(4).toString()));
+            m_table->setItem(r, COL_SERVICE, new QTableWidgetItem(q.value(5).toString()));
+            auto *imp = new QTableWidgetItem(displayMoney(q.value(6).toString()));
+            imp->setData(Qt::UserRole, moneyText(q.value(6).toString()).toDouble());   // the shown text has a comma
+            imp->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            m_table->setItem(r, COL_AMOUNT,  imp);
+            m_table->setItem(r, COL_OBS,     new QTableWidgetItem(q.value(7).toString()));
+            m_table->setItem(r, COL_HASH,    new QTableWidgetItem(q.value(9).toString()));
+            ++unpaidCount;
+        }
     }
-    db.close();
 
     if (unpaidCount == 0) {
         qDebug() << "PayDialog::loadTicket: ticket" << ticketNum << "has no unpaid rows";
@@ -166,9 +160,11 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     QString headerText = tr("Ticket %1 - %2 - Recepción %3")
                          .arg(ticketNum, m_cliente,
                               m_fechaRecepcion.toString("dd-MM-yyyy"));
-    if (lockedCount > 0)
-        headerText += tr("  (%1 prenda(s) omitida(s) por bloqueo de contabilidad)").arg(lockedCount);
     m_lblHeader->setText(headerText);
+    // The payment date is the invoice date AEAT gets: not in the future, not before reception.
+    m_dePago->setMaximumDate(QDate::currentDate());
+    if (m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate())
+        m_dePago->setMinimumDate(m_fechaRecepcion);
     connect(m_table, &QTableWidget::itemChanged,
             this, [this](QTableWidgetItem *it) {
         if (it && it->column() == COL_CHECK) recomputeTotal();
@@ -184,12 +180,12 @@ void PayDialog::recomputeTotal()
     for (int r = 0; r < m_table->rowCount(); ++r) {
         auto *chk = m_table->item(r, COL_CHECK);
         if (chk && chk->checkState() == Qt::Checked) {
-            total += m_table->item(r, COL_AMOUNT)->text().toDouble();
+            total += m_table->item(r, COL_AMOUNT)->data(Qt::UserRole).toDouble();
             ++selected;
         }
     }
     m_lblTotal->setText(tr("Total seleccionado (%1 prendas): %2 €")
-                        .arg(selected).arg(total, 0, 'f', 2));
+                        .arg(selected).arg(displayMoney(total)));
     m_btnCobrar->setEnabled(selected > 0);
 }
 
@@ -203,6 +199,8 @@ void PayDialog::setFormEnabled(bool enabled)
 
 void PayDialog::onCobrarClicked()
 {
+    if (!m_pendingReqId.isEmpty())   // waiting for AEAT: a second press would charge another seq
+        return;
     QStringList hashes;
     QHash<QString, QString> amounts;   // hash -> the amount shown, in cents
     double total = 0.0;
@@ -216,13 +214,27 @@ void PayDialog::onCobrarClicked()
                                      + "<br>" + tr("Introduzca su tamaño en Recogida o desmárquela para cobrar el resto."));
                 return;
             }
-            hashes << m_table->item(r, COL_HASH)->text();
+            hashes << m_table->item(r, COL_HASH)->text();   // the charged set: m_pendingAmounts
             amounts.insert(m_table->item(r, COL_HASH)->text(), m_table->item(r, COL_AMOUNT)->text());
-            total += m_table->item(r, COL_AMOUNT)->text().toDouble();
+            total += m_table->item(r, COL_AMOUNT)->data(Qt::UserRole).toDouble();
         }
     }
     if (hashes.isEmpty()) {
         m_lblStatus->setText(UiKit::warnHtml(tr("Selecciona al menos una prenda para cobrar.")));
+        return;
+    }
+    if (total <= 0.0) {
+        m_lblStatus->setText(UiKit::warnHtml(tr("El total a cobrar es 0,00: no hay nada que facturar."))
+                             + "<br>" + tr("Revise el importe de las prendas en Recogida."));
+        return;
+    }
+    // Every payment is an invoice: never booked without its Verifactu record.
+    if (!m_verifactu) {
+        m_lblStatus->setText(UiKit::errorHtml(tr("Verifactu no está disponible: no se puede cobrar.")));
+        return;
+    }
+    if (const QString blocked = m_verifactu->invoicingBlockedReason(); !blocked.isEmpty()) {
+        m_lblStatus->setText(UiKit::errorHtml(blocked));
         return;
     }
 
@@ -234,37 +246,7 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
-    // Race guard: edit_lock could have flipped 0->1 between loadTicket() and
-    // now (accountant closed the quarter in another window). Submitting to
-    // AEAT for an amount we can't actually mark paid locally would
-    // desynchronize the books from AEAT - abort before any AEAT call.
-    {
-        db.open();
-        QSqlQuery lockQ(db);
-        QString placeholders;
-        for (int i = 0; i < hashes.size(); ++i) {
-            if (i) placeholders += ',';
-            placeholders += ':' + QString("h%1").arg(i);
-        }
-        lockQ.prepare("SELECT COUNT(*) FROM ingresos WHERE n_recibo = :n "
-                      "AND edit_lock = 1 AND hash IN (" + placeholders + ")");
-        lockQ.bindValue(":n", m_ticketNum);
-        for (int i = 0; i < hashes.size(); ++i)
-            lockQ.bindValue(QString(":h%1").arg(i), hashes[i]);
-        int locked = 0;
-        if (lockQ.exec() && lockQ.first())
-            locked = lockQ.value(0).toInt();
-        db.close();
-        if (locked > 0) {
-            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
-                                 + "<br>" + tr("Una o más prendas seleccionadas pertenecen a un trimestre "
-                                               "que se ha bloqueado durante la operación. Cierra y vuelve "
-                                               "a abrir el cobro para refrescar el estado del ticket."));
-            return;
-        }
-    }
-
-    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum);
+    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName());
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum
@@ -276,14 +258,19 @@ void PayDialog::onCobrarClicked()
     m_pendingAmounts    = amounts;
     m_pendingFechaPago  = fechaPago;
 
-    if (!m_verifactu || !m_verifactu->isConfigured()) {
-        // Verifactu disabled: mark rows paid without AEAT metadata, no print QR.
-        qDebug() << "PayDialog: Verifactu not configured, persisting payment without AEAT";
-        VerifactuResult res;
-        res.status = VerifactuResult::INVALID_CONFIG;
-        persistPayment(seq, res);
-        printPartialFactura(seq, QPixmap());
-        accept();
+    // Stored as paid + PENDIENTE before anything is sent, like MainWindow::saveTicket: a
+    // crash during the AEAT round trip leaves a payment the start-up recovery resends,
+    // never an invoice at AEAT for a ticket the database shows unpaid.
+    if (!storePayment(seq)) {
+        if (quarterIsClosed(db, fechaPago)) {
+            m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
+                                 + "<br>" + tr("La contabilidad ha cerrado el trimestre de la fecha de pago: no se ha "
+                                               "guardado ni enviado nada."));
+            return;
+        }
+        m_lblStatus->setText(UiKit::errorHtml(tr("No se ha podido guardar el cobro: no se ha enviado nada a AEAT."))
+                             + "<br>" + tr("Alguna prenda se ha cobrado desde otra ventana o la base de datos no "
+                                           "responde. Cierre y vuelva a abrir Cobrar."));
         return;
     }
 
@@ -296,13 +283,23 @@ void PayDialog::onCobrarClicked()
         invoiceId, fechaPago, taxBase, ivaRate, tr("Servicios de lavandería"));
 
     if (m_pendingReqId.isEmpty()) {
-        QMessageBox::warning(this, tr("Verifactu"),
-                             tr("No se pudo enviar a AEAT:\n%1\n\nSe registrará el pago localmente sin envío.")
-                                 .arg(m_verifactu->getLastError()));
-        VerifactuResult res;
-        res.status = VerifactuResult::INVALID_CONFIG;
-        persistPayment(seq, res);
+        // Nothing left: the payment stays PENDIENTE and the start-up recovery resends it.
+        m_notSentReason = m_verifactu->getLastError();
+        qWarning() << "PayDialog: invoice" << invoiceId << "stored PENDIENTE, not sent -" << m_notSentReason;
         printPartialFactura(seq, QPixmap());
+        accept();
+        return;
+    }
+
+    // The direct client's QR needs no answer from AEAT (which may make the next
+    // submission wait up to TiempoEsperaEnvio): book the payment as pending, print
+    // the factura now and leave the answer to RecogPrendas, as after the timeout.
+    const QPixmap qrNow = m_verifactu->qrBeforeReply(invoiceId, fechaPago, taxBase, ivaRate);
+    if (!qrNow.isNull()) {
+        qDebug() << "PayDialog: factura printed before AEAT answers" << m_pendingReqId;
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq, true);
+        m_pendingReqId.clear();
+        printPartialFactura(m_pendingSeq, qrNow, true);
         accept();
         return;
     }
@@ -311,8 +308,8 @@ void PayDialog::onCobrarClicked()
     m_lblStatus->showInfo(tr("Enviando %1 a AEAT...").arg(invoiceId));
 
     // Bounded 5s wait for the AEAT reply. onVerifactuRequestFinished will
-    // accept() us once it lands; if it doesn't, persist the rows as PENDIENTE
-    // locally (the submission may still have reached AEAT - see persistPayment).
+    // accept() us once it lands; if it doesn't, the rows stay PENDIENTE (the
+    // submission may still have reached AEAT).
     QTimer::singleShot(5000, this, [this]() {
         if (m_pendingReqId.isEmpty()) return; // already handled
         qWarning() << "PayDialog: AEAT timeout (5s) for" << m_pendingReqId;
@@ -322,104 +319,60 @@ void PayDialog::onCobrarClicked()
         // is 10 s) was dropped on the floor - including a SUCCESS carrying the CSV,
         // which left the row falsely PENDIENTE and its later retry answering
         // "already exists".
-        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq);
+        emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq, false);
         m_pendingReqId.clear();
-        VerifactuResult res;
-        res.status = VerifactuResult::NETWORK_ERROR;
-        res.errorDescription = tr("Tiempo de espera agotado (5 s)");
-        persistPayment(m_pendingSeq, res);
         printPartialFactura(m_pendingSeq, QPixmap());
         accept();
     });
+}
+
+void PayDialog::done(int result)
+{
+    if (!m_pendingReqId.isEmpty()) {
+        m_lblStatus->setText(UiKit::warnHtml(tr("Esperando la respuesta de la AEAT: la ventana se cerrará o se podrá cerrar en cuanto responda.")));
+        return;
+    }
+    QDialog::done(result);
 }
 
 void PayDialog::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     if (requestId != m_pendingReqId) return; // not ours
     m_pendingReqId.clear();
-    persistPayment(m_pendingSeq, result);
-    printPartialFactura(m_pendingSeq, result.qrCode);
+    applyReply(m_pendingSeq, result);
+    printPartialFactura(m_pendingSeq, result.qrCode, result.isSuccess() && !result.qrCode.isNull());
     accept();
 }
 
-void PayDialog::persistPayment(int seq, const VerifactuResult &result)
+bool PayDialog::storePayment(int seq)
 {
-    db.open();
-    QSqlQuery q(db);
-    // AND edit_lock = 0: defensive against a row whose quarter was closed
-    // between loadTicket and persistPayment (very narrow race window, but
-    // free to guard - keeps accounting lock authoritative).
-    // importe = the amount shown and sent (cents), so an older row stored with more
-    // decimals is invoiced and stored with the same figure.
-    q.prepare("UPDATE ingresos SET pagado = 'SI', fecha_pago = :fp, "
-              "verifactu_invoice_seq = :seq, importe = :imp "
-              "WHERE n_recibo = :n AND hash = :h AND edit_lock = 0 AND COALESCE(pagado, '') != 'SI'");
-    m_unstoredHashes.clear();
-    for (const QString &h : m_pendingHashes) {
-        q.bindValue(":imp", moneyText(m_pendingAmounts.value(h)));
-        q.bindValue(":fp",  m_pendingFechaPago.toString("dd-MM-yyyy"));
-        q.bindValue(":seq", seq);
-        q.bindValue(":n",   m_ticketNum);
-        q.bindValue(":h",   h);
-        if (!q.exec() || q.numRowsAffected() != 1) {
-            // The invoice is already on its way to AEAT: the row must be reviewed by hand.
-            qCritical() << "PayDialog::persistPayment: garment" << h << "of ticket" << m_ticketNum
-                        << "not stored as paid (locked or already paid meanwhile) -" << q.lastError().text();
-            m_unstoredHashes << h;
-        }
-    }
-    db.close();
+    return storeChargedGarments(db, m_ticketNum, m_pendingAmounts, m_pendingFechaPago, seq,
+                                verifactuInvoiceId(m_ticketNum, seq));
+}
 
-    if (result.status == VerifactuResult::INVALID_CONFIG) {
-        qDebug() << "PayDialog::persistPayment: Verifactu disabled, leaving verifactu_* empty";
+void PayDialog::applyReply(int seq, const VerifactuResult &result)
+{
+    // A timeout, a transport failure or a reply-time configuration error is an unknown
+    // outcome: the rows stay PENDIENTE for the recovery. A definitive answer (accepted
+    // or refused) is written by updateTicketVerifactuFields, scoped to this seq.
+    if (result.status == VerifactuResult::NETWORK_ERROR || result.status == VerifactuResult::PENDING
+        || result.status == VerifactuResult::INVALID_CONFIG) {
+        qWarning() << "PayDialog::applyReply:" << verifactuInvoiceId(m_ticketNum, seq)
+                   << "left PENDIENTE - status" << int(result.status) << result.errorDescription;
         return;
     }
-    // A timeout or transport-level failure (NETWORK_ERROR / PENDING) is an
-    // *unknown* outcome - AEAT may still have registered the invoice - so record
-    // the rows as PENDIENTE rather than Error. This keeps the sale from being
-    // wrongly marked failed and a slow-but-successful reply from being lost. A
-    // definitive AEAT rejection (status ERROR) falls through to
-    // updateTicketVerifactuFields below, which writes estado=Error.
-    if (result.status == VerifactuResult::NETWORK_ERROR
-        || result.status == VerifactuResult::PENDING) {
-        markPendingVerifactu(seq);
-        return;
-    }
-    // updateTicketVerifactuFields scopes WHERE n_recibo=? AND verifactu_invoice_seq=?
-    // which is exactly the rows we just stamped above.
     updateTicketVerifactuFields(db, m_ticketNum, result, seq);
 }
 
-void PayDialog::markPendingVerifactu(int seq)
-{
-    // Keep the InvoiceID identity (bare n_recibo for seq 0, else <n_recibo>-<seq>)
-    // and set estado=PENDIENTE so the row reads as "awaiting AEAT confirmation"
-    // instead of a failed Error. Scoped by seq AND pagado - on a ticket's first
-    // partial payment seq is 0, which the still-unpaid siblings also carry.
-    const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("UPDATE ingresos SET verifactu_estado = :estado, verifactu_invoice_id = :id, "
-              "verifactu_error = '' "
-              "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
-              "  AND pagado = 'SI'");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
-    q.bindValue(":id",     invoiceId);
-    q.bindValue(":n",      m_ticketNum);
-    q.bindValue(":seq",    seq);
-    if (!q.exec())
-        qWarning() << "PayDialog::markPendingVerifactu: UPDATE failed for" << invoiceId
-                   << "-" << q.lastError().text();
-    db.close();
-}
-
-void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode)
+void PayDialog::printPartialFactura(int seq, const QPixmap &qrCode, bool verifactuIssued)
 {
     auto *ui_impr = new Imprimir(db, this);
+    const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo            = qrCode.isNull(); // recibo (no QR) when AEAT didn't reply
     ui_impr->isCompleteInvoice   = false;
     ui_impr->verifactuIntegration = nullptr;
     ui_impr->qrCode              = qrCode;
+    ui_impr->verifactuIssued     = verifactuIssued;
     ui_impr->invoiceSeq          = seq;
     ui_impr->le_n_ticket->setText(m_ticketNum);
     ui_impr->getTicketInfo();

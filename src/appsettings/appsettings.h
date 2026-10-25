@@ -19,6 +19,9 @@ public:
 
     // Persist current state back to the JSON file.
     bool save() const;
+    // Why the last save() failed, or empty: shown at start (the installation number and
+    // the chain marker must survive a restart).
+    QString lastSaveError() const { return m_lastSaveError; }
 
     // Injection seam: load from an explicit file path instead of the fixed
     // ~/.laideal_settings.json, resetting in-memory state first so repeated calls
@@ -115,6 +118,28 @@ public:
     QString verifactuPendingRecoveryFloorDate() const;
     void    setVerifactuPendingRecoveryFloorDate(const QString &v);
 
+    // How the app reaches AEAT: the IreneSolutions gateway (default) or directly
+    // (docs/modules/verifactu/aeat-direct-investigation.md).
+    bool    verifactuDirectAeat() const;
+    void    setVerifactuDirectAeat(bool v);
+    // The direct client uses AEAT pre-production unless this is set on purpose
+    // (Configuración, confirmed; never the gateway's PRODUCCIÓN box).
+    bool    aeatDirectProduction() const;
+    void    setAeatDirectProduction(bool v);
+    // The owner's certificate for the direct connection: a Windows personal-store
+    // thumbprint, or else a .pfx file and its password (stored DPAPI-encrypted).
+    QString aeatCertificateThumbprint() const;
+    void    setAeatCertificateThumbprint(const QString &v);
+    QString aeatCertificateFile() const;
+    void    setAeatCertificateFile(const QString &v);
+    QString aeatCertificatePassword() const;
+    void    setAeatCertificatePassword(const QString &v);
+    // NumeroInstalacion of the records: created once per installation.
+    QString aeatInstallationNumber();
+    // The direct client's chain as this installation last saw it (see AeatDirectBackend::Config).
+    QString aeatChainMarker() const;
+    void    setAeatChainMarker(const QString &v);
+
     // --- Updater ---
     bool checkUpdatesOnStartup() const;
     void setCheckUpdatesOnStartup(bool v);
@@ -127,6 +152,19 @@ public:
     // ISO-8601 timestamp of the last successful backup (empty = never).
     QString backupLastTime() const;
     void    setBackupLastTime(const QString &v);
+    // "<ISO time> <message>" of the last failed backup; cleared by the next success.
+    QString backupLastError() const;
+    void    setBackupLastError(const QString &v);
+    // App version ("X.Y") whose database was backed up before migrating it.
+    // Optional second folder (a USB stick, another drive) each verified backup is copied to,
+    // with the same retention; empty = off.
+    QString backupSecondFolder() const;
+    void    setBackupSecondFolder(const QString &v);
+    QString backupLastVersion() const;
+    void    setBackupLastVersion(const QString &v);
+    // The version that last started (the one-time "run the check" notice after an update).
+    QString lastStartedVersion() const;
+    void    setLastStartedVersion(const QString &v);
 
 private:
     AppSettings();
@@ -155,6 +193,8 @@ private:
 
     QJsonObject m_data;
     QString     m_filePath;
+    QString     m_legacyKeyFile;   // ~/.verifactu_key, when the key was migrated from it
+    mutable QString m_lastSaveError;
 
     static AppSettings *s_instance;
 };

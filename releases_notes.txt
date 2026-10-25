@@ -1,5 +1,23 @@
 ﻿Releases:
 
+12.1
+- Bug fix: since 11.2, "Añadir prendas" could not add an unpaid garment to a ticket ("NOT NULL constraint failed: ingresos.fecha_pago"). It works again.
+- Comprobar tras actualizar: the installer leaves it ticked on its last page (and no longer opens the program); the first start after an update reminds you to run it; it is also in Ayuda → Comprobar tras actualizar…, and when it finishes it lists what to send (the report, the program's log and a photo of the first printed invoice).
+
+12.0
+- New: the menu bar is organised by task: Tickets, Facturas and Contabilidad replace Herramientas; the backup is in Archivo and the log in Ayuda. 'Revertir contabilidad' no longer has a shortcut; 'Anular factura' and 'Rectificar factura' have Alt+A and Alt+T.
+- New: 'La Ideal - Comprobar tras actualizar' in the Start menu checks the new version with your data and printer, on a copy, and saves a report to send.
+- New: a second folder for the backups (for example a USB drive or a synced folder), in Configuración.
+- When updating, the program always keeps a copy of the database before changing it, also with automatic backups switched off.
+- New rectificativas have their own numbering series: R-1, R-2...
+- Amounts are shown with a decimal comma in every window and on printed receipts and invoices.
+- Invoices refused by AEAT: the red status-bar warning can be clicked; it lists them and opens Recogida de Prendas on each ticket. Tickets from before Verifactu no longer count.
+- Contabilidad: every quarter close is kept with its date, also when reverted; a quarter whose only movements are cancellations of earlier invoices can be closed. The output VAT is the sum of each invoice's VAT as registered.
+- Cobrar warns when the quarter was closed while the payment was being sent to AEAT.
+- Verifactu: fixes in sending, resending and rectifying invoices, in the numbering and in the pending / refused warnings.
+- 'Limpiar base de datos' and 'Crear hash en ingresos' removed from Archivo: what they fixed is now repaired at start-up.
+- The direct AEAT connection is ready for the production switch; in this version the shop keeps its current connection, in the test environment.
+
 11.2
 - Bug fix: since 11.0, "Anular prendas" did not void unpaid garments ("0 prenda(s) anuladas... se han cobrado, enviado o bloqueado"), and "Recogida de Prendas" could not change the size, price, quantity or service of an unpaid garment, nor split it. Everything works again; garments that are paid, sent to the AEAT or closed in the accounts stay protected.
 - Safety: the next ticket number is calculated as a number, so it keeps counting correctly past 99999.

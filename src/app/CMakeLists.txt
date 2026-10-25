@@ -28,6 +28,14 @@ add_library(laideal_app STATIC
     aeatexport.cpp
     aeatexportdialog.h
     aeatexportdialog.cpp
+    selfcheck.h
+    selfcheck.cpp
+    selfcheckdialog.h
+    selfcheckdialog.cpp
+    refusedinvoicesdialog.h
+    refusedinvoicesdialog.cpp
+    instancelock.h
+    instancelock.cpp
 )
 
 target_include_directories(laideal_app PUBLIC
@@ -48,6 +56,7 @@ target_link_libraries(laideal_app
     tableview
     contabilidad
     facturas
+    reporthtml
     add_garment
     verifactu
     updater

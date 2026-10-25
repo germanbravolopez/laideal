@@ -5,7 +5,16 @@
 // read or written. The dialog is never accepted (accept() would save).
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QAbstractButton>
+#include <QComboBox>
+#include <QPushButton>
+#include <QSignalSpy>
+#include <QTabWidget>
+#include <QMessageBox>
+#include <QCheckBox>
+#include <QTimer>
+#include <QApplication>
 #include <QLineEdit>
 #include <QTemporaryDir>
 
@@ -59,6 +68,226 @@ private slots:
         }
         SettingsDialog second;
         QCOMPARE(second.findChild<QLineEdit *>("serviceKeyEdit")->echoMode(), QLineEdit::Password);
+    }
+
+    // Direct AEAT connection: its group shows only for that connection, a store
+    // certificate disables the file fields, the self-test button sends the form's
+    // values, and saving stores the choice (the file password DPAPI-encrypted).
+    void test_directAeatConnection()
+    {
+        const QString thumbprint(40, 'A');
+        SettingsDialog dlg;
+        dlg.setCertificateChoices({ qMakePair(QStringLiteral("PRUEBA (caduca el 01-01-2030)"), thumbprint) });
+        auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+        auto *certificate = dlg.findChild<QComboBox *>("cbCertificate");
+        auto *file = dlg.findChild<QLineEdit *>("leCertificateFile");
+        auto *password = dlg.findChild<QLineEdit *>("leCertificatePassword");
+        QVERIFY(connection && certificate && file && password);
+        dlg.show();
+        auto *tabs = dlg.findChild<QTabWidget *>();
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabText(i) == QLatin1String("Verifactu"))
+                tabs->setCurrentIndex(i);
+        QCOMPARE(connection->currentData().toString(), QStringLiteral("irenesolutions"));   // default
+        QVERIFY(!certificate->isVisible());
+        connection->setCurrentIndex(connection->findData("aeat"));
+        QVERIFY(certificate->isVisible());
+        QCOMPARE(certificate->count(), 2);                             // the store certificate + "Archivo..."
+        QVERIFY(certificate->currentData().toString().isEmpty());      // nothing chosen yet: file
+        QVERIFY(file->isEnabled() && password->isEnabled());
+        certificate->setCurrentIndex(certificate->findData(thumbprint));
+        QVERIFY(!file->isEnabled() && !password->isEnabled());
+        QCOMPARE(password->echoMode(), QLineEdit::Password);
+
+        QSignalSpy spy(&dlg, &SettingsDialog::aeatSelfTestRequested);
+        dlg.findChild<QPushButton *>("btnAeatSelfTest")->click();
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy[0][2].toString(), thumbprint);
+
+        password->setText("clave-del-pfx");
+        QMetaObject::invokeMethod(&dlg, "accept");
+        AppSettings *s = AppSettings::instance();
+        QVERIFY(s->verifactuDirectAeat());
+        QCOMPARE(s->aeatCertificateThumbprint(), thumbprint);
+        QCOMPARE(s->aeatCertificatePassword(), QStringLiteral("clave-del-pfx"));
+        QFile saved(m_dir.filePath("settings.json"));
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        const QByteArray json = saved.readAll();
+#ifdef Q_OS_WIN
+        QVERIFY(!json.contains("clave-del-pfx"));                     // never in plain text
+#endif
+        QVERIFY(s->aeatInstallationNumber().startsWith("LAIDEAL-"));
+        QCOMPARE(s->aeatInstallationNumber(), s->aeatInstallationNumber());   // created once
+
+        SettingsDialog reopened;
+        reopened.setCertificateChoices({ qMakePair(QStringLiteral("PRUEBA"), thumbprint) });
+        QCOMPARE(reopened.findChild<QComboBox *>("cbConnection")->currentData().toString(), QStringLiteral("aeat"));
+        QCOMPARE(reopened.findChild<QComboBox *>("cbCertificate")->currentData().toString(), thumbprint);
+        s->setVerifactuDirectAeat(false);
+    }
+
+    // The direct connection's own production switch: off by default (pre-production);
+    // turning it on or off asks for confirmation, and leaving production is refused
+    // while production records are unsent.
+    void test_directProductionNeedsConfirmation()
+    {
+        AppSettings *s = AppSettings::instance();
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        const auto answer = [](QMessageBox::StandardButton button) {
+            QTimer::singleShot(0, [button] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        if (QAbstractButton *b = box->button(button)) b->click(); else box->reject();
+            });
+        };
+        {
+            SettingsDialog dlg;
+            auto *production = dlg.findChild<QCheckBox *>("chkDirectProduction");
+            QVERIFY(production && !production->isChecked());
+            production->setChecked(true);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+        }
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
+        // Leaving production: refused while production records are unsent, then confirmed.
+        {
+            SettingsDialog pending;
+            pending.setDirectPendingCount(2);
+            QVERIFY(pending.findChild<QCheckBox *>("chkDirectProduction")->isChecked());
+            pending.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&pending, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
+        {
+            SettingsDialog leaving;
+            leaving.setDirectPendingCount(0);
+            leaving.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&leaving, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
+        SettingsDialog reopened;
+        reopened.setDirectPendingCount(0);
+        reopened.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+        answer(QMessageBox::Yes);
+        QMetaObject::invokeMethod(&reopened, "accept");
+        QVERIFY(!s->aeatDirectProduction());
+        s->setVerifactuDirectAeat(false);
+    }
+
+    // The gateway's PRODUCCIÓN box is a production switch too: confirmed going in and out.
+    void test_gatewayProductionNeedsConfirmation()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuProduction(false); });
+        s->setVerifactuDirectAeat(false);
+        s->setVerifactuProduction(false);
+        const auto answer = [](QMessageBox::StandardButton button) {
+            QTimer::singleShot(0, [button] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        if (QAbstractButton *b = box->button(button)) b->click(); else box->reject();
+            });
+        };
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkProduction")->setChecked(true);
+            answer(QMessageBox::No);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(!s->verifactuProduction());
+        }
+        {
+            SettingsDialog dlg;
+            dlg.findChild<QCheckBox *>("chkProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->verifactuProduction());
+        }
+        SettingsDialog leaving;
+        leaving.findChild<QCheckBox *>("chkProduction")->setChecked(false);
+        answer(QMessageBox::Yes);
+        QMetaObject::invokeMethod(&leaving, "accept");
+        QVERIFY(!s->verifactuProduction());
+    }
+
+    // Leaving the direct client never keeps its production flag: coming back would
+    // otherwise skip the "Pasar a PRODUCCIÓN" question.
+    void test_leavingDirectNeverKeepsProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(true);
+        SettingsDialog dlg;
+        dlg.setDirectPendingCount(0);
+        auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+        connection->setCurrentIndex(connection->findData(QStringLiteral("irenesolutions")));
+        QVERIFY(dlg.findChild<QCheckBox *>("chkDirectProduction")->isChecked());   // hidden, still ticked
+        QTimer::singleShot(0, [] {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (auto *box = qobject_cast<QMessageBox *>(w))
+                    box->button(QMessageBox::Yes)->click();
+        });
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QVERIFY(!s->verifactuDirectAeat());
+        QVERIFY(!s->aeatDirectProduction());
+    }
+
+    // While the shop's own direct client works in pre-production the self-test is off: the
+    // tickets are the test, and both would send the same pre-production outbox at once.
+    void test_selfTestOffWhileTheShopIsInPreProduction()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        {
+            SettingsDialog dlg;
+            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        }
+        s->setAeatDirectProduction(true);
+        {
+            SettingsDialog dlg;
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        }
+        s->setVerifactuDirectAeat(false);
+        SettingsDialog gateway;
+        QVERIFY(gateway.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+    }
+
+    // Leaving the direct connection is refused while it has unsent records.
+    void test_leavingDirectRefusedWithPendingRecords()
+    {
+        AppSettings *s = AppSettings::instance();
+        s->setVerifactuDirectAeat(true);
+        {
+            SettingsDialog dlg;
+            dlg.setDirectPendingCount(3);
+            auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+            connection->setCurrentIndex(connection->findData("irenesolutions"));
+            QTimer::singleShot(0, [] {
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (auto *box = qobject_cast<QMessageBox *>(w))
+                        box->accept();
+            });
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QVERIFY(s->verifactuDirectAeat());                           // not saved
+        }
+        SettingsDialog none;
+        none.setDirectPendingCount(0);
+        auto *connection = none.findChild<QComboBox *>("cbConnection");
+        connection->setCurrentIndex(connection->findData("irenesolutions"));
+        QMetaObject::invokeMethod(&none, "accept");
+        QVERIFY(!s->verifactuDirectAeat());
     }
 };
 

@@ -67,7 +67,7 @@ ESC/POS prints single-byte code-page bytes, not UTF-8. `EscPosBuilder::toCp858()
 transcodes a `QString` to **PC858** (CP850 + the euro sign), selected on the
 device with `ESC t 19`. ASCII passes through; the ~50 Spanish glyphs actually
 used (`ñ Ñ á é í ó ú ¿ ¡ €` + accented capitals, etc.) map via an explicit table;
-anything else becomes `?`. An explicit table (not Qt's `QStringConverter`, which
+anything else becomes `?`, and C0 control characters (ESC, GS, ...) in printed text become a space, so a typed name can never inject a printer command. The table is checked against hard-coded CP858 values (`test_cp858TableAgainstReference`); `Ì` is 0xDE (0xDD, the broken bar, until October 2026). An explicit table (not Qt's `QStringConverter`, which
 in Qt 6 supports only UTF/Latin-1, **not** CP858) keeps it correct and unit-tested.
 The exact PC858 numbering should still be confirmed against a printed code-page
 chart on the physical unit.

@@ -2,8 +2,11 @@
 #include "applanguage.h"
 #include <QDir>
 #include <QFile>
+#include <QDateTime>
+#include <QSaveFile>
 #include <QFileInfo>
 #include <QTextStream>
+#include <QUuid>
 #include <QJsonDocument>
 #include <QDebug>
 
@@ -134,7 +137,9 @@ bool AppSettings::load()
         migrateFromLegacyFiles();
         encryptSecretsAtRest();   // a key brought in from ~/.verifactu_key must not land as plaintext
         applyDefaults();
-        save();
+        // The plaintext legacy key file goes once the settings hold the encrypted copy.
+        if (save() && !m_legacyKeyFile.isEmpty() && QFile::remove(m_legacyKeyFile))
+            qDebug() << "AppSettings: removed the plaintext legacy key file";
         qDebug() << "AppSettings: created new settings file at" << m_filePath;
         return false;
     }
@@ -150,7 +155,12 @@ bool AppSettings::load()
     file.close();
 
     if (err.error != QJsonParseError::NoError) {
-        qWarning() << "AppSettings: JSON parse error:" << err.errorString();
+        // Kept aside: the next save would otherwise overwrite the only copy of the
+        // database path and the credentials with defaults.
+        const QString aside = m_filePath + ".corrupt-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+        const bool kept = QFile::rename(m_filePath, aside);
+        qCritical() << "AppSettings: JSON parse error:" << err.errorString() << "- the file is"
+                    << (kept ? "kept as " + aside : QStringLiteral("NOT kept aside"));
         applyDefaults();
         return false;
     }
@@ -176,34 +186,21 @@ bool AppSettings::loadFrom(const QString &path)
 
 bool AppSettings::save() const
 {
-    // Atomic write: serialize to a sibling .tmp file, fsync-equivalent flush, then
-    // rename over the target. A crash mid-write leaves the previous settings intact
-    // instead of producing a zero-byte JSON that would lose the DB path / Verifactu
-    // credentials on next start.
-    const QString tmpPath = m_filePath + ".tmp";
-    QFile tmp(tmpPath);
-    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qWarning() << "AppSettings: cannot write to" << tmpPath;
+    // QSaveFile writes a temporary file and replaces the target in one step on commit:
+    // a crash mid-write leaves the previous settings intact, never no file.
+    QSaveFile file(m_filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        m_lastSaveError = file.errorString();
+        qCritical() << "AppSettings: cannot write to" << m_filePath << "-" << m_lastSaveError;
         return false;
     }
     const QByteArray bytes = QJsonDocument(m_data).toJson(QJsonDocument::Indented);
-    if (tmp.write(bytes) != bytes.size()) {
-        qWarning() << "AppSettings: short write to" << tmpPath;
-        tmp.close();
-        QFile::remove(tmpPath);
+    if (file.write(bytes) != bytes.size() || !file.commit()) {
+        m_lastSaveError = file.errorString();
+        qCritical() << "AppSettings: saving" << m_filePath << "failed -" << m_lastSaveError;
         return false;
     }
-    tmp.flush();
-    tmp.close();
-
-    // QFile::rename is not atomic on Windows when the target exists, so remove first.
-    // The window between remove and rename is small; the .tmp still exists on disk
-    // so a crash here is recoverable by hand.
-    QFile::remove(m_filePath);
-    if (!QFile::rename(tmpPath, m_filePath)) {
-        qWarning() << "AppSettings: rename" << tmpPath << "->" << m_filePath << "failed";
-        return false;
-    }
+    m_lastSaveError.clear();
     return true;
 }
 
@@ -276,18 +273,23 @@ void AppSettings::migrateFromLegacyFiles()
         QTextStream in(&keyFile);
         setStr({"verifactu", "service_key"}, in.readLine().trimmed());
         keyFile.close();
+        m_legacyKeyFile = keyFile.fileName();   // removed once the encrypted copy is saved
         qDebug() << "AppSettings: migrated service key from ~/.verifactu_key";
     }
 }
 
 bool AppSettings::encryptSecretsAtRest()
 {
-    const QString stored = str({"verifactu", "service_key"});
-    if (stored.isEmpty() || isEncrypted(stored))
-        return false;
-    setStr({"verifactu", "service_key"}, encryptSecret(stored));
-    qDebug() << "AppSettings: encrypted plaintext Verifactu service key at rest (DPAPI)";
-    return true;
+    bool changed = false;
+    for (const char *key : { "service_key", "aeat_certificate_password" }) {
+        const QString stored = str({"verifactu", key});
+        if (stored.isEmpty() || isEncrypted(stored))
+            continue;
+        setStr({"verifactu", key}, encryptSecret(stored));
+        qDebug() << "AppSettings: encrypted plaintext secret" << key << "at rest (DPAPI)";
+        changed = true;
+    }
+    return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +361,35 @@ void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifac
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
 
+bool    AppSettings::verifactuDirectAeat() const { return str({"verifactu", "connection"}) == QLatin1String("aeat"); }
+void    AppSettings::setVerifactuDirectAeat(bool v) { setStr({"verifactu", "connection"}, v ? "aeat" : "irenesolutions"); }
+bool    AppSettings::aeatDirectProduction() const { return bln({"verifactu", "aeat_direct_production"}, false); }
+void    AppSettings::setAeatDirectProduction(bool v) { setBln({"verifactu", "aeat_direct_production"}, v); }
+QString AppSettings::aeatCertificateThumbprint() const { return str({"verifactu", "aeat_certificate_thumbprint"}); }
+void    AppSettings::setAeatCertificateThumbprint(const QString &v) { setStr({"verifactu", "aeat_certificate_thumbprint"}, v); }
+QString AppSettings::aeatCertificateFile() const { return str({"verifactu", "aeat_certificate_file"}); }
+void    AppSettings::setAeatCertificateFile(const QString &v) { setStr({"verifactu", "aeat_certificate_file"}, v); }
+QString AppSettings::aeatCertificatePassword() const { return decryptSecret(str({"verifactu", "aeat_certificate_password"})); }
+void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"verifactu", "aeat_certificate_password"}, encryptSecret(v)); }
+
+QString AppSettings::aeatChainMarker() const { return str({"verifactu", "aeat_chain_marker"}); }
+void AppSettings::setAeatChainMarker(const QString &v)
+{
+    setStr({"verifactu", "aeat_chain_marker"}, v);
+    save();   // at once: it must survive a crash before any other save
+}
+
+QString AppSettings::aeatInstallationNumber()
+{
+    QString number = str({"verifactu", "aeat_installation"});
+    if (number.isEmpty()) {
+        number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
+        setStr({"verifactu", "aeat_installation"}, number);
+        save();   // at once: every record carries it, so it may never change between runs
+    }
+    return number;
+}
+
 bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, true); }
 void    AppSettings::setVerifactuPendingRecoveryEnabled(bool v) { setBln({"verifactu", "pending_recovery_enabled"}, v); }
 QString AppSettings::verifactuPendingRecoveryFloorDate() const { return str({"verifactu", "pending_recovery_floor_date"}); }
@@ -377,6 +408,14 @@ bool    AppSettings::backupEnabled() const            { return bln({"backup", "e
 void    AppSettings::setBackupEnabled(bool v)         { setBln({"backup", "enabled"}, v); }
 QString AppSettings::backupLastTime() const           { return str({"backup", "last_time"}); }
 void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }
+QString AppSettings::backupLastError() const           { return str({"backup", "last_error"}); }
+void    AppSettings::setBackupLastError(const QString &v) { setStr({"backup", "last_error"}, v); }
+QString AppSettings::backupSecondFolder() const       { return str({"backup", "second_folder"}); }
+void    AppSettings::setBackupSecondFolder(const QString &v) { setStr({"backup", "second_folder"}, v); }
+QString AppSettings::backupLastVersion() const        { return str({"backup", "last_version"}); }
+void    AppSettings::setBackupLastVersion(const QString &v) { setStr({"backup", "last_version"}, v); }
+QString AppSettings::lastStartedVersion() const       { return str({"app", "last_started_version"}); }
+void    AppSettings::setLastStartedVersion(const QString &v) { setStr({"app", "last_started_version"}, v); }
 
 // ---------------------------------------------------------------------------
 // JSON helpers

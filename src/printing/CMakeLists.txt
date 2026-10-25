@@ -19,6 +19,7 @@ add_library(printing STATIC
 target_link_libraries(printing PUBLIC
     Qt${QT_VERSION_MAJOR}::Gui
 )
+target_link_libraries(printing PRIVATE verifactu_types)   # splitGross (header-only)
 # winspool: OpenPrinter / StartDocPrinter (RAW) / WritePrinter. Ships with Windows.
 if(WIN32)
     target_link_libraries(printing PRIVATE winspool)

@@ -22,8 +22,9 @@ Listado::Listado(const QSqlDatabase &database, QWidget *parent) :
             this, &Listado::on_actionEliminar_fila_triggered);
     connect(filter_widget, &FilterWidget::filterChanged,
             this, &Listado::textFilterChanged);
-    connect(filter_widget, &QLineEdit::textChanged,
-            this, &Listado::textFilterChanged);
+    // A header click sorts the loaded rows only, so load the rest first.
+    connect(table_listado->horizontalHeader(), &QHeaderView::sectionClicked,
+            this, [this]() { loadEveryRow(); });
     connect(table_listado, &TableView::doubleClick,
             this, &Listado::handleDoubleClick, Qt::QueuedConnection);
     connect(table_listado, &QTableView::clicked, this, [this](const QModelIndex &index) {
@@ -148,6 +149,9 @@ void Listado::populateTable()
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
     if (QSqlDatabase::contains("qt_sql_default_connection")) {
+        // A refresh replaces the models: the old ones go once the view uses the new ones.
+        QSqlTableModel *oldModel = model;
+        MySortFilterProxyModel *oldProxy = proxyModel;
         model = new QSqlTableModel(this, QSqlDatabase::database("qt_sql_default_connection"));
         model->setTable(tableName);
         model->setEditStrategy(QSqlTableModel::OnFieldChange);
@@ -161,9 +165,14 @@ void Listado::populateTable()
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->table_name = tableName;
         if (tableName == "gastos") {
+            proxyModel->closedQuarters = closedQuarterKeys(db);
             // Same rule as Formulario facturas: an invoice never moves into a closed quarter.
-            proxyModel->editValidator = [this](int column, const QVariant &value) {
-                if (column != GASTOS_IDX_FECHA)
+            proxyModel->editValidator = [this](const QModelIndex &index, const QVariant &value) {
+                // Live, not the view's cache: the quarter may have been closed since it was loaded.
+                if (rowLockedNow(index.row()))
+                    return UiKit::errorHtml("Fila bloqueada.")
+                           + "<br>Pertenece a un trimestre cerrado por la contabilidad: no se ha cambiado.";
+                if (index.column() != GASTOS_IDX_FECHA)
                     return QString();
                 const QDate date = QDate::fromString(value.toString().trimmed(), "dd-MM-yyyy");
                 if (!date.isValid())
@@ -180,6 +189,10 @@ void Listado::populateTable()
         }
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
+        if (oldProxy)
+            oldProxy->deleteLater();
+        if (oldModel)
+            oldModel->deleteLater();
         if (tableName != "ingresos") {
             // Force-load all rows for smaller tables via fetchMore.
             while (model->canFetchMore(QModelIndex()))
@@ -194,28 +207,40 @@ void Listado::populateTable()
             table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
         else
             table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+        // Drop the delegates of the previous refresh so they do not pile up.
+        for (int col = 0; col < table_listado->model()->columnCount(); ++col)
+            table_listado->setItemDelegateForColumn(col, nullptr);
+        qDeleteAll(m_columnDelegates);
+        m_columnDelegates.clear();
+        auto setColumnDelegate = [this](int col, QAbstractItemDelegate *delegate) {
+            m_columnDelegates.append(delegate);
+            table_listado->setItemDelegateForColumn(col, delegate);
+        };
         // Configure NumberDelegate
         if (tableName == "prendas") {
-            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
+            setColumnDelegate(LIST_PRENDAS_IDX_LIMP, new NumberFormatDelegate(this));
+            setColumnDelegate(LIST_PRENDAS_IDX_PLAN, new NumberFormatDelegate(this));
         }
         else if (tableName == "gastos") {
-            table_listado->setItemDelegateForColumn(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
+            setColumnDelegate(GASTOS_IDX_IMPORTE, new NumberFormatDelegate(this));
+            // edit_lock is the pre-accounting_closures lock flag, no longer read.
+            table_listado->setColumnHidden(GASTOS_IDX_CONTAB, true);
         }
         if (tableName == "ingresos") {
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
-            table_listado->setItemDelegateForColumn(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
+            setColumnDelegate(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
+            setColumnDelegate(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
+            setColumnDelegate(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
+            setColumnDelegate(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
+            setColumnDelegate(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
             table_listado->horizontalHeader()->moveSection(INGRESOS_COL_VERIFACTU_URL_QR, INGRESOS_COL_VERIFACTU_ERROR);
             placeIngresosDateColumns(table_listado->horizontalHeader());
             // hash is not useful at user interface.
             table_listado->setColumnHidden(INGRESOS_COL_HASH, true);
-            // edit_lock is an internal flag (set by Contabilidad on quarter close); not user-facing.
+            // edit_lock is the pre-accounting_closures lock flag, no longer read.
             table_listado->setColumnHidden(INGRESOS_COL_EDIT_LOCK, true);
             // verifactu_csv is redundant with the clickable verifactu_url_qr link in this view.
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CSV, true);
-            // Hide raw XML column - exported via Herramientas > Exportar registros AEAT (XML), not viewed inline
+            // Hide raw XML column - exported via Facturas > Exportar registros AEAT (XML), not viewed inline
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_XML, true);
             table_listado->setColumnHidden(INGRESOS_COL_VERIFACTU_CANCEL_XML, true);
             // Hide chained hash (AEAT "Huella") - 64-char hex, not useful inline
@@ -271,12 +296,31 @@ void Listado::textFilterChanged()
     if (filter_widget->caseSensitivity() == Qt::CaseInsensitive)
         options |= QRegularExpression::CaseInsensitiveOption;
     QRegularExpression regularExpression(pattern, options);
-    proxyModel->setFilterRegularExpression(regularExpression);
-    // Also set normalized filter so searches without tildes match names that have them
-    proxyModel->setNormalizedFilter(MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
-    // Resize table
-    table_listado->resizeColumnsToContents();
-    table_listado->resizeRowsToContents();
+    // The proxy only sees the rows the model has fetched: read them all before filtering.
+    const bool filtering = !filter_widget->text().isEmpty();
+    if (filtering)
+        loadEveryRow();
+    // Regex plus the normalized text (so a search without tildes matches names that
+    // have them), applied in a single pass.
+    proxyModel->setFilters(regularExpression,
+                           MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
+    // Sizing every row per keystroke is slow on big tables: only when the filter is cleared.
+    if (!filtering) {
+        table_listado->resizeColumnsToContents();
+        table_listado->resizeRowsToContents();
+    }
+}
+
+// Ingresos is loaded lazily (a batch at a time); a text filter or a header sort
+// needs all of it, or older tickets would be missing from the result.
+void Listado::loadEveryRow()
+{
+    if (!model || !model->canFetchMore(QModelIndex()))
+        return;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    while (model->canFetchMore(QModelIndex()))
+        model->fetchMore(QModelIndex());
+    QApplication::restoreOverrideCursor();
 }
 
 void Listado::on_actionActualizar_triggered()
@@ -314,7 +358,7 @@ void Listado::on_actionAnadir_fila_triggered()
         insertNewItemToTable(db, {""}, "servicios");
         populateTable();
     } else if (tableName == "gastos") {
-        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Herramientas → Formulario facturas "
+        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Contabilidad → Añadir factura de gastos "
                                              "en la ventana principal."));
         return;
     } else {
@@ -334,7 +378,7 @@ void Listado::on_actionEliminar_fila_triggered()
                                              "o Anular factura."));
     } else if (!table_listado->currentIndex().isValid()) {
         m_lblResult->setText(UiKit::warnHtml("Seleccione primero la fila que quiere eliminar."));
-    } else if (proxyModel->rowLocked(table_listado->currentIndex().row())) {
+    } else if (rowLockedNow(table_listado->currentIndex().row())) {
         qWarning() << "Listado::on_actionEliminar_fila_triggered: refused deleting a locked" << tableName << "row";
         m_lblResult->setText(UiKit::errorHtml("Fila bloqueada.")
                              + "<br>Pertenece a un trimestre cerrado por la contabilidad; revierta la "
@@ -366,8 +410,12 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
             ui_generar_listado = new GenListado(db, this);
             ui_generar_listado->model = table_listado->model();
             ui_generar_listado->table_name = tableName;
-            ui_generar_listado->print_table();
-            m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF."));
+            if (ui_generar_listado->print_table())
+                m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF.") + "<br>"
+                                     + UiKit::fileLinkHtml(ui_generar_listado->printedFile()));
+            else
+                m_lblResult->setText(UiKit::errorHtml("No se pudo escribir el PDF.") + "<br>"
+                                     + ui_generar_listado->printedFile().toHtmlEscaped());
     } else {
         qDebug() << "Listado::on_actionGenerar_pdf_con_el_listado_triggered: no PDF listing for" << tableName;
         m_lblResult->setText(UiKit::warnHtml("Este listado no tiene versión en PDF."));
@@ -385,21 +433,20 @@ void Listado::closeEvent(QCloseEvent* event)
     }
 }
 
+bool Listado::rowLockedNow(int proxyRow)
+{
+    // A quarter may have been closed since the table was loaded.
+    if (proxyModel && tableName == "gastos")
+        proxyModel->closedQuarters = closedQuarterKeys(db);
+    return proxyModel && proxyModel->rowLocked(proxyRow);
+}
+
 void Listado::handleDoubleClick(const QModelIndex &index)
 {
-    if (index.isValid()) {
-        int lastColumn = table_listado->model()->columnCount() - 1;
-        QString headerName = table_listado->model()->headerData(lastColumn, Qt::Horizontal, Qt::DisplayRole).toString();
-        if (headerName == "edit_lock") {
-            QVariant value = table_listado->model()->data(table_listado->model()->index(index.row(), lastColumn));
-            if (value.toInt() == 1 && index.column() != lastColumn) {
-                m_lblResult->setText(UiKit::errorHtml("Edición bloqueada.")
-                                     + "<br>La fila pertenece a un trimestre cerrado por la contabilidad; "
-                                       "revierta la contabilidad para poder editarla.");
-                // Deselect the current cell
-                QItemSelectionModel *selectionModel = table_listado->selectionModel();
-                selectionModel->clearSelection();
-            }
-        }
+    if (index.isValid() && rowLockedNow(index.row())) {
+        m_lblResult->setText(UiKit::errorHtml("Edición bloqueada.")
+                             + "<br>La fila pertenece a un trimestre cerrado por la contabilidad; "
+                               "revierta la contabilidad para poder editarla.");
+        table_listado->selectionModel()->clearSelection();
     }
 }

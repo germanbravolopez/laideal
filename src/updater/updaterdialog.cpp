@@ -63,7 +63,7 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
     m_lblResult->setVisible(false);   // only when something goes wrong
     layout->addWidget(m_lblResult);
 
-    connect(m_btnLater,  &QPushButton::clicked, this, &QDialog::reject);
+    connect(m_btnLater,  &QPushButton::clicked, this, &UpdaterDialog::onLaterClicked);
     connect(m_btnUpdate, &QPushButton::clicked, this, &UpdaterDialog::onUpdateClicked);
 
     connect(m_updater, &Updater::downloadProgress, this, &UpdaterDialog::onDownloadProgress);
@@ -71,10 +71,39 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
     connect(m_updater, &Updater::downloadFailed,   this, &UpdaterDialog::onDownloadFailed);
 }
 
+void UpdaterDialog::reject()
+{
+    // Esc / window close must not leave a download running behind a closed dialog.
+    if (m_downloading)
+        return;
+    QDialog::reject();
+}
+
+// "Más tarde" before the download, "Cancelar" while it runs.
+void UpdaterDialog::onLaterClicked()
+{
+    if (!m_downloading) {
+        reject();
+        return;
+    }
+    m_updater->cancelDownload();
+    m_downloading = false;
+    m_progress->setVisible(false);
+    m_btnUpdate->setEnabled(true);
+    m_btnLater->setText(tr("Más tarde"));
+    m_header->setText(tr(
+        "<p>Hay una nueva versión disponible:</p>"
+        "<p>&nbsp;&nbsp;Versión actual: <b>%1</b><br/>"
+        "&nbsp;&nbsp;Nueva versión: <b>%2</b></p>"
+        "<p><b>Cambios:</b></p>")
+        .arg(Updater::currentVersion(), m_latestVersion));
+}
+
 void UpdaterDialog::onUpdateClicked()
 {
+    m_downloading = true;
     m_btnUpdate->setEnabled(false);
-    m_btnLater->setEnabled(false);
+    m_btnLater->setText(tr("Cancelar"));
     m_progress->setVisible(true);
     m_header->setText(tr(
         "<p>Descargando <b>laideal %1</b>...</p>"
@@ -97,6 +126,7 @@ void UpdaterDialog::onDownloadProgress(qint64 received, qint64 total)
 void UpdaterDialog::onDownloadFinished(const QString &localPath)
 {
     qDebug() << "UpdaterDialog: launching installer" << localPath;
+    m_downloading = false;
 
     // The installer is per-user (laideal.iss: PrivilegesRequired=lowest), so it
     // runs non-elevated and needs no UAC. Inno Setup extracts its bootstrap to
@@ -106,16 +136,22 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
     // in - inherited by the child because the launch is NOT elevated (elevation
     // would reset the environment back to the hardened default %TEMP%).
     // CloseApplications=yes in laideal.iss handles files still open under {app}.
-    const QByteArray launchDir = QFileInfo(localPath).absolutePath().toLocal8Bit();
-    qputenv("TMP", launchDir);
-    qputenv("TEMP", launchDir);
-    const bool started = QProcess::startDetached(localPath, {});
+    // The override is given to the child only; this process keeps its own TEMP.
+    const QString launchDir = QFileInfo(localPath).absolutePath();
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("TMP"), launchDir);
+    env.insert(QStringLiteral("TEMP"), launchDir);
+    QProcess installer;
+    installer.setProgram(localPath);
+    installer.setProcessEnvironment(env);
+    const bool started = installer.startDetached();
     if (!started) {
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo iniciar el instalador descargado."))
                              + "<br>" + tr("Puede ejecutarlo manualmente desde: %1").arg(localPath.toHtmlEscaped()));
         m_lblResult->setVisible(true);
         m_btnLater->setEnabled(true);
         m_btnLater->setText(tr("Cerrar"));
+        m_progress->setVisible(false);
         return;
     }
 
@@ -125,6 +161,8 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
 
 void UpdaterDialog::onDownloadFailed(const QString &error)
 {
+    m_downloading = false;
+    m_btnLater->setText(tr("Más tarde"));
     m_lblResult->setText(UiKit::errorHtml(tr("No se pudo descargar el instalador."))
                          + "<br>" + error.toHtmlEscaped());
     m_lblResult->setVisible(true);

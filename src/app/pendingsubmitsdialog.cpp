@@ -89,6 +89,8 @@ bool PendingSubmitsDialog::loadPending()
     // covers a slow-but-already-registered AEAT submission.
     const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(db, floorIso);
     for (const PendingVerifactuEvent &ev : events) {
+        if (inFlight && inFlight(verifactuInvoiceId(ev.nRecibo, ev.seq)))
+            continue;                                                   // being sent right now
         Entry e;
         e.ticketNum  = ev.nRecibo;
         e.seq        = ev.seq;
@@ -118,7 +120,7 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
         new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
-        new QTableWidgetItem(QString::number(e.importe, 'f', 2) + " €"));
+        new QTableWidgetItem(displayMoney(e.importe) + " €"));
 
     auto *cell = new QWidget(m_table);
     auto *h = new QHBoxLayout(cell);
@@ -152,7 +154,13 @@ void PendingSubmitsDialog::onRetryClicked(int row)
              << "seq=" << e.seq
              << "date=" << e.fechaPago.toString(Qt::ISODate)
              << "total=" << e.importe;
-    emit retryRequested(e.ticketNum, e.seq, e.fechaPago, e.importe);
+    const QString notSent = retry ? retry(e.ticketNum, e.seq, e.fechaPago, e.importe)
+                                  : tr("No se puede reenviar desde aquí.");
+    if (!notSent.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+                             + "<br>" + notSent.toHtmlEscaped());
+        return;                                                            // stays listed
+    }
     m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
                          + "<br>" + tr("La respuesta aparece en la barra de estado de la ventana principal."));
     // Drop the row from the table; the async reply will patch the DB. If it
@@ -166,30 +174,10 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
 
-    db.open();
-    QSqlQuery q(db);
-    // Scope by seq so marking one event as Error never clobbers a sibling event
-    // (a different seq) of the same ticket that is still PENDIENTE.
-    // The estado MUST come from the helper: a hardcoded 'Error' does not match the
-    // canonical "ERROR", so verifactuEstadoFromString() fell through to its
-    // NotSubmitted default and the row stopped offering "Reintentar envio a AEAT".
-    q.prepare(
-        "UPDATE ingresos SET verifactu_estado = :estado, "
-        "verifactu_error = 'Pendiente sin reconciliar tras cierre - revisar en sede AEAT' "
-        "WHERE n_recibo = :n AND verifactu_invoice_seq = :seq "
-        "  AND (verifactu_estado IS NULL OR verifactu_estado = '' "
-        "       OR verifactu_estado = 'PENDIENTE')");
-    q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Error));
-    q.bindValue(":n", e.ticketNum);
-    q.bindValue(":seq", e.seq);
-    if (!q.exec()) {
-        qWarning() << "PendingSubmitsDialog: UPDATE estado=Error failed for ticket"
-                   << e.ticketNum << "-" << q.lastError().text();
+    if (!markPendingEventUnreconciled(db, e.ticketNum, e.seq)) {
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum)));
-        db.close();
         return;
     }
-    db.close();
     m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
                          + "<br>" + tr("Revíselo en la sede electrónica de AEAT o con Consultar en AEAT en Recogida."));
     removeRowAt(row);

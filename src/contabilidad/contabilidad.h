@@ -46,11 +46,6 @@ public:
     // reverting: the "Bloquear datos" checkbox is enabled only for Trimestral.
     static bool lockOptionAvailable(ConfigMode mode, bool reverting);
 
-    // Merges the lock state of ingresos and gastos for one period (each 0 = open,
-    // 1 = locked, 2 = no rows): 2 only when both are empty, 1 if either is locked,
-    // else 0. A quarter with only gastos can then be closed and reverted too.
-    static int combinedLockState(int ingresosLock, int gastosLock);
-
     // Detail tables appended to the report so each summary figure can be audited.
     // Pure HTML rendering (no DB / UI state), exposed for unit testing; the rows come
     // from incomeTicketsBetweenDates / expensesBetweenDates and the total row equals
@@ -64,10 +59,14 @@ public:
     // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
     // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";
     // the version with the detail tables gets "_detalle" before ".pdf", so both are kept.
+    // Where a regenerated report of a closed period goes: file itself when absent, else
+    // "<name>_regenerado_YYYYMMDD[_N].pdf" next to it, so the filed PDF is kept.
+    static QString regeneratedPath(const QString &file, const QDate &date);
     static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
 
     // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
-    // contabilidad). A month reads its quarter; a year lists its four quarters.
+    // contabilidad), with the date of its last close or revert. A month reads its
+    // quarter; a year lists its four quarters.
     static QString lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int unit, int year);
 
 
@@ -129,6 +128,8 @@ public:
     // one ticket, and one paid and cancelled within the year is none.
     static int yearTicketCount(const QuarterlyDetails &details, int year);
     // Comma-decimal amounts in a period's rows (listed but not summed).
+    // A quarter can be closed from its last day on (closing it earlier refuses today's payments).
+    static QDate quarterLastDay(int quarter, int year);
     static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,
                                   const QVector<RegularizationDetail> &regularizations,
                                   const QVector<ExpenseDetail> &expenses);
@@ -146,8 +147,9 @@ private:
     void initialSettings();
     // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the
     // comma-decimal amounts left out of the sums.
-    QString generateContabilidad(int &invalidAmounts);
-    void updateLock();
+    // keepFiledReport: write beside an existing report under regeneratedPath(), never over it.
+    QString generateContabilidad(int &invalidAmounts, bool keepFiledReport = false);
+    bool m_dataReadFailed = false;   // the last generateContabilidad could not read the data: no report
 
     QSqlDatabase db;
     QLabel      *m_lblIntro = nullptr;

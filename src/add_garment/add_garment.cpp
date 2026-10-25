@@ -1,7 +1,7 @@
 #include "add_garment.h"
 #include "sql_lite.h"
 #include "uikit.h"
-#include "../verifactu/verifactutypes.h"
+#include "verifactutypes.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -159,7 +159,7 @@ void AddGarment::resetAllContents()
     m_cbServicio->setCurrentIndex(0);
     m_leCantidad->clear();
     m_leSize->clear();
-    m_leImporte->setText("0.00");
+    m_leImporte->setText(displayMoney(0.0));
     m_leObservaciones->clear();
     m_chkPagado->setChecked(false);
     m_deFechaPago->setDate(QDate::currentDate());
@@ -189,13 +189,14 @@ void AddGarment::onSearchClicked()
     m_grpGarment->setEnabled(false);
     m_grpState->setEnabled(false);
 
-    db.open();
-    QSqlQuery q(db);
-    q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-    q.bindValue(":n_recibo", ticket);
-    q.exec();
-    m_ticketModel->setQuery(std::move(q));
-    db.close();
+    {
+        ConnectionScope scope(db);
+        QSqlQuery q(db);
+        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+        q.bindValue(":n_recibo", ticket);
+        q.exec();
+        m_ticketModel->setQuery(std::move(q));
+    }
     if (ticket.isEmpty() || m_ticketModel->rowCount() == 0) {
         m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
         return;
@@ -211,6 +212,12 @@ void AddGarment::onSearchClicked()
     m_leCliente->setText(m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_CLIENTE)).toString());
     m_deFechaRecepcion->setDate(QDate::fromString(
         m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString(), "dd-MM-yyyy"));
+    // The payment date is the invoice date AEAT gets: not in the future, not before reception.
+    for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida }) {
+        edit->setMaximumDate(QDate::currentDate());
+        if (m_deFechaRecepcion->date() <= QDate::currentDate())
+            edit->setMinimumDate(m_deFechaRecepcion->date());
+    }
     populateGarments();
     m_grpTicket->setEnabled(true);
     m_grpGarment->setEnabled(true);
@@ -229,8 +236,8 @@ void AddGarment::populateGarments()
 
 void AddGarment::setGarmentPrice()
 {
-    if (m_leCantidad->text().isEmpty()) {
-        m_leImporte->setText("0.00");
+    if (m_leCantidad->text().isEmpty() || m_cbPrenda->findText(m_cbPrenda->currentText(), Qt::MatchExactly) == -1) {
+        m_leImporte->setText(displayMoney(0.0));
         return;
     }
     // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
@@ -238,7 +245,7 @@ void AddGarment::setGarmentPrice()
     const double importe = garmentImporte(
         m_leCantidad->text(), m_leSize->text(),
         readGarmentPrice(db, m_cbPrenda->currentText(), m_cbServicio->currentText()));
-    m_leImporte->setText(moneyText(importe));
+    m_leImporte->setText(displayMoney(importe));
 }
 
 QString AddGarment::validationError()
@@ -257,8 +264,22 @@ QString AddGarment::validationError()
     if (m_leCliente->text().isEmpty() || m_cbPrenda->currentText().isEmpty() || m_leCantidad->text().isEmpty())
         return UiKit::errorHtml("Formulario incompleto.")
                + "<br>Rellene al menos la prenda y la cantidad.";
+    if (m_cbPrenda->findText(m_cbPrenda->currentText(), Qt::MatchExactly) == -1)
+        return UiKit::errorHtml("La prenda \"" + m_cbPrenda->currentText().toHtmlEscaped() + "\" no está en la lista de prendas.")
+               + "<br>Elíjala de la lista (o añádala antes a la lista de prendas).";
+    if (m_leCantidad->text().toInt() <= 0)
+        return UiKit::errorHtml("La cantidad tiene que ser al menos 1.");
     if (garmentUnmeasured(m_cbPrenda->currentText(), m_leSize->text()))
         return UiKit::errorHtml("La prenda se cobra por m2: introduzca su tamaño.");
+    if (moneyText(m_leImporte->text()).toDouble() <= 0.0)
+        return UiKit::errorHtml("El importe de la prenda es 0,00.")
+               + "<br>Compruebe la prenda, el servicio, la cantidad y el tamaño.";
+    if (m_chkPagado->isChecked()) {                                 // a paid garment is an invoice
+        const QString blocked = invoicingBlocked ? invoicingBlocked()
+                                                 : tr("Verifactu no está disponible: no se puede cobrar.");
+        if (!blocked.isEmpty())
+            return UiKit::errorHtml(blocked);
+    }
     if (m_chkPagado->isChecked() && quarterIsClosed(db, m_deFechaPago->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
                + "<br>La fecha de pago pertenece a un trimestre cerrado por la contabilidad.";
@@ -274,11 +295,11 @@ void AddGarment::onSaveClicked()
     }
     const QString ticket = m_searchedTicket;
     const QString garment = m_cbPrenda->currentText();
-    const QString amount = moneyText(m_leImporte->text()).replace('.', ',');
+    const QString amount = displayMoney(m_leImporte->text());
     const bool paid = m_chkPagado->isChecked();
     if (!saveGarment()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo añadir la prenda.")
-                             + "<br>Consulte el log (Ayuda → Mostrar log).");
+                             + "<br>Consulte el log (Ayuda → Log de depuración).");
         return;
     }
     resetAllContents();
@@ -306,7 +327,6 @@ bool AddGarment::saveGarment()
     row.size           = m_leSize->text().replace(',', '.');
     row.servicio       = m_cbServicio->currentText();
     row.observaciones  = m_leObservaciones->text();
-    row.editLock       = "0";
     row.hash           = hash;
     // Issue #41: a garment added to an existing ticket is un-submitted like a
     // freshly saved row, so it follows the same rule - SIN COBRAR while unpaid,
@@ -314,7 +334,7 @@ bool AddGarment::saveGarment()
     row.verifactuEstado = verifactuEstadoToString(
         row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
                                           : VerifactuEstado::Unpaid);
-    qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo << "cliente=" << row.cliente
+    qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo
              << "prenda=" << row.prenda << "cantidad=" << row.cantidad << "importe=" << row.importe
              << "pagado=" << row.pagado << "hash=" << hash;
     if (!insertGarmentRow(db, row))
