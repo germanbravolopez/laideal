@@ -31,10 +31,13 @@ public:
     // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
     // Unset: paid garments are refused.
     std::function<QString()> invoicingBlocked;
+    // The AEAT environment of the direct client, whose used numbers a new invoice skips; unset: all.
+    std::function<QString()> aeatEnvironment;
 
 signals:
-    // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does).
-    void paidGarmentSaved(const QString &ticketNum, const QDate &paymentDate, double amount);
+    // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does), as InvoiceID
+    // "<ticketNum>-<seq>" (seq 0: "<ticketNum>"), the seq stored on its row.
+    void paidGarmentSaved(const QString &ticketNum, const QDate &paymentDate, double amount, int seq);
     // Any garment saved (paid or not), e.g. for Recogida to refresh and report it.
     void garmentSaved(const QString &ticketNum);
 

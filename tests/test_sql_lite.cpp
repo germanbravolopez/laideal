@@ -2194,29 +2194,40 @@ private slots:
         QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='saveHash'").isEmpty());
     }
 
-    // Issue #41: a garment added to an existing ticket via AddGarment must also be
-    // booked PENDIENTE (never blank) so the estado column is consistent and the
-    // pending-submit recovery can see it. AddGarment now routes through the same
-    // insertGarmentRow seam with verifactuEstado=PENDIENTE.
+    // Issue #41: a garment added to an existing ticket via AddGarment is booked PENDIENTE
+    // once paid (never blank) so the pending-submit recovery sees it, at the seq of its
+    // payment event; unpaid it is SIN COBRAR with no payment date.
     void test_insertGarmentRow_addGarmentShapePending()
     {
         IngresoGarmentRow row;
         row.nRecibo         = "30877";      // existing ticket the garment is added to
         row.cliente         = "Salvador";
         row.fechaRecepcion  = "01-07-2026";
-        row.fechaPago       = QString();    // added unpaid: AddGarment leaves both null
+        row.fechaPago       = "02-07-2026";
         row.fechaRecogida   = QString();
         row.importe         = "11.00";
-        row.pagado          = "NO";
+        row.pagado          = "SI";
         row.estado          = "En tienda";
         row.cantidad        = "1";
         row.prenda          = "Manta";
         row.hash            = "addGarmentHash";
         row.verifactuEstado = "PENDIENTE";
+        row.verifactuInvoiceSeq = 2;
 
         QVERIFY(insertGarmentRow(m_db, row));
-        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='addGarmentHash'"),
-                 QStringLiteral("PENDIENTE"));
+        QCOMPARE(scalar("SELECT pagado || '|' || verifactu_estado || '|' || verifactu_invoice_seq "
+                        "FROM ingresos WHERE hash='addGarmentHash'"),
+                 QStringLiteral("SI|PENDIENTE|2"));
+
+        row.fechaPago = QString();
+        row.pagado = "NO";
+        row.verifactuEstado = "SIN COBRAR";
+        row.verifactuInvoiceSeq = 0;
+        row.hash = "addGarmentUnpaid";
+        QVERIFY(insertGarmentRow(m_db, row));
+        QCOMPARE(scalar("SELECT pagado || '|' || fecha_pago || '|' || verifactu_estado || '|' || verifactu_invoice_seq "
+                        "FROM ingresos WHERE hash='addGarmentUnpaid'"),
+                 QStringLiteral("NO||SIN COBRAR|0"));
     }
 
     // The shop's table refuses NULL in its text columns (11.2: "NOT NULL constraint failed:

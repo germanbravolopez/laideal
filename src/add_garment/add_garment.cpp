@@ -280,6 +280,9 @@ QString AddGarment::validationError()
         if (!blocked.isEmpty())
             return UiKit::errorHtml(blocked);
     }
+    if (quarterIsClosed(db, m_deFechaRecepcion->date()))
+        return UiKit::errorHtml("Trimestre bloqueado.")
+               + "<br>La fecha de recepción del ticket pertenece a un trimestre cerrado por la contabilidad.";
     if (m_chkPagado->isChecked() && quarterIsClosed(db, m_deFechaPago->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
                + "<br>La fecha de pago pertenece a un trimestre cerrado por la contabilidad.";
@@ -337,13 +340,15 @@ bool AddGarment::saveGarment()
     qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo
              << "prenda=" << row.prenda << "cantidad=" << row.cantidad << "importe=" << row.importe
              << "pagado=" << row.pagado << "hash=" << hash;
+    // A ticket with a paid garment is refused above, but a number the direct client already
+    // used for an invoice of it (a payment never stored as paid) is not reused.
+    if (row.pagado == QLatin1String("SI"))
+        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, aeatEnvironment ? aeatEnvironment() : QString());
     if (!insertGarmentRow(db, row))
         return false;
     emit garmentSaved(row.nRecibo);
-    // A ticket that already has a paid garment is refused above, so this payment is
-    // the ticket's first invoice: seq 0, InvoiceID = n_recibo.
     if (row.pagado == QLatin1String("SI"))
         emit paidGarmentSaved(row.nRecibo, QDate::fromString(row.fechaPago, "dd-MM-yyyy"),
-                              moneyText(row.importe).toDouble());
+                              moneyText(row.importe).toDouble(), row.verifactuInvoiceSeq);
     return true;
 }

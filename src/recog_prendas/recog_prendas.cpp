@@ -798,14 +798,17 @@ void RecogPrendas::on_pb_add_clicked()
     dlg->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
     };
+    dlg->aeatEnvironment = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
+    };
     dlg->setWindowModality(Qt::WindowModal);
     m_notSentReason.clear();
     auto added = QSharedPointer<int>::create(0);
     connect(dlg, &AddGarment::garmentSaved, this, [added](const QString &) { ++*added; });
-    // A garment added as paid is the ticket's first invoice (seq 0): send it to AEAT
+    // A garment added as paid is an invoice at the seq stored on its row: send it to AEAT
     // now, through the same path as a retry, which reads its date and total from the DB.
     connect(dlg, &AddGarment::paidGarmentSaved, this,
-            [this](const QString &ticket, const QDate &, double) { retryVerifactuSubmit(ticket, 0); });
+            [this](const QString &ticket, const QDate &, double, int seq) { retryVerifactuSubmit(ticket, seq); });
     // finished, not destroyed: destruction also happens while Recogida itself closes.
     connect(dlg, &QDialog::finished, this, [this, added, ticketNum]() {
         runSearch(m_submittedQuery);

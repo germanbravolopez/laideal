@@ -268,6 +268,7 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString hash;
     QString verifactuEstado;  // "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
+    int     verifactuInvoiceSeq = 0;   // payment event of a paid row (InvoiceID "<n>-<seq>"; 0: "<n>")
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 // Inserts the rows in one transaction: all of them, or none when one fails.

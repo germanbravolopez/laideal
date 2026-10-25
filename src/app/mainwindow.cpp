@@ -1561,11 +1561,14 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     ui_add_garment->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
     };
+    ui_add_garment->aeatEnvironment = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
+    };
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
     // PENDIENTE for the startup recovery.
     connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,
-            [this](const QString &ticketNum, const QDate &paymentDate, double amount) {
-        verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0);
+            [this](const QString &ticketNum, const QDate &paymentDate, double amount, int seq) {
+        verifactuSubmitInvoice(ticketNum, paymentDate, amount, seq);
     });
     ui_add_garment->show();
 }

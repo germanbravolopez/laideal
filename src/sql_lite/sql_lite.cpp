@@ -1019,10 +1019,10 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
     QSqlQuery q(db);
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
               "fecha_recogida, importe, pagado, estado, cantidad, prenda, size, servicio, "
-              "observaciones, edit_lock, hash, verifactu_estado) "
+              "observaciones, edit_lock, hash, verifactu_estado, verifactu_invoice_seq) "
               "VALUES (:n_recibo, :cliente, :fecha_recepcion, :fecha_pago, :fecha_recogida, "
               ":importe, :pagado, :estado, :cantidad, :prenda, :size, :servicio, "
-              ":observaciones, '0', :hash, :verifactu_estado)");
+              ":observaciones, '0', :hash, :verifactu_estado, :verifactu_invoice_seq)");
     q.bindValue(":n_recibo",         notNull(row.nRecibo));
     q.bindValue(":cliente",          notNull(row.cliente));
     q.bindValue(":fecha_recepcion",  notNull(row.fechaRecepcion));
@@ -1038,6 +1038,7 @@ static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
     q.bindValue(":observaciones",    notNull(row.observaciones));
     q.bindValue(":hash",             notNull(row.hash));
     q.bindValue(":verifactu_estado", notNull(row.verifactuEstado));
+    q.bindValue(":verifactu_invoice_seq", row.verifactuInvoiceSeq);
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertGarmentRow: INSERT failed for" << row.nRecibo << row.hash << "-" << q.lastError().text();

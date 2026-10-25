@@ -94,6 +94,21 @@ add_test(NAME settingsdialog
     COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
 set_tests_properties(settingsdialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# add_garment: the Tickets -> Anadir nuevas prendas window on a throwaway shop-shaped DB
+# (validation order, closed quarters, m2, the row written, the seq emitted with a paid garment).
+add_executable(test_add_garment test_add_garment.cpp support/testschema.h)
+target_link_libraries(test_add_garment PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    add_garment
+    sql_lite
+    verifactu_types
+)
+add_test(NAME add_garment
+    COMMAND test_add_garment -o ${CMAKE_BINARY_DIR}/test-results-add_garment.xml,junitxml -o -,txt)
+set_tests_properties(add_garment PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # reporthtml: pure currency / scaffolding helpers.
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE
