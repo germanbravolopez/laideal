@@ -17,8 +17,37 @@ private:
         return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
     }
 
+    static QStringList &seen()
+    {
+        static QStringList messages;
+        return messages;
+    }
+    static void recordingHandler(QtMsgType, const QMessageLogContext &, const QString &msg)
+    {
+        seen() << msg;
+    }
+
 private slots:
     void cleanup() { AppLogger::uninstall(); }
+
+    // The handler that was installed before the logger still gets every message (a
+    // debug run shows them in the console), and uninstall puts it back.
+    void test_previousHandlerIsChainedAndRestored()
+    {
+        seen().clear();
+        const QtMessageHandler original = qInstallMessageHandler(recordingHandler);
+        QTemporaryDir dir;
+        const QString path = dir.filePath("app.log");
+        QVERIFY(AppLogger::installAt(path));
+        qWarning() << "chained message";
+        QVERIFY(seen().contains("chained message"));
+        QVERIFY(readAll(path).contains("chained message"));
+        AppLogger::uninstall();
+        seen().clear();
+        qWarning() << "after uninstall";
+        QVERIFY(seen().contains("after uninstall"));
+        qInstallMessageHandler(original);
+    }
 
     // The file is rotated once it passes the limit, with no restart.
     void test_rotatesInsideTheSession()

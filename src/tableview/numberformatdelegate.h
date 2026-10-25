@@ -17,6 +17,9 @@ public:
     void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
     // The text an edit stores: trimmed, the decimal comma replaced by a dot.
     static QString storedNumber(const QString &typed);
+    // Whether typed text is an amount (optional sign, digits, optional "," or "." and
+    // digits); setModelData refuses anything else without storing it.
+    static bool isAmount(const QString &typed);
 };
 
 // A read-only decimal column kept as stored (a size such as "2.5") shown with the comma.

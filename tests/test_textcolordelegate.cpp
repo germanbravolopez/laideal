@@ -89,6 +89,25 @@ private slots:
         QCOMPARE(model.index(0, 0).data().toString(), QStringLiteral("3.75"));
     }
 
+    // Text that is not an amount never reaches the model; the cell keeps its value.
+    void test_numberFormatDelegate_refusesNonAmounts()
+    {
+        QVERIFY(NumberFormatDelegate::isAmount("12"));
+        QVERIFY(NumberFormatDelegate::isAmount("-3,5"));
+        QVERIFY(NumberFormatDelegate::isAmount(" 1.25 "));
+        for (const QString &bad : { "", "abc", "1.234,56", "1,2,3", "12 EUR", ",5" })
+            QVERIFY2(!NumberFormatDelegate::isAmount(bad), qPrintable(bad));
+        QStandardItemModel model(1, 1);
+        model.setData(model.index(0, 0), QStringLiteral("9.50"));
+        NumberFormatDelegate delegate;
+        QLineEdit editor;
+        for (const QString &bad : { "abc", "", "1.234,56" }) {
+            editor.setText(bad);
+            delegate.setModelData(&editor, &model, model.index(0, 0));
+            QCOMPARE(model.index(0, 0).data().toString(), QStringLiteral("9.50"));
+        }
+    }
+
     // Amounts and sizes are shown with the comma whatever the language; an empty cell
     // stays empty and the editor opens on the comma form.
     void test_decimalDelegates_showTheComma()

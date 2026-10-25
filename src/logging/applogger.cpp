@@ -1,9 +1,11 @@
 #include "applogger.h"
 
 #include <QDateTime>
+#include <cstdio>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QStandardPaths>
@@ -18,6 +20,7 @@ QMutex s_logMutex;
 QString s_activePath;
 qint64 s_maxBytes = kDefaultMaxBytes;
 qint64 s_written = 0;   // bytes in the open file, counted from its size at open
+QtMessageHandler s_previousHandler = nullptr;   // the handler replaced by install; null = Qt default
 
 bool openLog(const QString &path)
 {
@@ -53,10 +56,12 @@ void rotateLocked()
         s_written = 0;   // rename failed: do not retry on every message
 }
 
-void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
+void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
+    QtMessageHandler previous = nullptr;
     {
         QMutexLocker locker(&s_logMutex);
+        previous = s_previousHandler;
         if (s_logStream.device()) {
             const char *tag = "DEBUG";
             switch (type) {
@@ -74,6 +79,11 @@ void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &m
                 rotateLocked();
         }
     }
+    // Chain on, so a debug run still shows the message in the console.
+    if (previous)
+        previous(type, context, msg);
+    else
+        fprintf(stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, msg)));
     if (type == QtFatalMsg)
         abort();
 }
@@ -101,14 +111,17 @@ bool AppLogger::installAt(const QString &path, qint64 maxBytes)
                 << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
                 << " ===\n";
     s_logStream.flush();
-    qInstallMessageHandler(messageHandler);
+    const QtMessageHandler replaced = qInstallMessageHandler(messageHandler);
+    if (replaced != messageHandler)   // installing twice must not chain to itself
+        s_previousHandler = replaced;
     return true;
 }
 
 void AppLogger::uninstall()
 {
-    qInstallMessageHandler(nullptr);
     QMutexLocker locker(&s_logMutex);
+    qInstallMessageHandler(s_previousHandler);
+    s_previousHandler = nullptr;
     s_logStream.setDevice(nullptr);
     if (s_logFile.isOpen())
         s_logFile.close();

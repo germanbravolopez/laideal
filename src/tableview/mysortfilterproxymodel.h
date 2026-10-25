@@ -34,6 +34,8 @@ public:
 
     // Sets the regex and the normalized text together with a single re-filter
     // (setFilterRegularExpression + setNormalizedFilter would filter twice).
+    // Exclusive: a non-empty regex is the only filter (an invalid one matches nothing);
+    // the normalized text applies only when the regex is empty.
     void setFilters(const QRegularExpression &regex, const QString &normalizedText, int column = -1);
 
     // Number of source columns the text filter looks at.

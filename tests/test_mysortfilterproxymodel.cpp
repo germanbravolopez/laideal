@@ -196,10 +196,37 @@ private slots:
         QCOMPARE(proxy.rowCount(), 1);
         proxy.setFilters(QRegularExpression(), "ana");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression("^B"), "ana");   // regex and text are OR-ed
-        QCOMPARE(proxy.rowCount(), 2);
+        proxy.setFilters(QRegularExpression("^B"), "ana");   // the regex alone decides
+        QCOMPARE(proxy.rowCount(), 1);
         proxy.setFilters(QRegularExpression(), QString());
         QCOMPARE(proxy.rowCount(), 3);
+    }
+
+    // A case-sensitive regex narrows: the case-insensitive text must not add matches.
+    void test_regexCaseSensitiveNarrows()
+    {
+        QStandardItemModel model;
+        for (const QString &name : { "Ana", "ana", "ANA" })
+            model.appendRow(new QStandardItem(name));
+        MySortFilterProxyModel proxy;
+        proxy.setSourceModel(&model);
+        proxy.setFilters(QRegularExpression("ana"), "ana");
+        QCOMPARE(proxy.rowCount(), 1);
+        QCOMPARE(proxy.index(0, 0).data().toString(), QStringLiteral("ana"));
+    }
+
+    // An invalid regex matches nothing, even when the plain text would match.
+    void test_invalidRegexMatchesNothing()
+    {
+        QStandardItemModel model;
+        for (const QString &name : { "a[b", "Ana" })
+            model.appendRow(new QStandardItem(name));
+        MySortFilterProxyModel proxy;
+        proxy.setSourceModel(&model);
+        proxy.setFilters(QRegularExpression("a["), "a[");
+        QCOMPARE(proxy.rowCount(), 0);
+        proxy.setFilters(QRegularExpression(), "a[");
+        QCOMPARE(proxy.rowCount(), 1);
     }
 
     // Invoice rows cannot be edited through the model, whatever the view allows.

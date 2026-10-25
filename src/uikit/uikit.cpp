@@ -1,7 +1,9 @@
 #include "uikit.h"
 
 #include <QAbstractButton>
+#include <QAbstractSpinBox>
 #include <QCollator>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDateEdit>
 #include <QDialog>
@@ -90,8 +92,14 @@ protected:
             focused->click();
             return true;
         }
+        // Only a text-entry widget turns Enter into the primary action; Enter on a table,
+        // check box, list or fixed combo box must not trigger (or send, or void) anything.
+        if (!isTextEntry(m_dialog->focusWidget()))
+            return true;
         for (QPushButton *button : m_dialog->findChildren<QPushButton *>()) {
-            if (button->property(kPrimaryProperty).toBool() && button->isVisible() && button->isEnabled()) {
+            // Not the primary of a child window parented to this dialog.
+            if (button->window() == m_dialog && button->property(kPrimaryProperty).toBool()
+                    && button->isVisible() && button->isEnabled()) {
                 button->click();
                 return true;
             }
@@ -100,6 +108,17 @@ protected:
     }
 
 private:
+    // A line edit (also the one inside a spin box or an editable combo box) or a spin box.
+    static bool isTextEntry(const QWidget *widget)
+    {
+        if (!widget)
+            return false;
+        if (qobject_cast<const QLineEdit *>(widget) || qobject_cast<const QAbstractSpinBox *>(widget))
+            return true;
+        const auto *combo = qobject_cast<const QComboBox *>(widget);
+        return combo && combo->isEditable();
+    }
+
     QDialog *m_dialog;
 };
 

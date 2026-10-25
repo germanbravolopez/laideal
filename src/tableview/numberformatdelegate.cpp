@@ -26,6 +26,9 @@ void NumberFormatDelegate::setEditorData(QWidget *editor, const QModelIndex &ind
 void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
 {
     if (auto *line = qobject_cast<QLineEdit *>(editor)) {
+        // Anything that is not an amount is refused: the cell keeps its value.
+        if (!isAmount(line->text()))
+            return;
         model->setData(index, storedNumber(line->text()), Qt::EditRole);
         return;
     }
@@ -35,6 +38,11 @@ void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *mod
 QString NumberFormatDelegate::storedNumber(const QString &typed)
 {
     return typed.trimmed().replace(QLatin1Char(','), QLatin1Char('.'));
+}
+
+bool NumberFormatDelegate::isAmount(const QString &typed)
+{
+    return moneyParse(typed, nullptr);
 }
 
 QString DecimalCommaDelegate::displayText(const QVariant &value, const QLocale &) const

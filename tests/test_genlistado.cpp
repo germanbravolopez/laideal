@@ -18,6 +18,36 @@ private slots:
                  QStringLiteral("agrupado_proveedores_contabilidad_cerrada_2025"));
     }
 
+    // Any numeric spelling of a rate divides the IVA out; zero or junk means none.
+    void test_splitGasto_rates()
+    {
+        for (const QString &rate : { "21", "21.0", "21,0", " 21 " }) {
+            const auto a = GenListado::splitGasto("121.00", rate);
+            QCOMPARE(a.importeCents, qint64(12100));
+            QCOMPARE(a.baseCents, qint64(10000));
+            QCOMPARE(a.ivaCents, qint64(2100));
+        }
+        QCOMPARE(GenListado::splitGasto("110,00", "10").baseCents, qint64(10000));
+        const auto four = GenListado::splitGasto("104.00", "4");
+        QCOMPARE(four.baseCents, qint64(10000));
+        QCOMPARE(four.ivaCents, qint64(400));
+        for (const QString &rate : { "0", "", "abc", "-5" }) {
+            const auto a = GenListado::splitGasto("50.00", rate);
+            QCOMPARE(a.baseCents, qint64(5000));
+            QCOMPARE(a.ivaCents, qint64(0));
+        }
+        QCOMPARE(GenListado::splitGasto("abc", "21").importeCents, qint64(0));
+    }
+
+    // Cents add up exactly where a float sum drifts.
+    void test_splitGasto_longSumIsExact()
+    {
+        qint64 total = 0;
+        for (int i = 0; i < 20000; ++i)
+            total += GenListado::splitGasto("1234.57", "0").importeCents;
+        QCOMPARE(total, qint64(20000) * 123457);
+    }
+
     void test_shouldPrintGastoRow()
     {
         // All years + all types -> always printed.
