@@ -135,7 +135,7 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     if (gate && !gate->beginSend()) {
         close(handle);
         FreeLibrary(dll);
-        return fail(QStringLiteral("Envio cancelado: la Status API tardo demasiado."));
+        return fail(QStringLiteral("Envío cancelado: la Status API tardó demasiado."));
     }
     int readLen = 0;
     const int rc = io(handle,
@@ -226,7 +226,7 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
                << "ms); disabled for this session, using RAW.";
     if (status) *status = PrinterStatus();
     if (err) *err = neverSends ? QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs)
-                                : QStringLiteral("Status API sin respuesta (%1 ms) durante el envio.").arg(timeoutMs);
+                                : QStringLiteral("Status API sin respuesta (%1 ms) durante el envío.").arg(timeoutMs);
     return false;
 }
 

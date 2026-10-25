@@ -8,16 +8,6 @@
 
 #include "printerstatus.h"
 
-// Optional transport that sends the same ESC/POS byte stream as ThermalPrinter
-// but through Epson's Status API DLL (EPSStmApi.dll), which can also read the
-// device's ASB status (paper out / near end, cover open, cutter error). It is
-// used only when the print.use_status_api setting is on; otherwise the RAW
-// spooler path (ThermalPrinter::send) is used.
-//
-// The DLL is loaded dynamically (LoadLibrary/GetProcAddress) so there is no
-// build-time dependency on the Epson SDK and a machine without the APD/Status
-// API installed simply gets a clean failure - the caller can then fall back to
-// the RAW path. See docs/modules/printer/02_control_methods.md (option B).
 // Hand-over between the Status API worker and the watchdog that bounds it: exactly one
 // side wins. Either the worker starts the send (the watchdog can then no longer promise
 // the bytes will not come out) or the watchdog gives up first (the worker must never send).
@@ -43,6 +33,16 @@ private:
     std::atomic<int> m_state{Idle};
 };
 
+// Optional transport that sends the same ESC/POS byte stream as ThermalPrinter
+// but through Epson's Status API DLL (EPSStmApi.dll), which can also read the
+// device's ASB status (paper out / near end, cover open, cutter error). It is
+// used only when the print.use_status_api setting is on; otherwise the RAW
+// spooler path (ThermalPrinter::send) is used.
+//
+// The DLL is loaded dynamically (LoadLibrary/GetProcAddress) so there is no
+// build-time dependency on the Epson SDK and a machine without the APD/Status
+// API installed simply gets a clean failure - the caller can then fall back to
+// the RAW path. See docs/modules/printer/02_control_methods.md (option B).
 class StatusApiPrinter
 {
 public:
