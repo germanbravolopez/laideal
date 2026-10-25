@@ -23,7 +23,8 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_escpos` | `printing` | guiless | ESC/POS bytes and ticket rendering |
 | `test_ticket_preview` | `printing` | GUI / offscreen | Rendered recibo / factura preview |
 | `test_facturas` | `facturas` | guiless | IVA split |
-| `test_genlistado` | `listado` | guiless | Listado helpers |
+| `test_genlistado` | `listado` | guiless | Listado helpers, `splitGasto` (IVA for any typed rate, sums in cents) |
+| `test_add_garment` | `laideal_app` | offscreen | Añadir prendas: validation order, incomplete form, closed quarter on the payment and the reception date, m2 without size, comma size, unpaid / paid row shape, invoicing blocked, the paid garment's invoice seq (0, or past a number already used at AEAT) |
 | `test_backup_manager` | `backup` | guiless | Backup retention |
 | `test_reporthtml` | `reporthtml` | guiless | Report HTML scaffolding |
 | `test_uikit` | `uikit` | offscreen | `AmountSpinBox` (shows "12,50", takes "7.25" and "7,25"); Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
