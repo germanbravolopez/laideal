@@ -2376,6 +2376,65 @@ private slots:
         QTRY_VERIFY(factura.isNull());
     }
 
+    // imprimir F4 / F5: a recibo prints the ticket's n_recibo, not the first payment event's
+    // invoice id; and one voided garment does not stop a fully-paid reprint from claiming it.
+    void test_imprimirRecibo_ticketNumberAndPaidMarkerIgnoreVoided()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "670", "h670a", "8.00", "10-02-2026", "A-670-1"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '670-1' "
+                                "WHERE hash='h670a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "670", "h670b", "5.00", "12-02-2026", "A-670"));
+        QVERIFY(E2e::seedGarment(m_db, "670", "h670c", "3.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = 'Anulado' WHERE hash='h670c'"));
+
+        Imprimir dlg(m_db);
+        dlg.isRecibo = true;
+        dlg.le_n_ticket->setText("670");
+        dlg.getTicketInfo();
+        dlg.buildTicket(true, ticketAllGarmentsPaid(m_db, "670"));
+        QVERIFY2(dlg.ticketBytes().contains("670"), "recibo number missing");
+        QVERIFY2(!dlg.ticketBytes().contains("670-1"), "recibo shows a payment event's invoice id");
+        QVERIFY(dlg.ticketBytes().contains("IMPORTE PAGADO"));
+    }
+
+    // imprimir F7: "Todas las facturas" skips an event with nothing to print and says so, and
+    // a failed print is not reported as printed (printing on, towards a printer that does not exist).
+    void test_imprimirTodasLasFacturas_reportsEventsNotPrinted()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "671", "h671a", "8.00", "10-02-2026", "A-671"));
+        QVERIFY(E2e::seedSentGarment(m_db, "671", "h671b", "5.00", "12-02-2026", "A-671-1"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '671-1' "
+                                "WHERE hash='h671b'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = 'Anulado' WHERE hash='h671b'"));
+
+        Imprimir dlg(m_db);
+        dlg.isRecibo = false;
+        dlg.show();
+        const auto press = [&dlg]() {
+            dlg.findChild<QPushButton *>("btnPrint")->click();
+            return dlg.findChild<QLabel *>("lblResult")->text();
+        };
+        dlg.le_n_ticket->setText("671");
+        press();
+        auto *events = dlg.findChild<QComboBox *>("cbEvent");
+        events->setCurrentIndex(events->count() - 1);
+        QString text = press();
+        QVERIFY2(text.contains("Facturas impresas: 671.") && text.contains("No se han impreso: 671-1 (sin prendas pagadas)"),
+                 qPrintable(text));
+
+        AppSettings *settings = AppSettings::instance();
+        const QString printerBefore = settings->printerName();
+        settings->setEnablePrinting(true);
+        settings->setPrinterName("NO SUCH PRINTER (laideal test)");
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = 'En tienda' WHERE hash='h671b'"));
+        text = press();
+        settings->setEnablePrinting(false);
+        settings->setPrinterName(printerBefore);
+        QVERIFY2(!text.contains("Facturas impresas:") && text.contains("No se han impreso: 671 (error de impresión), 671-1 (error de impresión)"),
+                 qPrintable(text));
+        QVERIFY2(text.contains("No se pudo imprimir el ticket"), qPrintable(text));
+    }
+
     // The Imprimir window stays open between prints, so a QR fetched for one invoice
     // must never be printed on the next one (here a voided ticket, which has none).
     // A reprint never prints a blank ticket nor an invoice AEAT never received: a number
