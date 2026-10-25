@@ -1528,6 +1528,19 @@ private slots:
         QVERIFY(!ticketAllGarmentsPaid(m_db, "NOPE"));
     }
 
+    // imprimir F5: a voided garment keeps pagado='NO' and is not on the printed ticket,
+    // so it must not keep a fully-paid reprint from showing IMPORTE PAGADO.
+    void test_ticketAllGarmentsPaid_ignoresAnulado()
+    {
+        insertIngreso("A5", "10-03-2026", "10.00", "SI", "ENVIADA");
+        insertIngreso("A5", "",           "20.00", "NO", "");
+        exec("UPDATE ingresos SET estado = 'Anulado' WHERE n_recibo = 'A5' AND pagado = 'NO'");
+        QVERIFY(ticketAllGarmentsPaid(m_db, "A5"));
+        insertIngreso("A6", "", "20.00", "NO", "");
+        exec("UPDATE ingresos SET estado = 'Anulado' WHERE n_recibo = 'A6'");
+        QVERIFY(!ticketAllGarmentsPaid(m_db, "A6"));           // nothing left on the ticket
+    }
+
     // A migrated SIN COBRAR row must not resurface in the recovery dialog: the
     // estado filter excludes it on its own, independently of the pagado gate.
     void test_pendingVerifactuEvents_excludesSinCobrar()
@@ -1668,6 +1681,32 @@ private slots:
         const QString part = splitGarmentRow(m_db, "402", "m2", 1);
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = :h", { {":h", part} }), QStringLiteral("7.51"));
         QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash = 'm2'"), QStringLiteral("15.005"));
+    }
+
+    // sql_lite F9: a commit that fails (another connection still reading) is reported as a
+    // failed split - empty hash, rows as they were - instead of a success that was not stored.
+    void test_splitGarmentRow_commitFailureReturnsEmpty()
+    {
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, cantidad, hash, verifactu_estado) "
+             "VALUES ('0', '403', '05-04-2026', '9.00', 'NO', '3', 'cf', '')");
+        m_db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=0");
+        QSqlDatabase reader = QSqlDatabase::addDatabase("QSQLITE", "split_reader");
+        reader.setDatabaseName(m_db.databaseName());
+        QVERIFY(reader.open());
+        QSqlQuery hold(reader);
+        QVERIFY(hold.exec("BEGIN"));
+        QVERIFY(hold.exec("SELECT * FROM ingresos"));
+        QVERIFY(hold.next());                                  // keeps the read lock
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("splitGarmentRow: commit failed.*"));
+        QVERIFY(splitGarmentRow(m_db, "403", "cf", 1).isEmpty());
+        hold.finish();
+        reader.close();
+        reader = QSqlDatabase();
+        QSqlDatabase::removeDatabase("split_reader");
+        m_db.setConnectOptions();
+        QCOMPARE(scalar("SELECT COUNT(*) || '|' || cantidad || '|' || importe FROM ingresos WHERE n_recibo = '403'"),
+                 QStringLiteral("1|3|9.00"));
+        QCOMPARE(splitGarmentRow(m_db, "403", "cf", 1).size(), 16);
     }
 
     // Garments split off a paid row before 10.14 were left with an empty estado,

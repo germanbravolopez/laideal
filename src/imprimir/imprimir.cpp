@@ -334,7 +334,8 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 
     d.isRecibo          = isRecibo;
     d.isCompleteInvoice = isCompleteInvoice;
-    d.invoiceId         = displayInvoiceId();
+    // A recibo is the claim ticket: its number is the n_recibo, never a payment event's invoice id.
+    d.invoiceId         = isRecibo ? le_n_ticket->text().trimmed() : displayInvoiceId();
     const QString client = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString();
     d.clientName     = client;
     d.receptionDate  = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-", "/");
@@ -445,9 +446,18 @@ bool Imprimir::printTicket()
         // honour our BiDirectIOEx timeout on that path), ~5.5 s total. A genuine
         // hang is indefinite, so the wide margin distinguishes the two and a normal
         // offline print is never mistaken for a hang. See docs/modules/printing.md.
+        bool mayStillPrint = false;
         const bool sent = StatusApiPrinter::sendAndReadStatusBounded(
-            m_ticketBytes, printer, &status, &statusErr, 10000);
+            m_ticketBytes, printer, &status, &statusErr, 10000, &mayStillPrint);
         QApplication::restoreOverrideCursor();
+        // The hang was inside the send itself: the Epson DLL may still print this
+        // ticket, so RAW would print it twice. Leave the call to the operator.
+        if (mayStillPrint) {
+            qWarning() << "Imprimir::printTicket: Status API blocked during the send, not resending by RAW:" << statusErr;
+            reportPrinterProblem("La impresora no respondió al enviar el ticket y puede que se imprima igualmente.\n"
+                                 "Compruebe la impresora antes de volver a imprimirlo.", true);
+            return false;
+        }
         bool warned = false;
         if (status.valid && (status.hasError() || status.hasWarning())) {
             qWarning() << "Imprimir::printTicket status:" << status.summary()
@@ -582,17 +592,32 @@ void Imprimir::onPrintClicked()
         else
             toPrint << events[m_cbEvent->currentIndex()];
         QStringList printed;
+        QStringList notPrinted;
         for (const auto &ev : toPrint) {
             invoiceSeq = ev.first;
             qrCode = QPixmap();
             getTicketInfo();
+            if (sqlQueryModel->rowCount() == 0) {
+                notPrinted << labelFor(ev) + " (sin prendas pagadas)";
+                continue;
+            }
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
-            sendIfEnabled();
+            if (AppSettings::instance()->enablePrinting() && !printTicket()) {
+                notPrinted << labelFor(ev) + " (error de impresión)";
+                continue;
+            }
             printed << labelFor(ev) + (m_lastVoidedMarker.isEmpty()
                                            ? QString() : " (" + m_lastVoidedMarker.toLower() + ", sin QR)");
         }
-        m_lblResult->setText(UiKit::okHtml("Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".")
-                             + printingOff + problems());
+        QString summary;
+        if (!printed.isEmpty()) {
+            const QString text = "Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".";
+            summary = notPrinted.isEmpty() ? UiKit::okHtml(text) : UiKit::warnHtml(text);
+        }
+        if (!notPrinted.isEmpty())
+            summary += (summary.isEmpty() ? QString() : "<br>")
+                       + UiKit::warnHtml("No se han impreso: " + notPrinted.join(", ").toHtmlEscaped() + ".");
+        m_lblResult->setText(summary + printingOff + problems());
         return;
     }
 

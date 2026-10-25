@@ -10,6 +10,7 @@
 #include "escposbuilder.h"
 #include "ticketrenderer.h"
 #include "printerstatus.h"
+#include "statusapiprinter.h"
 
 // ESC/POS marker fragments reused across assertions.
 static const QByteArray INIT_BYTES   = QByteArray("\x1B\x40\x1B\x74\x13", 5); // ESC @ + ESC t 19
@@ -298,6 +299,21 @@ private slots:
 
         const QByteArray out = TicketRenderer::render(d, 576);
         QVERIFY(out.contains(RASTER_HDR));      // GS v 0 raster image emitted
+    }
+
+    // --- StatusApiSendGate: a worker the watchdog gave up on must not send later ---
+    void test_sendGate_abandonedWorkerNeverSends()
+    {
+        StatusApiSendGate gate;
+        QVERIFY(gate.abandon());          // watchdog first: the worker had not started sending
+        QVERIFY(!gate.beginSend());       // so the worker's later send is refused
+    }
+
+    void test_sendGate_sendingWorkerIsNotAbandonable()
+    {
+        StatusApiSendGate gate;
+        QVERIFY(gate.beginSend());
+        QVERIFY(!gate.abandon());         // already inside the send: RAW fallback would print twice
     }
 
     // --- PrinterStatus: ASB status-word decode (Status API, optional path) ---

@@ -818,6 +818,17 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     if (dbNotConfigured(db, __func__)) return QString();
 
     ConnectionScope scope(db);
+    // Both writes or none: without a transaction a failed INSERT would leave the
+    // original row reduced and the split-off garments lost. The row is read inside
+    // it, so the amounts split below are the ones the UPDATE then guards.
+    if (!db.transaction()) {
+        qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
+        return QString();
+    }
+    const auto abort = [&db]() {
+        db.rollback();
+        return QString();
+    };
     QSqlQuery q(db);
     q.prepare("SELECT cantidad, importe, " + closedQuarterSql("ingresos.fecha_pago")
               + " FROM ingresos WHERE n_recibo = :n AND hash = :h");
@@ -825,21 +836,22 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     q.bindValue(":h", hash);
     if (!q.exec() || !q.first()) {
         qWarning() << "splitGarmentRow: row not found -" << nRecibo << hash << q.lastError().text();
-        return QString();
+        return abort();
     }
     const int qty = q.value(0).toInt();
+    const QString oldImporte = q.value(1).toString();
     if (q.value(2).toBool()) {
         qWarning() << "splitGarmentRow: row is locked by Contabilidad -" << nRecibo << hash;
-        return QString();
+        return abort();
     }
     if (nGarm < 1 || nGarm >= qty) {
         qWarning() << "splitGarmentRow: cannot split" << nGarm << "of" << qty << "on" << nRecibo << hash;
-        return QString();
+        return abort();
     }
     // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
     // so the two rows add up to the stored importe and an older paid amount stored
     // with more decimals is never re-rounded.
-    const double total = q.value(1).toString().replace(',', '.').toDouble();
+    const double total = QString(oldImporte).replace(',', '.').toDouble();
     const qint64 total4 = qRound64(total * 10000.0);
     const qint64 split4 = qRound64(roundToCents(total * nGarm / qty) * 100.0) * 100;
     const auto money = [](qint64 v4) {
@@ -851,21 +863,16 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     const QString newHash = genHash16();
     q.finish();
 
-    // Both writes or none: without a transaction a failed INSERT would leave the
-    // original row reduced and the split-off garments lost.
-    if (!db.transaction()) {
-        qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
-        return QString();
-    }
     QSqlQuery u(db);
-    // Same row as read above: still unlocked and with the same quantity.
+    // Same row as read above: still unlocked, with the same quantity and importe.
     u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
-              "AND cantidad = :oldCant" + kUnlockedWhere);
+              "AND cantidad = :oldCant AND importe = :oldImp" + kUnlockedWhere);
     u.bindValue(":cant", QString::number(qty - nGarm));
     u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);
     u.bindValue(":h",    hash);
     u.bindValue(":oldCant", QString::number(qty));
+    u.bindValue(":oldImp",  oldImporte);
     bool ok = u.exec() && u.numRowsAffected() == 1;
     // Every other column is copied, verifactu_* included: the split-off garments stay
     // in the invoice (and the estado) of the row they come from. edit_lock: always '0' (see kUnlockedWhere).
@@ -889,13 +896,15 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     i.bindValue(":n",       nRecibo);
     i.bindValue(":h",       hash);
     ok = ok && i.exec() && i.numRowsAffected() == 1;
-    if (ok) {
-        db.commit();
-    } else {
+    if (ok && !db.commit()) {
+        qWarning() << "splitGarmentRow: commit failed on" << nRecibo << hash << "-" << db.lastError().text();
+        ok = false;
+    } else if (!ok) {
         qWarning() << "splitGarmentRow: failed on" << nRecibo << hash << "-"
                    << u.lastError().text() << i.lastError().text();
-        db.rollback();
     }
+    if (!ok)
+        db.rollback();
     return ok ? newHash : QString();
 }
 
@@ -945,10 +954,12 @@ bool ticketAllGarmentsPaid(QSqlDatabase &db, const QString &nRecibo)
     QSqlQuery q(db);
     // Strict pagado='SI' (not "!= NO"): a blank must not read as paid. A ticket
     // with no rows is not "all paid" either, hence the total > 0 guard - otherwise
-    // an empty result would print IMPORTE PAGADO on nothing.
+    // an empty result would print IMPORTE PAGADO on nothing. Voided rows keep
+    // pagado='NO' and are not on the printed ticket, so they do not count.
     q.prepare("SELECT COUNT(*), SUM(CASE WHEN pagado = 'SI' THEN 1 ELSE 0 END) "
-              "FROM ingresos WHERE n_recibo = :n");
+              "FROM ingresos WHERE n_recibo = :n AND (estado IS NULL OR estado != :anulado)");
     q.bindValue(":n", nRecibo);
+    q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     bool allPaid = false;
     if (q.exec() && q.first()) {
         const int total = q.value(0).toInt();
