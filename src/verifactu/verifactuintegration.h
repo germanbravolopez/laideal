@@ -139,7 +139,7 @@ private:
     QString m_lastError;
     QHash<QString, QString> m_inFlight;   // request id -> invoice id, until its answer
 
-    bool loadEmitterConfiguration();
+    void loadEmitterConfiguration();
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,
                                        double taxRate, const QString &description) const;
 };

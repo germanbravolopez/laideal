@@ -199,7 +199,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | `verifactu.nif` | Emitter NIF |
 | `verifactu.name` | Emitter name (`CompanyName` sent to AEAT) |
 | `verifactu.serviceKey` | API ServiceKey — obtain at https://facturae.irenesolutions.com/verifactu/go |
-| `verifactu.production` | `false` = TESTING, `true` = PRODUCTION (the gateway's environment) |
+| `verifactu.production` | `false` = TESTING, `true` = PRODUCTION. For the gateway the ServiceKey decides the environment (both endpoints are the same URL): this box does not route invoices, it only changes the (unused) validation URL and makes the app refuse gateway rectificativas in PRODUCTION |
 | `verifactu.connection` | `irenesolutions` (default until the shop switches) or `aeat` - the direct client |
 | `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Set in Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)*, which asks for confirmation; never the gateway's PRODUCCIÓN box. While it is `false`, the main window's status bar shows "AEAT: entorno de PRUEBAS" (`lblAeatEnvironment`) |
 | `verifactu.aeat_chain_marker` | Written by the direct client: `<environment>|<issuer>|<huella of the chain's last record>` as this installation last saw it. A database whose chain differs (restored from an older backup, or a new PC) must reach AEAT at start before any record, as on a first start |
@@ -303,4 +303,4 @@ Direct connection: the owner's certificate is either read from the Windows perso
 
 - ServiceKey is encrypted at rest in `~/.laideal_settings.json` with Windows DPAPI (per-user `CryptProtectData`, `dpapi:v1:` marker); `AppSettings` decrypts transparently on read and legacy plaintext is auto-migrated on load. Note DPAPI binds the ciphertext to the Windows user+machine, so the key must be re-entered after a reinstall or migration to another account.
 - Never mix real data into TESTING.
-- Always validate end-to-end in TESTING before switching `verifactu.production` to `true`.
+- With the gateway, the ServiceKey (test or production key) decides where invoices go; `verifactu.production` never does. Switching the box without changing the key changes nothing at the gateway.

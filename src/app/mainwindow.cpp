@@ -907,11 +907,15 @@ bool MainWindow::validateTicket()
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
-        if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC))
-            continue;
         auto *cbGarment = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
         QTableWidgetItem *qty = ui->table_ticket->item(row, TABLE_TICKET_QNTY);
         const QString garment = cbGarment ? cbGarment->currentText() : QString();
+        if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
+            // A typed garment that is not in the price list has no price: it would be dropped.
+            if (!garment.isEmpty())
+                return refuse(tr("La prenda de la fila %1 no tiene precio.").arg(row + 1));
+            continue;
+        }
         if (garment.isEmpty() && ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
             continue;   // an empty slot
         if (!qty || qty->text().toInt() == 0)
@@ -921,6 +925,8 @@ bool MainWindow::validateTicket()
         QTableWidgetItem *size = ui->table_ticket->item(row, TABLE_TICKET_SIZE);
         if (garmentUnmeasured(garment, size ? size->text() : QString()))
             sizePending = true;
+        else if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
+            return refuse(tr("La prenda de la fila %1 no tiene precio.").arg(row + 1));
         const double price = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
         if (price < 0.0)
             return refuse(tr("La prenda de la fila %1 tiene un importe negativo; las correcciones se hacen "
@@ -1265,7 +1271,13 @@ void MainWindow::on_pb_save_clicked()
                         });
                     connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
                     timeout.start(3000);
-                    loop.exec();
+                    // Limpiar, the menus and the edits would change the ticket being printed.
+                    const bool menuWasEnabled = menuBar()->isEnabled();
+                    centralWidget()->setEnabled(false);
+                    menuBar()->setEnabled(false);
+                    loop.exec(QEventLoop::ExcludeUserInputEvents);
+                    centralWidget()->setEnabled(true);
+                    menuBar()->setEnabled(menuWasEnabled);
                     QObject::disconnect(conn);
                 }
 

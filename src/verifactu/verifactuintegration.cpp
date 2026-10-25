@@ -2,6 +2,9 @@
 #include "aeatdirectbackend.h"
 #include "appsettings.h"
 #include <QDebug>
+#include <QNetworkReply>
+#include <QTimer>
+#include <algorithm>
 #include <QSqlDatabase>
 
 VerifactuIntegration::VerifactuIntegration(QObject *parent)
@@ -13,6 +16,30 @@ VerifactuIntegration::~VerifactuIntegration()
 {
 }
 
+namespace {
+// An old gateway client keeps its signals until the replies it is still waiting for are
+// in, then goes: deleting it at once would drop a submit whose outcome is unknown.
+void retireManager(VerifactuManager *manager)
+{
+    if (!manager)
+        return;
+    auto running = [manager] {
+        const auto replies = manager->findChildren<QNetworkReply *>();
+        return std::any_of(replies.cbegin(), replies.cend(), [](QNetworkReply *r) { return r->isRunning(); });
+    };
+    if (!running()) {
+        delete manager;
+        return;
+    }
+    auto *poll = new QTimer(manager);
+    QObject::connect(poll, &QTimer::timeout, manager, [manager, running] {
+        if (!running())
+            manager->deleteLater();
+    });
+    poll->start(200);
+}
+} // namespace
+
 bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 {
     // Again after Configuración: one backend at a time (two direct clients would both
@@ -20,7 +47,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     if (m_direct)
         m_direct->releaseWaiters();         // the windows still waiting hear an answer
     delete m_direct;
-    delete m_manager;
+    retireManager(m_manager);
     m_direct = nullptr;
     m_manager = nullptr;
     m_backend = nullptr;
@@ -50,11 +77,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         connect(m_direct, &AeatDirectBackend::chainSynced, this, &VerifactuIntegration::chainChecked);
     } else {
         m_manager = new VerifactuManager(this);
-        if (!loadEmitterConfiguration()) {
-            m_lastError = "No se pudo cargar la configuración del emisor";
-            qWarning() << "Verifactu emitter configuration failed to load";
-            return false;
-        }
+        loadEmitterConfiguration();
         m_backend = m_manager;
     }
 
@@ -71,7 +94,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
 
     qDebug().noquote() << m_backend->configurationInfo();
     if (!m_backend->isConfigured()) {
-        m_lastError = m_direct ? m_direct->configurationError() : QStringLiteral("Verifactu no está configurado correctamente");
+        m_lastError = m_direct ? m_direct->configurationError() : m_manager->getConfig()->getValidationError();
         return false;
     }
     return true;
@@ -360,19 +383,14 @@ bool VerifactuIntegration::isConfigured() const
     return m_backend && m_backend->isConfigured();
 }
 
-bool VerifactuIntegration::loadEmitterConfiguration()
+void VerifactuIntegration::loadEmitterConfiguration()
 {
-    if (!m_manager) return false;
+    if (!m_manager) return;
 
     AppSettings *settings = AppSettings::instance();
     QString emitterNIF  = settings->verifactuNif();
     QString emitterName = settings->verifactuName();
     QString serviceKey  = settings->verifactuServiceKey();
-
-    if (emitterNIF.isEmpty() || emitterName.isEmpty()) {
-        qCritical() << "Emitter NIF or name not configured in AppSettings";
-        return false;
-    }
 
     m_manager->getConfig()->setEmitterData(emitterNIF, emitterName);
     m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION));
@@ -382,11 +400,4 @@ bool VerifactuIntegration::loadEmitterConfiguration()
         ? VerifactuConfig::PRODUCTION
         : VerifactuConfig::TESTING;
     m_manager->getConfig()->setEnvironment(env);
-
-    if (!m_manager->getConfig()->isValid()) {
-        qCritical() << "Verifactu configuration is invalid:" << m_manager->getConfig()->getValidationError();
-        return false;
-    }
-
-    return true;
 }
