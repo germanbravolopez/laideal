@@ -2091,9 +2091,9 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // paid-at-save row. A row with no fecha_pago (unpaid) yields an invalid date
     // the dialog refuses to retry - correct, it has no AEAT invoice to recover.
     //
-    // The recovery FLOOR, however, gates on fecha_recepcion (when the ticket
-    // entered the system) to exclude pre-Verifactu legacy tickets; both columns
-    // store dd-MM-yyyy, substr-rebuilt to yyyy-MM-dd for lexicographic compares.
+    // The recovery FLOOR gates on the invoice's own date (its earliest fecha_pago), like
+    // refusedInvoices: a legacy ticket paid before Verifactu is left out, while a ticket
+    // received before the floor and paid after it is an invoice and must be listed.
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
@@ -2104,12 +2104,12 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "  AND pagado = 'SI' "
         "  AND fecha_pago IS NOT NULL AND fecha_pago != '' "
         "  AND COALESCE(verifactu_rectifies_n_recibo, '') = '' "      // never resent as a plain invoice
-        "  AND substr(fecha_recepcion, 7, 4) || '-' "
-        "      || substr(fecha_recepcion, 4, 2) || '-' "
-        "      || substr(fecha_recepcion, 1, 2) >= :floor "
         "GROUP BY n_recibo, verifactu_invoice_seq "
+        "HAVING date(:floor) IS NULL OR MIN(" + kFechaPagoIso + ") IS NULL "
+        "    OR MIN(" + kFechaPagoIso + ") >= date(:floor2) "
         "ORDER BY " N_RECIBO_ORDER " DESC, verifactu_invoice_seq");
     q.bindValue(":floor", floorIso);
+    q.bindValue(":floor2", floorIso);
     if (!q.exec()) {
         qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
         return events;

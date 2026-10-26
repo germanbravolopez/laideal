@@ -1564,7 +1564,7 @@ private slots:
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
     // reception date: a partial pay made on a different day than reception would
     // otherwise register a second invoice at AEAT (date is part of the invoice
-    // identity). The recovery FLOOR still gates on fecha_recepcion.
+    // identity). The recovery FLOOR gates on that payment date too.
     void test_pendingVerifactuEvents_returnsPaymentDate()
     {
         // reception 10-03-2026 (after floor), paid later on 25-06-2026.
@@ -1577,9 +1577,11 @@ private slots:
         QCOMPARE(ev.size(), 1);
         QCOMPARE(ev[0].fechaPago, QStringLiteral("25-06-2026")); // payment date, not 10-03-2026
 
-        // And the floor gates on reception: a reception before the floor is excluded
-        // even though its payment date is after it.
+        // The floor gates on the payment: a payment before it is left out...
         QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
+        // ...while one after it is listed although the ticket was received before it
+        // (shop 26-10-2026: tickets received in April-August, paid in October, never listed).
+        QCOMPARE(pendingVerifactuEvents(m_db, "2026-06-01").size(), 1);
     }
 
     // A ticket whose two payment events (Q1 and Q2) are both cancelled in Q2 is one
