@@ -329,7 +329,8 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
     // place. The estado moves first, so the trigger no longer guards the row. Idempotent.
     {
         const QString stamped = QStringLiteral(
-            "SELECT u.rowid FROM ingresos u WHERE (u.pagado IS NULL OR u.pagado != 'SI') "
+            "SELECT u.rowid, u.n_recibo, u.verifactu_csv, u.verifactu_invoice_seq, u.estado FROM ingresos u "
+            "WHERE COALESCE(u.pagado, '') IN ('', 'NO') "
             "  AND u.verifactu_estado = 'ENVIADA' AND COALESCE(u.verifactu_csv, '') != '' "
             "  AND EXISTS (SELECT 1 FROM ingresos p WHERE p.n_recibo = u.n_recibo AND p.pagado = 'SI' "
             "              AND p.verifactu_csv = u.verifactu_csv)");
@@ -337,8 +338,14 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
         QSqlQuery find(db);
         if (!find.exec(stamped))
             fail() << "migrateDatabase: stamped-unpaid search failed -" << find.lastError().text();
-        while (find.next())
+        while (find.next()) {
             rows.append(find.value(0).toLongLong());
+            // The cleared columns leave no other trace: say which row held what.
+            qWarning() << "migrateDatabase: unpaid garment row" << find.value(0).toLongLong() << "of ticket"
+                       << find.value(1).toString() << "carried the paid invoice's CSV" << find.value(2).toString()
+                       << "seq" << find.value(3).toInt() << "- cleared to"
+                       << (find.value(4).toString() == QLatin1String(INGRESOS_ESTADO_ANULADO) ? "ANULADA" : "SIN COBRAR");
+        }
         find.finish();
         QSqlQuery relabel(db), clear(db);
         relabel.prepare("UPDATE ingresos SET verifactu_estado = CASE WHEN estado = '" INGRESOS_ESTADO_ANULADO
@@ -347,9 +354,11 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
                       "verifactu_error = NULL, verifactu_url_qr = NULL, verifactu_xml = NULL, "
                       "verifactu_hash = NULL, verifactu_invoice_id = NULL, verifactu_invoice_seq = 0 "
                       "WHERE rowid = :r");
-        db.transaction();   // every row or none
-        bool cleared = true;
-        for (qlonglong r : rows) {
+        // Every row or none: relabelled but not cleared, a row would no longer match.
+        bool cleared = rows.isEmpty() || db.transaction();
+        if (!cleared)
+            fail() << "migrateDatabase: stamped-unpaid repair skipped, no transaction -" << db.lastError().text();
+        for (qlonglong r : cleared ? rows : QVector<qlonglong>()) {
             relabel.bindValue(":r", r);
             clear.bindValue(":r", r);
             if (!relabel.exec() || !clear.exec()) {
@@ -359,7 +368,12 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
                 break;
             }
         }
-        if (cleared) db.commit(); else db.rollback();
+        if (!rows.isEmpty() && cleared && !db.commit()) {
+            cleared = false;
+            fail() << "migrateDatabase: stamped-unpaid repair commit failed -" << db.lastError().text();
+        }
+        if (!rows.isEmpty() && !cleared)
+            db.rollback();
         if (cleared && !rows.isEmpty())
             qDebug() << "migrateDatabase: cleared a paid sibling's AEAT invoice data from"
                      << rows.size() << "unpaid garment(s)";
