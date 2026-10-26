@@ -1,5 +1,9 @@
 ﻿Versiones:
 
+12.2
+- Corrección: algunas prendas sin cobrar de un ticket con otras prendas cobradas antes de septiembre de 2026 no se podían cobrar desde la 12.0 (el cobro no se guardaba). Al iniciar, el programa corrige esas prendas y se pueden cobrar con normalidad.
+- Comprobar tras actualizar: los importes guardados como "6." se leen bien, y un importe que no se puede leer se indica con su número de ticket.
+
 12.1
 - Corrección: desde la 11.2, "Añadir prendas" no podía añadir una prenda sin cobrar a un ticket ("NOT NULL constraint failed: ingresos.fecha_pago"). Ya funciona.
 - Comprobar tras actualizar: el instalador la deja marcada al terminar (y ya no abre el programa); el primer inicio tras una actualización recuerda ejecutarla; también está en Ayuda → Comprobar tras actualizar…, y al terminar indica qué enviar (el informe, el registro del programa y una foto de la primera factura impresa).
