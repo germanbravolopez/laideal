@@ -51,6 +51,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     m_direct = nullptr;
     m_manager = nullptr;
     m_backend = nullptr;
+    VerifactuConfig::removeLegacyIni();
     AppSettings *settings = AppSettings::instance();
     m_emitterNif  = settings->verifactuNif();
     m_emitterName = settings->verifactuName();

@@ -175,9 +175,11 @@ bool AeatCertificate::loadFromFile(const QString &path, const QString &password,
 #ifdef Q_OS_WIN
     QByteArray data = file.readAll();
     CRYPT_DATA_BLOB blob{ DWORD(data.size()), reinterpret_cast<BYTE *>(data.data()) };
-    const std::wstring pw = password.toStdWString();
+    std::wstring pw = password.toStdWString();
     // In memory only: the key is not written to the Windows key store.
     HCERTSTORE store = PFXImportCertStore(&blob, pw.c_str(), PKCS12_NO_PERSIST_KEY | CRYPT_USER_KEYSET);
+    SecureZeroMemory(data.data(), size_t(data.size()));
+    SecureZeroMemory(&pw[0], pw.size() * sizeof(wchar_t));
     if (!store) {
         *error = tr("No se puede abrir el certificado %1: contraseña incorrecta o archivo no válido.").arg(path);
         return false;

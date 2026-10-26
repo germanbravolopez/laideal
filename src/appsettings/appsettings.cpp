@@ -9,6 +9,8 @@
 #include <QUuid>
 #include <QJsonDocument>
 #include <QDebug>
+#include <QThread>
+#include <QCoreApplication>
 
 #ifdef Q_OS_WIN
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -25,6 +27,18 @@ namespace {
 // Marker for a value encrypted at rest. A stored value without this prefix is
 // treated as legacy plaintext (and re-encrypted on the next launch).
 const QString kEncPrefix = QStringLiteral("dpapi:v1:");
+
+// Defaults shared by applyDefaults() and the getters' fallbacks.
+constexpr bool   kDefaultPendingRecoveryEnabled = true;
+constexpr bool   kDefaultCheckUpdates = true;
+constexpr bool   kDefaultBackupEnabled = true;
+constexpr double kDefaultPaperWidthMm = 80;
+
+// The direct backend calls the persisting setters; they are not thread-safe.
+void assertMainThread()
+{
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+}
 
 bool isEncrypted(const QString &stored) { return stored.startsWith(kEncPrefix); }
 
@@ -81,6 +95,8 @@ QString AppSettings::dpapiEncrypt(const QString &plain)   { return encryptSecret
 QString AppSettings::dpapiDecrypt(const QString &stored)  { return decryptSecret(stored); }
 bool    AppSettings::dpapiIsEncrypted(const QString &stored) { return isEncrypted(stored); }
 
+QString AppSettings::defaultPendingRecoveryFloorDate() { return QStringLiteral("2026-09-01"); }
+
 AppSettings *AppSettings::s_instance = nullptr;
 
 AppSettings *AppSettings::instance()
@@ -111,22 +127,22 @@ void AppSettings::applyDefaults()
     if (str({"verifactu", "environment"}).isEmpty())
         setStr({"verifactu", "environment"}, "TESTING");
     if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
-        setBln({"verifactu", "pending_recovery_enabled"}, true);
+        setBln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled);
     if (verifactuPendingRecoveryFloorDate().isEmpty())
-        setStr({"verifactu", "pending_recovery_floor_date"}, "2026-09-01");
+        setStr({"verifactu", "pending_recovery_floor_date"}, defaultPendingRecoveryFloorDate());
     if (reportsRoot().isEmpty())
         setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
     // Default: opt-in startup check. bln() has a default-fallback parameter,
     // but the key must be persisted so future save() preserves it across upgrades.
     if (!m_data.value("updater").toObject().contains("check_on_startup"))
-        setBln({"updater", "check_on_startup"}, true);
+        setBln({"updater", "check_on_startup"}, kDefaultCheckUpdates);
     // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives
     // the directory). Default opt-in.
     if (!m_data.value("backup").toObject().contains("enabled"))
-        setBln({"backup", "enabled"}, true);
+        setBln({"backup", "enabled"}, kDefaultBackupEnabled);
     // Thermal printer roll width (mm). Default 80; persisted so an upgrade keeps it.
     if (!m_data.value("print").toObject().contains("paper_width_mm"))
-        setDbl({"print", "paper_width_mm"}, 80);
+        setDbl({"print", "paper_width_mm"}, kDefaultPaperWidthMm);
 }
 
 bool AppSettings::load()
@@ -134,9 +150,11 @@ bool AppSettings::load()
     QFile file(m_filePath);
 
     if (!file.exists()) {
-        migrateFromLegacyFiles();
+        if (!m_readOnly)
+            migrateFromLegacyFiles();
         encryptSecretsAtRest();   // a key brought in from ~/.verifactu_key must not land as plaintext
         applyDefaults();
+        if (m_readOnly) return false;
         // The plaintext legacy key file goes once the settings hold the encrypted copy.
         if (save() && !m_legacyKeyFile.isEmpty() && QFile::remove(m_legacyKeyFile))
             qDebug() << "AppSettings: removed the plaintext legacy key file";
@@ -158,7 +176,7 @@ bool AppSettings::load()
         // Kept aside: the next save would otherwise overwrite the only copy of the
         // database path and the credentials with defaults.
         const QString aside = m_filePath + ".corrupt-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
-        const bool kept = QFile::rename(m_filePath, aside);
+        const bool kept = !m_readOnly && QFile::rename(m_filePath, aside);
         qCritical() << "AppSettings: JSON parse error:" << err.errorString() << "- the file is"
                     << (kept ? "kept as " + aside : QStringLiteral("NOT kept aside"));
         applyDefaults();
@@ -179,13 +197,26 @@ bool AppSettings::load()
 
 bool AppSettings::loadFrom(const QString &path)
 {
+    m_readOnly = false;
     m_filePath = path;
     m_data = QJsonObject();   // drop constructor defaults so the file is the sole source
     return load();
 }
 
+bool AppSettings::loadReadOnly(const QString &path)
+{
+    m_filePath = path;
+    m_data = QJsonObject();
+    m_readOnly = true;
+    return load();
+}
+
 bool AppSettings::save() const
 {
+    if (m_readOnly) {
+        m_lastSaveError = QStringLiteral("settings loaded read-only");
+        return false;
+    }
     // QSaveFile writes a temporary file and replaces the target in one step on commit:
     // a crash mid-write leaves the previous settings intact, never no file.
     QSaveFile file(m_filePath);
@@ -320,7 +351,7 @@ void AppSettings::setEnablePrinting(bool v) { setStr({"print", "enable"}, v ? "Y
 QString AppSettings::printerName() const          { return str({"print", "printer_name"}); }
 void    AppSettings::setPrinterName(const QString &v) { setStr({"print", "printer_name"}, v); }
 
-int  AppSettings::paperWidthMm() const  { return static_cast<int>(dbl({"print", "paper_width_mm"}, 80)); }
+int  AppSettings::paperWidthMm() const  { return static_cast<int>(dbl({"print", "paper_width_mm"}, kDefaultPaperWidthMm)); }
 void AppSettings::setPaperWidthMm(int v) { setDbl({"print", "paper_width_mm"}, v); }
 
 bool AppSettings::useStatusApi() const { return str({"print", "use_status_api"}) == "Yes"; }
@@ -340,10 +371,6 @@ void    AppSettings::setBusinessCity(const QString &v) { setStr({"business", "ci
 
 QString AppSettings::businessPhone() const   { return str({"business", "phone"}); }
 void    AppSettings::setBusinessPhone(const QString &v) { setStr({"business", "phone"}, v); }
-
-// ---------------------------------------------------------------------------
-// Taxes
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Verifactu
@@ -375,6 +402,7 @@ void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"ver
 QString AppSettings::aeatChainMarker() const { return str({"verifactu", "aeat_chain_marker"}); }
 void AppSettings::setAeatChainMarker(const QString &v)
 {
+    assertMainThread();
     setStr({"verifactu", "aeat_chain_marker"}, v);
     save();   // at once: it must survive a crash before any other save
 }
@@ -383,6 +411,7 @@ QString AppSettings::aeatInstallationNumber()
 {
     QString number = str({"verifactu", "aeat_installation"});
     if (number.isEmpty()) {
+        assertMainThread();
         number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
         setStr({"verifactu", "aeat_installation"}, number);
         save();   // at once: every record carries it, so it may never change between runs
@@ -390,7 +419,7 @@ QString AppSettings::aeatInstallationNumber()
     return number;
 }
 
-bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, true); }
+bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled); }
 void    AppSettings::setVerifactuPendingRecoveryEnabled(bool v) { setBln({"verifactu", "pending_recovery_enabled"}, v); }
 QString AppSettings::verifactuPendingRecoveryFloorDate() const { return str({"verifactu", "pending_recovery_floor_date"}); }
 void    AppSettings::setVerifactuPendingRecoveryFloorDate(const QString &v) { setStr({"verifactu", "pending_recovery_floor_date"}, v); }
@@ -398,13 +427,13 @@ void    AppSettings::setVerifactuPendingRecoveryFloorDate(const QString &v) { se
 // ---------------------------------------------------------------------------
 // Updater
 // ---------------------------------------------------------------------------
-bool AppSettings::checkUpdatesOnStartup() const    { return bln({"updater", "check_on_startup"}, true); }
+bool AppSettings::checkUpdatesOnStartup() const    { return bln({"updater", "check_on_startup"}, kDefaultCheckUpdates); }
 void AppSettings::setCheckUpdatesOnStartup(bool v) { setBln({"updater", "check_on_startup"}, v); }
 
 // ---------------------------------------------------------------------------
 // Backup (Verifactu Req. 4)
 // ---------------------------------------------------------------------------
-bool    AppSettings::backupEnabled() const            { return bln({"backup", "enabled"}, true); }
+bool    AppSettings::backupEnabled() const            { return bln({"backup", "enabled"}, kDefaultBackupEnabled); }
 void    AppSettings::setBackupEnabled(bool v)         { setBln({"backup", "enabled"}, v); }
 QString AppSettings::backupLastTime() const           { return str({"backup", "last_time"}); }
 void    AppSettings::setBackupLastTime(const QString &v) { setStr({"backup", "last_time"}, v); }

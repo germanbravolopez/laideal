@@ -1,6 +1,7 @@
 #ifndef VERIFACTUMANAGER_H
 #define VERIFACTUMANAGER_H
 
+#include <memory>
 #include <QString>
 #include <QObject>
 #include <QNetworkAccessManager>
@@ -22,7 +23,7 @@ public:
     explicit VerifactuManager(QObject *parent = nullptr);
     ~VerifactuManager();
 
-    VerifactuConfig *getConfig() const { return m_config; }
+    VerifactuConfig *getConfig() const { return m_config.get(); }
 
     // Async API. Each call returns a unique request ID; the caller correlates it with
     // the requestFinished signal to pick up its own result. Validation errors and
@@ -51,7 +52,7 @@ private:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;
     QString getLastError() const { return m_lastError; }
 
-    VerifactuConfig *m_config;
+    std::unique_ptr<VerifactuConfig> m_config;
     QNetworkAccessManager *m_networkManager;
     QString m_lastError;
 

@@ -55,11 +55,8 @@ inline QString verifactuEstadoDisplay(const QString &stored)
     return e == VerifactuEstado::Unknown ? stored : verifactuEstadoToString(e);
 }
 
-// True for the two states that mean "AEAT has not accepted this row (yet)".
-// Every gate that used to test `== NotSubmitted` must use this instead: paying a
-// garment does not rewrite verifactu_estado, so a row is still Unpaid at the
-// moment RecogPrendas decides whether to submit it - testing NotSubmitted alone
-// would silently stop paid garments from reaching AEAT.
+// True for the two states that mean "AEAT has not accepted this row (yet)": paying a
+// garment does not rewrite verifactu_estado, so a paid row can still be Unpaid.
 inline bool verifactuEstadoIsUnsubmitted(VerifactuEstado e)
 {
     return e == VerifactuEstado::Unpaid || e == VerifactuEstado::NotSubmitted;
@@ -91,15 +88,9 @@ struct VerifactuResult
     bool isSuccess() const { return status == SUCCESS; }
 };
 
-// One invoice record as AEAT/Irene Solutions holds it, from a GetFilteredList
-// query. Used to reconcile a local row that says ERROR (typically "already
-// exists" after a retry) against what the AEAT side actually registered.
-//
-// The response schema of GetFilteredList is not published - the vendor's own
-// client parses it untyped - so the parser is deliberately tolerant about field
-// names and `raw` always keeps the payload for diagnosis. Nothing may be written
-// to the DB on the strength of this record alone: it must first pass
-// verifactuRemoteMatches() AND carry a non-empty csv.
+// One invoice record as the gateway holds it (GetFilteredList), to reconcile a local
+// row. Nothing may be written on the strength of it alone: it must pass
+// verifactuRemoteMatches() and carry a non-empty csv.
 struct VerifactuRemoteRecord
 {
     bool    found = false;      // the query returned a record for this InvoiceID
@@ -112,16 +103,12 @@ struct VerifactuRemoteRecord
     QString validationUrl;
     bool    isRejected = false; // AEAT's own IsRejected flag on the record
     QString errorCode;          // non-empty when AEAT recorded a rejection
-    // How many records the query returned for this InvoiceID. The service keeps
-    // every submission ATTEMPT, so a retried ticket comes back as several records
-    // (the duplicate-rejections plus the one acceptance) - the fields above are
-    // taken from the accepted one, not from whichever happens to be first.
+    // Records returned for this InvoiceID (every attempt is kept); the fields above come
+    // from the accepted one.
     int     recordCount = 0;
     QString raw;                // the whole JSON payload, always kept
 
     // Safe to reconcile from only when AEAT really has it, accepted, with a CSV.
-    // A rejected record can still come back from the query; adopting its CSV would
-    // mark us ENVIADA for an invoice AEAT refused.
     bool hasUsableCsv() const
     {
         return found && parsed && !csv.isEmpty() && !isRejected && errorCode.isEmpty();

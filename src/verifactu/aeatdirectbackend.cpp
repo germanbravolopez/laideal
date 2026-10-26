@@ -567,8 +567,10 @@ QString AeatDirectBackend::queryInvoiceAsync(const QString &invoiceNumber, const
 {
     const QString requestId = nextRequestId();
     if (!isConfigured() || !m_sendError.isEmpty()) {
-        QMetaObject::invokeMethod(this, [this, requestId]() {
-            emit queryFinished(requestId, VerifactuRemoteRecord());
+        VerifactuRemoteRecord unavailable;
+        unavailable.errorCode = isConfigured() ? m_sendError : m_configError;
+        QMetaObject::invokeMethod(this, [this, requestId, unavailable]() {
+            emit queryFinished(requestId, unavailable);
         }, Qt::QueuedConnection);
         return requestId;
     }
@@ -576,22 +578,23 @@ QString AeatDirectBackend::queryInvoiceAsync(const QString &invoiceNumber, const
     // stored record's; without either, this month and then the previous one.
     const AeatStore::Record stored = m_store.latest(AeatStore::Kind::Registration, invoiceNumber, m_config.issuerNif);
     const QDate known = invoiceDate.isValid() ? invoiceDate : (stored.isValid() ? stored.issueDate : QDate());
-    queryInvoiceMonth(requestId, invoiceNumber, known.isValid() ? known : QDate::currentDate(), !known.isValid());
+    queryInvoiceMonth(requestId, invoiceNumber, known.isValid() ? known : QDate::currentDate(), !known.isValid(), invoiceDate);
     return requestId;
 }
 
-void AeatDirectBackend::queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious)
+void AeatDirectBackend::queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious,
+                                          const QDate &invoiceDate)
 {
     const QString envelope = AeatRecord::queryEnvelope(m_config.issuerName, m_config.issuerNif,
                                                        month.year(), month.month(), invoiceNumber);
     m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
-                      [this, requestId, invoiceNumber, month, tryPrevious](const AeatTransport::Response &response) {
+                      [this, requestId, invoiceNumber, month, tryPrevious, invoiceDate](const AeatTransport::Response &response) {
         if (!response.error.isEmpty())
             qWarning() << "AeatDirectBackend: query of" << invoiceNumber << "failed -" << response.error;
-        VerifactuRemoteRecord remote = AeatResponse::remoteRecordFor(AeatResponse::parseQuery(response.body), invoiceNumber);
+        VerifactuRemoteRecord remote = AeatResponse::remoteRecordFor(AeatResponse::parseQuery(response.body), invoiceNumber, invoiceDate);
         remote.raw = QString::fromUtf8(response.body);
         if (remote.parsed && !remote.found && tryPrevious) {
-            queryInvoiceMonth(requestId, invoiceNumber, month.addMonths(-1), false);
+            queryInvoiceMonth(requestId, invoiceNumber, month.addMonths(-1), false, invoiceDate);
             return;
         }
         emit queryFinished(requestId, remote);

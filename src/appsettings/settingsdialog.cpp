@@ -234,7 +234,8 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vPendingRecoveryFloor->setDisplayFormat("dd-MM-yyyy");
     m_vPendingRecoveryFloor->setCalendarPopup(true);
     const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
-    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor : QDate(2026, 9, 1));
+    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor
+                                                     : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
     m_vPendingRecoveryFloor->setToolTip(tr("Los tickets anteriores no se avisan como pendientes al arrancar, "
                                            "ni cuentan como facturas rechazadas en la barra de estado."));
 

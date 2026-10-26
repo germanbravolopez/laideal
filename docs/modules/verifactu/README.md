@@ -13,11 +13,14 @@ For the full AEAT REST API field reference see [`rest_api.md`](./rest_api.md).
 | File | Purpose |
 |------|---------|
 | `verifactuintegration.h/cpp` | Public facade — the only class `MainWindow` and friends call directly |
+| `verifactubackend.h` | `VerifactuBackend`: the interface both connections implement (submit, cancel, QR, query, `recordSettled`); `VerifactuIntegration` talks only to it |
 | `verifactumanager.h/cpp` | HTTP REST layer over `QNetworkAccessManager`. `testConnection` reports a refused key (401 / 403, or a key error in the body) apart from a network failure |
 | `verifactutypes.h` | `VerifactuEstado` enum + string helpers, `VerifactuResult`; `testhostguard.h`: with `LAIDEAL_TEST=1` (every CTest test) both transports refuse any host but this machine |
 | `verifacturesponse.h/cpp` | Pure `parseVerifactuResponse()` (JSON reply -> `VerifactuResult`) + `decodeVerifactuImageBase64()`, extracted from `VerifactuManager` so the parsing is unit-testable without a network |
 | `verifactuconfig.h/cpp` | Internal config holder (NIF, name, ServiceKey, environment, endpoint URLs) |
-| `verifactuinvoice.h/cpp` | JSON-serialisable `VerifactuInvoice` and `VerifactuTaxItem` models |
+| `verifactuinvoice.h/cpp` | JSON-serialisable `VerifactuInvoice` model |
+| `verifactutaxitem.h/cpp` | JSON-serialisable `VerifactuTaxItem` (always `TaxType` `S1`) |
+| `aeat*.h/cpp`, `producerdeclaration.*` | The direct AEAT client - see the table in §Direct AEAT connection |
 
 ## Architecture
 
@@ -26,6 +29,8 @@ MainWindow / RecogPrendas / CancelInvoiceDialog / RectifyInvoiceDialog / Imprimi
         │
         ▼
 VerifactuIntegration (facade: chain gate, splitGross of the amounts)
+        │
+        ▼ both implement VerifactuBackend (verifactubackend.h)
         │
         ├── gateway: VerifactuManager (REST via QNetworkAccessManager)
         │       ├──▶ VerifactuConfig          (NIF, name, ServiceKey, env)
@@ -85,7 +90,7 @@ void MyClass::onVerifactuRequestFinished(const QString &reqId, const VerifactuRe
 }
 ```
 
-An empty returned `QString` means the call was rejected synchronously (Verifactu not configured) - no signal fires for it. Otherwise the signal is guaranteed to fire exactly once, even for validation errors and invalid-config cases (delivered via `Qt::QueuedConnection`).
+An empty returned `QString` means the call was rejected synchronously (Verifactu not configured, or `submitRectificationAsync` given a non-rectificativa type) - no signal fires for it. Otherwise the signal is guaranteed to fire exactly once, even for validation errors and invalid-config cases (delivered via `Qt::QueuedConnection`).
 
 ### `VerifactuResult`
 
@@ -136,7 +141,7 @@ Request (per the vendor's `Net/Rest/List/FilterSet.cs`; `ServiceKey` goes in the
 {"ServiceKey":"…","Filters":[{"FieldName":"InvoiceID","Operator":"=","Value":"30877"}],"Count":10,"Offset":-1}
 ```
 
-**The response schema is NOT published** — the vendor's own client parses it untyped. `parseVerifactuQueryResponse()` therefore probes several envelopes (`Return` / `Records` / `List` / `Items` / bare array) and field spellings, normalises dates to `dd-MM-yyyy`, and keeps the whole payload in `raw`. It always logs the payload: **the first real reply is what lets these candidates be narrowed to the truth**, so if you have one, pin the parser and delete the guesses.
+**The response schema is not published** — the vendor's own client parses it untyped. `Items` is confirmed against real replies (`test_parseQuery_realPopulatedReply`) and the fields are pinned (`InvoiceID`, `InvoiceDate`, `TotalAmount`, `CSV`, ...); `parseVerifactuQueryResponse()` still probes the other envelopes (`Return` / `Records` / `List` / `Result` / `Invoices` / bare array) and field spellings as margins, normalises dates to `dd-MM-yyyy`, and keeps the whole payload in `raw`. It always logs the payload.
 
 **The service stores every submission *attempt*, not one record per invoice.** A ticket submitted once and retried four times comes back as **five** records under the same `InvoiceID`: four duplicate-rejections (`ErrorCode 9999`, `CSV: null`) plus the original acceptance — and the accepted one is **not** necessarily first. `parseVerifactuQueryResponse()` therefore scans for the accepted record (a CSV, no `ErrorCode`, not `IsRejected`) rather than taking `Items[0]`, and reports `recordCount` so the dialog can say how many attempts were stored. Taking the first record read a failure and hid the CSV on an invoice AEAT demonstrably held (ticket 31121).
 
@@ -197,17 +202,19 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | JSON key | Content |
 |----------|---------|
 | `verifactu.nif` | Emitter NIF |
-| `verifactu.name` | Emitter name (`CompanyName` sent to AEAT) |
-| `verifactu.serviceKey` | API ServiceKey — obtain at https://facturae.irenesolutions.com/verifactu/go |
-| `verifactu.production` | `false` = TESTING, `true` = PRODUCTION. For the gateway the ServiceKey decides the environment (both endpoints are the same URL): this box does not route invoices, it only changes the (unused) validation URL and makes the app refuse gateway rectificativas in PRODUCTION |
+| `verifactu.company_name` | Emitter name (`CompanyName` sent to AEAT) |
+| `verifactu.service_key` | API ServiceKey, stored DPAPI-encrypted (`dpapi:v1:`) — obtain at https://facturae.irenesolutions.com/verifactu/go |
+| `verifactu.environment` | `"TESTING"` (default) or `"PRODUCTION"` (exact string). For the gateway the ServiceKey decides the environment (both endpoints are the same URL): this box does not route invoices, it only changes the (unused) validation URL and makes the app refuse gateway rectificativas in PRODUCTION |
 | `verifactu.connection` | `irenesolutions` (default until the shop switches) or `aeat` - the direct client |
 | `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Set in Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)*, which asks for confirmation; never the gateway's PRODUCCIÓN box. While it is `false`, the main window's status bar shows "AEAT: entorno de PRUEBAS" (`lblAeatEnvironment`) |
 | `verifactu.aeat_chain_marker` | Written by the direct client: `<environment>|<issuer>|<huella of the chain's last record>` as this installation last saw it. A database whose chain differs (restored from an older backup, or a new PC) must reach AEAT at start before any record, as on a first start |
 | `verifactu.aeat_certificate_thumbprint` | Direct client: the owner's certificate in the Windows personal store (SHA-1 thumbprint) |
 | `verifactu.aeat_certificate_file` / `aeat_certificate_password` | Direct client, else: a .pfx file and its password (DPAPI-encrypted) |
-| `verifactu.aeat_installation` | `NumeroInstalacion` of the direct client's records, created once |
+| `verifactu.aeat_installation` | `NumeroInstalacion` of the direct client's records, created once and saved at once |
+| `verifactu.pending_recovery_enabled` | `true` (default): the startup dialog lists PENDIENTE rows. Only an explicit `false` turns it off |
+| `verifactu.pending_recovery_floor_date` | ISO `yyyy-MM-dd`, default `2026-09-01` (`AppSettings::defaultPendingRecoveryFloorDate()`). Invoices whose earliest payment (`fecha_pago`, not the reception date) is before it are not listed at start and do not count as refused in the status bar |
 
-`VerifactuIntegration::loadEmitterConfiguration()` reads these on `initialize()` and pushes them into `VerifactuConfig`. `initialize()` is non-fatal — it only warns if NIF or name is empty, and the rest of the app remains usable (since 12.0 a paid ticket is refused while Verifactu is not configured, `invoicingBlockedReason`; unpaid tickets still save).
+`VerifactuIntegration::loadEmitterConfiguration()` reads these on `initialize()` and pushes them into `VerifactuConfig`. `initialize()` returns `false` and logs a `qCritical` when NIF or name is empty (or the gateway has no ServiceKey, which sets `getLastError()` to "Clave de servicio no configurada"); the rest of the app remains usable, but since 12.0 a paid ticket is refused while Verifactu is not configured (`invoicingBlockedReason`); unpaid tickets still save.
 
 ---
 
@@ -288,10 +295,10 @@ Not captured: `QrCodeUrl` (direct URL to QR on Irene servers — we have the pix
 
 | Error / situation | Where it surfaces | Resolution |
 |-------------------|-------------------|------------|
-| `INVALID_CONFIG` at save | Silent (logged only) | Configure NIF / name / ServiceKey in Settings |
+| `INVALID_CONFIG` at save | A paid ticket is refused with the reason (`invoicingBlockedReason`); unpaid tickets save | Configure NIF / name / ServiceKey in Settings |
 | `NETWORK_ERROR` at save | The outcome is unknown, so the row stays `PENDIENTE` (`verifactuEstadoForResult`), never `ERROR` | Retried from the startup recovery dialog (Envíos Verifactu pendientes); a duplicate answer is reconciled with "Consultar en AEAT" |
-| AEAT `8002 "CompanyName es obligatorio"` | `result.errorDescription` | Set `verifactu.name` in Settings — required by AEAT |
-| AEAT `8003 "InvoiceID duplicado"` | `result.errorDescription` | Each `n_recibo` must be unique per emitter per day — usually a sign of accidental re-submission |
+| AEAT `8002 "CompanyName es obligatorio"` | `result.errorDescription` | Set the company name (`verifactu.company_name`) in Settings — required by AEAT |
+| AEAT `8003 "InvoiceID duplicado"` | `result.errorDescription` | Each `n_recibo` must be unique per emitter (NumSerieFactura) — usually a sign of accidental re-submission |
 | AEAT `3002` on cancel | `CancelInvoiceDialog` | TESTING purges records — submit a fresh invoice in the same session first. In production it means AEAT holds no invoice with that InvoiceID and date; the dialog already retries an old seq-0 invoice with its reception date. Check what AEAT holds with "Consultar en AEAT" in Recogida |
 
 ---
