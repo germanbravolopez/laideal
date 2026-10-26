@@ -179,6 +179,49 @@ private slots:
         QVERIFY(store.append(AeatStore::Kind::Registration, "89890001K", builder("2", "NEW")).isValid());
     }
 
+    // An aeat_records made before the reached column is completed once, and again is a no-op.
+    void test_olderRecordsTableGetsReachedColumn()
+    {
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY AUTOINCREMENT, environment TEXT NOT NULL,"
+                                     " kind TEXT NOT NULL, issuer_nif TEXT NOT NULL, invoice_number TEXT NOT NULL,"
+                                     " issue_date TEXT NOT NULL, total REAL NOT NULL DEFAULT 0, hash TEXT NOT NULL,"
+                                     " xml TEXT NOT NULL, generated_at TEXT NOT NULL, state TEXT NOT NULL,"
+                                     " csv TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT '',"
+                                     " error_description TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0,"
+                                     " last_attempt TEXT NOT NULL DEFAULT '')"));
+        m_db.close();
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(store.ensureSchema());
+        QVERIFY(store.lastError().isEmpty());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(a.isValid());
+        QVERIFY(store.markReached(a.id));
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "1").reached);
+    }
+
+    // reached: 0 not sent, 2 sending, 1 may have reached AEAT; a cut-off send counts as reached.
+    void test_reachedStateMachine()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        const auto reached = [&] { return store.latest(AeatStore::Kind::Registration, "1").reached; };
+        QVERIFY(!reached());
+        QVERIFY(store.markSending(a.id));
+        QVERIFY(!reached());                      // 2: only the send in progress
+        QVERIFY(store.markNotSent(a.id));         // never left: back to 0
+        QVERIFY(store.markSending(a.id));
+        QVERIFY(store.markSending(a.id));         // the first was cut off: it may have reached
+        QVERIFY(reached());
+        QVERIFY(store.markNotSent(a.id));         // only undoes a send in progress
+        QVERIFY(reached());
+        const auto b = store.append(AeatStore::Kind::Registration, "89890001K", builder("2", "BBB"));
+        QVERIFY(store.markReached(b.id));
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "2").reached);
+    }
+
     // An open connection stays open (the app's models read through it); a closed one is closed again.
     void test_connectionStateKept()
     {

@@ -4,11 +4,16 @@
 // metadata), and the verifactu_estado string <-> enum round-trip.
 
 #include <QtTest>
+#include <QSignalSpy>
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QFile>
+#include <QDir>
+#include <QStandardPaths>
 
 #include "verifactuconfig.h"
+#include "verifactumanager.h"
 #include "verifactuinvoice.h"
 #include "verifactutaxitem.h"
 #include "verifactutypes.h"
@@ -63,6 +68,43 @@ private slots:
 
         c.setEmitterData("B12345678", "La Ideal");
         QVERIFY(c.isValid());
+    }
+
+    // Building a config never touches the disk; the legacy INI goes with removeLegacyIni().
+    void test_legacyIniRemovedOnlyOnRequest()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QVERIFY(QDir().mkpath(dir));
+        const QString ini = dir + "/verifactu_config.ini";
+        QFile f(ini);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("[x]\n");
+        f.close();
+        { VerifactuConfig c; }
+        QVERIFY(QFile::exists(ini));
+        VerifactuConfig::removeLegacyIni();
+        QVERIFY(!QFile::exists(ini));
+        VerifactuConfig::removeLegacyIni();    // nothing left: no-op
+        QStandardPaths::setTestModeEnabled(false);
+    }
+
+    // A query without an invoice number never leaves the app: it comes back unparsed
+    // (we know nothing), through queryFinished only, and not inside the call.
+    void test_managerQueryWithoutIdIsUnparsed()
+    {
+        VerifactuManager manager;
+        manager.getConfig()->setServiceKey("KEY");
+        manager.getConfig()->setEmitterData("B12345678", "La Ideal");
+        QSignalSpy query(&manager, &VerifactuBackend::queryFinished);
+        QSignalSpy request(&manager, &VerifactuBackend::requestFinished);
+        manager.queryInvoiceAsync(QString());
+        QCOMPARE(query.size(), 0);                 // delivered queued
+        QTRY_COMPARE(query.size(), 1);
+        const VerifactuRemoteRecord remote = query[0][1].value<VerifactuRemoteRecord>();
+        QVERIFY(!remote.parsed && !remote.found);
+        QVERIFY(remote.raw.contains("InvoiceID"));
+        QCOMPARE(request.size(), 0);
     }
 
     void test_configEnvironmentUrls()

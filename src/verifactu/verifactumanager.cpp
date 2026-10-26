@@ -15,16 +15,11 @@
 #include <QPointer>
 
 VerifactuManager::VerifactuManager(QObject *parent)
-    : VerifactuBackend(parent), m_config(nullptr), m_networkManager(nullptr)
+    : VerifactuBackend(parent), m_config(new VerifactuConfig), m_networkManager(new QNetworkAccessManager(this))
 {
-    m_config = new VerifactuConfig();
-    m_networkManager = new QNetworkAccessManager(this);
 }
 
-VerifactuManager::~VerifactuManager()
-{
-    delete m_config;    // not a QObject: owned here
-}
+VerifactuManager::~VerifactuManager() = default;
 
 QString VerifactuManager::nextRequestId()
 {
@@ -102,9 +97,10 @@ QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber, const 
     Q_UNUSED(invoiceDate)   // the gateway finds the invoice by its ID alone
     const QString reqId = nextRequestId();
 
-    if (!validateConfiguration() || invoiceNumber.isEmpty()) {
+    const bool configured = validateConfiguration();
+    if (!configured || invoiceNumber.isEmpty()) {
         VerifactuRemoteRecord rec;   // parsed=false: we know nothing, not "absent"
-        rec.raw = validateConfiguration() ? QStringLiteral("InvoiceID vacio") : getLastError();
+        rec.raw = configured ? QStringLiteral("InvoiceID vacío") : getLastError();
         QMetaObject::invokeMethod(this, [this, reqId, rec]() {
             emit queryFinished(reqId, rec);
         }, Qt::QueuedConnection);

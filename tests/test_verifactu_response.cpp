@@ -148,6 +148,15 @@ private slots:
         QVERIFY(bare.hasUsableCsv());
     }
 
+    // A numeric InvoiceID stays "31121" (not "31121.00") and still matches its ticket.
+    void test_parseQuery_numericInvoiceId()
+    {
+        const VerifactuRemoteRecord r = parseVerifactuQueryResponse(
+            R"({"Items":[{"InvoiceID":31121,"InvoiceDate":"03-09-2026","TotalAmount":24.2,"CSV":"A-1"}]})");
+        QCOMPARE(r.invoiceId, QStringLiteral("31121"));
+        QVERIFY(verifactuRemoteMatches(r, "31121", "03-09-2026", 24.20));
+    }
+
     // CAPTURED from a real GetFilteredList call (14-09-2026, InvoiceID "2", test
     // key) - unlike the fixtures above this is actual traffic, and it is what
     // confirms the envelope is "Items". Note the reply echoes Offset/Count/

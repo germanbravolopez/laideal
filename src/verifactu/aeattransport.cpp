@@ -4,6 +4,7 @@
 #include "testhostguard.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QPointer>
 #include <QRunnable>
 #include <QThreadPool>
@@ -125,6 +126,8 @@ AeatTransport::Response AeatTransport::postBlocking(const QString &url, const QB
     WinHttpQueryHeaders(request.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
                         &status, &size, WINHTTP_NO_HEADER_INDEX);
     response.httpStatus = int(status);
+    if (status != 200)
+        qWarning() << "AeatTransport: HTTP" << int(status) << "from" << url;
     for (;;) {
         DWORD available = 0;
         if (!WinHttpQueryDataAvailable(request.h, &available)) {

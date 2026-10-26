@@ -123,6 +123,8 @@ private:
 
     bool open(bool *wasOpen);
     void close(bool wasOpen);
+    // Upgrade of a table made by an earlier build (call with the connection open).
+    void addColumnIfMissing(const QString &table, const QString &column, const QString &definition);
     Record readRecord(QSqlQuery &q) const;
 };
 

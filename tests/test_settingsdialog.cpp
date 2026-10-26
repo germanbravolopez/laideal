@@ -1,8 +1,8 @@
 // Tests for the SettingsDialog Verifactu tab: the service key is masked by
 // default and the "Mostrar" toggle only switches how it is displayed - the text
-// (and so the value saved on accept) is unchanged. AppSettings is pointed at a
-// throwaway file via loadFrom(), so the real ~/.laideal_settings.json is never
-// read or written. The dialog is never accepted (accept() would save).
+// (and so the value saved on accept) is unchanged. The direct-AEAT group and the
+// production confirmations are covered too. AppSettings is pointed at a throwaway
+// file via loadFrom(), so the real ~/.laideal_settings.json is never read or written.
 
 #include <QtTest>
 #include <QScopeGuard>
@@ -13,6 +13,7 @@
 #include <QTabWidget>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QDateEdit>
 #include <QTimer>
 #include <QApplication>
 #include <QLineEdit>
@@ -240,6 +241,47 @@ private slots:
         QMetaObject::invokeMethod(&dlg, "accept");
         QVERIFY(!s->verifactuDirectAeat());
         QVERIFY(!s->aeatDirectProduction());
+    }
+
+    // The startup-recovery floor date shows as dd-MM-yyyy, a bad stored value shows the
+    // default, and accepting stores ISO.
+    void test_pendingRecoveryFloorRoundTrip()
+    {
+        AppSettings *s = AppSettings::instance();
+        const QString before = s->verifactuPendingRecoveryFloorDate();
+        const auto restore = qScopeGuard([s, before] { s->setVerifactuPendingRecoveryFloorDate(before); });
+        s->setVerifactuPendingRecoveryFloorDate(QStringLiteral("2026-10-05"));
+        {
+            SettingsDialog dlg;
+            auto *floor = dlg.findChild<QDateEdit *>();
+            QVERIFY(floor);
+            QCOMPARE(floor->date(), QDate(2026, 10, 5));
+            floor->setDate(QDate(2026, 11, 2));
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QCOMPARE(s->verifactuPendingRecoveryFloorDate(), QStringLiteral("2026-11-02"));
+        }
+        s->setVerifactuPendingRecoveryFloorDate(QStringLiteral("garbage"));
+        SettingsDialog fallback;
+        QCOMPARE(fallback.findChild<QDateEdit *>()->date(),
+                 QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
+    }
+
+    // "Probar conexión" sends the form's values trimmed.
+    void test_testConnectionSignalCarriesTrimmedValues()
+    {
+        SettingsDialog dlg;
+        QLineEdit *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
+        QVERIFY(key);
+        key->setText("  spaced-key  ");
+        QPushButton *test = nullptr;
+        for (QPushButton *b : dlg.findChildren<QPushButton *>())
+            if (b->text().startsWith(QLatin1String("Probar conex")))
+                test = b;
+        QVERIFY(test);
+        QSignalSpy spy(&dlg, &SettingsDialog::testConnectionRequested);
+        test->click();
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy[0][2].toString(), QStringLiteral("spaced-key"));
     }
 
     // While the shop's own direct client works in pre-production the self-test is off: the
