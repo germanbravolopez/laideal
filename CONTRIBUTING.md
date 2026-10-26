@@ -126,7 +126,7 @@ $ver = 'X.Y'
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
 function Get-Section([string]$file) {
     $raw = Get-Content $file -Raw
-    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^r?\d+\.\d+\r?\n|\z)")
+    $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\r?\d+\.\d+\r?\n|\z)")
     if (-not $m.Success) { throw "No section for $ver found in $file" }
     return $m.Groups[1].Value.TrimEnd()
 }

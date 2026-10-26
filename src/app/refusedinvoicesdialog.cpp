@@ -17,7 +17,7 @@ RefusedInvoicesDialog::RefusedInvoicesDialog(const QSqlDatabase &database, const
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(UiKit::introPanel(tr(
         "Facturas cobradas que la AEAT ha rechazado y siguen sin reenviar. Seleccione una y pulse \"Abrir en "
-        "Recogida\": allí, Verifactu… → Reintentar después de corregir la causa, o Consultar en AEAT si el "
+        "Recogida\": allí, Verifactu2026 → Reintentar después de corregir la causa, o Consultar en AEAT si el "
         "motivo dice que ya existe. Una rectificativa se rehace en Facturas → Rectificar factura.")));
 
     m_table = new QTableWidget(0, 4);

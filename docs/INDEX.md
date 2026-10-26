@@ -86,6 +86,10 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Pending Verifactu submits recovery dialog (startup) | `src/app/pendingsubmitsdialog.h` | `.cpp` |
 | AEAT records export (XML envelope writer) | `src/app/aeatexport.h` | `.cpp` |
 | AEAT records export dialog | `src/app/aeatexportdialog.h` | `.cpp` |
+| Refused invoices dialog (list behind the red status-bar count) | `src/app/refusedinvoicesdialog.h` | `.cpp` |
+| Post-update self-check (`--self-check`): checks and window | `src/app/selfcheck.h`, `src/app/selfcheckdialog.h` | `.cpp` |
+| One copy per database | `src/app/instancelock.h` | `.cpp` |
+| Command-line switch values (`--settings`) | `src/app/commandline.h` | - |
 | Database API | `src/sql_lite/sql_lite.h` | `src/sql_lite/sql_lite.cpp` |
 | Generic list viewer | `src/listado/listado.h` | `src/listado/listado.cpp` |
 | List row insert dialog | `src/listado/insertnewitem.h` | `.cpp` |

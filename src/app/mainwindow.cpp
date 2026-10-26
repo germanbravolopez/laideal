@@ -1,5 +1,8 @@
 #include "mainwindow.h"
 #include "sql_lite.h"
+#include "cancelinvoicedialog.h"
+#include "rectifyinvoicedialog.h"
+#include <QMessageBox>
 #include "applogger.h"
 #include <QDateTime>
 #include <QSqlError>
@@ -71,7 +74,7 @@ MainWindow::MainWindow(QWidget *parent)
     mainwindowInitialSettings();
     initializeVerifactu();
     if (!m_updateNotice.isEmpty())
-        m_result->setText(m_result->text().isEmpty() ? m_updateNotice : m_result->text() + "<br><br>" + m_updateNotice);
+        appendToResult(m_updateNotice);
 
     // Refused invoices stay in view until resent (the customer may hold their factura):
     // refreshed on every AEAT outcome, and regularly for those settled in other windows.
@@ -490,7 +493,7 @@ void MainWindow::mainwindowInitialSettings()
     // Verifactu start-up messages, which replace the panel).
     if (SelfCheck::isFirstStartAfterUpdate(previousVersion, version))
         m_updateNotice = UiKit::warnHtml(tr("La Ideal se ha actualizado a la versión %1.").arg(version))
-                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar…</b> (o Inicio → La Ideal - Comprobar "
+                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar2026</b> (o Inicio → La Ideal - Comprobar "
                                        "tras actualizar) y envíe el informe que guarda en el escritorio.");
     if (AppSettings::instance()->lastStartedVersion() != version) {
         AppSettings::instance()->setLastStartedVersion(version);
@@ -499,8 +502,6 @@ void MainWindow::mainwindowInitialSettings()
     // Req. 4: backups switched off, or none correct for days, stay visible at every start.
     if (const QString backup = BackupManager::currentBackupWarning(); !backup.isEmpty())
         startProblems << UiKit::warnHtml(backup.toHtmlEscaped());
-    if (!startProblems.isEmpty())
-        m_result->setText(startProblems.join("<br>"));
 
     connect(ui->actionConfiguracion, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
@@ -567,7 +568,15 @@ void MainWindow::mainwindowInitialSettings()
     // The garment name takes the spare width; the amounts keep a fixed column.
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(TABLE_TICKET_GARM, QHeaderView::Stretch);
     resetAllContents();
-    m_result->showInfo(tr("Listo para un nuevo ticket."));
+    if (startProblems.isEmpty())
+        m_result->showInfo(tr("Listo para un nuevo ticket."));
+    else
+        m_result->setText(startProblems.join("<br>"));
+}
+
+void MainWindow::appendToResult(const QString &html)
+{
+    m_result->setText(m_result->text().isEmpty() ? html : m_result->text() + "<br><br>" + html);
 }
 
 void MainWindow::initializeVerifactu()
@@ -580,9 +589,9 @@ void MainWindow::initializeVerifactu()
 
     if (!m_verifactuIntegration->initialize()) {
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
-        m_result->setText(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
-                                              .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
-                          + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
+        appendToResult(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
+                                           .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
+                       + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
     if (first)
@@ -613,7 +622,7 @@ void MainWindow::initializeVerifactu()
                        << "record(s) not in this database (a restored copy)";
         }
         if (!warnings.isEmpty())
-            m_result->setText(warnings.join("<br>"));
+            appendToResult(warnings.join("<br>"));
         continueDirectChain();
     }
 }
@@ -946,13 +955,6 @@ bool MainWindow::validateTicket()
     return true;
 }
 
-QString MainWindow::removeSpecialChar(QString str)
-{
-    // Logic lives in sql_lite::removeSpecialChars (unit-tested); kept as a thin
-    // member so the existing call sites stay unchanged.
-    return removeSpecialChars(str);
-}
-
 void MainWindow::checkClientData()
 {
     QString currentClient = ui->cb_client->currentText();
@@ -962,10 +964,10 @@ void MainWindow::checkClientData()
         updateItemToClient(db, "direccion", ui->le_addr->text(),   currentClient);
     }
     else {
-        currentClient = removeSpecialChar(currentClient.simplified().toLower());
+        currentClient = removeSpecialChars(currentClient.simplified().toLower());
         bool clientFound = false;
         for (int idx = 0; idx < ui->cb_client->count(); idx++) {
-            QString clientInCb = removeSpecialChar(ui->cb_client->itemText(idx).simplified().toLower());
+            QString clientInCb = removeSpecialChars(ui->cb_client->itemText(idx).simplified().toLower());
             if (currentClient == clientInCb)
                 clientFound = true;
         }
@@ -1027,6 +1029,8 @@ void MainWindow::updateAeatEnvironment()
 
 void MainWindow::updateRefusedInvoices()
 {
+    if (!m_refusedInvoices)
+        return;                                     // an outcome settled before the window finished building
     const int refused = refusedInvoiceCount(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate());
     // A link: the count opens the list of those invoices (showRefusedInvoices).
     m_refusedInvoices->setText("<a href=\"refused\" style=\"text-decoration:none\">"
