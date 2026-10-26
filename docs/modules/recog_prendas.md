@@ -6,14 +6,19 @@ A `QMainWindow` built in code with the shared [UiKit](uikit.md) style (the `.ui`
 
 ## Source files
 
-- `src/recog_prendas/recog_prendas.h/cpp`
+- `src/recog_prendas/recog_prendas.h/cpp` - the window
+- `src/recog_prendas/pay_dialog.h/cpp` - `PayDialog` (Cobrar)
+- `src/recog_prendas/voidgarmentsdialog.h/cpp` - `VoidGarmentsDialog` (Anular prendas)
 
 ## Key interface
 
 ```cpp
 RecogPrendas *ui = new RecogPrendas(db, this);  // db injected via constructor
+ui->m_verifactuIntegration = integration;       // required: without it Cobrar / retry refuse (no invoicing)
 ui->show();
 ```
+
+`m_verifactuIntegration` must be assigned by the creator (`MainWindow` does, for both entry points): `PayDialog` refuses to charge without it, because every payment is an invoice.
 
 ## Operations
 
@@ -25,6 +30,7 @@ ui->show();
 | Edit quantity | `QTY` | `cantidad`, `importe` (re-priced via `garmentImporte`) |
 | Change service | `SERVICE` | `servicio`, `importe` (re-priced against the new service's unit price) |
 | Edit importe (manual) | `PRICE` | `importe` (comma-normalised manual override; `size` left as-is) |
+| Mark the whole ticket picked up (`pb_pku_all`) | - (not an `updateDb` op) | `sql_lite::markTicketPickedUp`: one `UPDATE ... WHERE n_recibo = :n AND estado != 'Anulado'` setting `estado = 'Recogido'` and `fecha_recogida` |
 | Split garment row | `SEPARATE_GARM` | `sql_lite::splitGarmentRow`: moves the chosen quantity to a new row (`genHash16()`) that copies every other column, `verifactu_*` included, so split-off garments of a paid row stay in the invoice AEAT registered; the split-off part gets the proportional `importe` in cents while the original keeps the exact remainder, so the two rows keep the stored total (no re-pricing from the price list) |
 
 `updateDb()` keeps the business rules (the closed-quarter guard, the `Anulado` lock) and reads its values off the dialog widgets, but each actual write delegates to a pure `sql_lite` seam keyed by `(n_recibo, hash)` — `updateTicketPickup` / `updateTicketObservations` / `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte` (QTY + the split), `updateGarmentServiceAndImporte` (SERVICE) + `insertGarmentRow(IngresoGarmentRow)` for the split — so the DB writes are unit-tested in `test_sql_lite` (the dialog/UI wiring itself stays integration-level).
@@ -41,10 +47,12 @@ Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Inp
 
 | Input type | Detection | SQL / behaviour |
 |------------|-----------|-----------------|
-| Ticket number | All digits, length < 9 | `WHERE n_recibo = :n` |
-| Phone number | All digits, length ≥ 9 | `WHERE tel_fijo LIKE :p OR movil LIKE :p` on `clientes`; then `WHERE cliente = :name` |
+| Ticket number | Digits only (spaces ignored), length < 9 | `WHERE n_recibo = :n` |
+| Phone number | Digits only, length ≥ 9; spaces and a `+34` / `0034` prefix are ignored ("600 123 456", "+34600123456") | `WHERE tel_fijo LIKE :p OR movil LIKE :p` on `clientes`; then `WHERE cliente IN (...)` - every client sharing the number is listed |
 | Date (`dd/MM/yyyy` or `dd-MM-yyyy`) | `QDate::fromString` succeeds | `WHERE <date_column> = :date`, where the `cb_search_date` filter picks the column: Recepción → `fecha_recepcion`, Pago → `fecha_pago`, Recogida → `fecha_recogida`, **Anulación → `fecha_anulacion`** (voided, AEAT-cancelled and rectified garments; the Importe total is 0 there, since all are excluded from totals) |
 | Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setNormalizedFilter(text, INGRESOS_COL_CLIENTE)` — **diacritic-insensitive**: typing "garcia" matches "García" |
+
+The *Fecha de* column follows the combo position (not its translated text). A failing query is logged and shows no rows.
 
 Every search drains the model (`loadEveryRow`) before the connection closes. `QSqlQueryModel` fetches 256 rows at a time, and until October 2026 the phone, ticket and date searches showed only the first 256 rows, understating the Importe total. Name search loads all rows because SQLite LIKE is ASCII-only and cannot match accented characters. The proxy model's `removeDiacritics()` + `toLower()` normalization handles the matching client-side.
 
@@ -81,28 +89,22 @@ Defined once in `sql_lite.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>` so the con
 | `INGRESOS_COL_VERIFACTU_INVOICE_SEQ` | 24 | verifactu_invoice_seq |
 | `INGRESOS_COL_VERIFACTU_INVOICE_ID` | 25 | verifactu_invoice_id |
 | `INGRESOS_COL_FECHA_ANULACION` | 26 | fecha_anulacion — **visible**, header "Anulación", shown right after Recogida by `placeIngresosDateColumns()` so the four dates sit together |
+| `INGRESOS_COL_VERIFACTU_CANCEL_XML` | 27 | verifactu_cancel_xml |
 
-Columns 13–23 are loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read only by `updateDb()` (hash) and `on_pb_verifactu_clicked()` (verifactu_*).
+Every column except 0-12 and 26 is loaded by the `SELECT *` query but hidden from the `QTableView` via `setColumnHidden()`. They are read by `updateDb()` (hash), `on_pb_verifactu_clicked()` (verifactu_*), and `on_pb_print_clicked()`, the retry and `showTicket()` (invoice seq / id).
 
 ## Verifactu info button (`pb_verifactu`)
 
-A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (i.e. the ticket has a Verifactu state — `PENDIENTE`, `ENVIADA`, `ERROR`, or `ANULADA`). Legacy rows from before Verifactu (NULL/empty) keep the button disabled. Clicking it opens a `QDialog` showing:
+A "Verifactu" button is shown alongside the other action buttons. It is **enabled only when the selected row has a non-empty `verifactu_estado`** (`PENDIENTE`, `ENVIADA`, `ERROR`, `ANULADA` or `RECTIFICADA`). Legacy rows from before Verifactu (NULL/empty) keep the button disabled. Clicking it opens a `QDialog` (`verifactuDialog`) showing:
 
-- Estado (`PENDIENTE` / `ENVIADA` / `ERROR` / `ANULADA`)
-- CSV security code
-- Submission timestamp
+- Estado, CSV security code, submission timestamp
 - Error description (if any)
-- Clickable "Abrir en AEAT" link to the `verifactu_url_qr` validation URL
+- Clickable "Abrir en la sede de AEAT" link to the `verifactu_url_qr` validation URL (HTML-escaped)
 
-When `estado == "ERROR"` and Verifactu is configured, the dialog also shows a **"Reintentar envío a AEAT"** button. Clicking it:
+Two buttons follow, both needing a configured Verifactu:
 
-1. Closes the dialog.
-2. Queries `SUM(importe)` for the ticket from `ingresos` to recompute the total.
-3. Calls `VerifactuIntegration::submitSimplifiedInvoice()` with the original `n_recibo`, `fecha_recepcion`, and the recomputed tax base.
-4. Updates **all rows** for that `n_recibo` with the new `verifactu_*` values (`ENVIADA` or `ERROR`).
-5. Refreshes the table view and shows a success/failure message.
-
-Implemented in `retryVerifactuSubmit(ticketNum, invoiceDate)` — a private method called from a lambda in `on_pb_verifactu_clicked()`.
+- **"Reintentar envío a AEAT"** - when `estado == "ERROR"`. It closes the dialog and calls `retryVerifactuSubmit(ticketNum, seq)` (`seq` = the clicked row's `verifactu_invoice_seq`), which re-submits that one payment event asynchronously: the `verifactuEventFor` event (its own `fecha_pago` and total, `InvoiceID = "<n_recibo>-<seq>"`) goes through `submitSimplifiedInvoiceAsync` and the reply is applied by `onVerifactuRequestFinished`. A rectificativa is refused (its record is an R5), and so is an invoicing block (`invoicingBlockedReason()`); every refusal or unsent request is written in the result panel (`reportNotSent`).
+- **"Consultar en AEAT"** - on any paid row. `queryAeatAndOfferReconcile` asks AEAT for the invoice and opens the comparison window (`showAeatReconcileDialog`), which offers to adopt the CSV when the remote record matches (`verifactuRemoteMatches`); on an already settled row (`ENVIADA` / `ANULADA` / `RECTIFICADA`) the query is informational only.
 
 Note: the QR image is not stored in the DB; staff can access it via the AEAT validation link.
 
@@ -113,7 +115,8 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 | Button | Enabled when |
 |--------|-------------|
 | `pb_state`, `pb_pay_all`, `pb_pku_all`, `pb_separ_garm` | A row is selected AND it is **not** `Anulado` (a voided garment is read-only); `sb_separ` (how many to split off, 1 .. cantidad − 1) only when the quantity is over 1 |
-| `pb_print` | A row is selected (with none, *Imprimir factura* prints the ticket's only payment event, or asks to select a garment of one when there are several) |
+| `pb_print` | A row is selected; it refuses an unpaid row (a reprint is a paid payment event). With none selected, *Imprimir factura* prints the ticket's only payment event, or asks to select a garment of one when there are several |
+| `pb_void`, `pb_add` | A row is selected, whatever its state (including `Anulado`; the dialogs themselves refuse what cannot be done) |
 | `pb_verifactu` | Selected row has `verifactu_estado` non-empty |
 | `pb_payment` | **Never** — kept disabled because the per-garment toggle path has been deprecated in 8.5; payment now goes through `PayDialog` opened from `pb_pay_all`, which submits one Verifactu invoice per payment event with `InvoiceID = "<n_recibo>-<seq>"` and avoids the duplicate-InvoiceID rejection the old per-garment path would have caused. |
 
@@ -123,13 +126,14 @@ All action buttons start **disabled**. They are enabled when a row is clicked in
 
 ## Date fields: which ones actually write
 
-None of the three `QDateEdit`s has a `dateChanged`/`editingFinished` handler — they reach the DB only as a side effect of pressing a button, which makes their editability misleading:
+None of the four `QDateEdit`s has a `dateChanged`/`editingFinished` handler — they reach the DB only as a side effect of pressing a button, which makes their editability misleading:
 
 | Widget | Written by | Editable? |
 |--------|-----------|-----------|
 | `de_date_pickup` | `updateDb(PKU_YES)` (via `pb_state`) and `markTicketPickedUp()` (via `pb_pku_all`) | Yes — the only one that works |
 | `de_date_paym` | Never (only `PayDialog` writes `fecha_pago`) | **No** — forced `setReadOnly(true)` with no spin buttons since 10.9 |
 | `de_date_recep` | Never written back for the clicked row (the split-off row copies the original's dates from the DB) | **No** — `setReadOnly(true)` with no spin buttons since 10.10 |
+| `de_date_anul` | Never (voiding is `VoidGarmentsDialog` / the AEAT cancellation) | **No** — read-only; shows the anulación date of a voided row |
 
 `de_date_paym` is deliberately display-only: `fecha_pago` is part of the AEAT invoice identity `(emisor, InvoiceID, fecha)`, which `sql_lite::verifactuEventFor` (retry) and `verifactuRemoteMatches` (reconcile) both depend on. Editing it after submission would make a retry register a *second* invoice instead of being rejected as duplicate, and could move income into a locked quarter. The payment date is set by `PayDialog` alone.
 
@@ -139,12 +143,15 @@ None of the three `QDateEdit`s has a `dateChanged`/`editingFinished` handler —
 
 `pb_pay_all` opens `PayDialog` (`src/recog_prendas/pay_dialog.{h,cpp}`) with the clicked ticket pre-loaded. The dialog lists every unpaid row of the ticket with a per-row checkbox pre-checked; the operator unticks the rows the client is not paying this time, sees the live "Total seleccionado" update, and clicks Cobrar. PayDialog then:
 
-1. Calls `nextVerifactuInvoiceSeq(db, ticketNum)` to get the next free `seq` for this ticket.
-2. Builds `InvoiceID = "<n_recibo>-<seq>"` and fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()` with a 5 s bounded wait.
-3. On success: UPDATEs the chosen rows `pagado='SI'`, `fecha_pago=:date`, `verifactu_invoice_seq=:seq`, calls `updateTicketVerifactuFields(db, n_recibo, result, seq)` for the AEAT metadata (single seq-scoped helper used by both save-time and PayDialog paths), and prints the partial factura via `Imprimir` with `invoiceSeq` set so only the paid subset is on the print. A **single** copy (the customer factura) is auto-printed - no second business copy; reprint from RecogPrendas (`pb_print`) if another is needed.
-4. On AEAT timeout / config error: still persists the payment locally and prints a paid recibo without QR.
+0. Pre-checks, each refused in the dialog's result panel with nothing stored: an unmeasured m2 garment, a total of 0,00, no `m_verifactu` (every payment is an invoice, so it must be set) or an invoicing block (`invoicingBlockedReason()`), and a payment date in a closed quarter. The date edit itself is limited to the range reception date .. today.
+1. Calls `nextVerifactuInvoiceSeq(db, ticketNum, environment)` to get the next free `seq` for this ticket (it also skips numbers the direct client already used).
+2. Stores the chosen rows first as `pagado='SI'`, `fecha_pago=:date`, `verifactu_invoice_seq=:seq`, `PENDIENTE` (`importe` rewritten from the cents shown), so a crash during the round trip leaves a payment the start-up recovery resends.
+3. Builds `InvoiceID = "<n_recibo>-<seq>"` and fires `submitSimplifiedInvoiceAsync()`. With the direct client the QR is known at once (`qrBeforeReply`): the factura prints before AEAT answers and the reply is adopted by RecogPrendas (`submitAdopted(..., facturaPrinted)`); otherwise there is a 5 s bounded wait.
+4. A definitive reply is written by `updateTicketVerifactuFields(db, n_recibo, result, seq)` (seq-scoped). A timeout, a network error or a reply-time `INVALID_CONFIG` leaves the rows `PENDIENTE` (the start-up recovery resends) and the dialog prints a paid recibo without QR; the late reply is adopted by RecogPrendas (`m_pendingSubmits`). A quarter closed during the submit is reported (`m_unstoredHashes`). Esc / the window X while waiting does not close the dialog.
 
-Remaining unpaid rows of the same ticket stay unpaid; a later payment event picks up `seq = max(seq) + 1`. `pb_print` reads the clicked row's `verifactu_invoice_seq` and forwards it to `printFactura(ticketNum, askSecondCopy, invoiceSeq)` so a reprint matches the AEAT-side invoice exactly.
+The partial factura is printed through `Imprimir` with `invoiceSeq` set so only the paid subset is on it. A **single** copy (the customer factura) is auto-printed - no second business copy; reprint from RecogPrendas (`pb_print`) if another is needed.
+
+Remaining unpaid rows of the same ticket stay unpaid; a later payment event picks up `seq = max(seq) + 1`. `pb_print` reads the clicked row's `verifactu_invoice_seq` and forwards it to `printFactura(ticketNum, invoiceSeq)` so a reprint matches the AEAT-side invoice exactly.
 
 ## Header-click sorting
 

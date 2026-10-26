@@ -15,8 +15,8 @@ in [`../../../tests`](../../../tests)), English-only docs.
 > (remove the vendored `QXlsx/`) is done — the tree and its CMake wiring were deleted once the
 > printer was validated on hardware. **Phase 4** (optional Status API layer) shipped behind the
 > `print.use_status_api` flag as `src/printing/printerstatus.*` (pure ASB decoder, unit-tested)
-> + `statusapiprinter.*` (dynamically-loaded `EPSStmApi.dll` transport); the ASB bit values and
-> the DLL path still need confirming on the physical unit. Runtime reference:
+> + `statusapiprinter.*` (dynamically-loaded `EPSStmApi.dll` transport); confirmed on the
+> physical unit (an open cover reports ASB `0x1`, see `printing.md`). Runtime reference:
 > [`../printing.md`](../printing.md).
 
 ## Goals and non-goals

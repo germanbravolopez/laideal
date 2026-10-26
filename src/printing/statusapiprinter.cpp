@@ -144,9 +144,7 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                       &readLen, nullptr, 2500, 0, 0);
     bool sent = (rc == 0);
 
-    // The cover-open / paper-out ASB often lands only after the send attempt, so
-    // a pre-send read can still show "ready". Re-read on failure so the caller
-    // gets the real reason (and the log captures the raw word either way).
+    // The cover-open / paper-out ASB often lands only after the send: re-read on failure.
     if (!sent)
         readStatus("post-send");
 
@@ -215,10 +213,8 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
         return sh->ret;
     }
 
-    // The worker is stuck inside the Epson DLL. Leave it detached (its shared
-    // state keeps its result slot alive harmlessly). If it had not reached the
-    // send it now never will and the caller can fall back to RAW; if it is inside
-    // the send it may still print, so the caller must not print again.
+    // The worker is stuck in the DLL and stays detached: before the send it never will
+    // (RAW fallback is safe); inside the send it may still print (the caller must not).
     const bool neverSends = sh->gate.abandon();
     if (mayStillPrint) *mayStillPrint = !neverSends;
     s_unresponsive.store(true);

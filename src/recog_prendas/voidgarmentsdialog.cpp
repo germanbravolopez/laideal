@@ -134,8 +134,8 @@ void VoidGarmentsDialog::onSearchClicked()
     }
 
     m_loadedTicket = ticketNum;
-    m_lblHeader->setText(QString("<b>Cliente:</b> %1<br><b>Fecha:</b> %2")
-                             .arg(client.toHtmlEscaped(), date.toHtmlEscaped()));
+    m_lblHeader->setText(QString("<b>%1</b> %2<br><b>%3</b> %4")
+                             .arg(tr("Cliente:"), client.toHtmlEscaped(), tr("Fecha:"), date.toHtmlEscaped()));
     rebuildTable();
 }
 

@@ -1,6 +1,6 @@
 # 04 — Current Printing Flow (what we are replacing)
 
-> **Historical (Excel era).** This page describes the printing path before 10.0 (Excel/QXlsx/cscript), kept as design background. The shipped code is `src/printing/` and `src/imprimir/`; see [`../printing.md`](../printing.md) and [`../imprimir.md`](../imprimir.md).
+> **Historical (Excel era).** This page describes the printing path before 10.0 (Excel/QXlsx/cscript), kept as design background; function names, line numbers and QR sizes below are the old baseline and no longer exist. The shipped code is `src/printing/` and `src/imprimir/` (`buildTicket` / `printTicket`); see [`../printing.md`](../printing.md) and [`../imprimir.md`](../imprimir.md) for the current flow, including the QR sizing (30-40 mm) and the leyenda rule (row 0 `ENVIADA`, or `PENDIENTE` just issued by the direct client).
 
 This is the baseline: how `src/imprimir/` prints today, the exact layout the new ESC/POS code
 must reproduce, and every place that calls the printing API (the integration surface a rewrite
@@ -63,9 +63,9 @@ same content and ordering within the printer's column width.
      `Facturas::taxBaseFromGross`).
 10. **`IMPORTE PAGADO`** line when `addPayedInfo`, else a blank spacer.
 11. **Copy marker** (recibo only): `(Copia para el cliente)` or `(Copia para el establecimiento)`.
-12. **Verifactu QR** (facturas only, never recibos): the `resolveQrCode()` `QPixmap` (≈140×140),
-    followed — only when row 0 `verifactu_estado == ENVIADA` — by the small legend
-    `Factura verificable en la sede electrónica de la AEAT`.
+12. **Verifactu QR** (facturas only, never recibos): the `resolveQrCode()` `QPixmap` (≈140×140
+    then; now redrawn at 30-40 mm), followed — only when row 0 `verifactu_estado == ENVIADA`
+    then — by the small legend `Factura verificable en la sede electrónica de la AEAT`.
 13. **Legal policy** (client copy only): the RD 1453/1987 clauses + RGPD first-layer notice
     (small font, fixed wording in `imprimir.cpp`).
 14. **Timestamp**: `dd/MM/yyyy - hh:mm:ss`, top-ruled.
@@ -91,12 +91,11 @@ sites keep working. Today they all follow the pattern
 
 | Caller | Location | Flow |
 |--------|----------|------|
-| Save ticket | [`mainwindow.cpp:548`](../../../src/app/mainwindow.cpp#L548) | recibo: client copy then establishment copy. |
-| Save invoice | [`mainwindow.cpp:565`](../../../src/app/mainwindow.cpp#L565) | factura: two copies. |
-| Print menu actions | [`mainwindow.cpp:803`](../../../src/app/mainwindow.cpp#L803) | "Imprimir recibo / factura / factura completa" set `isRecibo`/`isCompleteInvoice` then exec the dialog. |
-| Pay (Cobrar) | [`pay_dialog.cpp:393`](../../../src/recog_prendas/pay_dialog.cpp#L393) | single customer factura after partial payment. |
-| Pickup (Pagar todo / reprint) | [`recog_prendas.cpp:666`](../../../src/recog_prendas/recog_prendas.cpp#L666) | factura on pickup, with a "second copy?" prompt. |
-| Dialog OK (reprint) | [`imprimir.cpp:578`](../../../src/imprimir/imprimir.cpp#L578) | `on_bb_ok_cancel_accepted()` — multi-seq factura chooser, recibo establishment-copy prompt. |
+| Save ticket / invoice | `MainWindow::printRecibo` / `printFra` (`mainwindow.cpp`) | recibo: client copy then establishment copy; factura. |
+| Print menu actions | `mainwindow.cpp` (Imprimir → Recibo / Factura / Factura completa) | set `isRecibo`/`isCompleteInvoice` then show the dialog. |
+| Pay (Cobrar) | `PayDialog::printPartialFactura` (`pay_dialog.cpp`) | single customer factura after partial payment (a recibo when AEAT did not reply). |
+| Reprint from Recogida | `RecogPrendas::printFactura` (`recog_prendas.cpp`) | the clicked row's payment event. |
+| Dialog print button | `Imprimir::onPrintClicked` (`imprimir.cpp`) | multi-seq factura chooser, recibo shop copy tick-box. |
 
 Public members used by callers: ctor `Imprimir(db, parent)`; `getTicketInfo()`;
 `createTicketExcel(bool, bool)`; `printTicket()`; flags `isRecibo`, `isCompleteInvoice`,

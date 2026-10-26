@@ -5,6 +5,7 @@
 #include <QtTest>
 #include <QFile>
 #include <QTemporaryDir>
+#include <limits>
 
 #include "appsettings.h"
 
@@ -23,6 +24,45 @@ private slots:
         QCOMPARE(ReportHtml::formatEuro(1000000.0),  QStringLiteral("1.000.000,00 €"));
         QCOMPARE(ReportHtml::formatEuro(0.0),        QStringLiteral("0,00 €"));
         QCOMPARE(ReportHtml::formatEuro(-1234.5),    QStringLiteral("-1.234,50 €"));
+    }
+
+    void test_formatEuro_roundingAndEdges()
+    {
+        QCOMPARE(ReportHtml::formatEuro(-0.004),     QStringLiteral("0,00 €"));       // never "-0,00 €"
+        QCOMPARE(ReportHtml::formatEuro(-0.0),       QStringLiteral("0,00 €"));
+        QCOMPARE(ReportHtml::formatEuro(999.995),    QStringLiteral("1.000,00 €"));   // carries into the group
+        QCOMPARE(ReportHtml::formatEuro(-0.01),      QStringLiteral("-0,01 €"));
+        QCOMPARE(ReportHtml::formatEuro(12.5),       QStringLiteral("12,50 €"));
+    }
+
+    // Not a number: a dash, not an amount nobody computed.
+    void test_formatEuro_nonFinite()
+    {
+        QCOMPARE(ReportHtml::formatEuro(std::numeric_limits<double>::quiet_NaN()), QStringLiteral("-"));
+        QCOMPARE(ReportHtml::formatEuro(std::numeric_limits<double>::infinity()),  QStringLiteral("-"));
+        QCOMPARE(ReportHtml::formatEuro(-std::numeric_limits<double>::infinity()), QStringLiteral("-"));
+        QCOMPARE(ReportHtml::formatEuro(1.0e300),                                  QStringLiteral("-"));
+    }
+
+    void test_documentOpen_closesWithDocumentClose()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        AppSettings::instance()->loadFrom(dir.filePath("settings.json"));
+        const QString html = ReportHtml::documentOpen("T", "Sub") + ReportHtml::tableOpen(true) + "</table>"
+                             + ReportHtml::documentClose();
+        QCOMPARE(html.count("<table"), html.count("</table>"));
+        QCOMPARE(html.count("<body>"), 1);
+        QCOMPARE(html.count("</body>"), 1);
+        QVERIFY(html.contains("<p style='color:#566573; margin:0;'>Sub</p>"));
+    }
+
+    void test_writePdf_unwritablePathReturnsFalse()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ReportHtml::setOpenGeneratedReports(false);
+        QVERIFY(!ReportHtml::writePdf(dir.filePath("no/such/folder/r.pdf"), "<html><body>x</body></html>"));
     }
 
     void test_tableOpen()

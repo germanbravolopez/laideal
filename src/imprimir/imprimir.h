@@ -80,8 +80,6 @@ private:
     bool checkAnyItemPaid();
     // A printer problem: into the result panel while the dialog is shown, else a message box.
     void reportPrinterProblem(const QString &text, bool critical);
-    // Prints the built ticket if printing is enabled; returns whether it reached the printer.
-    bool sendIfEnabled();
 
     // Printable width in dots derived from AppSettings::paperWidthMm()
     // (576 @80mm, 420 @58mm). Drives the renderer's column layout.

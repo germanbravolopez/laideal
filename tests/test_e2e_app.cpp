@@ -1585,7 +1585,7 @@ private slots:
         QPointer<AddGarment> add = rp.findChild<AddGarment *>();
         QVERIFY(add);
         QCOMPARE(add->findChild<QLineEdit *>("leNRecibo")->text(), QStringLiteral("920"));
-        QVERIFY(add->ticketFound);
+        QVERIFY(add->ticketFound());
         add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
         add->findChild<QLineEdit *>("leCantidad")->setText("1");
         add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
@@ -2481,6 +2481,57 @@ private slots:
         QVERIFY2(text.contains("No se pudo imprimir el ticket"), qPrintable(text));
     }
 
+    // A factura prints only rows marked paid: a blank pagado is not "paid".
+    void test_imprimirFactura_blankPagadoRowIsNotPrinted()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "6201", "h6201a", "10.00", "10-02-2026", "A-6201"));
+        QVERIFY(E2e::seedGarment(m_db, "6201", "h6201b", "3.33"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET pagado = '' WHERE hash = 'h6201b'"));
+        Imprimir engine(m_db);
+        engine.isRecibo = false;
+        engine.le_n_ticket->setText("6201");
+        engine.getTicketInfo();
+        engine.buildTicket(true, false);
+        const QByteArray bytes = engine.ticketBytes();
+        QVERIFY(bytes.contains("10,00"));
+        QVERIFY(!bytes.contains("3,33") && !bytes.contains("13,33"));
+    }
+
+    // The dialog says why a factura has no QR: Verifactu not active is not "awaiting AEAT".
+    void test_imprimirFactura_noQrMessageNamesVerifactuDisabled()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "6202", "h6202a", "10.00", "10-02-2026", "A-6202"));
+        Imprimir dlg(m_db);
+        dlg.isRecibo = false;
+        dlg.show();
+        dlg.le_n_ticket->setText("6202");
+        dlg.findChild<QPushButton *>("btnPrint")->click();
+        const QString text = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("Verifactu no está activado") && !text.contains("no está confirmada"), qPrintable(text));
+    }
+
+    // A printer failure on the client copy stops there: no second failure for the shop copy.
+    void test_imprimirRecibo_firstCopyFailureSkipsTheShopCopy()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6203", "h6203a", "10.00"));
+        Imprimir dlg(m_db);
+        dlg.isRecibo = true;
+        dlg.show();
+        dlg.le_n_ticket->setText("6203");
+        auto *shopCopy = dlg.findChild<QCheckBox *>();
+        QVERIFY(shopCopy);
+        shopCopy->setChecked(true);
+        AppSettings *settings = AppSettings::instance();
+        const QString printerBefore = settings->printerName();
+        settings->setEnablePrinting(true);
+        settings->setPrinterName("NO SUCH PRINTER (laideal test)");
+        dlg.findChild<QPushButton *>("btnPrint")->click();
+        settings->setEnablePrinting(false);
+        settings->setPrinterName(printerBefore);
+        const QString text = dlg.findChild<QLabel *>("lblResult")->text();
+        QCOMPARE(text.count("No se pudo imprimir el ticket"), 1);
+    }
+
     // The Imprimir window stays open between prints, so a QR fetched for one invoice
     // must never be printed on the next one (here a voided ticket, which has none).
     // A reprint never prints a blank ticket nor an invoice AEAT never received: a number
@@ -2697,7 +2748,7 @@ private slots:
         auto *number = add->findChild<QLineEdit *>("leNRecibo");
         number->setText("2300");
         QTest::keyClick(number, Qt::Key_Return);
-        QVERIFY(add->ticketFound);
+        QVERIFY(add->ticketFound());
         add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
         add->findChild<QLineEdit *>("leCantidad")->setText("1");
         QTest::keyClick(number, Qt::Key_Return);                             // searches again, adds nothing
@@ -3465,7 +3516,7 @@ private slots:
         QVERIFY(add);
         add->findChild<QLineEdit *>("leNRecibo")->setText("2000");
         add->findChild<QPushButton *>("btnSearch")->click();
-        QVERIFY(add->ticketFound);
+        QVERIFY(add->ticketFound());
         add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
         add->findChild<QLineEdit *>("leCantidad")->setText("2");
         add->findChild<QCheckBox *>("chkPagado")->setChecked(true);
@@ -3473,7 +3524,7 @@ private slots:
         const QString result = add->findChild<QLabel *>("lblResult")->text();
         QVERIFY2(result.contains("Prenda añadida al recibo Nº 2000") && result.contains("se envía a AEAT"),
                  qPrintable(result));
-        QVERIFY(!add->ticketFound);                                        // ready for another receipt
+        QVERIFY(!add->ticketFound());                                        // ready for another receipt
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
 
         QTRY_COMPARE_WITH_TIMEOUT(scalar("SELECT verifactu_estado FROM ingresos WHERE n_recibo='2000' AND pagado='SI'"),
@@ -3500,7 +3551,7 @@ private slots:
         auto *add = mw.findChild<AddGarment *>();
         add->findChild<QLineEdit *>("leNRecibo")->setText("2100");
         add->findChild<QPushButton *>("btnSearch")->click();
-        QVERIFY(add->ticketFound);
+        QVERIFY(add->ticketFound());
         add->findChild<QLineEdit *>("leNRecibo")->setText("2200");
         add->findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");
         add->findChild<QLineEdit *>("leCantidad")->setText("1");
@@ -3510,7 +3561,7 @@ private slots:
         QVERIFY(add->findChild<QLabel *>("lblResult")->text().contains("No se ha buscado"));
         // Searching the sent ticket itself is refused before the form opens.
         add->findChild<QPushButton *>("btnSearch")->click();
-        QVERIFY(!add->ticketFound);
+        QVERIFY(!add->ticketFound());
         QVERIFY(add->findChild<QLabel *>("lblResult")->text().contains("ya tiene prendas pagadas"));
         QTest::qWait(300);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='2200'"), QStringLiteral("1"));
@@ -3905,6 +3956,123 @@ private slots:
 
         QCOMPARE(search("600123456"), QStringList());                    // a phone no client has
         QVERIFY2(message().contains("No hay ningún cliente con el teléfono"), qPrintable(message()));
+    }
+
+    // A phone typed with spaces or +34 is still a phone, relatives sharing a number are all
+    // listed, and the date column follows the combo position, not its (translatable) text.
+    void test_recogida_phoneWithSpacesAndSharedPhone()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6101", "h6101", "5.00", "01-03-2026"));
+        QVERIFY(E2e::seedGarment(m_db, "6102", "h6102", "6.00", "02-03-2026"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = 'Ana Mora' WHERE n_recibo = '6101'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = 'Luis Mora' WHERE n_recibo = '6102'"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Ana Mora', '', '655123456', '')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Luis Mora', '655123456', '', '')"));
+
+        RecogPrendas rp(m_db);
+        const auto search = [&rp](const QString &text) {
+            rp.findChild<QLineEdit *>("le_search")->setText(text);
+            QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+            QStringList tickets;
+            QAbstractItemModel *view = rp.findChild<QTableView *>("tableView")->model();
+            for (int r = 0; view && r < view->rowCount(); ++r)
+                tickets << view->data(view->index(r, INGRESOS_COL_N_RECIBO)).toString();
+            tickets.sort();
+            return tickets;
+        };
+        const QStringList both({ "6101", "6102" });
+        QCOMPARE(search("655123456"), both);
+        QCOMPARE(search("655 123 456"), both);
+        QCOMPARE(search("+34655123456"), both);
+        QCOMPARE(search("+34 655 123 456"), both);
+        QCOMPARE(search("6101"), QStringList({ "6101" }));
+
+        auto *combo = rp.findChild<QComboBox *>("cb_search_date");
+        for (int i = 0; i < combo->count(); ++i)
+            combo->setItemText(i, QStringLiteral("Item%1").arg(i));   // an English UI would not say "Recepción"
+        combo->setCurrentIndex(0);
+        QCOMPARE(search("01-03-2026"), QStringList({ "6101" }));
+        QVERIFY(!rp.findChild<QLabel *>("lblResult")->text().contains("No se reconoce"));
+    }
+
+    // Importe total skips cancelled / rectified rows, counts unpaid ones, and reads the comma.
+    void test_recogida_totalSkipsAnuladaAndRectificada()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6120", "h6120a", "10.50"));
+        QVERIFY(E2e::seedGarment(m_db, "6120", "h6120b", "4.00"));
+        QVERIFY(E2e::seedGarment(m_db, "6120", "h6120c", "7.00"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ANULADA' WHERE hash = 'h6120b'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'RECTIFICADA' WHERE hash = 'h6120c'"));
+        RecogPrendas rp(m_db);
+        rp.findChild<QLineEdit *>("le_search")->setText("6120");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        QVERIFY2(rp.findChild<QLabel *>("lbl_total")->text().contains("10,50"),
+                 qPrintable(rp.findChild<QLabel *>("lbl_total")->text()));
+    }
+
+    // A voided garment is read-only except its observations.
+    void test_recogida_anuladoRowOnlyAcceptsObservations()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6130", "h6130", "9.00"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cantidad = '3', estado = 'Anulado', "
+                                "verifactu_estado = 'ANULADA' WHERE hash = 'h6130'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "6130", "h6130"));
+        rp.findChild<QLineEdit *>("le_qty")->setText("5");
+        QMetaObject::invokeMethod(&rp, "on_le_qty_editingFinished");
+        QVERIFY(selectRow(rp, "6130", "h6130"));
+        rp.findChild<QLineEdit *>("le_price")->setText("1,00");
+        QMetaObject::invokeMethod(&rp, "on_le_price_editingFinished");
+        QCOMPARE(scalar("SELECT cantidad || '|' || importe FROM ingresos WHERE hash='h6130'"), QStringLiteral("3|9.00"));
+        QVERIFY(selectRow(rp, "6130", "h6130"));
+        rp.findChild<QLineEdit *>("le_obsv")->setText("por error");
+        QMetaObject::invokeMethod(&rp, "on_le_obsv_editingFinished");
+        QCOMPARE(scalar("SELECT observaciones FROM ingresos WHERE hash='h6130'"), QStringLiteral("por error"));
+    }
+
+    // Recoger todo is scoped to the ticket, leaves a voided garment alone and picks up a
+    // legacy blank-estado row.
+    void test_recogida_pickupAllIsScopedToTheTicket()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6140", "h6140a", "5.00"));
+        QVERIFY(E2e::seedGarment(m_db, "6140", "h6140b", "5.00"));
+        QVERIFY(E2e::seedGarment(m_db, "6140", "h6140c", "5.00"));
+        QVERIFY(E2e::seedGarment(m_db, "6141", "h6141a", "5.00"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = 'Anulado', verifactu_estado = 'ANULADA' WHERE hash = 'h6140b'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET estado = '' WHERE hash = 'h6140c'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "6140", "h6140a"));
+        QMetaObject::invokeMethod(&rp, "on_pb_pku_all_clicked");
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(estado) FROM (SELECT estado FROM ingresos WHERE n_recibo='6140' ORDER BY hash)"),
+                 QStringLiteral("Recogido,Anulado,Recogido"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE n_recibo='6141'"), QStringLiteral("En tienda"));
+        QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("Ticket 6140 recogido"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+    }
+
+    // Reimprimir factura on an unpaid row prints nothing and says so.
+    void test_recogida_reprintRefusesAnUnpaidRow()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6150", "h6150", "5.00"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "6150", "h6150"));
+        QMetaObject::invokeMethod(&rp, "on_pb_print_clicked");
+        const QString message = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(message.contains("no está pagada") && !message.contains("impresa"), qPrintable(message));
+    }
+
+    // A write refused on a voided row reports no success, even when the caller's own checks pass.
+    void test_recogida_anuladoRowSplitReportsNothingSplit()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "6110", "h6110", "9.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cantidad = '3', estado = 'Anulado', "
+                                "verifactu_estado = 'ANULADA' WHERE hash = 'h6110'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "6110", "h6110"));
+        QMetaObject::invokeMethod(&rp, "on_pb_separ_garm_clicked");
+        const QString message = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(!message.contains("separadas"), qPrintable(message));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='6110'"), QStringLiteral("1"));
     }
 
     // Cobrar clicked twice while the AEAT answers: the first click disables the button, so one

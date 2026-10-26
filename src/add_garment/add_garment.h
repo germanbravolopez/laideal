@@ -27,7 +27,7 @@ public:
     explicit AddGarment(const QSqlDatabase &database, QWidget *parent = nullptr);
     // Types the receipt number and searches it, as the operator would.
     void loadTicket(const QString &ticketNum);
-    bool ticketFound = false;
+    bool ticketFound() const { return m_ticketFound; }
     // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
     // Unset: paid garments are refused.
     std::function<QString()> invoicingBlocked;
@@ -56,6 +56,7 @@ private:
 
     QSqlDatabase db;
     QSqlQueryModel *m_ticketModel = nullptr;
+    bool m_ticketFound = false;
     QString m_searchedTicket;   // the number the search checked; a save must use the same one
 
     QLineEdit *m_leNRecibo = nullptr;

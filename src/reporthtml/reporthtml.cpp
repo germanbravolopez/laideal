@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QPageSize>
 #include <QPrinter>
+#include <QtNumeric>
 #include <QTextDocument>
 #include <QUrl>
 
@@ -93,8 +94,12 @@ QString formatEuro(double value)
     // "1.234,56 €". Grouped manually because QLocale::toString(value,'f',2)
     // grouped inconsistently (no separator for 1234, a single misplaced one for
     // 1000000).
-    const bool negative = value < 0.0;
+    // A value that is not a number (or beyond what cents can hold) is shown as a dash,
+    // never as an invented amount.
+    if (!qIsFinite(value) || qAbs(value) >= 9.0e15 / 100.0)
+        return QStringLiteral("-");
     const qlonglong cents = qRound64(qAbs(value) * 100.0);
+    const bool negative = value < 0.0 && cents > 0;   // -0.004 rounds to 0,00 €, not "-0,00 €"
     const qlonglong intPart = cents / 100;
     const int frac = static_cast<int>(cents % 100);
 

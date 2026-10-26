@@ -119,6 +119,69 @@ private slots:
         QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("→")), QByteArray("?"));
     }
 
+    // Glyphs a laundry plausibly prints (m2 on carpets, symbols, Nordic letters).
+    void test_commonExtraGlyphsMapToCp858()
+    {
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("m²")), QByteArray("m\xFD", 2));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("²³¹")), QByteArray::fromHex("FDFCFB"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("×±§®µ")), QByteArray::fromHex("9EF1F5A9E6"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("åÅæÆøØßõýÿ")), QByteArray::fromHex("868F91929B9DE1E4EC98"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("¢¥")), QByteArray::fromHex("BDBE"));
+    }
+
+    void test_typographicPunctuationFoldsToAscii()
+    {
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("a–b—c")), QByteArray("a-b-c"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("‘x’ “y”")), QByteArray("'x' \"y\""));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("fin…")), QByteArray("fin..."));
+        QCOMPARE(EscPosBuilder::toCp858(QString("a") + QChar(0x00A0) + "b"), QByteArray("a b"));
+    }
+
+    void test_feedIsClampedToOneByte()
+    {
+        EscPosBuilder b;
+        b.feed(300).feed(0).feed(-1);
+        QCOMPARE(b.bytes(), QByteArray::fromHex("1B64FF"));   // ESC d 255, nothing for 0 and -1
+    }
+
+    // The QR is thresholded, never dithered: a mid-grey image is solid black or solid white.
+    void test_rasterImageThresholdsInsteadOfDithering()
+    {
+        for (const auto &pair : { qMakePair(100, uchar(0xFF)), qMakePair(200, uchar(0x00)) }) {
+            QImage img(8, 2, QImage::Format_Grayscale8);
+            img.fill(pair.first);
+            EscPosBuilder b;
+            b.rasterImage(img);
+            QCOMPARE(b.bytes().left(8), QByteArray::fromHex("1D763000" "0100" "0200"));
+            QCOMPARE(b.bytes().mid(8), QByteArray(2, char(pair.second)));
+        }
+    }
+
+    // Header lines longer than the paper are wrapped by the renderer, not by the firmware.
+    void test_renderWrapsALongHeader()
+    {
+        TicketData d;
+        d.isRecibo = true;
+        d.businessName = "Tintoreria La Ideal de Madrid Sociedad Limitada";   // 47 chars, 24 fit double-size
+        d.address = "Calle de la Constitucion Espanola numero 123 bajo izquierda";
+        const QByteArray out = TicketRenderer::render(d, 576);
+        QVERIFY(!out.contains(d.businessName.toLatin1()));
+        QVERIFY(out.contains("Tintoreria La Ideal de\nMadrid Sociedad Limitada\n"));
+        QVERIFY(!out.contains(d.address.toLatin1()));
+        QVERIFY(out.contains("Calle de la Constitucion Espanola numero 123\nbajo izquierda\n"));
+    }
+
+    void test_renderPrintsTheRateWithItsDecimals()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.total = 11.05;
+        d.ivaRate = 10.5;
+        QVERIFY(TicketRenderer::render(d, 576).contains("IVA (10,5%):"));
+        d.ivaRate = 21;
+        QVERIFY(TicketRenderer::render(d, 576).contains("IVA (21%):"));
+    }
+
     void test_lineSpacingBytes()
     {
         EscPosBuilder b;
@@ -351,6 +414,20 @@ private slots:
         QVERIFY(PrinterStatus::fromAsb(0x00000800u).cutterError);
         QCOMPARE(PrinterStatus::fromAsb(0x00000800u).summary(), QStringLiteral("Error en el cortador"));
         QVERIFY(PrinterStatus::fromAsb(0x00000008u).offline);
+    }
+
+    // What the shop's unit reports for an open cover, off or unplugged: ASB 0x1.
+    void test_printerStatus_noResponse()
+    {
+        const PrinterStatus s = PrinterStatus::fromAsb(0x00000001u);
+        QVERIFY(s.noResponse);
+        QVERIFY(s.summary().contains("no responde"));
+        QVERIFY(!s.isFatal());
+        QCOMPARE(PrinterStatus::fromAsb(0).noResponse, false);
+        // A paper-out outranks it; all bits set stays decodable and fatal.
+        QCOMPARE(PrinterStatus::fromAsb(0x00080001u).summary(), QStringLiteral("Sin papel"));
+        const PrinterStatus all = PrinterStatus::fromAsb(0xFFFFFFFFu);
+        QVERIFY(all.valid && all.isFatal() && all.coverOpen && all.paperEnd && all.noResponse);
     }
 
     void test_printerStatus_fatalVsRecoverable()

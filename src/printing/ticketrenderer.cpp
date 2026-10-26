@@ -16,12 +16,19 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
 
     // --- Header: centered, bold; shop name printed double-size ---
     b.align(EscPosBuilder::Align::Center).bold(true);
-    b.doubleSize(true).line(d.businessName).doubleSize(false);
-    b.line(d.legalName);
-    b.line("NIF: " + d.nif);
-    b.line(d.address);
-    b.line(d.city);
-    b.line("Tlf: " + d.phone);
+    // A long line is wrapped here: the printer's own wrap is uncentered and may cut a word.
+    const auto wrapped = [&b](const QString &text, int width) {
+        for (const QString &row : EscPosBuilder::wrapText(text, width))
+            b.line(row);
+    };
+    b.doubleSize(true);
+    wrapped(d.businessName, b.columns() / 2);
+    b.doubleSize(false);
+    wrapped(d.legalName, b.columns());
+    wrapped("NIF: " + d.nif, b.columns());
+    wrapped(d.address, b.columns());
+    wrapped(d.city, b.columns());
+    wrapped("Tlf: " + d.phone, b.columns());
     b.bold(false);
     b.rule('=');
 
@@ -68,7 +75,7 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
         // The split of the Verifactu record (splitGross): base in cents, IVA the rest.
         const GrossSplit split = splitGross(d.total, d.ivaRate);
         b.leftRight(QStringLiteral("Base Imponible:"), money(split.base));
-        b.leftRight(QStringLiteral("IVA (%1%):").arg(d.ivaRate, 0, 'f', 0),
+        b.leftRight(QStringLiteral("IVA (%1%):").arg(QString::number(d.ivaRate, 'g', 6).replace('.', ',')),
                     money(split.tax));
         b.leftRight(QStringLiteral("TOTAL:"), money(d.total));
     }
@@ -89,11 +96,9 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
                                : QStringLiteral("(Copia para el establecimiento)"));
     }
 
-    // --- Verifactu QR (facturas only; raster the AEAT-issued pixmap verbatim) ---
+    // --- Verifactu QR (facturas only; Imprimir redraws it through printableQr) ---
     if (!d.qr.isNull() && !voided) {
-        // No extra feed here: the payment marker above already separates the QR,
-        // and the AEAT pixmap carries its own quiet-zone margin - an added blank
-        // line left too much empty space before the code.
+        // No extra feed: the payment marker above separates the QR, which has its own quiet zone.
         b.align(EscPosBuilder::Align::Center);
         b.rasterImage(d.qr);
         b.feed(1);
@@ -142,7 +147,7 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     return b.bytes();
 }
 
-QImage TicketRenderer::printableQr(const QImage &qr)
+QImage TicketRenderer::printableQr(const QImage &qr, int paperDots)
 {
     if (qr.isNull())
         return QImage();
@@ -187,7 +192,7 @@ QImage TicketRenderer::printableQr(const QImage &qr)
     if (qAbs(width / modules - measured) > 0.25 * measured || qAbs(width - height) > width / modules)
         return QImage();
     // 30-40 mm = 240-320 dots: the largest whole module size that fits.
-    const int dots = qMax(1, 320 / modules);
+    const int dots = qMax(1, qMin(320 / modules, paperDots / (modules + 8)));
     const int quiet = 4 * dots;
     QImage out((modules * dots) + 2 * quiet, (modules * dots) + 2 * quiet, QImage::Format_Grayscale8);
     out.fill(255);
