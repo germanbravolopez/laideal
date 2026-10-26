@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
 project(laideal VERSION 12.2 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
