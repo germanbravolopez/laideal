@@ -5,8 +5,8 @@
 // installing a release: the checks of docs/testing/smoke_test.md that need the shop's
 // real data and printer, against a copy of the newest backup with a copy of the
 // settings (backups off, no certificate password). The live database is only read,
-// and so is ~/.laideal_settings.json, except that AppSettings::load() may rewrite it (a
-// legacy plaintext key is re-encrypted, a missing file is created). Nothing reaches AEAT.
+// and so is ~/.laideal_settings.json (main.cpp loads it with AppSettings::loadReadOnly).
+// Nothing reaches AEAT.
 // The pure parts live here so the suites can test them; SelfCheckDialog runs them and
 // asks the guided questions.
 

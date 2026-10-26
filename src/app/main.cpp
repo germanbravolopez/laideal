@@ -38,7 +38,10 @@ int main(int argc, char *argv[])
             QObject::tr("Falta el archivo de ajustes después de --settings."));
         return 1;
     }
-    if (!settingsFile.isEmpty()) {
+    if (args.contains(QStringLiteral("--self-check"))) {
+        // The check only reads the shop's settings: load() could rewrite them.
+        settings->loadReadOnly(settingsFile.isEmpty() ? settings->filePath() : settingsFile);
+    } else if (!settingsFile.isEmpty()) {
         settings->loadFrom(settingsFile);
         qWarning() << "main: using the settings file" << settingsFile;
     } else {
