@@ -322,6 +322,49 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
                  << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
 
+    // 12.2 repair: before 10.10 the AEAT answer of a ticket's first payment was also
+    // written onto its unpaid garments (same seq 0), which then carry a paid sibling's
+    // ENVIADA + CSV for an invoice that never covered them; since 12.0 the guard trigger
+    // refuses to charge them. Clear the copy: SIN COBRAR, or ANULADA when voided in
+    // place. The estado moves first, so the trigger no longer guards the row. Idempotent.
+    {
+        const QString stamped = QStringLiteral(
+            "SELECT u.rowid FROM ingresos u WHERE (u.pagado IS NULL OR u.pagado != 'SI') "
+            "  AND u.verifactu_estado = 'ENVIADA' AND COALESCE(u.verifactu_csv, '') != '' "
+            "  AND EXISTS (SELECT 1 FROM ingresos p WHERE p.n_recibo = u.n_recibo AND p.pagado = 'SI' "
+            "              AND p.verifactu_csv = u.verifactu_csv)");
+        QVector<qlonglong> rows;
+        QSqlQuery find(db);
+        if (!find.exec(stamped))
+            fail() << "migrateDatabase: stamped-unpaid search failed -" << find.lastError().text();
+        while (find.next())
+            rows.append(find.value(0).toLongLong());
+        find.finish();
+        QSqlQuery relabel(db), clear(db);
+        relabel.prepare("UPDATE ingresos SET verifactu_estado = CASE WHEN estado = '" INGRESOS_ESTADO_ANULADO
+                        "' THEN 'ANULADA' ELSE 'SIN COBRAR' END WHERE rowid = :r");
+        clear.prepare("UPDATE ingresos SET verifactu_csv = NULL, verifactu_timestamp = NULL, "
+                      "verifactu_error = NULL, verifactu_url_qr = NULL, verifactu_xml = NULL, "
+                      "verifactu_hash = NULL, verifactu_invoice_id = NULL, verifactu_invoice_seq = 0 "
+                      "WHERE rowid = :r");
+        db.transaction();   // every row or none
+        bool cleared = true;
+        for (qlonglong r : rows) {
+            relabel.bindValue(":r", r);
+            clear.bindValue(":r", r);
+            if (!relabel.exec() || !clear.exec()) {
+                cleared = false;
+                fail() << "migrateDatabase: stamped-unpaid repair failed -"
+                       << relabel.lastError().text() << clear.lastError().text();
+                break;
+            }
+        }
+        if (cleared) db.commit(); else db.rollback();
+        if (cleared && !rows.isEmpty())
+            qDebug() << "migrateDatabase: cleared a paid sibling's AEAT invoice data from"
+                     << rows.size() << "unpaid garment(s)";
+    }
+
     // 11.0 repair: Separar prendas used to insert the split-off garments with empty
     // verifactu_* columns and seq 0, so a split of a paid row fell out of the invoice
     // AEAT registered for it (export total, cancellation, reprint). Such a row is paid
@@ -2060,9 +2103,9 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // paid-at-save row. A row with no fecha_pago (unpaid) yields an invalid date
     // the dialog refuses to retry - correct, it has no AEAT invoice to recover.
     //
-    // The recovery FLOOR, however, gates on fecha_recepcion (when the ticket
-    // entered the system) to exclude pre-Verifactu legacy tickets; both columns
-    // store dd-MM-yyyy, substr-rebuilt to yyyy-MM-dd for lexicographic compares.
+    // The recovery FLOOR gates on the invoice's own date (its earliest fecha_pago), like
+    // refusedInvoices: a legacy ticket paid before Verifactu is left out, while a ticket
+    // received before the floor and paid after it is an invoice and must be listed.
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
@@ -2073,12 +2116,12 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         "  AND pagado = 'SI' "
         "  AND fecha_pago IS NOT NULL AND fecha_pago != '' "
         "  AND COALESCE(verifactu_rectifies_n_recibo, '') = '' "      // never resent as a plain invoice
-        "  AND substr(fecha_recepcion, 7, 4) || '-' "
-        "      || substr(fecha_recepcion, 4, 2) || '-' "
-        "      || substr(fecha_recepcion, 1, 2) >= :floor "
         "GROUP BY n_recibo, verifactu_invoice_seq "
+        "HAVING date(:floor) IS NULL OR MIN(" + kFechaPagoIso + ") IS NULL "
+        "    OR MIN(" + kFechaPagoIso + ") >= date(:floor2) "
         "ORDER BY " N_RECIBO_ORDER " DESC, verifactu_invoice_seq");
     q.bindValue(":floor", floorIso);
+    q.bindValue(":floor2", floorIso);
     if (!q.exec()) {
         qWarning() << "pendingVerifactuEvents: SELECT failed -" << q.lastError().text();
         return events;

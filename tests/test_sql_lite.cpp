@@ -610,6 +610,29 @@ private slots:
         QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h88v'"), QStringLiteral("ANULADA"));
     }
 
+    // Ticket 30634 at the shop (26-10-2026): before 10.10 the first payment's AEAT answer
+    // was also written onto the unpaid garment, which the 12.0 guard then refused to charge.
+    void test_migrateDatabase_clearsAeatDataCopiedOntoUnpaidGarments()
+    {
+        const char *row = "INSERT INTO ingresos (edit_lock, n_recibo, hash, importe, pagado, estado, fecha_pago, "
+                          "verifactu_estado, verifactu_csv, verifactu_hash, verifactu_invoice_id, verifactu_invoice_seq) "
+                          "VALUES ('0', '%1', '%2', '%3', '%4', '%5', '%6', 'ENVIADA', '%7', 'H', '%1', 0)";
+        exec(QString(row).arg("95", "h95p", "5.50", "SI", "Recogido", "10-07-2026", "CSV95"));
+        exec(QString(row).arg("95", "h95u", "15.00", "NO", "En tienda", "", "CSV95"));    // copied stamp
+        exec(QString(row).arg("95", "h95v", "15.00", "NO", "Anulado", "", "CSV95"));      // copied, voided since
+        exec(QString(row).arg("96", "h96u", "9.00", "NO", "En tienda", "", "CSV96"));     // no paid sibling: kept
+        migrateDatabase(m_db);   // installs the guard trigger too: the charge below runs under it
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || COALESCE(verifactu_csv, 'null') || '|' "
+                        "|| COALESCE(verifactu_invoice_id, 'null') FROM ingresos WHERE hash='h95u'"),
+                 QStringLiteral("SIN COBRAR|null|null"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || COALESCE(verifactu_csv, 'null') FROM ingresos WHERE hash='h95v'"),
+                 QStringLiteral("ANULADA|null"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || verifactu_csv FROM ingresos WHERE hash='h95p'"),
+                 QStringLiteral("ENVIADA|CSV95"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash='h96u'"), QStringLiteral("ENVIADA"));
+        QVERIFY(tryExec("UPDATE ingresos SET pagado = 'SI', fecha_pago = '26-10-2026' WHERE hash = 'h95u'"));
+    }
+
     void test_ticketLastPaymentDate()
     {
         insertIngreso("90", "10-02-2026", "10.00", "SI", "ENVIADA", 1);
@@ -1554,7 +1577,7 @@ private slots:
     // A retry must re-submit under the original AEAT date (fecha_pago), not the
     // reception date: a partial pay made on a different day than reception would
     // otherwise register a second invoice at AEAT (date is part of the invoice
-    // identity). The recovery FLOOR still gates on fecha_recepcion.
+    // identity). The recovery FLOOR gates on that payment date too.
     void test_pendingVerifactuEvents_returnsPaymentDate()
     {
         // reception 10-03-2026 (after floor), paid later on 25-06-2026.
@@ -1567,9 +1590,11 @@ private slots:
         QCOMPARE(ev.size(), 1);
         QCOMPARE(ev[0].fechaPago, QStringLiteral("25-06-2026")); // payment date, not 10-03-2026
 
-        // And the floor gates on reception: a reception before the floor is excluded
-        // even though its payment date is after it.
+        // The floor gates on the payment: a payment before it is left out...
         QVERIFY(pendingVerifactuEvents(m_db, "2026-12-01").isEmpty());
+        // ...while one after it is listed although the ticket was received before it
+        // (shop 26-10-2026: tickets received in April-August, paid in October, never listed).
+        QCOMPARE(pendingVerifactuEvents(m_db, "2026-06-01").size(), 1);
     }
 
     // A ticket whose two payment events (Q1 and Q2) are both cancelled in Q2 is one
