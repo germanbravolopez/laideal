@@ -2124,6 +2124,194 @@ private slots:
         QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("NO"));
     }
 
+    void test_updateTicketPickup_doesNotReviveAnulado()
+    {
+        insertRow("T1", "hashA");
+        exec("UPDATE ingresos SET estado='Anulado' WHERE hash='hashA'");
+        QVERIFY(updateTicketPickup(m_db, "T1", "hashA", "20-03-2026", "Recogido"));
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='hashA'"), QStringLiteral("Anulado"));
+        QVERIFY(scalar("SELECT fecha_recogida FROM ingresos WHERE hash='hashA'").isEmpty());
+    }
+
+    void test_insertNewItemToTable_bindsValuesAndRefusesBadShapes()
+    {
+        const QString hostile = QStringLiteral("O'Brien\"); DROP TABLE clientes;--");
+        QVERIFY(insertNewItemToTable(m_db, { hostile, "111", "222", "Calle 1" }, "clientes"));
+        QCOMPARE(scalar("SELECT nombre || '|' || tel_fijo || '|' || movil || '|' || direccion FROM clientes"),
+                 hostile + QStringLiteral("|111|222|Calle 1"));
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown table or wrong value count"));
+        QVERIFY(!insertNewItemToTable(m_db, { "x", "y" }, "clientes"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown table or wrong value count"));
+        QVERIFY(!insertNewItemToTable(m_db, { "x" }, "ingresos"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes"), QStringLiteral("1"));
+
+        QVERIFY(insertNewItemToTable(m_db, { "Abrigo", "9.50", "4.00" }, "prendas"));
+        QCOMPARE(scalar("SELECT precio_plancha FROM prendas WHERE nombre='Abrigo'"), QStringLiteral("4.00"));
+        exec("DELETE FROM prendas");
+    }
+
+    void test_readGarmentPrice_servicesCaseAndWildcards()
+    {
+        exec("DELETE FROM prendas");
+        exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Alfombra 100%', '30.00', '5.00')");
+        exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Alfombra 1000', '99.00', '9.00')");
+        exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', '4,50', '2.00')");
+        QCOMPARE(readGarmentPrice(m_db, "Alfombra 100%", "Limp."), 30.0f);
+        QCOMPARE(readGarmentPrice(m_db, "alfombra 100%", "Plan."), 5.0f);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("garment not found"));
+        QCOMPARE(readGarmentPrice(m_db, "Alfombra 10%", "Limp."), -1.0f);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("unknown service"));
+        QCOMPARE(readGarmentPrice(m_db, "Camisa", "Tint."), 0.0f);
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("comma decimal"));
+        QCOMPARE(readGarmentPrice(m_db, "Camisa", "Limp."), -1.0f);
+        exec("DELETE FROM prendas");
+    }
+
+    void test_addNewClient_updateItemToClient_roundTrip()
+    {
+        QVERIFY(addNewClient(m_db, "Ana", "911", "Calle 2", "600"));
+        QVERIFY(updateItemToClient(m_db, "movil", "611", "Ana"));
+        QCOMPARE(readClientPhones(m_db, "Ana"), (QStringList{"911", "611"}));
+        QVERIFY(updateItemToClient(m_db, "movil", "700", "Nobody"));   // no row: still true
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes"), QStringLiteral("1"));
+    }
+
+    void test_selectFromWhereLike_exactAndPrefix()
+    {
+        exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) VALUES ('Ana Maria', '1', '2', 'x')");
+        exec("INSERT INTO clientes (nombre, tel_fijo, movil, direccion) VALUES ('100%_', '3', '4', 'y')");
+        QCOMPARE(selectFromWhereLike(m_db, "tel_fijo", "clientes", "nombre", "Ana", true, false), QString());
+        QCOMPARE(selectFromWhereLike(m_db, "tel_fijo", "clientes", "nombre", "Ana", false, false), QStringLiteral("1"));
+        QCOMPARE(selectFromWhereLike(m_db, "tel_fijo", "clientes", "nombre", "ana m", false, false), QStringLiteral("1"));
+        QCOMPARE(selectFromWhereLike(m_db, "tel_fijo", "clientes", "nombre", "%", false, false), QString());
+        QCOMPARE(selectFromWhereLike(m_db, "tel_fijo", "clientes", "nombre", "100%", false, false), QStringLiteral("3"));
+    }
+
+    void test_readColumnFromTable_orderAndYearBounds()
+    {
+        exec("INSERT INTO clientes (nombre) VALUES ('Zoe')");
+        exec("INSERT INTO clientes (nombre) VALUES ('Ana')");
+        QCOMPARE(readColumnFromTable(m_db, "nombre", "clientes", "nombre"), (QStringList{"Ana", "Zoe"}));
+        QCOMPARE(readColumnFromTable(m_db, "nombre", "clientes", QString()).count(), 2);
+
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, true, "fecha_recepcion", "ingresos"), 0);   // empty table
+        insertIngreso("1", "05-03-2024", "1.00", "NO", "");
+        insertIngreso("2", "09-11-2026", "1.00", "NO", "");
+        insertIngreso("3", "", "1.00", "NO", "");                       // an empty date must not collapse the bound
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, false, "fecha_recepcion", "ingresos"), 2024);
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, true, "fecha_recepcion", "ingresos"), 2026);
+    }
+
+    void test_closedQuarterSql_isoDateIsUnlocked()
+    {
+        QVERIFY(closeQuarter(m_db, 1, 2026, "r.pdf"));
+        insertRow("T1", "hashA", "10.00", "NO");
+        exec("UPDATE ingresos SET fecha_pago='2026-03-15' WHERE hash='hashA'");
+        QVERIFY(updateTicketSizeAndPrice(m_db, "T1", "hashA", "2", "12.00"));   // an ISO date is in no quarter
+        QCOMPARE(scalar("SELECT importe FROM ingresos WHERE hash='hashA'"), QStringLiteral("12.00"));
+    }
+
+    // Pins the documented decision: a paid row with a fecha_anulacion but an estado that is
+    // not ANULADA / RECTIFICADA stays income and is subtracted nowhere.
+    void test_incomePredicate_anulacionDateWithLiveEstadoStaysIncome()
+    {
+        insertIngreso("1", "10-02-2026", "10.00", "SI", "ENVIADA");
+        exec("UPDATE ingresos SET fecha_anulacion='15-02-2026' WHERE n_recibo='1'");
+        bool ok = false;
+        QCOMPARE(incomeTicketsBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok).size(), 1);
+        QVERIFY(ok);
+        QVERIFY(regularizationsBetweenDates(m_db, QDate(2026, 1, 1), QDate(2026, 4, 1), &ok).isEmpty());
+    }
+
+    // An amount that is not a plain number is flagged, never summed, in all three listings.
+    void test_listings_nonNumericAmountsAreFlagged()
+    {
+        insertIngreso("1", "10-02-2026", "abc", "SI", "ENVIADA");
+        insertIngreso("2", "11-02-2026", "", "SI", "ENVIADA");
+        insertIngreso("3", "12-02-2026", "5.00", "SI", "ENVIADA");
+        insertIngreso("4", "13-02-2026", "7.00", "SI", "ANULADA");
+        exec("UPDATE ingresos SET fecha_anulacion='14-02-2026' WHERE n_recibo='4'");
+        insertIngreso("5", "13-02-2026", "9.00", "SI", "ANULADA");
+        exec("UPDATE ingresos SET fecha_anulacion='14-02-2026', importe='12.5e' WHERE n_recibo='5'");
+        exec("INSERT INTO gastos (id, n_factura, fecha, iva, importe) VALUES (1, 'F1', '10-02-2026', '21', 'abc')");
+
+        const QDate start(2026, 1, 1), end(2026, 4, 1);
+        const QVector<IncomeTicketDetail> income = incomeTicketsBetweenDates(m_db, start, end);
+        QCOMPARE(income.size(), 5);                      // cancelled rows stay income in their payment period
+        QCOMPARE(income[0].invalidAmounts, 1);
+        QCOMPARE(income[1].invalidAmounts, 1);
+        QCOMPARE(income[2].invalidAmounts, 0);
+        QCOMPARE(income[2].importe, 5.0);
+        QCOMPARE(income[4].invalidAmounts, 1);
+        const QVector<RegularizationDetail> regs = regularizationsBetweenDates(m_db, start, end);
+        QCOMPARE(regs.size(), 2);
+        QCOMPARE(regs[0].invalidAmounts + regs[1].invalidAmounts, 1);
+        const QVector<ExpenseDetail> expenses = expensesBetweenDates(m_db, start, end);
+        QCOMPARE(expenses.size(), 1);
+        QVERIFY(expenses[0].invalidAmount);
+        QCOMPARE(expenses[0].importe, 0.0);
+    }
+
+    void test_refusedInvoices_floorOrderingAndFlags()
+    {
+        insertIngreso("10", "10-03-2026", "5.00", "SI", "ERROR", 0);
+        insertIngreso("10", "12-03-2026", "3.00", "SI", "ERROR", 0);          // same event: summed, earliest date
+        insertIngreso("11", "20-03-2026", "7.00", "SI", "ERROR", 1);
+        insertIngreso("R-1", "25-03-2026", "2.00", "SI", "ERROR", 0);
+        exec("UPDATE ingresos SET verifactu_rectifies_n_recibo='10', verifactu_error='rechazada' WHERE n_recibo='R-1'");
+        insertIngreso("12", "01-01-2026", "1.00", "SI", "ERROR", 0);          // before the floor
+        insertIngreso("13", "05-03-2026", "1.00", "SI", "ENVIADA", 0);         // not refused
+        insertIngreso("14", "06-03-2026", "1.00", "NO", "ERROR", 0);           // unpaid
+        insertIngreso("15", "garbage", "4.00", "SI", "ERROR", 0);             // unreadable date: never hidden
+
+        const QVector<RefusedInvoice> listed = refusedInvoices(m_db, "2026-02-01");
+        QStringList numbers;
+        for (const RefusedInvoice &r : listed)
+            numbers << r.nRecibo;
+        QCOMPARE(numbers, (QStringList{"R-1", "11", "10", "15"}));            // newest first
+        QCOMPARE(listed[2].fechaPago, QStringLiteral("10-03-2026"));
+        QCOMPARE(listed[2].importe, 8.0);
+        QVERIFY(listed[0].rectificativa && !listed[1].rectificativa);
+        QCOMPARE(listed[0].error, QStringLiteral("rechazada"));
+        QCOMPARE(listed[1].seq, 1);
+        QCOMPARE(refusedInvoiceCount(m_db, "2026-02-01"), 4);
+        QCOMPARE(refusedInvoiceCount(m_db, QString()), 5);                    // no floor hides nothing
+        QCOMPARE(refusedInvoiceCount(m_db, "not a date"), 5);
+    }
+
+    void test_insertExpenseInvoice_idsAndClosedQuarterGuard()
+    {
+        QVERIFY(insertExpenseInvoice(m_db, "F-1", "Luz", "d", "Acme", QDate(2026, 5, 4), "21", "12,10"));
+        QVERIFY(insertExpenseInvoice(m_db, "F-2", "Luz", "", "Acme", QDate(2026, 5, 5), "10", "5"));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(id || '|' || importe, ';') FROM gastos"), QStringLiteral("1|12.10;2|5.00"));
+        QVERIFY(closeQuarter(m_db, 2, 2026, "q2.pdf"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("quarter is closed"));
+        QVERIFY(!insertExpenseInvoice(m_db, "F-3", "Luz", "", "Acme", QDate(2026, 6, 30), "21", "9"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM gastos"), QStringLiteral("2"));
+        QVERIFY(insertExpenseInvoice(m_db, "F-4", "Luz", "", "Acme", QDate(2026, 7, 1), "21", "9"));
+    }
+
+    void test_closureFunctions_leaveOpenConnectionOpen()
+    {
+        QVERIFY(m_db.open());
+        QVERIFY(closeQuarter(m_db, 2, 2026, "r.pdf"));
+        QVERIFY(m_db.isOpen());
+        QVERIFY(quarterIsClosed(m_db, 2, 2026));
+        QVERIFY(m_db.isOpen());
+        QVERIFY(quarterIsClosed(m_db, QDate(2026, 5, 4)));
+        QVERIFY(m_db.isOpen());
+        QCOMPARE(quarterClosures(m_db, 2, 2026).size(), 1);
+        QVERIFY(m_db.isOpen());
+        QVERIFY(closedQuarterKeys(m_db).contains(quarterKey(2, 2026)));
+        QVERIFY(m_db.isOpen());
+        QVERIFY(!quarterHasMovements(m_db, 2, 2026));
+        QVERIFY(m_db.isOpen());
+        QVERIFY(reopenQuarter(m_db, 2, 2026));
+        QVERIFY(m_db.isOpen());
+        m_db.close();
+    }
+
     void test_updateTicketObservations()
     {
         insertRow("T1", "hashA");
@@ -2159,6 +2347,24 @@ private slots:
     }
 
     // Every garment field is persisted; verifactu_estado is only what the caller sets.
+    void test_insertGarmentRows_allOrNone()
+    {
+        const auto garment = [](const QString &hash, const QString &importe) {
+            IngresoGarmentRow row;
+            row.nRecibo = "T9"; row.cliente = "Ana"; row.fechaRecepcion = "01-03-2026";
+            row.importe = importe; row.pagado = "NO"; row.estado = "NO"; row.cantidad = "1";
+            row.prenda = "Camisa"; row.size = "0"; row.servicio = "Limp."; row.hash = hash;
+            row.verifactuEstado = "SIN COBRAR";
+            return row;
+        };
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("refused an unreadable or negative importe"));
+        QVERIFY(!insertGarmentRows(m_db, { garment("a", "5.00"), garment("b", "abc") }));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo='T9'"), QStringLiteral("0"));
+        QVERIFY(insertGarmentRows(m_db, { garment("a", "5.00"), garment("b", "7,50") }));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(importe, ';') FROM ingresos WHERE n_recibo='T9'"), QStringLiteral("5.00;7.50"));
+        QVERIFY(insertGarmentRows(m_db, {}));                                  // nothing to store is not a failure
+    }
+
     void test_insertGarmentRow_fieldsAndVerifactuLeftEmpty()
     {
         IngresoGarmentRow row;

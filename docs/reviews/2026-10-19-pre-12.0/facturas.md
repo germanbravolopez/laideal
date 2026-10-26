@@ -19,9 +19,9 @@ Note on line numbers: facturas.cpp lines below are real file lines.
 | Medium ✅ FIXED 20-10-2026 | design | facturas.cpp:182,197 | `db.open()` then unconditional `db.close()`. The connection handle is shared; if a Listado de gastos window is open at the time (its model reads through the live connection, see e2e comment at test_e2e_app.cpp:2766), saving closes the connection under it, and the open Listado does not refresh to show the new row. `quarterIsClosed` already uses the `wasOpen` pattern (sql_lite.cpp:1043). | Use the wasOpen pattern; emit a signal / let MainWindow refresh an open gastos Listado. Ask the Listado reviewer whether it re-opens. | S |
 | Low | design | facturas.h:28-29, mainwindow.cpp:887,964 | Income-side tax base (Verifactu BaseImponible) is computed by a static of the expense dialog. A change to the expense math (e.g. rounding) would silently change AEAT records. | Move to a neutral pure helper (sql_lite money helpers or verifactu), keep Facturas calling it; test there. | S |
 | Low ✅ FIXED 23-10-2026 | bug | facturas.cpp:201-209 | Base and cuota rounded independently (display and later in Contabilidad: gas21Base = importe/1.21 unrounded, contabilidad.cpp:397). Displayed base+cuota can differ from the total by 1 cent when both fall on .5. Nothing stored, so only the on-screen figure is affected. | Display cuota as `round2(gross) - round2(base)`; add the test below. | S |
-| Low | design | facturas.cpp:65-66 | Rates 21/10/0 hardcoded; Contabilidad hardcodes 1.21 for gastos (contabilidad.cpp:397) while income uses `AppSettings::ivaRate()`. 4 % (superreducido) cannot be entered; rows with other rates are "unrecognised, counted not summed" in Contabilidad. Consistent today, but two lists must change together. | Single shared constant list of expense rates (or note in both headers). | S |
-| Low | bug | facturas.cpp:146 | `quarterIsClosed` checked only at validation; no DB-level guard on INSERT (the Listado edit path has one). Single user, so only a race with an open Contabilidad window. | Optional: re-check inside saveFactura or an `INSERT ... WHERE NOT closedQuarterSql(...)` like the ingresos writers. | M |
-| Low | bug | facturas.cpp:134-150 | No date sanity: any date from 1752 to far future is accepted (typo year 2062 stores a row no report shows). | Warn/refuse when year differs from the current year by more than 1 (panel message). | S |
+| Low ✅ FIXED 26-10-2026 | design | facturas.cpp:65-66 | Rates 21/10/0 hardcoded; Contabilidad hardcodes 1.21 for gastos (contabilidad.cpp:397) while income uses `AppSettings::ivaRate()`. 4 % (superreducido) cannot be entered; rows with other rates are "unrecognised, counted not summed" in Contabilidad. Consistent today, but two lists must change together. | Single shared constant list of expense rates (or note in both headers). | S |
+| Low ✅ FIXED 26-10-2026 | bug | facturas.cpp:146 | `quarterIsClosed` checked only at validation; no DB-level guard on INSERT (the Listado edit path has one). Single user, so only a race with an open Contabilidad window. | Optional: re-check inside saveFactura or an `INSERT ... WHERE NOT closedQuarterSql(...)` like the ingresos writers. | M |
+| Low ✅ FIXED 26-10-2026 | bug | facturas.cpp:134-150 | No date sanity: any date from 1752 to far future is accepted (typo year 2062 stores a row no report shows). | Warn/refuse when year differs from the current year by more than 1 (panel message). | S |
 | Low ✅ FIXED 23-10-2026 | design | facturas.cpp:159 | Success message built before the save from the raw text (`displayMoney(text)`); consistent with stored value, but if validation accepted `inf` it would show it. Covered by the amount fix. | none beyond amount fix. | - |
 | Low | docs | see Documentation drift | | | |
 | Low | dead-code | facturas.h:25-29 | None found. `taxAmountFromGross` is used only by the dialog and tests (fine). `qDebug` of n_factura/empresa (facturas.cpp:176-181) is acceptable (no secrets). | - | - |
@@ -34,13 +34,13 @@ Checked and fine: prepared statement (:184), no SQL concatenation; objectNames p
 |---|---|---|
 | docs/ai_agent_instructions.md:112 ✅ FIXED 23-10-2026 | Formal invoice "stored in `facturas` table" | Stored in `gastos` (facturas.cpp:184). No `facturas` table exists. |
 | docs/architecture.md:252 ✅ FIXED 23-10-2026 | Tables managed via Listado or Facturas include `facturas`, `empresas` | Only `gastos`, `proveedores`, `servicios` exist for this module; no `facturas`/`empresas` table in the schema. |
-| docs/modules/facturas.md:23 (Form fields: servicio "From `servicios` table") + validation list | Implies servicio comes from the table | Combo is editable and the value is not checked (facturas.cpp:48-52,134-137). Docs should say "any text accepted" or code should enforce. |
+| docs/modules/facturas.md:23 (Form fields: servicio "From `servicios` table") + validation list ✅ FIXED 26-10-2026 | Implies servicio comes from the table | Combo is editable and the value is not checked (facturas.cpp:48-52,134-137). Docs should say "any text accepted" or code should enforce. |
 | docs/modules/facturas.md:35-39 (Auto-calculation) ✅ FIXED 23-10-2026 | `iva_amount = importe - base` | Code uses `gross*(1-1/(1+r))` (facturas.cpp:205); algebraically equal, only wording. |
 | docs/modules/facturas.md "Validation" ✅ FIXED 23-10-2026 | Lists empty/number/empresa/quarter | Omits that negative/zero/inf amounts are currently accepted (state the decision once fixed) and the absence of duplicate detection. |
 | docs/testing/unit_suites.md:24,97 and docs/INDEX.md:136 | `test_facturas`: IVA split | Accurate, but unit_suites.md:97 should list the new tests when added. |
 | docs/testing/e2e.md:116 | Scenario covers split, save, unknown supplier, closed quarter | Accurate (test_e2e_app.cpp:2696-2764); also covers sorted combos (not mentioned in the row). |
 | docs/testing/ui_smoke.md:67 (D5) | Expense dated 20-09-2026 refused, today's saved | Matches tests/ui/block_d.py:89-105 via `add_expense` (actions.py:289-305). OK. |
-| docs/modules/facturas.md "Key interface" | `populateEmpresas()`/`populateServicios()` must be called by the caller | True (mainwindow.cpp:1417-1418), but a Facturas built without them has empty lists and every save fails "no está en la lista": consider calling them in the constructor. |
+| docs/modules/facturas.md "Key interface" ✅ FIXED 26-10-2026 | `populateEmpresas()`/`populateServicios()` must be called by the caller | True (mainwindow.cpp:1417-1418), but a Facturas built without them has empty lists and every save fails "no está en la lista": consider calling them in the constructor. |
 
 ## Test gaps
 
@@ -58,20 +58,20 @@ Unit (pure, guiless; first four need the validation/amount parsing extracted to 
 - `test_parseGross_acceptsCommaAndDot_rejectsGarbage`: "121,50"->121.5, "121.50", " 12 ", "" , "abc", "1,2,3", "inf", "nan", "1e3" -> invalid, "-5" per decision.
 - `test_taxSplit_largeAmounts`: 999999.99 at 21 keeps 2-decimal consistency.
 - `test_validation_*` via QSqlDatabase + testschema (offscreen, like test_settingsdialog): construct `Facturas(db)` in a QTemporaryDir DB (`tests/support/testschema.h`), then:
-  - `test_save_storesRowWithDotAmountAndDdMmYyyyDate` (SELECT every column: fecha `dd-MM-yyyy`, importe `121.00`, iva `21`, trimmed n_factura, id = max+1).
-  - `test_save_idContinuesAfterGapAndOnEmptyTable` (empty gastos -> id 1; ids 1,5 -> 6; text-typed ids).
+  - `test_save_storesRowWithDotAmountAndDdMmYyyyDate` ✅ FIXED 26-10-2026 (SELECT every column: fecha `dd-MM-yyyy`, importe `121.00`, iva `21`, trimmed n_factura, id = max+1).
+  - `test_save_idContinuesAfterGapAndOnEmptyTable` ✅ FIXED 26-10-2026 (empty gastos -> id 1; ids 1,5 -> 6; text-typed ids).
   - `test_save_incompleteForm_nothingWritten` (each of the four required fields empty in turn; whitespace-only n_factura and importe).
   - `test_save_invalidAmountText_refused` ("abc", "12,3,4").
-  - `test_save_supplierMustBeInList_exactMatch` (case differs -> refused).
-  - `test_save_closedQuarterRefused_emptyMonthInClosedQuarter` (month without gastos but closed quarter, first and last day of quarter, 31-03 vs 01-04 boundary).
-  - `test_save_insertFailure_reportedInPanel_formKept` (e.g. drop gastos table or read-only DB: red panel, form not cleared, no pop-up).
-  - `test_save_apostropheInFieldsIsBoundSafely` (O'Brien supplier, `"; DROP` in descripcion stored verbatim).
-  - `test_save_htmlInInvoiceNumberEscapedInPanel` (`<b>` not rendered).
-  - `test_reset_clearsFormAndSplit` (btnReset: fields, base/cuota empty, IVA back to 21 %, date today, panel "Formulario limpio.").
-  - `test_ivaChange_recomputesSplit` (21 -> 10 -> 0 with importe typed) and `test_invalidImporte_clearsSplit`.
+  - `test_save_supplierMustBeInList_exactMatch` ✅ FIXED 26-10-2026 (case differs -> refused).
+  - `test_save_closedQuarterRefused_emptyMonthInClosedQuarter` ✅ FIXED 26-10-2026 (month without gastos but closed quarter, first and last day of quarter, 31-03 vs 01-04 boundary).
+  - `test_save_insertFailure_reportedInPanel_formKept` ✅ FIXED 26-10-2026 (e.g. drop gastos table or read-only DB: red panel, form not cleared, no pop-up).
+  - `test_save_apostropheInFieldsIsBoundSafely` ✅ FIXED 26-10-2026 (O'Brien supplier, `"; DROP` in descripcion stored verbatim).
+  - `test_save_htmlInInvoiceNumberEscapedInPanel` ✅ FIXED 26-10-2026 (`<b>` not rendered).
+  - `test_reset_clearsFormAndSplit` ✅ FIXED 26-10-2026 (btnReset: fields, base/cuota empty, IVA back to 21 %, date today, panel "Formulario limpio.").
+  - `test_ivaChange_recomputesSplit` ✅ FIXED 26-10-2026 (21 -> 10 -> 0 with importe typed) and `test_invalidImporte_clearsSplit` ✅ FIXED 26-10-2026.
   - `test_populate_sortedSpanish` (also covered by e2e; unit cheaper).
   - `test_duplicateInvoice_refused` (after the duplicate fix).
-  - `test_gastoSavedIsPickedUpByContabilidad`: save through the dialog, then `expensesBetweenDates` for the quarter returns it with importe/iva as entered, and `figuresFromDetails` gives base/IVA at 21 and 10 and a 0 % row counted in `gasNiImporte` (closes the producer/consumer loop).
+  - `test_gastoSavedIsPickedUpByContabilidad` ✅ FIXED 26-10-2026: save through the dialog, then `expensesBetweenDates` for the quarter returns it with importe/iva as entered, and `figuresFromDetails` gives base/IVA at 21 and 10 and a 0 % row counted in `gasNiImporte` (closes the producer/consumer loop).
 
 E2E (test_e2e_app.cpp, extend `test_facturas_saveAndRefusals` or add):
 - `test_facturas_incompleteAndInvalidAmountInWindow`: empty form message "Formulario incompleto", "abc" amount message, nothing written, no pop-up.

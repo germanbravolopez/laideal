@@ -70,9 +70,10 @@ public:
     static QStringList backupsToPrune(const QStringList &fileNames, const QDateTime &now);
 
 private:
-    // Resolved absolute path of the backups/ subdirectory next to dbPath()
-    // (creates it if missing).
+    // Absolute path of the backups/ subdirectory next to dbPath(); creates nothing.
     QString backupDirectory() const;
+    // The same path, with the directory created if missing.
+    QString ensureBackupDirectory() const;
     static QString timestampedFileName();
     static void removeStalePartFiles(const QString &dir);
     void copyToSecondFolder(Result &res) const;

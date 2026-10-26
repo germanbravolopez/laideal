@@ -12,9 +12,9 @@ A `QDialog` built in code with the shared [UiKit](uikit.md) style (no `.ui` file
 
 ```cpp
 Facturas *ui = new Facturas(db, this);  // db injected via constructor
-ui->populateEmpresas();   // fill supplier combobox from `proveedores`
-ui->populateServicios();  // fill service combobox from `servicios`
 ui->show();
+// The constructor fills both combos (`proveedores`, `servicios`); populateEmpresas() /
+// populateServicios() refill them (they clear first) after the lists changed.
 ```
 
 ## Form fields
@@ -23,7 +23,7 @@ ui->show();
 |-------|--------|-------|
 | n_factura | Free text | Invoice number |
 | fecha | Date picker | Defaults to today |
-| servicio | Combobox | From `servicios` table, in Spanish alphabetical order (`UiKit::sortedNames`) |
+| servicio | Editable combobox | Suggestions from the `servicios` table, in Spanish alphabetical order (`UiKit::sortedNames`); any non-blank text is accepted and stored trimmed |
 | descripcion | Free text | Optional description |
 | empresa | Combobox | From `proveedores` table, in Spanish alphabetical order (`UiKit::sortedNames`) |
 | iva | Combobox | 21 / 10 / 0 |
@@ -42,9 +42,10 @@ iva_amount = importe - base
 
 - `n_factura`, `servicio`, `empresa`, and `importe` must not be empty (trimmed: a blank servicio is refused; servicio stays free text), and `importe` must be a plain positive amount (`Facturas::parseGross`: decimal comma accepted; zero, negative, `inf`, `nan`, exponents and signs refused).
 - The same supplier and Nº factura cannot be entered twice: the panel shows the existing invoice's date and amount.
-- `empresa` must exist exactly in the `proveedores` table.
+- `empresa` must exist exactly (case included) in the `proveedores` table.
+- The invoice date must be within a year of today (a mistyped year such as 2062 would store a row no report shows).
 - Invoice date must fall in an open accounting quarter (`quarterIsClosed()`: a month without gastos inside a closed quarter is closed too).
 
 ## Save
 
-Inserts a row into `gastos` with a sequential `id` taken in the same statement (`SELECT MAX(id) + 1 ...`, no separate read and no pop-up), through the dialog's own `db` connection (left open if the caller had it open), the `importe` stored in cents (`moneyText`). On success the result panel names the invoice, supplier, amount and rate, and the form is cleared for the next one; a failed insert is reported in red.
+Inserts a row into `gastos` through `insertExpenseInvoice` (`sql_lite`): the `id` is taken in the same statement (`MAX(id) + 1`, no separate read and no pop-up), the `importe` is stored in cents (`moneyText`), and the statement itself refuses a date in a closed quarter (so a quarter closed meanwhile by an open Contabilidad window cannot receive the row), on the dialog's own `db` connection (left open if the caller had it open). On success the result panel names the invoice, supplier, amount and rate, and the form is cleared for the next one; a failed insert is reported in red.
