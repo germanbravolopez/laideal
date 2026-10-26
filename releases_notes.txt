@@ -1,5 +1,9 @@
 ﻿Releases:
 
+12.2
+- Bug fix: some garments left unpaid on a ticket whose other garments were charged before September 2026 could not be charged since 12.0 (the payment was not stored). On the first start, the program corrects those garments and they can be charged normally.
+- Comprobar tras actualizar: amounts stored as "6." are read correctly, and an amount that cannot be read is reported with its ticket number.
+
 12.1
 - Bug fix: since 11.2, "Añadir prendas" could not add an unpaid garment to a ticket ("NOT NULL constraint failed: ingresos.fecha_pago"). It works again.
 - Comprobar tras actualizar: the installer leaves it ticked on its last page (and no longer opens the program); the first start after an update reminds you to run it; it is also in Ayuda → Comprobar tras actualizar…, and when it finishes it lists what to send (the report, the program's log and a photo of the first printed invoice).

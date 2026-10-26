@@ -61,7 +61,8 @@ private:
     }
 
     // Waits for the answer to `requestId` and returns it.
-    static VerifactuResult waitFor(AeatDirectBackend &backend, const QString &requestId, int timeoutMs = 10000)
+    // 30 s: a slow CI runner took longer than 10 s for one round trip to the local fake.
+    static VerifactuResult waitFor(AeatDirectBackend &backend, const QString &requestId, int timeoutMs = 30000)
     {
         VerifactuResult out;
         bool done = false;
@@ -95,8 +96,12 @@ private:
             AeatDirectBackend::Config c = config();
             c.system = system;
             AeatDirectBackend elsewhere(c, other);
-            for (const QString &n : numbers)
-                lastHash = waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket(n, 10))).rawHash;
+            for (const QString &n : numbers) {
+                const VerifactuResult r = waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket(n, 10)));
+                if (!r.isSuccess())
+                    qWarning() << "registerElsewhere:" << n << "not registered -" << r.errorDescription;
+                lastHash = r.rawHash;
+            }
             other.close();
         }
         QSqlDatabase::removeDatabase("aeat_other_db");
