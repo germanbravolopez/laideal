@@ -3,10 +3,7 @@
 
 #include <QDialog>
 #include <QSqlDatabase>
-#include <QDesktopServices>
-#include <QDir>
 #include <QDate>
-#include <QSet>
 #include <QVector>
 
 #include "sql_lite.h"
@@ -26,8 +23,8 @@ class Contabilidad : public QDialog
     Q_OBJECT
 
 public:
-    // Accounting period mode. Values match the cb_config combobox item order
-    // (see contabilidad.ui), so the logic no longer depends on the Spanish
+    // Accounting period mode. Values match the cbConfig combobox item order,
+    // so the logic no longer depends on the Spanish
     // display strings: renaming an item cannot silently break the comparisons.
     enum ConfigMode { Mensual = 0, Trimestral = 1, Anual = 2 };
 
@@ -43,7 +40,7 @@ public:
     static void periodRangeFor(ConfigMode mode, int unit, int year, QDate &start, QDate &endExclusive);
 
     // Closing (locking) the books is a quarterly action, and never offered while
-    // reverting: the "Bloquear datos" checkbox is enabled only for Trimestral.
+    // reverting: the "Bloquear el trimestre" checkbox is enabled only for Trimestral.
     static bool lockOptionAvailable(ConfigMode mode, bool reverting);
 
     // Detail tables appended to the report so each summary figure can be audited.

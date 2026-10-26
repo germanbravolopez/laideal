@@ -25,6 +25,8 @@ Facturas::Facturas(const QSqlDatabase &database, QWidget *parent) :
     setAttribute(Qt::WA_DeleteOnClose);
     UiKit::setUpDialog(this, "Formulario de facturas de gastos");
     buildUi();
+    populateEmpresas();
+    populateServicios();
     resetAllContents();
     m_lblResult->showInfo("Rellene la factura y pulse \"Guardar factura\".");
 }
@@ -66,6 +68,7 @@ void Facturas::buildUi()
     amountForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     m_cbIva = new QComboBox();
     m_cbIva->setObjectName("cbIva");
+    // Keep in step with Contabilidad::expenseIvaIsSummarised, which sums only these rates.
     for (const char *rate : { "21", "10", "0" })
         m_cbIva->addItem(QString(rate) + " %", QString(rate));
     amountForm->addRow("Tipo de IVA:", m_cbIva);
@@ -123,12 +126,14 @@ void Facturas::resetAllContents()
 
 void Facturas::populateEmpresas()
 {
+    m_cbEmpresa->clear();
     m_cbEmpresa->addItems(UiKit::sortedNames(readColumnFromTable(db, "nombre", "proveedores", "")));
     m_cbEmpresa->setCurrentText("");
 }
 
 void Facturas::populateServicios()
 {
+    m_cbServicio->clear();
     m_cbServicio->addItems(UiKit::sortedNames(readColumnFromTable(db, "nombre", "servicios", "")));
     m_cbServicio->setCurrentText("");
 }
@@ -146,6 +151,12 @@ QString Facturas::validationError()
     if (m_cbEmpresa->findText(m_cbEmpresa->currentText().trimmed(), Qt::MatchExactly) == -1)
         return UiKit::errorHtml("La empresa no está en la lista de proveedores.")
                + "<br>Añádala en Listado de proveedores antes de introducir esta factura.";
+    // A mistyped year stores an invoice no report shows.
+    const int yearGap = m_deFecha->date().year() - QDate::currentDate().year();
+    if (yearGap < -1 || yearGap > 1)
+        return UiKit::errorHtml("La fecha de la factura no es válida.")
+               + "<br>El año " + QString::number(m_deFecha->date().year())
+               + " dista más de un año del actual: revise la fecha.";
     // The whole quarter, both tables: a month without gastos in a closed quarter is closed too.
     if (quarterIsClosed(db, m_deFecha->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")
@@ -224,30 +235,9 @@ bool Facturas::saveFactura()
              << "fecha=" << m_deFecha->date().toString("dd-MM-yyyy")
              << "iva=" << m_cbIva->currentData().toString()
              << "importe=" << m_leImporte->text();
-    ConnectionScope scope(db);
-    if (!scope.isOpen()) {
-        qWarning() << "saveFactura: database not opened -" << db.lastError().text();
-        return false;
-    }
-    bool ok = false;
-    {
-        // The id comes from the same statement as the insert (no separate read).
-        QSqlQuery q(db);
-        q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe) "
-                  "SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) + 1, :n_factura, :servicio, :descripcion, "
-                  ":empresa, :fecha, :iva, :importe FROM gastos;");
-        q.bindValue(":n_factura", nFactura);
-        q.bindValue(":servicio", m_cbServicio->currentText().trimmed());
-        q.bindValue(":descripcion", m_leDescripcion->text().trimmed());
-        q.bindValue(":empresa", empresa);
-        q.bindValue(":fecha", m_deFecha->date().toString("dd-MM-yyyy"));
-        q.bindValue(":iva", m_cbIva->currentData().toString());
-        q.bindValue(":importe", moneyText(m_leImporte->text().trimmed()));
-        ok = q.exec();
-        if (!ok)
-            qWarning() << "saveFactura INSERT failed for" << nFactura << "-" << q.lastError().text();
-    }
-    return ok;
+    return insertExpenseInvoice(db, nFactura, m_cbServicio->currentText().trimmed(), m_leDescripcion->text().trimmed(),
+                                empresa, m_deFecha->date(), m_cbIva->currentData().toString(),
+                                m_leImporte->text().trimmed());
 }
 
 double Facturas::taxBaseFromGross(double gross, double ivaRate)

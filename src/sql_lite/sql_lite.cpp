@@ -59,9 +59,6 @@ static QString closedQuarterSql(const QString &dateColumn)
            " AND c.quarter = (CAST(substr(" + dateColumn + ", 4, 2) AS INTEGER) + 2) / 3)";
 }
 
-// The shop's ingresos.edit_lock is NOT NULL without a default, so every INSERT still
-// writes the legacy lock flag as '0'; it is never read (accounting_closures holds the lock).
-
 // Not locked by Contabilidad: the row's payment date is not in a closed quarter.
 static const QString kUnlockedWhere = " AND NOT " + closedQuarterSql(QStringLiteral("ingresos.fecha_pago"));
 
@@ -610,9 +607,10 @@ int readMaxNMinYearInColumnFromTable(QSqlDatabase &db, bool maxNMin, const QStri
 {
     if (dbNotConfigured(db, __func__)) return 0;
 
-    QString query = maxNMin
-        ? "SELECT MAX(substr(" + column + ",7,4)) FROM " + table
-        : "SELECT MIN(substr(" + column + ",7,4)) FROM " + table;
+    // Only four-digit years count: an empty date would make MIN() 0.
+    const QString year = "substr(" + column + ",7,4)";
+    QString query = QString(maxNMin ? "SELECT MAX(%1) FROM " : "SELECT MIN(%1) FROM ").arg(year) + table
+                    + " WHERE " + year + " GLOB '[0-9][0-9][0-9][0-9]'";
 
     int value = 0;
     ConnectionScope scope(db);
@@ -655,18 +653,19 @@ float readGarmentPrice(QSqlDatabase &db, const QString &garment, const QString &
 {
     if (dbNotConfigured(db, __func__)) return 0.0f;
 
+    const QString column = service == "Limp." ? QStringLiteral("precio_limpieza")
+                         : service == "Plan." ? QStringLiteral("precio_plancha") : QString();
+    if (column.isEmpty()) {
+        qWarning() << "readGarmentPrice: unknown service" << service;
+        return 0.0f;
+    }
+
     float price = 0.0f;
     ConnectionScope scope(db);
     QSqlQuery q(db);
-    if (service == "Limp.") {
-        q.prepare("SELECT precio_limpieza FROM prendas WHERE nombre LIKE :garment");
-        q.bindValue(":garment", garment);
-        q.exec();
-    } else if (service == "Plan.") {
-        q.prepare("SELECT precio_plancha FROM prendas WHERE nombre LIKE :garment");
-        q.bindValue(":garment", garment);
-        q.exec();
-    }
+    q.prepare("SELECT " + column + " FROM prendas WHERE nombre = :garment COLLATE NOCASE");
+    q.bindValue(":garment", garment);
+    q.exec();
     if (q.isSelect()) {
         if (q.first()) {
             if (!q.value(0).toString().contains(',')) {
@@ -723,7 +722,6 @@ bool updateItemToClient(QSqlDatabase &db, const QString &column, const QString &
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    qDebug() << "updateItemToClient: UPDATE clientes SET" << column;
     ConnectionScope scope(db);
     QSqlQuery q(db);
     q.prepare("UPDATE clientes SET " + column + " = :item WHERE nombre = :client");
@@ -763,12 +761,14 @@ bool updateTicketPickup(QSqlDatabase &db, const QString &nRecibo, const QString 
 
     ConnectionScope scope(db);
     QSqlQuery q(db);
+    // A voided row is never revived (same rule as markTicketPickedUp).
     q.prepare("UPDATE ingresos SET fecha_recogida = :fr, estado = :est "
-              "WHERE n_recibo = :n AND hash = :h");
+              "WHERE n_recibo = :n AND hash = :h AND COALESCE(estado, '') != :anulado");
     q.bindValue(":fr",  fechaRecogida);
     q.bindValue(":est", estado);
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
+    q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     bool ok = q.exec();
     if (!ok)
         qWarning() << "updateTicketPickup: UPDATE failed -" << q.lastError().text();
@@ -1390,7 +1390,7 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
         if (!original.isEmpty()) {
             ConnectionScope scope(db);
             QSqlQuery q(db);
-            q.prepare("SELECT MIN(verifactu_rectification_type), MIN(fecha_pago) FROM ingresos "
+            q.prepare("SELECT MIN(verifactu_rectification_type), " + kEarliestFechaPago + " FROM ingresos "
                       "WHERE n_recibo = :n AND pagado = 'SI'");
             q.bindValue(":n", nRecibo);
             const bool read = q.exec() && q.next();
@@ -1935,23 +1935,67 @@ bool insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QStr
 {
     if (dbNotConfigured(db, __func__)) return false;
 
-    // Build positional placeholders so values bind safely - never concatenate user input
-    // into the SQL (a client named O'Brien would otherwise break the statement, and a
-    // hostile value could close the literal and inject DDL).
-    QString placeholders;
-    for (int i = 0; i < items.count(); ++i)
-        placeholders += (i == 0 ? "?" : ", ?");
+    // Whitelisted tables with explicit columns: an added column cannot shift the values.
+    static const QHash<QString, QStringList> kColumns = {
+        {QStringLiteral("clientes"),    {"nombre", "tel_fijo", "movil", "direccion"}},
+        {QStringLiteral("prendas"),     {"nombre", "precio_limpieza", "precio_plancha"}},
+        {QStringLiteral("proveedores"), {"nombre", "cif", "direccion", "telefono"}},
+        {QStringLiteral("servicios"),   {"nombre"}},
+    };
+    const QStringList columns = kColumns.value(table);
+    if (columns.isEmpty() || columns.count() != items.count()) {
+        qWarning() << "insertNewItemToTable: unknown table or wrong value count for" << table << "-" << items.count() << "values";
+        return false;
+    }
 
-    qDebug() << "insertNewItemToTable: INSERT INTO" << table << "VALUES (" << items.count() << "items )";
+    QStringList placeholders;
+    for (int i = 0; i < items.count(); ++i)
+        placeholders << QStringLiteral("?");
+
+    qDebug() << "insertNewItemToTable: INSERT INTO" << table << "(" << items.count() << "values )";
     ConnectionScope scope(db);
     QSqlQuery q(db);
-    q.prepare("INSERT INTO " + table + " VALUES (" + placeholders + ")");
+    q.prepare("INSERT INTO " + table + " (" + columns.join(", ") + ") VALUES (" + placeholders.join(", ") + ")");
     for (const QString &item : items)
         q.addBindValue(notNull(item));
     const bool ok = q.exec();
     if (!ok)
         qWarning() << "insertNewItemToTable: insert into" << table << "failed -" << q.lastError().text();
     return ok;
+}
+
+bool insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QString &servicio,
+                          const QString &descripcion, const QString &empresa, const QDate &date,
+                          const QString &iva, const QString &importe)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+
+    ConnectionScope scope(db);
+    if (!scope.isOpen())
+        return false;
+    QSqlQuery q(db);
+    // The one-row subquery carries the next id and the date, so the closed-quarter test
+    // filters the row to insert (an aggregate over gastos itself would always yield one).
+    q.prepare("INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, iva, importe) "
+              "SELECT g.id, :n_factura, :servicio, :descripcion, :empresa, g.fecha, :iva, :importe FROM "
+              "(SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) + 1 AS id, :fecha AS fecha FROM gastos) AS g "
+              "WHERE NOT " + closedQuarterSql(QStringLiteral("g.fecha")));
+    q.bindValue(":n_factura", nFactura);
+    q.bindValue(":servicio", servicio);
+    q.bindValue(":descripcion", descripcion);
+    q.bindValue(":empresa", empresa);
+    q.bindValue(":fecha", date.toString("dd-MM-yyyy"));
+    q.bindValue(":iva", iva);
+    q.bindValue(":importe", moneyText(importe));
+    if (!q.exec()) {
+        qWarning() << "insertExpenseInvoice: insert failed for" << nFactura << "-" << q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() != 1) {
+        qWarning() << "insertExpenseInvoice: refused for" << nFactura << "- its quarter is closed";
+        return false;
+    }
+    return true;
 }
 
 QString verifactuInvoiceId(const QString &nRecibo, int seq)
@@ -2113,7 +2157,7 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
     // reuse the original submission date or AEAT treats it as a new invoice and
     // the duplicate-InvoiceID guard never fires. That date is fecha_pago: a
     // PayDialog event (seq>0) submitted with its payment date, a save-time event
-    // (seq>0=0) submitted with the reception date which equals fecha_pago for a
+    // (seq 0) submitted with the reception date which equals fecha_pago for a
     // paid-at-save row. A row with no fecha_pago (unpaid) yields an invalid date
     // the dialog refuses to retry - correct, it has no AEAT invoice to recover.
     //
@@ -2358,7 +2402,16 @@ static int quarterBucket(const QString &ddMMyyyy) { return (ddMMyyyy.mid(3, 2).t
 // n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
 // COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
 // a bucket keeps its first payment date. A comma-decimal importe is not summed;
-// it is counted in invalidAmounts so the report can flag it.
+// it is counted in invalidAmounts so the report can flag it, like any amount that is not a plain number.
+static bool readPlainAmount(const QString &text, double *value)
+{
+    bool ok = false;
+    const double parsed = text.contains(QLatin1Char(',')) ? 0.0 : text.toDouble(&ok);
+    ok = ok && std::isfinite(parsed);
+    *value = ok ? parsed : 0.0;
+    return ok;
+}
+
 static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
                                  QVector<IncomeTicketDetail> *buckets, int bucketCount,
                                  int (*bucketOf)(const QString &))
@@ -2389,12 +2442,12 @@ static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
             tickets.append(t);
         }
         IncomeTicketDetail &t = tickets[it.value()];
-        const QString importe = q.value(3).toString();
-        if (importe.contains(QLatin1Char(','))) {
+        double amount = 0.0;
+        if (!readPlainAmount(q.value(3).toString(), &amount)) {
             t.invalidAmounts++;
         } else {
-            t.importe += importe.toDouble();
-            t.invoices[q.value(4).toInt()] += importe.toDouble();
+            t.importe += amount;
+            t.invoices[q.value(4).toInt()] += amount;
         }
         t.garments++;
     }
@@ -2426,9 +2479,7 @@ static bool collectExpenses(QSqlDatabase &db, QDate start, QDate end,
         e.servicio = q.value(2).toString();
         e.fecha    = q.value(3).toString();
         e.iva      = expenseIvaRate(q.value(4));
-        const QString importe = q.value(5).toString();
-        e.invalidAmount = importe.contains(QLatin1Char(','));
-        e.importe  = e.invalidAmount ? 0.0 : importe.toDouble();
+        e.invalidAmount = !readPlainAmount(q.value(5).toString(), &e.importe);
         buckets[bucket].append(e);
     }
     return true;
@@ -2474,12 +2525,12 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
         const QDate rowPago = QDate::fromString(q.value(2).toString(), "dd-MM-yyyy");
         if (rowPago.isValid() && rowPago > QDate::fromString(r.fechaPago, "dd-MM-yyyy"))
             r.fechaPago = q.value(2).toString();
-        const QString importe = q.value(5).toString();
-        if (importe.contains(QLatin1Char(','))) {
+        double amount = 0.0;
+        if (!readPlainAmount(q.value(5).toString(), &amount)) {
             r.invalidAmounts++;
         } else {
-            r.importe += importe.toDouble();
-            r.invoices[q.value(6).toInt()] += importe.toDouble();
+            r.importe += amount;
+            r.invoices[q.value(6).toInt()] += amount;
         }
         r.garments++;
     }

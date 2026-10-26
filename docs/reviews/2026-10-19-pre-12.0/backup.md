@@ -21,12 +21,12 @@
 | Medium ✅ FIXED 20-10-2026 | bug | backup_manager.cpp:196-201 | Boundaries: `ageDays < 30` keeps, `> 1460` deletes. 4*365 ignores leap days (deleted up to 1 day early); `daysTo` on local naive time shifts over DST; docs say "31 days". | Use `ts.addYears(4) < now` and `ts.addDays(30) > now`; boundary tests (29/30/31, 1460/1461). | S |
 | Medium ✅ FIXED 19-10-2026 | bug | backup_manager.cpp:96,101 | No busy handling beyond Qt's default: if the GUI thread holds a write transaction VACUUM INTO can fail with SQLITE_BUSY and is retried only at the next start (>24 h). No WAL anywhere in src, so VACUUM INTO's read lock makes GUI commits wait for the whole copy; the docs claim no interruption. | `QSQLITE_BUSY_TIMEOUT=30000` for the snapshot connection; retry once; correct the docs wording. | S |
 | Medium ✅ FIXED 20-10-2026 | design | appsettings.cpp:405; e2efixture.h:78 | `backup.enabled` has no UI toggle (only JSON); a false value silently disables Req. 4 backups with no warning. | Warn at start when disabled, or drop the switch. | S |
-| Low | bug | backup_manager.cpp:216-225; backup_manager.h:262 | Header says "negative count = scan error"; never negative. `QFile::remove` failures (OneDrive lock) silent. | Log failures; fix the comment. | S |
+| Low ✅ FIXED 26-10-2026 | bug | backup_manager.cpp:216-225; backup_manager.h:262 | Header says "negative count = scan error"; never negative. `QFile::remove` failures (OneDrive lock) silent. | Log failures; fix the comment. | S |
 | Low ✅ FIXED 20-10-2026 | bug | backup_manager.cpp:165-167 | `save()` result ignored. | Check and log. | S |
 | Low | design | backup_manager.cpp:57-58 | Local-time names: DST fall-back hour can sort two copies out of chronological order (also `newestBackup`). | UTC or offset in the name (optional). | S |
-| Low | design | backup_manager.cpp:44-49 | `backupDirectory()` is a const getter with a side effect (mkpath); `pruneOldBackups` creates the dir even just to prune. | Split into getter and `ensureBackupDirectory()`. | S |
-| Low | bug | backup_manager.cpp:29-34,138-141 | When `q.next()` is false with no SQL error, `errorIfNotOk` returns empty: message "Fallo al verificar la copia: " with no detail. | Fallback text. | S |
-| Low | compliance | (module) | Settings JSON (aeat_chain_marker, issuer data) is not in the snapshot; a restore on another PC needs it (requirements.md:48). | Document; optionally copy settings without secrets beside each snapshot. | S |
+| Low ✅ FIXED 26-10-2026 | design | backup_manager.cpp:44-49 | `backupDirectory()` is a const getter with a side effect (mkpath); `pruneOldBackups` creates the dir even just to prune. | Split into getter and `ensureBackupDirectory()`. | S |
+| Low ✅ FIXED 26-10-2026 | bug | backup_manager.cpp:29-34,138-141 | When `q.next()` is false with no SQL error, `errorIfNotOk` returns empty: message "Fallo al verificar la copia: " with no detail. | Fallback text. | S |
+| Low ✅ FIXED 26-10-2026 | compliance | (module) | Settings JSON (aeat_chain_marker, issuer data) is not in the snapshot; a restore on another PC needs it (requirements.md:48). | Document; optionally copy settings without secrets beside each snapshot. | S |
 | Low | dead-code | - | None found. | - | - |
 
 Coding-guidelines: English identifiers and comments, Spanish only in tr(); VACUUM INTO cannot bind a parameter and the quote doubling at :104-105 is the right handling. No other violations.
@@ -41,10 +41,10 @@ Coding-guidelines: English identifiers and comments, Spanish only in tr(); VACUU
 | docs/architecture.md:156 ✅ FIXED 23-10-2026 | manual result in a `QMessageBox` | mainwindow.cpp:1631-1632 `m_result` + file link |
 | docs/modules/backup.md Wiring section ✅ FIXED 23-10-2026 | `QMessageBox` for manual and auto failure; no worker thread mentioned | worker thread (mainwindow.cpp:127-140); label |
 | docs/modules/verifactu/verifactu-requirements.md:58 ✅ FIXED 23-10-2026 | auto failure `QMessageBox` warning | m_result text (mainwindow.cpp:133) |
-| docs/modules/backup.md ("Restore UI") | copy "the `.sqlite` file" | files are `.db` |
+| docs/modules/backup.md ("Restore UI") ✅ FIXED 26-10-2026 | copy "the `.sqlite` file" | files are `.db` |
 | docs/modules/backup.md retention table ✅ FIXED 23-10-2026 | "31 days - 4 years" | code: `< 30` days kept (backup_manager.cpp:196), `> 1460` days deleted (:199) |
-| docs/modules/backup.md:~21, architecture.md:149 | VACUUM INTO "without exclusive lock, session not interrupted" | read lock held for the copy in rollback-journal mode; commits wait |
-| docs/modules/backup.md "Why in-app" | `performBackup()` "callable from any context" | not safe against itself or AppSettings from threads |
+| docs/modules/backup.md:~21, architecture.md:149 ✅ FIXED 26-10-2026 | VACUUM INTO "without exclusive lock, session not interrupted" | read lock held for the copy in rollback-journal mode; commits wait |
+| docs/modules/backup.md "Why in-app" ✅ FIXED 26-10-2026 | `performBackup()` "callable from any context" | not safe against itself or AppSettings from threads |
 | backup_manager.h:262-263 ✅ FIXED 23-10-2026 | negative count = scan error | never negative |
 
 ## Test gaps
@@ -53,17 +53,17 @@ Covered: `backupsToPrune` - recent kept, one per month (earliest), over 4 years 
 
 ### Unit (test_backup_manager)
 - `test_performBackup_createsVerifiedCopy`: success, file in `<dir>/backups` matching the regex, `bytesWritten == size`, copy row count equals source, `backupLastTime` parsable.
-- `test_performBackup_missingSource`: empty and non-existent dbPath -> success=false, message set, no file, last_time unchanged.
-- `test_performBackup_notADatabase`: text file as dbPath -> failure, no leftover in backups/.
+- `test_performBackup_missingSource` ✅ FIXED 26-10-2026: empty and non-existent dbPath -> success=false, message set, no file, last_time unchanged.
+- `test_performBackup_notADatabase` ✅ FIXED 26-10-2026: text file as dbPath -> failure, no leftover in backups/.
 - `test_performBackup_sameSecondDoesNotDestroyExisting` (red today): two calls with the same timestamp; first file still exists and valid.
-- `test_performBackup_unwritableBackupsDir`: a file named `backups` -> failure, no crash.
-- `test_performBackup_noPartialLeftOnFailure`: no `laideal_*.db` / `.part` after failure.
-- `test_performBackup_connectionsRemoved`: `QSqlDatabase::contains` false for both names after success and failure.
+- `test_performBackup_unwritableBackupsDir` ✅ FIXED 26-10-2026: a file named `backups` -> failure, no crash.
+- `test_performBackup_noPartialLeftOnFailure` ✅ FIXED 26-10-2026: no `laideal_*.db` / `.part` after failure.
+- `test_performBackup_connectionsRemoved` ✅ FIXED 26-10-2026: `QSqlDatabase::contains` false for both names after success and failure.
 - `test_performBackup_snapshotIgnoresUncommitted`: open uncommitted write on a second connection; copy has only committed rows.
 - `test_performBackup_onWorkerThread`: run via `QThread::create`, succeeds (guards mainwindow.cpp:127).
 - `test_performBackup_rejectsConcurrentCall` (after the guard fix).
-- `test_needsBackup_disabled / neverRun / olderThan24h / recent / invalidTimestamp / futureTimestamp`.
-- `test_pruneOldBackups_removesOnlyOwnedOld`: temp dir with matching old files plus `notes.txt`, `laideal_manual.db`; only expected removed, count returned; missing dir returns 0.
+- `test_needsBackup_disabled / neverRun / olderThan24h / recent / invalidTimestamp / futureTimestamp` ✅ FIXED 26-10-2026.
+- `test_pruneOldBackups_removesOnlyOwnedOld` ✅ FIXED 26-10-2026: temp dir with matching old files plus `notes.txt`, `laideal_manual.db`; only expected removed, count returned; missing dir returns 0.
 - `test_backupsToPrune_boundaries`: ages 29/30/31 and 1460/1461 days; year-end (2025-12 vs 2026-01); malformed `laideal_2026-13-40_999999.db` ignored; unsorted input gives the same result.
 - `test_backupsToPrune_clockJump`: now 5 years ahead / before newest file -> nothing deleted, newest N kept (after fix).
 - `test_backupsToPrune_keepsLastOfMonth` (if the design changes).
