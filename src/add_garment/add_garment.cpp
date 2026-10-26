@@ -14,6 +14,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QSqlQueryModel>
 #include <QVBoxLayout>
@@ -150,7 +151,7 @@ void AddGarment::loadTicket(const QString &ticketNum)
 
 void AddGarment::resetAllContents()
 {
-    ticketFound = false;
+    m_ticketFound = false;
     m_searchedTicket.clear();
     m_leNRecibo->clear();
     m_leCliente->clear();
@@ -183,21 +184,26 @@ static QString paidTicketRefusal(const QString &ticket)
 void AddGarment::onSearchClicked()
 {
     const QString ticket = m_leNRecibo->text().trimmed();
-    ticketFound = false;
+    m_ticketFound = false;
     m_searchedTicket.clear();
     m_grpTicket->setEnabled(false);
     m_grpGarment->setEnabled(false);
     m_grpState->setEnabled(false);
 
+    if (ticket.isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
+        return;
+    }
     {
         ConnectionScope scope(db);
         QSqlQuery q(db);
-        q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
+        q.prepare("SELECT cliente, fecha_recepcion FROM ingresos WHERE n_recibo = :n_recibo LIMIT 1");
         q.bindValue(":n_recibo", ticket);
-        q.exec();
+        if (!q.exec())
+            qWarning() << "AddGarment: ticket lookup failed:" << q.lastError().text();
         m_ticketModel->setQuery(std::move(q));
     }
-    if (ticket.isEmpty() || m_ticketModel->rowCount() == 0) {
+    if (m_ticketModel->rowCount() == 0) {
         m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
         return;
     }
@@ -207,11 +213,11 @@ void AddGarment::onSearchClicked()
         m_lblResult->setText(paidTicketRefusal(ticket));
         return;
     }
-    ticketFound = true;
+    m_ticketFound = true;
     m_searchedTicket = ticket;
-    m_leCliente->setText(m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_CLIENTE)).toString());
+    m_leCliente->setText(m_ticketModel->data(m_ticketModel->index(0, 0)).toString());
     m_deFechaRecepcion->setDate(QDate::fromString(
-        m_ticketModel->data(m_ticketModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString(), "dd-MM-yyyy"));
+        m_ticketModel->data(m_ticketModel->index(0, 1)).toString(), "dd-MM-yyyy"));
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
     for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida }) {
         edit->setMaximumDate(QDate::currentDate());
@@ -251,7 +257,7 @@ void AddGarment::setGarmentPrice()
 QString AddGarment::validationError()
 {
     // The number may have been retyped after the search: that ticket was never checked.
-    if (!ticketFound || m_leNRecibo->text().trimmed() != m_searchedTicket) {
+    if (!m_ticketFound || m_leNRecibo->text().trimmed() != m_searchedTicket) {
         qWarning() << "AddGarment: save without a search for receipt number" << m_leNRecibo->text();
         return UiKit::errorHtml("No se ha buscado ningún Nº recibo previo a guardar los datos actuales.")
                + "<br>Pulse \"Buscar\" con el número del recibo al que se añade la prenda.";

@@ -16,6 +16,8 @@ Built in code with the shared [UiKit](uikit.md) style (no hand-copied form code,
 
 When the class is used as a **print engine** (MainWindow save, Cobrar, Recogida), nothing is shown: `printTicket()` returns whether the ticket reached the printer and printer problems still pop up, since there is no panel (`reportPrinterProblem`).
 
+**Factura events.** A factura is one payment event, never several merged. The dialog lists the `(verifactu_invoice_seq, invoice id)` pairs that have a `verifactu_estado` for the ticket: with one it scopes to that seq (so unpaid siblings and the printed Nº match what AEAT has); with several the first press fills the **Factura** list (one entry per invoice plus *Todas las facturas*) and the second prints the chosen one or each, listing in the panel the invoices printed and those not (no paid garments, printer error). An invoice cancelled or rectified since prints marked `ANULADA` / `RECTIFICADA`, without QR. The panel says why a factura has no QR: Verifactu not active, not confirmed by AEAT, or cancelled. A recibo prints `IMPORTE PAGADO` only when every garment of the ticket is paid (`ticketAllGarmentsPaid`, voided garments ignored) and its Nº is the ticket number, never a payment event's invoice id. If the client copy fails to print the shop copy is not attempted. Engine callers set the flags themselves: `PayDialog` prints the partial factura with `invoiceSeq` and, when AEAT did not reply (no QR), a *recibo* with `IMPORTE PAGADO` instead; Recogida reprints with the clicked row's seq; MainWindow's save-time print passes the QR it already holds.
+
 ## Source files
 
 - `src/imprimir/imprimir.h/cpp`
@@ -26,18 +28,20 @@ When the class is used as a **print engine** (MainWindow save, Cobrar, Recogida)
 Imprimir *ui = new Imprimir(db, this);  // db injected via constructor
 ui->isRecibo = true;            // receipt layout
 ui->isCompleteInvoice = false;  // true adds billing address + DNI (dialog fields)
-ui->verifactuIntegration = m_verifactuIntegration; // enables /GetQrCode fallback
+ui->verifactuIntegration = m_verifactuIntegration; // resolves the QR of a reprint
 ui->qrCode = result.qrCode;     // optional: pixmap from a fresh /Create response
+ui->verifactuIssued = true;     // optional: the direct client just issued the record (legend with a PENDIENTE row)
+ui->invoiceSeq = seq;           // -1 (default): every row of the ticket; >= 0: only the paid rows of that payment event
 ui->le_n_ticket->setText(ticketNumber);
 ui->getTicketInfo();            // fetches matching rows from ingresos
 ui->buildTicket(copyForClient, addPayedInfo);  // builds ESC/POS bytes (m_ticketBytes)
 ui->printTicket();              // sends m_ticketBytes RAW to the printer queue
+ui->ticketBytes();              // the ESC/POS bytes of the last buildTicket() (tests read them)
 ```
 
 `buildTicket()` / `printTicket()` keep the historical two-step shape: callers
 build a copy, optionally print it, then build + print the next copy. A second
-`printTicket()` without an intervening `buildTicket()` re-sends the same bytes
-(used by the RecogPrendas "second copy?" prompt).
+`printTicket()` without an intervening `buildTicket()` re-sends the same bytes.
 
 ## Layout modes
 
@@ -50,10 +54,13 @@ build a copy, optionally print it, then build + print the next copy. A second
 ## Process
 
 1. Caller sets the flags and the ticket number, then `getTicketInfo()` loads all
-   matching `ingresos` rows into `sqlQueryModel` (optionally scoped to a paid
-   `verifactu_invoice_seq` for partial-payment events). Both queries carry
-   `AND estado != 'Anulado'` so a locally voided garment never prints on a recibo
-   or factura.
+   matching `ingresos` rows into `sqlQueryModel` (the number is trimmed; the
+   model is drained before the connection closes). Both queries carry
+   `AND (estado IS NULL OR estado != 'Anulado')` so a locally voided garment never prints
+   on a recibo or factura while legacy NULL-estado rows still do. With `invoiceSeq >= 0`
+   the query also forces `verifactu_invoice_seq = :seq AND pagado = 'SI'`: the seq column
+   DEFAULTs to 0 on every row, so a seq-0 payment event would otherwise pull in the
+   still-unpaid siblings. A factura prints only rows whose `pagado` is exactly `SI`.
 2. `buildTicket(copyForClient, addPayedInfo)` reads the model + `AppSettings` +
    the resolved QR into a `TicketData` and calls `TicketRenderer::render(data,
    paperDots())`. The result is cached in `m_ticketBytes`. `paperDots()` derives
@@ -61,13 +68,15 @@ build a copy, optionally print it, then build + print the next copy. A second
    58 mm → 420).
 3. `printTicket()` hands `m_ticketBytes` to `ThermalPrinter::send(bytes,
    AppSettings::printerName())`. An empty printer name uses the Windows default
-   printer and returns whether it was sent. On failure it reports the problem -
+   printer and returns whether it was sent (an empty payload is refused). On failure it reports the problem -
    in the dialog's result panel when it is shown, else a `QMessageBox`. Callers still gate the call on `AppSettings::enablePrinting()`.
    When `AppSettings::useStatusApi()` is on, the bytes go through
-   `StatusApiPrinter::sendAndReadStatus()` first (Epson Status API) and a device
-   problem (paper out / cover open / cutter) is reported the same way (result panel or
-   `QMessageBox`); if
-   the Status API is unavailable it falls back to the RAW `send()` above.
+   `StatusApiPrinter::sendAndReadStatusBounded()` first (Epson Status API on a worker
+   with a 10 s watchdog) and a device problem (paper out / cover open / cutter) is
+   reported the same way (result panel or `QMessageBox`); a fatal fault (cutter /
+   mechanical / unrecoverable) stops there. If the Status API is unavailable or times out
+   before sending, it falls back to the RAW `send()` above; a hang inside the send is
+   not resent (it may still print).
 
 The column layout is computed from the real paper width (dots / char width per
 font) instead of empirically-tuned spreadsheet cell widths.
@@ -86,7 +95,7 @@ top to bottom:
 | Garment table | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura); long names word-wrap |
 | Totals (bold) | recibo: `TOTAL (IVA incl.)`; factura: `Base Imponible` + `IVA (rate%)` + `TOTAL` |
 | Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker (`Copia para el cliente` / `... establecimiento`) |
-| Verifactu QR | facturas only — rastered AEAT pixmap + the verification legend when estado = ENVIADA |
+| Verifactu QR | facturas only — the QR redrawn at 30-40 mm + the verification legend when estado = ENVIADA (or PENDIENTE just issued by the direct client) |
 | Legal policy | client copy only — RD 1453/1987 clauses + RGPD notice (Font B) |
 | Timestamp + cut | `dd/MM/yyyy - hh:mm:ss`, then feed + partial cut |
 
@@ -109,7 +118,7 @@ Consumo Responde (Junta de Andalucía):
 ## `ingresos` column indices
 
 Defined once in `sql_lite/ingresos_schema.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>`
-(`INGRESOS_COL_N_RECIBO=0` … `INGRESOS_COL_VERIFACTU_INVOICE_ID=25`). Used here
+(`INGRESOS_COL_N_RECIBO=0` … `INGRESOS_COL_VERIFACTU_CANCEL_XML=27`). Used here
 for every `sqlQueryModel->index(row, col)` lookup in `imprimir.cpp`, and shared
 with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
 `add_garment`.
@@ -119,42 +128,51 @@ with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
 Never blank, never merged: the ticket number is trimmed before loading; `buildTicket` builds nothing when no row is printable (unknown number, every garment voided) and the dialog says so instead of "impreso"; `resolveQrCode` sums only the paid rows and draws no QR when the loaded paid rows belong to more than one payment event (`invoiceSeq` -1 over a partially paid ticket), so a QR always describes an invoice AEAT received.
 
 A QR is printed on **facturas only** (recibos are claim tickets, not tax
-documents). `resolveQrCode()` is unchanged by the ESC/POS migration — order of
-fallback:
+documents). `resolveQrCode()` resolves it in this order:
 
 1. If the caller pre-populated `qrCode` (the pixmap from a fresh `/Create`
-   response in the save flow), use it.
-2. Otherwise aggregate `verifactu_estado` across all rows: emit a QR only when at
-   least one row has a non-empty `verifactu_csv` AND no row is `ANULADA` /
-   `RECTIFICADA` / `ERROR`. The InvoiceID is `displayInvoiceId()` and the
+   response in the save flow, or `PayDialog`'s `qrBeforeReply`), use it.
+2. Without a configured Verifactu, or when any loaded row is `ANULADA` /
+   `RECTIFICADA` / `ERROR` / unrecognised, or the paid rows span more than one payment
+   event, there is no QR. The InvoiceID is `displayInvoiceId()` and the
    `FechaExpedicion` is the first paid row's `fecha_pago` (the date submitted to
    AEAT). `displayInvoiceId()` gathers the `verifactu_invoice_id` column and
    delegates the selection (first non-empty literal, else bare `n_recibo`) to the
    pure, unit-tested `sql_lite::verifactuDisplayInvoiceId` seam.
-3. An accepted invoice is reprinted with the QR drawn (`AeatQr::image`) from the
+3. **No row has a CSV** (not confirmed by AEAT yet): only the direct client, whose
+   record is generated, chained and queued, has a QR - the one printed at issue,
+   `VerifactuIntegration::qrBeforeReply`. It sets `m_qrFromQueuedRecord`, which
+   also turns the leyenda on. The gateway prints no QR here.
+4. **A CSV exists** (accepted invoice): the QR is drawn (`AeatQr::image`) from the
    verification URL stored with AEAT's answer (`verifactu_url_qr` of its paid rows,
    gateway and direct client alike). It is never rebuilt from today's environment:
    after the production switch an older test invoice would otherwise get a
    production QR. Nor is it rebuilt from today's IVA rate. Only an older row without
-   that URL (an old gateway row) asks the backend, and only the gateway: the direct client
-   prints it without QR rather than rebuild a URL that may not be the invoice's. The gateway (REST `/GetQrCode`, 5 s bounded wait; on timeout the
-   ticket prints without a QR).
+   that URL (an old gateway row) asks the backend, and only the gateway (REST
+   `/GetQrCode`, 5 s bounded wait; on timeout the ticket prints without a QR); the
+   direct client prints it without QR rather than rebuild a URL that may not be the
+   invoice's.
 
-`buildTicket()` rasters the resolved `QPixmap` into the ESC/POS stream
-(`qr.scaled(192,192).toImage()` → `EscPosBuilder::rasterImage()`, `GS v 0`), so
-the printed QR is byte-exact with what AEAT issued (no local re-encoding). The
-verification legend `Factura verificable en la sede electrónica de la AEAT` is
-emitted below the QR only when row 0's `verifactu_estado` equals
-`verifactuEstadoToString(VerifactuEstado::Enviada)` — required by Disposición
-Final Primera RD 1007/2023. QR image bytes are never persisted in the DB.
+`buildTicket()` redraws the resolved `QPixmap` through `TicketRenderer::printableQr`
+(the same modules at whole dots per module, 30-40 mm, plus the 4-module quiet zone,
+never wider than the paper) and rasters it into the ESC/POS stream
+(`EscPosBuilder::rasterImage()`, `GS v 0`); a symbol it cannot read is printed as
+received. No local re-encoding. The verification legend `Factura verificable en la
+sede electrónica de la AEAT` is emitted below the QR only when row 0's
+`verifactu_estado` is `ENVIADA`, or `PENDIENTE` while the direct client has just issued
+the record (`verifactuIssued`, or the QR came from the queued record) - required by
+Disposición Final Primera RD 1007/2023. QR image bytes are never persisted in the DB.
 
 ## Dependencies
 
 - [`printing`](printing.md) — `EscPosBuilder`, `TicketRenderer`, `ThermalPrinter`
   (the ESC/POS byte builder + RAW Windows-spooler transport). No QXlsx, no Excel,
   no `cscript`.
-- `verifactu` — `VerifactuIntegration::generateQRAsync()` for the `/GetQrCode` path.
+- `verifactu` — `VerifactuIntegration::qrBeforeReply()` (the direct client's queued
+  record) and `generateQRAsync()` for the old gateway `/GetQrCode` path; `AeatQr::image`
+  draws the stored URL.
+- `uikit` — the dialog style and result panel.
 - `appsettings` — business identity, IVA rate, `printerName()`, `paperWidthMm()`,
-  `enablePrinting()`.
+  `enablePrinting()`, `useStatusApi()`.
 - `sql_lite` — `searchItemFromClient()`, the `verifactuInvoiceId()`/estado helpers,
   and the `INGRESOS_COL_*` indices.

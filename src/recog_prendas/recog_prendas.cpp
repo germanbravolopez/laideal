@@ -35,6 +35,7 @@
 #include <QSqlQuery>
 #include <QStatusBar>
 #include <QIntValidator>
+#include <QRegularExpression>
 
 RecogPrendas::RecogPrendas(const QSqlDatabase &database, QWidget *parent) :
     QMainWindow(parent),
@@ -330,8 +331,10 @@ double RecogPrendas::manualUnitPrice()
 void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
 {
     QString failure;   // a write that was refused or failed, reported after the refresh
-    if (rowClickedCell < 0 || rowClickedCell >= sqlQueryModel->rowCount())
+    if (rowClickedCell < 0 || rowClickedCell >= sqlQueryModel->rowCount()) {
+        m_lastWriteOk = false;
         return;
+    }
     const bool editLock = rowClickedLocked();
     static const char *const opNames[] = {
         "PKU_YES", "PKU_NO", "OBSV", "SIZE_AND_PRICE",
@@ -354,6 +357,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
             == QLatin1String(INGRESOS_ESTADO_ANULADO)) {
         qWarning() << "RecogPrendas::updateDb: blocked" << opNames[op]
                    << "on anulado row, ticket" << ticketNum << "hash" << rowHash;
+        m_lastWriteOk = false;
         return;
     }
     switch (op) {
@@ -542,7 +546,7 @@ void RecogPrendas::on_le_search_returnPressed()
     on_pb_search_clicked();
 }
 
-void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &arg1)
+void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &)
 {
     on_pb_search_clicked();
 }
@@ -584,11 +588,27 @@ void RecogPrendas::refreshSearch(bool keepTyped)
     }
 }
 
+// The search text as a digits-only ticket number or phone ("600 123 456", "+34600123456"),
+// or empty when it is not one.
+static QString normalizedSearchDigits(const QString &text)
+{
+    QString digits = text;
+    digits.remove(QRegularExpression(QStringLiteral("\\s")));
+    const bool international = digits.startsWith(QLatin1String("+34")) || digits.startsWith(QLatin1String("0034"));
+    if (international)
+        digits = digits.mid(digits.startsWith('+') ? 3 : 4);
+    static const QRegularExpression onlyDigits(QStringLiteral("^\\d+$"));
+    if (!onlyDigits.match(digits).hasMatch())
+        return QString();
+    return (international && digits.length() < 9) ? QString() : digits;
+}
+
 // QSqlQueryModel fetches in batches of 256 and fetchMore() needs the connection open:
 // drain the result before the caller closes it, or a long search is cut silently.
 static void loadEveryRow(QSqlQueryModel *model, QSqlQuery &&q)
 {
-    q.exec();
+    if (!q.exec())
+        qWarning() << "RecogPrendas: search query failed:" << q.lastError().text();
     model->setQuery(std::move(q));
     while (model->canFetchMore())
         model->fetchMore();
@@ -607,34 +627,35 @@ void RecogPrendas::runSearch(const QString &query)
     qDebug() << "RecogPrendas::on_pb_search_clicked: input=" << query
              << "dateMode=" << ui->cb_search_date->currentText();
     if (query != "") {
-        bool ok = false, totalPriceActive = true;
+        bool totalPriceActive = true;
         QString nameSearchFilter;
-        query.toUInt(&ok);
-        if (ok) {
-            if (query.length() >= 9) {
-                // Phone number - search tel_fijo OR movil
-                QString clientFromPhone;
+        const QString digits = normalizedSearchDigits(query);
+        if (!digits.isEmpty()) {
+            if (digits.length() >= 9) {
+                // Phone number - search tel_fijo OR movil; relatives may share a number
+                QStringList clientsFromPhone;
                 {
                     ConnectionScope scope(db);
                     QSqlQuery phoneQ(db);
                     phoneQ.prepare("SELECT nombre FROM clientes WHERE tel_fijo LIKE :phone OR movil LIKE :movil");
-                    phoneQ.bindValue(":phone", query);
-                    phoneQ.bindValue(":movil", query);
-                    phoneQ.exec();
-                    if (phoneQ.first())
-                        clientFromPhone = phoneQ.value(0).toString();
-                    else {
-                        m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
-                                                              .arg(query.toHtmlEscaped())));
-                        searchProblem = true;
-                    }
+                    phoneQ.bindValue(":phone", digits);
+                    phoneQ.bindValue(":movil", digits);
+                    if (!phoneQ.exec())
+                        qWarning() << "RecogPrendas: phone lookup failed:" << phoneQ.lastError().text();
+                    while (phoneQ.next())
+                        clientsFromPhone << phoneQ.value(0).toString();
                 }
-
-                if (!clientFromPhone.isNull()) {
+                if (clientsFromPhone.isEmpty()) {
+                    m_result->setText(UiKit::warnHtml(tr("No hay ningún cliente con el teléfono %1.")
+                                                          .arg(query.toHtmlEscaped())));
+                    searchProblem = true;
+                } else {
                     ConnectionScope scope(db);
                     QSqlQuery q(db);
-                    q.prepare("SELECT * FROM ingresos WHERE cliente = :cliente");
-                    q.bindValue(":cliente", clientFromPhone);
+                    q.prepare("SELECT * FROM ingresos WHERE cliente IN ("
+                              + QStringList(clientsFromPhone.size(), QStringLiteral("?")).join(',') + ")");
+                    for (const QString &client : clientsFromPhone)
+                        q.addBindValue(client);
                     loadEveryRow(sqlQueryModel, std::move(q));
                 }
             }
@@ -644,7 +665,7 @@ void RecogPrendas::runSearch(const QString &query)
                     ConnectionScope scope(db);
                     QSqlQuery q(db);
                     q.prepare("SELECT * FROM ingresos WHERE n_recibo = :n_recibo");
-                    q.bindValue(":n_recibo", query);
+                    q.bindValue(":n_recibo", digits);
                     loadEveryRow(sqlQueryModel, std::move(q));
                 }
                 totalPriceActive = true;
@@ -656,10 +677,9 @@ void RecogPrendas::runSearch(const QString &query)
             QDate date = (!dateSlash.isNull()) ? dateSlash :
                          (!dateDash.isNull()) ? dateDash: QDate::currentDate();
             // date_type values come from a hard-coded ComboBox - not user input
-            QString dateType = (ui->cb_search_date->currentText() == "Recepción") ? "fecha_recepcion" :
-                               (ui->cb_search_date->currentText() == "Pago") ? "fecha_pago" :
-                               (ui->cb_search_date->currentText() == "Recogida") ? "fecha_recogida" :
-                               (ui->cb_search_date->currentText() == "Anulación") ? "fecha_anulacion" : "";
+            static const char *const dateColumns[] = { "fecha_recepcion", "fecha_pago", "fecha_recogida", "fecha_anulacion" };
+            const int dateIndex = qBound(0, ui->cb_search_date->currentIndex(), 3);
+            const QString dateType = dateColumns[dateIndex];   // items are in this fixed order, whatever the UI language
             if (!dateSlash.isNull() || !dateDash.isNull()) {
                 ConnectionScope scope(db);
                 QSqlQuery q(db);
@@ -1062,7 +1082,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     if (!error.isEmpty())
         addRow(tr("Error:"), error);
     if (!url.isEmpty()) {
-        QLabel *urlLabel = new QLabel(QString("<a href='%1'>%2</a>").arg(url, tr("Abrir en la sede de AEAT")));
+        QLabel *urlLabel = new QLabel(QString("<a href='%1'>%2</a>").arg(url.toHtmlEscaped(), tr("Abrir en la sede de AEAT")));
         urlLabel->setOpenExternalLinks(true);
         urlLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
         info->addRow(tr("Validación:"), urlLabel);
@@ -1091,8 +1111,8 @@ void RecogPrendas::on_pb_verifactu_clicked()
     if (verifactuUsable && rowPaid) {
         QPushButton *btnQuery = UiKit::secondaryButton(tr("Consultar en AEAT"), "btnQuery");
         btnQuery->setToolTip(alreadySettled
-            ? "Consulta a AEAT los datos registrados de esta factura (solo informativo)."
-            : "Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV.");
+            ? tr("Consulta a AEAT los datos registrados de esta factura (solo informativo).")
+            : tr("Comprueba si AEAT ya tiene esta factura y permite recuperar su CSV."));
         connect(btnQuery, &QPushButton::clicked, this,
                 [this, dlg, ticketNum, rowSeq, alreadySettled]() {
             dlg->accept();

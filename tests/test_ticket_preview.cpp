@@ -37,9 +37,8 @@ namespace {
 
 // A QR-like placeholder image (three finder squares + a checker field), one pixel
 // per module, no quiet zone; fakeQr() scales it up as a stand-in for the AEAT pixmap.
-QImage fakeQrModules()
+QImage fakeQrModules(int mods = 25)
 {
-    const int mods = 25;
     QImage q(mods, mods, QImage::Format_RGB32);
     q.fill(qRgb(255, 255, 255));
     for (int y = 0; y < mods; ++y)
@@ -230,6 +229,19 @@ private slots:
         QImage blank(100, 100, QImage::Format_RGB32);
         blank.fill(qRgb(255, 255, 255));
         QVERIFY(TicketRenderer::printableQr(blank).isNull());
+    }
+
+    // A small symbol gets bigger modules, so its quiet zone must still fit the roll.
+    void test_printableQrFitsPaperWidth()
+    {
+        for (const int paper : { 420, 576 }) {
+            for (const int n : { 21, 25, 29, 37, 41, 57 }) {
+                const QImage out = TicketRenderer::printableQr(withQuietZone(fakeQrModules(n), 4), paper);
+                QVERIFY2(!out.isNull(), qPrintable(QString("%1 modules").arg(n)));
+                QVERIFY2(out.width() <= paper, qPrintable(QString("%1 modules on %2: %3 dots").arg(n).arg(paper).arg(out.width())));
+                QCOMPARE(out.width() % (n + 8), 0);   // whole dots per module
+            }
+        }
     }
 
     // Art. 20.1.b: the leyenda in a well-visible font like the rest (Font A, not B),

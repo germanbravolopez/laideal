@@ -68,6 +68,8 @@ QString offlineReason(HANDLE hPrinter)
 bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QString *err)
 {
     auto fail = [err](const QString &m) { if (err) *err = m; return false; };
+    if (escpos.isEmpty())
+        return fail(QStringLiteral("No hay nada que imprimir."));
 
 #ifdef Q_OS_WIN
     QString queue = queueName.trimmed();

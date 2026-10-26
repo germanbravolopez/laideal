@@ -144,7 +144,7 @@ private slots:
         seedTicket();
         AddGarment dlg(m_db);
         searchTicket(dlg);
-        QVERIFY(dlg.ticketFound);
+        QVERIFY(dlg.ticketFound());
         save(dlg);
         QVERIFY2(panel(dlg).contains("Formulario incompleto"), qPrintable(panel(dlg)));
         dlg.findChild<QComboBox *>("cbPrenda")->setCurrentText("Camisa");   // quantity still missing

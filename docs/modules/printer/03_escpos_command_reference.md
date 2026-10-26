@@ -57,8 +57,8 @@ ESC/POS sends text as **single-byte code-page bytes**, not UTF-8. The receipt co
 | International charset | `ESC R n` | `[1B 52 n]` | Per-country glyph swaps; `n`=7 = Spain. Usually leave default and rely on the code page. |
 
 Recommended: select **PC858** (`ESC t 19`) — it is Western-European with the `€` sign — and
-transcode `QString` → CP858 in C++ (`QStringEncoder("CP858")` in Qt 6, or `QTextCodec` in Qt 5;
-or a small explicit lookup table for the ~12 glyphs actually used). Verify on the physical unit:
+transcode `QString` → CP858 in C++ with a small explicit lookup table (shipped as
+`EscPosBuilder::toCp858`; Qt 6's `QStringEncoder` has no CP858). Verify on the physical unit:
 the exact code-page numbering can vary, and the safest path is to print a self-test / code-page
 chart from the printer and confirm. This transcoding step is the single most error-prone part of
 the rewrite — Excel handled it invisibly, ESC/POS does not.
@@ -87,8 +87,9 @@ For the **Verifactu QR**, the existing code already obtains a `QPixmap` from
 native-QR option below and the trade-off in [`05_implementation_plan.md`](05_implementation_plan.md).)
 
 Conversion sketch (host side): `pixmap.toImage().convertToFormat(QImage::Format_Mono)`, then for
-each row pack 8 horizontal pixels per byte (MSB = leftmost), `1` = black. Scale to ~140–200 dots
-wide so it is scannable but fits the roll.
+each row pack 8 horizontal pixels per byte (MSB = leftmost), `1` = black. The shipped code scales
+the QR to 30-40 mm (240-320 dots, whole dots per module; Orden HAC/1177/2024 art. 21) and never
+wider than the roll (`TicketRenderer::printableQr`).
 
 ## Native 2D / barcodes (firmware-generated, optional)
 
