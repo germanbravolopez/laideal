@@ -16,6 +16,7 @@
 #include <QTemporaryDir>
 
 #include "appsettings.h"
+#include "commandline.h"
 #include "e2efixture.h"
 #include "selfcheck.h"
 #include "selfcheckdialog.h"
@@ -285,6 +286,45 @@ private slots:
         QVERIFY(!SelfCheck::invoiceStillSent(live, "99", 0));
     }
 
+    // A rectificativa (own number, estado Rectificativa, paid) is never the one printed
+    // through the invoice template: with the original invoice gone, nothing is offered.
+    void test_checkData_printableTicketIgnoresRectificativas()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath("shop.db");
+        QVERIFY(seedShop(file));
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "rect");
+            db.setDatabaseName(file);
+            QVERIFY(E2e::seedSentGarment(db, "R-1", "hR1", "5.00", "16-02-2026", "A-RECT"));
+            QVERIFY(E2e::exec(db, "UPDATE ingresos SET estado = 'Rectificativa', verifactu_rectifies_n_recibo = '99', "
+                                  "verifactu_url_qr = 'https://prewww2.aeat.es/x?numserie=R-1' WHERE n_recibo = 'R-1'"));
+            QVERIFY(E2e::exec(db, "UPDATE ingresos SET verifactu_estado = 'ANULADA' WHERE n_recibo = '99'"));
+            db.close();
+        }
+        QSqlDatabase::removeDatabase("rect");
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "data");
+            db.setDatabaseName(file);
+            SelfCheck::DataFacts facts;
+            SelfCheck::checkData(db, dir.filePath("Contabilidad"), facts);
+            QVERIFY2(facts.printableTicket.isEmpty(), qPrintable(facts.printableTicket));
+        }
+        QSqlDatabase::removeDatabase("data");
+    }
+
+    // `--settings` with no file after it is an error, never the shop's own settings.
+    void test_commandLine_danglingSettingsSwitch()
+    {
+        bool dangling = false;
+        QCOMPARE(CommandLine::switchValue({ "laideal.exe", "--settings", "a.json" }, "--settings", &dangling), QStringLiteral("a.json"));
+        QVERIFY(!dangling);
+        QVERIFY(CommandLine::switchValue({ "laideal.exe", "--self-check", "--settings" }, "--settings", &dangling).isEmpty());
+        QVERIFY(dangling);
+        QVERIFY(CommandLine::switchValue({ "laideal.exe" }, "--settings", &dangling).isEmpty());
+        QVERIFY(!dangling);
+    }
+
     void test_reportText()
     {
         SelfCheck::Check a{ "M1", "Base", SelfCheck::Check::Pass, "ok" };
@@ -349,6 +389,7 @@ private slots:
             QVERIFY(report.open(QIODevice::ReadOnly));
             const QString text = QString::fromUtf8(report.readAll());
             QVERIFY2(text.contains("Resultado: todo correcto."), qPrintable(text));
+            QVERIFY(dialog.allPassed());
             QVERIFY(!text.contains("Cliente E2E") && !text.contains("24,20") && !text.contains("A-SELFCHECK"));
             workDir = QFileInfo(AppSettings::instance()->dbPath()).absolutePath();
         }
@@ -356,6 +397,40 @@ private slots:
         QVERIFY(!QFileInfo::exists(stale));
         QCOMPARE(digest(liveDb), dbBefore);
         QCOMPARE(digest(liveSettings), settingsBefore);
+    }
+
+    // Closing the window before the questions are answered still leaves a report, with the
+    // unanswered checks "SIN HACER" and a failing result (the exit code of --self-check).
+    void test_dialog_closeBeforeAnsweringWritesPartialReport()
+    {
+        QTemporaryDir shop;
+        const QString liveDb = shop.filePath("laideal.db");
+        QVERIFY(seedShop(liveDb));
+        QVERIFY(QDir().mkpath(shop.filePath("backups")));
+        QVERIFY(QFile::copy(liveDb, shop.filePath("backups/laideal_" + QDateTime::currentDateTime().addDays(-1).toString("yyyy-MM-dd_HHmmss") + ".db")));
+        const QString liveSettings = shop.filePath("settings.json");
+        QJsonObject root;
+        root["database"] = QJsonObject{ { "path", liveDb } };
+        root["print"] = QJsonObject{ { "enable", "No" } };
+        root["reports"] = QJsonObject{ { "root", shop.filePath("reports") } };
+        QFile settingsFile(liveSettings);
+        QVERIFY(settingsFile.open(QIODevice::WriteOnly));
+        settingsFile.write(QJsonDocument(root).toJson());
+        settingsFile.close();
+        QVERIFY(AppSettings::instance()->loadFrom(liveSettings));
+
+        QTemporaryDir out;
+        SelfCheckDialog dialog(liveSettings);
+        dialog.setReportFolder(out.path());
+        dialog.start();
+        QVERIFY(dialog.reportFile().isEmpty());                          // questions still open
+        dialog.reject();
+        QVERIFY(!dialog.allPassed());
+        QFile report(dialog.reportFile());
+        QVERIFY(report.open(QIODevice::ReadOnly));
+        const QString text = QString::fromUtf8(report.readAll());
+        QVERIFY2(text.contains("SIN HACER"), qPrintable(text));
+        QVERIFY2(text.contains("con fallo o sin hacer"), qPrintable(text));
     }
 };
 

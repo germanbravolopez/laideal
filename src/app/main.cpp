@@ -7,6 +7,7 @@
 #include "instancelock.h"
 #include "sql_lite.h"
 #include "applogger.h"
+#include "commandline.h"
 #ifdef LAIDEAL_UI_TEST
 #include "reporthtml.h"
 #endif
@@ -30,9 +31,17 @@ int main(int argc, char *argv[])
     // shop's own ~/.laideal_settings.json.
     const QStringList args = a.arguments();
     const int settingsArg = args.indexOf(QStringLiteral("--settings"));
-    if (settingsArg > 0 && settingsArg + 1 < args.size()) {
-        settings->loadFrom(args.at(settingsArg + 1));
-        qWarning() << "main: using the settings file" << args.at(settingsArg + 1);
+    bool danglingSettings = false;
+    const QString settingsFile = CommandLine::switchValue(args, QStringLiteral("--settings"), &danglingSettings);
+    if (danglingSettings) {
+        qCritical() << "main: --settings needs a file";
+        QMessageBox::critical(nullptr, QObject::tr("Error de configuración"),
+            QObject::tr("Falta el archivo de ajustes después de --settings."));
+        return 1;
+    }
+    if (!settingsFile.isEmpty()) {
+        settings->loadFrom(settingsFile);
+        qWarning() << "main: using the settings file" << settingsFile;
     } else {
         settings->load();
     }
@@ -68,7 +77,7 @@ int main(int argc, char *argv[])
         SelfCheckDialog check(settings->filePath());
         QTimer::singleShot(0, &check, &SelfCheckDialog::start);
         check.exec();
-        return 0;
+        return check.allPassed() ? 0 : 1;
     }
 
     // If the DB path is not set or the file is missing, prompt the user to

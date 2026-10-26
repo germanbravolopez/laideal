@@ -31,6 +31,7 @@
 #include <QTableView>
 #include <QTableWidget>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QTcpServer>
@@ -303,6 +304,26 @@ private slots:
         MainWindow again;
         QVERIFY(!again.findChild<QLabel *>("lblResult")->text().contains("Comprobar tras actualizar"));
         QVERIFY(again.findChild<QAction *>("actionComprobar_tras_actualizar"));
+    }
+
+    // A start problem (here the backup warning) stays in view when Verifactu then warns
+    // too: its message is added below, not put in its place.
+    void test_mainWindow_verifactuWarningKeepsTheStartProblems()
+    {
+        AppSettings *settings = AppSettings::instance();
+        const QString nif = settings->verifactuNif();
+        const bool backups = settings->backupEnabled();
+        settings->setBackupEnabled(false);
+        settings->setVerifactuNif(QString());
+        QString text;
+        {
+            MainWindow mw;
+            text = mw.findChild<QLabel *>("lblResult")->text();
+        }
+        settings->setVerifactuNif(nif);
+        settings->setBackupEnabled(backups);
+        QVERIFY2(text.contains("Verifactu no est"), qPrintable(text));
+        QVERIFY2(text.contains("copias de seguridad autom"), qPrintable(text));
     }
 
     // From 12.0, which did not record the started version: its pre-migration copy's version
@@ -2323,6 +2344,55 @@ private slots:
         QTRY_VERIFY(dlg.isNull());                                        // last row handled: it closes itself
     }
 
+    // Envíos pendientes: "Error" on one payment event leaves its sibling event of the same
+    // ticket PENDIENTE and takes the row out; the dialog closes after the last row; a
+    // retry on an unreadable payment date sends nothing; the toggle and the floor date
+    // hide what they are meant to hide.
+    void test_pendingSubmits_markErrorScopedBySeqAndGates()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700a", "9.00", today(), ""));
+        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700b", "4.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE', verifactu_invoice_seq = 1 "
+                                "WHERE hash = 'h700b'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash = 'h700a'"));
+
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(false);
+        {
+            PendingSubmitsDialog off(m_db);
+            QVERIFY(!off.loadPending());                                  // the operator toggle
+        }
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        AppSettings::instance()->setVerifactuPendingRecoveryFloorDate(QDate::currentDate().addDays(1).toString(Qt::ISODate));
+        {
+            PendingSubmitsDialog beforeFloor(m_db);
+            QVERIFY(!beforeFloor.loadPending());                          // paid before the floor: not an invoice to recover
+        }
+        AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
+
+        PendingSubmitsDialog dlg(m_db);
+        bool sent = false;
+        dlg.retry = [&sent](const QString &, int, const QDate &, double) { sent = true; return QString(); };
+        QVERIFY(dlg.loadPending());
+        QTableWidget *table = dlg.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 2);                                   // 700 and 700-1
+        QCOMPARE(table->item(0, 0)->text(), QStringLiteral("700"));
+        QMetaObject::invokeMethod(&dlg, "onMarkErrorClicked", Q_ARG(int, 0));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash = 'h700a'"), QStringLiteral("ERROR"));
+        QCOMPARE(scalar("SELECT verifactu_estado FROM ingresos WHERE hash = 'h700b'"), QStringLiteral("PENDIENTE"));
+        QCOMPARE(table->rowCount(), 1);
+
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET fecha_pago = '31-31-2026' WHERE hash = 'h700b'"));
+        PendingSubmitsDialog unreadable(m_db);
+        unreadable.retry = [&sent](const QString &, int, const QDate &, double) { sent = true; return QString(); };
+        QVERIFY(unreadable.loadPending());
+        QMetaObject::invokeMethod(&unreadable, "onRetryClicked", Q_ARG(int, 0));
+        QVERIFY(!sent);
+        QVERIFY(unreadable.findChild<QLabel *>("lblResult")->text().contains("no tiene fecha de pago"));
+        QCOMPARE(unreadable.findChild<QTableWidget *>("table")->rowCount(), 1);
+        QMetaObject::invokeMethod(&unreadable, "onMarkErrorClicked", Q_ARG(int, 0));
+        QCOMPARE(unreadable.result(), static_cast<int>(QDialog::Accepted));   // last row handled
+    }
+
     // Reprint of one payment event (Imprimir, as Recogida de prendas uses it): only
     // that event's paid garments are loaded, the QR is requested under its literal
     // InvoiceID and payment date, and no QR is requested once the event is ANULADA.
@@ -3300,6 +3370,31 @@ private slots:
         QVERIFY(result().contains("aeat_registros_20260301_20260331.xml"));
         QVERIFY(QFile::exists(file));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+        dlg->findChild<QPushButton *>("btnClose")->click();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
+    // A period with nothing sent says so (the file is still created); a path that cannot
+    // be written reports the failure in the window and creates nothing.
+    void test_aeatExportDialog_emptyPeriodAndUnwritablePath()
+    {
+        QPointer<AeatExportDialog> dlg = new AeatExportDialog(m_db);
+        const auto result = [&dlg]() { return dlg->findChild<QLabel *>("lblResult")->text(); };
+        dlg->findChild<QDateEdit *>("deFrom")->setDate(QDate(2019, 1, 1));
+        dlg->findChild<QDateEdit *>("deTo")->setDate(QDate(2019, 1, 31));
+        const QString file = dlg->findChild<QLineEdit *>("leFile")->text();
+        QFile::remove(file);
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QVERIFY2(result().contains("No hay registros"), qPrintable(result()));
+        QVERIFY2(result().contains("creado vac"), qPrintable(result()));
+        QVERIFY(QFile::exists(file));
+
+        QTemporaryFile blocker;                                           // a file where a folder is needed
+        QVERIFY(blocker.open());
+        dlg->findChild<QLineEdit *>("leFile")->setText(blocker.fileName() + "/sub/out.xml");
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QVERIFY2(result().contains("No se pudo abrir el archivo"), qPrintable(result()));
+        QVERIFY(m_popups->messages().isEmpty());
         dlg->findChild<QPushButton *>("btnClose")->click();
         QTRY_VERIFY(dlg.isNull());
     }

@@ -18,7 +18,7 @@ class QPushButton;
 //
 // Strategy: surface every still-PENDIENTE n_recibo at app start, let the
 // operator decide per ticket whether to Reintentar (re-fire the AEAT submit),
-// Marcar como error (set verifactu_estado='Error' + error explanation), or
+// Error (set the canonical verifactu_estado ERROR + an explanation), or
 // Posponer (no-op, surfaces again next launch). No blind auto-resubmit -
 // AEAT may already hold a registered invoice under the same InvoiceID and a
 // naive resubmit would get a duplicate-InvoiceID rejection.
@@ -28,7 +28,7 @@ class PendingSubmitsDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit PendingSubmitsDialog(QSqlDatabase &db, QWidget *parent = nullptr);
+    explicit PendingSubmitsDialog(const QSqlDatabase &db, QWidget *parent = nullptr);
     // Resends one pending invoice; returns why nothing was sent (empty when it was). The
     // row stays listed when nothing was sent.
     std::function<QString(const QString &ticketNum, int seq, const QDate &invoiceDate, double totalAmount)> retry;
@@ -54,7 +54,7 @@ private slots:
     void onPostponeClicked(int row);
 
 private:
-    QSqlDatabase   &db;
+    QSqlDatabase    db;
     QTableWidget   *m_table = nullptr;
     UiKit::ResultPanel *m_lblResult = nullptr;
     QVector<Entry>  m_entries;

@@ -302,8 +302,16 @@ void SelfCheckDialog::answer(bool yes)
     askNext();
 }
 
+void SelfCheckDialog::reject()
+{
+    if (!m_finished && !m_checks.isEmpty())
+        finish();
+    QDialog::reject();
+}
+
 void SelfCheckDialog::finish()
 {
+    m_finished = true;
     m_grpQuestion->setVisible(false);
     cleanUp();
     const QDateTime now = QDateTime::currentDateTime();
@@ -317,6 +325,7 @@ void SelfCheckDialog::finish()
     bool allOk = true;
     for (const Check &c : m_checks)
         allOk = allOk && (c.status == Check::Pass || c.status == Check::Skip);
+    m_allOk = allOk;
     qDebug() << "SelfCheckDialog: finished, all ok =" << allOk << "report" << m_reportFile << "written" << written;
     const QString outcome = allOk ? UiKit::okHtml(tr("Comprobación terminada: todo correcto."))
                                   : UiKit::errorHtml(tr("Comprobación terminada con fallos."));
