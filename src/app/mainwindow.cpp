@@ -493,7 +493,7 @@ void MainWindow::mainwindowInitialSettings()
     // Verifactu start-up messages, which replace the panel).
     if (SelfCheck::isFirstStartAfterUpdate(previousVersion, version))
         m_updateNotice = UiKit::warnHtml(tr("La Ideal se ha actualizado a la versión %1.").arg(version))
-                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar2026</b> (o Inicio → La Ideal - Comprobar "
+                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar…</b> (o Inicio → La Ideal - Comprobar "
                                        "tras actualizar) y envíe el informe que guarda en el escritorio.");
     if (AppSettings::instance()->lastStartedVersion() != version) {
         AppSettings::instance()->setLastStartedVersion(version);

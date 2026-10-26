@@ -30,7 +30,6 @@ int main(int argc, char *argv[])
     // e.g. the direct AEAT client against a copy of the database), never touching the
     // shop's own ~/.laideal_settings.json.
     const QStringList args = a.arguments();
-    const int settingsArg = args.indexOf(QStringLiteral("--settings"));
     bool danglingSettings = false;
     const QString settingsFile = CommandLine::switchValue(args, QStringLiteral("--settings"), &danglingSettings);
     if (danglingSettings) {
@@ -109,8 +108,8 @@ int main(int argc, char *argv[])
 
     MainWindow w;
     w.setWindowState(Qt::WindowMaximized);
-    if (settingsArg > 0)
-        w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(args.value(settingsArg + 1)));
+    if (!settingsFile.isEmpty())
+        w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(settingsFile));
 #ifdef LAIDEAL_UI_TEST
     if (!fakeAeatUrl.isEmpty())
         w.setWindowTitle(w.windowTitle() + QStringLiteral(" - AEAT simulada (prueba de interfaz)"));
