@@ -20,6 +20,7 @@ class QDialog;
 class QHBoxLayout;
 class QLineEdit;
 class QPushButton;
+class QWidget;
 
 namespace UiKit {
 
@@ -34,6 +35,12 @@ void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth = 520);
 
 // Window heading (bold, larger than the app font), for windows that list data.
 QLabel *heading(const QString &text);
+
+// Bolds a widget's text and enlarges it by extraPoints over the app font (totals, ticket number).
+void emphasize(QWidget *widget, qreal extraPoints);
+
+// Display-only date: read-only, no spin buttons (still shows the value and a tooltip, if given).
+void lockDate(QDateEdit *edit, const QString &toolTip = QString());
 
 // Framed explanation at the top of a dialog: what it does, in one or two sentences.
 QLabel *introPanel(const QString &text);

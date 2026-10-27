@@ -240,13 +240,6 @@ bool Facturas::saveFactura()
                                 m_leImporte->text().trimmed());
 }
 
-double Facturas::taxBaseFromGross(double gross, double ivaRate)
-{
-    // Unrounded on purpose: the Verifactu facade gets gross / (1 + rate) and splits it back
-    // in cents itself (splitGross); a rounded base would lose a cent of the total.
-    return gross / (1.0 + ivaRate / 100.0);
-}
-
 double Facturas::taxAmountFromGross(double gross, double ivaRate)
 {
     return gross * (1.0 - 1.0 / (1.0 + ivaRate / 100.0));

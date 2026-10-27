@@ -48,7 +48,11 @@ public:
     // Strips Spanish/common diacritics from a string for locale-insensitive comparison.
     static QString removeDiacritics(const QString &text);
 
-    QString table_name;
+    // Which table the rows come from: picks the comparators, the searched columns and
+    // the read-only rules. Set by the owner before the model is used.
+    enum class Schema { Generic, Ingresos, Gastos, Prendas };
+    Schema schema = Schema::Generic;
+    static Schema schemaForTable(const QString &tableName);
 
     // A gastos row whose fecha is in a quarter closed by Contabilidad is read-only.
     // closedQuarters holds quarterKey()s (sql_lite closedQuarterKeys), set by the view.

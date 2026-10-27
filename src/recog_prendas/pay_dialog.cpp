@@ -68,10 +68,7 @@ void PayDialog::buildUi()
 
     m_lblTotal = new QLabel(this);
     m_lblTotal->setAlignment(Qt::AlignRight);
-    QFont totalFont = m_lblTotal->font();
-    totalFont.setPointSizeF(totalFont.pointSizeF() + 2);
-    totalFont.setBold(true);
-    m_lblTotal->setFont(totalFont);
+    UiKit::emphasize(m_lblTotal, 2);
     root->addWidget(m_lblTotal);
 
     auto *form = new QFormLayout;

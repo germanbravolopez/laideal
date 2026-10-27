@@ -169,10 +169,7 @@ void RecogPrendas::buildUi()
     QGroupBox *grpTicket = new QGroupBox(tr("Ticket"));
     QVBoxLayout *t = new QVBoxLayout(grpTicket);
     ui->lbl_total = new QLabel();
-    QFont totalFont = ui->lbl_total->font();
-    totalFont.setPointSizeF(totalFont.pointSizeF() + 3);
-    totalFont.setBold(true);
-    ui->lbl_total->setFont(totalFont);
+    UiKit::emphasize(ui->lbl_total, 3);
     ui->lbl_total->setToolTip(tr("Suma de las prendas listadas (sin anuladas ni rectificadas)."));
     t->addWidget(ui->lbl_total);
     ui->pb_pay_all = UiKit::primaryButton(tr("Cobrar\u2026"), "pb_pay_all");
@@ -283,22 +280,17 @@ void RecogPrendas::resetAllContents()
     // submission makes a retry register a SECOND invoice instead of being rejected
     // as duplicate, breaks reconciliation matching, and can move income into a
     // locked quarter. Read-only + no spin buttons keeps it legible but inert.
-    ui->de_date_paym->setReadOnly(true);
-    ui->de_date_paym->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    ui->de_date_paym->setToolTip(tr("La fecha de pago se registra al cobrar y no se "
-                                    "puede modificar aquí."));
+    UiKit::lockDate(ui->de_date_paym, tr("La fecha de pago se registra al cobrar y no se "
+                                         "puede modificar aquí."));
     // Reception date is display-only for the same reason: nothing writes it back to
     // the clicked row. Its one remaining reader is the split-off row in
     // SEPARATE_GARM, which must inherit the original reception date anyway - a
     // hand-typed value there would also shift the row in or out of the Verifactu
     // startup-recovery window, which gates on fecha_recepcion.
     // fecha_anulacion is written only by Anular prendas / Anular factura / Rectificar.
-    ui->de_date_anul->setReadOnly(true);
-    ui->de_date_anul->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    ui->de_date_recep->setReadOnly(true);
-    ui->de_date_recep->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    ui->de_date_recep->setToolTip(tr("La fecha de recepción se fija al crear el "
-                                     "ticket y no se puede modificar aquí."));
+    UiKit::lockDate(ui->de_date_anul);
+    UiKit::lockDate(ui->de_date_recep, tr("La fecha de recepción se fija al crear el "
+                                          "ticket y no se puede modificar aquí."));
     // Clear the SQL query model and the view
     sqlQueryModel->clear();
     ui->tableView->setModel(sqlQueryModel);
@@ -725,8 +717,7 @@ void RecogPrendas::runSearch(const QString &query)
         // Set model to table
         MySortFilterProxyModel *oldProxy = proxyModel;   // replaced on every refresh
         proxyModel = new MySortFilterProxyModel(this);
-        // lessThan() keys on table_name to pick the date / numeric comparators.
-        proxyModel->table_name = "ingresos";
+        proxyModel->schema = MySortFilterProxyModel::Schema::Ingresos;
         if (!nameSearchFilter.isEmpty())
             proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);

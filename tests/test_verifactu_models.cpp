@@ -56,6 +56,13 @@ private slots:
         QCOMPARE(splitGross(5.00, 10.0).base, 4.55);
     }
 
+    void test_taxBaseFromGross()
+    {
+        QVERIFY(qAbs(taxBaseFromGross(121.0, 21.0) - 100.0) < 1e-9);
+        QVERIFY(qAbs(taxBaseFromGross(110.0, 10.0) - 100.0) < 1e-9);
+        QVERIFY(qAbs(taxBaseFromGross(50.0, 0.0) - 50.0) < 1e-9);
+    }
+
     // ---- VerifactuConfig ----------------------------------------------------
     void test_configDefaultsAndValidation()
     {

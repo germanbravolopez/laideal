@@ -137,12 +137,25 @@ QLabel *heading(const QString &text)
 {
     QLabel *label = new QLabel(text);
     label->setObjectName(QStringLiteral("lblHeading"));
-    QFont font = label->font();
-    if (font.pointSizeF() > 0)   // a pixel-sized app font reports -1
-        font.setPointSizeF(font.pointSizeF() + 5);
-    font.setBold(true);
-    label->setFont(font);
+    emphasize(label, 5);
     return label;
+}
+
+void emphasize(QWidget *widget, qreal extraPoints)
+{
+    QFont font = widget->font();
+    if (font.pointSizeF() > 0)   // a pixel-sized app font reports -1
+        font.setPointSizeF(font.pointSizeF() + extraPoints);
+    font.setBold(true);
+    widget->setFont(font);
+}
+
+void lockDate(QDateEdit *edit, const QString &toolTip)
+{
+    edit->setReadOnly(true);
+    edit->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    if (!toolTip.isEmpty())
+        edit->setToolTip(toolTip);
 }
 
 QLabel *introPanel(const QString &text)
