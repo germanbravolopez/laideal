@@ -408,11 +408,23 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
         // record the direct client has queued, or of an accepted reply whose row write failed.
-        const QString verifactuState = sqlQueryModel->data(
-            sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
-        d.verifactuVerifiable = verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)
-                                || ((verifactuIssued || m_qrFromQueuedRecord)
-                                    && verifactuState == verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+        // Decided by the paid rows (the invoice's rows, like the QR amount), never by row 0:
+        // each must be ENVIADA, or NotSubmitted in those two cases.
+        const QString sent = verifactuEstadoToString(VerifactuEstado::Enviada);
+        const QString queued = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+        const bool queuedAllowed = verifactuIssued || m_qrFromQueuedRecord;
+        bool anyPaid = false;
+        bool allVerifiable = true;
+        for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+            if (!checkTicketPaid(row))
+                continue;
+            anyPaid = true;
+            const QString state = sqlQueryModel->data(
+                sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
+            if (state != sent && !(queuedAllowed && state == queued))
+                allVerifiable = false;
+        }
+        d.verifactuVerifiable = anyPaid && allVerifiable;
     }
 
     d.timestamp = QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss");

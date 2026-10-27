@@ -2393,6 +2393,34 @@ private slots:
         QCOMPARE(unreadable.result(), static_cast<int>(QDialog::Accepted));   // last row handled
     }
 
+    // The leyenda follows the paid rows being invoiced, not row 0 of the loaded set: an
+    // unscoped reprint whose first row is an unpaid garment still prints it next to the QR.
+    void test_leyendaFollowsPaidRowsNotRowZero()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "610", "h610a", "3.00"));          // row 0: unpaid, no estado
+        QVERIFY(E2e::seedSentGarment(m_db, "610", "h610b", "10.00", "10-02-2026", "A-ORIG0610"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = 'https://prewww2.aeat.es/qr?nif=1' "
+                                "WHERE hash='h610b'"));
+        Imprimir dlg(m_db);
+        dlg.isRecibo = false;
+        dlg.verifactuIntegration = m_verifactu;
+        dlg.le_n_ticket->setText("610");
+        dlg.getTicketInfo();
+        QCOMPARE(dlg.sqlQueryModel->rowCount(), 2);
+        QCOMPARE(dlg.sqlQueryModel->data(dlg.sqlQueryModel->index(0, INGRESOS_COL_PAGADO)).toString(),
+                 QStringLiteral("NO"));
+        dlg.buildTicket(true, false);
+        QVERIFY(dlg.ticketBytes().contains("v0"));
+        QVERIFY(dlg.ticketBytes().contains("Factura verificable"));
+
+        // And the opposite: row 0 is an ENVIADA paid row but the paid row of the invoice is not.
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE hash='h610a'"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h610b'"));
+        dlg.getTicketInfo();
+        dlg.buildTicket(true, false);
+        QVERIFY(!dlg.ticketBytes().contains("Factura verificable"));
+    }
+
     // Reprint of one payment event (Imprimir, as Recogida de prendas uses it): only
     // that event's paid garments are loaded, the QR is requested under its literal
     // InvoiceID and payment date, and no QR is requested once the event is ANULADA.
@@ -3425,6 +3453,49 @@ private slots:
         QTRY_VERIFY(dlg.isNull());
     }
 
+    // An existing file is replaced only after the operator says yes; "no" leaves it untouched.
+    void test_aeatExportDialog_existingFileAsksBeforeOverwrite()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "2810", "h2810a", "10.00", "05-03-2026", "CSV-2810"));
+        QPointer<AeatExportDialog> dlg = new AeatExportDialog(m_db);
+        const auto result = [&dlg]() { return dlg->findChild<QLabel *>("lblResult")->text(); };
+        dlg->findChild<QDateEdit *>("deFrom")->setDate(QDate(2026, 3, 1));
+        dlg->findChild<QDateEdit *>("deTo")->setDate(QDate(2026, 3, 31));
+        const QString file = dlg->findChild<QLineEdit *>("leFile")->text();
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        {
+            QFile old(file);
+            QVERIFY(old.open(QIODevice::WriteOnly));
+            old.write("previous");
+        }
+        QStringList asked;
+        bool answer = false;
+        dlg->confirmOverwrite = [&](const QString &f) { asked << f; return answer; };
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QCOMPARE(asked, QStringList({ file }));
+        QVERIFY2(result().contains("cancelada"), qPrintable(result()));
+        QFile kept(file);
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QCOMPARE(kept.readAll(), QByteArray("previous"));
+        kept.close();
+
+        answer = true;
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QCOMPARE(asked.size(), 2);
+        QVERIFY2(result().contains("1 registros exportados"), qPrintable(result()));
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QVERIFY(kept.readAll() != QByteArray("previous"));
+        kept.close();
+
+        QFile::remove(file);                                             // a new file is not asked about
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QCOMPARE(asked.size(), 2);
+        QVERIFY(QFile::exists(file));
+        QVERIFY(m_popups->messages().isEmpty());
+        dlg->findChild<QPushButton *>("btnClose")->click();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
     // A period with nothing sent says so (the file is still created); a path that cannot
     // be written reports the failure in the window and creates nothing.
     void test_aeatExportDialog_emptyPeriodAndUnwritablePath()
@@ -3993,7 +4064,19 @@ private slots:
         QVERIFY(!revert->findChild<QCheckBox *>("chkDetail")->isEnabled());
         revert->findChild<QSpinBox *>("sbPeriod")->setValue(1);
         revert->findChild<QSpinBox *>("sbYear")->setValue(2026);
+        QStringList asked;
+        bool agree = false;
+        revert->confirmRevert = [&](const QString &quarter) { asked << quarter; return agree; };
         revert->findChild<QPushButton *>("btnGenerate")->click();
+        // Declined: asked once, the quarter stays closed.
+        QCOMPARE(asked, QStringList({ "del trimestre 1 de 2026" }));
+        QVERIFY2(result(revert).contains("No se ha revertido"), qPrintable(result(revert)));
+        QVERIFY(quarterIsClosed(m_db, 1, 2026));
+
+        agree = true;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("closed quarter 1 of 2026 reverted"));
+        revert->findChild<QPushButton *>("btnGenerate")->click();
+        QCOMPARE(asked.size(), 2);
 
         QVERIFY2(result(revert).contains("revertida"), qPrintable(result(revert)));
         QVERIFY(!quarterIsClosed(m_db, 1, 2026));

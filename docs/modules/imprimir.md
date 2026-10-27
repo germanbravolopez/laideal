@@ -158,9 +158,10 @@ documents). `resolveQrCode()` resolves it in this order:
 never wider than the paper) and rasters it into the ESC/POS stream
 (`EscPosBuilder::rasterImage()`, `GS v 0`); a symbol it cannot read is printed as
 received. No local re-encoding. The verification legend `Factura verificable en la
-sede electrónica de la AEAT` is emitted below the QR only when row 0's
-`verifactu_estado` is `ENVIADA`, or `PENDIENTE` while the direct client has just issued
-the record (`verifactuIssued`, or the QR came from the queued record) - required by
+sede electrónica de la AEAT` is emitted below the QR only when every paid row of the
+loaded set (`pagado = 'SI'`, the rows being invoiced, as for the QR amount) has `verifactu_estado`
+`ENVIADA`, or `PENDIENTE` while the direct client has just issued the record (`verifactuIssued`,
+or the QR came from the queued record); never decided by row 0, which may be unpaid in an unscoped reprint - required by
 Disposición Final Primera RD 1007/2023. QR image bytes are never persisted in the DB.
 
 ## Dependencies

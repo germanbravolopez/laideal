@@ -238,6 +238,41 @@ private slots:
                  QStringLiteral("NO||En tienda|SIN COBRAR|0|0|16|10.00|Ana"));
     }
 
+    // An unpaid save keeps the ticket loaded so the next garment goes to it; only the garment fields clear.
+    void test_save_unpaid_keepsTicketForNextGarment()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        save(dlg);
+        QCOMPARE(garmentRows(), 2);
+        QCOMPARE(dlg.findChild<QLineEdit *>("leNRecibo")->text(), QStringLiteral("100"));
+        QCOMPARE(dlg.findChild<QLineEdit *>("leCliente")->text(), QStringLiteral("Ana"));
+        QVERIFY(dlg.findChild<QLineEdit *>("leCantidad")->text().isEmpty());
+        QVERIFY(dlg.findChild<QComboBox *>("cbPrenda")->currentText().isEmpty());
+        fillGarment(dlg, "Camisa", "1");
+        save(dlg);
+        QCOMPARE(garmentRows(), 3);
+    }
+
+    // A paid save still resets the form: the ticket is refused from then on.
+    void test_save_paid_resetsTicket()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        pay(dlg);
+        save(dlg);
+        QCOMPARE(garmentRows(), 2);
+        QVERIFY(dlg.findChild<QLineEdit *>("leNRecibo")->text().isEmpty());
+        fillGarment(dlg);
+        save(dlg);
+        QCOMPARE(garmentRows(), 2);
+    }
+
     void test_save_paidWithoutInvoicingCheck_refused()
     {
         seedTicket();

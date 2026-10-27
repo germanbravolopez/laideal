@@ -236,6 +236,8 @@ def export_aeat_records(app, date_from: str, date_to: str):
     set_date(dialog, "deTo", date_to)
     path = text(find(dialog, "leFile"))
     click(dialog, "btnExport")
+    if _has_message_box(app, 1.0):   # the file of an earlier run: replace it
+        app.answer("Sí")
     result = find(dialog, "lblResult")
     wait_for(lambda: "exportados" in text(result) or "No se" in text(result), 30, "the export")
     message = text(result)

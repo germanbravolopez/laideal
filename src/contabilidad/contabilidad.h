@@ -2,6 +2,7 @@
 #define CONTABILIDAD_H
 
 #include <QDialog>
+#include <functional>
 #include <QSqlDatabase>
 #include <QDate>
 #include <QVector>
@@ -32,6 +33,8 @@ public:
     ~Contabilidad();
     bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
     void resetAllContents();
+    // Asked before a closed quarter is reverted; true to go on. Tests inject their answer.
+    std::function<bool(const QString &quarterName)> confirmRevert;
 
     // Pure period-range math (no UI state), exposed for unit testing. For
     // Mensual, 'unit' is the month (1-12); for Trimestral/Anual it is the
@@ -136,6 +139,7 @@ public:
 
 private slots:
     void onGenerateClicked();
+    bool revertConfirmed(const QString &quarterName);
     void onCheckLockClicked();
     void onConfigChanged();
 

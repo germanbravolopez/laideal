@@ -45,6 +45,7 @@ private slots:
     void onSearchClicked();
     void onSaveClicked();
     void resetAllContents();
+    void clearGarmentFields();
     void setGarmentPrice();
 
 private:
