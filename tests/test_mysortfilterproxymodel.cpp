@@ -68,7 +68,7 @@ private slots:
         QCOMPARE(proxy.rowCount(), 0);
     }
 
-    // lessThan() keys on table_name + column; the ingresos columns used below are
+    // lessThan() keys on schema + column; the ingresos columns used below are
     // 1 = cliente, 3 = fecha_pago, 5 = importe.
     void test_lessThan_ingresosDateChronological()
     {
@@ -80,7 +80,7 @@ private slots:
             model.setItem(r, 3, new QStandardItem(dates[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(3, Qt::AscendingOrder);
 
@@ -98,7 +98,7 @@ private slots:
             model.setItem(r, 5, new QStandardItem(importes[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(5, Qt::AscendingOrder);
 
@@ -116,7 +116,7 @@ private slots:
             model.setItem(r, 0, new QStandardItem(numbers[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(0, Qt::DescendingOrder);
         QStringList seen;
@@ -136,7 +136,7 @@ private slots:
             model.setItem(r, 22, new QStandardItem(sizes[r]));   // rectifies n_recibo
         }
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         for (int col : { 8, 10, 22 }) {
             proxy.sort(col, Qt::AscendingOrder);
@@ -154,7 +154,7 @@ private slots:
         for (int r = 0; r < dates.size(); ++r)
             model.setItem(r, 26, new QStandardItem(dates[r]));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(26, Qt::AscendingOrder);
         QCOMPARE(proxy.data(proxy.index(0, 26)).toString(), QStringLiteral("15-12-2025"));
@@ -171,7 +171,7 @@ private slots:
         model.setItem(2, 12, new QStandardItem("manchas"));
         model.setItem(0, 15, new QStandardItem("secreto-csv"));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         QCOMPARE(proxy.searchColumnCount(), 13);
         proxy.setNormalizedFilter("talla-unica");
@@ -235,7 +235,7 @@ private slots:
         QStandardItemModel model(1, 3);
         model.setItem(0, 1, new QStandardItem("Ana"));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         for (int col = 0; col < 3; ++col)
             QVERIFY(!(proxy.flags(proxy.index(0, col)) & Qt::ItemIsEditable));
@@ -244,7 +244,7 @@ private slots:
 
         // Other tables stay editable.
         MySortFilterProxyModel other;
-        other.table_name = "prendas";
+        other.schema = MySortFilterProxyModel::Schema::Prendas;
         other.setSourceModel(&model);
         QVERIFY(other.flags(other.index(0, 1)) & Qt::ItemIsEditable);
         QVERIFY(other.setData(other.index(0, 1), "Pepe"));
@@ -268,7 +268,7 @@ private slots:
         for (int r = 0; r < dates.size(); ++r)
             model.setItem(r, 3, new QStandardItem(dates[r]));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(3, Qt::AscendingOrder);
         QCOMPARE(proxy.data(proxy.index(2, 3)).toString(), QStringLiteral("01-01-2026"));
@@ -291,7 +291,7 @@ private slots:
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());
         MySortFilterProxyModel proxy;
-        proxy.table_name = "gastos";
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
         proxy.setSourceModel(model.get());
         proxy.setClosedQuarters({ 20261 });
         QVERIFY(proxy.rowLocked(0));
@@ -300,7 +300,7 @@ private slots:
         QVERIFY(proxy.rowLocked(1));   // padding does not hide a closed quarter
         model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem("not a date"));
         QVERIFY(!proxy.rowLocked(1));
-        proxy.table_name = "prendas";
+        proxy.schema = MySortFilterProxyModel::Schema::Prendas;
         QVERIFY(!proxy.rowLocked(0));
     }
 
@@ -308,7 +308,7 @@ private slots:
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());
         MySortFilterProxyModel proxy;
-        proxy.table_name = "gastos";
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
         proxy.setSourceModel(model.get());
         proxy.setClosedQuarters({ 20261 });
         QVERIFY(!(proxy.flags(proxy.index(0, GASTOS_IDX_FECHA)) & Qt::ItemIsEditable));   // closed quarter
@@ -322,7 +322,7 @@ private slots:
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());
         MySortFilterProxyModel proxy;
-        proxy.table_name = "gastos";
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
         proxy.setSourceModel(model.get());
         QSignalSpy changed(&proxy, &QAbstractItemModel::dataChanged);
         proxy.setClosedQuarters({ 20261 });
@@ -335,7 +335,7 @@ private slots:
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());
         MySortFilterProxyModel proxy;
-        proxy.table_name = "gastos";
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
         proxy.setSourceModel(model.get());
         proxy.editValidator = [](const QModelIndex &, const QVariant &value) {
             return value.toString() == "bad" ? QStringLiteral("refused") : QString();
@@ -354,7 +354,7 @@ private slots:
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());
         MySortFilterProxyModel proxy;
-        proxy.table_name = "gastos";
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
         proxy.setSourceModel(model.get());
         QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_FECHA), " 05-03-2026 "));
         QCOMPARE(model->item(0, GASTOS_IDX_FECHA)->text(), QStringLiteral("05-03-2026"));
@@ -368,7 +368,7 @@ private slots:
             model.setItem(r, 1, new QStandardItem(names[r])); // cliente -> locale string compare
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(1, Qt::AscendingOrder);
 

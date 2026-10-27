@@ -176,7 +176,7 @@ void Listado::populateTable()
             model->setSort(0, Qt::AscendingOrder);
         model->select();
         proxyModel = new MySortFilterProxyModel(this);
-        proxyModel->table_name = tableName;
+        proxyModel->schema = MySortFilterProxyModel::schemaForTable(tableName);
         if (tableName == "gastos") {
             proxyModel->setClosedQuarters(closedQuarterKeys(db));
             // Same rule as Formulario facturas: an invoice never moves into a closed quarter.

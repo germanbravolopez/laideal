@@ -381,10 +381,7 @@ void MainWindow::buildUi()
     ui->le_nr_ticket->setObjectName("le_nr_ticket");
     ui->le_nr_ticket->setReadOnly(true);
     ui->le_nr_ticket->setToolTip(tr("El siguiente número libre; se asigna solo."));
-    QFont numberFont = ui->le_nr_ticket->font();
-    numberFont.setPointSizeF(numberFont.pointSizeF() + 3);
-    numberFont.setBold(true);
-    ui->le_nr_ticket->setFont(numberFont);
+    UiKit::emphasize(ui->le_nr_ticket, 3);
     ui->le_nr_ticket->setMaximumWidth(160);
     ui->de_date_recep = UiKit::dateEdit(QDate::currentDate(), "de_date_recep");
     ui->de_date_recep->setMaximumDate(QDate::currentDate());   // a paid ticket's invoice date
@@ -422,15 +419,12 @@ void MainWindow::buildUi()
     garmentFooter->addWidget(ui->pb_add_row);
     garmentFooter->addStretch();
     QLabel *lblTotal = new QLabel(tr("Importe total:"));
-    QFont totalFont = lblTotal->font();
-    totalFont.setPointSizeF(totalFont.pointSizeF() + 3);
-    totalFont.setBold(true);
-    lblTotal->setFont(totalFont);
+    UiKit::emphasize(lblTotal, 3);
     garmentFooter->addWidget(lblTotal);
     ui->le_cost_total = new QLineEdit();
     ui->le_cost_total->setObjectName("le_cost_total");
     ui->le_cost_total->setReadOnly(true);   // always the sum of the rows
-    ui->le_cost_total->setFont(totalFont);
+    UiKit::emphasize(ui->le_cost_total, 3);
     ui->le_cost_total->setAlignment(Qt::AlignRight);
     ui->le_cost_total->setMaximumWidth(150);
     garmentFooter->addWidget(ui->le_cost_total);

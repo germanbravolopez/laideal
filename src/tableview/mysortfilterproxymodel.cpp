@@ -37,9 +37,17 @@ QDate MySortFilterProxyModel::parseFecha(const QString &text)
     return dayOk && monthOk && yearOk ? QDate(year, month, day) : QDate();
 }
 
+MySortFilterProxyModel::Schema MySortFilterProxyModel::schemaForTable(const QString &tableName)
+{
+    if (tableName == QLatin1String("ingresos")) return Schema::Ingresos;
+    if (tableName == QLatin1String("gastos"))   return Schema::Gastos;
+    if (tableName == QLatin1String("prendas"))  return Schema::Prendas;
+    return Schema::Generic;
+}
+
 bool MySortFilterProxyModel::rowLocked(int proxyRow) const
 {
-    if (table_name != QLatin1String("gastos"))
+    if (schema != Schema::Gastos)
         return false;
     return m_closedQuarters.contains(quarterKey(parseFecha(index(proxyRow, GASTOS_IDX_FECHA).data().toString())));
 }
@@ -57,9 +65,9 @@ Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
 {
     Qt::ItemFlags f = QSortFilterProxyModel::flags(index);
     // Invoice rows have no edit path at all (Verifactu req. 1): not only a view flag.
-    if (table_name == QLatin1String("ingresos"))
+    if (schema == Schema::Ingresos)
         f &= ~Qt::ItemIsEditable;
-    else if (table_name == QLatin1String("gastos") && index.column() == GASTOS_IDX_ID)
+    else if (schema == Schema::Gastos && index.column() == GASTOS_IDX_ID)
         f &= ~Qt::ItemIsEditable;   // the primary key is never typed over
     else if (index.isValid() && rowLocked(index.row()))
         f &= ~Qt::ItemIsEditable;
@@ -68,11 +76,11 @@ Qt::ItemFlags MySortFilterProxyModel::flags(const QModelIndex &index) const
 
 bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
-    if (table_name == QLatin1String("ingresos")) {
+    if (schema == Schema::Ingresos) {
         qWarning() << "MySortFilterProxyModel: write to ingresos refused (column" << index.column() << ")";
         return false;
     }
-    if (table_name == QLatin1String("gastos") && index.column() == GASTOS_IDX_ID)
+    if (schema == Schema::Gastos && index.column() == GASTOS_IDX_ID)
         return false;
     QVariant stored = value;
     if (role == Qt::EditRole && editValidator) {
@@ -83,11 +91,11 @@ bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &v
         }
     }
     // A padded date would be locked correctly but fail the year filter and the sort.
-    if (role == Qt::EditRole && table_name == QLatin1String("gastos") && index.column() == GASTOS_IDX_FECHA)
+    if (role == Qt::EditRole && schema == Schema::Gastos && index.column() == GASTOS_IDX_FECHA)
         stored = value.toString().trimmed();
     if (QSortFilterProxyModel::setData(index, stored, role))
         return true;
-    if (role == Qt::EditRole && table_name == QLatin1String("gastos"))
+    if (role == Qt::EditRole && schema == Schema::Gastos)
         emit editRefused(UiKit::errorHtml("No se pudo guardar el cambio."));
     return false;
 }
@@ -112,7 +120,7 @@ int MySortFilterProxyModel::searchColumnCount() const
     const int columns = sourceModel() ? sourceModel()->columnCount() : 0;
     // ingresos: up to Observaciones; the columns after it hold Verifactu metadata
     // (csv / hash / url / ...) that is not user-facing and must not be searched.
-    const int limit = table_name == QLatin1String("ingresos") ? INGRESOS_COL_OBSERVACIONES + 1 : 10;
+    const int limit = schema == Schema::Ingresos ? INGRESOS_COL_OBSERVACIONES + 1 : 10;
     return qMin(columns, limit);
 }
 
@@ -158,8 +166,8 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     QVariant rightData = sourceModel()->data(right);
 
     const int col = left.column();
-    const bool isDate = (table_name == "gastos" && col == GASTOS_IDX_FECHA)
-                        || (table_name == "ingresos"
+    const bool isDate = (schema == Schema::Gastos && col == GASTOS_IDX_FECHA)
+                        || (schema == Schema::Ingresos
                             && (col == INGRESOS_COL_FECHA_RECEPCION || col == INGRESOS_COL_FECHA_PAGO
                                 || col == INGRESOS_COL_FECHA_RECOGIDA || col == INGRESOS_COL_FECHA_ANULACION));
     if (isDate) {
@@ -167,12 +175,12 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
         return parseFecha(leftData.toString()) < parseFecha(rightData.toString());
     }
 
-    const bool isNumber = (table_name == "gastos" && (col == GASTOS_IDX_IMPORTE || col == GASTOS_IDX_ID))
-                          || (table_name == "ingresos"
+    const bool isNumber = (schema == Schema::Gastos && (col == GASTOS_IDX_IMPORTE || col == GASTOS_IDX_ID))
+                          || (schema == Schema::Ingresos
                               && (col == INGRESOS_COL_N_RECIBO || col == INGRESOS_COL_IMPORTE
                                   || col == INGRESOS_COL_CANTIDAD || col == INGRESOS_COL_SIZE
                                   || col == INGRESOS_COL_VERIFACTU_RECTIFIES_N_RECIBO))
-                          || (table_name == "prendas" && (col == LIST_PRENDAS_IDX_LIMP || col == LIST_PRENDAS_IDX_PLAN));
+                          || (schema == Schema::Prendas && (col == LIST_PRENDAS_IDX_LIMP || col == LIST_PRENDAS_IDX_PLAN));
     if (isNumber) {
         bool leftOk = false, rightOk = false;
         const double l = numericValue(leftData.toString(), &leftOk);
