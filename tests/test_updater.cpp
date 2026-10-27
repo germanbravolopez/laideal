@@ -53,14 +53,14 @@ public:
 class PathServer : public QObject
 {
 public:
-    struct Answer { QByteArray body; qint64 claimedLength = -1; bool hang = false; };
+    struct Answer { QByteArray body; qint64 claimedLength = -1; bool hang = false; QString redirectTo; };
     QTcpServer server;
     QMap<QString, Answer> answers;
     QMap<QString, int> hits;
 
-    PathServer()
+    explicit PathServer(const QHostAddress &address = QHostAddress::LocalHost)
     {
-        server.listen(QHostAddress::LocalHost);
+        server.listen(address);
         connect(&server, &QTcpServer::newConnection, this, [this]() {
             while (QTcpSocket *socket = server.nextPendingConnection()) {
                 connect(socket, &QTcpSocket::readyRead, socket, [this, socket]() {
@@ -72,7 +72,10 @@ public:
                     ++hits[path];
                     if (answers.value(path).hang)
                         return;
-                    if (!answers.contains(path)) {
+                    if (!answers.value(path).redirectTo.isEmpty()) {
+                        socket->write("HTTP/1.1 302 X\r\nLocation: " + answers.value(path).redirectTo.toLatin1()
+                                      + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    } else if (!answers.contains(path)) {
                         socket->write("HTTP/1.1 404 X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                     } else {
                         const Answer a = answers.value(path);
@@ -85,7 +88,10 @@ public:
             }
         });
     }
-    QString base() const { return QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()); }
+    QString base() const
+    {
+        return QStringLiteral("http://%1:%2").arg(server.serverAddress().toString()).arg(server.serverPort());
+    }
     QUrl url(const QString &path) const { return QUrl(base() + path); }
 };
 
@@ -506,6 +512,28 @@ private slots:
         rig.updater.downloadInstaller(rig.server.url("/other.exe"));
         QCOMPARE(failed.count(), 1);
         QCOMPARE(rig.server.hits.value("/other.exe"), 0);
+    }
+
+    // A download redirected to another host is refused even when that host serves the right
+    // bytes: 127.0.0.2 is loopback, but not one of the trusted test hosts.
+    void test_downloadInstaller_redirectedToForeignHost_refused()
+    {
+        const QByteArray installer = "MZ redirected payload";
+        PathServer foreign(QHostAddress(QStringLiteral("127.0.0.2")));
+        if (!foreign.server.isListening())
+            QSKIP("127.0.0.2 is not available on this machine");
+        foreign.answers["/laideal_setup_99.0.exe"].body = installer;
+        Rig rig;
+        QVERIFY(primeUpdate(rig, installer, true));
+        rig.server.answers["/laideal_setup_99.0.exe"].redirectTo = foreign.base() + "/laideal_setup_99.0.exe";
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(failed.wait(5000));
+        QVERIFY(failed.at(0).at(0).toString().contains("redirigido"));
+        QCOMPARE(foreign.hits.value("/laideal_setup_99.0.exe"), 1);
+        QCOMPARE(done.count(), 0);
+        QVERIFY(QDir(updatesDir()).entryList({ "*.exe", "*.part" }, QDir::Files).isEmpty());
     }
 
     // Loopback http is only trusted when a test asks for it.

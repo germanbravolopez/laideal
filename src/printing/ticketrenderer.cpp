@@ -47,7 +47,7 @@ QByteArray TicketRenderer::render(const TicketData &d, int paperDots)
     // Art. 7 RD 1619/2012: the date of issue, the one the QR and AEAT carry.
     if (!d.isRecibo && !d.issueDate.isEmpty())
         b.line("Fecha de expedición: " + d.issueDate);
-    b.line("Cliente: " + d.clientName);
+    b.paragraph("Cliente: " + d.clientName);
     b.line("Recepción: " + d.receptionDate);
     if (d.isCompleteInvoice) {
         b.paragraph("Dirección: " + d.clientAddress);

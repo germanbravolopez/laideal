@@ -82,7 +82,7 @@ Existing: `test_versioncompare` (tests/test_updater.cpp): `test_compareVersions`
 
 ## Proposals summary
 1. Installer hash (then signature) verification published by ci.yml - M / L.
-2. Scheme/host allow-list for asset URL and redirects - S.
+2. Scheme/host allow-list for asset URL and redirects - S. ✅ DONE 27-10-2026 (`test_downloadInstaller_redirectedToForeignHost_refused`, a redirect to 127.0.0.2).
 3. Download timeout, cancel, reject handling, `.part` + atomic rename, size check - M.
 4. Per-request silent flag and in-flight guard - S.
 5. Child-only TMP/TEMP, restore on failure - S.

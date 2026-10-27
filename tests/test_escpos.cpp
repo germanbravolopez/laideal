@@ -434,12 +434,11 @@ private slots:
         const QByteArray out = TicketRenderer::render(d, 420);
         for (const auto &b : textBlocks(out)) {
             const int limit = b.font == EscPosBuilder::Font::A ? (b.dbl ? 17 : 35) : 46;
-            if (b.text.startsWith("Cliente: "))
-                continue;   // the client line is still printed unwrapped
             QVERIFY2(b.text.size() <= limit, qPrintable(QString("'%1' is %2 > %3").arg(b.text).arg(b.text.size()).arg(limit)));
         }
         // The garment table and the complete invoice's address wrap rather than lose text.
         QVERIFY(out.contains("desmontable"));
+        QVERIFY(out.contains("largos"));
         QVERIFY(out.contains("puerta B"));
     }
 
