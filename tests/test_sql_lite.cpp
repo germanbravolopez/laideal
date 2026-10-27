@@ -23,6 +23,104 @@
 
 namespace {
 constexpr const char *kConn = "test_sql_lite_conn";
+
+// A database file shaped as an older build left it: the shop's original tables, built by
+// hand (synthetic rows only), that the test then brings forward with migrateDatabase.
+struct LegacyDb
+{
+    QTemporaryDir dir;
+    QString       connName;
+    QSqlDatabase  db;
+
+    explicit LegacyDb(const QString &name) : connName(name)
+    {
+        db = QSqlDatabase::addDatabase("QSQLITE", connName);
+        db.setDatabaseName(dir.filePath("legacy.db"));
+    }
+    ~LegacyDb()
+    {
+        db.close();
+        db = QSqlDatabase();
+        QSqlDatabase::removeDatabase(connName);
+    }
+
+    // The tables as the first builds created them: no verifactu_* columns, no closures.
+    bool createOriginalTables()
+    {
+        return run({
+            "CREATE TABLE ingresos (n_recibo TEXT NOT NULL DEFAULT '', cliente TEXT NOT NULL DEFAULT '', "
+            " fecha_recepcion TEXT NOT NULL DEFAULT '', fecha_pago TEXT NOT NULL DEFAULT '', "
+            " fecha_recogida TEXT NOT NULL DEFAULT '', importe TEXT NOT NULL DEFAULT '', pagado TEXT NOT NULL DEFAULT '', "
+            " estado TEXT NOT NULL DEFAULT '', cantidad TEXT NOT NULL DEFAULT '', prenda TEXT NOT NULL DEFAULT '', "
+            " size TEXT NOT NULL DEFAULT '', servicio TEXT NOT NULL DEFAULT '', observaciones TEXT NOT NULL DEFAULT '', "
+            " edit_lock TEXT NOT NULL, hash TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE gastos (id NUMERIC NOT NULL, n_factura TEXT NOT NULL DEFAULT '', servicio TEXT NOT NULL DEFAULT '', "
+            " descripcion TEXT NOT NULL DEFAULT '', empresa TEXT NOT NULL DEFAULT '', fecha TEXT NOT NULL DEFAULT '', "
+            " iva TEXT NOT NULL DEFAULT '', importe TEXT NOT NULL DEFAULT '', edit_lock TEXT)",
+            "CREATE TABLE clientes (nombre TEXT NOT NULL DEFAULT '', tel_fijo TEXT NOT NULL DEFAULT '', "
+            " movil TEXT NOT NULL DEFAULT '', direccion TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE prendas (nombre TEXT NOT NULL DEFAULT '', precio_limpieza TEXT NOT NULL DEFAULT '', "
+            " precio_plancha TEXT NOT NULL DEFAULT '', PRIMARY KEY(nombre))",
+        });
+    }
+
+    // Run the statements one after the other; false on the first failure.
+    bool run(const QStringList &statements)
+    {
+        if (!db.open())
+            return false;
+        bool ok = true;
+        {
+            QSqlQuery q(db);
+            for (const QString &sql : statements)
+                if (!q.exec(sql)) {
+                    qWarning() << "LegacyDb::run failed:" << q.lastError().text() << "::" << sql;
+                    ok = false;
+                    break;
+                }
+        }
+        db.close();
+        return ok;
+    }
+
+    // Every row of the tables, one text line each: two snapshots compare whole databases.
+    QStringList snapshot(const QStringList &tables)
+    {
+        QStringList lines;
+        if (!db.open())
+            return lines;
+        {
+            QSqlQuery q(db);
+            for (const QString &table : tables) {
+                lines << "== " + table;
+                if (!q.exec("SELECT * FROM " + table + " ORDER BY rowid"))
+                    continue;
+                while (q.next()) {
+                    QStringList cells;
+                    for (int i = 0; i < q.record().count(); ++i)
+                        cells << (q.value(i).isNull() ? QStringLiteral("<null>") : q.value(i).toString());
+                    lines << cells.join('|');
+                }
+            }
+        }
+        db.close();
+        return lines;
+    }
+
+    QString scalar(const QString &sql)
+    {
+        QString out;
+        if (!db.open())
+            return out;
+        {
+            QSqlQuery q(db);
+            if (q.exec(sql) && q.next())
+                out = q.value(0).toString();
+        }
+        db.close();
+        return out;
+    }
+};
 }
 
 class TestSqlLite : public QObject
@@ -2396,6 +2494,291 @@ private slots:
             QVERIFY(m_db.isOpen());
         }
         QVERIFY(!m_db.isOpen());
+    }
+
+    // --- migration fixtures: databases as older builds left them ----------------------
+
+    // The oldest shape: no verifactu_* column, no accounting_closures. One run brings it to
+    // the current schema, carries the legacy edit_lock over as a closed quarter, rounds the
+    // open amount and fixes the comma decimals; a second run changes nothing.
+    void test_migrateDatabase_fixtureBeforeVerifactu()
+    {
+        LegacyDb legacy("legacy_oldest");
+        QVERIFY(legacy.createOriginalTables());
+        QVERIFY(legacy.run({
+            "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, estado, hash) "
+            "VALUES ('1', '100', '10-02-2025', '10.00', 'SI', 'Entregado', 'h100')",
+            "INSERT INTO ingresos (edit_lock, n_recibo, importe, pagado, estado, hash) "
+            "VALUES ('0', '101', '5.005', 'NO', 'En tienda', 'h101')",
+            "INSERT INTO gastos (id, fecha, importe, edit_lock) VALUES (1, '15-03-2025', '9,90', '1')",
+            "INSERT INTO gastos (id, fecha, importe, edit_lock) VALUES (2, '15-08-2026', '4,50', '0')",
+            "INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', '5,5', '1.234,50')",
+        }));
+
+        QVERIFY(migrateDatabase(legacy.db));
+        QVERIFY(legacy.db.open());
+        QVERIFY(legacy.db.record("ingresos").count() > INGRESOS_COL_VERIFACTU_CANCEL_XML);
+        legacy.db.close();
+        QCOMPARE(legacy.scalar("SELECT COUNT(*) FROM accounting_closures WHERE year = 2025 AND quarter = 1 "
+                               "AND origin = 'migration' AND reopened_at IS NULL"), QStringLiteral("1"));
+        QCOMPARE(legacy.scalar("SELECT COUNT(*) FROM accounting_closures"), QStringLiteral("1"));    // the gasto shares Q1 2025
+        QCOMPARE(legacy.scalar("SELECT importe FROM ingresos WHERE hash = 'h101'"), QStringLiteral("5.01"));
+        QCOMPARE(legacy.scalar("SELECT importe FROM ingresos WHERE hash = 'h100'"), QStringLiteral("10.00"));
+        QCOMPARE(legacy.scalar("SELECT importe FROM gastos WHERE id = 1"), QStringLiteral("9,90"));   // closed quarter: as filed
+        QCOMPARE(legacy.scalar("SELECT importe FROM gastos WHERE id = 2"), QStringLiteral("4.50"));
+        QCOMPARE(legacy.scalar("SELECT precio_limpieza FROM prendas"), QStringLiteral("5.5"));
+        QCOMPARE(legacy.scalar("SELECT precio_plancha FROM prendas"), QStringLiteral("1.234,50"));    // ambiguous: left
+
+        const QStringList tables = { "ingresos", "gastos", "prendas", "accounting_closures", "migration_notes" };
+        const QStringList first = legacy.snapshot(tables);
+        QVERIFY(migrateDatabase(legacy.db));
+        QCOMPARE(legacy.snapshot(tables), first);
+    }
+
+    // One database holding the shape of every release that needed a repair (10.9, 10.12,
+    // 11.0, 12.0, 12.2): each repair lands, and a second start changes nothing.
+    void test_migrateDatabase_fixtureEveryLegacyShape_repairsOnceAndTwiceChangesNothing()
+    {
+        LegacyDb legacy("legacy_every_shape");
+        QVERIFY(legacy.createOriginalTables());
+        QVERIFY(migrateDatabase(legacy.db, false));          // the schema as a pre-10.9 build had it
+        const QString ins = "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, fecha_recogida, importe, pagado, "
+                            "estado, prenda, servicio, hash, verifactu_csv, verifactu_estado, verifactu_invoice_seq, "
+                            "verifactu_invoice_id, fecha_anulacion) VALUES ";
+        QVERIFY(legacy.run({
+            "DROP TRIGGER IF EXISTS ingresos_registered_no_delete", "DROP TRIGGER IF EXISTS ingresos_accepted_identity",
+            "DROP INDEX IF EXISTS ingresos_ticket_hash",
+            // 10.9: an unpaid garment stamped PENDIENTE
+            ins + "('0', 'A1', '', '', '5.00', 'NO', 'En tienda', 'Camisa', 'Limp.', 'h1', NULL, 'PENDIENTE', 0, NULL, NULL)",
+            // 10.12: a garment voided in place, the void date in fecha_pago / fecha_recogida; and one with no date at all
+            ins + "('0', 'A2', '03-08-2026', '03-08-2026', '4.00', 'NO', 'Anulado', 'Falda', 'Limp.', 'h2', NULL, 'ANULADA', 0, NULL, NULL)",
+            ins + "('0', 'A3', '', '', '4.00', 'NO', 'Anulado', 'Falda', 'Limp.', 'h3', NULL, 'ANULADA', 0, NULL, NULL)",
+            // 10.12: the unpaid remainder of a cancelled ticket, marked ANULADA with its paid sibling
+            ins + "('0', 'A4', '01-06-2026', '', '8.00', 'SI', 'En tienda', 'Traje', 'Limp.', 'p4', 'C4', 'ANULADA', 0, 'A4', '09-06-2026')",
+            ins + "('0', 'A4', '', '', '3.00', 'NO', 'En tienda', 'Traje', 'Plan.', 'u4', NULL, 'ANULADA', 0, NULL, NULL)",
+            // 12.2: an unpaid garment carrying its paid sibling's ENVIADA + CSV
+            ins + "('0', 'A5', '02-06-2026', '', '6.00', 'SI', 'En tienda', 'Abrigo', 'Limp.', 'p5', 'C5', 'ENVIADA', 0, 'A5', NULL)",
+            ins + "('0', 'A5', '', '', '2.00', 'NO', 'En tienda', 'Bufanda', 'Limp.', 'u5', 'C5', 'ENVIADA', 0, 'A5', NULL)",
+            // 11.0: a split-off paid garment with no invoice data
+            ins + "('0', 'A6', '02-06-2026', '', '20.00', 'SI', 'En tienda', 'Camisa', 'Limp.', 'i6', 'C6', 'ENVIADA', 1, 'A6-1', NULL)",
+            ins + "('0', 'A6', '02-06-2026', '', '5.00', 'SI', 'En tienda', 'Camisa', 'Limp.', 's6', NULL, NULL, 0, NULL, NULL)",
+            // 12.0: two rows of a ticket sharing a hash, and one with an empty hash
+            ins + "('0', 'A7', '', '', '1.00', 'NO', 'En tienda', 'Calcetin', 'Limp.', 'dup', NULL, 'SIN COBRAR', 0, NULL, NULL)",
+            ins + "('0', 'A7', '', '', '1.50', 'NO', 'En tienda', 'Calcetin', 'Limp.', 'dup', NULL, 'SIN COBRAR', 0, NULL, NULL)",
+            ins + "('0', 'A8', '', '', '1.00', 'NO', 'En tienda', 'Gorro', 'Limp.', '', NULL, 'SIN COBRAR', 0, NULL, NULL)",
+            // 10.14: an open amount with three decimals; a paid one is an invoice and stays
+            ins + "('0', 'A9', '', '', '5.005', 'NO', 'En tienda', 'Manta', 'Limp.', 'h9', NULL, 'SIN COBRAR', 0, NULL, NULL)",
+            ins + "('0', 'B1', '04-06-2026', '', '7.005', 'SI', 'En tienda', 'Manta', 'Limp.', 'h10', 'C10', 'ENVIADA', 0, 'B1', NULL)",
+            // 12.0: a casing the app no longer writes
+            ins + "('0', 'B2', '05-06-2026', '', '3.00', 'SI', 'En tienda', 'Guante', 'Limp.', 'h11', NULL, 'Error', 0, NULL, NULL)",
+            "INSERT INTO gastos (id, fecha, importe, edit_lock) VALUES (1, '15-08-2026', '4,50', '0')",
+        }));
+
+        QVERIFY(migrateDatabase(legacy.db));
+        const auto field = [&legacy](const QString &column, const QString &hash) {
+            return legacy.scalar("SELECT COALESCE(" + column + ", '<null>') FROM ingresos WHERE hash = '" + hash + "'");
+        };
+        QCOMPARE(field("verifactu_estado", "h1"), QStringLiteral("SIN COBRAR"));                      // 10.9
+        QCOMPARE(field("fecha_anulacion", "h2") + "|" + field("fecha_pago", "h2") + "|" + field("fecha_recogida", "h2"),
+                 QStringLiteral("03-08-2026||"));                                                     // 10.12 void date
+        QCOMPARE(field("fecha_anulacion", "h3"), QStringLiteral("<null>"));                           // nothing to move
+        QCOMPARE(field("verifactu_estado", "u4"), QStringLiteral("SIN COBRAR"));                      // 10.12 remainder
+        QCOMPARE(field("verifactu_estado", "p4"), QStringLiteral("ANULADA"));                         // the paid one stays
+        QCOMPARE(field("verifactu_estado", "u5") + "|" + field("verifactu_csv", "u5") + "|" + field("verifactu_invoice_id", "u5"),
+                 QStringLiteral("SIN COBRAR|<null>|<null>"));                                         // 12.2
+        QCOMPARE(field("verifactu_csv", "p5"), QStringLiteral("C5"));
+        QCOMPARE(field("verifactu_estado", "s6") + "|" + field("verifactu_csv", "s6") + "|" + field("verifactu_invoice_id", "s6"),
+                 QStringLiteral("ENVIADA|C6|A6-1"));                                                 // 11.0
+        QCOMPARE(legacy.scalar("SELECT COUNT(DISTINCT hash) FROM ingresos WHERE n_recibo = 'A7'"), QStringLiteral("2"));   // 12.0
+        QCOMPARE(legacy.scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'A7' AND hash = 'dup'"), QStringLiteral("1"));
+        QCOMPARE(legacy.scalar("SELECT COUNT(*) FROM ingresos WHERE hash = ''"), QStringLiteral("0"));
+        QCOMPARE(field("importe", "h9"), QStringLiteral("5.01"));                                     // 10.14
+        QCOMPARE(field("importe", "h10"), QStringLiteral("7.005"));
+        QCOMPARE(field("verifactu_estado", "h11"), QStringLiteral("ERROR"));                          // casing
+        QCOMPARE(legacy.scalar("SELECT importe FROM gastos WHERE id = 1"), QStringLiteral("4.50"));  // comma decimal
+        QCOMPARE(legacy.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name IN "
+                               "('ingresos_ticket_hash', 'ingresos_registered_no_delete', 'ingresos_accepted_identity')"),
+                 QStringLiteral("3"));                                                                // the guards are back
+
+        const QStringList tables = { "ingresos", "gastos", "accounting_closures", "migration_notes" };
+        const QStringList first = legacy.snapshot(tables);
+        QVERIFY(migrateDatabase(legacy.db));
+        QCOMPARE(legacy.snapshot(tables), first);
+    }
+
+    // A quarter closed before the repairs ran keeps its figures: the amount and the comma
+    // of a row inside it are as they were filed.
+    void test_migrateDatabase_fixtureClosedQuarterIsLeftAsFiled()
+    {
+        LegacyDb legacy("legacy_closed");
+        QVERIFY(legacy.createOriginalTables());
+        QVERIFY(migrateDatabase(legacy.db, false));
+        QVERIFY(legacy.run({
+            "INSERT INTO accounting_closures (year, quarter, closed_at, origin) VALUES (2026, 1, '2026-04-02T10:00:00', 'contabilidad')",
+            "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, estado, hash, verifactu_estado) "
+            "VALUES ('0', 'C1', '10-02-2026', '5.005', 'NO', 'En tienda', 'c1', 'SIN COBRAR')",
+            "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, estado, hash, verifactu_estado) "
+            "VALUES ('0', 'C2', '10-05-2026', '5.005', 'NO', 'En tienda', 'c2', 'SIN COBRAR')",
+            "INSERT INTO gastos (id, fecha, importe) VALUES (1, '20-01-2026', '7,25')",
+            "INSERT INTO gastos (id, fecha, importe) VALUES (2, '20-05-2026', '7,25')",
+        }));
+        QVERIFY(migrateDatabase(legacy.db));
+        QCOMPARE(legacy.scalar("SELECT importe FROM ingresos WHERE hash = 'c1'"), QStringLiteral("5.005"));
+        QCOMPARE(legacy.scalar("SELECT importe FROM ingresos WHERE hash = 'c2'"), QStringLiteral("5.01"));
+        QCOMPARE(legacy.scalar("SELECT importe FROM gastos WHERE id = 1"), QStringLiteral("7,25"));
+        QCOMPARE(legacy.scalar("SELECT importe FROM gastos WHERE id = 2"), QStringLiteral("7.25"));
+        const QStringList tables = { "ingresos", "gastos", "accounting_closures" };
+        const QStringList first = legacy.snapshot(tables);
+        QVERIFY(migrateDatabase(legacy.db));
+        QCOMPARE(legacy.snapshot(tables), first);
+    }
+
+    // --- refusedInvoices ----------------------------------------------------------------
+
+    void test_refusedInvoices_floorOrderingAndFlags()
+    {
+        const QString ins = "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_estado, "
+                            "verifactu_invoice_seq, verifactu_error, verifactu_rectifies_n_recibo) VALUES ";
+        exec(ins + "('0', '10', '10-03-2026', '10.00', 'SI', 'a', 'ERROR', 0, 'e10', NULL), "
+                   // one invoice paid on two days: earliest date, summed amount
+                   "('0', '20', '12-03-2026', '5.00',  'SI', 'b', 'ERROR', 1, 'e20', NULL), "
+                   "('0', '20', '05-03-2026', '7.50',  'SI', 'c', 'ERROR', 1, 'e20', NULL), "
+                   "('0', 'R-1', '15-03-2026', '4.00', 'SI', 'd', 'ERROR', 0, 'eR', '20'), "
+                   "('0', '30', '20-12-2025', '3.00',  'SI', 'e', 'ERROR', 0, 'e30', NULL), "
+                   "('0', '40', 'garbage',    '2.00',  'SI', 'f', 'ERROR', 0, 'e40', NULL), "
+                   "('0', '50', '11-03-2026', '1.00',  'SI', 'g', 'ENVIADA', 0, '', NULL), "
+                   "('0', '60', '11-03-2026', '1.00',  'NO', 'h', 'ERROR', 0, 'e60', NULL)");
+
+        const QVector<RefusedInvoice> all = refusedInvoices(m_db, QString());
+        QCOMPARE(all.size(), 5);                                 // neither the ENVIADA nor the unpaid one
+        QCOMPARE(refusedInvoiceCount(m_db), all.size());
+        QCOMPARE(refusedInvoices(m_db, "not a date").size(), 5);  // an unreadable floor hides nothing
+
+        const QVector<RefusedInvoice> list = refusedInvoices(m_db, "2026-01-01");
+        QCOMPARE(list.size(), 4);                                // the 2025 payment is below the floor
+        QCOMPARE(refusedInvoiceCount(m_db, "2026-01-01"), 4);
+        QCOMPARE(list[0].nRecibo, QStringLiteral("R-1"));         // newest payment first
+        QVERIFY(list[0].rectificativa);
+        QCOMPARE(list[0].error, QStringLiteral("eR"));
+        QCOMPARE(list[1].nRecibo, QStringLiteral("10"));
+        QVERIFY(!list[1].rectificativa);
+        QCOMPARE(list[2].nRecibo, QStringLiteral("20"));
+        QCOMPARE(list[2].seq, 1);
+        QCOMPARE(list[2].fechaPago, QStringLiteral("05-03-2026"));
+        QCOMPARE(list[2].importe, 12.50);
+        QCOMPARE(list[3].nRecibo, QStringLiteral("40"));          // an unreadable date is never hidden
+        QCOMPARE(list[3].fechaPago, QString());
+    }
+
+    // --- the other cheap gaps -----------------------------------------------------------
+
+    void test_insertGarmentRows_allOrNone()
+    {
+        QVERIFY(tryExec("CREATE UNIQUE INDEX IF NOT EXISTS ingresos_ticket_hash ON ingresos (n_recibo, hash)"));
+        const auto garment = [](const QString &hash) {
+            IngresoGarmentRow row;
+            row.nRecibo = "U1";
+            row.fechaRecepcion = "01-03-2026";
+            row.importe = "3.00";
+            row.pagado = "NO";
+            row.estado = "En tienda";
+            row.cantidad = "1";
+            row.prenda = "Camisa";
+            row.hash = hash;
+            row.verifactuEstado = "SIN COBRAR";
+            return row;
+        };
+        QVERIFY(!insertGarmentRows(m_db, { garment("x"), garment("y"), garment("x") }));   // the third repeats the first
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("0"));
+        QVERIFY(insertGarmentRows(m_db, { garment("x"), garment("y") }));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("2"));
+        QVERIFY(insertGarmentRows(m_db, {}));                                              // nothing to store is not a failure
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("2"));
+    }
+
+    void test_insertNewItemToTable_bindsValues()
+    {
+        const QString hostile = "O'Brien\"); DROP TABLE clientes;--";
+        QVERIFY(insertNewItemToTable(m_db, { hostile, "1", "2", "3" }, "clientes"));
+        QCOMPARE(scalar("SELECT nombre FROM clientes"), hostile);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM sqlite_master WHERE name = 'clientes'"), QStringLiteral("1"));
+        QVERIFY(!insertNewItemToTable(m_db, { "only one" }, "clientes"));                   // wrong column count
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes"), QStringLiteral("1"));
+    }
+
+    void test_addNewClient_updateItemToClient_roundTrip()
+    {
+        QVERIFY(addNewClient(m_db, "Marta", "911000111", "Calle Uno", "600000111"));
+        QVERIFY(updateItemToClient(m_db, "movil", "600999888", "Marta"));
+        QCOMPARE(readClientPhones(m_db, "Marta"), (QStringList{ "911000111", "600999888" }));
+        QVERIFY(updateItemToClient(m_db, "movil", "1", "Nadie"));                           // unknown client: succeeds, changes nothing
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes WHERE movil = '1'"), QStringLiteral("0"));
+    }
+
+    void test_selectFromWhereLike_exactAndPrefix()
+    {
+        addNewClient(m_db, "Ana Maria", "", "", "600000001");
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana Maria", true, false), QStringLiteral("600000001"));
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana", true, false), QString());       // exact: no prefix
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana", false, false), QStringLiteral("600000001"));
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "ana", false, false), QStringLiteral("600000001"));   // LIKE ignores case
+        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Zoe", false, false), QString());
+    }
+
+    void test_readColumnFromTable_orderAndYears()
+    {
+        QCOMPARE(readColumnFromTable(m_db, "nombre", "clientes", "nombre"), QStringList());
+        exec("INSERT INTO clientes (nombre) VALUES ('Carla'), ('Ana'), ('Berta')");
+        QCOMPARE(readColumnFromTable(m_db, "nombre", "clientes", "nombre"), (QStringList{ "Ana", "Berta", "Carla" }));
+        QCOMPARE(readColumnFromTable(m_db, "nombre", "clientes", QString()), (QStringList{ "Carla", "Ana", "Berta" }));   // insertion order
+
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, true, "fecha", "gastos"), 0);                                    // empty table
+        exec("INSERT INTO gastos (id, fecha) VALUES (1, '05-01-2024'), (2, '30-12-2026'), (3, '10-06-2025')");
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, true, "fecha", "gastos"), 2026);
+        QCOMPARE(readMaxNMinYearInColumnFromTable(m_db, false, "fecha", "gastos"), 2024);
+    }
+
+    void test_readGarmentPrice_limpAndPlan()
+    {
+        exec("DELETE FROM prendas");
+        exec("INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Camisa', '5.50', '1.25')");
+        QCOMPARE(readGarmentPrice(m_db, "Camisa", "Limp."), 5.5f);
+        QCOMPARE(readGarmentPrice(m_db, "Camisa", "Plan."), 1.25f);
+        QCOMPARE(readGarmentPrice(m_db, "Nada", "Limp."), -1.0f);
+    }
+
+    // A connection with no database name: every function answers its neutral value, logs
+    // the missing path and never opens anything.
+    void test_dbNotConfigured_functionsReturnNeutralValues()
+    {
+        QSqlDatabase none = QSqlDatabase::addDatabase("QSQLITE", "unconfigured");
+        static int warnings = 0;
+        warnings = 0;
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &m) {
+            if (m.contains("database path not configured")) ++warnings;
+        });
+        QVERIFY(!migrateDatabase(none));
+        QCOMPARE(nextTicketNumber(none, 5), 0);
+        QCOMPARE(refusedInvoiceCount(none), 0);
+        QVERIFY(refusedInvoices(none).isEmpty());
+        QVERIFY(pendingVerifactuEvents(none, QString()).isEmpty());
+        QCOMPARE(readClientPhones(none, "x"), (QStringList{ QString(), QString() }));
+        QCOMPARE(selectFromWhereLike(none, "a", "b", "c", "d", true, false), QString());
+        QCOMPARE(searchItemFromClient(none, "movil", "x", false), QString());
+        QVERIFY(readColumnFromTable(none, "a", "b", QString()).isEmpty());
+        QCOMPARE(readMaxValueInColumnFromTable(none, "a", "b"), 0);
+        QCOMPARE(readMaxNMinYearInColumnFromTable(none, true, "a", "b"), 0);
+        QCOMPARE(readGarmentPrice(none, "a", "Limp."), 0.0f);
+        QVERIFY(!insertNewItemToTable(none, { "a" }, "clientes"));
+        QVERIFY(!addNewClient(none, "a", "", "", ""));
+        QVERIFY(!updateItemToClient(none, "movil", "1", "a"));
+        QVERIFY(!insertGarmentRows(none, {}));
+        QCOMPARE(aeatPendingRecordCount(none, "pruebas"), 0);
+        qInstallMessageHandler(previous);
+        QVERIFY(!none.isOpen());
+        QCOMPARE(warnings, 17);                       // one per call above; searchItemFromClient goes through selectFromWhereLike
+        none = QSqlDatabase();
+        QSqlDatabase::removeDatabase("unconfigured");
     }
 };
 
