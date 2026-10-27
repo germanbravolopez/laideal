@@ -2419,6 +2419,15 @@ private slots:
         dlg.getTicketInfo();
         dlg.buildTicket(true, false);
         QVERIFY(!dlg.ticketBytes().contains("Factura verificable"));
+
+        // Every paid row must be verifiable: one ENVIADA and one ERROR paid row of the
+        // same invoice print no leyenda (auditor 27-10-2026).
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ENVIADA' WHERE hash='h610b'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "610", "h610c", "5.00", "10-02-2026", "A-ORIG0610"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR' WHERE hash='h610c'"));
+        dlg.getTicketInfo();
+        dlg.buildTicket(true, false);
+        QVERIFY(!dlg.ticketBytes().contains("Factura verificable"));
     }
 
     // Reprint of one payment event (Imprimir, as Recogida de prendas uses it): only
@@ -3040,14 +3049,18 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QVERIFY(store.ensureSchema());
         QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
-        aeat.server.enqueue({ QByteArray(), 200, 0, true });
+        // Every request of the first sync (it may query several months) gets a dropped
+        // connection: one alone made the outcome depend on which request it hit.
+        for (int i = 0; i < 30; ++i)
+            aeat.server.enqueue({ QByteArray(), 200, 0, true });
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
         AppSettings::instance()->setVerifactuDirectAeat(false);
-        bool done = false;
-        direct.directBackend()->syncChain([&done](bool, const QString &) { done = true; });
+        bool done = false, synced = true;
+        direct.directBackend()->syncChain([&done, &synced](bool ok, const QString &) { done = true; synced = ok; });
         QTRY_VERIFY_WITH_TIMEOUT(done, 15000);
+        QVERIFY(!synced);
         QVERIFY(direct.directBackend()->chainSyncFailed());
         aeat.server.enqueue({ QByteArray(), 200, 0, true });
         RecogPrendas rp(m_db);

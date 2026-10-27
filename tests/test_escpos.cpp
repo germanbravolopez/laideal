@@ -334,6 +334,27 @@ private slots:
         QVERIFY(TicketRenderer::render(d, 576).contains("*** FACTURA RECTIFICADA ***"));
     }
 
+    // Printing F7 (auditor 27-10-2026): the leyenda is the exact phrase of Orden HAC/1177/2024,
+    // printed in order over two Font A lines just below the QR, on both paper widths.
+    void test_renderLeyendaIsTheExactPhrase()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.qr = QImage(29, 29, QImage::Format_Mono);
+        d.qr.fill(0);
+        d.verifactuVerifiable = true;
+        for (int dots : { 576, 384 }) {
+            const QByteArray t = TicketRenderer::render(d, dots);
+            const int first = t.indexOf("Factura verificable en la sede\n");
+            const int second = t.indexOf("nica de la AEAT\n");
+            QVERIFY2(first >= 0 && second > first, qPrintable(QString::number(dots)));
+            const QByteArray between = t.mid(first + 31, second - first - 31);
+            QVERIFY2(between.startsWith("electr") && between.size() <= 16, between.toHex().constData());
+            const QByteArray raster("\x1d\x76\x30", 3);   // GS v 0: the QR image
+            QVERIFY(t.lastIndexOf(raster) < first);   // below the QR
+        }
+    }
+
     // A completa without a typed DNI prints no empty "DNI:" line.
     void test_renderCompleteInvoiceWithoutDni()
     {
