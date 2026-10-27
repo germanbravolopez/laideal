@@ -336,9 +336,13 @@ void Listado::textFilterChanged()
     if (filtering)
         loadEveryRow();
     // One mode at a time: a plain case-insensitive search also ignores tildes ("jose"
-    // finds "José"); case-sensitive, wildcard and regex searches use the regex alone.
-    const bool plainSearch = s == FilterWidget::FixedString
-                             && filter_widget->caseSensitivity() == Qt::CaseInsensitive;
+    // finds "José"), in any mode while the text has no pattern characters (the default
+    // mode is the regex one); case-sensitive and real patterns use the regex alone.
+    const QString text = filter_widget->text();
+    const bool literal = s == FilterWidget::FixedString
+        || (s == FilterWidget::Wildcard && !text.contains(QRegularExpression(R"([*?\[])")))
+        || (s == FilterWidget::RegularExpression && !text.contains(QRegularExpression(R"([\\^$.|?*+()\[\]{}])")));
+    const bool plainSearch = literal && filter_widget->caseSensitivity() == Qt::CaseInsensitive;
     if (plainSearch)
         proxyModel->setFilters(QRegularExpression(),
                                MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());

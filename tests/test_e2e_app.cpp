@@ -3984,6 +3984,35 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
     }
 
+    // The search box starts in "Expresión Regular" mode: text with no pattern characters
+    // still ignores accents and case ("senora alvarez" finds "Señora Álvarez"), while a
+    // real pattern is matched as a regex.
+    void test_listado_plainSearchIgnoresAccentsInTheDefaultMode()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Señora Álvarez', '', '600000001', '')"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Pedro Ruiz', '', '600000002', '')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_clientes_triggered");
+        Listado *clientes = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "clientes")
+                clientes = l;
+        QVERIFY(clientes);
+        auto *filter = clientes->findChild<QLineEdit *>("filter_widget");
+        QVERIFY(filter);
+        const auto names = [clientes]() {
+            QStringList shown;
+            QAbstractItemModel *model = clientes->table_listado->model();
+            for (int r = 0; r < model->rowCount(); ++r)
+                shown << model->index(r, 0).data().toString();
+            return shown;
+        };
+        filter->setText("senora alvarez");
+        QCOMPARE(names(), QStringList({ QString::fromUtf8("Señora Álvarez") }));
+        filter->setText("^Pedro");
+        QCOMPARE(names(), QStringList({ "Pedro Ruiz" }));
+    }
+
     // Listado de prendas: Añadir adds exactly one row; Eliminar names the row it asks
     // about and deletes it on Yes.
     void test_listado_prendasAddAndDelete()
