@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "sql_lite.h"
+#include "verifactutypes.h"
 #include "cancelinvoicedialog.h"
 #include "rectifyinvoicedialog.h"
 #include <QMessageBox>
@@ -1001,7 +1002,7 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
         // Tax base from the IVA-inclusive ticket total (same split as the Facturas dialog).
         Facturas::taxBaseFromGross(totalAmount, ivaRate),
         ivaRate,
-        "Servicios de lavanderia"
+        kInvoiceDescription
     );
     if (reqId.isEmpty()) {
         qWarning() << "Verifactu submit rejected for ticket" << invoiceId;

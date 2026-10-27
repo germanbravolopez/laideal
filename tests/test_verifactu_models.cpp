@@ -33,6 +33,14 @@ private:
     }
 
 private slots:
+    // One DescripcionOperacion for every submission (Cobrar, retries, save, reprint QR);
+    // retries used to send it without the accent.
+    void test_invoiceDescriptionIsOneAccentedText()
+    {
+        QCOMPARE(kInvoiceDescription, QStringLiteral("Servicios de lavandería"));
+        QCOMPARE(kRectificationDescription, QStringLiteral("Rectificativa de servicios de lavandería"));
+    }
+
     // The invoiced split: base in cents and tax the rest, always adding up to the gross.
     void test_splitGrossAddsUpForEveryAmount()
     {

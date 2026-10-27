@@ -1177,7 +1177,7 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
         invoiceDate,
         ev.importe / (1.0 + ivaRate / 100.0),
         ivaRate,
-        "Servicios de lavanderia"
+        kInvoiceDescription
     );
     if (reqId.isEmpty()) {
         qWarning() << "retryVerifactuSubmit: Verifactu rejected request for" << invoiceId;

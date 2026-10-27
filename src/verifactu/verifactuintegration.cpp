@@ -198,7 +198,7 @@ QString VerifactuIntegration::submitRectificationAsync(
     invoice.setSellerNIF(m_emitterNif);
     invoice.setSellerName(m_emitterName);
     invoice.setDescription(description.isEmpty()
-        ? "Rectificativa de servicios de lavanderia"
+        ? kRectificationDescription
         : description);
 
     // TaxItems hold the corrected values (substitution: new totals; differences: delta).
@@ -255,7 +255,7 @@ VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceN
     invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
     invoice.setSellerNIF(m_emitterNif);
     invoice.setSellerName(m_emitterName);
-    invoice.setDescription(description.isEmpty() ? "Servicio de lavandería" : description);
+    invoice.setDescription(description.isEmpty() ? kInvoiceDescription : description);
 
     // The callers pass the gross over (1 + rate): split back from the gross in cents, so the
     // record's base + cuota equal the amount charged and printed.

@@ -147,4 +147,8 @@ inline GrossSplit splitGross(double gross, double ratePercent)
     return { base, cents(g - base) };
 }
 
+// DescripcionOperacion of every invoice the shop submits (sent to AEAT as is, never translated).
+inline const QString kInvoiceDescription = QStringLiteral("Servicios de lavandería");
+inline const QString kRectificationDescription = QStringLiteral("Rectificativa de servicios de lavandería");
+
 #endif // VERIFACTUTYPES_H

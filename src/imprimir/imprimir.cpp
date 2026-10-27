@@ -3,6 +3,7 @@
 
 #include <QSet>
 #include "sql_lite.h"
+#include "verifactutypes.h"
 #include "appsettings.h"
 #include "uikit.h"
 
@@ -280,7 +281,7 @@ QPixmap Imprimir::resolveQrCode()
     // The gateway: ask it, waiting up to 5 s in a local event loop.
     // If it does not reply in time, print without QR (logged warning).
     const QString reqId = verifactuIntegration->generateQRAsync(
-        invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
+        invoiceNumber, invoiceDate, taxBase, ivaRate, kInvoiceDescription);
     if (reqId.isEmpty()) {
         qWarning() << "GetQrCode rejected for ticket" << invoiceNumber
                    << ":" << verifactuIntegration->getLastError();

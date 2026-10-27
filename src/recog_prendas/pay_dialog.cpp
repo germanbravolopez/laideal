@@ -278,7 +278,7 @@ void PayDialog::onCobrarClicked()
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &PayDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
     m_pendingReqId = m_verifactu->submitSimplifiedInvoiceAsync(
-        invoiceId, fechaPago, taxBase, ivaRate, tr("Servicios de lavandería"));
+        invoiceId, fechaPago, taxBase, ivaRate, kInvoiceDescription);
 
     if (m_pendingReqId.isEmpty()) {
         // Nothing left: the payment stays PENDIENTE and the start-up recovery resends it.
