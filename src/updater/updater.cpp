@@ -64,9 +64,12 @@ QString Updater::installerFileName(const QUrl &url)
     return rx.match(name).hasMatch() ? name : QStringLiteral("laideal_setup.exe");
 }
 
-bool Updater::isTrustedDownloadUrl(const QUrl &url)
+bool Updater::isTrustedDownloadUrl(const QUrl &url, bool allowLoopback)
 {
     const QString host = url.host().toLower();
+    if (allowLoopback && url.scheme() == QLatin1String("http")
+        && (host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost")))
+        return true;
     return url.isValid() && url.scheme() == QLatin1String("https")
            && (host == QLatin1String("github.com") || host.endsWith(QLatin1String(".githubusercontent.com")));
 }
@@ -154,7 +157,7 @@ void Updater::checkForUpdates(bool silentOnNoUpdate)
     });
 }
 
-Updater::Release Updater::parseRelease(const QByteArray &json, const QString &installedVersion)
+Updater::Release Updater::parseRelease(const QByteArray &json, const QString &installedVersion, bool allowLoopback)
 {
     Release release;
     QJsonParseError jerr;
@@ -184,8 +187,8 @@ Updater::Release Updater::parseRelease(const QByteArray &json, const QString &in
         release.error = QStringLiteral(
             "La versión %1 no incluye un instalador 'laideal_setup_X.Y.exe' "
             "en sus assets de GitHub.").arg(release.tag);
-    } else if (!isTrustedDownloadUrl(release.installer.url)
-               || (release.installer.sha256.isEmpty() && !isTrustedDownloadUrl(release.installer.checksumUrl))) {
+    } else if (!isTrustedDownloadUrl(release.installer.url, allowLoopback)
+               || (release.installer.sha256.isEmpty() && !isTrustedDownloadUrl(release.installer.checksumUrl, allowLoopback))) {
         release.error = QStringLiteral("La versión %1 no publica un instalador que se pueda comprobar "
                                        "(dirección de GitHub y suma SHA-256).").arg(release.tag);
     }
@@ -244,7 +247,7 @@ void Updater::handleReleaseReply(QNetworkReply *reply)
         return;
     }
 
-    const Release release = parseRelease(reply->readAll());
+    const Release release = parseRelease(reply->readAll(), currentVersion(), m_allowLoopback);
     if (!release.error.isEmpty()) {
         qWarning() << "Updater:" << release.error;
         emit checkFailed(release.error);
@@ -309,7 +312,7 @@ void Updater::downloadInstaller(const QUrl &installerUrl)
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         m_downloadReply = nullptr;
-        const QString sha256 = reply->error() == QNetworkReply::NoError && isTrustedDownloadUrl(reply->url())
+        const QString sha256 = reply->error() == QNetworkReply::NoError && isTrustedDownloadUrl(reply->url(), m_allowLoopback)
                                    ? parseChecksumFile(reply->read(4096)) : QString();
         if (sha256.isEmpty()) {
             emit downloadFailed(QStringLiteral("No se pudo leer la suma SHA-256 publicada del instalador."));
@@ -353,7 +356,7 @@ void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath
         emit downloadFailed(reply->errorString());
         return;
     }
-    if (!isTrustedDownloadUrl(reply->url())) {
+    if (!isTrustedDownloadUrl(reply->url(), m_allowLoopback)) {
         qWarning() << "Updater: the download was redirected to" << reply->url().host();
         emit downloadFailed(QStringLiteral("La descarga se ha redirigido fuera de GitHub; no se instala."));
         return;

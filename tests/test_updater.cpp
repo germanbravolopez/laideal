@@ -6,7 +6,11 @@
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -43,6 +47,57 @@ public:
     }
     QUrl url() const { return QUrl(QStringLiteral("http://127.0.0.1:%1/releases/latest").arg(server.serverPort())); }
 };
+
+// Answers per path (404 when unknown); a path can claim more bytes than it sends (cut-off
+// transfer) or never answer. Never reaches the internet.
+class PathServer : public QObject
+{
+public:
+    struct Answer { QByteArray body; qint64 claimedLength = -1; bool hang = false; };
+    QTcpServer server;
+    QMap<QString, Answer> answers;
+    QMap<QString, int> hits;
+
+    PathServer()
+    {
+        server.listen(QHostAddress::LocalHost);
+        connect(&server, &QTcpServer::newConnection, this, [this]() {
+            while (QTcpSocket *socket = server.nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket]() {
+                    const QByteArray req = socket->readAll();
+                    if (req.isEmpty() || socket->property("answered").toBool())
+                        return;
+                    socket->setProperty("answered", true);
+                    const QString path = QString::fromLatin1(req.split(' ').value(1));
+                    ++hits[path];
+                    if (answers.value(path).hang)
+                        return;
+                    if (!answers.contains(path)) {
+                        socket->write("HTTP/1.1 404 X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    } else {
+                        const Answer a = answers.value(path);
+                        const qint64 len = a.claimedLength >= 0 ? a.claimedLength : a.body.size();
+                        socket->write("HTTP/1.1 200 X\r\nContent-Length: " + QByteArray::number(len)
+                                      + "\r\nConnection: close\r\n\r\n" + a.body);
+                    }
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString base() const { return QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()); }
+    QUrl url(const QString &path) const { return QUrl(base() + path); }
+};
+
+static QString shaOf(const QByteArray &b)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(b, QCryptographicHash::Sha256).toHex());
+}
+
+static QString updatesDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/updates");
+}
 
 // A release JSON with a laideal_setup_<tag>.exe asset (and its .sha256 asset).
 static QByteArray releaseJson(const QString &tag, const QString &body = QString(),
@@ -301,6 +356,165 @@ private slots:
         updater.checkForUpdates(true);   // a later startup-style check is silent again
         QTRY_COMPARE(silent.size(), 2);
         QCOMPARE(silent.at(1), true);
+    }
+
+    // ---- downloadInstaller against a local fake (the updates folder is the Qt test location) ----
+
+    // A newer release whose installer and checksum live on the fake; the updater holds it
+    // after the check, which downloadInstaller requires.
+private:
+    struct Rig {
+        PathServer server;
+        Updater    updater;
+        QUrl       installerUrl;
+    };
+    bool primeUpdate(Rig &rig, const QByteArray &installer, bool withDigest)
+    {
+        const QString exe = QStringLiteral("laideal_setup_99.0.exe");
+        QJsonObject a{ { "name", exe }, { "size", installer.size() }, { "browser_download_url", rig.server.base() + "/" + exe } };
+        if (withDigest)
+            a.insert("digest", "sha256:" + shaOf(installer));
+        const QJsonObject c{ { "name", exe + ".sha256" }, { "browser_download_url", rig.server.base() + "/" + exe + ".sha256" } };
+        rig.server.answers["/releases/latest"].body = QJsonDocument(QJsonObject{
+            { "tag_name", "99.0" }, { "assets", QJsonArray{ a, c } } }).toJson();
+        rig.updater.setAllowLoopbackForTests(true);
+        rig.updater.setApiUrl(rig.server.url("/releases/latest"));
+        QSignalSpy spy(&rig.updater, &Updater::updateAvailable);
+        rig.updater.checkForUpdates(false);
+        if (!spy.wait(5000))
+            return false;
+        rig.installerUrl = spy.at(0).at(2).toUrl();
+        return true;
+    }
+
+private slots:
+    void init()
+    {
+        QStandardPaths::setTestModeEnabled(true);   // never the shop's folder
+        QDir(updatesDir()).removeRecursively();
+    }
+
+    void test_downloadInstaller_writesFileAndCleansStale()
+    {
+        const QByteArray installer = "MZ fake installer payload";
+        QDir().mkpath(updatesDir());
+        QFile stale(updatesDir() + "/laideal_setup_1.0.exe");
+        QVERIFY(stale.open(QIODevice::WriteOnly));
+        stale.write("old");
+        stale.close();
+
+        Rig rig;
+        QVERIFY(primeUpdate(rig, installer, true));
+        rig.server.answers["/laideal_setup_99.0.exe"].body = installer;
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy prog(&rig.updater, &Updater::downloadProgress);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(done.wait(5000));
+        QCOMPARE(failed.count(), 0);
+        const QString path = done.at(0).at(0).toString();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), installer);
+        f.close();
+        QVERIFY(!QFile::exists(updatesDir() + "/laideal_setup_1.0.exe"));
+        QVERIFY(!QFile::exists(path + ".part"));
+        QVERIFY(prog.count() >= 1);
+        QVERIFY(!rig.updater.isDownloading());
+    }
+
+    // No digest from GitHub: the hash comes from the published .sha256 asset.
+    void test_downloadInstaller_checksumAsset()
+    {
+        const QByteArray installer = "MZ payload two";
+        Rig rig;
+        QVERIFY(primeUpdate(rig, installer, false));
+        rig.server.answers["/laideal_setup_99.0.exe"].body = installer;
+        rig.server.answers["/laideal_setup_99.0.exe.sha256"].body = shaOf(installer).toLatin1() + "  laideal_setup_99.0.exe\n";
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(done.wait(5000));
+        QCOMPARE(failed.count(), 0);
+        QCOMPARE(rig.server.hits["/laideal_setup_99.0.exe.sha256"], 1);
+    }
+
+    void test_downloadInstaller_hashMismatch_noFileLeft()
+    {
+        Rig rig;
+        QVERIFY(primeUpdate(rig, "the published bytes", true));
+        rig.server.answers["/laideal_setup_99.0.exe"].body = "tampered bytes!!!!!";   // same length, other content
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(failed.wait(5000));
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(failed.at(0).at(0).toString().contains("SHA-256"));
+        QCOMPARE(done.count(), 0);
+        QVERIFY(QDir(updatesDir()).entryList({ "*.exe", "*.part" }, QDir::Files).isEmpty());
+    }
+
+    void test_downloadInstaller_truncated_noFinalFile()
+    {
+        const QByteArray installer = "a full installer body";
+        Rig rig;
+        QVERIFY(primeUpdate(rig, installer, true));
+        auto &a = rig.server.answers["/laideal_setup_99.0.exe"];
+        a.body = installer.left(5);
+        a.claimedLength = installer.size();   // server closes early
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(failed.wait(5000));
+        QCOMPARE(done.count(), 0);
+        QVERIFY(QDir(updatesDir()).entryList({ "*.exe", "*.part" }, QDir::Files).isEmpty());
+    }
+
+    void test_downloadInstaller_http404_failed()
+    {
+        Rig rig;
+        QVERIFY(primeUpdate(rig, "bytes", true));   // the installer path is not served
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(failed.wait(5000));
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(!rig.updater.isDownloading());
+    }
+
+    void test_downloadInstaller_cancel_silent()
+    {
+        Rig rig;
+        QVERIFY(primeUpdate(rig, "bytes", true));
+        rig.server.answers["/laideal_setup_99.0.exe"].hang = true;
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(rig.updater.isDownloading());
+        rig.updater.cancelDownload();
+        QVERIFY(!rig.updater.isDownloading());
+        QTest::qWait(200);
+        QCOMPARE(done.count(), 0);
+        QCOMPARE(failed.count(), 0);
+    }
+
+    // A URL other than the one the last check reported is refused without any request.
+    void test_downloadInstaller_unknownUrl_refused()
+    {
+        Rig rig;
+        QVERIFY(primeUpdate(rig, "bytes", true));
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.server.url("/other.exe"));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(rig.server.hits.value("/other.exe"), 0);
+    }
+
+    // Loopback http is only trusted when a test asks for it.
+    void test_trustedDownloadUrl_loopbackOnlyOnRequest()
+    {
+        const QUrl u("http://127.0.0.1:1/x.exe");
+        QVERIFY(!Updater::isTrustedDownloadUrl(u));
+        QVERIFY(Updater::isTrustedDownloadUrl(u, true));
+        QVERIFY(!Updater::isTrustedDownloadUrl(QUrl("http://evil.example/x.exe"), true));
     }
 
     void test_currentVersion()
