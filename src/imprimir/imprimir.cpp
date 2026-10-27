@@ -442,6 +442,7 @@ bool Imprimir::printTicket()
     }
     const QString printer = AppSettings::instance()->printerName();
     QString err;
+    m_lastSendUncertain = false;
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
     // Optional Status API path (Epson DLL): without the DLL it fails with an empty status
@@ -458,6 +459,7 @@ bool Imprimir::printTicket()
         // The hang was inside the send itself: the Epson DLL may still print this
         // ticket, so RAW would print it twice. Leave the call to the operator.
         if (mayStillPrint) {
+            m_lastSendUncertain = true;
             qWarning() << "Imprimir::printTicket: Status API blocked during the send, not resending by RAW:" << statusErr;
             reportPrinterProblem("La impresora no respondió al enviar el ticket y puede que se imprima igualmente.\n"
                                  "Compruebe la impresora antes de volver a imprimirlo.", true);
@@ -603,7 +605,8 @@ void Imprimir::onPrintClicked()
             }
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
             if (AppSettings::instance()->enablePrinting() && !printTicket()) {
-                notPrinted << labelFor(ev) + " (error de impresión)";
+                notPrinted << labelFor(ev) + (m_lastSendUncertain ? " (puede que se imprima: compruebe la impresora)"
+                                                                  : " (error de impresión)");
                 continue;
             }
             printed << labelFor(ev) + (m_lastVoidedMarker.isEmpty()
@@ -651,10 +654,11 @@ void Imprimir::onPrintClicked()
             if (printing)
                 printTicket();
         }
-        m_lblResult->setText(UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
-                                           + (shopCopy ? " (copia del cliente y del establecimiento)."
-                                                       : " (copia del cliente)."))
-                             + printingOff + problems());
+        const QString result = clientCopyFailed
+            ? UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + " no se ha impreso.")
+            : UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
+                            + (shopCopy ? " (copia del cliente y del establecimiento)." : " (copia del cliente)."));
+        m_lblResult->setText(result + printingOff + problems());
         return;
     }
     const QString noQr = !m_lastVoidedMarker.isEmpty()
@@ -664,7 +668,8 @@ void Imprimir::onPrintClicked()
         : (!verifactuIntegration || !verifactuIntegration->isConfigured())
             ? "<br>Sin código QR: Verifactu no está activado."
             : "<br>Sin código QR: la factura no está confirmada por AEAT o AEAT no respondió a tiempo.";
-    m_lblResult->setText(UiKit::okHtml((isCompleteInvoice ? "Factura completa " : "Factura ")
-                                       + displayInvoiceId().toHtmlEscaped() + " impresa.")
+    const QString invoiceName = (isCompleteInvoice ? "Factura completa " : "Factura ") + displayInvoiceId().toHtmlEscaped();
+    m_lblResult->setText((clientCopyFailed ? UiKit::warnHtml(invoiceName + " no se ha impreso.")
+                                           : UiKit::okHtml(invoiceName + " impresa."))
                          + noQr + printingOff + problems());
 }

@@ -321,6 +321,9 @@ private slots:
         QVERIFY(!dangling);
         QVERIFY(CommandLine::switchValue({ "laideal.exe", "--self-check", "--settings" }, "--settings", &dangling).isEmpty());
         QVERIFY(dangling);
+        // A forgotten file name before another switch is missing too, not "--self-check".
+        QVERIFY(CommandLine::switchValue({ "laideal.exe", "--settings", "--self-check" }, "--settings", &dangling).isEmpty());
+        QVERIFY(dangling);
         QVERIFY(CommandLine::switchValue({ "laideal.exe" }, "--settings", &dangling).isEmpty());
         QVERIFY(!dangling);
     }

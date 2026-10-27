@@ -202,11 +202,23 @@ void Listado::populateTable()
                            + "<br>La fecha pertenece a un trimestre cerrado por la contabilidad: no se ha cambiado.";
                 return QString();
             };
-            connect(proxyModel, &MySortFilterProxyModel::editRefused, this, [this](const QString &message) {
-                qWarning() << "Listado: gastos edit refused -" << message;
-                m_lblResult->setText(message);
-            });
+        } else if (tableName == "prendas") {
+            // A price is an amount or empty (the service is not offered for that garment).
+            proxyModel->editValidator = [](const QModelIndex &index, const QVariant &value) {
+                if (index.column() != LIST_PRENDAS_IDX_LIMP && index.column() != LIST_PRENDAS_IDX_PLAN)
+                    return QString();
+                double number = 0.0;
+                const QString text = value.toString().trimmed();
+                if (text.isEmpty() || (moneyParse(text, &number) && number >= 0.0))
+                    return QString();
+                return UiKit::errorHtml("Precio no válido.")
+                       + "<br>Escriba una cantidad, por ejemplo 12,50, o deje la casilla vacía: no se ha cambiado.";
+            };
         }
+        connect(proxyModel, &MySortFilterProxyModel::editRefused, this, [this](const QString &message) {
+            qWarning() << "Listado:" << tableName << "edit refused -" << message;
+            m_lblResult->setText(message);
+        });
         proxyModel->setSourceModel(model);
         table_listado->setModel(proxyModel);
         if (oldProxy)

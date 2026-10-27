@@ -432,13 +432,18 @@ void SettingsDialog::accept()
 
     s->setVerifactuNif(m_vNif->text().trimmed());
     s->setVerifactuName(m_vName->text().trimmed());
-    bool secretsEncrypted = s->setVerifactuServiceKey(m_vKey->text().trimmed());
+    // A secret that cannot be decrypted here is kept while its field stays empty: it may
+    // still decrypt for the Windows account that stored it.
+    bool secretsEncrypted = true;
+    if (!(s->verifactuServiceKeyUnreadable() && m_vKey->text().trimmed().isEmpty()))
+        secretsEncrypted = s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
     s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
     s->setAeatDirectProduction(directProduction);
     s->setAeatCertificateThumbprint(selectedThumbprint());
     s->setAeatCertificateFile(m_vCertFile->text().trimmed());
-    secretsEncrypted = s->setAeatCertificatePassword(m_vCertPassword->text()) && secretsEncrypted;
+    if (!(s->aeatCertificatePasswordUnreadable() && m_vCertPassword->text().isEmpty()))
+        secretsEncrypted = s->setAeatCertificatePassword(m_vCertPassword->text()) && secretsEncrypted;
     s->setVerifactuPendingRecoveryEnabled(m_vPendingRecoveryEnabled->isChecked());
     s->setVerifactuPendingRecoveryFloorDate(
         m_vPendingRecoveryFloor->date().toString(Qt::ISODate));

@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "reporthtml.h"
 #include "uikit.h"
+#include "verifactutypes.h"   // splitGross
 
 #include <algorithm>
 #include <numeric>
@@ -276,10 +277,11 @@ GenListado::GastoAmounts GenListado::splitGasto(const QString &importe, const QS
     double rate = 0.0;
     if (!moneyParse(iva, &rate) || rate <= 0.0)
         rate = 0.0;
+    // The same split as every other IVA figure (splitGross): base in cents, IVA the rest.
+    const GrossSplit split = splitGross(amount, rate);
     GastoAmounts result;
     result.importeCents = qRound64(amount * 100.0);
-    result.baseCents = rate > 0.0 ? qRound64(result.importeCents / (1.0 + rate / 100.0))
-                                  : result.importeCents;
+    result.baseCents = qRound64(split.base * 100.0);
     result.ivaCents = result.importeCents - result.baseCents;
     return result;
 }

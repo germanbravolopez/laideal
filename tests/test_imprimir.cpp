@@ -165,6 +165,8 @@ private slots:
         const QString text = press(dlg, "702");
         QVERIFY2(text.contains(QString::fromUtf8("apagada o desconectada")), qPrintable(text));
         QVERIFY2(text.contains("No se pudo imprimir el ticket"), qPrintable(text));
+        QVERIFY2(text.contains("no se ha impreso") && !text.contains(" impreso ("), qPrintable(text));
+        QCOMPARE(m_sent.size(), 1);                         // no shop copy after a failed client copy
         QVERIFY(m_popups->messages().isEmpty());
         QVERIFY(!m_sent.isEmpty());                         // it did try to print
         QCOMPARE(ticketState("702"), before);

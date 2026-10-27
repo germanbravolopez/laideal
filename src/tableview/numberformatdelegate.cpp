@@ -26,10 +26,10 @@ void NumberFormatDelegate::setEditorData(QWidget *editor, const QModelIndex &ind
 void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
 {
     if (auto *line = qobject_cast<QLineEdit *>(editor)) {
-        // Anything that is not an amount is refused: the cell keeps its value.
-        if (!isAmount(line->text()))
-            return;
-        model->setData(index, storedNumber(line->text()), Qt::EditRole);
+        // An amount is stored in cents; other text goes to the model as typed, so its
+        // validator refuses it with a message (or, when empty, clears the cell).
+        const QString typed = line->text().trimmed();
+        model->setData(index, isAmount(typed) ? storedNumber(typed) : typed, Qt::EditRole);
         return;
     }
     QStyledItemDelegate::setModelData(editor, model, index);

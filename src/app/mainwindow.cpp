@@ -1546,8 +1546,6 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     Facturas *ui_facturas;
     ui_facturas = new Facturas(db, this);
     ui_facturas->setAttribute(Qt::WA_DeleteOnClose);
-    ui_facturas->populateEmpresas();
-    ui_facturas->populateServicios();
     ui_facturas->show();
 }
 

@@ -480,6 +480,11 @@ private slots:
         QVERIFY(!dlg.findChild<QLabel *>("lblKeyUnreadable")->isHidden());
         QVERIFY(!dlg.findChild<QLabel *>("lblCertPasswordUnreadable")->isHidden());
         QVERIFY(dlg.findChild<QLineEdit *>("serviceKeyEdit")->text().isEmpty());
+        // Aceptar with the fields left empty keeps both stored secrets (another account may read them).
+        answerBoxes(QMessageBox::Ok);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QVERIFY(AppSettings::instance()->verifactuServiceKeyUnreadable());
+        QVERIFY(AppSettings::instance()->aeatCertificatePasswordUnreadable());
     }
 };
 

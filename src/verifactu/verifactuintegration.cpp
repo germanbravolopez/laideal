@@ -3,7 +3,6 @@
 #include "appsettings.h"
 #include <QDebug>
 #include <QNetworkReply>
-#include <QTimer>
 #include <algorithm>
 #include <QSqlDatabase>
 
@@ -31,12 +30,17 @@ void retireManager(VerifactuManager *manager)
         delete manager;
         return;
     }
-    auto *poll = new QTimer(manager);
-    QObject::connect(poll, &QTimer::timeout, manager, [manager, running] {
-        if (!running())
-            manager->deleteLater();
-    });
-    poll->start(200);
+    // Deleted after the last in-flight reply has finished (and been handled); the
+    // manager is gone by the time a later reply would ask again.
+    const auto replies = manager->findChildren<QNetworkReply *>();
+    for (QNetworkReply *reply : replies) {
+        if (!reply->isRunning())
+            continue;
+        QObject::connect(reply, &QNetworkReply::finished, manager, [manager, running] {
+            if (!running())
+                manager->deleteLater();
+        }, Qt::QueuedConnection);
+    }
 }
 } // namespace
 

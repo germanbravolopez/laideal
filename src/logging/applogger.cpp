@@ -71,6 +71,7 @@ QString scrubbed(const QString &msg)
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     QtMessageHandler previous = nullptr;
+    const QString clean = scrubbed(msg);   // the console gets the scrubbed text too
     {
         QMutexLocker locker(&s_logMutex);
         previous = s_previousHandler;
@@ -84,7 +85,7 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
             default: break;
             }
             const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
-                                 + " [" + tag + "] " + scrubbed(msg) + "\n";
+                                 + " [" + tag + "] " + clean + "\n";
             s_logStream << line;
             s_logStream.flush();
             s_written += line.toUtf8().size();
@@ -94,9 +95,9 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
     }
     // Chain on, so a debug run still shows the message in the console.
     if (previous)
-        previous(type, context, msg);
+        previous(type, context, clean);
     else
-        fprintf(stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, msg)));
+        fprintf(stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, clean)));
     if (type == QtFatalMsg)
         abort();
 }
