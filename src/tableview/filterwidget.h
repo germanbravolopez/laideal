@@ -11,8 +11,6 @@ QT_END_NAMESPACE
 class FilterWidget : public QLineEdit
 {
     Q_OBJECT
-    Q_PROPERTY(Qt::CaseSensitivity caseSensitivity READ caseSensitivity)
-    Q_PROPERTY(PatternSyntax patternSyntax READ patternSyntax)
 public:
     explicit FilterWidget(QWidget *parent = nullptr);
 

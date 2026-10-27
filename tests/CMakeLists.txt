@@ -127,6 +127,7 @@ set_tests_properties(reporthtml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscree
 add_executable(test_versioncompare test_updater.cpp)
 target_link_libraries(test_versioncompare PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Network
     updater
 )
 add_test(NAME version_compare

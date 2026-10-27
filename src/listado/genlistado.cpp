@@ -5,6 +5,9 @@
 #include "reporthtml.h"
 #include "uikit.h"
 
+#include <algorithm>
+#include <numeric>
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -82,8 +85,9 @@ void GenListado::set_cb_fechas()
 
 bool GenListado::print_table()
 {
-    model->sort(0, Qt::AscendingOrder);
-    QString html_table_prendas = generate_html_prendas_table();
+    if (!model)
+        return false;
+    const QString html_table_prendas = generate_html_prendas_table(rowsSortedBy(model, LIST_PRENDAS_IDX_NAME, -1));
     // set path and print table
     QString path = AppSettings::instance()->listadosPrendasPath();
     QString filename = "/listado_prendas_" +
@@ -96,7 +100,34 @@ bool GenListado::print_table()
     return ReportHtml::writePdf(m_lastPrintedFile, html_table_prendas);
 }
 
-QString GenListado::generate_html_prendas_table()
+QVector<int> GenListado::rowsSortedBy(const QAbstractItemModel *model, int column, int dateColumn)
+{
+    QVector<int> rows(model->rowCount());
+    std::iota(rows.begin(), rows.end(), 0);
+    std::stable_sort(rows.begin(), rows.end(), [=](int a, int b) {
+        const int byText = QString::localeAwareCompare(model->index(a, column).data().toString(),
+                                                       model->index(b, column).data().toString());
+        if (byText != 0 || dateColumn < 0)
+            return byText < 0;
+        return MySortFilterProxyModel::parseFecha(model->index(a, dateColumn).data().toString())
+               < MySortFilterProxyModel::parseFecha(model->index(b, dateColumn).data().toString());
+    });
+    return rows;
+}
+
+QString GenListado::supplierTotalCells(qint64 totalCents, bool withClosedColumn)
+{
+    return "<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
+           "<td colspan='" + QString::number(withClosedColumn ? 2 : 1) + "' style='text-align:right; font-weight:bold;'>"
+           + ReportHtml::formatEuro(totalCents / 100.0) + "</td></tr>";
+}
+
+QString GenListado::rowYear(const QString &fecha)
+{
+    return fecha.trimmed().mid(6, 4);
+}
+
+QString GenListado::generate_html_prendas_table(const QVector<int> &rows)
 {
     QString html_table = ReportHtml::documentOpen("Listado de Prendas")
             + ReportHtml::tableOpen() +
@@ -111,7 +142,7 @@ QString GenListado::generate_html_prendas_table()
 
     // add each line of data
     int row_printed = 0;
-    for (int row = 0; row < model->rowCount(); row++) {
+    for (const int row : rows) {
         // set background color for even rows
         if (row_printed % 2 == 0)
             html_table += "<tr>";
@@ -139,19 +170,23 @@ QString GenListado::generate_html_prendas_table()
 
 QString GenListado::generate_html_gastos_table_with_specific_conditions()
 {
-    // agrupar por proveedores if selected
+    if (!model)
+        return QString();
+    // Grouped by supplier (then by date) without touching the order of the user's table.
     if (m_cbGroup->currentText() == C_PROVEEDORES)
-        model->sort(GASTOS_IDX_CLIENT, Qt::AscendingOrder);
-    return generate_html_gastos_table();
+        return generate_html_gastos_table(rowsSortedBy(model, GASTOS_IDX_CLIENT, GASTOS_IDX_FECHA));
+    QVector<int> rows(model->rowCount());
+    std::iota(rows.begin(), rows.end(), 0);
+    return generate_html_gastos_table(rows);
 }
 
 bool GenListado::rowClosed(int row) const
 {
-    const QDate fecha = QDate::fromString(model->index(row, GASTOS_IDX_FECHA).data().toString().trimmed(), "dd-MM-yyyy");
+    const QDate fecha = MySortFilterProxyModel::parseFecha(model->index(row, GASTOS_IDX_FECHA).data().toString());
     return m_closedQuarters.contains(quarterKey(fecha));
 }
 
-QString GenListado::generate_html_gastos_table()
+QString GenListado::generate_html_gastos_table(const QVector<int> &rows)
 {
     m_closedQuarters = closedQuarterKeys(db);
     QString html_table = ReportHtml::documentOpen("Listado de Gastos")
@@ -173,7 +208,8 @@ QString GenListado::generate_html_gastos_table()
     int row_printed = 0;
     QString client, client_prev_row;
     qint64 importe_tot = 0;   // cents
-    for (int row = 0; row < model->rowCount(); row++) {
+    const bool withClosedColumn = m_cbType->currentText() == C_INCL_TODOS;
+    for (const int row : rows) {
         // print row based on previous analysis
         if (check_years_invoice_type_for_row(row)) {
             const GastoAmounts amounts = splitGasto(model->index(row, 7).data().toString(),
@@ -189,9 +225,7 @@ QString GenListado::generate_html_gastos_table()
                     else
                         html_table += "<tr style='background-color: #f6f7f9;'>";
                     // set total costs row
-                    html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
-                                        "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot / 100.0) +
-                                        "</td></tr>";
+                    html_table += supplierTotalCells(importe_tot, withClosedColumn);
                     importe_tot = 0;
                     row_printed++;
                 }
@@ -229,15 +263,10 @@ QString GenListado::generate_html_gastos_table()
         else
             html_table += "<tr style='background-color: #f6f7f9;'>";
         // set total costs row
-        html_table +="<td colspan='6' style='text-align:right; font-weight:bold;'>IMPORTE TOTAL:</td>"
-                            "<td colspan='2' style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(importe_tot / 100.0) +
-                            "</td></tr>";
+        html_table += supplierTotalCells(importe_tot, withClosedColumn);
     }
     html_table += "</tbody></table>" + ReportHtml::documentClose();
-    if (row_printed == 0)
-        return C_NO_ROWS;
-    else
-        return html_table;
+    return row_printed == 0 ? QString() : html_table;
 }
 
 GenListado::GastoAmounts GenListado::splitGasto(const QString &importe, const QString &iva)
@@ -265,11 +294,10 @@ bool GenListado::shouldPrintGastoRow(bool allYears, const QString &selectedYear,
 
 bool GenListado::check_years_invoice_type_for_row(int row)
 {
-    // rowYear = the yyyy in the dd-MM-yyyy date string (chars 6..9).
     return shouldPrintGastoRow(
         m_chkAllYears->isChecked(),
         m_cbYear->currentText(),
-        model->index(row, GASTOS_IDX_FECHA).data().toString().mid(6, 4),
+        rowYear(model->index(row, GASTOS_IDX_FECHA).data().toString()),
         m_cbType->currentText() == C_CONTAB_CERR,
         rowClosed(row));
 }
@@ -293,7 +321,7 @@ QString GenListado::add_suffix_to_filename()
 void GenListado::onGenerateClicked()
 {
     const QString html = generate_html_gastos_table_with_specific_conditions();
-    if (html == C_NO_ROWS) {
+    if (html.isEmpty()) {
         qWarning() << "GenListado: no gastos rows for the selected configuration";
         m_lblResult->setText(UiKit::warnHtml("No hay gastos para la configuración elegida.")
                              + "<br>Revise el año y el tipo de gastos.");

@@ -138,7 +138,8 @@ QLabel *heading(const QString &text)
     QLabel *label = new QLabel(text);
     label->setObjectName(QStringLiteral("lblHeading"));
     QFont font = label->font();
-    font.setPointSizeF(font.pointSizeF() + 5);
+    if (font.pointSizeF() > 0)   // a pixel-sized app font reports -1
+        font.setPointSizeF(font.pointSizeF() + 5);
     font.setBold(true);
     label->setFont(font);
     return label;
@@ -210,7 +211,9 @@ QString errorHtml(const QString &text) { return QStringLiteral("<b style='color:
 
 QString fileLinkHtml(const QString &file, const QString &label)
 {
-    return label + ": <a href='" + QUrl::fromLocalFile(file).toString() + "'>"
+    // Percent-encoded and HTML-escaped, so a path with an apostrophe or & keeps the link whole.
+    const QString href = QString::fromLatin1(QUrl::fromLocalFile(file).toEncoded()).toHtmlEscaped();
+    return label.toHtmlEscaped() + ": <a href=\"" + href + "\">"
            + QFileInfo(file).fileName().toHtmlEscaped() + "</a>";
 }
 
@@ -221,15 +224,23 @@ AmountSpinBox::AmountSpinBox(QWidget *parent)
     setGroupSeparatorShown(false);
 }
 
+// "." is the decimal key unless a comma is already there, then it is a thousands dot ("1.234,56").
+static QString withDecimalComma(QString text)
+{
+    if (text.contains(QLatin1Char(',')))
+        return text.remove(QLatin1Char('.'));
+    return text.replace(QLatin1Char('.'), QLatin1Char(','));
+}
+
 QValidator::State AmountSpinBox::validate(QString &input, int &pos) const
 {
-    input.replace(QLatin1Char('.'), QLatin1Char(','));
+    input = withDecimalComma(input);
     return QDoubleSpinBox::validate(input, pos);
 }
 
 double AmountSpinBox::valueFromText(const QString &text) const
 {
-    return QDoubleSpinBox::valueFromText(QString(text).replace(QLatin1Char('.'), QLatin1Char(',')));
+    return QDoubleSpinBox::valueFromText(withDecimalComma(text));
 }
 
 ResultPanel::ResultPanel(const QString &initialText, QWidget *parent)

@@ -6,6 +6,7 @@
 
 #include <QtTest>
 #include <QStandardItemModel>
+#include <memory>
 
 #include "mysortfilterproxymodel.h"
 
@@ -67,8 +68,7 @@ private slots:
         QCOMPARE(proxy.rowCount(), 0);
     }
 
-    // lessThan() keys on table_name + column. ingresos column indices come from
-    // sql_lite.h (INGRESOS_COL_*); used here as literals to avoid the dependency:
+    // lessThan() keys on table_name + column; the ingresos columns used below are
     // 1 = cliente, 3 = fecha_pago, 5 = importe.
     void test_lessThan_ingresosDateChronological()
     {
@@ -248,6 +248,116 @@ private slots:
         other.setSourceModel(&model);
         QVERIFY(other.flags(other.index(0, 1)) & Qt::ItemIsEditable);
         QVERIFY(other.setData(other.index(0, 1), "Pepe"));
+    }
+
+    void test_parseFecha()
+    {
+        QCOMPARE(MySortFilterProxyModel::parseFecha("05-03-2026"), QDate(2026, 3, 5));
+        QCOMPARE(MySortFilterProxyModel::parseFecha(" 05-03-2026 "), QDate(2026, 3, 5));
+        QVERIFY(!MySortFilterProxyModel::parseFecha("31-02-2026").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha("2026-03-05").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha("5-3-2026").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha(QString()).isValid());
+    }
+
+    // Empty and malformed dates sort first ascending, last descending.
+    void test_lessThan_emptyDatesSortFirst()
+    {
+        QStandardItemModel model;
+        const QStringList dates = { "10-02-2026", "", "01-01-2026", "garbage" };
+        for (int r = 0; r < dates.size(); ++r)
+            model.setItem(r, 3, new QStandardItem(dates[r]));
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "ingresos";
+        proxy.setSourceModel(&model);
+        proxy.sort(3, Qt::AscendingOrder);
+        QCOMPARE(proxy.data(proxy.index(2, 3)).toString(), QStringLiteral("01-01-2026"));
+        QCOMPARE(proxy.data(proxy.index(3, 3)).toString(), QStringLiteral("10-02-2026"));
+        proxy.sort(3, Qt::DescendingOrder);
+        QCOMPARE(proxy.data(proxy.index(0, 3)).toString(), QStringLiteral("10-02-2026"));
+    }
+
+    static QStandardItemModel *gastosModel()
+    {
+        auto *model = new QStandardItemModel(2, 8);
+        model->setItem(0, GASTOS_IDX_ID, new QStandardItem("1"));
+        model->setItem(0, GASTOS_IDX_FECHA, new QStandardItem("15-02-2026"));   // Q1 2026
+        model->setItem(1, GASTOS_IDX_ID, new QStandardItem("2"));
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem(" 15-05-2026 "));  // Q2, padded
+        return model;
+    }
+
+    void test_rowLocked_onlyGastosAndClosedQuarter()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "gastos";
+        proxy.setSourceModel(model.get());
+        proxy.setClosedQuarters({ 20261 });
+        QVERIFY(proxy.rowLocked(0));
+        QVERIFY(!proxy.rowLocked(1));
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem(" 15-02-2026 "));
+        QVERIFY(proxy.rowLocked(1));   // padding does not hide a closed quarter
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem("not a date"));
+        QVERIFY(!proxy.rowLocked(1));
+        proxy.table_name = "prendas";
+        QVERIFY(!proxy.rowLocked(0));
+    }
+
+    void test_flags_lockedRowAndIdNotEditable()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "gastos";
+        proxy.setSourceModel(model.get());
+        proxy.setClosedQuarters({ 20261 });
+        QVERIFY(!(proxy.flags(proxy.index(0, GASTOS_IDX_FECHA)) & Qt::ItemIsEditable));   // closed quarter
+        QVERIFY(proxy.flags(proxy.index(1, GASTOS_IDX_FECHA)) & Qt::ItemIsEditable);
+        QVERIFY(!(proxy.flags(proxy.index(1, GASTOS_IDX_ID)) & Qt::ItemIsEditable));      // primary key
+        QVERIFY(!proxy.setData(proxy.index(1, GASTOS_IDX_ID), "99"));
+        QCOMPARE(model->item(1, GASTOS_IDX_ID)->text(), QStringLiteral("2"));
+    }
+
+    void test_setClosedQuarters_notifiesTheView()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "gastos";
+        proxy.setSourceModel(model.get());
+        QSignalSpy changed(&proxy, &QAbstractItemModel::dataChanged);
+        proxy.setClosedQuarters({ 20261 });
+        QCOMPARE(changed.count(), 1);
+        proxy.setClosedQuarters({ 20261 });   // unchanged: nothing to refresh
+        QCOMPARE(changed.count(), 1);
+    }
+
+    void test_setData_validatorRefusalEmitsEditRefused_andKeepsValue()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "gastos";
+        proxy.setSourceModel(model.get());
+        proxy.editValidator = [](const QModelIndex &, const QVariant &value) {
+            return value.toString() == "bad" ? QStringLiteral("refused") : QString();
+        };
+        QSignalSpy refused(&proxy, &MySortFilterProxyModel::editRefused);
+        QVERIFY(!proxy.setData(proxy.index(0, GASTOS_IDX_IMPORTE), "bad"));
+        QCOMPARE(refused.count(), 1);
+        QCOMPARE(refused.at(0).at(0).toString(), QStringLiteral("refused"));
+        QVERIFY(model->item(0, GASTOS_IDX_IMPORTE) == nullptr || model->item(0, GASTOS_IDX_IMPORTE)->text().isEmpty());
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_IMPORTE), "12.50"));
+        QCOMPARE(model->item(0, GASTOS_IDX_IMPORTE)->text(), QStringLiteral("12.50"));
+    }
+
+    // A padded date is stored clean, so the year filter and the sort read it.
+    void test_setData_gastosFechaIsStoredTrimmed()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.table_name = "gastos";
+        proxy.setSourceModel(model.get());
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_FECHA), " 05-03-2026 "));
+        QCOMPARE(model->item(0, GASTOS_IDX_FECHA)->text(), QStringLiteral("05-03-2026"));
     }
 
     void test_lessThan_defaultStringColumn()

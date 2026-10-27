@@ -23,6 +23,7 @@ class QPushButton;
 
 namespace UiKit {
 
+// Call before the dialog is shown (changing a window flag hides a shown window).
 // Window flags shared by every dialog: no "?" help button, no minimise (a dialog
 // is never sent behind its window). Sets the title and a minimum width. Also the
 // dialog's Enter rule: Enter in a text field (line edit, spin or date box, editable
@@ -63,10 +64,11 @@ extern const char *const COLOR_ERROR;    // red
 extern const char *const COLOR_LINK;     // blue
 
 // Result-panel phrases: green success, amber nothing done / attention, red error.
+// They take HTML and escape nothing: the caller runs user / AEAT text through toHtmlEscaped().
 QString okHtml(const QString &text);
 QString warnHtml(const QString &text);
 QString errorHtml(const QString &text);
-// "PDF: <name>" linking to the file, which the result panel opens on click.
+// "PDF: <name>" linking to the file, which the result panel opens on click (label is plain text).
 QString fileLinkHtml(const QString &file, const QString &label = QStringLiteral("PDF"));
 
 // Framed panel where a dialog reports every outcome (objectName lblResult), in
@@ -80,7 +82,8 @@ public:
 };
 
 // Amount field: shows the decimal comma whatever the language, and takes "," or "."
-// as the decimal key (the numeric keypad sends either, depending on Windows).
+// as the decimal key (the numeric keypad sends either, depending on Windows). With a comma
+// already typed or pasted, dots are thousands separators and dropped ("1.234,56").
 class AmountSpinBox : public QDoubleSpinBox
 {
 public:

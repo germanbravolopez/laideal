@@ -7,8 +7,57 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSignalSpy>
+#include <QTcpServer>
+#include <QTcpSocket>
 
 #include "updater.h"
+
+// Answers every request with one canned HTTP response; never reaches the internet.
+class CannedServer : public QObject
+{
+public:
+    QTcpServer server;
+    int status = 200;
+    QByteArray body;
+    int hits = 0;
+
+    CannedServer()
+    {
+        server.listen(QHostAddress::LocalHost);
+        connect(&server, &QTcpServer::newConnection, this, [this]() {
+            while (QTcpSocket *socket = server.nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket]() {
+                    if (socket->readAll().isEmpty() || socket->property("answered").toBool())
+                        return;
+                    socket->setProperty("answered", true);
+                    ++hits;
+                    socket->write("HTTP/1.1 " + QByteArray::number(status) + " X\r\n"
+                                  "Content-Type: application/json\r\n"
+                                  "Content-Length: " + QByteArray::number(body.size()) + "\r\n"
+                                  "Connection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QUrl url() const { return QUrl(QStringLiteral("http://127.0.0.1:%1/releases/latest").arg(server.serverPort())); }
+};
+
+// A release JSON with a laideal_setup_<tag>.exe asset (and its .sha256 asset).
+static QByteArray releaseJson(const QString &tag, const QString &body = QString(),
+                              const QString &exeUrl = QString(), const QString &digest = QString())
+{
+    const QString base = QStringLiteral("https://github.com/o/r/releases/download/%1/").arg(tag);
+    QJsonObject exe{ { "name", "laideal_setup_" + tag + ".exe" }, { "size", 100 },
+                     { "browser_download_url", exeUrl.isEmpty() ? base + "laideal_setup_" + tag + ".exe" : exeUrl } };
+    if (!digest.isEmpty())
+        exe.insert("digest", digest);
+    const QJsonObject checksum{ { "name", "laideal_setup_" + tag + ".exe.sha256" },
+                                { "browser_download_url", base + "laideal_setup_" + tag + ".exe.sha256" } };
+    return QJsonDocument(QJsonObject{ { "tag_name", tag }, { "body", body },
+                                      { "assets", QJsonArray{ exe, checksum } } }).toJson();
+}
 
 class TestUpdater : public QObject
 {
@@ -96,6 +145,162 @@ private slots:
         QVERIFY(Updater::installerMismatch(bytes.left(5), bytes.size(), sha).contains("incompleto"));
         QVERIFY(Updater::installerMismatch("tampered bytes!", 15, sha).contains("SHA-256"));
         QVERIFY(!Updater::installerMismatch(bytes, bytes.size(), QString()).isEmpty());   // nothing to compare with
+    }
+
+    void test_compareVersions_boundary11to12()
+    {
+        QVERIFY(Updater::compareVersions("12.0", "11.10") > 0);
+        QVERIFY(Updater::compareVersions("11.10", "11.9") > 0);
+        QCOMPARE(Updater::compareVersions("12.00", "12.0"), 0);
+    }
+
+    void test_findInstallerAsset_prefersTheExactName()
+    {
+        const QString base = QStringLiteral("https://github.com/o/r/releases/download/12.0/");
+        const QJsonArray assets = {
+            QJsonObject{ { "name", "laideal_setup_11.9.exe" }, { "browser_download_url", base + "laideal_setup_11.9.exe" } },
+            QJsonObject{ { "name", "laideal_setup_12.0.exe" }, { "browser_download_url", base + "laideal_setup_12.0.exe" } },
+        };
+        QCOMPARE(Updater::findInstallerAsset(assets, "12.0").url.fileName(), QStringLiteral("laideal_setup_12.0.exe"));
+        QCOMPARE(Updater::findInstallerAsset(assets).url.fileName(), QStringLiteral("laideal_setup_11.9.exe"));
+        // No exact match: the first installer-looking asset still has to pass the SHA-256 check.
+        QCOMPARE(Updater::findInstallerAsset(assets, "13.0").url.fileName(), QStringLiteral("laideal_setup_11.9.exe"));
+    }
+
+    // The local file name comes from the release, so anything odd gets a fixed name.
+    void test_installerFileName()
+    {
+        QCOMPARE(Updater::installerFileName(QUrl("https://github.com/o/r/laideal_setup_12.0.exe")),
+                 QStringLiteral("laideal_setup_12.0.exe"));
+        QCOMPARE(Updater::installerFileName(QUrl("https://github.com/o/r/x.exe")), QStringLiteral("laideal_setup.exe"));
+        QCOMPARE(Updater::installerFileName(QUrl("https://github.com/o/r/laideal_setup_12.0.exe%3Astream")),
+                 QStringLiteral("laideal_setup.exe"));
+        QCOMPARE(Updater::installerFileName(QUrl()), QStringLiteral("laideal_setup.exe"));
+    }
+
+    void test_parseRelease_newerWithInstaller()
+    {
+        const Updater::Release r = Updater::parseRelease(
+            releaseJson("12.0", "notes", QString(), "sha256:" + QString(64, 'a')), "11.10");
+        QVERIFY2(r.error.isEmpty(), qPrintable(r.error));
+        QVERIFY(r.newer);
+        QCOMPARE(r.tag, QStringLiteral("12.0"));
+        QCOMPARE(r.notes, QStringLiteral("notes"));
+        QCOMPARE(r.installer.url.fileName(), QStringLiteral("laideal_setup_12.0.exe"));
+    }
+
+    void test_parseRelease_sameOrOlderTag_noUpdate()
+    {
+        const Updater::Release same = Updater::parseRelease(releaseJson("12.0"), "12.0");
+        QVERIFY(same.error.isEmpty());
+        QVERIFY(!same.newer);
+        const Updater::Release older = Updater::parseRelease(releaseJson("11.9"), "12.0");
+        QVERIFY(older.error.isEmpty());
+        QVERIFY(!older.newer);
+    }
+
+    void test_parseRelease_missingTagOrBadJson()
+    {
+        QVERIFY(Updater::parseRelease("not json", "1.0").error.contains("JSON"));
+        QVERIFY(Updater::parseRelease("[1,2]", "1.0").error.contains("JSON"));
+        QVERIFY(Updater::parseRelease("{\"body\":\"x\"}", "1.0").error.contains("tag_name"));
+        QVERIFY(Updater::parseRelease("{\"tag_name\":\"nightly\"}", "1.0").error.contains("nightly"));
+    }
+
+    void test_parseRelease_newerWithoutUsableInstaller()
+    {
+        const QByteArray zipOnly = R"({"tag_name":"12.0","assets":[{"name":"12.0.zip","browser_download_url":"https://github.com/x/12.0.zip"}]})";
+        QVERIFY(Updater::parseRelease(zipOnly, "11.0").error.contains("12.0"));
+        const QString digest = "sha256:" + QString(64, 'b');
+        QVERIFY(!Updater::parseRelease(releaseJson("12.0", "", "http://github.com/x/laideal_setup_12.0.exe", digest), "11.0").error.isEmpty());
+        QVERIFY(!Updater::parseRelease(releaseJson("12.0", "", "https://evil.example/laideal_setup_12.0.exe", digest), "11.0").error.isEmpty());
+        // Without a digest the published .sha256 asset stands in for it.
+        QVERIFY(Updater::parseRelease(releaseJson("12.0"), "11.0").error.isEmpty());
+    }
+
+    // The bilingual body shows only its Spanish section.
+    void test_releaseNotesForUi()
+    {
+        const QString body = "## Español\n\n- Uno\n- Dos\n\n## English\n\n- One";
+        QCOMPARE(Updater::releaseNotesForUi(body), QStringLiteral("- Uno\n- Dos"));
+        QCOMPARE(Updater::releaseNotesForUi("## Español\n\n- Solo"), QStringLiteral("- Solo"));
+        QCOMPARE(Updater::releaseNotesForUi("- sin secciones"), QStringLiteral("- sin secciones"));
+        QCOMPARE(Updater::releaseNotesForUi(QString()), QString());
+    }
+
+    void test_describeNetworkError()
+    {
+        QVERIFY(Updater::describeNetworkError(QNetworkReply::ContentAccessDenied, 403, "raw").contains("limitado"));
+        QVERIFY(Updater::describeNetworkError(QNetworkReply::ContentNotFoundError, 404, "raw").contains("404"));
+        QVERIFY(Updater::describeNetworkError(QNetworkReply::TimeoutError, 0, "raw").contains("a tiempo"));
+        QVERIFY(Updater::describeNetworkError(QNetworkReply::HostNotFoundError, 0, "raw").contains("conexión"));
+        QVERIFY(Updater::describeNetworkError(QNetworkReply::ProtocolFailure, 0, "raw text").contains("raw text"));
+    }
+
+    void test_checkForUpdates_updateAvailable()
+    {
+        CannedServer server;
+        server.body = releaseJson("99.0", "## Español\n\n- Hola\n\n## English\n\n- Hi", QString(), "sha256:" + QString(64, 'c'));
+        Updater updater;
+        updater.setApiUrl(server.url());
+        QSignalSpy available(&updater, &Updater::updateAvailable);
+        QSignalSpy failed(&updater, &Updater::checkFailed);
+        updater.checkForUpdates(false);
+        QTRY_COMPARE(available.count(), 1);
+        QCOMPARE(failed.count(), 0);
+        QCOMPARE(available.at(0).at(0).toString(), QStringLiteral("99.0"));
+        QCOMPARE(available.at(0).at(1).toString(), QStringLiteral("- Hola"));
+        QCOMPARE(available.at(0).at(2).toUrl().fileName(), QStringLiteral("laideal_setup_99.0.exe"));
+    }
+
+    void test_checkForUpdates_http404_failsOnce()
+    {
+        CannedServer server;
+        server.status = 404;
+        server.body = "{}";
+        Updater updater;
+        updater.setApiUrl(server.url());
+        QSignalSpy available(&updater, &Updater::updateAvailable);
+        QSignalSpy failed(&updater, &Updater::checkFailed);
+        updater.checkForUpdates(false);
+        QTRY_COMPARE(failed.count(), 1);
+        QCOMPARE(available.count(), 0);
+        QVERIFY(failed.at(0).at(0).toString().contains("404"));
+    }
+
+    void test_checkForUpdates_serverDown_failsOnce()
+    {
+        QUrl url;
+        {
+            CannedServer server;
+            url = server.url();
+        }   // closed again: nothing listens on that port
+        Updater updater;
+        updater.setApiUrl(url);
+        QSignalSpy failed(&updater, &Updater::checkFailed);
+        updater.checkForUpdates(true);
+        QTRY_COMPARE(failed.count(), 1);
+        QVERIFY(failed.at(0).at(0).toString().contains("GitHub"));
+    }
+
+    // A manual click during the startup check shares its request and gets its answer shown.
+    void test_silentFlagPerRequest()
+    {
+        CannedServer server;
+        server.body = releaseJson("0.1");
+        Updater updater;
+        updater.setApiUrl(server.url());
+        QList<bool> silent;
+        connect(&updater, &Updater::noUpdateAvailable, this, [&]() { silent << updater.isSilentCheck(); });
+        updater.checkForUpdates(true);
+        updater.checkForUpdates(false);
+        QTRY_COMPARE(silent.size(), 1);
+        QCOMPARE(silent.at(0), false);
+        QCOMPARE(server.hits, 1);
+
+        updater.checkForUpdates(true);   // a later startup-style check is silent again
+        QTRY_COMPARE(silent.size(), 2);
+        QCOMPARE(silent.at(1), true);
     }
 
     void test_currentVersion()
