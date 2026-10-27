@@ -149,6 +149,21 @@ void AddGarment::loadTicket(const QString &ticketNum)
     onSearchClicked();
 }
 
+void AddGarment::clearGarmentFields()
+{
+    m_cbPrenda->setCurrentText("");
+    m_cbServicio->setCurrentIndex(0);
+    m_leCantidad->clear();
+    m_leSize->clear();
+    m_leImporte->setText(displayMoney(0.0));
+    m_leObservaciones->clear();
+    m_chkPagado->setChecked(false);
+    m_deFechaPago->setDate(QDate::currentDate());
+    m_chkRecogido->setChecked(false);
+    m_deFechaRecogida->setDate(QDate::currentDate());
+    m_cbPrenda->setFocus();
+}
+
 void AddGarment::resetAllContents()
 {
     m_ticketFound = false;
@@ -311,7 +326,11 @@ void AddGarment::onSaveClicked()
                              + "<br>Consulte el log (Ayuda → Log de depuración).");
         return;
     }
-    resetAllContents();
+    // A paid ticket is refused from now on; an unpaid one stays loaded for the next garment.
+    if (paid)
+        resetAllContents();
+    else
+        clearGarmentFields();
     m_lblResult->setText(UiKit::okHtml("Prenda añadida al recibo Nº " + ticket.toHtmlEscaped() + ": "
                                        + garment.toHtmlEscaped() + ", " + amount + " €.")
                          + (paid ? "<br>Pagada: se envía a AEAT como la factura " + ticket.toHtmlEscaped()

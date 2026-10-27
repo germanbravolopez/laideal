@@ -401,6 +401,18 @@ private slots:
         QCOMPARE(f.ingTickets, 2);
     }
 
+    // A regularisation whose payment date is empty or unreadable is netted in the amounts, so it
+    // offsets its ticket's count in the period being computed.
+    void test_netTicketCount_emptyOrInvalidFechaPago()
+    {
+        const QDate q2(2026, 4, 1), q3(2026, 7, 1);
+        IncomeTicketDetail t; t.nRecibo = "7"; t.importe = 40.0;
+        RegularizationDetail empty;   empty.nRecibo = "7";   empty.importe = 40.0;   empty.fechaPago = "";
+        RegularizationDetail invalid; invalid.nRecibo = "7"; invalid.importe = 40.0; invalid.fechaPago = "31-31-2026";
+        QCOMPARE(Contabilidad::netTicketCount({t}, {empty}, q2, q3), 0);
+        QCOMPARE(Contabilidad::netTicketCount({t}, {invalid}, q2, q3), 0);
+    }
+
     void test_yearTicketCountNetsCancellationsWithinTheYear()
     {
         QuarterlyDetails d;

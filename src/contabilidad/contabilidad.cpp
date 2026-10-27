@@ -14,6 +14,7 @@
 #include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
 #include <QSpinBox>
@@ -215,6 +216,16 @@ QDate Contabilidad::quarterLastDay(int quarter, int year)
     return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1);
 }
 
+bool Contabilidad::revertConfirmed(const QString &quarterName)
+{
+    if (confirmRevert)
+        return confirmRevert(quarterName);
+    return QMessageBox::question(this, "Revertir contabilidad",
+               "La contabilidad " + quarterName + " está cerrada. Al revertirla, sus ingresos y gastos se podrán "
+               "modificar y el informe presentado puede dejar de coincidir con los datos.\n\n¿Desea revertirla?",
+               QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+}
+
 void Contabilidad::onGenerateClicked()
 {
     m_dataReadFailed = false;   // only this action's own read may report a failure
@@ -237,11 +248,15 @@ void Contabilidad::onGenerateClicked()
             if (!closed) {
                 qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not closed";
                 message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
+            } else if (!revertConfirmed(quarterName)) {
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "revert declined";
+                message = warnHtml("No se ha revertido la contabilidad " + quarterName + ".")
+                          + "<br>El trimestre sigue bloqueado.";
             } else if (!reopenQuarter(db, trim, year)) {
                 message = errorHtml("No se pudo revertir la contabilidad " + quarterName + ".")
                           + "<br>El trimestre sigue bloqueado.";
             } else {
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "reopened";
+                qWarning() << "(Revertir) Contabilidad: closed quarter" << trim << "of" << year << "reverted";
                 message = okHtml("Contabilidad " + quarterName + " revertida.") + "<br>"
                           + "El trimestre vuelve a estar abierto.";
             }
@@ -531,8 +546,9 @@ int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
     QSet<QString> regularized;
     for (const RegularizationDetail &r : regularizations) {
         const QDate paid = QDate::fromString(r.fechaPago, QStringLiteral("dd-MM-yyyy"));
-        if (!paid.isValid() || paid < periodStart || paid >= periodEnd)
-            continue;                       // an earlier period's payment: does not offset this period's sales
+        // An unreadable payment date counts as this period: its money is netted, so its ticket is too.
+        if (paid.isValid() && (paid < periodStart || paid >= periodEnd))
+            continue;                      // an earlier period's payment: does not offset this period's sales
         if (net.contains(r.nRecibo))
             net[r.nRecibo] -= r.importe;
         regularized.insert(r.nRecibo);

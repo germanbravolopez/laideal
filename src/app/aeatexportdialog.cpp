@@ -14,6 +14,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -95,6 +96,19 @@ void AeatExportDialog::onExportClicked()
     if (file.isEmpty()) {
         m_lblResult->setText(UiKit::errorHtml(tr("Indique el archivo donde guardar los registros.")));
         return;
+    }
+
+    if (QFileInfo::exists(file)) {
+        const bool overwrite = confirmOverwrite
+            ? confirmOverwrite(file)
+            : QMessageBox::question(this, tr("Exportar registros AEAT"),
+                                    tr("El archivo ya existe:\n%1\n\n¿Desea sustituirlo?").arg(file),
+                                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+        if (!overwrite) {
+            m_lblResult->setText(UiKit::warnHtml(tr("Exportación cancelada: el archivo ya existe."))
+                                 + "<br>" + tr("Elija otro archivo o confirme que desea sustituirlo."));
+            return;
+        }
     }
 
     // One record per invoice submitted to AEAT (payment event), any current estado:
