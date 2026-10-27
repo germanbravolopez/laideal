@@ -13,7 +13,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Current Status — October 2026
 
-**Active branch**: `feature/aeat-direct-investigation`
+**Active branch**: `develop`
 
 **Latest release**: [12.3](https://github.com/germanbravolopez/laideal/releases/tag/12.3) — the pre-12.0 review closed (Medium and Low rounds, owner's decisions, leftovers, PR #63 review) and the 12.2 follow-up: unsent invoices paid after the floor date are listed and resent again. One accented AEAT description, the leyenda follows the paid rows, Configuración keeps unreadable secrets, printing reports failures truthfully and fits 58 mm. Declaración signed 27-10-2026. The shop stays on the IreneSolutions gateway in its TEST environment.
 
