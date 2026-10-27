@@ -21,7 +21,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 - **Accounting reports** — monthly, quarterly, and annual PDF reports; period locking to prevent back-dated entry
 - **Catalogue management** — garments, clients, suppliers, and services via a generic filterable list viewer with PDF export
 - **Verifactu** — AEAT mandatory digital invoicing integration (8.0+, required for Spanish businesses from 2026): through the Irene Solutions gateway, or (12.0) directly with AEAT using the owner's certificate; *Comprobar tras actualizar* (`--self-check`) checks an update on a copy of the newest backup
-- **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración.
+- **In-app updater** — checks GitHub Releases at startup and on demand (Ayuda → Buscar actualizaciones); downloads the installer and replaces the running version in place. Toggle the startup check in Configuración. After an update, run *Comprobar tras actualizar* (see [smoke test, part 2](docs/testing/smoke_test.md)).
 - **In-app release notes** — Ayuda → Notas de la versión shows the full version history, offline, in the configured language (`releases_notes.txt` English / `releases_notes_es.txt` Spanish, both bundled).
 
 ---

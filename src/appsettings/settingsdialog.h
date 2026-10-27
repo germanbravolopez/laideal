@@ -4,11 +4,14 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <functional>
 
 // Settings dialog - all user-configurable options across the application.
 // Reads from and writes to AppSettings. Call exec(); on Accepted the caller
 // should re-apply settings that take effect at runtime (Verifactu).
 // DB path changes require an application restart.
+class QLabel;
+
 class SettingsDialog : public QDialog
 {
     Q_OBJECT
@@ -24,6 +27,10 @@ public:
     // Records the direct connection generated and AEAT has not confirmed: while there
     // are any, the connection cannot be switched back to the gateway.
     void setDirectPendingCount(int count) { m_directPending = count; }
+    // Asked on accept when the database path is not an existing file; true keeps it.
+    // Defaults to a Yes/No question; tests and scripted runs replace it.
+    using MissingDbConfirm = std::function<bool(const QString &path)>;
+    static void setMissingDbConfirm(MissingDbConfirm confirm);
 
 signals:
     // Emitted when the user clicks "Probar conexión" in the Verifactu tab.
@@ -76,6 +83,10 @@ private:
     QWidget   *m_vDirectGroup;
     QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;
+    QLabel    *m_vKeyUnreadable = nullptr;
+    QLabel    *m_vCertPasswordUnreadable = nullptr;
+    QLabel    *m_vFloorFuture = nullptr;
+    void updateFloorWarning();
 
     QString selectedThumbprint() const;
     void updateDirectRows();

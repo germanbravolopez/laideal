@@ -3,17 +3,18 @@
 
 #include <QString>
 
-// Shared "clean professional" scaffolding for the A4 PDF reports
-// (Contabilidad, Listados). Both modules render through QTextDocument, which
-// only supports a subset of HTML/CSS (tables + inline attributes, no flexbox),
-// so everything here stays table- and inline-style based. Keeping the style,
-// business header and currency formatting in one place stops the two report
-// generators from drifting apart.
+// Shared "clean professional" scaffolding for the A4 PDF reports (Contabilidad,
+// Listados and the declaración responsable, which adds its own bare markup).
+// Everything renders through QTextDocument, which only supports a subset of
+// HTML/CSS, so it stays table- and inline-style based. The reports are Spanish
+// whatever the app language, by design; the zebra striping of long tables is
+// added by the callers, not by tableOpen().
 namespace ReportHtml {
 
 // Opens the document: <!DOCTYPE>..<style>..<body> + business header band
 // (name / address / city / NIF / phone on the left, issue date on the right),
-// an accent rule, the report <h1> title and an optional subtitle line.
+// an accent rule, the report <h1> title and an optional subtitle line. The business
+// text is escaped here; title and subtitle are HTML by contract.
 QString documentOpen(const QString &title, const QString &subtitle = QString());
 
 // Opening tag for a data table.

@@ -1,27 +1,24 @@
 #include "tableview.h"
 
+#include <QAction>
+#include <QMenu>
+
 TableView::TableView(QWidget *parent)
     : QTableView(parent)
 {
-    // create context menu
-    context_menu = new QMenu(tr("Menú contextual"), this);
-    action1 = new QAction(tr("Añadir fila"), this);
-    action2 = new QAction(tr("Eliminar fila"), this);
-    context_menu->addAction(action1);
-    context_menu->addAction(action2);
-    // connect context menu
-    this->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_contextMenu = new QMenu(tr("Menú contextual"), this);
+    m_addRowAction = new QAction(tr("Añadir fila"), this);
+    m_deleteRowAction = new QAction(tr("Eliminar fila"), this);
+    m_contextMenu->addAction(m_addRowAction);
+    m_contextMenu->addAction(m_deleteRowAction);
+    setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, &TableView::customContextMenuRequested,
             this, &TableView::showContextMenu);
     connect(this, &QTableView::doubleClicked,
             this, &TableView::doubleClick);
 }
 
-TableView::~TableView()
-{
-}
-
 void TableView::showContextMenu(QPoint pos)
 {
-   context_menu->exec(this->mapToGlobal(pos));
+    m_contextMenu->exec(mapToGlobal(pos));
 }

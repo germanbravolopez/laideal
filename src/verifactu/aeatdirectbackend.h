@@ -204,7 +204,8 @@ private:
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,
                     QList<AeatResponse::RecordSummary> found, bool sawUnusable);
-    void queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious);
+    void queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious,
+                           const QDate &invoiceDate);
 };
 
 #endif // AEATDIRECTBACKEND_H

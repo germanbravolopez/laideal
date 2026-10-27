@@ -13,10 +13,28 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDate>
+#include <QFileInfo>
+#include <algorithm>
 #include <QDateEdit>
 #include <QComboBox>
 #include <QPrinterInfo>
 #include <QToolButton>
+
+namespace {
+SettingsDialog::MissingDbConfirm g_missingDbConfirm;
+
+QLabel *warningLabel(const char *objectName, const QString &text)
+{
+    auto *label = new QLabel(text);
+    label->setObjectName(objectName);
+    label->setWordWrap(true);
+    label->setStyleSheet("color: #b00020;");
+    label->setHidden(true);
+    return label;
+}
+} // namespace
+
+void SettingsDialog::setMissingDbConfirm(MissingDbConfirm confirm) { g_missingDbConfirm = std::move(confirm); }
 
 // Helpers - create a row: line edit + Browse button
 static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
@@ -234,16 +252,28 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vPendingRecoveryFloor->setDisplayFormat("dd-MM-yyyy");
     m_vPendingRecoveryFloor->setCalendarPopup(true);
     const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
-    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor : QDate(2026, 9, 1));
+    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor
+                                                     : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
     m_vPendingRecoveryFloor->setToolTip(tr("Los tickets anteriores no se avisan como pendientes al arrancar, "
                                            "ni cuentan como facturas rechazadas en la barra de estado."));
 
     fl->addRow(tr("NIF del emisor:"),     m_vNif);
     fl->addRow(tr("Nombre empresa:"),     m_vName);
     fl->addRow(tr("Clave de servicio:"),  keyRow);
+    m_vKeyUnreadable = warningLabel("lblKeyUnreadable",
+        tr("Clave ilegible: la clave guardada no se puede descifrar (otro usuario o equipo de Windows). "
+           "Vuelva a introducirla."));
+    m_vKeyUnreadable->setVisible(s->verifactuServiceKeyUnreadable());
+    fl->addRow(m_vKeyUnreadable);
     fl->addRow(m_vProduction);
     fl->addRow(m_vPendingRecoveryEnabled);
     fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
+    m_vFloorFuture = warningLabel("lblFloorFuture",
+        tr("Esta fecha es posterior a hoy: hasta entonces no se avisará de ningún envío pendiente ni "
+           "factura rechazada."));
+    fl->addRow(m_vFloorFuture);
+    connect(m_vPendingRecoveryFloor, &QDateEdit::dateChanged, this, &SettingsDialog::updateFloorWarning);
+    updateFloorWarning();
 
     auto *note = new QLabel(tr(
         "<i>La clave de servicio se obtiene en "
@@ -267,6 +297,13 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertificate = new QComboBox;
     m_vCertificate->setObjectName("cbCertificate");
     m_vCertificate->addItem(tr("Archivo .pfx / .p12..."), QString());
+    // A saved certificate stays selected (and saved) until the user picks another one,
+    // even if the store does not list it; setCertificateChoices() replaces this entry.
+    const QString storedThumbprint = s->aeatCertificateThumbprint();
+    if (!storedThumbprint.isEmpty()) {
+        m_vCertificate->insertItem(0, tr("%1 (no encontrado en el almacén)").arg(storedThumbprint), storedThumbprint);
+        m_vCertificate->setCurrentIndex(0);
+    }
     m_vCertFile = new QLineEdit(s->aeatCertificateFile());
     m_vCertFile->setObjectName("leCertificateFile");
     m_vCertFileRow = browseRow(m_vCertFile, false, this);
@@ -295,6 +332,11 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     direct->addRow(tr("Certificado electrónico:"), m_vCertificate);
     direct->addRow(tr("Archivo del certificado:"), m_vCertFileRow);
     direct->addRow(tr("Contraseña del archivo:"), m_vCertPassword);
+    m_vCertPasswordUnreadable = warningLabel("lblCertPasswordUnreadable",
+        tr("Clave ilegible: la contraseña guardada no se puede descifrar (otro usuario o equipo de Windows). "
+           "Vuelva a introducirla."));
+    m_vCertPasswordUnreadable->setVisible(s->aeatCertificatePasswordUnreadable());
+    direct->addRow(m_vCertPasswordUnreadable);
     direct->addRow(btnSelfTest);
     fl->addRow(m_vDirectGroup);
     connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
@@ -359,10 +401,21 @@ void SettingsDialog::accept()
                                           "¿Salir de PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
+    const QString dbPath = m_dbPath->text().trimmed();
+    if (!QFileInfo(dbPath).isFile()) {
+        const bool keep = g_missingDbConfirm
+            ? g_missingDbConfirm(dbPath)
+            : QMessageBox::question(this, tr("Base de datos"),
+                  tr("La ruta de la base de datos no es un archivo existente:\n%1\n\n"
+                     "¿Guardarla de todas formas? La aplicación no podrá abrirla al reiniciar.").arg(dbPath),
+                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+        if (!keep)
+            return;
+    }
     AppSettings *s = AppSettings::instance();
 
     s->setLanguage(m_language->currentData().toString());
-    s->setDbPath(m_dbPath->text().trimmed());
+    s->setDbPath(dbPath);
     s->setBackupSecondFolder(m_backupSecondFolder->text().trimmed());
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
@@ -379,13 +432,18 @@ void SettingsDialog::accept()
 
     s->setVerifactuNif(m_vNif->text().trimmed());
     s->setVerifactuName(m_vName->text().trimmed());
-    s->setVerifactuServiceKey(m_vKey->text().trimmed());
+    // A secret that cannot be decrypted here is kept while its field stays empty: it may
+    // still decrypt for the Windows account that stored it.
+    bool secretsEncrypted = true;
+    if (!(s->verifactuServiceKeyUnreadable() && m_vKey->text().trimmed().isEmpty()))
+        secretsEncrypted = s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
     s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
     s->setAeatDirectProduction(directProduction);
     s->setAeatCertificateThumbprint(selectedThumbprint());
     s->setAeatCertificateFile(m_vCertFile->text().trimmed());
-    s->setAeatCertificatePassword(m_vCertPassword->text());
+    if (!(s->aeatCertificatePasswordUnreadable() && m_vCertPassword->text().isEmpty()))
+        secretsEncrypted = s->setAeatCertificatePassword(m_vCertPassword->text()) && secretsEncrypted;
     s->setVerifactuPendingRecoveryEnabled(m_vPendingRecoveryEnabled->isChecked());
     s->setVerifactuPendingRecoveryFloorDate(
         m_vPendingRecoveryFloor->date().toString(Qt::ISODate));
@@ -396,6 +454,12 @@ void SettingsDialog::accept()
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
     }
 
+    if (!secretsEncrypted) {
+        QMessageBox::warning(this, tr("Cifrado"),
+            tr("No se pudo cifrar la clave de servicio o la contraseña del certificado con Windows: "
+               "se han guardado sin cifrar. Se cifrarán al abrir la aplicación si Windows lo permite."));
+    }
+
     AppLanguage::applyQtTranslations(s->language());   // live, for every caller
     QDialog::accept();
 }
@@ -403,6 +467,11 @@ void SettingsDialog::accept()
 QString SettingsDialog::selectedThumbprint() const
 {
     return m_vCertificate->currentData().toString();
+}
+
+void SettingsDialog::updateFloorWarning()
+{
+    m_vFloorFuture->setVisible(m_vPendingRecoveryFloor->date() > QDate::currentDate());
 }
 
 void SettingsDialog::updateDirectRows()
@@ -417,6 +486,13 @@ void SettingsDialog::updateDirectRows()
 void SettingsDialog::setCertificateChoices(const QList<QPair<QString, QString>> &choices)
 {
     const QString stored = AppSettings::instance()->aeatCertificateThumbprint();
+    const bool storedListed = std::any_of(choices.begin(), choices.end(),
+                                          [&stored](const auto &choice) { return choice.second == stored; });
+    if (storedListed && !stored.isEmpty()) {
+        const int placeholder = m_vCertificate->findData(stored);
+        if (placeholder >= 0)
+            m_vCertificate->removeItem(placeholder);
+    }
     for (const auto &choice : choices) {
         m_vCertificate->insertItem(m_vCertificate->count() - 1, choice.first, choice.second);
         if (choice.second == stored)

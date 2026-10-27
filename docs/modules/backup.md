@@ -21,21 +21,22 @@ public:
     static void recordSuccess(const Result &result);   // GUI thread
     bool    needsBackup(qint64 minIntervalSeconds = 24 * 3600) const;
     int     pruneOldBackups();
-    QString backupDirectory() const;
+    QString backupDirectory() const;          // private: path only, creates nothing
+    QString ensureBackupDirectory() const;    // private: the same, created if missing
 };
 ```
 
 ## How it works
 
-0. **Guards**: one backup at a time in the process. The automatic one runs on a worker thread and the manual one on the GUI thread, and a second call fails at once with "Ya hay una copia de seguridad en curso". Stale `laideal_*.db.part` files left by a cut-off run are removed. If a copy with this second's name already exists, the run fails and leaves that copy as it is. A run only ever removes files it created.
-1. **Snapshot**: a dedicated `QSQLITE` connection named `laideal_backup_snapshot` (busy timeout 30 s) opens the live DB and runs `VACUUM INTO '<final name>.part'`. SQLite emits a transactionally-consistent point-in-time copy. While it reads, a ticket being saved waits for it (there is no WAL), and the backup waits for a save in progress.
+0. **Guards**: one backup at a time in the process. The automatic one runs on a worker thread and the manual one on the GUI thread, and a second call fails at once with "Ya hay una copia de seguridad en curso". Stale `laideal_*.db.part` files left by a cut-off run are removed. A copy that cannot be removed while pruning (a file locked by OneDrive, say) is logged and left for the next run. If a copy with this second's name already exists, the run fails and leaves that copy as it is. A run only ever removes files it created.
+1. **Snapshot**: a dedicated `QSQLITE` connection named `laideal_backup_snapshot` (busy timeout 30 s) opens the live DB and runs `VACUUM INTO '<final name>.part'`. SQLite emits a transactionally-consistent point-in-time copy. It takes no exclusive lock, but the read lock it holds for the copy (rollback-journal mode, no WAL) makes a ticket being saved wait until it ends, and the backup waits for a save in progress.
 2. **Verify**: the `.part` file is re-opened on a second dedicated connection (`laideal_backup_verify`) with `QSQLITE_OPEN_READONLY`. `PRAGMA integrity_check` must return `ok`, then the file is renamed to its final `.db` name. Any other verdict deletes the `.part` and reports failure, so a cut-off copy never matches the backup pattern.
 3. **Persist**: `performBackup()` never touches `AppSettings`, because it may run off the GUI thread. The caller passes the result to `BackupManager::recordSuccess()` on the GUI thread, which saves `backup.last_time` (`Result::finishedAt`). `needsBackup()` also treats a last time in the future (a wrong clock then) as due.
 4. **Prune**: `pruneOldBackups()` walks the backup directory matching the timestamped filename pattern, keeps every file from the last 30 days, then one file per calendar month for the next 4 years, then deletes the rest. The retention *decision* lives in the pure static `BackupManager::backupsToPrune(fileNames, now)` (no filesystem); `pruneOldBackups()` just lists the directory, calls it, and removes the returned names. `backupsToPrune` is unit-tested in `tests/test_backup_manager.cpp`, along with real copies of a throwaway DB (rename after verifying, stale `.part`, same second, concurrent run, a future last time).
 
 ## Filename convention
 
-`<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db` — same `.db` extension as the live DB so the operator manages a uniform set of files; the timestamp prefix sorts lexicographically by time, keeping the pruner trivial. The `backups/` subdir is created on demand next to `dbPath()`, isolating snapshots from the live file.
+`<dbDir>/backups/laideal_yyyy-MM-dd_HHmmss.db` — same `.db` extension as the live DB so the operator manages a uniform set of files; the timestamp prefix sorts lexicographically by time, keeping the pruner trivial. The `backups/` subdir is created on demand next to `dbPath()` (by the backup, not by reading its path), isolating snapshots from the live file. Names use local time, so the hour a DST change repeats can sort two copies out of order; the retention rules tolerate it and the schema is left as it is.
 
 ## Retention contract
 
@@ -73,10 +74,11 @@ The backup directory is **not** configurable separately — `BackupManager::back
 
 ## Why in-app instead of Windows Task Scheduler
 
-The shop opens the app every working day. An in-app daily backup on startup covers the prescription window equivalently to a nightly scheduled task — and lets the user trigger an extra backup before leaving for offsite copy. If the shop ever runs the app irregularly (closed for vacation longer than a week), a Task Scheduler entry can be added separately via `release.ps1` without touching the module — `BackupManager::performBackup()` is callable from any context.
+The shop opens the app every working day. An in-app daily backup on startup covers the prescription window equivalently to a nightly scheduled task — and lets the user trigger an extra backup before leaving for offsite copy. If the shop ever runs the app irregularly (closed for vacation longer than a week), a Task Scheduler entry can be added separately via `release.ps1` without touching the module — `BackupManager::performBackup()` may run on the GUI thread or on the one worker thread of the automatic backup (never two at once: a second call is refused); it does not touch `AppSettings`, which has no mutex - the caller records the result on the GUI thread.
 
 ## What is *not* in scope
 
 - **Offsite replication** (cloud / network share). Backups live next to `dbPath()`, so to mirror them off-machine the operator either points the DB itself at a synced folder (`dbPath` in settings) or copies the directory periodically. The module does not push files itself.
+- **Settings**. The snapshot holds the database only: the settings file (`~/.laideal_settings.json`: issuer data, the AEAT chain marker `aeat_chain_marker`, the service key) is not copied. A restore on another PC needs that file kept apart.
 - **Encryption**. Backups are plain SQLite files. If the source DB ever gains row-level encryption, the snapshot inherits it — `VACUUM INTO` preserves the byte format.
-- **Restore UI**. To restore a backup the operator copies the `.sqlite` file over `dbPath()` while the app is closed; no in-app restore flow exists yet.
+- **Restore UI**. To restore a backup the operator copies the `.db` file over `dbPath()` while the app is closed; no in-app restore flow exists yet.

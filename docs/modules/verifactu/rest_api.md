@@ -19,7 +19,7 @@ The `Invoice` object is the main input parameter for all operations (submit, can
   - `'DRAFT'` → draft with XML and QR, no AEAT validation
 - **Type**: Alphanumeric (20)
 - **Required**: No (defaults to definitive submission)
-- **In LAIDEAL**: `'DRAFT'` used for testing, omitted for production
+- **In LAIDEAL**: never sent (every invoice is a definitive submission)
 
 ### InvoiceType (REQUIRED)
 - **Description**: Invoice type key (list L2)
@@ -66,7 +66,7 @@ The `Invoice` object is the main input parameter for all operations (submit, can
 - **Example**: `"24417"` or `"SERIE-2026-001"`
 - **Type**: Alphanumeric (60)
 - **In LAIDEAL**: `m_invoiceNumber` of `VerifactuInvoice`
-- **Note**: MUST be unique — do not repeat on the same day
+- **Note**: MUST be unique per issuer (NumSerieFactura) - AEAT answers a repeat as a duplicate
 
 ### InvoiceDate (REQUIRED)
 - **Description**: Invoice issue date
@@ -173,7 +173,7 @@ Element containing tax line information for an invoice.
   - **05**: Other
 - **Type**: Alphanumeric (1)
 - **Default**: 01 (VAT)
-- **In LAIDEAL**: `m_taxType` of `VerifactuTaxItem` (currently VAT = 01)
+- **In LAIDEAL**: not sent (`Tax` is never in the payload; the gateway assumes VAT)
 
 ### TaxScheme (REQUIRED)
 - **Description**: Tax scheme / regime key (list L8A/L8B)
@@ -199,7 +199,7 @@ Element containing tax line information for an invoice.
   - **N2**: Not taxable (location rules)
 - **Type**: Alphanumeric (2)
 - **Default**: S1
-- **In LAIDEAL**: `m_operationType` of `VerifactuTaxItem`. Implemented: S1, S2, N1, N2 via `VerifactuTaxItem::operationTypeToString()`
+- **In LAIDEAL**: always `"S1"` (`VerifactuTaxItem::toJson()`); the other keys have no setter
 
 ### TaxException
 - **Description**: Exemption reason (list L10) — for exempt operations
@@ -212,7 +212,7 @@ Element containing tax line information for an invoice.
 - **Type**: Decimal (12,2)
 - **Example**: `100.00`
 - **In LAIDEAL**: `m_taxBase` of `VerifactuTaxItem`
-- **Validation**: Must be >= 0
+- **Validation**: none; a negative base is allowed (a rectificativa by differences going down)
 
 ### TaxRate (REQUIRED)
 - **Description**: Tax rate (percentage)
@@ -227,7 +227,7 @@ Element containing tax line information for an invoice.
 - **Type**: Decimal (12,2)
 - **Example**: `21.00`
 - **In LAIDEAL**: `m_taxAmount` of `VerifactuTaxItem`
-- **Validation**: `abs(TaxAmount - (TaxBase * TaxRate / 100)) < 0.01`
+- **Validation**: a mismatch with `TaxBase * TaxRate / 100` only logs a `qWarning`
 
 ### TaxRateSurcharge
 - **Description**: Equivalence surcharge rate (if applicable)
@@ -255,11 +255,11 @@ Object returned by the server for any operation.
 - **Description**: Descriptive result message
 - **Example**: `"Factura procesada correctamente"` or an error message
 - **Type**: String
-- **In LAIDEAL**: Not currently used (info comes from `Return.ErrorDescription`)
+- **In LAIDEAL**: the fallback description when `Return.ErrorDescription` is empty
 
 ### Return
 - **Description**: Object with detailed result properties (see Return Object below)
-- **In LAIDEAL**: Processed in `VerifactuManager::processResponse()`
+- **In LAIDEAL**: Processed in `parseVerifactuResponse()` (`verifacturesponse.cpp`)
 
 ---
 
@@ -305,7 +305,7 @@ Contains the same Invoice properties plus processing results.
 - **Usage**: Show to client, print on receipt
 - **Type**: Bytes (Base64)
 - **In LAIDEAL**: `result.qrCode` of `VerifactuResult` (decoded to `QPixmap`)
-- **Method**: `VerifactuManager::decodeImageFromBase64()`
+- **Method**: `decodeVerifactuImageBase64()` (`verifacturesponse.cpp`)
 
 ### Xml
 - **Description**: XML file sent to AEAT
@@ -327,26 +327,26 @@ Contains the same Invoice properties plus processing results.
 - **Usage**: Show to client to verify on the AEAT portal
 - **Example**: `"https://www.agenciatributaria.es/verifactu?nif=B12345678&..."`
 - **Type**: String (URL)
-- **In LAIDEAL**: `result.validationUrl` of `VerifactuResult`. Calculated by `VerifactuManager::getValidationUrl()`
+- **In LAIDEAL**: `result.validationUrl` of `VerifactuResult`. Read from `Return.ValidationUrl` on a submit; the QR path stamps a locally assembled URL (`VerifactuManager::getValidationUrl()`)
 
 ---
 
 ## FilterSet Object (For Queries)
 
-Input parameter for the submitted-invoices query endpoint `<base>/GetFilteredList`, used by `VerifactuManager::queryInvoiceAsync()` to reconcile an "already exists" rejection. **Implemented since 10.9** (the "Not implemented" notes below are historical).
+Input parameter for the submitted-invoices query endpoint `<base>/GetFilteredList`, used by `VerifactuManager::queryInvoiceAsync()` to reconcile an "already exists" rejection. **Implemented since 10.9**: the app sends one `InvoiceID = <number>` filter with `Count` 10 and `Offset` -1.
 
 ### Count
 - **Description**: Maximum number of records to return
 - **Type**: Integer
 - **Default**: 5,000
-- **In LAIDEAL**: Not implemented (reserved for future)
+- **In LAIDEAL**: sent as 10
 
 ### Offset
 - **Description**: Start position for pagination
 - **Type**: Integer
 - **Default**: 0
 - **Example**: Offset=5000, Count=1000 → records 5001–6000
-- **In LAIDEAL**: Not implemented
+- **In LAIDEAL**: sent as -1
 
 ### OrderClause
 - **Description**: SQL ordering clause
@@ -357,7 +357,7 @@ Input parameter for the submitted-invoices query endpoint `<base>/GetFilteredLis
 ### Filters
 - **Description**: Array of filter conditions to apply
 - **Type**: Array of Filter
-- **In LAIDEAL**: Not implemented
+- **In LAIDEAL**: one filter, `InvoiceID` `=` the ticket number
 
 ---
 
@@ -417,6 +417,7 @@ REQUIRED:
   InvoiceID       (invoice to cancel)
   InvoiceDate     (date)
   SellerID        (NIF)
+  CompanyName     (emitter name; the app always sends it)
 ```
 
 ---
@@ -437,8 +438,8 @@ REQUIRED:
 
 | Field | Status | Notes |
 |-------|--------|-------|
-| Status | Partial | Used for DRAFT in testing |
-| InvoiceType | Complete | F1, F2, F3, R1-R5 supported |
+| Status | Not sent | Every invoice is a definitive submission |
+| InvoiceType | Complete | F2 and R1-R5 (F1 / F3 are rejected locally by `isValid`) |
 | RectificationType | Complete | S (substitution) and I (differences) |
 | IsInvoiceFix | Pending | For corrections |
 | IsRejected | Pending | For corrections with rejection |
@@ -446,14 +447,14 @@ REQUIRED:
 | InvoiceDate | Complete | |
 | SellerID | Complete | |
 | CompanyName | Complete | |
-| RelatedPartyID | Complete | |
-| RelatedPartyName | Complete | |
+| RelatedPartyID | Not sent | The app issues F2 / R5 only, which carry no buyer |
+| RelatedPartyName | Not sent | As above |
 | RelatedPartyIDType | Partial | Assumes 02 (default) |
 | CountryID | Pending | Future |
 | Text | Complete | |
 | TaxItems | Complete | |
 | TaxScheme | Partial | Assumes 01 (general regime) |
-| TaxType | Complete | S1, S2, N1, N2 |
+| TaxType | Partial | Always S1 |
 | TaxException | Pending | For exempt operations |
 | TaxBase | Complete | |
 | TaxRate | Complete | |
@@ -480,8 +481,8 @@ REQUIRED:
 - **Example**: `"B12345678"`
 
 ### ServiceKey (REQUIRED — sent separately)
-- **Source**: Loaded from external `.ini` file via `QSettings`
-- **Location**: Added to the JSON in `VerifactuManager::submitInvoice()`
+- **Source**: `AppSettings::verifactuServiceKey()` (`verifactu.service_key`, DPAPI-encrypted in `~/.laideal_settings.json`)
+- **Location**: Added to the JSON in `VerifactuManager::submitInvoiceAsync()`; logged only as `[redacted, N chars]`
 
 ```cpp
 QJsonObject invoiceJson = invoice.toJson();
@@ -495,22 +496,22 @@ invoiceJson["ServiceKey"] = m_config->getServiceKey();
 ```
 User saves a paid ticket in MainWindow
     ↓
-verifactuSubmitInvoice() → VerifactuIntegration::submitSimplifiedInvoice()  (F2)
+VerifactuIntegration::submitSimplifiedInvoiceAsync()  (F2)
     ↓
 Builds VerifactuInvoice with seller data from AppSettings + single VerifactuTaxItem
     ↓
 calculateTotals() + isValid()
     ↓
-VerifactuManager::submitInvoice() — adds ServiceKey, POSTs JSON to /Create
+VerifactuManager::submitInvoiceAsync() — adds ServiceKey, POSTs JSON to /Create
     ↓
-processResponse() — captures CSV, QrCode, ValidationUrl from Return
+parseVerifactuResponse() — captures CSV, QrCode, ValidationUrl from Return
     ↓
-saveTicket(VerifactuResult) — writes verifactu_* columns to ingresos
+requestFinished(reqId, VerifactuResult) → the caller writes the verifactu_* columns to ingresos
     ↓
 Imprimir::buildTicket() — rasters the QR pixmap into the ESC/POS receipt (GS v 0)
 ```
 
-For the F1 (full invoice with buyer NIF) flow substitute `createAndSubmitInvoice()`. For the reprint path the QR is fetched via `generateQR()` → `/GetQrCode` because the pixmap is not persisted.
+There is no F1 (full invoice with buyer NIF) flow. For the gateway reprint path the QR is fetched via `generateQRAsync()` → `/GetQrCode` because the pixmap is not persisted.
 
 ---
 
@@ -518,9 +519,9 @@ For the F1 (full invoice with buyer NIF) flow substitute `createAndSubmitInvoice
 
 ### VerifactuTaxItem::isValid()
 ```cpp
-TaxBase >= 0
-TaxRate >= 0 (if not exempt)
-abs(TaxAmount - (TaxBase * TaxRate / 100)) < 0.01
+TaxRate >= 0
+(a TaxAmount that differs from TaxBase * TaxRate / 100 by 0.01 or more only logs a warning;
+ a negative TaxBase is allowed)
 ```
 
 ### VerifactuInvoice::isValid()
@@ -530,8 +531,7 @@ invoiceDate valid
 sellerNIF not empty
 sellerName not empty
 at least one valid TaxItem
-if buyerNIF present → buyerName not empty
-totalAmount > 0 (generally)
+(no total check; F1 / F3 do not exist as types any more)
 ```
 
 ---
@@ -571,11 +571,11 @@ totalAmount > 0 (generally)
 ### "El campo CompanyName es obligatorio"
 Verify that `VerifactuIntegration::loadEmitterConfiguration()` calls:
 ```cpp
-m_manager->getConfig()->setEmitterData("B12345678", "Mi Empresa SL", "Mi Empresa");
+m_manager->getConfig()->setEmitterData("B12345678", "Mi Empresa SL");
 ```
 
 ### "InvoiceID duplicado"
-Generate a unique invoice ID for each submission. Do not re-submit the same number.
+Generate a unique invoice ID for each submission (unique per issuer, not per day). Do not re-submit the same number.
 
 ### "BuyerID es obligatorio para tipo F1"
 Either provide BuyerID + BuyerName, or change to invoice type F2.
@@ -589,4 +589,4 @@ Verify: `TaxAmount = TaxBase * TaxRate / 100.0`
 
 - **Official specification**: https://facturae.irenesolutions.com/
 - **API documentation**: Provided with the ServiceKey
-- **Regulation**: Real Decreto 1619/2012 (Verifactu)
+- **Regulation**: Real Decreto 1007/2023 and Orden HAC/1177/2024 (Verifactu); Real Decreto 1619/2012 is the general invoicing regulation

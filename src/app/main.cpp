@@ -7,6 +7,7 @@
 #include "instancelock.h"
 #include "sql_lite.h"
 #include "applogger.h"
+#include "commandline.h"
 #ifdef LAIDEAL_UI_TEST
 #include "reporthtml.h"
 #endif
@@ -29,10 +30,20 @@ int main(int argc, char *argv[])
     // e.g. the direct AEAT client against a copy of the database), never touching the
     // shop's own ~/.laideal_settings.json.
     const QStringList args = a.arguments();
-    const int settingsArg = args.indexOf(QStringLiteral("--settings"));
-    if (settingsArg > 0 && settingsArg + 1 < args.size()) {
-        settings->loadFrom(args.at(settingsArg + 1));
-        qWarning() << "main: using the settings file" << args.at(settingsArg + 1);
+    bool danglingSettings = false;
+    const QString settingsFile = CommandLine::switchValue(args, QStringLiteral("--settings"), &danglingSettings);
+    if (danglingSettings) {
+        qCritical() << "main: --settings needs a file";
+        QMessageBox::critical(nullptr, QObject::tr("Error de configuración"),
+            QObject::tr("Falta el archivo de ajustes después de --settings."));
+        return 1;
+    }
+    if (args.contains(QStringLiteral("--self-check"))) {
+        // The check only reads the shop's settings: load() could rewrite them.
+        settings->loadReadOnly(settingsFile.isEmpty() ? settings->filePath() : settingsFile);
+    } else if (!settingsFile.isEmpty()) {
+        settings->loadFrom(settingsFile);
+        qWarning() << "main: using the settings file" << settingsFile;
     } else {
         settings->load();
     }
@@ -68,7 +79,7 @@ int main(int argc, char *argv[])
         SelfCheckDialog check(settings->filePath());
         QTimer::singleShot(0, &check, &SelfCheckDialog::start);
         check.exec();
-        return 0;
+        return check.allPassed() ? 0 : 1;
     }
 
     // If the DB path is not set or the file is missing, prompt the user to
@@ -100,8 +111,8 @@ int main(int argc, char *argv[])
 
     MainWindow w;
     w.setWindowState(Qt::WindowMaximized);
-    if (settingsArg > 0)
-        w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(args.value(settingsArg + 1)));
+    if (!settingsFile.isEmpty())
+        w.setWindowTitle(w.windowTitle() + QObject::tr(" - configuración de pruebas: %1").arg(settingsFile));
 #ifdef LAIDEAL_UI_TEST
     if (!fakeAeatUrl.isEmpty())
         w.setWindowTitle(w.windowTitle() + QStringLiteral(" - AEAT simulada (prueba de interfaz)"));

@@ -20,19 +20,27 @@ class QDialog;
 class QHBoxLayout;
 class QLineEdit;
 class QPushButton;
+class QWidget;
 
 namespace UiKit {
 
+// Call before the dialog is shown (changing a window flag hides a shown window).
 // Window flags shared by every dialog: no "?" help button, no minimise (a dialog
 // is never sent behind its window). Sets the title and a minimum width. Also the
-// dialog's Enter rule: Enter in a field presses the primary button, or nothing when
-// the dialog has none (Qt would press whichever button it made the default, e.g. a
+// dialog's Enter rule: Enter in a text field (line edit, spin or date box, editable
+// combo) presses the primary button of this dialog, or nothing when the dialog has none (Qt would press whichever button it made the default, e.g. a
 // Buscar that resets the form); Enter on a focused button presses that button; a
-// held key is not repeated. A field whose Enter means something else uses onEnter.
+// held key is not repeated; Enter on a table, list, check box or fixed combo does nothing. A field whose Enter means something else uses onEnter.
 void setUpDialog(QDialog *dialog, const QString &title, int minimumWidth = 520);
 
 // Window heading (bold, larger than the app font), for windows that list data.
 QLabel *heading(const QString &text);
+
+// Bolds a widget's text and enlarges it by extraPoints over the app font (totals, ticket number).
+void emphasize(QWidget *widget, qreal extraPoints);
+
+// Display-only date: read-only, no spin buttons (still shows the value and a tooltip, if given).
+void lockDate(QDateEdit *edit, const QString &toolTip = QString());
 
 // Framed explanation at the top of a dialog: what it does, in one or two sentences.
 QLabel *introPanel(const QString &text);
@@ -63,10 +71,11 @@ extern const char *const COLOR_ERROR;    // red
 extern const char *const COLOR_LINK;     // blue
 
 // Result-panel phrases: green success, amber nothing done / attention, red error.
+// They take HTML and escape nothing: the caller runs user / AEAT text through toHtmlEscaped().
 QString okHtml(const QString &text);
 QString warnHtml(const QString &text);
 QString errorHtml(const QString &text);
-// "PDF: <name>" linking to the file, which the result panel opens on click.
+// "PDF: <name>" linking to the file, which the result panel opens on click (label is plain text).
 QString fileLinkHtml(const QString &file, const QString &label = QStringLiteral("PDF"));
 
 // Framed panel where a dialog reports every outcome (objectName lblResult), in
@@ -80,7 +89,8 @@ public:
 };
 
 // Amount field: shows the decimal comma whatever the language, and takes "," or "."
-// as the decimal key (the numeric keypad sends either, depending on Windows).
+// as the decimal key (the numeric keypad sends either, depending on Windows). With a comma
+// already typed or pasted, dots are thousands separators and dropped ("1.234,56").
 class AmountSpinBox : public QDoubleSpinBox
 {
 public:

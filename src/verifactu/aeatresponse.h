@@ -8,6 +8,7 @@
 // namespace prefixes AEAT happens to use do not matter. Pure functions.
 
 #include <QByteArray>
+#include <QDate>
 #include <QList>
 #include <QString>
 
@@ -103,7 +104,8 @@ VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber,
 
 // What AEAT holds for an invoice number, as the reconciliation dialogs read it. The
 // query returns no CSV, so `csv` carries the IdPeticion of the accepted submission.
-VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoiceNumber);
+// When `invoiceDate` is given and the reply holds that number under it, only those records count.
+VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoiceNumber, const QDate &invoiceDate = QDate());
 
 } // namespace AeatResponse
 

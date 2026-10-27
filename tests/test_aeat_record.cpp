@@ -309,7 +309,7 @@ private slots:
         const ProducerDeclaration::Signature now = ProducerDeclaration::currentSignature();
         QCOMPARE(now.postalAddress, QString::fromUtf8("Calle Mayor 1, bajo 2, 18001 Granada, España"));
         QCOMPARE(now.place, QString::fromUtf8("Granada, España"));
-        QCOMPARE(now.date, QDate(2026, 10, 23));
+        QCOMPARE(now.date, QDate(2026, 10, 27));
         QVERIFY(ProducerDeclaration::isComplete(now));
         AppSettings::instance()->setBusinessAddress(QString());
         AppSettings::instance()->setBusinessCity(QString());

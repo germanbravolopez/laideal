@@ -53,7 +53,7 @@ Specification (`APD6_Spec_T20III_en_revA.pdf`):
   ticket.
 
 > PAPER WIDTH NOTE: `progress_tracker.md` (issue "Improve thermal ticket / invoice layout")
-> records the current ticket as **58 mm width**, and the Excel column widths were tuned
+> recorded the ticket (at the time of the Excel layout) as **58 mm width**; the shipped setting `print.paper_width_mm` defaults to **80**, and the Excel column widths were tuned
 > empirically against the physical printer. Treat paper width as a **configurable** value in
 > the new module (default to whatever the shop actually loads), and compute the column layout
 > from the dot width (420 vs 576) rather than hard-coding character counts. Confirm the loaded

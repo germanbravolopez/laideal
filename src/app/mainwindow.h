@@ -2,17 +2,11 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QAbstractButton>
 #include <QSqlDatabase>
-#include <QDebug>
-#include <QMessageBox>
-#include <QStyleFactory>
 #include <QHash>
 #include <QPointer>
 #include <QThread>
 #include "verifactuintegration.h"
-#include "cancelinvoicedialog.h"
-#include "rectifyinvoicedialog.h"
 #include "updater.h"
 #include "backup_manager.h"
 
@@ -48,11 +42,11 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     QSqlDatabase db;
-    int pbAddedRows = 0;
 
 private slots:
     void mainwindowInitialSettings();
     void initializeVerifactu();
+    void appendToResult(const QString &html);   // adds below what the panel already shows
     void resetAllContents();
 
     // Custom functions
@@ -69,7 +63,6 @@ private slots:
     void updateRowPrice(int row);
 
     bool validateTicket();
-    QString removeSpecialChar(QString str);
     void checkClientData();
     // Returns the in-flight reqId, or empty if Verifactu is not configured /
     // submit was rejected. seq selects the submission event: 0 = save-time /
@@ -173,6 +166,7 @@ private:
 
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;
+    int pbAddedRows = 0;
     QString m_updateNotice;   // the first start of a new version asks for the post-update check
     QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration = nullptr;

@@ -4,9 +4,11 @@
 // The post-update self-check (`laideal.exe --self-check`), run by the shop user after
 // installing a release: the checks of docs/testing/smoke_test.md that need the shop's
 // real data and printer, against a copy of the newest backup with a copy of the
-// settings. The live database and ~/.laideal_settings.json are only read, and nothing
-// reaches AEAT. The pure parts live here so the suites can test them; SelfCheckDialog
-// runs them and asks the guided questions.
+// settings (backups off, no certificate password). The live database is only read,
+// and so is ~/.laideal_settings.json (main.cpp loads it with AppSettings::loadReadOnly).
+// Nothing reaches AEAT.
+// The pure parts live here so the suites can test them; SelfCheckDialog runs them and
+// asks the guided questions.
 
 #include <QDateTime>
 #include <QSqlDatabase>

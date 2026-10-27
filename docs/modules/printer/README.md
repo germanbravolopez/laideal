@@ -12,7 +12,7 @@ Excel/QXlsx/`.vbs`/`cscript` path is gone. The runtime reference for the shipped
 control-method rationale, the exact ESC/POS command subset, and the original phased plan).
 Phase 0 (hardware validation on the shop's TM-T20III), Phase 4 (the optional Status-API layer,
 behind `print.use_status_api`) and Phase 5 (removing the vendored `QXlsx/`) are all done; the
-Status-API's ASB bit values + DLL path still need confirming on the physical unit.
+Status-API is confirmed on the shop unit: an open cover reports ASB `0x1` (no response), not the cover bit - see [`../printing.md`](../printing.md) "Hardware finding".
 
 ## The printer, in one line
 

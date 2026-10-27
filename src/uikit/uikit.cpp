@@ -1,7 +1,9 @@
 #include "uikit.h"
 
 #include <QAbstractButton>
+#include <QAbstractSpinBox>
 #include <QCollator>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDateEdit>
 #include <QDialog>
@@ -90,8 +92,14 @@ protected:
             focused->click();
             return true;
         }
+        // Only a text-entry widget turns Enter into the primary action; Enter on a table,
+        // check box, list or fixed combo box must not trigger (or send, or void) anything.
+        if (!isTextEntry(m_dialog->focusWidget()))
+            return true;
         for (QPushButton *button : m_dialog->findChildren<QPushButton *>()) {
-            if (button->property(kPrimaryProperty).toBool() && button->isVisible() && button->isEnabled()) {
+            // Not the primary of a child window parented to this dialog.
+            if (button->window() == m_dialog && button->property(kPrimaryProperty).toBool()
+                    && button->isVisible() && button->isEnabled()) {
                 button->click();
                 return true;
             }
@@ -100,6 +108,17 @@ protected:
     }
 
 private:
+    // A line edit (also the one inside a spin box or an editable combo box) or a spin box.
+    static bool isTextEntry(const QWidget *widget)
+    {
+        if (!widget)
+            return false;
+        if (qobject_cast<const QLineEdit *>(widget) || qobject_cast<const QAbstractSpinBox *>(widget))
+            return true;
+        const auto *combo = qobject_cast<const QComboBox *>(widget);
+        return combo && combo->isEditable();
+    }
+
     QDialog *m_dialog;
 };
 
@@ -118,11 +137,25 @@ QLabel *heading(const QString &text)
 {
     QLabel *label = new QLabel(text);
     label->setObjectName(QStringLiteral("lblHeading"));
-    QFont font = label->font();
-    font.setPointSizeF(font.pointSizeF() + 5);
-    font.setBold(true);
-    label->setFont(font);
+    emphasize(label, 5);
     return label;
+}
+
+void emphasize(QWidget *widget, qreal extraPoints)
+{
+    QFont font = widget->font();
+    if (font.pointSizeF() > 0)   // a pixel-sized app font reports -1
+        font.setPointSizeF(font.pointSizeF() + extraPoints);
+    font.setBold(true);
+    widget->setFont(font);
+}
+
+void lockDate(QDateEdit *edit, const QString &toolTip)
+{
+    edit->setReadOnly(true);
+    edit->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    if (!toolTip.isEmpty())
+        edit->setToolTip(toolTip);
 }
 
 QLabel *introPanel(const QString &text)
@@ -191,7 +224,9 @@ QString errorHtml(const QString &text) { return QStringLiteral("<b style='color:
 
 QString fileLinkHtml(const QString &file, const QString &label)
 {
-    return label + ": <a href='" + QUrl::fromLocalFile(file).toString() + "'>"
+    // Percent-encoded and HTML-escaped, so a path with an apostrophe or & keeps the link whole.
+    const QString href = QString::fromLatin1(QUrl::fromLocalFile(file).toEncoded()).toHtmlEscaped();
+    return label.toHtmlEscaped() + ": <a href=\"" + href + "\">"
            + QFileInfo(file).fileName().toHtmlEscaped() + "</a>";
 }
 
@@ -202,15 +237,23 @@ AmountSpinBox::AmountSpinBox(QWidget *parent)
     setGroupSeparatorShown(false);
 }
 
+// "." is the decimal key unless a comma is already there, then it is a thousands dot ("1.234,56").
+static QString withDecimalComma(QString text)
+{
+    if (text.contains(QLatin1Char(',')))
+        return text.remove(QLatin1Char('.'));
+    return text.replace(QLatin1Char('.'), QLatin1Char(','));
+}
+
 QValidator::State AmountSpinBox::validate(QString &input, int &pos) const
 {
-    input.replace(QLatin1Char('.'), QLatin1Char(','));
+    input = withDecimalComma(input);
     return QDoubleSpinBox::validate(input, pos);
 }
 
 double AmountSpinBox::valueFromText(const QString &text) const
 {
-    return QDoubleSpinBox::valueFromText(QString(text).replace(QLatin1Char('.'), QLatin1Char(',')));
+    return QDoubleSpinBox::valueFromText(withDecimalComma(text));
 }
 
 ResultPanel::ResultPanel(const QString &initialText, QWidget *parent)

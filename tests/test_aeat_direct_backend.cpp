@@ -1262,8 +1262,25 @@ private slots:
             QVERIFY(c.hasPrivateKey && c.thumbprint.size() == 40);
     }
 
-    // With a certificate loaded, a request reaches the server over WinHTTP as usual
-    // (plain http here: the certificate is only presented in a TLS handshake).
+    // A backend that cannot query says why, instead of an empty answer.
+    void test_queryWhenNotConfiguredSaysWhy()
+    {
+        AeatDirectBackend::Config c = config();
+        c.issuerNif.clear();
+        AeatDirectBackend backend(c, m_db);
+        QVERIFY(!backend.isConfigured());
+        QSignalSpy spy(&backend, &VerifactuBackend::queryFinished);
+        backend.queryInvoiceAsync("1", QDate(2026, 10, 10));
+        QTRY_COMPARE_WITH_TIMEOUT(spy.size(), 1, 10000);
+        const VerifactuRemoteRecord remote = spy[0][1].value<VerifactuRemoteRecord>();
+        QVERIFY(!remote.parsed);
+        QVERIFY(!remote.errorCode.isEmpty());
+        QCOMPARE(remote.errorCode, backend.configurationError());
+    }
+
+    // A certificate set in the configuration does not stop sending over plain http: the
+    // backend loads it only for https (loading is covered by test_certificate
+    // and the like), so this checks the configuration is accepted and requests go out.
     void test_backendWithFileCertificate()
     {
         AeatDirectBackend::Config c = config();

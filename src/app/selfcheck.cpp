@@ -261,7 +261,7 @@ Check checkData(QSqlDatabase &db, const QString &contabilidadPath, DataFacts &fa
                                 { { ":n", facts.lastTicket } }).toInt();
     const QString client = scalar(db, QStringLiteral("SELECT cliente FROM ingresos WHERE n_recibo = :n LIMIT 1"),
                                   { { ":n", facts.lastTicket } });
-    // Recogida's search by client: a LIKE on ingresos.cliente.
+    // Stand-in for Recogida's client search (which filters loaded rows, ignoring accents): a LIKE on ingresos.cliente.
     const bool foundByClient = !client.isEmpty()
         && scalar(db, QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE cliente LIKE :c AND n_recibo = :n"),
                   { { ":c", "%" + client + "%" }, { ":n", facts.lastTicket } }).toInt() > 0;
@@ -271,6 +271,7 @@ Check checkData(QSqlDatabase &db, const QString &contabilidadPath, DataFacts &fa
         // invoice may be cancelled, rectified or refused.
         q.prepare(QStringLiteral("SELECT n_recibo, verifactu_invoice_seq, verifactu_url_qr FROM ingresos i "
                                  "WHERE pagado = 'SI' AND verifactu_estado = 'ENVIADA' AND COALESCE(verifactu_url_qr, '') != '' "
+                                 "  AND COALESCE(estado, '') != 'Rectificativa' AND COALESCE(verifactu_rectifies_n_recibo, '') = '' "
                                  "  AND NOT EXISTS (SELECT 1 FROM ingresos o WHERE o.n_recibo = i.n_recibo "
                                  "    AND o.verifactu_invoice_seq = i.verifactu_invoice_seq AND o.pagado = 'SI' "
                                  "    AND COALESCE(o.estado, '') != 'Anulado' AND COALESCE(o.verifactu_estado, '') != 'ENVIADA') "

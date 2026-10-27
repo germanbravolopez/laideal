@@ -13,6 +13,7 @@
 #include "ingresoscolumns.h"
 #include "textcolordelegate.h"
 #include "numberformatdelegate.h"
+#include "mysortfilterproxymodel.h"
 #include <QLineEdit>
 
 using TC = TextColorDelegate::TextColor;
@@ -79,7 +80,8 @@ private slots:
     // An edited number is stored with a dot, whatever decimal separator was typed.
     void test_numberFormatDelegate_storesADot()
     {
-        QCOMPARE(NumberFormatDelegate::storedNumber(" 2,5 "), QStringLiteral("2.5"));
+        QCOMPARE(NumberFormatDelegate::storedNumber(" 2,5 "), QStringLiteral("2.50"));
+        QCOMPARE(NumberFormatDelegate::storedNumber("12,"), QStringLiteral("12.00"));   // never "12."
         QCOMPARE(NumberFormatDelegate::storedNumber("12.40"), QStringLiteral("12.40"));
         QStandardItemModel model(1, 1);
         NumberFormatDelegate delegate;
@@ -87,6 +89,37 @@ private slots:
         editor.setText("3,75");
         delegate.setModelData(&editor, &model, model.index(0, 0));
         QCOMPARE(model.index(0, 0).data().toString(), QStringLiteral("3.75"));
+    }
+
+    // Text that is not an amount goes to the model as typed: the model's validator refuses
+    // it with a message and the cell keeps its value; an empty cell clears it.
+    void test_numberFormatDelegate_leavesNonAmountsToTheValidator()
+    {
+        QVERIFY(NumberFormatDelegate::isAmount("12"));
+        QVERIFY(NumberFormatDelegate::isAmount("-3,5"));
+        QVERIFY(NumberFormatDelegate::isAmount(" 1.25 "));
+        for (const QString &bad : { "", "abc", "1.234,56", "1,2,3", "12 EUR", ",5" })
+            QVERIFY2(!NumberFormatDelegate::isAmount(bad), qPrintable(bad));
+        QStandardItemModel source(1, 1);
+        source.setData(source.index(0, 0), QStringLiteral("9.50"));
+        MySortFilterProxyModel proxy;
+        proxy.setSourceModel(&source);
+        proxy.editValidator = [](const QModelIndex &, const QVariant &value) {
+            return value.toString().isEmpty() || NumberFormatDelegate::isAmount(value.toString())
+                ? QString() : QStringLiteral("refused");
+        };
+        QSignalSpy refused(&proxy, &MySortFilterProxyModel::editRefused);
+        NumberFormatDelegate delegate;
+        QLineEdit editor;
+        for (const QString &bad : { "abc", "1.234,56", "12 EUR" }) {
+            editor.setText(bad);
+            delegate.setModelData(&editor, &proxy, proxy.index(0, 0));
+            QCOMPARE(source.index(0, 0).data().toString(), QStringLiteral("9.50"));
+        }
+        QCOMPARE(refused.count(), 3);
+        editor.setText("  ");
+        delegate.setModelData(&editor, &proxy, proxy.index(0, 0));
+        QCOMPARE(source.index(0, 0).data().toString(), QString());
     }
 
     // Amounts and sizes are shown with the comma whatever the language; an empty cell

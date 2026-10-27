@@ -7,13 +7,10 @@
 #include <functional>
 #include <QSortFilterProxyModel>
 
-// INGRESOS_COL_* lives in sql_lite.h - this header used to also carry an
-// INGRESOS_IDX_* duplicate set with diverging names. Consumers that need
-// the ingresos column indices must include "sql_lite.h" directly.
-
 #define GASTOS_IDX_ID          0
 #define GASTOS_IDX_CLIENT      4
 #define GASTOS_IDX_FECHA       5
+#define GASTOS_IDX_IVA         6
 #define GASTOS_IDX_IMPORTE     7
 #define GASTOS_IDX_CONTAB      8
 
@@ -28,13 +25,14 @@ class MySortFilterProxyModel : public QSortFilterProxyModel
 public:
     MySortFilterProxyModel(QObject *parent = nullptr);
 
-    // Sets a plain-text filter that matches diacritic-insensitively.
-    // column: column index to check, or -1 to check all columns (default).
-    void setNormalizedFilter(const QString &normalizedText, int column = -1);
+    // The one search: accents and case are ignored ("alvarez" finds "Álvarez") and,
+    // with several words, a row is shown when it contains every one of them, in any
+    // searched column and order. column: the only column to look in, or -1 for all.
+    // Empty text shows every row.
+    void setSearchText(const QString &text, int column = -1);
 
-    // Sets the regex and the normalized text together with a single re-filter
-    // (setFilterRegularExpression + setNormalizedFilter would filter twice).
-    void setFilters(const QRegularExpression &regex, const QString &normalizedText, int column = -1);
+    // The text a search compares: no accents, lower case, single spaces.
+    static QString searchKey(const QString &text);
 
     // Number of source columns the text filter looks at.
     int searchColumnCount() const;
@@ -42,16 +40,24 @@ public:
     // Parses a stored number, accepting a decimal comma ("12,5").
     static double numericValue(const QString &text, bool *ok);
 
+    // The date of a dd-MM-yyyy cell (spaces around it ignored); an invalid QDate when it
+    // is empty or malformed, which sorts first.
+    static QDate parseFecha(const QString &text);
+
     // Strips Spanish/common diacritics from a string for locale-insensitive comparison.
     static QString removeDiacritics(const QString &text);
 
-    QString table_name;
+    // Which table the rows come from: picks the comparators, the searched columns and
+    // the read-only rules. Set by the owner before the model is used.
+    enum class Schema { Generic, Ingresos, Gastos, Prendas };
+    Schema schema = Schema::Generic;
+    static Schema schemaForTable(const QString &tableName);
 
     // A gastos row whose fecha is in a quarter closed by Contabilidad is read-only.
     // closedQuarters holds quarterKey()s (sql_lite closedQuarterKeys), set by the view.
     Qt::ItemFlags flags(const QModelIndex &index) const override;
     bool rowLocked(int proxyRow) const;
-    QSet<int> closedQuarters;
+    void setClosedQuarters(const QSet<int> &quarterKeys);
 
     // Checked before an edit is written: a non-empty message refuses it (editRefused).
     std::function<QString(const QModelIndex &index, const QVariant &value)> editValidator;
@@ -65,9 +71,9 @@ protected:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 
 private:
-    QString m_normalizedFilterText;
+    QSet<int> m_closedQuarters;
+    QStringList m_searchWords;   // searchKey()ed
     int m_filterColumn = -1;
-    QRegularExpression m_ownRegex;   // set by setFilters(); wins over filterRegularExpression()
 };
 
 #endif // MYSORTFILTERPROXYMODEL_H

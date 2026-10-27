@@ -10,6 +10,8 @@
 #include "escposbuilder.h"
 #include "ticketrenderer.h"
 #include "printerstatus.h"
+#include "statusapiprinter.h"
+#include "escpospreview.h"
 
 // ESC/POS marker fragments reused across assertions.
 static const QByteArray INIT_BYTES   = QByteArray("\x1B\x40\x1B\x74\x13", 5); // ESC @ + ESC t 19
@@ -116,6 +118,69 @@ private slots:
     {
         // U+2192 (rightwards arrow) has no PC858 glyph.
         QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("→")), QByteArray("?"));
+    }
+
+    // Glyphs a laundry plausibly prints (m2 on carpets, symbols, Nordic letters).
+    void test_commonExtraGlyphsMapToCp858()
+    {
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("m²")), QByteArray("m\xFD", 2));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("²³¹")), QByteArray::fromHex("FDFCFB"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("×±§®µ")), QByteArray::fromHex("9EF1F5A9E6"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("åÅæÆøØßõýÿ")), QByteArray::fromHex("868F91929B9DE1E4EC98"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("¢¥")), QByteArray::fromHex("BDBE"));
+    }
+
+    void test_typographicPunctuationFoldsToAscii()
+    {
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("a–b—c")), QByteArray("a-b-c"));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("‘x’ “y”")), QByteArray("'x' \"y\""));
+        QCOMPARE(EscPosBuilder::toCp858(QString::fromUtf8("fin…")), QByteArray("fin..."));
+        QCOMPARE(EscPosBuilder::toCp858(QString("a") + QChar(0x00A0) + "b"), QByteArray("a b"));
+    }
+
+    void test_feedIsClampedToOneByte()
+    {
+        EscPosBuilder b;
+        b.feed(300).feed(0).feed(-1);
+        QCOMPARE(b.bytes(), QByteArray::fromHex("1B64FF"));   // ESC d 255, nothing for 0 and -1
+    }
+
+    // The QR is thresholded, never dithered: a mid-grey image is solid black or solid white.
+    void test_rasterImageThresholdsInsteadOfDithering()
+    {
+        for (const auto &pair : { qMakePair(100, uchar(0xFF)), qMakePair(200, uchar(0x00)) }) {
+            QImage img(8, 2, QImage::Format_Grayscale8);
+            img.fill(pair.first);
+            EscPosBuilder b;
+            b.rasterImage(img);
+            QCOMPARE(b.bytes().left(8), QByteArray::fromHex("1D763000" "0100" "0200"));
+            QCOMPARE(b.bytes().mid(8), QByteArray(2, char(pair.second)));
+        }
+    }
+
+    // Header lines longer than the paper are wrapped by the renderer, not by the firmware.
+    void test_renderWrapsALongHeader()
+    {
+        TicketData d;
+        d.isRecibo = true;
+        d.businessName = "Tintoreria La Ideal de Madrid Sociedad Limitada";   // 47 chars, 24 fit double-size
+        d.address = "Calle de la Constitucion Espanola numero 123 bajo izquierda";
+        const QByteArray out = TicketRenderer::render(d, 576);
+        QVERIFY(!out.contains(d.businessName.toLatin1()));
+        QVERIFY(out.contains("Tintoreria La Ideal de\nMadrid Sociedad Limitada\n"));
+        QVERIFY(!out.contains(d.address.toLatin1()));
+        QVERIFY(out.contains("Calle de la Constitucion Espanola numero 123\nbajo izquierda\n"));
+    }
+
+    void test_renderPrintsTheRateWithItsDecimals()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.total = 11.05;
+        d.ivaRate = 10.5;
+        QVERIFY(TicketRenderer::render(d, 576).contains("IVA (10,5%):"));
+        d.ivaRate = 21;
+        QVERIFY(TicketRenderer::render(d, 576).contains("IVA (21%):"));
     }
 
     void test_lineSpacingBytes()
@@ -270,6 +335,27 @@ private slots:
         QVERIFY(TicketRenderer::render(d, 576).contains("*** FACTURA RECTIFICADA ***"));
     }
 
+    // Printing F7 (auditor 27-10-2026): the leyenda is the exact phrase of Orden HAC/1177/2024,
+    // printed in order over two Font A lines just below the QR, on both paper widths.
+    void test_renderLeyendaIsTheExactPhrase()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.qr = QImage(29, 29, QImage::Format_Mono);
+        d.qr.fill(0);
+        d.verifactuVerifiable = true;
+        for (int dots : { 576, 384 }) {
+            const QByteArray t = TicketRenderer::render(d, dots);
+            const int first = t.indexOf("Factura verificable en la sede\n");
+            const int second = t.indexOf("nica de la AEAT\n");
+            QVERIFY2(first >= 0 && second > first, qPrintable(QString::number(dots)));
+            const QByteArray between = t.mid(first + 31, second - first - 31);
+            QVERIFY2(between.startsWith("electr") && between.size() <= 16, between.toHex().constData());
+            const QByteArray raster("\x1d\x76\x30", 3);   // GS v 0: the QR image
+            QVERIFY(t.lastIndexOf(raster) < first);   // below the QR
+        }
+    }
+
     // A completa without a typed DNI prints no empty "DNI:" line.
     void test_renderCompleteInvoiceWithoutDni()
     {
@@ -298,6 +384,210 @@ private slots:
 
         const QByteArray out = TicketRenderer::render(d, 576);
         QVERIFY(out.contains(RASTER_HDR));      // GS v 0 raster image emitted
+    }
+
+    // --- StatusApiSendGate: a worker the watchdog gave up on must not send later ---
+    void test_sendGate_abandonedWorkerNeverSends()
+    {
+        StatusApiSendGate gate;
+        QVERIFY(gate.abandon());          // watchdog first: the worker had not started sending
+        QVERIFY(!gate.beginSend());       // so the worker's later send is refused
+    }
+
+    void test_sendGate_sendingWorkerIsNotAbandonable()
+    {
+        StatusApiSendGate gate;
+        QVERIFY(gate.beginSend());
+        QVERIFY(!gate.abandon());         // already inside the send: RAW fallback would print twice
+    }
+
+    // --- T4: a 58 mm factura with long fields never overflows a row ---
+    static QList<EscPosPreview::PreviewBlock> textBlocks(const QByteArray &ticket)
+    {
+        QList<EscPosPreview::PreviewBlock> out;
+        for (const auto &b : EscPosPreview::interpret(ticket))
+            if (b.kind == EscPosPreview::PreviewBlock::Text)
+                out << b;
+        return out;
+    }
+
+    void test_render58mmFitsEveryLine()
+    {
+        TicketData d;
+        d.businessName = "Tintoreria La Ideal Centro";
+        d.legalName = "Lavanderia y Tintoreria La Ideal Sociedad Limitada";
+        d.nif = "B00000000";
+        d.address = "Calle de un nombre muy largo numero 123, bajo izquierda";
+        d.city = "28000 Una Ciudad Con Nombre Largo";
+        d.phone = "600000000";
+        d.isRecibo = false;
+        d.isCompleteInvoice = true;
+        d.invoiceId = "12345-1";
+        d.clientName = "Cliente con un nombre y apellidos bastante largos";
+        d.clientAddress = "Avenida de la Constitucion numero 100, piso tercero puerta B";
+        d.clientDni = "12345678Z";
+        d.receptionDate = d.issueDate = "10/02/2026";
+        d.garments = { {"12", "Abrigo largo de lana con forro desmontable", "121,00"} };
+        d.total = 121.0;
+        d.copyForClient = true;
+        d.timestamp = "10/02/2026 - 10:00:00";
+        const QByteArray out = TicketRenderer::render(d, 420);
+        for (const auto &b : textBlocks(out)) {
+            const int limit = b.font == EscPosBuilder::Font::A ? (b.dbl ? 17 : 35) : 46;
+            QVERIFY2(b.text.size() <= limit, qPrintable(QString("'%1' is %2 > %3").arg(b.text).arg(b.text.size()).arg(limit)));
+        }
+        // The garment table and the complete invoice's address wrap rather than lose text.
+        QVERIFY(out.contains("desmontable"));
+        QVERIFY(out.contains("largos"));
+        QVERIFY(out.contains("puerta B"));
+    }
+
+    // --- T5: client copy carries the legal block, the shop copy does not ---
+    void test_reciboCopyMarkerAndLegalBlock()
+    {
+        TicketData d;
+        d.isRecibo = true;
+        d.businessName = "La Ideal";
+        d.copyForClient = false;
+        const QByteArray shop = TicketRenderer::render(d, 576);
+        QVERIFY(shop.contains("(Copia para el establecimiento)"));
+        QVERIFY(!shop.contains("CONDICIONES GENERALES"));
+        QVERIFY(!shop.contains(QByteArray("\x1B\x33\x18", 3)));            // no tightened line pitch
+
+        d.copyForClient = true;
+        d.phone.clear();
+        const QByteArray client = TicketRenderer::render(d, 576);
+        QVERIFY(client.contains("(Copia para el cliente)"));
+        QVERIFY(client.contains("CONDICIONES GENERALES (RD 1453/1987)"));
+        QStringList clauses;
+        for (const auto &b : textBlocks(client))
+            if (b.text.startsWith("- "))
+                clauses << b.text;
+        QCOMPARE(clauses.size(), 5);                                         // five clauses, each starts a row
+        QVERIFY(client.contains("ver cartel en tienda"));
+        const int tight = client.indexOf(QByteArray("\x1B\x33\x18", 3));     // ESC 3 24 ... then ESC 2
+        QVERIFY(tight > 0);
+        QVERIFY(client.indexOf(QByteArray("\x1B\x32", 2), tight) > tight);
+        QVERIFY(client.contains(EscPosBuilder::toCp858(QString::fromUtf8("deberá presentarse"))));
+        d.phone = "600111222";
+        QVERIFY(TicketRenderer::render(d, 576).contains("Derechos arts.15-22: 600111222"));
+    }
+
+    // --- T10: the leyenda needs a QR (the exact phrase: test_renderLeyendaIsTheExactPhrase) ---
+    void test_leyendaNeedsAQr()
+    {
+        TicketData d;
+        d.isRecibo = false;
+        d.verifactuVerifiable = true;
+        QVERIFY(!TicketRenderer::render(d, 576).contains("verificable"));
+        d.qr = QImage(29, 29, QImage::Format_Mono);
+        d.qr.fill(0);
+        QVERIFY(TicketRenderer::render(d, 576).contains("verificable"));
+        d.verifactuVerifiable = false;
+        QVERIFY(!TicketRenderer::render(d, 576).contains("verificable"));
+    }
+
+    // --- T10: the legal fields of a factura simplificada ---
+    void test_facturaLegalFields()
+    {
+        TicketData d;
+        d.legalName = "Tintoreria E2E SL";
+        d.nif = "B00000000";
+        d.isRecibo = false;
+        d.invoiceId = "77";
+        d.issueDate = "10/02/2026";
+        d.garments = { {"1", "Abrigo", "121,00"} };
+        d.total = 121.0;
+        d.ivaRate = 21;
+        QStringList rows;
+        for (const auto &b : textBlocks(TicketRenderer::render(d, 576)))
+            rows << b.text;
+        QVERIFY(rows.contains("Tintoreria E2E SL"));
+        QVERIFY(rows.contains("NIF: B00000000"));
+        QVERIFY(rows.contains(QString::fromUtf8("Nº: 77")));
+        QVERIFY(rows.contains(QString::fromUtf8("Fecha de expedición: 10/02/2026")));
+        QVERIFY(rows.contains("FACTURA SIMPLIFICADA"));
+        QVERIFY(rows.join("|").contains("IVA (21%):"));
+        QVERIFY(!rows.join("|").contains("TOTAL (IVA incl.)"));              // that is the recibo's total
+    }
+
+    // --- T9 (self-consistency): the printed base + IVA always add up to the total ---
+    void test_printedTaxSplitAddsUpToTheTotal()
+    {
+        for (int cents = 1; cents <= 3000; ++cents) {
+            TicketData d;
+            d.isRecibo = false;
+            d.total = cents / 100.0;
+            d.ivaRate = 21;
+            double base = -1, tax = -1;
+            for (const auto &b : textBlocks(TicketRenderer::render(d, 576))) {
+                const QString t = b.text.simplified();
+                if (t.startsWith("Base Imponible:"))
+                    base = t.mid(t.lastIndexOf(' ') + 1).replace(',', '.').toDouble();
+                else if (t.startsWith("IVA (21%):"))
+                    tax = t.mid(t.lastIndexOf(' ') + 1).replace(',', '.').toDouble();
+            }
+            QVERIFY2(qRound((base + tax) * 100) == cents, qPrintable(QString("%1: %2 + %3").arg(cents).arg(base).arg(tax)));
+        }
+    }
+
+    // --- T12: edge cases of the column helpers ---
+    void test_garmentRowEdgeCases()
+    {
+        EscPosBuilder b(576);   // 48 cols: qty 6, name 33, amount 9
+        b.garmentRow("1", "", "1,00");                                      // empty name
+        b.garmentRow("1", QString(33, 'x'), "1,00");                        // exactly nameWidth: one row
+        b.garmentRow("1234567", "x", "123456789,00");                       // qty and amount too wide
+        const QList<QByteArray> rows = b.bytes().split('\n');
+        QCOMPARE(rows.size(), 4);                                           // 3 rows + the empty tail
+        for (int i = 0; i < 3; ++i)
+            QCOMPARE(rows[i].size(), 48);
+        QVERIFY(rows[2].startsWith("123456x"));                             // qty cut to its width
+        QVERIFY(rows[2].endsWith("456789,00"));                             // amount keeps its right end
+
+        EscPosBuilder w(576);
+        w.garmentRow("1", QString(34, 'y'), "2,00");                        // one char over: wraps, continuation blank
+        const QList<QByteArray> wrapped = w.bytes().split('\n');
+        QCOMPARE(wrapped.size(), 3);
+        QCOMPARE(wrapped[1].trimmed(), QByteArray("y"));
+
+        EscPosBuilder lr(576);
+        lr.leftRight(QString(60, 'a'), "9,99");                             // label too long: truncated, value kept
+        QCOMPARE(lr.bytes().size(), 49);
+        QVERIFY(lr.bytes().left(48).endsWith(" 9,99"));
+        EscPosBuilder empty(576);
+        empty.leftRight("", "1,00");
+        QCOMPARE(empty.bytes().size(), 49);
+        QCOMPARE(empty.bytes().trimmed(), QByteArray("1,00"));
+    }
+
+    // --- T13: feed / cut / line spacing bounds ---
+    void test_feedCutAndSpacingBounds()
+    {
+        EscPosBuilder b;
+        b.feed(0).feed(-3);
+        QVERIFY(b.bytes().isEmpty());
+        b.cut(0);
+        QCOMPARE(b.bytes(), CUT_BYTES);                                     // no feed before the cut
+        EscPosBuilder s;
+        s.lineSpacing(-1).lineSpacing(999);
+        QCOMPARE(s.bytes(), QByteArray("\x1B\x33\x00\x1B\x33\xFF", 6));
+    }
+
+    // --- T14: GS v 0 raster bytes of a known image ---
+    void test_rasterImageBytes()
+    {
+        QImage img(9, 2, QImage::Format_Mono);
+        img.fill(1);                                     // 1 = white in Format_Mono's default colour table
+        img.setPixel(0, 0, 0);                           // black dots: (0,0) (8,0) (1,1)
+        img.setPixel(8, 0, 0);
+        img.setPixel(1, 1, 0);
+        EscPosBuilder b;
+        b.rasterImage(img);
+        QCOMPARE(b.bytes(), QByteArray("\x1D\x76\x30\x00\x02\x00\x02\x00" "\x80\x80" "\x40\x00", 12));
+        EscPosBuilder none;
+        none.rasterImage(QImage());
+        QVERIFY(none.bytes().isEmpty());
     }
 
     // --- PrinterStatus: ASB status-word decode (Status API, optional path) ---
@@ -335,6 +625,20 @@ private slots:
         QVERIFY(PrinterStatus::fromAsb(0x00000800u).cutterError);
         QCOMPARE(PrinterStatus::fromAsb(0x00000800u).summary(), QStringLiteral("Error en el cortador"));
         QVERIFY(PrinterStatus::fromAsb(0x00000008u).offline);
+    }
+
+    // What the shop's unit reports for an open cover, off or unplugged: ASB 0x1.
+    void test_printerStatus_noResponse()
+    {
+        const PrinterStatus s = PrinterStatus::fromAsb(0x00000001u);
+        QVERIFY(s.noResponse);
+        QVERIFY(s.summary().contains("no responde"));
+        QVERIFY(!s.isFatal());
+        QCOMPARE(PrinterStatus::fromAsb(0).noResponse, false);
+        // A paper-out outranks it; all bits set stays decodable and fatal.
+        QCOMPARE(PrinterStatus::fromAsb(0x00080001u).summary(), QStringLiteral("Sin papel"));
+        const PrinterStatus all = PrinterStatus::fromAsb(0xFFFFFFFFu);
+        QVERIFY(all.valid && all.isFatal() && all.coverOpen && all.paperEnd && all.noResponse);
     }
 
     void test_printerStatus_fatalVsRecoverable()

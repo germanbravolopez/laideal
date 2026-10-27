@@ -1,23 +1,15 @@
-// Tests for MySortFilterProxyModel's diacritic-insensitive text filter. The
-// filter text is expected pre-normalised + lower-cased by the caller (that is
-// how RecogPrendas / Listado feed it), so the tests mirror that: they build the
-// needle with removeDiacritics(...).toLower() and assert the proxy matches the
-// accented source rows.
+// Tests for MySortFilterProxyModel: the one search (accents and case ignored, every
+// word must appear), the comparators, the searched columns and the read-only rules.
 
 #include <QtTest>
 #include <QStandardItemModel>
+#include <memory>
 
 #include "mysortfilterproxymodel.h"
 
 class TestMySortFilterProxyModel : public QObject
 {
     Q_OBJECT
-
-private:
-    static QString needle(const QString &raw)
-    {
-        return MySortFilterProxyModel::removeDiacritics(raw).toLower();
-    }
 
 private slots:
     void test_removeDiacritics()
@@ -45,30 +37,29 @@ private slots:
         proxy.setSourceModel(&model);
 
         // ASCII needle matches the accented row ("jose" -> "José").
-        proxy.setNormalizedFilter(needle(QStringLiteral("jose")));
+        proxy.setSearchText(QStringLiteral("jose"));
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.data(proxy.index(0, 0)).toString(), QStringLiteral("José"));
 
         // Accent-free needle matches an accented "ñ" name.
-        proxy.setNormalizedFilter(needle(QStringLiteral("begona")));
+        proxy.setSearchText(QStringLiteral("begona"));
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.data(proxy.index(0, 0)).toString(), QStringLiteral("Begoña"));
 
-        // Accented needle also matches (caller normalises it the same way).
-        proxy.setNormalizedFilter(needle(QStringLiteral("begoña")));
+        // Accented and upper-case needles match too.
+        proxy.setSearchText(QStringLiteral("begoña"));
         QCOMPARE(proxy.rowCount(), 1);
 
         // Empty filter shows everything.
-        proxy.setNormalizedFilter(QString());
+        proxy.setSearchText(QString());
         QCOMPARE(proxy.rowCount(), 3);
 
         // No match.
-        proxy.setNormalizedFilter(needle(QStringLiteral("zzz")));
+        proxy.setSearchText(QStringLiteral("zzz"));
         QCOMPARE(proxy.rowCount(), 0);
     }
 
-    // lessThan() keys on table_name + column. ingresos column indices come from
-    // sql_lite.h (INGRESOS_COL_*); used here as literals to avoid the dependency:
+    // lessThan() keys on schema + column; the ingresos columns used below are
     // 1 = cliente, 3 = fecha_pago, 5 = importe.
     void test_lessThan_ingresosDateChronological()
     {
@@ -80,7 +71,7 @@ private slots:
             model.setItem(r, 3, new QStandardItem(dates[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(3, Qt::AscendingOrder);
 
@@ -98,7 +89,7 @@ private slots:
             model.setItem(r, 5, new QStandardItem(importes[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(5, Qt::AscendingOrder);
 
@@ -116,7 +107,7 @@ private slots:
             model.setItem(r, 0, new QStandardItem(numbers[r]));
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(0, Qt::DescendingOrder);
         QStringList seen;
@@ -136,7 +127,7 @@ private slots:
             model.setItem(r, 22, new QStandardItem(sizes[r]));   // rectifies n_recibo
         }
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         for (int col : { 8, 10, 22 }) {
             proxy.sort(col, Qt::AscendingOrder);
@@ -154,7 +145,7 @@ private slots:
         for (int r = 0; r < dates.size(); ++r)
             model.setItem(r, 26, new QStandardItem(dates[r]));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(26, Qt::AscendingOrder);
         QCOMPARE(proxy.data(proxy.index(0, 26)).toString(), QStringLiteral("15-12-2025"));
@@ -171,35 +162,46 @@ private slots:
         model.setItem(2, 12, new QStandardItem("manchas"));
         model.setItem(0, 15, new QStandardItem("secreto-csv"));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         QCOMPARE(proxy.searchColumnCount(), 13);
-        proxy.setNormalizedFilter("talla-unica");
+        proxy.setSearchText("talla-unica");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("tintado");
+        proxy.setSearchText("tintado");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("manchas");
+        proxy.setSearchText("manchas");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("secreto-csv");
+        proxy.setSearchText("secreto-csv");
         QCOMPARE(proxy.rowCount(), 0);
     }
 
-    // setFilters() applies the regex and the normalized text together.
-    void test_setFilters_singleInvalidation()
+    // The one search: "alvarez" finds Alvarez, Álvarez and álvarez; several words must all
+    // appear, in any column and order; pattern characters are plain text.
+    void test_search_accentsCaseAndEveryWord()
     {
-        QStandardItemModel model;
-        for (const QString &name : { "Ana", "Beatriz", "Carlos" })
-            model.appendRow(new QStandardItem(name));
+        QStandardItemModel model(0, 2);
+        const QList<QStringList> rows = { { "Alvarez", "Granada" }, { "Álvarez", "Madrid" },
+                                          { "señora álvarez", "Granada" }, { "Mora, Ana", "a[b (1)" } };
+        for (const QStringList &r : rows)
+            model.appendRow({ new QStandardItem(r[0]), new QStandardItem(r[1]) });
         MySortFilterProxyModel proxy;
         proxy.setSourceModel(&model);
-        proxy.setFilters(QRegularExpression("^C"), "car");
-        QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression(), "ana");
-        QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression("^B"), "ana");   // regex and text are OR-ed
-        QCOMPARE(proxy.rowCount(), 2);
-        proxy.setFilters(QRegularExpression(), QString());
+        proxy.setSearchText("alvarez");
         QCOMPARE(proxy.rowCount(), 3);
+        proxy.setSearchText("  ÁLVAREZ ");
+        QCOMPARE(proxy.rowCount(), 3);
+        proxy.setSearchText("alvarez granada");          // words across columns
+        QCOMPARE(proxy.rowCount(), 2);
+        proxy.setSearchText("ana mora");                 // any order
+        QCOMPARE(proxy.rowCount(), 1);
+        proxy.setSearchText("alvarez sevilla");          // every word must appear
+        QCOMPARE(proxy.rowCount(), 0);
+        proxy.setSearchText("a[b (1)");                  // no regex: matched as typed
+        QCOMPARE(proxy.rowCount(), 1);
+        proxy.setSearchText("senora", 1);                // one column only
+        QCOMPARE(proxy.rowCount(), 0);
+        proxy.setSearchText(QString());
+        QCOMPARE(proxy.rowCount(), 4);
     }
 
     // Invoice rows cannot be edited through the model, whatever the view allows.
@@ -208,7 +210,7 @@ private slots:
         QStandardItemModel model(1, 3);
         model.setItem(0, 1, new QStandardItem("Ana"));
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         for (int col = 0; col < 3; ++col)
             QVERIFY(!(proxy.flags(proxy.index(0, col)) & Qt::ItemIsEditable));
@@ -217,10 +219,120 @@ private slots:
 
         // Other tables stay editable.
         MySortFilterProxyModel other;
-        other.table_name = "prendas";
+        other.schema = MySortFilterProxyModel::Schema::Prendas;
         other.setSourceModel(&model);
         QVERIFY(other.flags(other.index(0, 1)) & Qt::ItemIsEditable);
         QVERIFY(other.setData(other.index(0, 1), "Pepe"));
+    }
+
+    void test_parseFecha()
+    {
+        QCOMPARE(MySortFilterProxyModel::parseFecha("05-03-2026"), QDate(2026, 3, 5));
+        QCOMPARE(MySortFilterProxyModel::parseFecha(" 05-03-2026 "), QDate(2026, 3, 5));
+        QVERIFY(!MySortFilterProxyModel::parseFecha("31-02-2026").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha("2026-03-05").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha("5-3-2026").isValid());
+        QVERIFY(!MySortFilterProxyModel::parseFecha(QString()).isValid());
+    }
+
+    // Empty and malformed dates sort first ascending, last descending.
+    void test_lessThan_emptyDatesSortFirst()
+    {
+        QStandardItemModel model;
+        const QStringList dates = { "10-02-2026", "", "01-01-2026", "garbage" };
+        for (int r = 0; r < dates.size(); ++r)
+            model.setItem(r, 3, new QStandardItem(dates[r]));
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
+        proxy.setSourceModel(&model);
+        proxy.sort(3, Qt::AscendingOrder);
+        QCOMPARE(proxy.data(proxy.index(2, 3)).toString(), QStringLiteral("01-01-2026"));
+        QCOMPARE(proxy.data(proxy.index(3, 3)).toString(), QStringLiteral("10-02-2026"));
+        proxy.sort(3, Qt::DescendingOrder);
+        QCOMPARE(proxy.data(proxy.index(0, 3)).toString(), QStringLiteral("10-02-2026"));
+    }
+
+    static QStandardItemModel *gastosModel()
+    {
+        auto *model = new QStandardItemModel(2, 8);
+        model->setItem(0, GASTOS_IDX_ID, new QStandardItem("1"));
+        model->setItem(0, GASTOS_IDX_FECHA, new QStandardItem("15-02-2026"));   // Q1 2026
+        model->setItem(1, GASTOS_IDX_ID, new QStandardItem("2"));
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem(" 15-05-2026 "));  // Q2, padded
+        return model;
+    }
+
+    void test_rowLocked_onlyGastosAndClosedQuarter()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        proxy.setClosedQuarters({ 20261 });
+        QVERIFY(proxy.rowLocked(0));
+        QVERIFY(!proxy.rowLocked(1));
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem(" 15-02-2026 "));
+        QVERIFY(proxy.rowLocked(1));   // padding does not hide a closed quarter
+        model->setItem(1, GASTOS_IDX_FECHA, new QStandardItem("not a date"));
+        QVERIFY(!proxy.rowLocked(1));
+        proxy.schema = MySortFilterProxyModel::Schema::Prendas;
+        QVERIFY(!proxy.rowLocked(0));
+    }
+
+    void test_flags_lockedRowAndIdNotEditable()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        proxy.setClosedQuarters({ 20261 });
+        QVERIFY(!(proxy.flags(proxy.index(0, GASTOS_IDX_FECHA)) & Qt::ItemIsEditable));   // closed quarter
+        QVERIFY(proxy.flags(proxy.index(1, GASTOS_IDX_FECHA)) & Qt::ItemIsEditable);
+        QVERIFY(!(proxy.flags(proxy.index(1, GASTOS_IDX_ID)) & Qt::ItemIsEditable));      // primary key
+        QVERIFY(!proxy.setData(proxy.index(1, GASTOS_IDX_ID), "99"));
+        QCOMPARE(model->item(1, GASTOS_IDX_ID)->text(), QStringLiteral("2"));
+    }
+
+    void test_setClosedQuarters_notifiesTheView()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        QSignalSpy changed(&proxy, &QAbstractItemModel::dataChanged);
+        proxy.setClosedQuarters({ 20261 });
+        QCOMPARE(changed.count(), 1);
+        proxy.setClosedQuarters({ 20261 });   // unchanged: nothing to refresh
+        QCOMPARE(changed.count(), 1);
+    }
+
+    void test_setData_validatorRefusalEmitsEditRefused_andKeepsValue()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        proxy.editValidator = [](const QModelIndex &, const QVariant &value) {
+            return value.toString() == "bad" ? QStringLiteral("refused") : QString();
+        };
+        QSignalSpy refused(&proxy, &MySortFilterProxyModel::editRefused);
+        QVERIFY(!proxy.setData(proxy.index(0, GASTOS_IDX_IMPORTE), "bad"));
+        QCOMPARE(refused.count(), 1);
+        QCOMPARE(refused.at(0).at(0).toString(), QStringLiteral("refused"));
+        QVERIFY(model->item(0, GASTOS_IDX_IMPORTE) == nullptr || model->item(0, GASTOS_IDX_IMPORTE)->text().isEmpty());
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_IMPORTE), "12.50"));
+        QCOMPARE(model->item(0, GASTOS_IDX_IMPORTE)->text(), QStringLiteral("12.50"));
+    }
+
+    // A padded date is stored clean, so the year filter and the sort read it.
+    void test_setData_gastosFechaIsStoredTrimmed()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_FECHA), " 05-03-2026 "));
+        QCOMPARE(model->item(0, GASTOS_IDX_FECHA)->text(), QStringLiteral("05-03-2026"));
     }
 
     void test_lessThan_defaultStringColumn()
@@ -231,7 +343,7 @@ private slots:
             model.setItem(r, 1, new QStandardItem(names[r])); // cliente -> locale string compare
 
         MySortFilterProxyModel proxy;
-        proxy.table_name = "ingresos";
+        proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         proxy.sort(1, Qt::AscendingOrder);
 

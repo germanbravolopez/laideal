@@ -1,5 +1,18 @@
 ﻿Versiones:
 
+12.3
+- Corrección: las facturas que no se pudieron enviar a Verifactu (por ejemplo durante una caída de la pasarela) vuelven a aparecer en "Envíos Verifactu pendientes" y se reenvían, también en tickets recibidos antes de la fecha "Solo tickets desde".
+- Todas las facturas se envían a la AEAT con la misma descripción, "Servicios de lavandería".
+- La leyenda de la factura ("Factura verificable...") solo se imprime cuando la AEAT ha aceptado todas las prendas cobradas de la factura.
+- Añadir prendas mantiene el ticket tras guardar una prenda sin cobrar, para añadir otra en seguida.
+- Exportar registros AEAT pregunta antes de sobrescribir un archivo, y Revertir contabilidad pide confirmación.
+- Configuración avisa de una clave o contraseña que no se puede leer o cifrar, de una fecha mínima futura y de una ruta de base de datos que no existe; una clave ilegible ya no se pierde al pulsar Aceptar.
+- Impresión: si la impresora falla, la ventana indica que el ticket no se ha impreso (en lugar de "impreso"); se avisa cuando la impresora está apagada; en papel de 58 mm caben el QR y los nombres de cliente largos.
+- Búsqueda (Listados y Recogida de Prendas): una sola casilla de búsqueda, sin opciones; las tildes y las mayúsculas no importan ("alvarez" encuentra "Álvarez") y con varias palabras muestra las filas que las contienen todas ("ana mora" encuentra "Mora, Ana").
+- Listado: un importe o precio no válido se rechaza con un mensaje; los números y las fechas se ordenan bien; la búsqueda incluye también la talla, el servicio y las observaciones.
+- Recogida de Prendas: un precio escrito a mano se mantiene al cambiar la cantidad o el servicio; una prenda ya entregada no se puede anular.
+- Varias correcciones menores y más pruebas automáticas.
+
 12.2
 - Corrección: algunas prendas sin cobrar de un ticket con otras prendas cobradas antes de septiembre de 2026 no se podían cobrar desde la 12.0 (el cobro no se guardaba). Al iniciar, el programa corrige esas prendas y se pueden cobrar con normalidad.
 - Comprobar tras actualizar: los importes guardados como "6." se leen bien, y un importe que no se puede leer se indica con su número de ticket.

@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QSqlDatabase>
+#include <functional>
 
 class QDateEdit;
 class QLineEdit;
@@ -18,6 +19,9 @@ class AeatExportDialog : public QDialog
 
 public:
     explicit AeatExportDialog(const QSqlDatabase &database, QWidget *parent = nullptr);
+
+    // Asked before an existing file is replaced; true to overwrite. Tests inject their answer.
+    std::function<bool(const QString &file)> confirmOverwrite;
 
 private slots:
     void onExportClicked();

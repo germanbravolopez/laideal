@@ -3,6 +3,7 @@
 
 #include <QSet>
 #include "sql_lite.h"
+#include "verifactutypes.h"
 #include "appsettings.h"
 #include "uikit.h"
 
@@ -23,6 +24,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSqlError>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -137,8 +139,11 @@ void Imprimir::getTicketInfo()
         q.bindValue(":n_recibo", le_n_ticket->text().trimmed());
         q.bindValue(":anulado", QStringLiteral(INGRESOS_ESTADO_ANULADO));
     }
-    q.exec();
+    if (!q.exec())
+        qWarning() << "Imprimir::getTicketInfo: query failed:" << q.lastError().text();
     sqlQueryModel->setQuery(std::move(q));
+    while (sqlQueryModel->canFetchMore())   // the rows are read after the connection closes
+        sqlQueryModel->fetchMore();
 }
 
 QString Imprimir::displayInvoiceId() const
@@ -156,9 +161,7 @@ QString Imprimir::displayInvoiceId() const
 
 bool Imprimir::checkTicketPaid(int row)
 {
-    if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() == "NO")
-        return false;
-    return true;
+    return sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() == "SI";
 }
 
 bool Imprimir::checkAnyItemPaid()
@@ -278,7 +281,7 @@ QPixmap Imprimir::resolveQrCode()
     // The gateway: ask it, waiting up to 5 s in a local event loop.
     // If it does not reply in time, print without QR (logged warning).
     const QString reqId = verifactuIntegration->generateQRAsync(
-        invoiceNumber, invoiceDate, taxBase, ivaRate, "Servicios de lavanderia");
+        invoiceNumber, invoiceDate, taxBase, ivaRate, kInvoiceDescription);
     if (reqId.isEmpty()) {
         qWarning() << "GetQrCode rejected for ticket" << invoiceNumber
                    << ":" << verifactuIntegration->getLastError();
@@ -334,7 +337,8 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 
     d.isRecibo          = isRecibo;
     d.isCompleteInvoice = isCompleteInvoice;
-    d.invoiceId         = displayInvoiceId();
+    // A recibo is the claim ticket: its number is the n_recibo, never a payment event's invoice id.
+    d.invoiceId         = isRecibo ? le_n_ticket->text().trimmed() : displayInvoiceId();
     const QString client = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString();
     d.clientName     = client;
     d.receptionDate  = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_FECHA_RECEPCION)).toString().replace("-", "/");
@@ -375,7 +379,7 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         QString garmentName = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_PRENDA)).toString();
         const QString size = QString::number(
             sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_SIZE)).toFloat(), 'f', 2);
-        if (size != "" && size != "0.00")
+        if (size != "0.00")
             garmentName.append(" - " + displayDecimal(size));
         g.name = garmentName;
         const double importe = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toDouble();
@@ -395,7 +399,7 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     // same modules), redrawn at the size the Orden requires.
     const QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
-        d.qr = TicketRenderer::printableQr(qr.toImage());
+        d.qr = TicketRenderer::printableQr(qr.toImage(), paperDots());
         if (d.qr.isNull()) {
             qWarning() << "Imprimir: QR not readable, printed as received";
             d.qr = qr.toImage();
@@ -404,11 +408,23 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
         // record the direct client has queued, or of an accepted reply whose row write failed.
-        const QString verifactuState = sqlQueryModel->data(
-            sqlQueryModel->index(0, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
-        d.verifactuVerifiable = verifactuState == verifactuEstadoToString(VerifactuEstado::Enviada)
-                                || ((verifactuIssued || m_qrFromQueuedRecord)
-                                    && verifactuState == verifactuEstadoToString(VerifactuEstado::NotSubmitted));
+        // Decided by the paid rows (the invoice's rows, like the QR amount), never by row 0:
+        // each must be ENVIADA, or NotSubmitted in those two cases.
+        const QString sent = verifactuEstadoToString(VerifactuEstado::Enviada);
+        const QString queued = verifactuEstadoToString(VerifactuEstado::NotSubmitted);
+        const bool queuedAllowed = verifactuIssued || m_qrFromQueuedRecord;
+        bool anyPaid = false;
+        bool allVerifiable = true;
+        for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
+            if (!checkTicketPaid(row))
+                continue;
+            anyPaid = true;
+            const QString state = sqlQueryModel->data(
+                sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
+            if (state != sent && !(queuedAllowed && state == queued))
+                allVerifiable = false;
+        }
+        d.verifactuVerifiable = anyPaid && allVerifiable;
     }
 
     d.timestamp = QDateTime::currentDateTime().toString("dd/MM/yyyy - hh:mm:ss");
@@ -426,28 +442,29 @@ bool Imprimir::printTicket()
     }
     const QString printer = AppSettings::instance()->printerName();
     QString err;
+    m_lastSendUncertain = false;
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Optional Status API path: read the device status (Epson EPSStmApi.dll) and
-    // send the same bytes through it. sendAndReadStatus() reads status BEFORE the
-    // send, so a cover-open / paper-out is surfaced here even though it makes the
-    // send itself fail. If the DLL/APD isn't installed it reports failure with an
-    // empty status and we fall through to the RAW spooler, so enabling the flag
-    // never stops printing.
+    // Optional Status API path (Epson DLL): without the DLL it fails with an empty status
+    // and the RAW spooler below takes over, so the flag never stops printing.
     if (AppSettings::instance()->useStatusApi()) {
         PrinterStatus status;
         QString statusErr;
-        // Bounded call: the Epson DLL runs on a worker with a 10 s watchdog so a
-        // printer firmware/driver quirk that hangs a Bi* call can never freeze the
-        // POS UI - on timeout it falls back to RAW and disables the API for the
-        // session. 10 s sits well above the real worst case: a cover-open/no-paper
-        // send returns ERR_ACCESS after the DLL's own internal ~5 s (it does NOT
-        // honour our BiDirectIOEx timeout on that path), ~5.5 s total. A genuine
-        // hang is indefinite, so the wide margin distinguishes the two and a normal
-        // offline print is never mistaken for a hang. See docs/modules/printing.md.
+        // 10 s watchdog: above the DLL's own ~5.5 s on a cover-open send, below a real hang
+        // (docs/modules/printing.md).
+        bool mayStillPrint = false;
         const bool sent = StatusApiPrinter::sendAndReadStatusBounded(
-            m_ticketBytes, printer, &status, &statusErr, 10000);
+            m_ticketBytes, printer, &status, &statusErr, 10000, &mayStillPrint);
         QApplication::restoreOverrideCursor();
+        // The hang was inside the send itself: the Epson DLL may still print this
+        // ticket, so RAW would print it twice. Leave the call to the operator.
+        if (mayStillPrint) {
+            m_lastSendUncertain = true;
+            qWarning() << "Imprimir::printTicket: Status API blocked during the send, not resending by RAW:" << statusErr;
+            reportPrinterProblem("La impresora no respondió al enviar el ticket y puede que se imprima igualmente.\n"
+                                 "Compruebe la impresora antes de volver a imprimirlo.", true);
+            return false;
+        }
         bool warned = false;
         if (status.valid && (status.hasError() || status.hasWarning())) {
             qWarning() << "Imprimir::printTicket status:" << status.summary()
@@ -496,11 +513,6 @@ void Imprimir::reportPrinterProblem(const QString &text, bool critical)
         QMessageBox::critical(this, "Imprimir", text, QMessageBox::Ok, QMessageBox::Ok);
     else
         QMessageBox::warning(this, "Impresora", text, QMessageBox::Ok, QMessageBox::Ok);
-}
-
-bool Imprimir::sendIfEnabled()
-{
-    return AppSettings::instance()->enablePrinting() && printTicket();
 }
 
 void Imprimir::onPrintClicked()
@@ -582,17 +594,33 @@ void Imprimir::onPrintClicked()
         else
             toPrint << events[m_cbEvent->currentIndex()];
         QStringList printed;
+        QStringList notPrinted;
         for (const auto &ev : toPrint) {
             invoiceSeq = ev.first;
             qrCode = QPixmap();
             getTicketInfo();
+            if (sqlQueryModel->rowCount() == 0) {
+                notPrinted << labelFor(ev) + " (sin prendas pagadas)";
+                continue;
+            }
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
-            sendIfEnabled();
+            if (AppSettings::instance()->enablePrinting() && !printTicket()) {
+                notPrinted << labelFor(ev) + (m_lastSendUncertain ? " (puede que se imprima: compruebe la impresora)"
+                                                                  : " (error de impresión)");
+                continue;
+            }
             printed << labelFor(ev) + (m_lastVoidedMarker.isEmpty()
                                            ? QString() : " (" + m_lastVoidedMarker.toLower() + ", sin QR)");
         }
-        m_lblResult->setText(UiKit::okHtml("Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".")
-                             + printingOff + problems());
+        QString summary;
+        if (!printed.isEmpty()) {
+            const QString text = "Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".";
+            summary = notPrinted.isEmpty() ? UiKit::okHtml(text) : UiKit::warnHtml(text);
+        }
+        if (!notPrinted.isEmpty())
+            summary += (summary.isEmpty() ? QString() : "<br>")
+                       + UiKit::warnHtml("No se han impreso: " + notPrinted.join(", ").toHtmlEscaped() + ".");
+        m_lblResult->setText(summary + printingOff + problems());
         return;
     }
 
@@ -618,26 +646,30 @@ void Imprimir::onPrintClicked()
     // implied), same as every other factura path.
     const bool paidMarker = isRecibo && ticketAllGarmentsPaid(db, ticket);
     buildTicket(true, paidMarker);
-    sendIfEnabled();
+    const bool clientCopyFailed = printing && !printTicket();
     if (isRecibo) {
         const bool shopCopy = m_chkShopCopy->isChecked();
-        if (shopCopy) {
+        if (shopCopy && !clientCopyFailed) {   // no second failure on top of the first
             buildTicket(false, paidMarker);
-            sendIfEnabled();
+            if (printing)
+                printTicket();
         }
-        m_lblResult->setText(UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
-                                           + (shopCopy ? " (copia del cliente y del establecimiento)."
-                                                       : " (copia del cliente)."))
-                             + printingOff + problems());
+        const QString result = clientCopyFailed
+            ? UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + " no se ha impreso.")
+            : UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
+                            + (shopCopy ? " (copia del cliente y del establecimiento)." : " (copia del cliente)."));
+        m_lblResult->setText(result + printingOff + problems());
         return;
     }
     const QString noQr = !m_lastVoidedMarker.isEmpty()
         ? "<br>" + UiKit::warnHtml("La factura está " + m_lastVoidedMarker.toLower()
                                    + ": la copia lo indica y no lleva código QR.")
-        : qrCode.isNull() ? "<br>Sin código QR: la factura no está confirmada por AEAT "
-                            "o AEAT no respondió a tiempo."
-                          : QString();
-    m_lblResult->setText(UiKit::okHtml((isCompleteInvoice ? "Factura completa " : "Factura ")
-                                       + displayInvoiceId().toHtmlEscaped() + " impresa.")
+        : !qrCode.isNull() ? QString()
+        : (!verifactuIntegration || !verifactuIntegration->isConfigured())
+            ? "<br>Sin código QR: Verifactu no está activado."
+            : "<br>Sin código QR: la factura no está confirmada por AEAT o AEAT no respondió a tiempo.";
+    const QString invoiceName = (isCompleteInvoice ? "Factura completa " : "Factura ") + displayInvoiceId().toHtmlEscaped();
+    m_lblResult->setText((clientCopyFailed ? UiKit::warnHtml(invoiceName + " no se ha impreso.")
+                                           : UiKit::okHtml(invoiceName + " impresa."))
                          + noQr + printingOff + problems());
 }

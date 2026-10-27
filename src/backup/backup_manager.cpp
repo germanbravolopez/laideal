@@ -42,7 +42,7 @@ QString errorIfNotOk(QSqlQuery &q, const QString &context)
 {
     if (q.lastError().isValid())
         return QString("%1: %2").arg(context, q.lastError().text());
-    return QString();
+    return QString("%1: sin respuesta").arg(context);   // exec() ran but returned no row
 }
 } // namespace
 
@@ -51,12 +51,16 @@ BackupManager::BackupManager(QObject *parent) : QObject(parent) {}
 QString BackupManager::backupDirectory() const
 {
     // backups/ subdir next to the live DB - keeps snapshots adjacent to the
-    // file they protect but separated from it so listing/cleanup is
-    // unambiguous. mkpath() is idempotent and creates the subdir on first run.
+    // file they protect but separated from it so listing/cleanup is unambiguous.
     QString parent = QFileInfo(dbPath()).absolutePath();
     if (parent.isEmpty())
         parent = QDir::homePath();
-    const QString dir = QDir(parent).filePath("backups");
+    return QDir(parent).filePath("backups");
+}
+
+QString BackupManager::ensureBackupDirectory() const
+{
+    const QString dir = backupDirectory();
     QDir().mkpath(dir);
     return dir;
 }
@@ -156,7 +160,7 @@ BackupManager::Result BackupManager::performBackup()
         return res;
     }
 
-    const QString dir = backupDirectory();
+    const QString dir = ensureBackupDirectory();
     removeStalePartFiles(dir);
     const QString finalPath = QDir(dir).filePath(timestampedFileName());
     if (QFile::exists(finalPath)) {
@@ -352,7 +356,10 @@ int BackupManager::pruneOldBackups()
 
     int deleted = 0;
     for (const QString &name : toDelete) {
-        if (QFile::remove(dir.filePath(name))) ++deleted;
+        if (QFile::remove(dir.filePath(name)))
+            ++deleted;
+        else
+            qWarning() << "BackupManager: could not remove the old copy" << name;
     }
     return deleted;
 }

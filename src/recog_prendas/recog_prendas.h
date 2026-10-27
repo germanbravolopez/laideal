@@ -138,6 +138,17 @@ private:
     Widgets *ui = nullptr;
     UiKit::ResultPanel *m_result = nullptr;
     bool m_lastWriteOk = true;   // the last updateDb() write was stored
+    QString m_submittedQuery;    // the search text last submitted; refreshes re-run it, not le_search
+    QString m_notSentReason;     // why the last Reintentar sent nothing (said again by Añadir)
+    // Runs the search for `query`, clearing the fields.
+    void runSearch(const QString &query);
+    // Re-runs the submitted search and reselects the clicked garment by hash.
+    void refreshSearch(bool keepTyped);
+    // The clicked row's unit price when its importe was typed by hand (it is not what the
+    // price list gives for its saved quantity / service / size), else -1.
+    double manualUnitPrice();
+    // Says in the result panel that a submission did not leave.
+    void reportNotSent(const QString &reason);
     QSqlDatabase db;
     // Async submit tracking: reqId -> the payment event it belongs to.
     struct PendingSubmit {

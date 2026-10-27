@@ -185,6 +185,11 @@ QVector<RefusedInvoice> refusedInvoices(QSqlDatabase &db, const QString &floorIs
 bool        updateItemToClient(QSqlDatabase &db, const QString &column, const QString &item, const QString &client);
 bool        addNewClient(QSqlDatabase &db, const QString &client, const QString &telFijo,
                          const QString &direccion, const QString &movil);
+// A supplier invoice into gastos with the next id; false when its date lies in a closed quarter
+// or the insert fails. importe is stored through moneyText.
+bool        insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QString &servicio,
+                                 const QString &descripcion, const QString &empresa, const QDate &date,
+                                 const QString &iva, const QString &importe);
 bool        insertNewItemToTable(QSqlDatabase &db, const QStringList &items, const QString &table);
 QString     genHash16();
 
@@ -268,6 +273,7 @@ struct IngresoGarmentRow {
     QString observaciones;
     QString hash;
     QString verifactuEstado;  // "SIN COBRAR" (unpaid) or "PENDIENTE" (paid)
+    int     verifactuInvoiceSeq = 0;   // payment event of a paid row (InvoiceID "<n>-<seq>"; 0: "<n>")
 };
 bool        insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row);
 // Inserts the rows in one transaction: all of them, or none when one fails.

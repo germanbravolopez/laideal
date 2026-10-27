@@ -9,10 +9,12 @@ VerifactuConfig::VerifactuConfig()
       m_systemName("LAIDEAL"),
       m_systemVersion(QString(PROJECT_VERSION))
 {
-    // One-time cleanup of the legacy QSettings INI written by pre-8.5 versions
-    // of this class. The INI was a stale plaintext copy of credentials already
-    // stored in ~/.laideal_settings.json and is no longer consulted. Removing
-    // it shrinks the credential footprint on disk.
+}
+
+void VerifactuConfig::removeLegacyIni()
+{
+    // The QSettings INI of pre-8.5 versions was a stale plaintext copy of credentials
+    // already in ~/.laideal_settings.json and is no longer read.
     const QString legacyIni = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                               + "/verifactu_config.ini";
     if (QFile::exists(legacyIni)) {

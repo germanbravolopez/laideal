@@ -54,6 +54,8 @@ Drives the real `PayDialog` as the Cobrar button does (load the ticket, untick g
 |----------|------|--------|
 | `test_payment_acceptedByAeat` | Cobrar → AEAT accepts | One Create with invoice id = bare ticket number and the service key; both garments paid, `ENVIADA`, CSV, `Huella`, payment date; no pop-up |
 | `test_gateway_http500_staysPendiente`, `_http401_`, `_malformedJson_`, `_droppedConnection_`, `_successWithoutCsv_` | The gateway answers 500, 401, malformed JSON, a dropped connection, or "success" without CSV | The rows stay paid and `PENDIENTE` with their InvoiceID, no CSV, never `ERROR` (the outcome is unknown) |
+| `test_gatewayRectificativaRefusedInProduction` | A rectificativa with the gateway in PRODUCTION | Refused (it carries no RectificationItems); nothing sent |
+| `test_testConnectionReportsARefusedKey` | Probar conexión with a refused key (401, or a key error in the body) | Reported as a refused key, not "Conexión correcta" |
 | `test_gateway_stalledReply_endsAsNetworkErrorAtTheTransferTimeout` | The gateway never answers | NETWORK_ERROR at the 30 s transfer timeout (about 30 s) |
 | `test_partialPayments_eachEventIsItsOwnInvoice` | Pay one garment, later the other | Two invoices `200` and `200-1`; the second garment has seq 1 |
 | `test_noReplyInTime_staysPendiente_thenReconciledFromAeat` | AEAT replies after 7 s (PayDialog waits 5 s) | Payment kept `PENDIENTE`; the retry is answered "already exists" (`verifactuErrorIsDuplicate`); querying AEAT returns the accepted record, which matches and is adopted → `ENVIADA` with its CSV |
@@ -117,6 +119,8 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 | `test_recogida_replyForSettledInvoiceIgnored` | Reintentar on an `ERROR` row; the invoice is registered meanwhile; AEAT then answers "duplicate" | Nothing rewritten, status bar "...ignorada: la factura ya estaba registrada", no AEAT query |
 | `test_addGarmentPaid_submittedAtOnce` | Tickets → Añadir nuevas prendas on an unpaid ticket, adding a garment as paid | Submitted at once as the ticket's first invoice (`2000`, today, 7.00), row `ENVIADA` in seq 0; the ticket's unpaid garment stays `SIN COBRAR`; the result panel reports it and the form is cleared, no pop-up |
 | `test_addGarment_retypedTicketNumberRefused` | Añadir nuevas prendas: search an unpaid ticket, retype an already sent one, save as paid | Refused in the result panel ("No se ha buscado…"); searching the sent ticket itself is refused before the form opens; nothing inserted into the sent ticket, no Create, its CSV intact |
+| `test_addGarment_refusesAGarmentNotInTheList` | Añadir nuevas prendas on a found ticket: a free-typed garment, then quantity 0 | "no está en la lista" and "al menos 1" in the result panel; nothing inserted, no pop-up |
+| `test_paymentDatesBoundedByReceptionAndToday` | PayDialog and AddGarment (and the main form) on a ticket received 5 days ago | The payment date editors are bounded by today and the reception date; the main form's reception date by today |
 | `test_facturas_saveAndRefusals` | Formulario de facturas: 121,00 at 21 %, save; an unknown supplier; a date in a closed quarter | Base 100.00 and IVA 21.00 shown as typed; saved as `121.00` / 21 and reported in the result panel, form cleared; the two refusals are reported there with nothing written; no pop-up |
 | `test_genListadoGastos_pdfAndEmptyYear` | Listado de gastos → Generar PDF for 2026 grouped by supplier; then only closed quarters of 2025 | Only 2026 rows, suppliers in order with IMPORTE TOTAL, PDF in Listados/Gastos linked in the result panel; the empty configuration is reported there; no pop-up |
 | `test_listado_buttonsAndMessagesInWindow` | Listado de gastos: buttons, Añadir fila from the menu, double-click on a row of a closed quarter, then its edit flags and Eliminar fila; Listado de clientes: Añadir fila through Nuevo cliente (first without a name) | Gastos offers no Añadir but a PDF; both messages in the result panel; the locked row is not editable and is not deleted ("Fila bloqueada"); the client form refuses the empty name in its panel, then saves the client; "Cliente añadido"; no pop-up |
@@ -127,7 +131,94 @@ The application's windows live in the `laideal_app` static library (`src/app/CMa
 
 Each scenario was checked against a mutated build (quarter guard removed, date rule removed, retry signal not emitted, the `pagado='SI'` filter dropped from `getTicketInfo`, the Anular button enabled for every estado, Recogida not taking over PayDialog's request, no query after a duplicate, Actualizar enabled on any found record, Consultar shown on unpaid rows); each mutation made its scenario fail.
 
-**Not in this bench**: menu wiring, printing, the Listado lock and the installed app are covered by the UI smoke test ([ui_smoke.md](ui_smoke.md)); the physical printer, the shop's real schema and how screens look by the manual [smoke_test.md](smoke_test.md). The real AEAT itself is checked once, with a single real ticket after the production switch.
+**Not in this bench**: menu wiring, the printer transport and the installed app are covered by the UI smoke test ([ui_smoke.md](ui_smoke.md)); the Listado lock is covered by both (here by `test_listado_buttonsAndMessagesInWindow` and `test_listado_gastosDateNeverMovesIntoAClosedQuarter`); the physical printer, the shop's real schema and how screens look by the manual [smoke_test.md](smoke_test.md). The ticket bytes themselves (QR raster, leyenda) are asserted here through `Imprimir::ticketBytes()`. The real AEAT itself is checked once, with a single real ticket after the production switch.
+
+### More `test_e2e_app` scenarios
+
+One line each; the test body has the exact assertions.
+
+**Start-up and Configuración**
+
+| Test | Proves |
+|---|---|
+| `test_mainWindow_asksForTheCheckOnceAfterAnUpdate` | After an update the first start asks once for the post-update check; later starts do not |
+| `test_mainWindow_asksForTheCheckAfterAnUpdateFrom12_0` | From 12.0 (which did not record the started version) the pre-migration copy's version tells the update; with neither (a first installation) nothing is asked |
+| `test_mainWindow_preMigrationCopyWithBackupsOff` | A new version copies the database before migrating it, also with automatic backups off |
+| `test_mainWindow_reinitialisesOneBackend` | Aceptar in Configuración re-initialises Verifactu with one integration and one backend (two direct clients would both send the outbox) |
+| `test_mainWindow_showsThePreProductionEnvironment` | The status bar says when the direct client registers in AEAT's test environment |
+
+**Direct connection in the main window, Recogida and Cobrar**
+
+| Test | Proves |
+|---|---|
+| `test_mainWindow_directSavePrintsAtOnce` | A paid ticket's record is generated and chained at once, so the factura with QR prints without waiting for AEAT (the gateway waits up to 3 s); rows stay PENDIENTE until AEAT answers |
+| `test_mainWindow_settlesAnOutcomeNobodyWaitedFor` | A record an earlier session left unanswered goes out at start and its rows become ENVIADA |
+| `test_recogida_directCobrarSettledByRecogida` | Cobrar over the direct connection prints at once; Recogida settles the rows when AEAT accepts and asks for no reprint |
+| `test_payDialog_directPrintsFacturaBeforeAeatAnswers` | Cobrar prints the factura with the QR drawn from the invoice and the VERI*FACTU legend; rows paid and PENDIENTE; no QR before the record exists, nor with the gateway |
+| `test_recogida_lateRejectionShownInThePanel` | A refusal that arrives after the customer left stays in the result panel and says how to resend it |
+| `test_recogida_searchReturnsEveryRowBeyondTheFirstBatch` | A long Recogida search lists every row (the model fetches 256 at a time) |
+
+**Chain gate, numbering and not-configured**
+
+| Test | Proves |
+|---|---|
+| `test_mainWindow_noInvoicingUntilTheChainIsChecked` | The first check cannot reach AEAT: no ticket is saved, paid or not; the refused attempt checks again and the number continues after AEAT's |
+| `test_mainWindow_noSaveWhileTheFirstCheckRuns` | While the first check still asks AEAT no ticket is saved |
+| `test_gateOnlyWhileTheChainIsUnchecked` | Recogida's Añadir is refused like Cobrar while the chain is unchecked; an ordinary start never blocks saving |
+| `test_payDialog_noInvoicingUntilTheChainIsChecked` | Cobrar is refused like a paid save while the chain check has failed |
+| `test_mainWindow_numberRefreshedAfterAnyChainSync` | Any sync that succeeds after a failed first check moves the number on screen past AEAT's highest |
+| `test_mainWindow_syncDuringASaveKeepsItsNumber` | A sync ending while a paid save waits never changes the number on screen |
+| `test_mainWindow_numbersAboveAeatAfterARestore` | A restored (older) database continues above the numbers AEAT holds for our system |
+| `test_mainWindow_preProductionNumbersFollowTheDatabase` | In pre-production AEAT's test numbers never move the shop's numbering and no restore warning shows |
+| `test_noInvoiceWhileVerifactuIsNotConfigured` | Nothing is charged (save, Cobrar, Añadir with a paid garment) while Verifactu is not configured; an unpaid ticket still saves |
+| `test_selfTestSharesTheShopChainOnlyInPreProduction` | The self-test shares the shop's chain only while the direct client is in pre-production |
+| `test_pendingRecoverySkipsAnInvoiceBeingSent` | The start-up recovery does not offer an invoice still being sent |
+| `test_pendingRetryKeepsTheRowWhenNothingWasSent` | The start-up Reintentar keeps the row listed with the reason when nothing was sent |
+
+**Anular factura**
+
+| Test | Proves |
+|---|---|
+| `test_cancelInvoice_asksForConfirmationFirst` | The first press only says what will be cancelled ("Confirmar anulación"); a new search drops that; the second press sends |
+| `test_cancelInvoice_confirmButtonFitsItsText` | The row button is wide enough for "Confirmar anulación" |
+| `test_cancelInvoice_refusedWhileARectificativaIsSent` | An invoice with a standing rectificativa is not cancelled until that one is |
+| `test_cancelInvoice_replyAppliesToTheTicketItWasSentFor` | While a cancellation waits no other ticket can be searched; the reply marks the invoice it was sent for |
+| `test_cancelDirectQueuedIsPending` | A cancellation the direct client stored but could not send yet is pending, not an error, and the button stays off |
+| `test_dialogsCannotCloseWhileAeatAnswers` | Esc / the X is refused in Cobrar, Anular and Rectificar while AEAT answers |
+
+**Rectificar factura**
+
+| Test | Proves |
+|---|---|
+| `test_rectifyNamesTheStoredRecordsInvoice` | The R5 names the corrected invoice as its stored record has it |
+| `test_rectifyInvoice_mixedPaidUnpaidTicketUsesThePaidInvoice` | Rectificar reads the paid seq-0 invoice; an unpaid garment neither hides it nor adds to the original amount |
+| `test_rectifySubstitutionAfterADifferenceRefused` | A substitution after a difference is refused; the ticket is corrected by differences |
+| `test_rectify_differenceCannotMakeTheTotalNegative` | A difference never takes the invoice to 0 or below (that is Anular) |
+| `test_rectify_placeholderNotStoredSendsNothing` | A rectificativa whose row cannot be stored is not sent |
+| `test_rectify_replyAppliesToTheTicketItWasSentFor` | While one waits no other ticket can be searched; the reply settles the row it was sent for |
+| `test_rectifyDirectOnlyR5_noRowLeft` | With the direct client a non-R5 type is refused before a number is claimed, leaving no placeholder row |
+| `test_rectifyDirectQueuedWithoutAnswer` | With no answer yet the rectificativa is stored and chained, PENDIENTE not ERROR, and the ticket is never offered a second one |
+| `test_rectifyDirectWithoutRecordIsAnError` | Before the first chain sync no record exists, so the row is an error to redo, never a PENDIENTE row nothing would send |
+| `test_rectifyGatewayClosedBeforeTheAnswer` | A gateway rectificativa whose dialog closed before the answer becomes an error, counted and redone |
+| `test_rectifyGatewayPendingAnswerSendsNoSecond` | A gateway answer without the CSV (PENDING) never lets a second press send another rectificativa |
+| `test_pendingRectificativaBlocksTheTicket` | While one waits for AEAT the ticket can be neither rectified nor cancelled again |
+| `test_queuedRectificativaIsLeftToTheDirectClient` | A rectificativa whose record is pending at AEAT is never turned into an error |
+| `test_noRedoOverAPendingRectificativa` | A rectificativa marked ERROR while its record is still pending is never redone |
+| `test_mainWindow_orphanedPendingRectificativaBecomesAnError` | At start a PENDIENTE rectificativa with nothing to send it becomes an error to redo |
+| `test_startSettlesARectificativaFromItsStoredAnswer` | At start an accepted but unsettled rectificativa is settled from its stored answer |
+| `test_refusedRectificativaRedoneUnderItsNumber` | A refused rectificativa is redone under its own number (Subsanacion + RechazoPrevio), its row reused; Recogida's Reintentar refuses it |
+| `test_refusedRectificativaInAClosedQuarter` | One counted in a quarter closed since is resent as it was (date and amount), its closed row unchanged |
+| `test_refusedRectificativaWithUnreadableDateNotResent` | One whose date cannot be read is never rewritten nor resent |
+
+**Printing and reports**
+
+| Test | Proves |
+|---|---|
+| `test_printedQrSizeOfARealQr` | A real VERI*FACTU QR as printed: 30-40 mm, whole dots per module, quiet zone |
+| `test_reprintNeverBlankNorMerged` | A reprint never prints a blank ticket, a QR from a previous invoice or an invoice AEAT never received (trailing space still loads; all-voided refused; no row selected picks the only event or asks) |
+| `test_reprintUsesTheStoredVerificationUrl` | A reprint draws the QR from the stored verification URL: no request, never a URL rebuilt for today |
+| `test_contabilidad_unfinishedQuarterIsNotClosed` | The quarter that has not ended is reported but never closed |
+| `test_contabilidad_unreadableDataNeitherReportsNorCloses` | Unreadable data: no all-zero report and no close, even with Bloquear ticked |
 
 ## Direct AEAT connection - `test_e2e_aeat_direct`
 
@@ -139,3 +230,4 @@ Each scenario was checked against a mutated build (quarter guard removed, date r
 | `test_partialPaymentChained` | Two payment events | The second is `200-1`, chained after the first record |
 | `test_productionOnlyOnPurpose` | The gateway's PRODUCCIÓN box on; then the direct client's own production setting | Pre-production with the box alone; production only with its own setting |
 | `test_rejection` | AEAT refuses the record | The row is ERROR with AEAT's description |
+| `test_reprintWithoutStoredUrlHasNoQr` | Reprint of an accepted row with no stored verification URL (an older gateway row) | Printed without QR: the direct client never rebuilds the URL for today's environment |

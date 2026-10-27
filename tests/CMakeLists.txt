@@ -94,6 +94,21 @@ add_test(NAME settingsdialog
     COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
 set_tests_properties(settingsdialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# add_garment: the Tickets -> Anadir nuevas prendas window on a throwaway shop-shaped DB
+# (validation order, closed quarters, m2, the row written, the seq emitted with a paid garment).
+add_executable(test_add_garment test_add_garment.cpp support/testschema.h)
+target_link_libraries(test_add_garment PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    add_garment
+    sql_lite
+    verifactu_types
+)
+add_test(NAME add_garment
+    COMMAND test_add_garment -o ${CMAKE_BINARY_DIR}/test-results-add_garment.xml,junitxml -o -,txt)
+set_tests_properties(add_garment PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # reporthtml: pure currency / scaffolding helpers.
 add_executable(test_reporthtml test_reporthtml.cpp)
 target_link_libraries(test_reporthtml PRIVATE
@@ -112,6 +127,7 @@ set_tests_properties(reporthtml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscree
 add_executable(test_versioncompare test_updater.cpp)
 target_link_libraries(test_versioncompare PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Network
     updater
 )
 add_test(NAME version_compare
@@ -292,7 +308,8 @@ add_test(NAME backup_manager
 # printing: pure ESC/POS builder (exact bytes + PC858 transcode + column math)
 # and the TicketRenderer receipt/invoice layout. QTEST_GUILESS_MAIN - QImage
 # works under QCoreApplication, no platform plugin needed.
-add_executable(test_escpos test_escpos.cpp)
+add_executable(test_escpos test_escpos.cpp support/escpospreview.h)
+target_include_directories(test_escpos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(test_escpos PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Gui       # QImage (raster path + TicketData::qr)
@@ -393,6 +410,30 @@ add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# imprimir: the print dialog / engine with the printer transport replaced
+# (ThermalPrinter::setTransport) - printer offline, copies sent, factura / completa
+# content, 58 mm - on a throwaway DB and settings. Never a real printer or AEAT.
+add_executable(test_imprimir
+    test_imprimir.cpp
+    support/e2efixture.h
+    support/escpospreview.h
+    support/modalautocloser.h
+    support/testschema.h
+)
+target_include_directories(test_imprimir PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(test_imprimir PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    imprimir
+    printing
+    sql_lite
+    appsettings
+)
+add_test(NAME imprimir
+    COMMAND test_imprimir -o ${CMAKE_BINARY_DIR}/test-results-imprimir.xml,junitxml -o -,txt)
+set_tests_properties(imprimir PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # InstanceLock: one copy of the app per database.
 add_executable(test_instancelock test_instancelock.cpp)
 target_link_libraries(test_instancelock PRIVATE Qt${QT_VERSION_MAJOR}::Test laideal_app)
@@ -452,3 +493,6 @@ target_link_libraries(test_applogger PRIVATE
 )
 add_test(NAME applogger
     COMMAND test_applogger -o ${CMAKE_BINARY_DIR}/test-results-applogger.xml,junitxml -o -,txt)
+# The sql_lite suite (migration fixtures on throwaway databases) takes ~65 s on a CI
+# runner and passed 120 s on a slow one.
+set_tests_properties(sql_lite PROPERTIES TIMEOUT 300)

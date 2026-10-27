@@ -7,13 +7,16 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSet>
 #include <QSpinBox>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -23,8 +26,9 @@ using UiKit::warnHtml;
 using UiKit::errorHtml;
 using UiKit::fileLinkHtml;
 
-Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent) :
+Contabilidad::Contabilidad(const QSqlDatabase &database, QWidget *parent, Purpose purpose) :
     QDialog(parent),
+    m_reverting(purpose == Revert),
     db(database)
 {
     setAttribute(Qt::WA_DeleteOnClose); // self-delete on close: callers show() it and drop the pointer
@@ -105,35 +109,36 @@ Contabilidad::ConfigMode Contabilidad::currentMode() const
 
 void Contabilidad::initialSettings()
 {
-    // Lower bound of the year selector taken from the oldest income record
-    // rather than a hardcoded year, so the range tracks the actual data.
-    // Use fecha_recepcion, not fecha_pago: every ingresos row has a reception
-    // date, whereas fecha_pago is empty on unpaid rows and SQLite MIN() of a
-    // column containing '' returns '' (-> 0), which would collapse the range
-    // to the current year and block selecting/reverting prior-year accounting.
-    const int firstYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_recepcion", "ingresos");
+    // Lower bound of the year selector from the oldest income or expense record, so the
+    // range tracks the data. fecha_recepcion: every ingresos row has one, unlike fecha_pago.
+    const int firstIncomeYear = readMaxNMinYearInColumnFromTable(db, false, "fecha_recepcion", "ingresos");
+    const int firstExpenseYear = readMaxNMinYearInColumnFromTable(db, false, "fecha", "gastos");
     const int currentYear = QDate::currentDate().year();
-    m_sbYear->setRange(firstYear > 0 ? firstYear : currentYear, currentYear);
+    int firstYear = currentYear;
+    for (int year : { firstIncomeYear, firstExpenseYear })
+        if (year > 0)
+            firstYear = qMin(firstYear, year);
+    m_sbYear->setRange(firstYear, currentYear);
     m_sbPeriod->setRange(1, 4);
     resetAllContents();
 }
 
 void Contabilidad::resetAllContents()
 {
-    setWindowTitle(revertirOn ? "Revertir contabilidad" : "Generar contabilidad");
-    m_lblIntro->setText(revertirOn
+    setWindowTitle(m_reverting ? "Revertir contabilidad" : "Generar contabilidad");
+    m_lblIntro->setText(m_reverting
         ? "Desbloquea un trimestre ya contabilizado para que sus ingresos y gastos se puedan "
           "volver a modificar. No se genera ningún informe."
         : "Genera el informe de contabilidad del periodo en PDF. El informe trimestral puede "
           "además bloquear el trimestre, como cierre tras la declaración de impuestos.");
     m_cbConfig->setCurrentIndex(Trimestral);
-    m_cbConfig->setDisabled(revertirOn);   // reverting is always quarterly
+    m_cbConfig->setDisabled(m_reverting);   // reverting is always quarterly
     m_sbYear->setValue(QDate::currentDate().year());
     m_chkLock->setChecked(false);
-    m_chkLock->setEnabled(lockOptionAvailable(currentMode(), revertirOn));
+    m_chkLock->setEnabled(lockOptionAvailable(currentMode(), m_reverting));
     m_chkDetail->setChecked(false);
-    m_chkDetail->setEnabled(!revertirOn);  // reverting writes no report
-    m_btnGenerate->setText(revertirOn ? "Revertir contabilidad" : "Generar contabilidad");
+    m_chkDetail->setEnabled(!m_reverting);  // reverting writes no report
+    m_btnGenerate->setText(m_reverting ? "Revertir contabilidad" : "Generar contabilidad");
     m_lblResult->setText("Seleccione el periodo y pulse \"" + m_btnGenerate->text() + "\".");
 }
 
@@ -180,6 +185,8 @@ QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int u
         if (!closures.isEmpty())
             return name + " no está bloqueado (contabilidad revertida el "
                    + last.reopenedAt.toString("dd-MM-yyyy 'a las' hh:mm") + ").";
+        if (quarterIsClosed(db, q, year))   // no history yet it reads closed: the read failed
+            return name + " se considera bloqueado: no se pudo leer su estado.";
         return name + (quarterHasMovements(db, q, year) ? " no está bloqueado."
                                                          : " no tiene registros de ingresos ni de gastos.");
     };
@@ -210,13 +217,23 @@ QDate Contabilidad::quarterLastDay(int quarter, int year)
     return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1);
 }
 
+bool Contabilidad::revertConfirmed(const QString &quarterName)
+{
+    if (confirmRevert)
+        return confirmRevert(quarterName);
+    return QMessageBox::question(this, "Revertir contabilidad",
+               "La contabilidad " + quarterName + " está cerrada. Al revertirla, sus ingresos y gastos se podrán "
+               "modificar y el informe presentado puede dejar de coincidir con los datos.\n\n¿Desea revertirla?",
+               QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+}
+
 void Contabilidad::onGenerateClicked()
 {
     m_dataReadFailed = false;   // only this action's own read may report a failure
     const int trim = m_sbPeriod->value();
     const int year = m_sbYear->value();
     const QString quarterName = "del trimestre " + QString::number(trim) + " de " + QString::number(year);
-    m_lblResult->setText(revertirOn ? "Revirtiendo..." : "Generando el informe...");
+    m_lblResult->setText(m_reverting ? "Revirtiendo..." : "Generando el informe...");
     QString message;
     int invalidAmounts = 0;
     QString file;
@@ -228,15 +245,19 @@ void Contabilidad::onGenerateClicked()
                                  : okHtml("Informe generado.");
     } else {
         const bool closed = quarterIsClosed(db, trim, year);
-        if (revertirOn) {
+        if (m_reverting) {
             if (!closed) {
                 qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not closed";
                 message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
+            } else if (!revertConfirmed(quarterName)) {
+                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "revert declined";
+                message = warnHtml("No se ha revertido la contabilidad " + quarterName + ".")
+                          + "<br>El trimestre sigue bloqueado.";
             } else if (!reopenQuarter(db, trim, year)) {
                 message = errorHtml("No se pudo revertir la contabilidad " + quarterName + ".")
                           + "<br>El trimestre sigue bloqueado.";
             } else {
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "reopened";
+                qWarning() << "(Revertir) Contabilidad: closed quarter" << trim << "of" << year << "reverted";
                 message = okHtml("Contabilidad " + quarterName + " revertida.") + "<br>"
                           + "El trimestre vuelve a estar abierto.";
             }
@@ -288,7 +309,7 @@ void Contabilidad::onGenerateClicked()
     if (!file.isEmpty())
         message += "<br>" + fileLinkHtml(file);
     if (invalidAmounts > 0)
-        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal "
+        message += "<br>" + errorHtml(QString("Hay %1 importe(s) guardados con ',' como separador decimal u otro formato no válido "
                                               "o gasto(s) con un tipo de IVA no reconocido: no se han sumado y "
                                               "aparecen marcados en el detalle. Revíselos antes "
                                               "de presentar el informe.").arg(invalidAmounts));
@@ -298,7 +319,7 @@ void Contabilidad::onGenerateClicked()
 void Contabilidad::onConfigChanged()
 {
     // Only a quarterly report can close the books; untick so a hidden choice never applies.
-    const bool lockAvailable = lockOptionAvailable(currentMode(), revertirOn);
+    const bool lockAvailable = lockOptionAvailable(currentMode(), m_reverting);
     if (!lockAvailable)
         m_chkLock->setChecked(false);
     m_chkLock->setEnabled(lockAvailable);
@@ -419,7 +440,7 @@ void Contabilidad::periodRangeFor(ConfigMode mode, int unit, int year, QDate &st
 void Contabilidad::periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive)
 {
     const ConfigMode mode = currentMode();
-    // Mensual reads the month from sb_trim; Trimestral the quarter from sb_trim;
+    // Mensual reads the month from m_sbPeriod; Trimestral the quarter from m_sbPeriod;
     // Anual iterates quarters, so the caller passes the quarter in trimForYearConfig.
     const int unit = (mode == Anual) ? trimForYearConfig : m_sbPeriod->value();
     periodRangeFor(mode, unit, m_sbYear->value(), start, endExclusive);
@@ -526,8 +547,9 @@ int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
     QSet<QString> regularized;
     for (const RegularizationDetail &r : regularizations) {
         const QDate paid = QDate::fromString(r.fechaPago, QStringLiteral("dd-MM-yyyy"));
-        if (!paid.isValid() || paid < periodStart || paid >= periodEnd)
-            continue;                       // an earlier period's payment: does not offset this period's sales
+        // An unreadable payment date counts as this period: its money is netted, so its ticket is too.
+        if (paid.isValid() && (paid < periodStart || paid >= periodEnd))
+            continue;                      // an earlier period's payment: does not offset this period's sales
         if (net.contains(r.nRecibo))
             net[r.nRecibo] -= r.importe;
         regularized.insert(r.nRecibo);
@@ -706,7 +728,7 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
             "</tbody></table>";
     if (flaggedTickets > 0)
         html += "<p>* " + QString::number(flaggedTickets) + " ticket(s) con alguna prenda cuyo importe est&aacute; "
-                "guardado con ',' decimal: esa prenda no se suma en el importe ni en el total.</p>";
+                "guardado con ',' decimal u otro formato no válido: esa prenda no se suma en el importe ni en el total.</p>";
     return html + kRoundingNote;
 }
 
@@ -755,7 +777,7 @@ QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<Regularizat
             "</tbody></table>";
     if (flagged > 0)
         html += "<p>* " + QString::number(flagged) + " ticket(s) con alguna prenda cuyo importe est&aacute; "
-                "guardado con ',' decimal: esa prenda no se resta.</p>";
+                "guardado con ',' decimal u otro formato no válido: esa prenda no se resta.</p>";
     return html + kRoundingNote;
 }
 
@@ -816,7 +838,7 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
                 "(solo se suman sin IVA, 10 % y 21 %): aparecen en el listado pero no entran en el "
                 "resumen de gastos ni en este total. Revise su IVA en la tabla de gastos.</p>";
     if (invalidRows > 0)
-        html += "<p>** " + QString::number(invalidRows) + " factura(s) con el importe guardado con ',' decimal: "
+        html += "<p>** " + QString::number(invalidRows) + " factura(s) con el importe guardado con ',' decimal u otro formato no válido: "
                 "no se suman en el resumen ni en este total.</p>";
     return html + kRoundingNote;
 }

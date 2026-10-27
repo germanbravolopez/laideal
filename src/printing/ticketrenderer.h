@@ -63,7 +63,8 @@ public:
 
     // Any QR image redrawn module by module at whole dots per module: 30-40 mm (art. 21.1
     // of the Orden), plus the quiet zone. Null when no QR symbol can be read from it.
-    static QImage printableQr(const QImage &qr);
+    // The symbol never exceeds paperDots (the quiet zone included).
+    static QImage printableQr(const QImage &qr, int paperDots = 576);
 };
 
 #endif // TICKETRENDERER_H
