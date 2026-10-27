@@ -56,8 +56,7 @@ void AddGarment::buildUi()
     m_leCliente->setReadOnly(true);
     ticketForm->addRow("Cliente:", m_leCliente);
     m_deFechaRecepcion = UiKit::dateEdit(QDate::currentDate(), "deFechaRecepcion");
-    m_deFechaRecepcion->setReadOnly(true);
-    m_deFechaRecepcion->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    UiKit::lockDate(m_deFechaRecepcion);
     ticketForm->addRow("Fecha recepción:", m_deFechaRecepcion);
     layout->addWidget(m_grpTicket);
 

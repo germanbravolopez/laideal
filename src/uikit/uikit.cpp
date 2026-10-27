@@ -144,7 +144,8 @@ QLabel *heading(const QString &text)
 void emphasize(QWidget *widget, qreal extraPoints)
 {
     QFont font = widget->font();
-    font.setPointSizeF(font.pointSizeF() + extraPoints);
+    if (font.pointSizeF() > 0)   // a pixel-sized app font reports -1
+        font.setPointSizeF(font.pointSizeF() + extraPoints);
     font.setBold(true);
     widget->setFont(font);
 }
