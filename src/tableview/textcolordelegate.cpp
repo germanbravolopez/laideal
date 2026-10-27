@@ -5,7 +5,10 @@
 #include <QPainter>
 #include <QTableView>
 
-TextColorDelegate::TextColorDelegate(QTableView* tableView, QObject* parent) : QStyledItemDelegate(parent), m_tableView(tableView) {}
+TextColorDelegate::TextColorDelegate(QTableView* tableView, QObject* parent) : QStyledItemDelegate(parent)
+{
+    Q_UNUSED(tableView)
+}
 
 TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText, const QString &rowEstado,
                                                        const QString &rowVerifactuEstado)
@@ -34,8 +37,4 @@ void TextColorDelegate::initStyleOption(QStyleOptionViewItem* option, const QMod
     }
 
     option->palette.setColor(QPalette::Text, textColor);
-}
-
-void TextColorDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
-    QStyledItemDelegate::paint(painter, option, index);
 }

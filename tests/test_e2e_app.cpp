@@ -3857,6 +3857,85 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
     }
 
+    // Listado de gastos: importe / IVA must be numbers, the id is never typed over, a padded
+    // date is stored clean, and the right-click menu offers only what the table supports.
+    void test_listado_gastosEditsAreChecked()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe) VALUES (1, 'L-1', 'Luz', '', 'Beta', '10-05-2026', '21', '121.00')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
+        Listado *gastos = nullptr;
+        Listado *ingresos = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "gastos")
+                gastos = l;
+        QVERIFY(gastos);
+        QVERIFY(!gastos->table_listado->addRowAction()->isEnabled());
+        QVERIFY(gastos->table_listado->deleteRowAction()->isEnabled());
+        QMetaObject::invokeMethod(&mw, "on_actionIngresos_triggered");
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "ingresos")
+                ingresos = l;
+        QVERIFY(ingresos);
+        QVERIFY(!ingresos->table_listado->addRowAction()->isEnabled());
+        QVERIFY(!ingresos->table_listado->deleteRowAction()->isEnabled());
+
+        QAbstractItemModel *model = gastos->table_listado->model();
+        const auto result = [gastos]() { return gastos->findChild<QLabel *>("lblResult")->text(); };
+        QVERIFY(!model->setData(model->index(0, GASTOS_IDX_IMPORTE), "abc"));
+        QVERIFY2(result().contains("Número no válido"), qPrintable(result()));
+        QVERIFY(!model->setData(model->index(0, GASTOS_IDX_IVA), ""));
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE id = 1"), QStringLiteral("121.00"));
+        QCOMPARE(scalar("SELECT iva FROM gastos WHERE id = 1"), QStringLiteral("21"));
+        QVERIFY(model->setData(model->index(0, GASTOS_IDX_IMPORTE), "130.50"));
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE id = 1"), QStringLiteral("130.50"));
+
+        QVERIFY(!(model->flags(model->index(0, GASTOS_IDX_ID)) & Qt::ItemIsEditable));
+        QVERIFY(!model->setData(model->index(0, GASTOS_IDX_ID), "99"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM gastos WHERE id = 1"), QStringLiteral("1"));
+
+        QVERIFY(model->setData(model->index(0, GASTOS_IDX_FECHA), " 11-05-2026 "));
+        QCOMPARE(scalar("SELECT fecha FROM gastos WHERE id = 1"), QStringLiteral("11-05-2026"));
+        QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
+    }
+
+    // Listado de prendas: Añadir adds exactly one row; Eliminar names the row it asks
+    // about and deletes it on Yes.
+    void test_listado_prendasAddAndDelete()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) "
+                                "VALUES ('Falda', '2.5', '1.5')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_prendas_triggered");
+        Listado *prendas = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "prendas")
+                prendas = l;
+        QVERIFY(prendas);
+        const auto result = [prendas]() { return prendas->findChild<QLabel *>("lblResult")->text(); };
+
+        const int before = scalar("SELECT COUNT(*) FROM prendas").toInt();
+        prendas->actionAnadir_fila->trigger();
+        QVERIFY2(result().contains("Fila añadida"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM prendas"), QString::number(before + 1));
+        prendas->actionAnadir_fila->trigger();
+        QVERIFY2(result().contains("No se pudo añadir"), qPrintable(result()));   // a second blank name breaks the primary key
+        QCOMPARE(scalar("SELECT COUNT(*) FROM prendas"), QString::number(before + 1));
+
+        QAbstractItemModel *model = prendas->table_listado->model();
+        int row = -1;
+        for (int r = 0; r < model->rowCount(); ++r)
+            if (model->index(r, 0).data().toString() == "Falda")
+                row = r;
+        QVERIFY(row >= 0);
+        prendas->table_listado->setCurrentIndex(model->index(row, 0));
+        prendas->actionEliminar_fila->trigger();
+        QVERIFY2(m_popups->sawMessageContaining("\"Falda, 2.5\""), qPrintable(m_popups->messages().join(" | ")));
+        QVERIFY2(result().contains("Fila eliminada"), qPrintable(result()));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM prendas WHERE nombre = 'Falda'"), QStringLiteral("0"));
+    }
+
     // Contabilidad trimestral: generating with "bloquear" writes the PDF and locks
     // the quarter's rows; Revertir contabilidad unlocks them again.
     void test_contabilidad_generateLockThenRevert()

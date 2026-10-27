@@ -6,8 +6,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QCoreApplication>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -56,6 +58,16 @@ void rotateLocked()
         s_written = 0;   // rename failed: do not retry on every message
 }
 
+// A secret that slips into a message never reaches the file the shop sends to support.
+QString scrubbed(const QString &msg)
+{
+    static const QRegularExpression secret(
+        R"((ServiceKey|password|passwd|clave|secret|token)(["']?\s*[:=]\s*["']?)[^"'\s,;}&]+)",
+        QRegularExpression::CaseInsensitiveOption);
+    QString out = msg;
+    return out.replace(secret, QStringLiteral("\\1\\2***"));
+}
+
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     QtMessageHandler previous = nullptr;
@@ -65,13 +77,14 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
         if (s_logStream.device()) {
             const char *tag = "DEBUG";
             switch (type) {
+            case QtInfoMsg:     tag = "INFO";  break;
             case QtWarningMsg:  tag = "WARN";  break;
             case QtCriticalMsg: tag = "CRIT";  break;
             case QtFatalMsg:    tag = "FATAL"; break;
             default: break;
             }
-            const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
-                                 + " [" + tag + "] " + msg + "\n";
+            const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+                                 + " [" + tag + "] " + scrubbed(msg) + "\n";
             s_logStream << line;
             s_logStream.flush();
             s_written += line.toUtf8().size();
@@ -111,6 +124,8 @@ bool AppLogger::installAt(const QString &path, qint64 maxBytes)
                 << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
                 << " ===\n";
     s_logStream.flush();
+    static const bool closesAtExit = (qAddPostRoutine(&AppLogger::uninstall), true);   // no logging into destroyed statics
+    Q_UNUSED(closesAtExit)
     const QtMessageHandler replaced = qInstallMessageHandler(messageHandler);
     if (replaced != messageHandler)   // installing twice must not chain to itself
         s_previousHandler = replaced;
