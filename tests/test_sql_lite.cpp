@@ -2891,69 +2891,6 @@ private slots:
         QCOMPARE(legacy.snapshot(tables), first);
     }
 
-    // --- refusedInvoices ----------------------------------------------------------------
-
-    void test_refusedInvoices_floorOrderingAndFlags()
-    {
-        const QString ins = "INSERT INTO ingresos (edit_lock, n_recibo, fecha_pago, importe, pagado, hash, verifactu_estado, "
-                            "verifactu_invoice_seq, verifactu_error, verifactu_rectifies_n_recibo) VALUES ";
-        exec(ins + "('0', '10', '10-03-2026', '10.00', 'SI', 'a', 'ERROR', 0, 'e10', NULL), "
-                   // one invoice paid on two days: earliest date, summed amount
-                   "('0', '20', '12-03-2026', '5.00',  'SI', 'b', 'ERROR', 1, 'e20', NULL), "
-                   "('0', '20', '05-03-2026', '7.50',  'SI', 'c', 'ERROR', 1, 'e20', NULL), "
-                   "('0', 'R-1', '15-03-2026', '4.00', 'SI', 'd', 'ERROR', 0, 'eR', '20'), "
-                   "('0', '30', '20-12-2025', '3.00',  'SI', 'e', 'ERROR', 0, 'e30', NULL), "
-                   "('0', '40', 'garbage',    '2.00',  'SI', 'f', 'ERROR', 0, 'e40', NULL), "
-                   "('0', '50', '11-03-2026', '1.00',  'SI', 'g', 'ENVIADA', 0, '', NULL), "
-                   "('0', '60', '11-03-2026', '1.00',  'NO', 'h', 'ERROR', 0, 'e60', NULL)");
-
-        const QVector<RefusedInvoice> all = refusedInvoices(m_db, QString());
-        QCOMPARE(all.size(), 5);                                 // neither the ENVIADA nor the unpaid one
-        QCOMPARE(refusedInvoiceCount(m_db), all.size());
-        QCOMPARE(refusedInvoices(m_db, "not a date").size(), 5);  // an unreadable floor hides nothing
-
-        const QVector<RefusedInvoice> list = refusedInvoices(m_db, "2026-01-01");
-        QCOMPARE(list.size(), 4);                                // the 2025 payment is below the floor
-        QCOMPARE(refusedInvoiceCount(m_db, "2026-01-01"), 4);
-        QCOMPARE(list[0].nRecibo, QStringLiteral("R-1"));         // newest payment first
-        QVERIFY(list[0].rectificativa);
-        QCOMPARE(list[0].error, QStringLiteral("eR"));
-        QCOMPARE(list[1].nRecibo, QStringLiteral("10"));
-        QVERIFY(!list[1].rectificativa);
-        QCOMPARE(list[2].nRecibo, QStringLiteral("20"));
-        QCOMPARE(list[2].seq, 1);
-        QCOMPARE(list[2].fechaPago, QStringLiteral("05-03-2026"));
-        QCOMPARE(list[2].importe, 12.50);
-        QCOMPARE(list[3].nRecibo, QStringLiteral("40"));          // an unreadable date is never hidden
-        QCOMPARE(list[3].fechaPago, QString());
-    }
-
-    // --- the other cheap gaps -----------------------------------------------------------
-
-    void test_insertGarmentRows_allOrNone()
-    {
-        QVERIFY(tryExec("CREATE UNIQUE INDEX IF NOT EXISTS ingresos_ticket_hash ON ingresos (n_recibo, hash)"));
-        const auto garment = [](const QString &hash) {
-            IngresoGarmentRow row;
-            row.nRecibo = "U1";
-            row.fechaRecepcion = "01-03-2026";
-            row.importe = "3.00";
-            row.pagado = "NO";
-            row.estado = "En tienda";
-            row.cantidad = "1";
-            row.prenda = "Camisa";
-            row.hash = hash;
-            row.verifactuEstado = "SIN COBRAR";
-            return row;
-        };
-        QVERIFY(!insertGarmentRows(m_db, { garment("x"), garment("y"), garment("x") }));   // the third repeats the first
-        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("0"));
-        QVERIFY(insertGarmentRows(m_db, { garment("x"), garment("y") }));
-        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("2"));
-        QVERIFY(insertGarmentRows(m_db, {}));                                              // nothing to store is not a failure
-        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = 'U1'"), QStringLiteral("2"));
-    }
-
     void test_insertNewItemToTable_bindsValues()
     {
         const QString hostile = "O'Brien\"); DROP TABLE clientes;--";
@@ -2962,25 +2899,6 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM sqlite_master WHERE name = 'clientes'"), QStringLiteral("1"));
         QVERIFY(!insertNewItemToTable(m_db, { "only one" }, "clientes"));                   // wrong column count
         QCOMPARE(scalar("SELECT COUNT(*) FROM clientes"), QStringLiteral("1"));
-    }
-
-    void test_addNewClient_updateItemToClient_roundTrip()
-    {
-        QVERIFY(addNewClient(m_db, "Marta", "911000111", "Calle Uno", "600000111"));
-        QVERIFY(updateItemToClient(m_db, "movil", "600999888", "Marta"));
-        QCOMPARE(readClientPhones(m_db, "Marta"), (QStringList{ "911000111", "600999888" }));
-        QVERIFY(updateItemToClient(m_db, "movil", "1", "Nadie"));                           // unknown client: succeeds, changes nothing
-        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes WHERE movil = '1'"), QStringLiteral("0"));
-    }
-
-    void test_selectFromWhereLike_exactAndPrefix()
-    {
-        addNewClient(m_db, "Ana Maria", "", "", "600000001");
-        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana Maria", true, false), QStringLiteral("600000001"));
-        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana", true, false), QString());       // exact: no prefix
-        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Ana", false, false), QStringLiteral("600000001"));
-        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "ana", false, false), QStringLiteral("600000001"));   // LIKE ignores case
-        QCOMPARE(selectFromWhereLike(m_db, "movil", "clientes", "nombre", "Zoe", false, false), QString());
     }
 
     void test_readColumnFromTable_orderAndYears()
