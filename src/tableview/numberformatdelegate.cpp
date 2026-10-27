@@ -37,7 +37,7 @@ void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *mod
 
 QString NumberFormatDelegate::storedNumber(const QString &typed)
 {
-    return typed.trimmed().replace(QLatin1Char(','), QLatin1Char('.'));
+    return moneyText(typed);   // "12," and "2,5" are stored as "12.00" and "2.50", like every amount writer
 }
 
 bool NumberFormatDelegate::isAmount(const QString &typed)

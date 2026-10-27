@@ -79,7 +79,8 @@ private slots:
     // An edited number is stored with a dot, whatever decimal separator was typed.
     void test_numberFormatDelegate_storesADot()
     {
-        QCOMPARE(NumberFormatDelegate::storedNumber(" 2,5 "), QStringLiteral("2.5"));
+        QCOMPARE(NumberFormatDelegate::storedNumber(" 2,5 "), QStringLiteral("2.50"));
+        QCOMPARE(NumberFormatDelegate::storedNumber("12,"), QStringLiteral("12.00"));   // never "12."
         QCOMPARE(NumberFormatDelegate::storedNumber("12.40"), QStringLiteral("12.40"));
         QStandardItemModel model(1, 1);
         NumberFormatDelegate delegate;
