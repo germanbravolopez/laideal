@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ develop, master, 'feature/**' ]
+    branches: [ '**' ]
     tags: [ '[0-9]+.[0-9]+' ]
   pull_request:
-    branches: [ develop, master, 'feature/**' ]
+    branches: [ master ]
 
 jobs:
   build:

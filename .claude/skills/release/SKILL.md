@@ -17,7 +17,7 @@ Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if n
 
 ## Preconditions (check before doing anything)
 
-1. **Current branch is not `master`.** Releases are cut from a working branch (`develop` or `feature/...`) and merged into `master` — never committed straight to it. If on `master`, stop and ask the user which branch to release from.
+1. **Release branch.** Releases are cut on a `release/X.Y` branch from an up-to-date `master` (`git checkout master && git pull --ff-only origin master && git checkout -b release/X.Y`) and merged back through a PR — never committed straight to `master`. Every change it ships must already be merged to `master` from its own branch. If the user is on another branch with unmerged work, ask whether to merge that first.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
 3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
 4. **`releases_notes.txt` and `releases_notes_es.txt` both have an `X.Y` section.** The `ci.yml` release job **fails the publish** if either section is missing or empty: together they become the GitHub release body (Spanish first, then English), which is also what the in-app updater shows the shop before installing. So this is a hard gate, not just a nicety. Verify it before tagging. (The local-artifact file `build-release\laideal_setup_X.Y.exe` only matters for the local fallback in step 8b — CI builds fresh on a runner.)
@@ -129,14 +129,14 @@ gh run watch $rid --exit-status   # non-zero exit = CI failed -> do NOT merge
 # --admin so the merge proceeds even if required-reviews / required-checks
 # aren't satisfied. This is a solo project; the PR exists to honour the
 # protection rule, not to gate on automated review.
-gh pr merge <working-branch> --merge --admin --delete-branch=false
+gh pr merge <working-branch> --merge --admin --delete-branch
 
 # Bring the merge commit into the local master so step 7 can tag it.
 git checkout master
 git pull --ff-only origin master
 ```
 
-`--merge` is mandatory — `--squash` or `--rebase` defeat the "release = single point on master" convention. `--delete-branch=false` keeps `<working-branch>` alive locally and on the remote for the next release cycle; do NOT pass `--delete-branch` unless the user asks.
+`--merge` is mandatory — `--squash` or `--rebase` defeat the "release = single point on master" convention. `--delete-branch` removes `release/X.Y` once merged; the next change starts a new branch from `master`.
 
 Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
 
@@ -193,11 +193,7 @@ Remove-Item $tmpNotes
 
 - Confirm `git status` on `master` is clean and on the merge commit.
 - Surface the GitHub release URL from `gh release create` output.
-- Switch back to the working branch so future commits don't land on `master`:
-  ```powershell
-  git checkout <working-branch>
-  ```
-- If the user wants the working branch deleted or renamed for the next iteration, ask — don't delete branches unprompted.
+- Delete the local `release/X.Y` branch (`git branch -d release/X.Y`) and stay on an up-to-date `master` without committing; the next change starts its own branch from it.
 
 ---
 

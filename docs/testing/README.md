@@ -24,7 +24,7 @@ ctest --test-dir build -R e2e --output-on-failure  # one suite, by name regex
 
 A suite can also be run directly for its full per-function report, e.g. `build\tests\test_sql_lite.exe`. GUI suites need `QT_QPA_PLATFORM=offscreen` when run by hand; CTest sets it for them.
 
-**In CI** the single `ci.yml` workflow runs the same `ctest` on every push and PR to `develop`, `master` and `feature/**`, and on `X.Y` tags. Its `release` job `needs: build`, so a failing test aborts a publish. Each suite writes `build/test-results-<suite>.xml` (JUnit); `.github/scripts/Render-TestSummary.ps1` turns those into a foldable per-suite, per-method table in the run's step summary, and appends the `test_ticket_preview` ASCII receipt (GitHub strips images from summaries; the PNG renders are uploaded as the `ticket-previews` artifact).
+**In CI** the single `ci.yml` workflow runs the same `ctest` on every push to any branch, every PR to `master`, and on `X.Y` tags. Its `release` job `needs: build`, so a failing test aborts a publish. Each suite writes `build/test-results-<suite>.xml` (JUnit); `.github/scripts/Render-TestSummary.ps1` turns those into a foldable per-suite, per-method table in the run's step summary, and appends the `test_ticket_preview` ASCII receipt (GitHub strips images from summaries; the PNG renders are uploaded as the `ticket-previews` artifact).
 
 ---
 

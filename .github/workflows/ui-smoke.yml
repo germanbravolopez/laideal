@@ -9,15 +9,15 @@ name: UI smoke
 # pre-production script in its dry run. Screenshots, control trees on failure, the
 # printed jobs, logs and databases are kept as the `ui-smoke` artifact.
 #
-# Run it before a release (/release step 1): gh workflow run ui-smoke.yml --ref develop
+# Run it before a release (/release step 1): gh workflow run ui-smoke.yml --ref release/X.Y
 
 on:
   workflow_dispatch:
-  # The release PR (develop -> master) runs it; never on every push.
+  # Every pull request to master runs it (release/X.Y included); never on every push.
   pull_request:
     branches: [ master ]
   push:
-    branches: [ develop, 'feature/**' ]
+    branches: [ '**', '!master' ]
     paths:
       - 'tests/ui/**'
       - 'tests/tools/**'

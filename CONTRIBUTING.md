@@ -11,7 +11,7 @@ La Ideal is maintained by one developer, mostly working with AI coding agents (C
 
 ## Every change
 
-1. Work on `develop` or a `feature/...` branch, never on `master` (see the workflow below).
+1. Work on a short-lived branch cut from `master` and named after the change (`feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `tests/<topic>`, `ci/<topic>`, `release/X.Y`), never on `master` itself (see the workflow below).
 2. Cover the change with a test: a unit or end-to-end suite (`tests/`), or a UI smoke step (`tests/ui/`) for a window or flow. How to run each suite: [README §Tests](README.md#tests); how to write one: [`docs/testing/`](docs/testing/README.md).
 3. Anything touching invoices, the `verifactu_*` columns, ticket numbering, row edits / deletes or the printed QR also goes through the Verifactu compliance review ([`docs/modules/verifactu/verifactu-requirements.md`](docs/modules/verifactu/verifactu-requirements.md); the `verifactu-compliance-auditor` agent).
 4. Build, run `ctest` until it is green, and update the docs ([`/update-docs`](.claude/skills/update-docs/SKILL.md) checklist).
@@ -21,38 +21,47 @@ La Ideal is maintained by one developer, mostly working with AI coding agents (C
 
 ## Development workflow
 
-**Never commit directly to `master`.** `master` only ever moves through merges from a working branch, and every commit on `master` corresponds to a release tag.
+**Never commit directly to `master`.** `master` only moves through pull requests merged with a merge commit. There is no long-lived integration branch: every change gets its own short-lived branch cut from `master` and named after what it does (`feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `tests/<topic>`, `ci/<topic>`, `release/X.Y`). A release is the merge commit of a `release/X.Y` pull request, tagged `X.Y`.
 
-1. Create or check out a working branch (e.g. `develop`, or a feature branch like `feature/fix-search`):
+1. Start the branch from an up-to-date `master`:
    ```powershell
-   git checkout -b develop
+   git checkout master
+   git pull --ff-only origin master
+   git checkout -b fix/search-accents
    ```
-2. Implement your changes on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch is also where the documentation updates live - keep `docs/progress_tracker.md` (status / open issues), `docs/completed_milestones.md`, the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code as you go.
-3. Before merging to `master`, the branch must be **release-ready**:
-   - All planned changes are applied and reviewed.
+2. Implement the change on the branch. Commit as you go - small, focused commits with single-line messages in the project style (see `git log`). The branch also carries its documentation updates - keep `docs/progress_tracker.md` (status / open issues), `docs/completed_milestones.md`, the relevant `docs/modules/*.md` and `docs/architecture.md` in sync with the code.
+3. Open a pull request to `master` and merge it once CI is green (the `ui-smoke.yml` UI smoke test also runs on pull requests to `master`):
+   ```powershell
+   git push -u origin fix/search-accents
+   gh pr create --base master --head fix/search-accents --title "<what it changes>" --body "<why>"
+   gh pr checks --watch
+   gh pr merge fix/search-accents --merge --admin --delete-branch
+   git checkout master
+   git pull --ff-only origin master
+   ```
+   `--merge` produces a merge commit (NOT `--squash`, NOT `--rebase`). `--admin` lets the merge proceed despite required-reviews on a solo project. The branch is deleted once merged; the next change starts again at step 1. Merged work waits on `master`, untagged, until the next release.
+4. **Release X.Y**: cut `release/X.Y` from `master` and make it **release-ready**:
+   - All planned changes are merged to `master` and reviewed.
    - The project builds cleanly (`releases\release.ps1 <next-version>` succeeds end-to-end, including `windeployqt` and Inno Setup).
    - `ctest` and the UI smoke test (`ui-smoke.yml`) are green, and part 1 of the smoke test ([`docs/testing/smoke_test.md`](docs/testing/smoke_test.md)) is done; part 2 is the shop user's self-check after installing.
    - All documentation is up to date - run the `/update-docs` skill or follow its checklist by hand: `docs/progress_tracker.md`, `docs/completed_milestones.md`, `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, the root `README.md` if a user-visible behaviour or the build changed, and this file if the workflow or release steps changed.
    - `CMakeLists.txt` is bumped to the new `project(laideal VERSION X.Y ...)`.
    - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new X.Y section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time; CI fails the release if either section is missing. Keep both files UTF-8 **with BOM** so the installer renders accents.
    - `docs/progress_tracker.md` Current Status points at the new release; the milestone entry covers the work delivered.
-   Commit the version bump + notes on the branch as a single `release X.Y` commit.
-4. Merge the branch to `master` through a pull request, with a merge commit so the release shows up as a single point on `master`'s history. `master` has a branch protection rule that requires a PR, so this is the path of least resistance. With the [GitHub CLI](https://cli.github.com/):
+   Commit the version bump + notes on `release/X.Y` as a single `release X.Y` commit, then merge it like any other branch (step 3) with the title `Release X.Y`:
    ```powershell
-   git push -u origin develop
-   gh pr create --base master --head develop `
+   git push -u origin release/X.Y
+   gh pr create --base master --head release/X.Y `
        --title "Release X.Y" `
        --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
-   gh pr merge develop --merge --admin --delete-branch=false
+   gh pr merge release/X.Y --merge --admin --delete-branch
    git checkout master
    git pull --ff-only origin master
    ```
-   `--merge` produces the merge commit (NOT `--squash`, NOT `--rebase`). `--admin` lets the merge proceed despite required-reviews on a solo project. `--delete-branch=false` keeps `develop` alive for the next cycle.
-
    Fallback if `gh` is unavailable or the PR can't merge cleanly, do it locally:
    ```powershell
    git checkout master
-   git merge --no-ff develop -m "Merge branch 'develop' for release X.Y"
+   git merge --no-ff release/X.Y -m "Merge branch 'release/X.Y' for release X.Y"
    git push origin master
    ```
    The push will be flagged as `Bypassed rule violations` but admins can override - decide whether to tighten or relax the rule afterwards.
@@ -64,8 +73,6 @@ La Ideal is maintained by one developer, mostly working with AI coding agents (C
    git push origin X.Y
    ```
 6. **Pushing the tag in step 5 is the publish trigger** - the `release` job in `.github/workflows/ci.yml` runs on any `X.Y` tag, after the `build` job (incl. the `ctest` gate) passes, and packages + publishes the GitHub Release automatically (artifacts + notes) reusing the exe the build job produced. Just watch the run (`gh run watch` or the Actions tab); no manual build or `gh release create` needed. See [Release procedure](#release-procedure) below for what the workflow does and the local fallback.
-
-After publishing, the working branch can either continue (rename + reuse for the next iteration) or be deleted. Either way, the next set of changes starts again at step 1.
 
 ---
 
@@ -102,7 +109,7 @@ The same pipeline (configure -> build -> `ctest` -> `windeployqt` with the DLL c
 
 To repoint at a different Qt / CMake / Ninja install, edit the `$QtBinDir` / `$CMakeBinDir` / `$MingwBinDir` / `$NinjaBinDir` constants at the top of `releases\release.ps1`.
 
-From any PowerShell prompt in the repo root (after `CMakeLists.txt` has been bumped to the target version on the working branch):
+From any PowerShell prompt in the repo root (after `CMakeLists.txt` has been bumped to the target version on the `release/X.Y` branch):
 
 ```powershell
 .\releases\release.ps1 X.Y
