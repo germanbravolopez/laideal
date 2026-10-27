@@ -88,7 +88,7 @@ public:
         QString        error;
         bool           newer = false;
     };
-    static Release parseRelease(const QByteArray &json, const QString &installedVersion = currentVersion());
+    static Release parseRelease(const QByteArray &json, const QString &installedVersion = currentVersion(), bool allowLoopback = false);
     // The Spanish section of the bilingual release body; the whole body when it has no sections.
     static QString releaseNotesForUi(const QString &body);
     // Spanish text for a failed GitHub request (rate limit, offline, timeout...).
@@ -97,7 +97,10 @@ public:
     // Test seam: query another URL than GitHub's /releases/latest.
     void setApiUrl(const QUrl &url) { m_apiUrl = url; }
     // https on github.com or *.githubusercontent.com only.
-    static bool isTrustedDownloadUrl(const QUrl &url);
+    // allowLoopback also accepts http on 127.0.0.1 / localhost (tests against a local fake only).
+    static bool isTrustedDownloadUrl(const QUrl &url, bool allowLoopback = false);
+    // Test seam: accept loopback http URLs for the installer and its checksum.
+    void setAllowLoopbackForTests(bool allow) { m_allowLoopback = allow; }
     // The lower-case hex digest of a sha256sum line ("<hex>  <file>" or "<hex>"); empty if none.
     static QString parseChecksumFile(const QByteArray &content);
     // Why these installer bytes must not run; empty when size and SHA-256 match.
@@ -125,6 +128,7 @@ private:
 
     QNetworkAccessManager *m_nam;
     QUrl m_apiUrl;
+    bool m_allowLoopback = false;
     bool m_silentOnNoUpdate;
     bool m_checkInFlight = false;
     bool m_checkSilent = true;               // of the check in flight; a manual click makes it false
