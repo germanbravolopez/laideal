@@ -2,6 +2,7 @@
 #include "ingresos_schema.h"
 #include "sql_lite.h"
 #include "uikit.h"
+#include <algorithm>
 #include <QtWidgets>
 #include <QMessageBox>
 #include <QDebug>
@@ -100,19 +101,16 @@ bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &v
     return false;
 }
 
-void MySortFilterProxyModel::setNormalizedFilter(const QString &normalizedText, int column)
+QString MySortFilterProxyModel::searchKey(const QString &text)
 {
-    m_normalizedFilterText = normalizedText;
-    m_filterColumn = column;
-    invalidateFilter();
+    return removeDiacritics(text).toLower().simplified();
 }
 
-void MySortFilterProxyModel::setFilters(const QRegularExpression &regex, const QString &normalizedText, int column)
+void MySortFilterProxyModel::setSearchText(const QString &text, int column)
 {
-    m_ownRegex = regex;
-    m_normalizedFilterText = normalizedText;
+    m_searchWords = searchKey(text).split(QLatin1Char(' '), Qt::SkipEmptyParts);
     m_filterColumn = column;
-    invalidateFilter();   // one pass for both
+    invalidateFilter();
 }
 
 int MySortFilterProxyModel::searchColumnCount() const
@@ -132,31 +130,20 @@ double MySortFilterProxyModel::numericValue(const QString &text, bool *ok)
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
                                               const QModelIndex &sourceParent) const
 {
-    const QRegularExpression re = m_ownRegex.pattern().isEmpty() ? filterRegularExpression() : m_ownRegex;
-    const bool hasRegex = !re.pattern().isEmpty();
-    const bool hasNormalized = !m_normalizedFilterText.isEmpty();
-
-    if (!hasRegex && !hasNormalized)
+    if (m_searchWords.isEmpty())
         return true;
-    // The modes are exclusive: a regex narrows by itself (case option included) and an
-    // invalid one matches nothing, so the typo shows as an empty list.
-    if (hasRegex && !re.isValid())
-        return false;
-
+    QStringList cells;
     const int colCount = searchColumnCount();
-    for (int c = 0; c < colCount; ++c) {
-        QModelIndex idx = sourceModel()->index(sourceRow, c, sourceParent);
-        QString cellText = sourceModel()->data(idx).toString();
-
-        if (hasRegex) {
-            if (cellText.contains(re))
-                return true;
-        } else if (m_filterColumn == -1 || c == m_filterColumn) {
-            if (removeDiacritics(cellText).toLower().contains(m_normalizedFilterText))
-                return true;
-        }
+    for (int c = 0; c < colCount; ++c)
+        if (m_filterColumn == -1 || c == m_filterColumn)
+            cells << searchKey(sourceModel()->index(sourceRow, c, sourceParent).data().toString());
+    for (const QString &word : m_searchWords) {
+        const bool found = std::any_of(cells.cbegin(), cells.cend(),
+                                       [&word](const QString &cell) { return cell.contains(word); });
+        if (!found)
+            return false;
     }
-    return false;
+    return true;
 }
 
 bool MySortFilterProxyModel::lessThan(const QModelIndex &left,

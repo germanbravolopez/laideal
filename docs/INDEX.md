@@ -196,7 +196,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Debug log file location | `src/logging/applogger.h` (`logFilePath()`) — `~/.laideal.log` |
 | How to read customer bug logs | `~/.laideal.log` on customer machine; Ayuda → Log de depuración shows the path and an "Abrir archivo" button that opens the log directly |
 | Table view utilities (sort, filter, delegates) | `src/tableview/` — single `tableview` CMake library |
-| Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()` + `setNormalizedFilter()` |
+| Diacritic-insensitive search (tildes) | `src/tableview/mysortfilterproxymodel.h` — `removeDiacritics()`, `searchKey()` + `setSearchText()` (one mode: accents and case ignored, every word) |
 | Development workflow, release procedure | Root `CONTRIBUTING.md` |
 | Gateway REST API fields (as researched) | `docs/modules/verifactu/rest_api.md` |
 | Verifactu DB schema (ingresos verifactu_* columns) | `docs/architecture.md` (ingresos schema) + `docs/modules/verifactu/README.md` (DB persistence section) |

@@ -50,7 +50,7 @@ Triggered by `on_pb_search_clicked()` (also `on_le_search_returnPressed()`). Inp
 | Ticket number | Digits only (spaces ignored), length < 9 | `WHERE n_recibo = :n` |
 | Phone number | Digits only, length ≥ 9; spaces and a `+34` / `0034` prefix are ignored ("600 123 456", "+34600123456") | `WHERE tel_fijo LIKE :p OR movil LIKE :p` on `clientes`; then `WHERE cliente IN (...)` - every client sharing the number is listed |
 | Date (`dd/MM/yyyy` or `dd-MM-yyyy`) | `QDate::fromString` succeeds | `WHERE <date_column> = :date`, where the `cb_search_date` filter picks the column: Recepción → `fecha_recepcion`, Pago → `fecha_pago`, Recogida → `fecha_recogida`, **Anulación → `fecha_anulacion`** (voided, AEAT-cancelled and rectified garments; the Importe total is 0 there, since all are excluded from totals) |
-| Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setNormalizedFilter(text, INGRESOS_COL_CLIENTE)` — **diacritic-insensitive**: typing "garcia" matches "García" |
+| Client name | Default (simple text, not a date) | `SELECT * FROM ingresos` (all rows) filtered client-side by `MySortFilterProxyModel::setSearchText(text, INGRESOS_COL_CLIENTE)` — **accents and case ignored**: typing "garcia" matches "García"; with several words every one must appear ("ana mora" finds "Mora, Ana") |
 
 The *Fecha de* column follows the combo position (not its translated text). A failing query is logged and shows no rows.
 

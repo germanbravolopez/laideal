@@ -3,34 +3,16 @@
 
 #include <QLineEdit>
 
-QT_BEGIN_NAMESPACE
-class QAction;
-class QActionGroup;
-QT_END_NAMESPACE
-
+// The Listado search box: one mode, no options. What it matches is decided by
+// MySortFilterProxyModel::setSearchText (accents and case ignored, every word must appear).
 class FilterWidget : public QLineEdit
 {
     Q_OBJECT
 public:
     explicit FilterWidget(QWidget *parent = nullptr);
 
-    Qt::CaseSensitivity caseSensitivity() const;
-
-    enum PatternSyntax {
-        RegularExpression,
-        Wildcard,
-        FixedString
-    };
-    Q_ENUM(PatternSyntax)
-
-    PatternSyntax patternSyntax() const;
-
 signals:
     void filterChanged();
-
-private:
-    QAction *m_caseSensitivityAction;
-    QActionGroup *m_patternGroup;
 };
 
 #endif // FILTERWIDGET_H

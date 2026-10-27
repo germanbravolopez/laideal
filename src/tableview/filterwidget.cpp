@@ -1,66 +1,10 @@
 #include "filterwidget.h"
 
-#include <QMenu>
-#include <QAction>
-#include <QActionGroup>
-#include <QToolButton>
-#include <QWidgetAction>
-
 FilterWidget::FilterWidget(QWidget *parent)
     : QLineEdit(parent)
-    , m_patternGroup(new QActionGroup(this))
 {
     setClearButtonEnabled(true);
+    setPlaceholderText(tr("Buscar…"));
+    setToolTip(tr("Sin distinguir tildes ni mayúsculas; con varias palabras, las filas que las contienen todas."));
     connect(this, &QLineEdit::textChanged, this, &FilterWidget::filterChanged);
-
-    QMenu *menu = new QMenu(this);
-    m_caseSensitivityAction = menu->addAction(tr("Distinguir Mayúsculas y Minúsculas"));
-    m_caseSensitivityAction->setCheckable(true);
-    connect(m_caseSensitivityAction, &QAction::toggled, this, &FilterWidget::filterChanged);
-
-    menu->addSeparator();
-    m_patternGroup->setExclusive(true);
-    QAction *patternAction = menu->addAction(tr("Expresión Regular"));
-    patternAction->setCheckable(true);
-    patternAction->setChecked(true);
-    patternAction->setData(QVariant(int(RegularExpression)));
-    m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction(tr("Comodín"));
-    patternAction->setCheckable(true);
-    patternAction->setData(QVariant(int(Wildcard)));
-    m_patternGroup->addAction(patternAction);
-    patternAction = menu->addAction(tr("Texto Fijo"));
-    patternAction->setData(QVariant(int(FixedString)));
-    patternAction->setCheckable(true);
-    m_patternGroup->addAction(patternAction);
-    connect(m_patternGroup, &QActionGroup::triggered, this, &FilterWidget::filterChanged);
-
-    QToolButton *optionsButton = new QToolButton;
-#ifndef QT_NO_CURSOR
-    optionsButton->setCursor(Qt::ArrowCursor);
-#endif
-    optionsButton->setFocusPolicy(Qt::NoFocus);
-    optionsButton->setStyleSheet("* { border: none; }");
-    optionsButton->setMenu(menu);
-    optionsButton->setPopupMode(QToolButton::InstantPopup);
-
-    QWidgetAction *optionsAction = new QWidgetAction(this);
-    optionsAction->setDefaultWidget(optionsButton);
-    addAction(optionsAction, QLineEdit::LeadingPosition);
 }
-
-Qt::CaseSensitivity FilterWidget::caseSensitivity() const
-{
-    return m_caseSensitivityAction->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive;
-}
-
-static inline FilterWidget::PatternSyntax patternSyntaxFromAction(const QAction *a)
-{
-    return a ? static_cast<FilterWidget::PatternSyntax>(a->data().toInt()) : FilterWidget::RegularExpression;
-}
-
-FilterWidget::PatternSyntax FilterWidget::patternSyntax() const
-{
-    return patternSyntaxFromAction(m_patternGroup->checkedAction());
-}
-

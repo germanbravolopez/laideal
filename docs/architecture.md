@@ -74,14 +74,14 @@ Generic list-view window. Set `tableName` property at runtime to display any tab
 Used for: `ingresos`, `gastos`, `prendas`, `clientes`, `proveedores`, `servicios`.
 Features: add row, delete row, text filter (`FilterWidget`), PDF export.
 Inline cell editing is disabled for `ingresos` (Verifactu Req. 1, Art. 8.1 RD 1007/2023): row deletion is blocked AND `setEditTriggers(NoEditTriggers)` so no column can be edited from the list view. All `ingresos` changes flow through RecogPrendas / CancelInvoiceDialog / VoidGarmentsDialog / RectifyInvoiceDialog so AEAT, the chained Huella and the accounting lock stay in sync. (VoidGarmentsDialog only touches unpaid, never-submitted rows — a purely local void with no AEAT call.)
-Search is diacritic-insensitive: typing "garcia" matches "García" via `MySortFilterProxyModel::setNormalizedFilter`.
+Search is diacritic-insensitive: typing "garcia" matches "García" via `MySortFilterProxyModel::setSearchText` (case ignored too; several words must all appear).
 Signals `populateClientes()` / `populatePrendas()` back to `MainWindow` after edits.
 
 ### RecogPrendas (`src/recog_prendas/`)
 "Garment pickup" window. Loads `ingresos` rows into a filterable table view.
 Operations: mark paid, mark picked up, edit observations, edit size+price, split garment rows.
 Search modes: by ticket number, by phone, by date, or by client name.
-Name search loads all `ingresos` and filters client-side via `MySortFilterProxyModel::setNormalizedFilter` (diacritic-insensitive — handles García, Jiménez, etc.).
+Name search loads all `ingresos` and filters client-side via `MySortFilterProxyModel::setSearchText(text, INGRESOS_COL_CLIENTE)` (diacritic-insensitive — handles García, Jiménez, etc.).
 
 ### Facturas (`src/facturas/`)
 Formal supplier invoice entry form (code-built dialog, UiKit style). Distinct from receipts.
@@ -128,8 +128,8 @@ Single CMake library (`tableview`) containing all table-view utility classes. Al
 | Class | File | Purpose |
 |-------|------|---------|
 | `TableView` | `tableview.h/.cpp` | `QTableView` subclass with context menu (add/delete row) and `doubleClick` signal |
-| `MySortFilterProxyModel` | `mysortfilterproxymodel.h/.cpp` | `QSortFilterProxyModel` subclass; checks the first 10 source columns against the filter regex (the `verifactu_*` metadata is not searched); also supports diacritic-insensitive plain-text filter via `setNormalizedFilter(text, column)` and `removeDiacritics(text)` static helper |
-| `FilterWidget` | `filterwidget.h/.cpp` | `QLineEdit` with case-sensitivity toggle and pattern-syntax menu (Regex / Wildcard / Fixed) |
+| `MySortFilterProxyModel` | `mysortfilterproxymodel.h/.cpp` | `QSortFilterProxyModel` subclass; one search, `setSearchText(text, column)`: accents and case ignored (`searchKey`, `removeDiacritics`), every word must appear in a searched column (ingresos up to Observaciones, other tables the first 10; the `verifactu_*` metadata is not searched) |
+| `FilterWidget` | `filterwidget.h/.cpp` | `QLineEdit` with a clear button and a "Buscar…" placeholder; no modes or options |
 | `NumberFormatDelegate` | `numberformatdelegate.h/.cpp` | `QStyledItemDelegate` that formats numeric cells to 2 decimal places |
 | `TextColorDelegate` | `textcolordelegate.h/.cpp` | `QStyledItemDelegate` that colours "SI"/"Recogido" green and "NO"/"En tienda" red. A voided row (its `estado` == "Anulado", read from the sibling `INGRESOS_COL_ESTADO`) renders green everywhere so a cancelled receipt's "NO" pagado no longer reads as a debt; so does any row whose `verifactu_estado` is `ANULADA` (sibling `INGRESOS_COL_VERIFACTU_ESTADO`), whether voided in place or cancelled at AEAT. The pure decision is the static `TextColorDelegate::classify(cellText, rowEstado, rowVerifactuEstado)` |
 | `placeIngresosDateColumns()` | `ingresoscolumns.h/.cpp` | Free function used by the Recogida de Prendas and Listado ingresos grids: moves `fecha_anulacion` (appended last in the table) visually right after Recepción / Pago / Recogida. Only the visual order changes; `INGRESOS_COL_*` logical indices are untouched. Idempotent |

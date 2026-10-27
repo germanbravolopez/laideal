@@ -25,15 +25,14 @@ class MySortFilterProxyModel : public QSortFilterProxyModel
 public:
     MySortFilterProxyModel(QObject *parent = nullptr);
 
-    // Sets a plain-text filter that matches diacritic-insensitively.
-    // column: column index to check, or -1 to check all columns (default).
-    void setNormalizedFilter(const QString &normalizedText, int column = -1);
+    // The one search: accents and case are ignored ("alvarez" finds "Álvarez") and,
+    // with several words, a row is shown when it contains every one of them, in any
+    // searched column and order. column: the only column to look in, or -1 for all.
+    // Empty text shows every row.
+    void setSearchText(const QString &text, int column = -1);
 
-    // Sets the regex and the normalized text together with a single re-filter
-    // (setFilterRegularExpression + setNormalizedFilter would filter twice).
-    // Exclusive: a non-empty regex is the only filter (an invalid one matches nothing);
-    // the normalized text applies only when the regex is empty.
-    void setFilters(const QRegularExpression &regex, const QString &normalizedText, int column = -1);
+    // The text a search compares: no accents, lower case, single spaces.
+    static QString searchKey(const QString &text);
 
     // Number of source columns the text filter looks at.
     int searchColumnCount() const;
@@ -73,9 +72,8 @@ protected:
 
 private:
     QSet<int> m_closedQuarters;
-    QString m_normalizedFilterText;
+    QStringList m_searchWords;   // searchKey()ed
     int m_filterColumn = -1;
-    QRegularExpression m_ownRegex;   // set by setFilters(); wins over filterRegularExpression()
 };
 
 #endif // MYSORTFILTERPROXYMODEL_H

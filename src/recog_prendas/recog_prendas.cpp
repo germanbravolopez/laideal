@@ -719,7 +719,7 @@ void RecogPrendas::runSearch(const QString &query)
         proxyModel = new MySortFilterProxyModel(this);
         proxyModel->schema = MySortFilterProxyModel::Schema::Ingresos;
         if (!nameSearchFilter.isEmpty())
-            proxyModel->setNormalizedFilter(nameSearchFilter, INGRESOS_COL_CLIENTE);
+            proxyModel->setSearchText(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
         if (oldProxy)

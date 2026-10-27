@@ -3984,10 +3984,8 @@ private slots:
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
     }
 
-    // The search box starts in "Expresión Regular" mode: text with no pattern characters
-    // still ignores accents and case ("senora alvarez" finds "Señora Álvarez"), while a
-    // real pattern is matched as a regex.
-    void test_listado_plainSearchIgnoresAccentsInTheDefaultMode()
+    // The one Listado search ignores accents and case and needs every word, in any order.
+    void test_listado_searchIgnoresAccentsAndCase()
     {
         QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Señora Álvarez', '', '600000001', '')"));
         QVERIFY(E2e::exec(m_db, "INSERT INTO clientes VALUES ('Pedro Ruiz', '', '600000002', '')"));
@@ -4009,8 +4007,12 @@ private slots:
         };
         filter->setText("senora alvarez");
         QCOMPARE(names(), QStringList({ QString::fromUtf8("Señora Álvarez") }));
-        filter->setText("^Pedro");
+        filter->setText(QString::fromUtf8("ÁLVAREZ señora"));
+        QCOMPARE(names(), QStringList({ QString::fromUtf8("Señora Álvarez") }));
+        filter->setText("ruiz pedro");
         QCOMPARE(names(), QStringList({ "Pedro Ruiz" }));
+        filter->clear();
+        QCOMPARE(names().size(), 2);
     }
 
     // Listado de prendas: Añadir adds exactly one row; Eliminar names the row it asks

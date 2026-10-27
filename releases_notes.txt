@@ -8,6 +8,7 @@
 - Exportar registros AEAT asks before overwriting a file, and Revertir contabilidad asks for confirmation.
 - Configuración warns about a key or password that cannot be read or encrypted, a floor date in the future and a database path that does not exist; an unreadable key is no longer lost by pressing Aceptar.
 - Printing: when the printer fails, the window says the ticket was not printed (instead of "impreso"); a printer that is switched off is reported; on 58 mm paper the QR and long client names fit.
+- Search (Listados and Recogida de Prendas): one simple search box with no options; accents and capitals do not matter ("alvarez" finds "Álvarez") and with several words it shows the rows that contain all of them ("ana mora" finds "Mora, Ana").
 - Listado: an invalid amount or price is refused with a message; numbers and dates sort correctly; the search also covers size, service and notes.
 - Recogida de Prendas: a typed price survives a change of quantity or service; a garment already handed over cannot be voided.
 - Several smaller fixes and more automatic tests.

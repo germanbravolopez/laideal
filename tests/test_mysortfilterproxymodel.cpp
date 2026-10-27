@@ -1,8 +1,5 @@
-// Tests for MySortFilterProxyModel's diacritic-insensitive text filter. The
-// filter text is expected pre-normalised + lower-cased by the caller (that is
-// how RecogPrendas / Listado feed it), so the tests mirror that: they build the
-// needle with removeDiacritics(...).toLower() and assert the proxy matches the
-// accented source rows.
+// Tests for MySortFilterProxyModel: the one search (accents and case ignored, every
+// word must appear), the comparators, the searched columns and the read-only rules.
 
 #include <QtTest>
 #include <QStandardItemModel>
@@ -13,12 +10,6 @@
 class TestMySortFilterProxyModel : public QObject
 {
     Q_OBJECT
-
-private:
-    static QString needle(const QString &raw)
-    {
-        return MySortFilterProxyModel::removeDiacritics(raw).toLower();
-    }
 
 private slots:
     void test_removeDiacritics()
@@ -46,25 +37,25 @@ private slots:
         proxy.setSourceModel(&model);
 
         // ASCII needle matches the accented row ("jose" -> "José").
-        proxy.setNormalizedFilter(needle(QStringLiteral("jose")));
+        proxy.setSearchText(QStringLiteral("jose"));
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.data(proxy.index(0, 0)).toString(), QStringLiteral("José"));
 
         // Accent-free needle matches an accented "ñ" name.
-        proxy.setNormalizedFilter(needle(QStringLiteral("begona")));
+        proxy.setSearchText(QStringLiteral("begona"));
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.data(proxy.index(0, 0)).toString(), QStringLiteral("Begoña"));
 
-        // Accented needle also matches (caller normalises it the same way).
-        proxy.setNormalizedFilter(needle(QStringLiteral("begoña")));
+        // Accented and upper-case needles match too.
+        proxy.setSearchText(QStringLiteral("begoña"));
         QCOMPARE(proxy.rowCount(), 1);
 
         // Empty filter shows everything.
-        proxy.setNormalizedFilter(QString());
+        proxy.setSearchText(QString());
         QCOMPARE(proxy.rowCount(), 3);
 
         // No match.
-        proxy.setNormalizedFilter(needle(QStringLiteral("zzz")));
+        proxy.setSearchText(QStringLiteral("zzz"));
         QCOMPARE(proxy.rowCount(), 0);
     }
 
@@ -174,59 +165,43 @@ private slots:
         proxy.schema = MySortFilterProxyModel::Schema::Ingresos;
         proxy.setSourceModel(&model);
         QCOMPARE(proxy.searchColumnCount(), 13);
-        proxy.setNormalizedFilter("talla-unica");
+        proxy.setSearchText("talla-unica");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("tintado");
+        proxy.setSearchText("tintado");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("manchas");
+        proxy.setSearchText("manchas");
         QCOMPARE(proxy.rowCount(), 1);
-        proxy.setNormalizedFilter("secreto-csv");
+        proxy.setSearchText("secreto-csv");
         QCOMPARE(proxy.rowCount(), 0);
     }
 
-    // setFilters() applies the regex and the normalized text together.
-    void test_setFilters_singleInvalidation()
+    // The one search: "alvarez" finds Alvarez, Álvarez and álvarez; several words must all
+    // appear, in any column and order; pattern characters are plain text.
+    void test_search_accentsCaseAndEveryWord()
     {
-        QStandardItemModel model;
-        for (const QString &name : { "Ana", "Beatriz", "Carlos" })
-            model.appendRow(new QStandardItem(name));
+        QStandardItemModel model(0, 2);
+        const QList<QStringList> rows = { { "Alvarez", "Granada" }, { "Álvarez", "Madrid" },
+                                          { "señora álvarez", "Granada" }, { "Mora, Ana", "a[b (1)" } };
+        for (const QStringList &r : rows)
+            model.appendRow({ new QStandardItem(r[0]), new QStandardItem(r[1]) });
         MySortFilterProxyModel proxy;
         proxy.setSourceModel(&model);
-        proxy.setFilters(QRegularExpression("^C"), "car");
-        QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression(), "ana");
-        QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression("^B"), "ana");   // the regex alone decides
-        QCOMPARE(proxy.rowCount(), 1);
-        proxy.setFilters(QRegularExpression(), QString());
+        proxy.setSearchText("alvarez");
         QCOMPARE(proxy.rowCount(), 3);
-    }
-
-    // A case-sensitive regex narrows: the case-insensitive text must not add matches.
-    void test_regexCaseSensitiveNarrows()
-    {
-        QStandardItemModel model;
-        for (const QString &name : { "Ana", "ana", "ANA" })
-            model.appendRow(new QStandardItem(name));
-        MySortFilterProxyModel proxy;
-        proxy.setSourceModel(&model);
-        proxy.setFilters(QRegularExpression("ana"), "ana");
+        proxy.setSearchText("  ÁLVAREZ ");
+        QCOMPARE(proxy.rowCount(), 3);
+        proxy.setSearchText("alvarez granada");          // words across columns
+        QCOMPARE(proxy.rowCount(), 2);
+        proxy.setSearchText("ana mora");                 // any order
         QCOMPARE(proxy.rowCount(), 1);
-        QCOMPARE(proxy.index(0, 0).data().toString(), QStringLiteral("ana"));
-    }
-
-    // An invalid regex matches nothing, even when the plain text would match.
-    void test_invalidRegexMatchesNothing()
-    {
-        QStandardItemModel model;
-        for (const QString &name : { "a[b", "Ana" })
-            model.appendRow(new QStandardItem(name));
-        MySortFilterProxyModel proxy;
-        proxy.setSourceModel(&model);
-        proxy.setFilters(QRegularExpression("a["), "a[");
+        proxy.setSearchText("alvarez sevilla");          // every word must appear
         QCOMPARE(proxy.rowCount(), 0);
-        proxy.setFilters(QRegularExpression(), "a[");
+        proxy.setSearchText("a[b (1)");                  // no regex: matched as typed
         QCOMPARE(proxy.rowCount(), 1);
+        proxy.setSearchText("senora", 1);                // one column only
+        QCOMPARE(proxy.rowCount(), 0);
+        proxy.setSearchText(QString());
+        QCOMPARE(proxy.rowCount(), 4);
     }
 
     // Invoice rows cannot be edited through the model, whatever the view allows.

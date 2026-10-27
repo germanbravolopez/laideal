@@ -314,40 +314,11 @@ void Listado::textFilterChanged()
 {
     if (!proxyModel)
         return;
-    FilterWidget::PatternSyntax s = filter_widget->patternSyntax();
-    QString pattern = filter_widget->text();
-    switch (s) {
-    case FilterWidget::Wildcard:
-        pattern = QRegularExpression::wildcardToRegularExpression(pattern);
-        break;
-    case FilterWidget::FixedString:
-        pattern = QRegularExpression::escape(pattern);
-        break;
-    default:
-        break;
-    }
-
-    QRegularExpression::PatternOptions options = QRegularExpression::NoPatternOption;
-    if (filter_widget->caseSensitivity() == Qt::CaseInsensitive)
-        options |= QRegularExpression::CaseInsensitiveOption;
-    QRegularExpression regularExpression(pattern, options);
     // The proxy only sees the rows the model has fetched: read them all before filtering.
-    const bool filtering = !filter_widget->text().isEmpty();
+    const bool filtering = !filter_widget->text().trimmed().isEmpty();
     if (filtering)
         loadEveryRow();
-    // One mode at a time: a plain case-insensitive search also ignores tildes ("jose"
-    // finds "José"), in any mode while the text has no pattern characters (the default
-    // mode is the regex one); case-sensitive and real patterns use the regex alone.
-    const QString text = filter_widget->text();
-    const bool literal = s == FilterWidget::FixedString
-        || (s == FilterWidget::Wildcard && !text.contains(QRegularExpression(R"([*?\[])")))
-        || (s == FilterWidget::RegularExpression && !text.contains(QRegularExpression(R"([\\^$.|?*+()\[\]{}])")));
-    const bool plainSearch = literal && filter_widget->caseSensitivity() == Qt::CaseInsensitive;
-    if (plainSearch)
-        proxyModel->setFilters(QRegularExpression(),
-                               MySortFilterProxyModel::removeDiacritics(filter_widget->text()).toLower());
-    else
-        proxyModel->setFilters(regularExpression, QString());
+    proxyModel->setSearchText(filter_widget->text());
     // Sizing every row per keystroke is slow on big tables: only when the filter is cleared.
     if (!filtering) {
         table_listado->resizeColumnsToContents();
