@@ -261,7 +261,7 @@ Check checkData(QSqlDatabase &db, const QString &contabilidadPath, DataFacts &fa
                                 { { ":n", facts.lastTicket } }).toInt();
     const QString client = scalar(db, QStringLiteral("SELECT cliente FROM ingresos WHERE n_recibo = :n LIMIT 1"),
                                   { { ":n", facts.lastTicket } });
-    // Recogida's search by client: a LIKE on ingresos.cliente.
+    // Stand-in for Recogida's client search (which filters loaded rows, ignoring accents): a LIKE on ingresos.cliente.
     const bool foundByClient = !client.isEmpty()
         && scalar(db, QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE cliente LIKE :c AND n_recibo = :n"),
                   { { ":c", "%" + client + "%" }, { ":n", facts.lastTicket } }).toInt() > 0;
