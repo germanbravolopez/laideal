@@ -33,7 +33,7 @@ Signature currentSignature()
         if (!line.isEmpty())
             lines << line;
     const QString address = lines.join(QStringLiteral(", "));
-    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 10, 23),
+    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 10, 27),
              QString::fromUtf8("Granada, España") };
 }
 

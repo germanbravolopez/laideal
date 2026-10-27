@@ -15,7 +15,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Active branch**: `feature/aeat-direct-investigation`
 
-**Latest release**: [12.2](https://github.com/germanbravolopez/laideal/releases/tag/12.2) — hotfix on 12.1: unpaid garments that carried a paid sibling's AEAT data (written before 10.10) could not be charged since 12.0; `migrateDatabase` clears that copy. The self-check reads trailing-dot amounts and names unreadable tickets. Released without the compliance auditor or a code review, at the owner's request (26-10-2026): both are due afterwards. The shop stays on the IreneSolutions gateway in its TEST environment.
+**Latest release**: [12.3](https://github.com/germanbravolopez/laideal/releases/tag/12.3) — the pre-12.0 review closed (Medium and Low rounds, owner's decisions, leftovers, PR #63 review) and the 12.2 follow-up: unsent invoices paid after the floor date are listed and resent again. One accented AEAT description, the leyenda follows the paid rows, Configuración keeps unreadable secrets, printing reports failures truthfully and fits 58 mm. Declaración signed 27-10-2026. The shop stays on the IreneSolutions gateway in its TEST environment.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->

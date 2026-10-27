@@ -1,5 +1,17 @@
 ﻿Releases:
 
+12.3
+- Bug fix: invoices that could not be sent to Verifactu (for example during a gateway outage) are listed again in "Envíos Verifactu pendientes" and resent, also for tickets received before the "Solo tickets desde" date.
+- Every invoice is sent to AEAT with the same description, "Servicios de lavandería".
+- The invoice legend ("Factura verificable...") is printed only when every paid garment of the invoice was accepted by AEAT.
+- Añadir prendas keeps the ticket after saving an unpaid garment, so another garment can be added straight away.
+- Exportar registros AEAT asks before overwriting a file, and Revertir contabilidad asks for confirmation.
+- Configuración warns about a key or password that cannot be read or encrypted, a floor date in the future and a database path that does not exist; an unreadable key is no longer lost by pressing Aceptar.
+- Printing: when the printer fails, the window says the ticket was not printed (instead of "impreso"); a printer that is switched off is reported; on 58 mm paper the QR and long client names fit.
+- Listado: an invalid amount or price is refused with a message; numbers and dates sort correctly; the search also covers size, service and notes.
+- Recogida de Prendas: a typed price survives a change of quantity or service; a garment already handed over cannot be voided.
+- Several smaller fixes and more automatic tests.
+
 12.2
 - Bug fix: some garments left unpaid on a ticket whose other garments were charged before September 2026 could not be charged since 12.0 (the payment was not stored). On the first start, the program corrects those garments and they can be charged normally.
 - Comprobar tras actualizar: amounts stored as "6." are read correctly, and an amount that cannot be read is reported with its ticket number.
