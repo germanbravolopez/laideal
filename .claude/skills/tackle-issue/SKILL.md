@@ -95,7 +95,7 @@ ctest --test-dir build --output-on-failure
 - **Single-line subject, hard cap 300 characters** — no body, no `Co-Authored-By` line. "Single-line" describes the *shape* (one paragraph, no separate body); the 300-char cap is the *length* rule. If you cannot fit the explanation in 300 characters, the long-form belongs in the `docs/progress_tracker.md` milestone you wrote in step 4, not in the commit message — the message points at the change, the tracker carries the rationale. Examples:
   - Typical (fits in 200): `Verifactu Req. 4: new src/backup/BackupManager (VACUUM INTO + PRAGMA integrity_check + 30-day daily/4-year monthly retention) auto on startup + Herramientas->Hacer copia de seguridad ahora`
   - Mechanical: `replace em-dash with ASCII '-' across all source files`
-- **Branch**: commit on `develop` (or a feature branch). Never commit to `master` — `master` only fast-forwards at release time.
+- **Branch**: commit on a branch cut from an up-to-date `master` and named after the change (`feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `tests/<topic>`, `ci/<topic>`). Never commit to `master` — it only moves through pull requests (CONTRIBUTING.md, Development workflow).
 - **Stage only the files this issue touched.** Never `git add -A` / `git add .` — pre-existing unrelated edits in the working tree must not ride along. If you find such edits, leave them alone and call them out in your final message.
 - **Never `--amend`.** If the pre-commit hook rejects the commit, fix the issue and create a **new** commit — `--amend` after a hook-rejected commit would overwrite the *previous* commit (the rejected one never landed).
 

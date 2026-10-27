@@ -27,7 +27,7 @@ It must never reach a shop, because it could mark invoices as sent without AEAT 
 
 `.github/workflows/ui-smoke.yml` runs on a GitHub-hosted `windows-latest` runner: a fresh VM with a desktop session for every run. Docker is out because Windows containers have no desktop and no printer spooler. Windows Sandbox and Hyper-V are out because they need Pro, and this PC runs Home.
 
-Triggers: `workflow_dispatch` (run it before every release, `/release` step 1), pull requests to `master`, and pushes to `develop` / `feature/**` that touch `tests/ui/`, `tests/tools/` or the workflow.
+Triggers: `workflow_dispatch` (run it before every release, `/release` step 1), pull requests to `master`, and pushes to any branch but `master` that touch `tests/ui/`, `tests/tools/` or the workflow.
 
 Steps:
 1. Build the UI-test app and the two tools.
