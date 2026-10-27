@@ -42,19 +42,34 @@ void assertMainThread()
 
 bool isEncrypted(const QString &stored) { return stored.startsWith(kEncPrefix); }
 
+// Test seam: makes every encryption fail, as a broken DPAPI would.
+bool g_forceEncryptFailure = false;
+
+// True when encryptSecret() must leave the value untouched: nothing to protect, or
+// already protected (a pasted stored blob must never be encrypted twice).
+bool skipEncryption(const QString &plain) { return plain.isEmpty() || isEncrypted(plain); }
+
 #ifdef Q_OS_WIN
 // Encrypt with Windows DPAPI scoped to the current user (CRYPTPROTECT_UI_FORBIDDEN
 // = no UI). On failure, fall back to returning the plaintext rather than losing the
-// secret - better a working-but-unencrypted key than a broken AEAT connection.
-QString encryptSecret(const QString &plain)
+// secret - better a working-but-unencrypted key than a broken AEAT connection - and
+// report it through `ok` so the dialog can tell the user.
+QString encryptSecret(const QString &plain, bool *ok = nullptr)
 {
-    if (plain.isEmpty()) return plain;
+    if (ok) *ok = true;
+    if (skipEncryption(plain)) return plain;
+    if (g_forceEncryptFailure) {
+        qWarning() << "AppSettings: encryption forced to fail; storing secret unencrypted";
+        if (ok) *ok = false;
+        return plain;
+    }
     const QByteArray in = plain.toUtf8();
     DATA_BLOB inBlob{ static_cast<DWORD>(in.size()), reinterpret_cast<BYTE*>(const_cast<char*>(in.constData())) };
     DATA_BLOB outBlob{ 0, nullptr };
     if (!CryptProtectData(&inBlob, L"laideal verifactu service key", nullptr, nullptr,
                           nullptr, CRYPTPROTECT_UI_FORBIDDEN, &outBlob)) {
-        qWarning() << "AppSettings: CryptProtectData failed; storing service key unencrypted";
+        qWarning() << "AppSettings: CryptProtectData failed; storing secret unencrypted";
+        if (ok) *ok = false;
         return plain;
     }
     const QByteArray cipher(reinterpret_cast<const char*>(outBlob.pbData), static_cast<int>(outBlob.cbData));
@@ -83,7 +98,11 @@ QString decryptSecret(const QString &stored)
 }
 #else
 // Non-Windows builds (none shipped) keep the value as-is so the code still compiles.
-QString encryptSecret(const QString &plain) { return plain; }
+QString encryptSecret(const QString &plain, bool *ok = nullptr)
+{
+    if (ok) *ok = !g_forceEncryptFailure || skipEncryption(plain);
+    return plain;
+}
 QString decryptSecret(const QString &stored) { return isEncrypted(stored) ? stored.mid(kEncPrefix.size()) : stored; }
 #endif
 } // namespace
@@ -91,7 +110,8 @@ QString decryptSecret(const QString &stored) { return isEncrypted(stored) ? stor
 // Thin public delegators over the file-local secret helpers above, so the
 // encryption logic is unit-testable (the internal getters/setters keep calling
 // the unqualified helpers directly).
-QString AppSettings::dpapiEncrypt(const QString &plain)   { return encryptSecret(plain); }
+QString AppSettings::dpapiEncrypt(const QString &plain, bool *ok) { return encryptSecret(plain, ok); }
+void    AppSettings::forceEncryptionFailure(bool fail) { g_forceEncryptFailure = fail; }
 QString AppSettings::dpapiDecrypt(const QString &stored)  { return decryptSecret(stored); }
 bool    AppSettings::dpapiIsEncrypted(const QString &stored) { return isEncrypted(stored); }
 
@@ -316,7 +336,11 @@ bool AppSettings::encryptSecretsAtRest()
         const QString stored = str({"verifactu", key});
         if (stored.isEmpty() || isEncrypted(stored))
             continue;
-        setStr({"verifactu", key}, encryptSecret(stored));
+        bool ok = false;
+        const QString enc = encryptSecret(stored, &ok);
+        if (!ok)
+            continue;   // stays plaintext; retried on the next load
+        setStr({"verifactu", key}, enc);
         qDebug() << "AppSettings: encrypted plaintext secret" << key << "at rest (DPAPI)";
         changed = true;
     }
@@ -383,7 +407,8 @@ void    AppSettings::setVerifactuName(const QString &v) { setStr({"verifactu", "
 
 // Stored encrypted at rest (Windows DPAPI, per-user); callers always see plaintext.
 QString AppSettings::verifactuServiceKey() const { return decryptSecret(str({"verifactu", "service_key"})); }
-void    AppSettings::setVerifactuServiceKey(const QString &v) { setStr({"verifactu", "service_key"}, encryptSecret(v)); }
+bool    AppSettings::setVerifactuServiceKey(const QString &v) { return setSecret("service_key", v); }
+bool    AppSettings::verifactuServiceKeyUnreadable() const { return secretUnreadable("service_key"); }
 
 bool AppSettings::verifactuProduction() const { return str({"verifactu", "environment"}) == "PRODUCTION"; }
 void AppSettings::setVerifactuProduction(bool v) { setStr({"verifactu", "environment"}, v ? "PRODUCTION" : "TESTING"); }
@@ -397,7 +422,21 @@ void    AppSettings::setAeatCertificateThumbprint(const QString &v) { setStr({"v
 QString AppSettings::aeatCertificateFile() const { return str({"verifactu", "aeat_certificate_file"}); }
 void    AppSettings::setAeatCertificateFile(const QString &v) { setStr({"verifactu", "aeat_certificate_file"}, v); }
 QString AppSettings::aeatCertificatePassword() const { return decryptSecret(str({"verifactu", "aeat_certificate_password"})); }
-void    AppSettings::setAeatCertificatePassword(const QString &v) { setStr({"verifactu", "aeat_certificate_password"}, encryptSecret(v)); }
+bool    AppSettings::setAeatCertificatePassword(const QString &v) { return setSecret("aeat_certificate_password", v); }
+bool    AppSettings::aeatCertificatePasswordUnreadable() const { return secretUnreadable("aeat_certificate_password"); }
+
+bool AppSettings::setSecret(const char *key, const QString &plain)
+{
+    bool ok = true;
+    setStr({"verifactu", key}, encryptSecret(plain, &ok));
+    return ok;
+}
+
+bool AppSettings::secretUnreadable(const char *key) const
+{
+    const QString stored = str({"verifactu", key});
+    return !stored.isEmpty() && decryptSecret(stored).isEmpty();
+}
 
 QString AppSettings::aeatChainMarker() const { return str({"verifactu", "aeat_chain_marker"}); }
 void AppSettings::setAeatChainMarker(const QString &v)
