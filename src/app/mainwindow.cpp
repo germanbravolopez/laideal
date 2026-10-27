@@ -1630,10 +1630,8 @@ void MainWindow::on_actionMostrar_log_triggered()
 }
 
 // Declaración responsable visible in the software, as required by Art. 13
-// RD 1007/2023. Producer data is taken from AppSettings (the same NIF/name
-// used as Verifactu emitter, since the software is deployed bespoke for the
-// business that uses it). The compliance text is fixed; only producer data
-// and the software version vary across installations.
+// RD 1007/2023. The producer is La Ideal's own, fixed in ProducerDeclaration;
+// only the software version varies.
 void MainWindow::on_actionAcerca_de_Verifactu_triggered()
 {
     const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);

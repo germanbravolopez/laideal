@@ -53,7 +53,7 @@ Checked without findings: huella input format and trimming, upper-case SHA-256, 
 | `docs/modules/verifactu/README.md:11-19` ✅ FIXED 26-10-2026 (Source files) and `:21-35` (Architecture diagram) | `verifactubackend.h`, `aeatdirectbackend.*` | Only the gateway classes are shown. Add the backend interface and the direct branch to the diagram, or point to §Direct. |
 | `docs/modules/verifactu/README.md:82` ✅ NO LONGER APPLIES 26-10-2026 (both edge cases are fixed) "the signal is guaranteed to fire exactly once" | `aeatdirectbackend.cpp:688-691`; a backend destroyed by Configuración | Not true in two edge cases (Low finding). |
 | `docs/modules/verifactu/README.md:198` ✅ FIXED 26-10-2026 `initialize()` non-fatal, "tickets save ... PENDIENTE" | `verifactu-requirements.md:35` (no paid invoice while not configured) | Gateway section; for the verifactu-gateway reviewer. |
-| `src/app/mainwindow.cpp:1487-1490` comment "Producer data is taken from AppSettings (the same NIF/name used as Verifactu emitter)" | `producerdeclaration.cpp:26-38`, `aeatrecord.cpp:237-241` (producer = La Ideal's producer, fixed) | Stale code comment (mainwindow reviewer). |
+| ✅ FIXED 27-10-2026 `src/app/mainwindow.cpp:1487-1490` comment "Producer data is taken from AppSettings (the same NIF/name used as Verifactu emitter)" | `producerdeclaration.cpp:26-38`, `aeatrecord.cpp:237-241` (producer = La Ideal's producer, fixed) | Stale code comment (mainwindow reviewer). |
 
 ## Test gaps
 

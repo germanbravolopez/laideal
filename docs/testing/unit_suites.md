@@ -21,6 +21,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_mysortfilterproxymodel` | `tableview` | guiless | Search and sort in the grids |
 | `test_textcolordelegate` | `tableview` | offscreen | Cell colours, ingresos column placement |
 | `test_escpos` | `printing` | guiless | ESC/POS bytes and ticket rendering |
+| `test_imprimir` | `laideal_app` | offscreen | Imprimir through the `ThermalPrinter::setTransport` seam: offline warning in the panel, two copies, printing disabled, factura dates, completa DNI / address, 58 mm width |
 | `test_ticket_preview` | `printing` | GUI (native platform on Windows for real fonts, offscreen elsewhere) | Rendered recibo / factura preview |
 | `test_facturas` | `facturas` | guiless | IVA split, `parseGross`, the dialog's save validation, duplicates and refusals on a throwaway DB |
 | `test_genlistado` | `listado` | guiless | Listado helpers, `splitGasto` (IVA for any typed rate, sums in cents) |
@@ -31,7 +32,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_uikit` | `uikit` | offscreen | `AmountSpinBox` (shows "12,50", takes "7.25" and "7,25"); Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
 | `test_instancelock` | `laideal_app` | offscreen | One copy per database: the lock path ignores case and separators, a second lock on the same database is refused until the first is released, another database is free, and a crashed copy's lock is taken over |
 | `test_selfcheck` | `laideal_app` | offscreen | The post-update self-check (checks M1a settings, M1b backup age, M1 / M1d migrations once and twice, M1e money counts, M1c chain, M2 data, M3 print, M5 installer): newest backup, the settings copy (database copy, direct client in pre-production, no gateway key), M1 passes and fails on a failed migration, M2's facts (ticket, invoice to print, closed quarter's figures, filed PDF), the report; one whole run of the window leaves the live DB and settings byte for byte unchanged, deletes the copies and reports no shop data |
-| `test_versioncompare` | `updater` | guiless | Version comparison |
+| `test_versioncompare` | `updater` | guiless | Version comparison, `parseRelease`, update check and installer download against a local fake server (hash mismatch, truncated, 404, cancel, unknown URL) |
 
 ---
 
@@ -103,4 +104,4 @@ Links `contabilidad` (and `reporthtml` for amount formatting). Mostly pure stati
 - **`test_backup_manager`**: real copies of a throwaway DB (renamed to its final `.db` name only once verified, the second folder gets the copy, a stale `.part` is removed, the same second keeps the existing copy, a second concurrent run is refused, a last time in the future needs a backup); `BackupManager::backupsToPrune` (recent kept, one per month, the 30-day and 4-year boundaries, a clock jump prunes nothing, the newest three kept, non-matching names ignored); `backupWarning` and `recordFailure` / `recordSuccess`.
 - **`test_applogger`** (through the `AppLogger::installAt` seam): the log rotates inside a session once it passes the limit, an oversized log is rotated at start, a failed rename keeps the previous `.old`, an unopenable file does not crash.
 - **`test_reporthtml`**: `ReportHtml::formatEuro`, `tableOpen`, `documentClose`.
-- **`test_versioncompare`** (suite `TestUpdater`): `Updater::compareVersions` (incl. 10.10 > 10.9) and `currentVersion`.
+- **`test_versioncompare`** (suite `TestUpdater`): `Updater::compareVersions` (incl. 10.10 > 10.9) and `currentVersion`; release parsing, the update check and `downloadInstaller` against a loopback fake (`setApiUrl`, `setAllowLoopbackForTests`; test mode keeps the shop's updates folder untouched).
