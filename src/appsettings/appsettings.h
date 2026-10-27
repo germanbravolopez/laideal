@@ -98,14 +98,21 @@ public:
     QString verifactuName() const;
     void setVerifactuName(const QString &v);
     QString verifactuServiceKey() const;
-    void setVerifactuServiceKey(const QString &v);
+    // Both secret setters return false when the value could not be encrypted: it is
+    // then kept in plain text (nothing is lost) and the caller should tell the user.
+    // A value already starting with `dpapi:v1:` is stored as is, never encrypted twice.
+    bool setVerifactuServiceKey(const QString &v);
+    // A stored key that no longer decrypts (another Windows user or machine, corrupt blob).
+    bool verifactuServiceKeyUnreadable() const;
 
     // Secret-at-rest helpers (Windows DPAPI, per-user). The service-key and
     // certificate-password getters/setters use these internally; exposed as statics so the encrypt->decrypt
     // round-trip, the `dpapi:v1:` marker and the legacy-plaintext passthrough are
     // unit-testable without the settings file. On non-Windows builds they are a
     // passthrough. `dpapiEncrypt("")` returns "".
-    static QString dpapiEncrypt(const QString &plain);
+    static QString dpapiEncrypt(const QString &plain, bool *ok = nullptr);
+    // Tests only: makes every encryption fail, like a broken DPAPI.
+    static void    forceEncryptionFailure(bool fail);
     static QString dpapiDecrypt(const QString &stored);
     static bool    dpapiIsEncrypted(const QString &stored);
     bool verifactuProduction() const;
@@ -138,7 +145,8 @@ public:
     QString aeatCertificateFile() const;
     void    setAeatCertificateFile(const QString &v);
     QString aeatCertificatePassword() const;
-    void    setAeatCertificatePassword(const QString &v);
+    bool    setAeatCertificatePassword(const QString &v);
+    bool    aeatCertificatePasswordUnreadable() const;
     // NumeroInstalacion of the records: created once per installation.
     QString aeatInstallationNumber();
     // The direct client's chain as this installation last saw it (see AeatDirectBackend::Config).
@@ -183,6 +191,8 @@ private:
     // password) that is still stored in plaintext, using Windows DPAPI scoped to the current user.
     // Idempotent. Returns true if it changed m_data (so the caller can persist).
     bool encryptSecretsAtRest();
+    bool setSecret(const char *key, const QString &plain);
+    bool secretUnreadable(const char *key) const;
 
     QString str(const QStringList &path, const QString &def = {}) const;
     double  dbl(const QStringList &path, double def = 0.0) const;

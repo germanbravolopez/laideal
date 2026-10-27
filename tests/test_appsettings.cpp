@@ -400,6 +400,58 @@ private slots:
     }
 #endif
 
+    // A failed encryption is reported to the caller and the secret is kept in plain
+    // text, so nothing is lost.
+    void test_encryptionFailureIsReportedAndKeepsPlaintext()
+    {
+        loadJson("{}");
+        AppSettings *s = AppSettings::instance();
+        AppSettings::forceEncryptionFailure(true);
+        bool ok = true;
+        QCOMPARE(AppSettings::dpapiEncrypt("a-secret", &ok), QStringLiteral("a-secret"));
+        QVERIFY(!ok);
+        QVERIFY(!s->setVerifactuServiceKey("a-secret"));
+        QVERIFY(!s->setAeatCertificatePassword("a-password"));
+        AppSettings::forceEncryptionFailure(false);
+        QCOMPARE(s->verifactuServiceKey(), QStringLiteral("a-secret"));
+        QCOMPARE(s->aeatCertificatePassword(), QStringLiteral("a-password"));
+        QVERIFY(s->setVerifactuServiceKey("a-secret"));
+        QVERIFY(s->setVerifactuServiceKey(QString()));   // clearing is not a failure
+        AppSettings::dpapiEncrypt("x", &ok);
+        QVERIFY(ok);
+    }
+
+    // A value that already carries the marker (a pasted stored blob) is stored as is.
+    void test_alreadyEncryptedValueNotEncryptedTwice()
+    {
+        const QString path = loadJson("{}");
+        AppSettings *s = AppSettings::instance();
+        const QString blob = QStringLiteral("dpapi:v1:QUJDREVGRw==");
+        bool ok = false;
+        QCOMPARE(AppSettings::dpapiEncrypt(blob, &ok), blob);
+        QVERIFY(ok);
+        QVERIFY(s->setVerifactuServiceKey(blob));
+        QVERIFY(s->setAeatCertificatePassword(blob));
+        s->save();
+        QCOMPARE(rawValue(path, "verifactu", "service_key"), blob);
+        QCOMPARE(rawValue(path, "verifactu", "aeat_certificate_password"), blob);
+    }
+
+    // A stored secret that does not decrypt is flagged; empty or readable ones are not.
+    void test_unreadableSecretsAreFlagged()
+    {
+        AppSettings *s = AppSettings::instance();
+        loadJson("{}");
+        QVERIFY(!s->verifactuServiceKeyUnreadable());
+        QVERIFY(!s->aeatCertificatePasswordUnreadable());
+        s->setVerifactuServiceKey("readable");
+        QVERIFY(!s->verifactuServiceKeyUnreadable());
+        loadJson(R"({"verifactu":{"service_key":"dpapi:v1:","aeat_certificate_password":"dpapi:v1:"}})");
+        QVERIFY(s->verifactuServiceKey().isEmpty());
+        QVERIFY(s->verifactuServiceKeyUnreadable());
+        QVERIFY(s->aeatCertificatePasswordUnreadable());
+    }
+
     // Loading a second file forgets the first one's values.
     void test_loadFromResetsState()
     {

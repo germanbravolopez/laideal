@@ -17,6 +17,7 @@
 #include <QTimer>
 #include <QApplication>
 #include <QLineEdit>
+#include <QLabel>
 #include <QTemporaryDir>
 
 #include "appsettings.h"
@@ -27,6 +28,18 @@ class TestSettingsDialog : public QObject
     Q_OBJECT
 
     QTemporaryDir m_dir;
+    QString m_dbFile;
+
+    static void answerBoxes(QMessageBox::StandardButton button, int *seen = nullptr)
+    {
+        QTimer::singleShot(0, [button, seen] {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (auto *box = qobject_cast<QMessageBox *>(w)) {
+                    if (seen) ++*seen;
+                    if (QAbstractButton *b = box->button(button)) b->click(); else box->reject();
+                }
+        });
+    }
 
 private slots:
     void initTestCase()
@@ -39,6 +52,12 @@ private slots:
         f.close();
         AppSettings::instance()->loadFrom(path);
         AppSettings::instance()->setVerifactuServiceKey("secret-key-123");
+        // An existing database file, so accepting never asks about a missing one.
+        m_dbFile = m_dir.filePath("shop.db");
+        QFile db(m_dbFile);
+        QVERIFY(db.open(QIODevice::WriteOnly));
+        db.close();
+        AppSettings::instance()->setDbPath(m_dbFile);
     }
 
     void test_serviceKeyMaskedByDefaultAndToggles()
@@ -330,6 +349,137 @@ private slots:
         connection->setCurrentIndex(connection->findData("irenesolutions"));
         QMetaObject::invokeMethod(&none, "accept");
         QVERIFY(!s->verifactuDirectAeat());
+    }
+
+    // Accepting a database path that is not an existing file asks first; No keeps the
+    // dialog open and the old path.
+    void test_missingDatabasePathAsksBeforeSaving()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s, this] {
+            SettingsDialog::setMissingDbConfirm({});
+            s->setDbPath(m_dbFile);
+        });
+        int asked = 0;
+        QString askedPath;
+        bool answer = false;
+        SettingsDialog::setMissingDbConfirm([&](const QString &path) { ++asked; askedPath = path; return answer; });
+        const QString missing = m_dir.filePath("typo.db");
+        {
+            SettingsDialog dlg;
+            for (QLineEdit *le : dlg.findChildren<QLineEdit *>())
+                if (le->text() == m_dbFile) le->setText(missing);
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QCOMPARE(asked, 1);
+            QCOMPARE(askedPath, missing);
+            QCOMPARE(s->dbPath(), m_dbFile);                 // No: not saved, dialog still open
+            QVERIFY(dlg.result() != QDialog::Accepted);
+            answer = true;
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QCOMPARE(asked, 2);
+            QCOMPARE(s->dbPath(), missing);                  // Yes: kept anyway
+            QCOMPARE(dlg.result(), int(QDialog::Accepted));
+        }
+        s->setDbPath(m_dbFile);
+        SettingsDialog existing;
+        QMetaObject::invokeMethod(&existing, "accept");
+        QCOMPARE(asked, 2);                                  // an existing file is never questioned
+    }
+
+    // A saved certificate that the Windows store no longer lists stays selected, is shown as
+    // missing and survives accepting; picking another one replaces it.
+    void test_missingCertificateThumbprintIsKept()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setAeatCertificateThumbprint(QString()); });
+        const QString gone(40, 'B');
+        const QString other(40, 'C');
+        s->setAeatCertificateThumbprint(gone);
+        {
+            SettingsDialog dlg;
+            dlg.setCertificateChoices({ qMakePair(QStringLiteral("OTRO"), other) });
+            auto *certificate = dlg.findChild<QComboBox *>("cbCertificate");
+            QCOMPARE(certificate->currentData().toString(), gone);
+            QVERIFY(certificate->currentText().contains(QStringLiteral("no encontrado en el almacén")));
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QCOMPARE(s->aeatCertificateThumbprint(), gone);
+        }
+        {
+            SettingsDialog dlg;
+            dlg.setCertificateChoices({ qMakePair(QStringLiteral("OTRO"), other) });
+            auto *certificate = dlg.findChild<QComboBox *>("cbCertificate");
+            certificate->setCurrentIndex(certificate->findData(other));
+            QMetaObject::invokeMethod(&dlg, "accept");
+            QCOMPARE(s->aeatCertificateThumbprint(), other);
+        }
+        // Listed again: shown by its label, no "missing" placeholder left.
+        s->setAeatCertificateThumbprint(gone);
+        SettingsDialog listed;
+        listed.setCertificateChoices({ qMakePair(QStringLiteral("VIGENTE"), gone) });
+        auto *certificate = listed.findChild<QComboBox *>("cbCertificate");
+        QCOMPARE(certificate->currentText(), QStringLiteral("VIGENTE"));
+        QCOMPARE(certificate->count(), 2);
+    }
+
+    // A floor date after today shows a warning (it does not block saving).
+    void test_futureFloorDateWarns()
+    {
+        AppSettings *s = AppSettings::instance();
+        const QString before = s->verifactuPendingRecoveryFloorDate();
+        const auto restore = qScopeGuard([s, before] { s->setVerifactuPendingRecoveryFloorDate(before); });
+        s->setVerifactuPendingRecoveryFloorDate(QStringLiteral("2026-09-01"));
+        {
+            SettingsDialog dlg;
+            auto *warning = dlg.findChild<QLabel *>("lblFloorFuture");
+            auto *floor = dlg.findChild<QDateEdit *>();
+            QVERIFY(warning && floor);
+            floor->setDate(QDate::currentDate());
+            QVERIFY(warning->isHidden());
+            floor->setDate(QDate::currentDate().addDays(1));
+            QVERIFY(!warning->isHidden());
+            floor->setDate(QDate::currentDate().addDays(-1));
+            QVERIFY(warning->isHidden());
+            floor->setDate(QDate::currentDate().addDays(30));
+            QMetaObject::invokeMethod(&dlg, "accept");       // not blocked
+            QCOMPARE(s->verifactuPendingRecoveryFloorDate(), QDate::currentDate().addDays(30).toString(Qt::ISODate));
+        }
+        SettingsDialog reopened;                              // warned from the start
+        QVERIFY(!reopened.findChild<QLabel *>("lblFloorFuture")->isHidden());
+    }
+
+    // A failed encryption warns on accept; the values are still saved.
+    void test_encryptionFailureWarns()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { AppSettings::forceEncryptionFailure(false); s->setVerifactuServiceKey("secret-key-123"); });
+        AppSettings::forceEncryptionFailure(true);
+        SettingsDialog dlg;
+        dlg.findChild<QLineEdit *>("serviceKeyEdit")->setText("brand-new-key");
+        int seen = 0;
+        answerBoxes(QMessageBox::Ok, &seen);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QCOMPARE(seen, 1);
+        QCOMPARE(s->verifactuServiceKey(), QStringLiteral("brand-new-key"));
+    }
+
+    // A stored key that no longer decrypts is flagged in the dialog.
+    void test_unreadableKeyIsFlagged()
+    {
+        {
+            SettingsDialog dlg;
+            QVERIFY(dlg.findChild<QLabel *>("lblKeyUnreadable")->isHidden());
+        }
+        const QString path = m_dir.filePath("unreadable.json");
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"verifactu":{"service_key":"dpapi:v1:","aeat_certificate_password":"dpapi:v1:"},"database":{"path":")" + m_dbFile.toUtf8() + R"("}})");
+        f.close();
+        const auto restore = qScopeGuard([this] { AppSettings::instance()->loadFrom(m_dir.filePath("settings.json")); });
+        AppSettings::instance()->loadFrom(path);
+        SettingsDialog dlg;
+        QVERIFY(!dlg.findChild<QLabel *>("lblKeyUnreadable")->isHidden());
+        QVERIFY(!dlg.findChild<QLabel *>("lblCertPasswordUnreadable")->isHidden());
+        QVERIFY(dlg.findChild<QLineEdit *>("serviceKeyEdit")->text().isEmpty());
     }
 };
 
