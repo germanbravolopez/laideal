@@ -4070,9 +4070,7 @@ private slots:
         form->findChild<QPushButton *>("btnClose")->click();
         QTRY_VERIFY(form.isNull());                                       // Cerrar closes it (WA_DeleteOnClose)
 
-        QPointer<Contabilidad> revert = new Contabilidad(m_db);
-        revert->revertirOn = true;
-        revert->resetAllContents();
+        QPointer<Contabilidad> revert = new Contabilidad(m_db, nullptr, Contabilidad::Revert);
         QCOMPARE(revert->windowTitle(), QStringLiteral("Revertir contabilidad"));
         QVERIFY(!revert->findChild<QCheckBox *>("chkDetail")->isEnabled());
         revert->findChild<QSpinBox *>("sbPeriod")->setValue(1);

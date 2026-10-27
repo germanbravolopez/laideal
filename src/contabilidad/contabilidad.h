@@ -29,10 +29,11 @@ public:
     // display strings: renaming an item cannot silently break the comparisons.
     enum ConfigMode { Mensual = 0, Trimestral = 1, Anual = 2 };
 
-    explicit Contabilidad(const QSqlDatabase &database, QWidget *parent = nullptr);
+    // What the dialog is opened for: doing a new contabilidad or reverting one already done.
+    enum Purpose { Generate, Revert };
+
+    explicit Contabilidad(const QSqlDatabase &database, QWidget *parent = nullptr, Purpose purpose = Generate);
     ~Contabilidad();
-    bool revertirOn = false; // indicates whether the dialog is being used to revert an already done contabilidad (true) or to do a new contabilidad (false)
-    void resetAllContents();
     // Asked before a closed quarter is reverted; true to go on. Tests inject their answer.
     std::function<bool(const QString &quarterName)> confirmRevert;
 
@@ -144,6 +145,8 @@ private slots:
     void onConfigChanged();
 
 private:
+    void resetAllContents();
+    const bool m_reverting;
     void buildUi();
     void initialSettings();
     // Writes the selected report; returns its file (empty if it could not be written). invalidAmounts receives the

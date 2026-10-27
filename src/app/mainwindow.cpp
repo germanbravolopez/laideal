@@ -21,6 +21,7 @@
 #include "applanguage.h"
 #include "settingsdialog.h"
 #include "verifactumanager.h"
+#include "verifactutypes.h"
 #include "verifactuconfig.h"
 #include "verifacturesponse.h"
 #include "updaterdialog.h"
@@ -1000,7 +1001,7 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
         invoiceId,
         invoiceDate,
         // Tax base from the IVA-inclusive ticket total (same split as the Facturas dialog).
-        Facturas::taxBaseFromGross(totalAmount, ivaRate),
+        taxBaseFromGross(totalAmount, ivaRate),
         ivaRate,
         kInvoiceDescription
     );
@@ -1080,7 +1081,7 @@ QPixmap MainWindow::verifactuQrBeforeReply(const QString &ticketNum, const QDate
         return QPixmap();
     const double ivaRate = AppSettings::instance()->ivaRate();
     return m_verifactuIntegration->qrBeforeReply(verifactuInvoiceId(ticketNum, seq), invoiceDate,
-                                                 Facturas::taxBaseFromGross(totalAmount, ivaRate), ivaRate);
+                                                 taxBaseFromGross(totalAmount, ivaRate), ivaRate);
 }
 
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
@@ -1541,10 +1542,8 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
 void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
-    ui_rev_cont = new Contabilidad(db, this);
+    ui_rev_cont = new Contabilidad(db, this, Contabilidad::Revert);
     ui_rev_cont->setAttribute(Qt::WA_DeleteOnClose);
-    ui_rev_cont->revertirOn = true;
-    ui_rev_cont->resetAllContents();
     ui_rev_cont->show();
 }
 

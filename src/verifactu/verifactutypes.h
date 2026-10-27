@@ -151,4 +151,11 @@ inline GrossSplit splitGross(double gross, double ratePercent)
 inline const QString kInvoiceDescription = QStringLiteral("Servicios de lavandería");
 inline const QString kRectificationDescription = QStringLiteral("Rectificativa de servicios de lavandería");
 
+// The base of a gross amount, unrounded on purpose: the Verifactu facade gets gross / (1 + rate)
+// and splits it back in cents itself (splitGross); a rounded base would lose a cent of the total.
+inline double taxBaseFromGross(double gross, double ratePercent)
+{
+    return gross / (1.0 + ratePercent / 100.0);
+}
+
 #endif // VERIFACTUTYPES_H
