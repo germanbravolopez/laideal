@@ -308,7 +308,8 @@ add_test(NAME backup_manager
 # printing: pure ESC/POS builder (exact bytes + PC858 transcode + column math)
 # and the TicketRenderer receipt/invoice layout. QTEST_GUILESS_MAIN - QImage
 # works under QCoreApplication, no platform plugin needed.
-add_executable(test_escpos test_escpos.cpp)
+add_executable(test_escpos test_escpos.cpp support/escpospreview.h)
+target_include_directories(test_escpos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(test_escpos PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Gui       # QImage (raster path + TicketData::qr)
@@ -408,6 +409,30 @@ target_link_libraries(test_e2e_app PRIVATE
 add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# imprimir: the print dialog / engine with the printer transport replaced
+# (ThermalPrinter::setTransport) - printer offline, copies sent, factura / completa
+# content, 58 mm - on a throwaway DB and settings. Never a real printer or AEAT.
+add_executable(test_imprimir
+    test_imprimir.cpp
+    support/e2efixture.h
+    support/escpospreview.h
+    support/modalautocloser.h
+    support/testschema.h
+)
+target_include_directories(test_imprimir PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
+target_link_libraries(test_imprimir PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+    imprimir
+    printing
+    sql_lite
+    appsettings
+)
+add_test(NAME imprimir
+    COMMAND test_imprimir -o ${CMAKE_BINARY_DIR}/test-results-imprimir.xml,junitxml -o -,txt)
+set_tests_properties(imprimir PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # InstanceLock: one copy of the app per database.
 add_executable(test_instancelock test_instancelock.cpp)
