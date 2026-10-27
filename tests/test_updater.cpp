@@ -266,6 +266,8 @@ private slots:
         QVERIFY(Updater::parseRelease("[1,2]", "1.0").error.contains("JSON"));
         QVERIFY(Updater::parseRelease("{\"body\":\"x\"}", "1.0").error.contains("tag_name"));
         QVERIFY(Updater::parseRelease("{\"tag_name\":\"nightly\"}", "1.0").error.contains("nightly"));
+        for (const char *tag : { "12.0.1", "12.0-beta" })
+            QVERIFY2(Updater::parseRelease(releaseJson(tag), "11.0").error.contains(tag), tag);
     }
 
     void test_parseRelease_newerWithoutUsableInstaller()
@@ -275,6 +277,9 @@ private slots:
         const QString digest = "sha256:" + QString(64, 'b');
         QVERIFY(!Updater::parseRelease(releaseJson("12.0", "", "http://github.com/x/laideal_setup_12.0.exe", digest), "11.0").error.isEmpty());
         QVERIFY(!Updater::parseRelease(releaseJson("12.0", "", "https://evil.example/laideal_setup_12.0.exe", digest), "11.0").error.isEmpty());
+        QVERIFY(!Updater::parseRelease(releaseJson("12.0", "", "http://127.0.0.1/laideal_setup_12.0.exe", digest), "11.0").error.isEmpty());
+        const QByteArray exeOnly = R"({"tag_name":"12.0","assets":[{"name":"laideal_setup_12.0.exe","browser_download_url":"https://github.com/o/r/releases/download/12.0/laideal_setup_12.0.exe"}]})";
+        QVERIFY(!Updater::parseRelease(exeOnly, "11.0").error.isEmpty());   // neither digest nor .sha256
         // Without a digest the published .sha256 asset stands in for it.
         QVERIFY(Updater::parseRelease(releaseJson("12.0"), "11.0").error.isEmpty());
     }
