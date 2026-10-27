@@ -280,7 +280,7 @@ private slots:
         QTRY_VERIFY(dlg.isNull());
     }
 
-    // A 58 mm roll: no text row is wider than the 35 columns of Font A (the double-size shop name aside) or
+    // A 58 mm roll: no text row is wider than the 35 columns of Font A (17 double size) or
     // the 46 of the Font B legal block.
     void test_dialog_58mmRollFitsEveryRow()
     {
@@ -291,9 +291,7 @@ private slots:
         press(dlg, "708");
         QVERIFY(!m_sent.isEmpty());
         for (const auto &b : textBlocks(m_sent[0])) {
-            if (b.dbl)
-                continue;   // the shop name is printed unwrapped (review finding F11)
-            const int limit = b.font == EscPosBuilder::Font::A ? 35 : 46;
+            const int limit = b.font == EscPosBuilder::Font::A ? (b.dbl ? 17 : 35) : 46;
             QVERIFY2(b.text.size() <= limit, qPrintable(QString("%1 (%2 > %3)").arg(b.text).arg(b.text.size()).arg(limit)));
         }
         dlg->close();

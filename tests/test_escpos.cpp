@@ -433,10 +433,9 @@ private slots:
         d.timestamp = "10/02/2026 - 10:00:00";
         const QByteArray out = TicketRenderer::render(d, 420);
         for (const auto &b : textBlocks(out)) {
-            const int limit = b.font == EscPosBuilder::Font::A ? 35 : 46;
-            if (b.dbl || b.text.startsWith("Tintoreria La Ideal Centro") || b.text.startsWith("Lavanderia")
-                || b.text.startsWith("Calle de un") || b.text.startsWith("28000") || b.text.startsWith("Cliente: "))
-                continue;   // header and client lines are printed unwrapped (finding F11), left to the firmware
+            const int limit = b.font == EscPosBuilder::Font::A ? (b.dbl ? 17 : 35) : 46;
+            if (b.text.startsWith("Cliente: "))
+                continue;   // the client line is still printed unwrapped
             QVERIFY2(b.text.size() <= limit, qPrintable(QString("'%1' is %2 > %3").arg(b.text).arg(b.text.size()).arg(limit)));
         }
         // The garment table and the complete invoice's address wrap rather than lose text.
