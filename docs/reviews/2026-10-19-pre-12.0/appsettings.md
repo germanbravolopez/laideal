@@ -49,8 +49,8 @@ No secret is logged: `qDebug` lines print key names, paths and "encrypted" only.
 | docs/modules/verifactu/README.md:~205 ✅ FIXED 26-10-2026 | "`initialize()` is non-fatal - it only warns if NIF or name is empty" | verifactuintegration.cpp:30-34 returns false and `qCritical`s |
 | docs/architecture.md:171 ✅ FIXED 26-10-2026 | Only the service key is encrypted, "`encryptSecretsAtRest()` ... legacy plaintext value" | Also `aeat_certificate_password` (appsettings.cpp:287). Also not documented: plaintext fallback on DPAPI failure; legacy `~/.verifactu_key` stays on disk |
 | docs/architecture.md:175-177 ✅ FIXED 26-10-2026 | Settings groups list | Lacks `print.use_status_api`, `backup.*`, `app.language` key name only in the previous paragraph, `verifactu.connection`, `aeat_*`, pending recovery; "Verifactu NIF/name/serviceKey/production" is not key names. Dialog description lacks the Direct-AEAT group, certificate choice, production confirmations, "Prueba con la AEAT", status API diagnostic |
-| docs/INDEX.md:136 | `test_settingsdialog` = "service-key show/hide toggle" | Also direct connection, production confirmations, self-test button state, leaving-direct guard |
-| docs/testing/unit_suites.md:76-77 | test_appsettings/test_settingsdialog description; "never accepted" | Dialog tests accept; direct-AEAT group and production guards untested in the doc. Update both |
+| docs/INDEX.md:136 ✅ FIXED 27-10-2026 | `test_settingsdialog` = "service-key show/hide toggle" | Also direct connection, production confirmations, self-test button state, leaving-direct guard |
+| docs/testing/unit_suites.md:76-77 ✅ FIXED 27-10-2026 | test_appsettings/test_settingsdialog description; "never accepted" | Dialog tests accept; direct-AEAT group and production guards untested in the doc. Update both |
 | docs/INDEX.md:171 ✅ FIXED 23-10-2026 | "All configurable settings (paths, IVA, ...)" | IVA is not configurable |
 | appsettings.h:28, 161 ✅ FIXED 26-10-2026 | see finding 15 | |
 

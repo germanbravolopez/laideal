@@ -39,12 +39,12 @@ Checked and fine: 11.10 > 11.9 numeric compare (updater.cpp:46-52, test_updater.
 | docs/architecture.md:135 ✅ FIXED 23-10-2026 | installer saved to `%TEMP%` | updater.cpp:128-147: `AppLocalDataLocation/updates`, stale `*.exe` deleted first | Update text |
 | src/updater/updater.h:20,52-53 ✅ FIXED 26-10-2026 | "saves to %TEMP%\laideal_setup_X.Y.exe", "reused across runs" | same | Fix comments |
 | docs/architecture.md:135 ✅ FIXED 23-10-2026 | `compareVersions` "major.minor numeric (tolerates a leading v)" | prefix match + lexicographic fallback (updater.cpp:36-40) | Say so or change the code |
-| docs/architecture.md:131-142 | No mention that the installer is unverified, that the release body is bilingual Markdown shown as plain text, or that drafts/pre-releases are invisible | updater.cpp:174-189; ci.yml:239; updaterdialog.cpp:60 | Add "Trust model" paragraph |
+| docs/architecture.md:131-142 ✅ FIXED 27-10-2026 | No mention that the installer is unverified, that the release body is bilingual Markdown shown as plain text, or that drafts/pre-releases are invisible | updater.cpp:174-189; ci.yml:239; updaterdialog.cpp:60 | Add "Trust model" paragraph |
 | docs/architecture.md:136 ✅ FIXED 23-10-2026 | `Updater`/dialog desc. | New launch uses TMP/TEMP of the whole process (updaterdialog.cpp:110) | Mention it is process-wide |
 | CONTRIBUTING.md:84-86 ✅ FIXED 26-10-2026 | assets and bare tag consumed by the updater | ci.yml consistent; contract not stated (asset prefix `laideal_setup_`, `.exe`, release must not be draft/prerelease) | Add one line |
 | README.md:24 ✅ FIXED 26-10-2026 | in-app updater bullet | no pointer to "Comprobar tras actualizar" after updating | Link docs/testing/smoke_test.md part 2 |
-| docs/testing/e2e.md:15, ui_smoke.md:57, tests/ui/seed.py:58 | update check is switched off | no scenario enables it | See gaps |
-| docs/testing/unit_suites.md:30,101 | `test_versioncompare` covers compareVersions + currentVersion | tests/test_updater.cpp:14-40 correct | none |
+| docs/testing/e2e.md:15, ui_smoke.md:57, tests/ui/seed.py:58 ✅ obsolete 27-10-2026 (the docs correctly say the check is off; no scenario enabling it is a test gap) | update check is switched off | no scenario enables it | See gaps |
+| docs/testing/unit_suites.md:30,101 ✅ obsolete 27-10-2026 (row said none, the docs are accurate) | `test_versioncompare` covers compareVersions + currentVersion | tests/test_updater.cpp:14-40 correct | none |
 
 ## Test gaps
 Existing: `test_versioncompare` (tests/test_updater.cpp): `test_compareVersions`, `test_currentVersion`. Nothing else.

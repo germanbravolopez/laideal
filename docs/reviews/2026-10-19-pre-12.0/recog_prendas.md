@@ -48,12 +48,12 @@ Read-only review. Nothing built or run. Files: `src/recog_prendas/recog_prendas.
 | recog_prendas.md Button table ✅ FIXED 26-10-2026 | `pb_print` "A row is selected"; no `pb_void` / `pb_add` | recog_prendas.cpp:471, 481-482: print always on once a row is selected but refuses an unpaid row (908); `pb_void`, `pb_add` enabled for any selected row, including Anulado | Add rows. |
 | recog_prendas.md Operations table ✅ FIXED 26-10-2026 | no pickup-all, no `pb_pku_all` row | recog_prendas.cpp:873-893 | Add `markTicketPickedUp` row (already described only under Notes). |
 | recog_prendas.md Key interface ✅ FIXED 26-10-2026 | `new RecogPrendas(db, this)` | `m_verifactuIntegration` must be assigned (mainwindow.cpp:931, 1359) or Cobrar loses its invoicing block | Add the assignment and warning. |
-| docs/modules/verifactu/README.md:~229 (`RecogPrendas::on_pb_verifactu_clicked`) | "estado == ERROR ... Reintentar" only | cpp:1000-1011 also offers Consultar en AEAT | Add. |
-| docs/modules/verifactu/README.md:~230 (`PayDialog::onCobrarClicked`) | fine for estado handling | omits closed-quarter and date pre-checks (pay_dialog.cpp:320-326) | Add one sentence. |
+| docs/modules/verifactu/README.md:~229 (`RecogPrendas::on_pb_verifactu_clicked`) ✅ FIXED 27-10-2026 | "estado == ERROR ... Reintentar" only | cpp:1000-1011 also offers Consultar en AEAT | Add. |
+| docs/modules/verifactu/README.md:~230 (`PayDialog::onCobrarClicked`) ✅ obsolete 27-10-2026 (the Cobrar paragraph already lists the pre-checks) | fine for estado handling | omits closed-quarter and date pre-checks (pay_dialog.cpp:320-326) | Add one sentence. |
 | docs/modules/printer/04_current_printing_flow.md:95 ✅ FIXED 26-10-2026 | `pay_dialog.cpp:393` is the Cobrar print | printing is `printPartialFactura` at pay_dialog.cpp:497-524 (`buildTicket` 521, `printTicket` 523) | Update the link / drop the line number. |
 | src/app/selfcheck.cpp:119 and selfcheck.h:49 ("Recogida's search by client: a LIKE on ingresos.cliente") | a LIKE | The real search loads all rows and filters client-side, diacritic-insensitive (recog_prendas.cpp:592-609); the phone search is another query | Stop replicating the search (see self-check below). |
 | voidgarmentsdialog.h:17-18 comment ✅ FIXED 26-10-2026 | rows are "verifactu_estado SIN COBRAR" | `garmentIsLocallyVoidable` accepts any unsubmitted estado, including empty (sql_lite.cpp:856-860) | Reword. |
-| docs/testing/unit_suites.md:43-44 | lists the sql_lite seams used by Recogida | Accurate; but no suite covers the window itself - say so | Add one line under "not covered". |
+| docs/testing/unit_suites.md:43-44 ✅ FIXED 27-10-2026 | lists the sql_lite seams used by Recogida | Accurate; but no suite covers the window itself - say so | Add one line under "not covered". |
 
 ## Test gaps
 

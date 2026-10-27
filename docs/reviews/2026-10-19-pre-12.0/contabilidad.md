@@ -48,9 +48,9 @@ Scope read: `src/contabilidad/contabilidad.{h,cpp}`, `docs/modules/contabilidad.
 | `docs/modules/contabilidad.md` (no mention) ✅ FIXED 26-10-2026 | - | Mensual subtitle "Contabilidad cerrada/no cerrada" (`contabilidad.cpp:299-303`) and per-quarter closed headings in the Anual report (`:319-327`) are undocumented |
 | `docs/architecture.md:84, 87` ✅ FIXED 26-10-2026 | "Counts are the number of detail rows (distinct paid tickets, gastos rows)"; income listing "excludes ANULADA/RECTIFICADA" | Count is `netTicketCount` (netted by regularisations); rows with `fecha_anulacion` are kept as income and subtracted elsewhere (md:76-85). Architecture paragraph is a duplicate of the module doc and stale; replace by a link |
 | `docs/architecture.md:86` ✅ FIXED 26-10-2026 | Detalle lists "paid tickets and the gastos rows" | Also the regularisations table |
-| `docs/testing/unit_suites.md:51` | "All pure statics, no DB" | `test_contabilidad.cpp:110-165` create a DB and call `closeQuarter/reopenQuarter/migrateDatabase` |
-| `docs/testing/unit_suites.md:49-57` | Lists coverage of Locks, Figures, Counts, Tables | Does not mention `invalidAmountCount` (covered at test:319) - fine; but the doc does not state the untested dialog flow (see gaps) |
-| `docs/testing/e2e.md:62` | Mentions the 10.12 count bug found by e2e | Consistent; no drift |
+| `docs/testing/unit_suites.md:51` ✅ FIXED 27-10-2026 | "All pure statics, no DB" | `test_contabilidad.cpp:110-165` create a DB and call `closeQuarter/reopenQuarter/migrateDatabase` |
+| `docs/testing/unit_suites.md:49-57` ✅ FIXED 27-10-2026 | Lists coverage of Locks, Figures, Counts, Tables | Does not mention `invalidAmountCount` (covered at test:319) - fine; but the doc does not state the untested dialog flow (see gaps) |
+| `docs/testing/e2e.md:62` ✅ obsolete 27-10-2026 (row itself said consistent, no drift) | Mentions the 10.12 count bug found by e2e | Consistent; no drift |
 
 ## Test gaps
 

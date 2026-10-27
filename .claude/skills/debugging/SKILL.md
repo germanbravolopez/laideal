@@ -14,7 +14,7 @@ Collect evidence before reading code:
 
 - **Report**: the exact symptom, ticket number (`n_recibo`), date, screen, and filter used. Ask the user for whatever is missing — one question at a time.
 - **Log**: `~/.laideal.log` (rotated to `~/.laideal.log.old` past 5 MB). Format `yyyy-MM-dd HH:mm:ss [DEBUG|WARN|CRIT|FATAL] <message>`; each launch writes a session separator. Find the session and the timestamp of the incident.
-- **Data**: the DB path is `db.path` in `~/.laideal_settings.json`. **Never write to the shop's live DB.** Copy it into the scratchpad and query the copy (`sqlite3` or a throwaway Qt Test). Rows of one ticket share `n_recibo`; inspect every row, including `pagado`, `verifactu_estado`, `verifactu_invoice_seq` and the dates.
+- **Data**: the DB path is `database.path` in `~/.laideal_settings.json`. **Never write to the shop's live DB.** Copy it into the scratchpad and query the copy (`sqlite3` or a throwaway Qt Test). Rows of one ticket share `n_recibo`; inspect every row, including `pagado`, `verifactu_estado`, `verifactu_invoice_seq` and the dates.
 - **AEAT**: for a submission/query problem, get the raw vendor response from the log. The vendor keeps **every submission attempt**, so expect several records per ticket.
 - **Printing**: render through `TicketRenderer` the way `tests/test_ticket_preview.cpp` does before suspecting the printer.
 

@@ -36,10 +36,10 @@ Line refs are to the real files.
 | docs/modules/uikit.md (setUpDialog row), uikit.h:30 | ✅ NO LONGER APPLIES 26-10-2026 (the secondary-button Enter fix of 19-10 made the claim true; test_enterOnFocusedSecondaryButtonPressesIt) "a focused button still presses itself" | False for `secondaryButton` / `closeRow` buttons (autoDefault=false): Enter goes to the primary (uikit.cpp:137-142 + 64-90). |
 | uikit.md last paragraph ✅ FIXED 26-10-2026 | Rectificar factura, Anular factura and Anular prendas "follow the same layout with their own code (older than the kit)" | They already call `setUpDialog` and `onEnter`; only result label, Cerrar and date edit are hand-built in Rectificar / Anular factura (rectifyinvoicedialog.cpp:99,134-142; cancelinvoicedialog.cpp:69-75). Reword to the specific leftovers. |
 | uikit.md "Windows built with it" / "No window uses a .ui form any more" ✅ FIXED 26-10-2026 (SKILL.md:67 is outside this pass) | Lists windows | Omits Configuración (settingsdialog.cpp has no setUpDialog) and Listado (a QMainWindow using heading / introPanel / ResultPanel only). SKILL.md:67 still speaks of "the remaining .ui forms". |
-| SKILL.md:65 "never QLineEdit::returnPressed" | absolute | recog_prendas.cpp:511 `on_le_search_returnPressed` is fine because Recogida is a QMainWindow, but the exception is not stated. |
+| SKILL.md:65 "never QLineEdit::returnPressed" ✅ FIXED 27-10-2026 | absolute | recog_prendas.cpp:511 `on_le_search_returnPressed` is fine because Recogida is a QMainWindow, but the exception is not stated. |
 | uikit.md `okHtml` row ✅ FIXED 26-10-2026 | "Green success, amber..." | No mention that the text is NOT escaped; callers must escape. Add the contract. |
 | uikit.md `onEnter` row ✅ FIXED 26-10-2026 | "Runs once per press ... only while input is acceptable" | Matches uikit.cpp:36-45; but Enter is consumed (return true, uikit.cpp:42) even when input is not acceptable: say so. |
-| docs/testing/unit_suites.md:28 | test_uikit covers AmountSpinBox and Enter rules | Accurate but incomplete vs the module (no helpers, no ResultPanel, no sortedNames). |
+| docs/testing/unit_suites.md:28 ✅ obsolete 27-10-2026 (the doc is accurate, the missing coverage is the report's test gap) | test_uikit covers AmountSpinBox and Enter rules | Accurate but incomplete vs the module (no helpers, no ResultPanel, no sortedNames). |
 | docs/INDEX.md:136 ✅ FIXED 23-10-2026 | Lists `test_versioncompare` | No such file in tests/ (other module; supervisor to check). |
 
 ## Test gaps

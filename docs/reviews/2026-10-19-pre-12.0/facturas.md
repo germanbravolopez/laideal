@@ -37,9 +37,9 @@ Checked and fine: prepared statement (:184), no SQL concatenation; objectNames p
 | docs/modules/facturas.md:23 (Form fields: servicio "From `servicios` table") + validation list ✅ FIXED 26-10-2026 | Implies servicio comes from the table | Combo is editable and the value is not checked (facturas.cpp:48-52,134-137). Docs should say "any text accepted" or code should enforce. |
 | docs/modules/facturas.md:35-39 (Auto-calculation) ✅ FIXED 23-10-2026 | `iva_amount = importe - base` | Code uses `gross*(1-1/(1+r))` (facturas.cpp:205); algebraically equal, only wording. |
 | docs/modules/facturas.md "Validation" ✅ FIXED 23-10-2026 | Lists empty/number/empresa/quarter | Omits that negative/zero/inf amounts are currently accepted (state the decision once fixed) and the absence of duplicate detection. |
-| docs/testing/unit_suites.md:24,97 and docs/INDEX.md:136 | `test_facturas`: IVA split | Accurate, but unit_suites.md:97 should list the new tests when added. |
-| docs/testing/e2e.md:116 | Scenario covers split, save, unknown supplier, closed quarter | Accurate (test_e2e_app.cpp:2696-2764); also covers sorted combos (not mentioned in the row). |
-| docs/testing/ui_smoke.md:67 (D5) | Expense dated 20-09-2026 refused, today's saved | Matches tests/ui/block_d.py:89-105 via `add_expense` (actions.py:289-305). OK. |
+| docs/testing/unit_suites.md:24,97 and docs/INDEX.md:136 ✅ FIXED 27-10-2026 | `test_facturas`: IVA split | Accurate, but unit_suites.md:97 should list the new tests when added. |
+| docs/testing/e2e.md:116 ✅ obsolete 27-10-2026 (row itself said accurate) | Scenario covers split, save, unknown supplier, closed quarter | Accurate (test_e2e_app.cpp:2696-2764); also covers sorted combos (not mentioned in the row). |
+| docs/testing/ui_smoke.md:67 (D5) ✅ obsolete 27-10-2026 (row itself said OK) | Expense dated 20-09-2026 refused, today's saved | Matches tests/ui/block_d.py:89-105 via `add_expense` (actions.py:289-305). OK. |
 | docs/modules/facturas.md "Key interface" ✅ FIXED 26-10-2026 | `populateEmpresas()`/`populateServicios()` must be called by the caller | True (mainwindow.cpp:1417-1418), but a Facturas built without them has empty lists and every save fails "no está en la lista": consider calling them in the constructor. |
 
 ## Test gaps

@@ -45,9 +45,9 @@
 | :54-58 ✅ FIXED 26-10-2026 "Dependencies (CMake)" starts with a paragraph about `NumberFormatDelegate` (decimal display) | Misplaced; the CMake text (PUBLIC `tableview`; private `sql_lite`, `appsettings`, `reporthtml`, `uikit`, src/listado/CMakeLists.txt:7-15) is only partly given. | Move the delegate paragraph to Features; list the real link targets. |
 | :58 ✅ FIXED 26-10-2026 "exposes ... `NumberFormatDelegate`, `TextColorDelegate`" | Also `LinkDelegate`, `DecimalCommaDelegate`, `ingresoscolumns` are used (listado.h:25, cpp:5-7). | Complete the list. |
 | :28-29 ✅ FIXED 26-10-2026 signals "emitted after editing the clients/garments table" | They are emitted in `closeEvent` only (listado.cpp:385-394), i.e. on closing the window, for clientes and prendas; nothing for proveedores/servicios. | Reword to "when the window closes". |
-| :63 InsertNewItem "window-modal" | OK (insertnewitem.cpp:13). | none |
+| :63 InsertNewItem "window-modal" ✅ obsolete 27-10-2026 (row itself said OK) | OK (insertnewitem.cpp:13). | none |
 | :66 ✅ FIXED 26-10-2026 GenListado | Does not mention the prendas PDF is not linked/verified (finding), the supplier IMPORTE TOTAL rows, the `Cerrado por contabilidad` column, or that the prendas listing sorts the shared proxy. | Add. |
-| docs/testing/e2e.md:126 "the Listado lock ... covered by the UI smoke" | The lock is also covered by two e2e tests (e2e.md:118-119). | Reword. |
+| docs/testing/e2e.md:126 "the Listado lock ... covered by the UI smoke" ✅ FIXED 27-10-2026 | The lock is also covered by two e2e tests (e2e.md:118-119). | Reword. |
 | docs/testing/unit_suites.md:25,98 ✅ FIXED 23-10-2026 | `test_genlistado` is listed correctly but `MySortFilterProxyModel` lock/validator behaviour has no unit suite entry (none exists). | Update when tests are added. |
 
 ## Test gaps

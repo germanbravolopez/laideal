@@ -62,7 +62,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 - Build new windows **in code** with `src/uikit/` (no new `.ui` files): `UiKit::setUpDialog`, an `introPanel`, fields in `QGroupBox` + `QFormLayout`, one `primaryButton` at the right of the action row, `secondaryButton` for the rest, `dateEdit` for dates, a `ResultPanel`, `closeRow`. See `docs/modules/uikit.md`.
 - Report outcomes in the `ResultPanel` with `okHtml` / `warnHtml` / `errorHtml`, not `QMessageBox`. Message boxes only to confirm a destructive action, or for a notice when the window closes right after.
-- Enter in a dialog: build it with `UiKit::setUpDialog` (Enter in a field presses the primary button, or nothing) and its main action with `primaryButton`. A field whose Enter does something else uses `UiKit::onEnter(edit, action)`, never `QLineEdit::returnPressed` - the key also reaches the dialog, which then runs a second action (Imprimir printed twice in 11.0).
+- Enter in a dialog: build it with `UiKit::setUpDialog` (Enter in a field presses the primary button, or nothing) and its main action with `primaryButton`. A field whose Enter does something else uses `UiKit::onEnter(edit, action)`, never `QLineEdit::returnPressed` - the key also reaches the dialog, which then runs a second action (Imprimir printed twice in 11.0). The exception is a `QMainWindow` with no default button (Recogida's `on_le_search_returnPressed`). A field whose Enter does something else uses `UiKit::onEnter(edit, action)`, never `QLineEdit::returnPressed` - the key also reaches the dialog, which then runs a second action (Imprimir printed twice in 11.0).
 - No fixed point sizes or pixel stylesheets: use the app font, or a size relative to it.
 - Give the widgets a test drives camelCase object names (`leFra`, `btnSave`, `lblResult`); the `pb_` / `le_` prefixes above are for the remaining `.ui` forms.
 - PDFs go through `ReportHtml::writePdf`.
@@ -81,7 +81,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
   connect(sender, SIGNAL(signal()), receiver, SLOT(slot()));
   ```
 - **No Qt exceptions**: Qt does not use exceptions. Return `bool`, a result struct (see `VerifactuResult`), or a nullable `QString` for errors. Never throw.
-- **Decimal separators**: always use `.` not `,` in code. The DB has a cleanup tool (`limpiar_base_de_datos`) precisely because `,` crept into data — do not introduce new occurrences.
+- **Decimal separators**: always use `.` not `,` in code. `migrateDatabase` has to repair commas that crept into `gastos` / `prendas` amounts, and a comma amount in `ingresos` is flagged and never summed — do not introduce new occurrences.
 - **Printing numbers**: use `QString::number(value, 'f', 2)` for currency. Never rely on locale-dependent formatting.
 
 ---
@@ -97,7 +97,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
   q.exec();
   ```
 - **Never** build SQL by string concatenation — always use `:named_params` with `bindValue()`.
-- No hardcoded paths. The existing `DB_PATH` in `sql_lite.h` is a known issue, not a pattern to follow.
+- No hardcoded paths. The database path is the runtime setting (`dbPath()`, which the `DB_PATH` macro expands to); report folders come from `AppSettings`.
 
 ---
 
@@ -109,7 +109,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 
 - Return `bool` or a result struct from anything that can fail.
 - Log failures in English with `qDebug()` (debug-level) or `qWarning()` (unexpected state).
-- Show the user a `QMessageBox` in Spanish only when their input is wrong or they need to act.
+- Tell the user in Spanish, in the window's `ResultPanel` (see UiKit above), when their input is wrong or they need to act; a `QMessageBox` only to confirm a destructive action.
 - Never silently swallow errors — log even if you don't surface them to the user.
 
 ---
@@ -134,13 +134,13 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 | Forbidden | Reason |
 |-----------|--------|
 | Hardcoded file paths | Breaks on any other machine — use config or relative paths |
-| `std::exit()` / `abort()` in non-main code | Bypasses Qt cleanup; known issue in constructor — do not repeat |
+| `std::exit()` / `abort()` in non-main code | Bypasses Qt cleanup |
 | Spanish identifiers, variable names, or comments | Makes code harder to read for any non-Spanish developer or AI agent |
 | English UI strings shown to the end user | The end user of the app is Spanish-speaking |
 | SQL string concatenation | SQL injection risk and hard to debug |
 | `using namespace std` or `using namespace Qt` | Causes ambiguity with Qt types |
 | Raw `new` without Qt parent or paired `delete` | Memory leak |
-| Committed debug-only code or `qDebug()` prints left in production paths | Use the `debug` flag in `MainWindow` or remove before merging |
+| Committed debug-only code or `qDebug()` prints left in production paths | Remove before merging |
 | Comma as decimal separator in numeric strings | DB stores data with `.`; commas cause silent data corruption |
 | Non-ASCII punctuation in `.cpp` / `.h` files: em-dash (`—` U+2014), en-dash (`–` U+2013), curly quotes (`“ ” ‘ ’`), ellipsis (`…` U+2026) | Some Windows code pages mangle these characters in source files; use plain ASCII (`-`, `"`, `'`, `...`) in comments, log strings, and string literals. Exception: Spanish characters (`á`, `é`, `í`, `ó`, `ú`, `ñ`, `¿`, `¡`, `°`) are required in user-facing UI strings and are allowed everywhere. |
 

@@ -51,7 +51,7 @@ Shared infrastructure:
 ### MainWindow (`src/app/`)
 Central controller. Owns the SQLite `db` connection. Instantiates all child windows.
 
-`src/app/` builds the `laideal_app` static library (MainWindow + the Cancel / Rectify / Void / Pending dialogs) and the `laideal` executable (`main.cpp`, the Qt resources and the Windows version resource) linking it, so the end-to-end bench can drive the windows ([testing/e2e.md](testing/e2e.md)). `main.cpp` allows one copy per database (`InstanceLock`: a `QLockFile` in the user's temp folder keyed on the database path; a second start waits 3 s for a closing copy, then says the app is already open), and takes `--settings <file>` (run with another settings file) and `--self-check` (*Comprobar tras actualizar*, `SelfCheckDialog` instead of MainWindow: the shop user's post-update check on a copy of the newest backup, [testing/smoke_test.md](testing/smoke_test.md) part 2).
+`src/app/` builds the `laideal_app` static library (MainWindow, the Cancel / Rectify / Pending / Refused-invoices dialogs, the AEAT export and its dialog, the self-check and its dialog, `InstanceLock`; the Void dialog lives in `src/recog_prendas/`) and the `laideal` executable (`main.cpp`, the Qt resources and the Windows version resource) linking it, so the end-to-end bench can drive the windows ([testing/e2e.md](testing/e2e.md)). `main.cpp` allows one copy per database (`InstanceLock`: a `QLockFile` in the user's temp folder keyed on the database path; a second start waits 3 s for a closing copy, then says the app is already open), and takes `--settings <file>` (run with another settings file) and `--self-check` (*Comprobar tras actualizar*, `SelfCheckDialog` instead of MainWindow: the shop user's post-update check on a copy of the newest backup, [testing/smoke_test.md](testing/smoke_test.md) part 2).
 
 Key methods:
 
@@ -60,11 +60,11 @@ Key methods:
 | `mainwindowInitialSettings()` | Runs `migrateDatabase()`, then UI setup (table columns, buttons) |
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows a warning if not configured (paid saves are then refused) |
 | `resetAllContents()` | Clears form after save |
-| `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
+| `validateTicket()` | Pre-save checks: ticket number and client, the Verifactu chain / invoicing gates, per-row quantity / garment / non-negative price, at least one priced garment, no unmeasured m2 garment when paid, reception date not in a closed quarter |
 | `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado` = PENDIENTE when paid / SIN COBRAR when not; async submit patches the paid rows when AEAT replies |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
-| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
+| `printRecibo()` / `printFra(qr, verifactuIssued)` | Save-time print — `verifactuIntegration = nullptr`, so `Imprimir` resolves no QR itself: the QR on the factura is the preset `qrCode` the save flow hands to `printFra` (the direct client's, computed locally, or the gateway's reply within 3 s). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 
 Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OBSE=4`, `PRIC=5`
@@ -120,7 +120,7 @@ pipeline; design dossier in `docs/modules/printer/`, reference in
 `docs/modules/printing.md`.
 
 ### AddGarment (`src/add_garment/`)
-Adds new garment rows to an existing ticket number already in the database.
+Adds new garment rows to an existing ticket number already in the database (Tickets → Añadir nuevas prendas, and Recogida's **Añadir prendas…**). A ticket that already has a paid garment is refused (it is an AEAT invoice). A garment added as paid is an invoice: the caller sets `invoicingBlocked` (refused when it returns a reason, or when unset) and submits it at once on `paidGarmentSaved` (seq 0).
 
 ### tableview (`src/tableview/`)
 Single CMake library (`tableview`) containing all table-view utility classes. All headers live in the same directory and are exposed via one INTERFACE include path.
@@ -145,7 +145,7 @@ In-app updater. Two entry points: an unattended startup check (gated by `AppSett
 
 In-place upgrade path: `releases/laideal.iss` sets `CloseApplications=yes` + `RestartApplications=yes` + `CloseApplicationsFilter=*.exe`. If the running app has not finished exiting by the time the installer starts touching `{app}\laideal.exe`, Inno detects it (filtered to .exe so we don't touch unrelated open files under `{app}`), prompts, and relaunches once install completes.
 
-Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome.
+Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome. Trust model: the updater reads `/releases/latest`, so a draft or pre-release is invisible; the installer is the first asset named `laideal_setup_*.exe` and runs only after its size and SHA-256 match (asset `digest` or the `.sha256` asset) from an https github.com / `*.githubusercontent.com` URL (no code-signature check); the release body is the bilingual Markdown of the CI release job, shown as raw text; a network failure shows Qt's own (English) error text.
 
 Repo visibility: `/releases/latest` requires the repo to be **public** under unauthenticated calls (private repos return 404). If the repo is ever flipped back to private the updater will fail in `silent` mode silently and surface "Not Found" via the menu action.
 
@@ -270,7 +270,7 @@ Created by `AeatStore::ensureSchema` in the same DB (so the backups cover them).
 User fills form in MainWindow
   ↓
 on_pb_save_clicked() (Guardar ticket)
-  ├── validateTicket()                       — checks client, amounts, quarter lock
+  ├── validateTicket()                       — checks client, chain / invoicing gates, row amounts, quarter lock
   ├── checkClientData()                      — adds/updates client in `clientes`
   ├── saveTicket()                           — writes N rows to `ingresos` (verifactu_estado = PENDIENTE when paid, SIN COBRAR when not)
   ├── if (isPaid):
@@ -280,7 +280,7 @@ on_pb_save_clicked() (Guardar ticket)
   │     │   onVerifactuRequestFinished runs first (FIFO connect order) and UPDATEs ingresos
   │     │   to verifactu_estado = ENVIADA / ERROR before the lambda quits the loop
   │     └── if (result.isSuccess() && !result.qrCode.isNull()):
-  │             printFra(result.qrCode)        — factura simplificada with QR + AEAT leyenda
+  │             printFra(qr, true)             — factura simplificada with QR + AEAT leyenda
   │         else (timeout, or success w/o QR, or error):
   │             printRecibo()                   — paid recibo: "Importe pagado" stamp on customer copy
   ├── else (not paid):
@@ -334,11 +334,7 @@ AEAT QR validation (`aeathash.cpp`):
 
 ## Known Issues / Technical Debt
 
-| Issue | File | Priority | Notes |
-|-------|------|----------|-------|
-| ~~ServiceKey stored in plaintext JSON~~ | ~~`~/.laideal_settings.json`~~ | — | Fixed: encrypted at rest with Windows DPAPI (per-user), `dpapi:v1:` marker; auto-migrated on load. See AppSettings section |
-| ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; a save-time failure shows in the result panel (no pop-up) |
-| ~~Clients missing from Listado but present in MainWindow combobox~~ | ~~`src/listado/listado.cpp`~~ | — | Discarded: no current mechanism. `Listado::populateTable()` drains `fetchMore` for non-`ingresos` tables (loads every `clientes` row, replacing the old flaky scroll-to-bottom hack in b39cda7), and both the combobox and the view read `clientes.nombre` through the same SQLite driver so encoding cannot diverge. Reopen only if observed again. |
+None is tracked here: open and blocking items live in [`progress_tracker.md`](progress_tracker.md); fixed ones in [`completed_milestones.md`](completed_milestones.md).
 
 ---
 
@@ -352,6 +348,8 @@ AEAT QR validation (`aeathash.cpp`):
 | Qt Sql | System | SQLite driver |
 | Qt PrintSupport | System | `QPrinterInfo` (printer list in SettingsDialog) |
 | Qt Network | System | HTTP for the Verifactu gateway REST API |
+| winhttp, crypt32, ncrypt | System (Windows) | The direct AEAT client's mutual-TLS SOAP transport and certificate access (`verifactu`); `crypt32` also for DPAPI in `appsettings` |
+| qrcodegen | `src/third_party/qrcodegen/` (vendored) | Local QR encoder for the direct client (`AeatQr`) |
 | Qt Test | System | Unit / integration tests (`tests/`) |
 
 ---

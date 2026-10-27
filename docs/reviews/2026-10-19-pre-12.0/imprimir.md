@@ -42,7 +42,7 @@ Verified OK (no finding): decimal comma (`displayMoney`/`displayDecimal` at :316
 | docs/modules/imprimir.md:62-70 ✅ FIXED 26-10-2026 | `StatusApiPrinter::sendAndReadStatus()` | imprimir.cpp:389 calls `sendAndReadStatusBounded(..., 10000)` (worker with 10 s watchdog), plus fatal-status early return :401. |
 | docs/modules/imprimir.md:15 (dialog) ✅ FIXED 26-10-2026 | factura enumerates partial payments | The events query (imprimir.cpp:477-493), the "IMPORTE PAGADO only if all paid" rule (:546-551), the recibo-fallback in PayDialog (pay_dialog.cpp:418-427) and the callers' flags are not described. |
 | docs/modules/imprimir.md:144-153 (Dependencies) ✅ FIXED 26-10-2026 | lists `generateQRAsync` | also `qrBeforeReply`, `uikit`, `AppSettings::useStatusApi`; CMake links uikit. |
-| docs/architecture.md:59 | save-time print uses `verifactuIntegration = nullptr` "so no QR fetch is attempted" | accurate for printFra but the QR comes from the preset `qrCode`; clarify. |
+| docs/architecture.md:59 ✅ FIXED 27-10-2026 | save-time print uses `verifactuIntegration = nullptr` "so no QR fetch is attempted" | accurate for printFra but the QR comes from the preset `qrCode`; clarify. |
 | docs/testing/unit_suites.md | no entry for imprimir | the module has no unit suite; its behaviours are only listed in e2e.md:93-96. |
 
 ## Test gaps

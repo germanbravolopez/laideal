@@ -49,9 +49,9 @@ Reviewer scope: `src/printing/*`, vendored `src/third_party/qrcodegen` (integrat
 | `printer/README.md:11-14` "Status-API's ASB bit values + DLL path still need confirming" ✅ FIXED 26-10-2026 | not confirmed | `printing.md` "Hardware finding" confirms the shop unit reports 0x1 for an open cover; update README and 05 status |
 | `printer/05_implementation_plan.md` ✅ FIXED 26-10-2026 | planning (proposed API, phases) | stale as a plan; header says implemented. Keep only as background or archive; it still lists `raw()`-style APIs and risks already resolved |
 | `printer/01_printer_model_and_specs.md:55-60` ✅ FIXED 26-10-2026 | ticket "58 mm width", configurable | settings default 80 (`appsettings.cpp:326`), `imprimir.cpp:276` |
-| `docs/testing/unit_suites.md:23` | `test_ticket_preview`: "GUI / offscreen" | file header says native platform on Windows for real fonts (line 91 of the same doc agrees) - minor inconsistency inside the doc |
-| `docs/testing/e2e.md` "Not in this bench: ... printing" vs `test_e2e_app.cpp:1795-1817` | e2e does assert ticket bytes (QR raster, leyenda) via `Imprimir::ticketBytes()` | wording should say "transport not in this bench; bytes are" |
-| `docs/modules/verifactu/verifactu-requirements.md:106` | leyenda "immediately below the QR", guarded by ENVIADA only | also printed for PENDIENTE issued by the direct client (`imprimir.cpp:346-352`; line 108 of the same file says so) |
+| `docs/testing/unit_suites.md:23` ✅ FIXED 27-10-2026 | `test_ticket_preview`: "GUI / offscreen" | file header says native platform on Windows for real fonts (line 91 of the same doc agrees) - minor inconsistency inside the doc |
+| `docs/testing/e2e.md` "Not in this bench: ... printing" vs `test_e2e_app.cpp:1795-1817` ✅ FIXED 27-10-2026 | e2e does assert ticket bytes (QR raster, leyenda) via `Imprimir::ticketBytes()` | wording should say "transport not in this bench; bytes are" |
+| `docs/modules/verifactu/verifactu-requirements.md:106` ✅ FIXED 27-10-2026 | leyenda "immediately below the QR", guarded by ENVIADA only | also printed for PENDIENTE issued by the direct client (`imprimir.cpp:346-352`; line 108 of the same file says so) |
 
 ## Test gaps
 

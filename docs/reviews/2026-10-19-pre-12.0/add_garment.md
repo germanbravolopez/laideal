@@ -36,11 +36,11 @@ Verified OK (no finding): prepared statements only (:194, sql_lite.cpp:940); HTM
 | add_garment.md "Validation" ✅ FIXED 26-10-2026 | lists 4 rules | add_garment.cpp:262-267 also refuses when `invoicingBlocked` is non-empty (or unset: "Verifactu no está disponible") and :257 "Formulario incompleto" requires a client too; order of checks is not documented. |
 | add_garment.md "Key interface" snippet ✅ FIXED 26-10-2026 | `new AddGarment(db, this)` only | Callers must set `invoicingBlocked` (mainwindow.cpp:1426, recog_prendas.cpp:723); unset = every paid add refused. Missing from the snippet (the field is in add_garment.h:29-31). |
 | add_garment.md Workflow 4 "always seq 0" ✅ FIXED 26-10-2026 | always the first payment event | See Medium finding on `aeat_records`-used numbers (sql_lite.cpp:1892-1909). |
-| docs/architecture.md:114-115 | "Adds new garment rows to an existing ticket" | Omits: refuses tickets with a paid garment, paid add = AEAT invoice. |
-| docs/testing/unit_suites.md:43 | says insertGarmentRow covers "`saveTicket` and AddGarment shapes" | The AddGarment-shape test is stale (see test finding). `ticketHasPaidGarment` is listed at :42, fine. |
-| docs/testing/ui_smoke.md:65, tests/ui/block_b.py:66-108 | B4 adds unpaid Falda, B6 refusal | consistent; nothing covers paid add or Tickets-menu path. |
-| docs/modules/sql_lite.md:70 | `insertGarmentRow`: "AddGarment (fresh row...)" | The seam is also used by tests only for single rows; saveTicket uses `insertGarmentRows` (mainwindow.cpp:1047). Minor wording. |
-| docs/testing/e2e.md:114-115 | rows for the two tests | match tests (test_e2e_app.cpp:2630, 2665). `test_recogida_addGarmentFromTheWindow` (:1359) and the blocked-state tests (:1009, :1041, :1115) are documented only partially for AddGarment. |
+| docs/architecture.md:114-115 ✅ FIXED 27-10-2026 | "Adds new garment rows to an existing ticket" | Omits: refuses tickets with a paid garment, paid add = AEAT invoice. |
+| docs/testing/unit_suites.md:43 ✅ obsolete 27-10-2026 (the AddGarment-shape test was rewritten, the doc line is accurate) | says insertGarmentRow covers "`saveTicket` and AddGarment shapes" | The AddGarment-shape test is stale (see test finding). `ticketHasPaidGarment` is listed at :42, fine. |
+| docs/testing/ui_smoke.md:65, tests/ui/block_b.py:66-108 ✅ obsolete 27-10-2026 (row itself said consistent, no drift) | B4 adds unpaid Falda, B6 refusal | consistent; nothing covers paid add or Tickets-menu path. |
+| docs/modules/sql_lite.md:70 ✅ FIXED 27-10-2026 | `insertGarmentRow`: "AddGarment (fresh row...)" | The seam is also used by tests only for single rows; saveTicket uses `insertGarmentRows` (mainwindow.cpp:1047). Minor wording. |
+| docs/testing/e2e.md:114-115 ✅ FIXED 27-10-2026 | rows for the two tests | match tests (test_e2e_app.cpp:2630, 2665). `test_recogida_addGarmentFromTheWindow` (:1359) and the blocked-state tests (:1009, :1041, :1115) are documented only partially for AddGarment. |
 
 ## Test gaps
 
