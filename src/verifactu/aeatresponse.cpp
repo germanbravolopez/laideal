@@ -250,7 +250,7 @@ VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber,
     return result;
 }
 
-VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoiceNumber)
+VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoiceNumber, const QDate &invoiceDate)
 {
     VerifactuRemoteRecord remote;
     remote.parsed = reply.parsed && !reply.fault;
@@ -258,8 +258,15 @@ VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoice
         remote.errorCode = reply.faultText;
         return remote;
     }
+    const QString wantedDate = invoiceDate.isValid() ? invoiceDate.toString(QStringLiteral("dd-MM-yyyy")) : QString();
+    bool dateMatches = false;
+    for (const QueryRecord &record : reply.records)
+        if (record.invoiceNumber == invoiceNumber.trimmed() && record.issueDate == wantedDate && !wantedDate.isEmpty())
+            dateMatches = true;
     for (const QueryRecord &record : reply.records) {
         if (record.invoiceNumber != invoiceNumber.trimmed())
+            continue;
+        if (dateMatches && record.issueDate != wantedDate)
             continue;
         ++remote.recordCount;
         remote.found = true;

@@ -107,6 +107,89 @@ private slots:
         QCOMPARE(backupFiles().filter(".part").size(), 0);
     }
 
+    // A missing source, a file that is no database and a backups path that is a file fail
+    // cleanly: a message, no copy left behind, no database connection left registered.
+    void test_failuresLeaveNothingBehind()
+    {
+        const QString live = dbPath();
+        BackupManager manager;
+        const auto noLeftovers = [this]() {
+            QVERIFY(backupFiles().isEmpty());
+            QVERIFY(!QSqlDatabase::contains("laideal_backup_snapshot"));
+            QVERIFY(!QSqlDatabase::contains("laideal_backup_verify"));
+        };
+
+        setDbPath(m_dir.filePath("missing.db"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("source DB not found"));
+        BackupManager::Result res = manager.performBackup();
+        QVERIFY(!res.success && !res.errorMessage.isEmpty());
+        noLeftovers();
+
+        QFile notDb(m_dir.filePath("text.db"));
+        QVERIFY(notDb.open(QIODevice::WriteOnly));
+        notDb.write("this is not a database, just some text that is long enough to be read as a header");
+        notDb.close();
+        setDbPath(notDb.fileName());
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*"));
+        res = manager.performBackup();
+        QVERIFY(!res.success && !res.errorMessage.isEmpty());
+        noLeftovers();
+
+        setDbPath(live);
+        QDir(backupDir()).removeRecursively();
+        QFile blocker(backupDir());                                      // "backups" is a file
+        QVERIFY(blocker.open(QIODevice::WriteOnly));
+        blocker.close();
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*"));
+        res = manager.performBackup();
+        QVERIFY(!res.success && !res.errorMessage.isEmpty());
+        QVERIFY(blocker.remove());
+        QVERIFY(!QSqlDatabase::contains("laideal_backup_snapshot"));
+    }
+
+    // Only our own old copies go: a foreign file and a name outside the schema stay.
+    void test_pruneOldBackups_removesOnlyOwnedOld()
+    {
+        BackupManager manager;
+        QCOMPARE(manager.pruneOldBackups(), 0);                          // no directory yet
+        QVERIFY(!QDir(backupDir()).exists());                            // and pruning creates none
+
+        QDir().mkpath(backupDir());
+        const QDateTime now = QDateTime::currentDateTime();
+        QStringList kept = { "notes.txt", "laideal_manual.db" };
+        for (int d = 0; d < 4; ++d)
+            kept << now.addDays(-d).toString("'laideal_'yyyy-MM-dd_HHmmss'.db'");
+        const QStringList old = { "laideal_2020-01-01_120000.db", "laideal_2020-01-02_120000.db" };
+        for (const QString &name : kept + old) {
+            QFile f(QDir(backupDir()).filePath(name));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("x");
+        }
+        QCOMPARE(manager.pruneOldBackups(), 2);
+        QStringList expected = kept;
+        expected.sort();
+        QCOMPARE(backupFiles(), expected);
+    }
+
+    void test_needsBackup_states()
+    {
+        AppSettings *settings = AppSettings::instance();
+        BackupManager manager;
+        const bool wasEnabled = settings->backupEnabled();
+        settings->setBackupEnabled(false);
+        QVERIFY(!manager.needsBackup());
+        settings->setBackupEnabled(true);
+        settings->setBackupLastTime(QString());
+        QVERIFY(manager.needsBackup());                                  // never run
+        settings->setBackupLastTime("garbage");
+        QVERIFY(manager.needsBackup());                                  // unreadable time
+        settings->setBackupLastTime(QDateTime::currentDateTime().addSecs(-3600).toString(Qt::ISODate));
+        QVERIFY(!manager.needsBackup());                                 // recent
+        settings->setBackupLastTime(QDateTime::currentDateTime().addDays(-2).toString(Qt::ISODate));
+        QVERIFY(manager.needsBackup());                                  // older than 24 h
+        settings->setBackupEnabled(wasEnabled);
+    }
+
     // A copy of the same second already exists: the run fails and keeps that copy as it was.
     void test_sameSecondKeepsTheExistingCopy()
     {

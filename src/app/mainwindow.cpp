@@ -1,5 +1,9 @@
 #include "mainwindow.h"
 #include "sql_lite.h"
+#include "verifactutypes.h"
+#include "cancelinvoicedialog.h"
+#include "rectifyinvoicedialog.h"
+#include <QMessageBox>
 #include "applogger.h"
 #include <QDateTime>
 #include <QSqlError>
@@ -17,6 +21,7 @@
 #include "applanguage.h"
 #include "settingsdialog.h"
 #include "verifactumanager.h"
+#include "verifactutypes.h"
 #include "verifactuconfig.h"
 #include "verifacturesponse.h"
 #include "updaterdialog.h"
@@ -71,7 +76,7 @@ MainWindow::MainWindow(QWidget *parent)
     mainwindowInitialSettings();
     initializeVerifactu();
     if (!m_updateNotice.isEmpty())
-        m_result->setText(m_result->text().isEmpty() ? m_updateNotice : m_result->text() + "<br><br>" + m_updateNotice);
+        appendToResult(m_updateNotice);
 
     // Refused invoices stay in view until resent (the customer may hold their factura):
     // refreshed on every AEAT outcome, and regularly for those settled in other windows.
@@ -376,10 +381,7 @@ void MainWindow::buildUi()
     ui->le_nr_ticket->setObjectName("le_nr_ticket");
     ui->le_nr_ticket->setReadOnly(true);
     ui->le_nr_ticket->setToolTip(tr("El siguiente número libre; se asigna solo."));
-    QFont numberFont = ui->le_nr_ticket->font();
-    numberFont.setPointSizeF(numberFont.pointSizeF() + 3);
-    numberFont.setBold(true);
-    ui->le_nr_ticket->setFont(numberFont);
+    UiKit::emphasize(ui->le_nr_ticket, 3);
     ui->le_nr_ticket->setMaximumWidth(160);
     ui->de_date_recep = UiKit::dateEdit(QDate::currentDate(), "de_date_recep");
     ui->de_date_recep->setMaximumDate(QDate::currentDate());   // a paid ticket's invoice date
@@ -417,15 +419,12 @@ void MainWindow::buildUi()
     garmentFooter->addWidget(ui->pb_add_row);
     garmentFooter->addStretch();
     QLabel *lblTotal = new QLabel(tr("Importe total:"));
-    QFont totalFont = lblTotal->font();
-    totalFont.setPointSizeF(totalFont.pointSizeF() + 3);
-    totalFont.setBold(true);
-    lblTotal->setFont(totalFont);
+    UiKit::emphasize(lblTotal, 3);
     garmentFooter->addWidget(lblTotal);
     ui->le_cost_total = new QLineEdit();
     ui->le_cost_total->setObjectName("le_cost_total");
     ui->le_cost_total->setReadOnly(true);   // always the sum of the rows
-    ui->le_cost_total->setFont(totalFont);
+    UiKit::emphasize(ui->le_cost_total, 3);
     ui->le_cost_total->setAlignment(Qt::AlignRight);
     ui->le_cost_total->setMaximumWidth(150);
     garmentFooter->addWidget(ui->le_cost_total);
@@ -499,8 +498,6 @@ void MainWindow::mainwindowInitialSettings()
     // Req. 4: backups switched off, or none correct for days, stay visible at every start.
     if (const QString backup = BackupManager::currentBackupWarning(); !backup.isEmpty())
         startProblems << UiKit::warnHtml(backup.toHtmlEscaped());
-    if (!startProblems.isEmpty())
-        m_result->setText(startProblems.join("<br>"));
 
     connect(ui->actionConfiguracion, &QAction::triggered, this, [this]() {
         SettingsDialog dlg(this);
@@ -567,7 +564,15 @@ void MainWindow::mainwindowInitialSettings()
     // The garment name takes the spare width; the amounts keep a fixed column.
     ui->table_ticket->horizontalHeader()->setSectionResizeMode(TABLE_TICKET_GARM, QHeaderView::Stretch);
     resetAllContents();
-    m_result->showInfo(tr("Listo para un nuevo ticket."));
+    if (startProblems.isEmpty())
+        m_result->showInfo(tr("Listo para un nuevo ticket."));
+    else
+        m_result->setText(startProblems.join("<br>"));
+}
+
+void MainWindow::appendToResult(const QString &html)
+{
+    m_result->setText(m_result->text().isEmpty() ? html : m_result->text() + "<br><br>" + html);
 }
 
 void MainWindow::initializeVerifactu()
@@ -580,9 +585,9 @@ void MainWindow::initializeVerifactu()
 
     if (!m_verifactuIntegration->initialize()) {
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
-        m_result->setText(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
-                                              .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
-                          + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
+        appendToResult(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
+                                           .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
+                       + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
     if (first)
@@ -613,7 +618,7 @@ void MainWindow::initializeVerifactu()
                        << "record(s) not in this database (a restored copy)";
         }
         if (!warnings.isEmpty())
-            m_result->setText(warnings.join("<br>"));
+            appendToResult(warnings.join("<br>"));
         continueDirectChain();
     }
 }
@@ -907,11 +912,15 @@ bool MainWindow::validateTicket()
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
     for (int row = 0; row < ui->table_ticket->rowCount(); row++) {
-        if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC))
-            continue;
         auto *cbGarment = qobject_cast<QComboBox *>(ui->table_ticket->cellWidget(row, TABLE_TICKET_GARM));
         QTableWidgetItem *qty = ui->table_ticket->item(row, TABLE_TICKET_QNTY);
         const QString garment = cbGarment ? cbGarment->currentText() : QString();
+        if (!ui->table_ticket->item(row, TABLE_TICKET_PRIC)) {
+            // A typed garment that is not in the price list has no price: it would be dropped.
+            if (!garment.isEmpty())
+                return refuse(tr("La prenda de la fila %1 no tiene precio.").arg(row + 1));
+            continue;
+        }
         if (garment.isEmpty() && ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
             continue;   // an empty slot
         if (!qty || qty->text().toInt() == 0)
@@ -921,6 +930,8 @@ bool MainWindow::validateTicket()
         QTableWidgetItem *size = ui->table_ticket->item(row, TABLE_TICKET_SIZE);
         if (garmentUnmeasured(garment, size ? size->text() : QString()))
             sizePending = true;
+        else if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
+            return refuse(tr("La prenda de la fila %1 no tiene precio.").arg(row + 1));
         const double price = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
         if (price < 0.0)
             return refuse(tr("La prenda de la fila %1 tiene un importe negativo; las correcciones se hacen "
@@ -940,13 +951,6 @@ bool MainWindow::validateTicket()
     return true;
 }
 
-QString MainWindow::removeSpecialChar(QString str)
-{
-    // Logic lives in sql_lite::removeSpecialChars (unit-tested); kept as a thin
-    // member so the existing call sites stay unchanged.
-    return removeSpecialChars(str);
-}
-
 void MainWindow::checkClientData()
 {
     QString currentClient = ui->cb_client->currentText();
@@ -956,10 +960,10 @@ void MainWindow::checkClientData()
         updateItemToClient(db, "direccion", ui->le_addr->text(),   currentClient);
     }
     else {
-        currentClient = removeSpecialChar(currentClient.simplified().toLower());
+        currentClient = removeSpecialChars(currentClient.simplified().toLower());
         bool clientFound = false;
         for (int idx = 0; idx < ui->cb_client->count(); idx++) {
-            QString clientInCb = removeSpecialChar(ui->cb_client->itemText(idx).simplified().toLower());
+            QString clientInCb = removeSpecialChars(ui->cb_client->itemText(idx).simplified().toLower());
             if (currentClient == clientInCb)
                 clientFound = true;
         }
@@ -991,9 +995,9 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
         invoiceId,
         invoiceDate,
         // Tax base from the IVA-inclusive ticket total (same split as the Facturas dialog).
-        Facturas::taxBaseFromGross(totalAmount, ivaRate),
+        taxBaseFromGross(totalAmount, ivaRate),
         ivaRate,
-        "Servicios de lavanderia"
+        kInvoiceDescription
     );
     if (reqId.isEmpty()) {
         qWarning() << "Verifactu submit rejected for ticket" << invoiceId;
@@ -1021,6 +1025,8 @@ void MainWindow::updateAeatEnvironment()
 
 void MainWindow::updateRefusedInvoices()
 {
+    if (!m_refusedInvoices)
+        return;                                     // an outcome settled before the window finished building
     const int refused = refusedInvoiceCount(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate());
     // A link: the count opens the list of those invoices (showRefusedInvoices).
     m_refusedInvoices->setText("<a href=\"refused\" style=\"text-decoration:none\">"
@@ -1069,7 +1075,7 @@ QPixmap MainWindow::verifactuQrBeforeReply(const QString &ticketNum, const QDate
         return QPixmap();
     const double ivaRate = AppSettings::instance()->ivaRate();
     return m_verifactuIntegration->qrBeforeReply(verifactuInvoiceId(ticketNum, seq), invoiceDate,
-                                                 Facturas::taxBaseFromGross(totalAmount, ivaRate), ivaRate);
+                                                 taxBaseFromGross(totalAmount, ivaRate), ivaRate);
 }
 
 void MainWindow::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
@@ -1265,7 +1271,13 @@ void MainWindow::on_pb_save_clicked()
                         });
                     connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
                     timeout.start(3000);
-                    loop.exec();
+                    // Limpiar, the menus and the edits would change the ticket being printed.
+                    const bool menuWasEnabled = menuBar()->isEnabled();
+                    centralWidget()->setEnabled(false);
+                    menuBar()->setEnabled(false);
+                    loop.exec(QEventLoop::ExcludeUserInputEvents);
+                    centralWidget()->setEnabled(true);
+                    menuBar()->setEnabled(menuWasEnabled);
                     QObject::disconnect(conn);
                 }
 
@@ -1524,10 +1536,8 @@ void MainWindow::on_actionGenerar_contabilidad_triggered()
 void MainWindow::on_actionRevertir_contabilidad_triggered()
 {
     Contabilidad *ui_rev_cont;
-    ui_rev_cont = new Contabilidad(db, this);
+    ui_rev_cont = new Contabilidad(db, this, Contabilidad::Revert);
     ui_rev_cont->setAttribute(Qt::WA_DeleteOnClose);
-    ui_rev_cont->revertirOn = true;
-    ui_rev_cont->resetAllContents();
     ui_rev_cont->show();
 }
 
@@ -1536,8 +1546,6 @@ void MainWindow::on_actionFormulario_facturas_triggered()
     Facturas *ui_facturas;
     ui_facturas = new Facturas(db, this);
     ui_facturas->setAttribute(Qt::WA_DeleteOnClose);
-    ui_facturas->populateEmpresas();
-    ui_facturas->populateServicios();
     ui_facturas->show();
 }
 
@@ -1549,11 +1557,14 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     ui_add_garment->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
     };
+    ui_add_garment->aeatEnvironment = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
+    };
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
     // PENDIENTE for the startup recovery.
     connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,
-            [this](const QString &ticketNum, const QDate &paymentDate, double amount) {
-        verifactuSubmitInvoice(ticketNum, paymentDate, amount, 0);
+            [this](const QString &ticketNum, const QDate &paymentDate, double amount, int seq) {
+        verifactuSubmitInvoice(ticketNum, paymentDate, amount, seq);
     });
     ui_add_garment->show();
 }
@@ -1617,10 +1628,8 @@ void MainWindow::on_actionMostrar_log_triggered()
 }
 
 // Declaración responsable visible in the software, as required by Art. 13
-// RD 1007/2023. Producer data is taken from AppSettings (the same NIF/name
-// used as Verifactu emitter, since the software is deployed bespoke for the
-// business that uses it). The compliance text is fixed; only producer data
-// and the software version vary across installations.
+// RD 1007/2023. The producer is La Ideal's own, fixed in ProducerDeclaration;
+// only the software version varies.
 void MainWindow::on_actionAcerca_de_Verifactu_triggered()
 {
     const QString version = QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR);

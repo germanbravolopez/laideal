@@ -14,6 +14,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -22,37 +23,37 @@ AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent
 {
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowModality(Qt::WindowModal);
-    UiKit::setUpDialog(this, "Exportar registros AEAT (XML)", 560);
+    UiKit::setUpDialog(this, tr("Exportar registros AEAT (XML)"), 560);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->addWidget(UiKit::introPanel(
+    layout->addWidget(UiKit::introPanel(tr(
         "Guarda en un archivo XML las facturas registradas en AEAT en un periodo (emitidas o "
-        "anuladas en él), con el registro de AEAT de cada una, para entregarlo a Hacienda si lo pide."));
+        "anuladas en él), con el registro de AEAT de cada una, para entregarlo a Hacienda si lo pide.")));
 
-    QGroupBox *grpPeriod = new QGroupBox("Periodo");
+    QGroupBox *grpPeriod = new QGroupBox(tr("Periodo"));
     QFormLayout *periodForm = new QFormLayout(grpPeriod);
     periodForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     m_deFrom = UiKit::dateEdit(QDate::currentDate().addMonths(-3), "deFrom");   // stable names for the e2e bench
     m_deTo   = UiKit::dateEdit(QDate::currentDate(), "deTo");
-    periodForm->addRow("Desde:", m_deFrom);
-    periodForm->addRow("Hasta:", m_deTo);
+    periodForm->addRow(tr("Desde:"), m_deFrom);
+    periodForm->addRow(tr("Hasta:"), m_deTo);
     layout->addWidget(grpPeriod);
 
-    QGroupBox *grpFile = new QGroupBox("Archivo");
+    QGroupBox *grpFile = new QGroupBox(tr("Archivo"));
     QHBoxLayout *fileRow = new QHBoxLayout(grpFile);
     m_leFile = new QLineEdit();
     m_leFile->setObjectName("leFile");
     fileRow->addWidget(m_leFile, 1);
-    QPushButton *btnChoose = UiKit::secondaryButton("Elegir\u2026", "btnChoose");
+    QPushButton *btnChoose = UiKit::secondaryButton(tr("Elegir\u2026"), "btnChoose");
     fileRow->addWidget(btnChoose);
     layout->addWidget(grpFile);
 
     QHBoxLayout *actions = new QHBoxLayout();
     actions->addStretch();
-    QPushButton *btnExport = UiKit::primaryButton("Exportar registros", "btnExport");
+    QPushButton *btnExport = UiKit::primaryButton(tr("Exportar registros"), "btnExport");
     actions->addWidget(btnExport);
     layout->addLayout(actions);
-    m_lblResult = new UiKit::ResultPanel("Elija el periodo y pulse \"Exportar registros\".");
+    m_lblResult = new UiKit::ResultPanel(tr("Elija el periodo y pulse \"Exportar registros\"."));
     layout->addWidget(m_lblResult);
     layout->addLayout(UiKit::closeRow(this));
 
@@ -75,7 +76,7 @@ void AeatExportDialog::suggestFileName()
 
 void AeatExportDialog::onChooseFileClicked()
 {
-    const QString file = QFileDialog::getSaveFileName(this, "Guardar archivo de registros AEAT",
+    const QString file = QFileDialog::getSaveFileName(this, tr("Guardar archivo de registros AEAT"),
                                                       m_leFile->text(), "XML (*.xml)");
     if (file.isEmpty())
         return;
@@ -89,12 +90,25 @@ void AeatExportDialog::onExportClicked()
     const QDate to   = m_deTo->date();
     const QString file = m_leFile->text().trimmed();
     if (from > to) {
-        m_lblResult->setText(UiKit::errorHtml("La fecha 'Desde' debe ser anterior o igual a 'Hasta'."));
+        m_lblResult->setText(UiKit::errorHtml(tr("La fecha 'Desde' debe ser anterior o igual a 'Hasta'.")));
         return;
     }
     if (file.isEmpty()) {
-        m_lblResult->setText(UiKit::errorHtml("Indique el archivo donde guardar los registros."));
+        m_lblResult->setText(UiKit::errorHtml(tr("Indique el archivo donde guardar los registros.")));
         return;
+    }
+
+    if (QFileInfo::exists(file)) {
+        const bool overwrite = confirmOverwrite
+            ? confirmOverwrite(file)
+            : QMessageBox::question(this, tr("Exportar registros AEAT"),
+                                    tr("El archivo ya existe:\n%1\n\n¿Desea sustituirlo?").arg(file),
+                                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+        if (!overwrite) {
+            m_lblResult->setText(UiKit::warnHtml(tr("Exportación cancelada: el archivo ya existe."))
+                                 + "<br>" + tr("Elija otro archivo o confirme que desea sustituirlo."));
+            return;
+        }
     }
 
     // One record per invoice submitted to AEAT (payment event), any current estado:
@@ -102,14 +116,14 @@ void AeatExportDialog::onExportClicked()
     QVector<AeatExportRecord> records;
     int undated = 0;
     if (!aeatExportRecords(db, from, to, records, &undated)) {
-        m_lblResult->setText(UiKit::errorHtml("Error al consultar la base de datos.")
-                             + "<br>No se ha creado el archivo.");
+        m_lblResult->setText(UiKit::errorHtml(tr("Error al consultar la base de datos."))
+                             + "<br>" + tr("No se ha creado el archivo."));
         return;
     }
     QDir().mkpath(QFileInfo(file).absolutePath());
     QFile out(file);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        m_lblResult->setText(UiKit::errorHtml("No se pudo abrir el archivo para escribir.")
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo abrir el archivo para escribir."))
                              + "<br>" + file.toHtmlEscaped());
         return;
     }
@@ -119,19 +133,19 @@ void AeatExportDialog::onExportClicked()
     out.close();
     if (out.error() != QFileDevice::NoError) {
         qWarning() << "Exportar registros AEAT: write failed -" << out.errorString();
-        m_lblResult->setText(UiKit::errorHtml("Error al escribir el archivo.") + "<br>"
+        m_lblResult->setText(UiKit::errorHtml(tr("Error al escribir el archivo.")) + "<br>"
                              + out.errorString().toHtmlEscaped());
         return;
     }
 
-    const QString period = from.toString("dd-MM-yyyy") + " a " + to.toString("dd-MM-yyyy");
+    const QString period = tr("%1 a %2").arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy"));
     QString message = count == 0
-        ? UiKit::warnHtml("No hay registros enviados a AEAT del " + period + ".") + "<br>El archivo se ha creado vacío."
-        : UiKit::okHtml(QString("%1 registros exportados (%2).").arg(count).arg(period));
-    message += "<br>" + UiKit::fileLinkHtml(file, "Archivo");
+        ? UiKit::warnHtml(tr("No hay registros enviados a AEAT del %1.").arg(period)) + "<br>" + tr("El archivo se ha creado vacío.")
+        : UiKit::okHtml(tr("%1 registros exportados (%2).").arg(count).arg(period));
+    message += "<br>" + UiKit::fileLinkHtml(file, tr("Archivo"));
     if (undated > 0)
-        message += "<br>" + UiKit::errorHtml(QString("Atención: %1 factura(s) enviadas a AEAT no tienen una fecha "
-                                                     "de pago válida y no aparecen en ningún periodo. Revise el "
-                                                     "log y contacte con soporte.").arg(undated));
+        message += "<br>" + UiKit::errorHtml(tr("Atención: %1 factura(s) enviadas a AEAT no tienen una fecha "
+                                                 "de pago válida y no aparecen en ningún periodo. Revise el "
+                                                 "log y contacte con soporte.").arg(undated));
     m_lblResult->setText(message);
 }

@@ -65,9 +65,26 @@ QString offlineReason(HANDLE hPrinter)
 } // namespace
 #endif
 
+namespace {
+ThermalPrinter::Transport &transportOverride()
+{
+    static ThermalPrinter::Transport transport;
+    return transport;
+}
+} // namespace
+
+void ThermalPrinter::setTransport(Transport transport)
+{
+    transportOverride() = std::move(transport);
+}
+
 bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QString *err)
 {
+    if (transportOverride())
+        return transportOverride()(escpos, queueName, err);
     auto fail = [err](const QString &m) { if (err) *err = m; return false; };
+    if (escpos.isEmpty())
+        return fail(QStringLiteral("No hay nada que imprimir."));
 
 #ifdef Q_OS_WIN
     QString queue = queueName.trimmed();

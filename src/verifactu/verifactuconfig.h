@@ -16,6 +16,9 @@ public:
 
     VerifactuConfig();
 
+    // Deletes the plaintext INI an old version left in AppData (called at initialize()).
+    static void removeLegacyIni();
+
     void setEnvironment(Environment env);
     Environment getEnvironment() const;
 

@@ -40,7 +40,7 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
 
     m_notes = new QTextEdit(this);
     m_notes->setReadOnly(true);
-    m_notes->setPlainText(releaseNotes);
+    m_notes->setMarkdown(releaseNotes);
     m_notes->setMinimumHeight(200);
     layout->addWidget(m_notes);
 
@@ -155,6 +155,7 @@ void UpdaterDialog::onDownloadFinished(const QString &localPath)
         return;
     }
 
+    qDebug() << "UpdaterDialog: installer started, closing the application";   // support sees an update was attempted
     accept();
     QCoreApplication::quit();
 }

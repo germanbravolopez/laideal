@@ -14,7 +14,7 @@ namespace UiKit { class ResultPanel; }
 
 // Void unpaid, not-yet-delivered garments of a ticket (an erroneous receipt or a
 // customer change of mind). This is the local counterpart to CancelInvoiceDialog:
-// the rows here were never sent to AEAT (pagado=NO, verifactu_estado SIN COBRAR),
+// the rows here were never sent to AEAT (pagado=NO, no submitted verifactu_estado),
 // so voiding is a pure DB update - estado -> "Anulado", verifactu_estado ->
 // "ANULADA" - with no AEAT anulacion. Paid/ENVIADA rows are shown but not
 // selectable; those must be cancelled via "Anular Factura Verifactu". Opened from

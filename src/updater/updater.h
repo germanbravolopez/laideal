@@ -1,6 +1,7 @@
 #ifndef UPDATER_H
 #define UPDATER_H
 
+#include <QNetworkReply>
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -19,7 +20,7 @@ class QNetworkReply;
 // the caller can pass it to downloadInstaller().
 //
 // downloadInstaller() saves the installer .exe under the per-user app data dir
-// (as .part, renamed once its size and SHA-256 match what the release publishes:
+// (never %TEMP%, which hardened PCs deny execute; as .part, renamed once its size and SHA-256 match what the release publishes:
 // the asset's "digest" or the laideal_setup_X.Y.exe.sha256 asset) and emits
 // downloadFinished with the local path. An installer that cannot be verified is
 // never handed over to run. The caller is expected to
@@ -72,17 +73,41 @@ public:
         QString sha256;        // from the asset's "digest" ("sha256:<hex>"), when GitHub gives it
         QUrl    checksumUrl;   // the laideal_setup_X.Y.exe.sha256 asset
     };
-    static InstallerAsset findInstallerAsset(const QJsonArray &assets);
+    // `tag` (when given) makes laideal_setup_<tag>.exe the preferred asset.
+    static InstallerAsset findInstallerAsset(const QJsonArray &assets, const QString &tag = QString());
+    // laideal_setup_X.Y.exe from the URL; a fixed name when the URL carries anything else.
+    static QString installerFileName(const QUrl &url);
+
+    // The /releases/latest answer, decoded. `error` is set (Spanish) when the check failed;
+    // otherwise `newer` says whether the tag beats installedVersion, and only then are
+    // `installer` and `notes` checked and filled.
+    struct Release {
+        QString        tag;
+        QString        notes;
+        InstallerAsset installer;
+        QString        error;
+        bool           newer = false;
+    };
+    static Release parseRelease(const QByteArray &json, const QString &installedVersion = currentVersion(), bool allowLoopback = false);
+    // The Spanish section of the bilingual release body; the whole body when it has no sections.
+    static QString releaseNotesForUi(const QString &body);
+    // Spanish text for a failed GitHub request (rate limit, offline, timeout...).
+    static QString describeNetworkError(QNetworkReply::NetworkError error, int httpStatus, const QString &rawText);
+
+    // Test seam: query another URL than GitHub's /releases/latest.
+    void setApiUrl(const QUrl &url) { m_apiUrl = url; }
     // https on github.com or *.githubusercontent.com only.
-    static bool isTrustedDownloadUrl(const QUrl &url);
+    // allowLoopback also accepts http on 127.0.0.1 / localhost (tests against a local fake only).
+    static bool isTrustedDownloadUrl(const QUrl &url, bool allowLoopback = false);
+    // Test seam: accept loopback http URLs for the installer and its checksum.
+    void setAllowLoopbackForTests(bool allow) { m_allowLoopback = allow; }
     // The lower-case hex digest of a sha256sum line ("<hex>  <file>" or "<hex>"); empty if none.
     static QString parseChecksumFile(const QByteArray &content);
     // Why these installer bytes must not run; empty when size and SHA-256 match.
     static QString installerMismatch(const QByteArray &bytes, qint64 expectedSize, const QString &expectedSha256);
 
-    // Downloads installerUrl to %TEMP%; emits downloadFinished or
-    // downloadFailed. The local path under %TEMP% is reused across runs -
-    // a subsequent download for the same version overwrites the file.
+    // Downloads installerUrl into the per-user updates folder; emits downloadFinished
+    // or downloadFailed. Older installers there are deleted first.
     void downloadInstaller(const QUrl &installerUrl);
 
 signals:
@@ -102,6 +127,8 @@ private:
     void handleDownloadReply(QNetworkReply *reply, const QString &localPath);
 
     QNetworkAccessManager *m_nam;
+    QUrl m_apiUrl;
+    bool m_allowLoopback = false;
     bool m_silentOnNoUpdate;
     bool m_checkInFlight = false;
     bool m_checkSilent = true;               // of the check in flight; a manual click makes it false

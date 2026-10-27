@@ -28,8 +28,12 @@ public:
     // don't accumulate. Runs the full parse + legacy-key migration + encrypt-at-rest
     // + defaults pipeline against that file (and rewrites it if a plaintext secret
     // was encrypted), so those getters are testable without touching the real
-    // settings file. Returns what load() returns. Not used in production.
+    // settings file. Returns what load() returns. Used by `--settings <file>` and the tests.
     bool loadFrom(const QString &path);
+    // Same pipeline held in memory only: nothing is ever written or moved (no first-run
+    // file, no encrypted rewrite, no corrupt-file rename, no legacy-key removal) and
+    // save() fails. For `--self-check`, which promises to only read the settings.
+    bool loadReadOnly(const QString &path);
 
     QString filePath() const { return m_filePath; }
 
@@ -83,9 +87,8 @@ public:
 
     // --- Taxes ---
     // IVA rate (%) on ingresos: fixed at 21 by business decision, no longer
-    // configurable. A legacy taxes.iva_rate key in the settings JSON is kept on
-    // disk for older versions but ignored, so a stray value can never alter
-    // tickets, AEAT submissions or past Contabilidad reports.
+    // configurable. No settings key holds it, so a stray value in the JSON can never
+    // alter tickets, AEAT submissions or past Contabilidad reports.
     static constexpr double kIngresosIvaRate = 21.0;
     static double ivaRate() { return kIngresosIvaRate; }
 
@@ -95,14 +98,21 @@ public:
     QString verifactuName() const;
     void setVerifactuName(const QString &v);
     QString verifactuServiceKey() const;
-    void setVerifactuServiceKey(const QString &v);
+    // Both secret setters return false when the value could not be encrypted: it is
+    // then kept in plain text (nothing is lost) and the caller should tell the user.
+    // A value already starting with `dpapi:v1:` is stored as is, never encrypted twice.
+    bool setVerifactuServiceKey(const QString &v);
+    // A stored key that no longer decrypts (another Windows user or machine, corrupt blob).
+    bool verifactuServiceKeyUnreadable() const;
 
-    // Secret-at-rest helpers (Windows DPAPI, per-user). The service-key getter/
-    // setter use these internally; exposed as statics so the encrypt->decrypt
+    // Secret-at-rest helpers (Windows DPAPI, per-user). The service-key and
+    // certificate-password getters/setters use these internally; exposed as statics so the encrypt->decrypt
     // round-trip, the `dpapi:v1:` marker and the legacy-plaintext passthrough are
     // unit-testable without the settings file. On non-Windows builds they are a
     // passthrough. `dpapiEncrypt("")` returns "".
-    static QString dpapiEncrypt(const QString &plain);
+    static QString dpapiEncrypt(const QString &plain, bool *ok = nullptr);
+    // Tests only: makes every encryption fail, like a broken DPAPI.
+    static void    forceEncryptionFailure(bool fail);
     static QString dpapiDecrypt(const QString &stored);
     static bool    dpapiIsEncrypted(const QString &stored);
     bool verifactuProduction() const;
@@ -110,6 +120,8 @@ public:
     // Startup recovery for verifactu_estado=PENDIENTE rows. Disabled-by-default
     // behaviour would silently leave durability gaps unresolved; default is on
     // but gated by a floor date so legacy pre-Verifactu tickets do not surface.
+    // Floor date a fresh settings file starts with (ISO yyyy-MM-dd).
+    static QString defaultPendingRecoveryFloorDate();
     bool    verifactuPendingRecoveryEnabled() const;
     void    setVerifactuPendingRecoveryEnabled(bool v);
     // ISO yyyy-MM-dd. Rows with fecha_recepcion strictly before this date are
@@ -133,7 +145,8 @@ public:
     QString aeatCertificateFile() const;
     void    setAeatCertificateFile(const QString &v);
     QString aeatCertificatePassword() const;
-    void    setAeatCertificatePassword(const QString &v);
+    bool    setAeatCertificatePassword(const QString &v);
+    bool    aeatCertificatePasswordUnreadable() const;
     // NumeroInstalacion of the records: created once per installation.
     QString aeatInstallationNumber();
     // The direct client's chain as this installation last saw it (see AeatDirectBackend::Config).
@@ -174,10 +187,12 @@ private:
     // removes the obsolete keys. Idempotent.
     void migrateLegacyKeys();
     void applyDefaults();
-    // Encrypts any at-rest secret (currently the Verifactu service key) that is
-    // still stored in plaintext, using Windows DPAPI scoped to the current user.
+    // Encrypts any at-rest secret (the Verifactu service key and the certificate
+    // password) that is still stored in plaintext, using Windows DPAPI scoped to the current user.
     // Idempotent. Returns true if it changed m_data (so the caller can persist).
     bool encryptSecretsAtRest();
+    bool setSecret(const char *key, const QString &plain);
+    bool secretUnreadable(const char *key) const;
 
     QString str(const QStringList &path, const QString &def = {}) const;
     double  dbl(const QStringList &path, double def = 0.0) const;
@@ -195,6 +210,7 @@ private:
     QString     m_filePath;
     QString     m_legacyKeyFile;   // ~/.verifactu_key, when the key was migrated from it
     mutable QString m_lastSaveError;
+    bool        m_readOnly = false;   // loadReadOnly(): nothing is written
 
     static AppSettings *s_instance;
 };

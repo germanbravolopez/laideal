@@ -1,11 +1,15 @@
 #include "applogger.h"
 
 #include <QDateTime>
+#include <cstdio>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLoggingCategory>
+#include <QCoreApplication>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -18,6 +22,7 @@ QMutex s_logMutex;
 QString s_activePath;
 qint64 s_maxBytes = kDefaultMaxBytes;
 qint64 s_written = 0;   // bytes in the open file, counted from its size at open
+QtMessageHandler s_previousHandler = nullptr;   // the handler replaced by install; null = Qt default
 
 bool openLog(const QString &path)
 {
@@ -53,20 +58,34 @@ void rotateLocked()
         s_written = 0;   // rename failed: do not retry on every message
 }
 
-void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
+// A secret that slips into a message never reaches the file the shop sends to support.
+QString scrubbed(const QString &msg)
 {
+    static const QRegularExpression secret(
+        R"((ServiceKey|password|passwd|clave|secret|token)(["']?\s*[:=]\s*["']?)[^"'\s,;}&]+)",
+        QRegularExpression::CaseInsensitiveOption);
+    QString out = msg;
+    return out.replace(secret, QStringLiteral("\\1\\2***"));
+}
+
+void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    QtMessageHandler previous = nullptr;
+    const QString clean = scrubbed(msg);   // the console gets the scrubbed text too
     {
         QMutexLocker locker(&s_logMutex);
+        previous = s_previousHandler;
         if (s_logStream.device()) {
             const char *tag = "DEBUG";
             switch (type) {
+            case QtInfoMsg:     tag = "INFO";  break;
             case QtWarningMsg:  tag = "WARN";  break;
             case QtCriticalMsg: tag = "CRIT";  break;
             case QtFatalMsg:    tag = "FATAL"; break;
             default: break;
             }
-            const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
-                                 + " [" + tag + "] " + msg + "\n";
+            const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+                                 + " [" + tag + "] " + clean + "\n";
             s_logStream << line;
             s_logStream.flush();
             s_written += line.toUtf8().size();
@@ -74,6 +93,11 @@ void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &m
                 rotateLocked();
         }
     }
+    // Chain on, so a debug run still shows the message in the console.
+    if (previous)
+        previous(type, context, clean);
+    else
+        fprintf(stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, clean)));
     if (type == QtFatalMsg)
         abort();
 }
@@ -101,14 +125,19 @@ bool AppLogger::installAt(const QString &path, qint64 maxBytes)
                 << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
                 << " ===\n";
     s_logStream.flush();
-    qInstallMessageHandler(messageHandler);
+    static const bool closesAtExit = (qAddPostRoutine(&AppLogger::uninstall), true);   // no logging into destroyed statics
+    Q_UNUSED(closesAtExit)
+    const QtMessageHandler replaced = qInstallMessageHandler(messageHandler);
+    if (replaced != messageHandler)   // installing twice must not chain to itself
+        s_previousHandler = replaced;
     return true;
 }
 
 void AppLogger::uninstall()
 {
-    qInstallMessageHandler(nullptr);
     QMutexLocker locker(&s_logMutex);
+    qInstallMessageHandler(s_previousHandler);
+    s_previousHandler = nullptr;
     s_logStream.setDevice(nullptr);
     if (s_logFile.isOpen())
         s_logFile.close();

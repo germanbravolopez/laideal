@@ -46,6 +46,9 @@ public:
 
     void populateTable();
 
+    // Only an https address is opened from the QR column (a restored DB could hold file: or other schemes).
+    static bool isOpenableQrUrl(const QString &url);
+
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
     QSqlTableModel *model = nullptr;
@@ -59,10 +62,14 @@ private slots:
     void on_actionAnadir_fila_triggered();
     void on_actionEliminar_fila_triggered();
     void on_actionGenerar_pdf_con_el_listado_triggered();
-    void closeEvent(QCloseEvent* event);
     void handleDoubleClick(const QModelIndex &index);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
+    // The first two visible cell texts of a row, to name it in the delete confirmation.
+    QString rowDescription(int proxyRow) const;
     void setupUi();
     // Explanation and available buttons for tableName.
     void configureForTable();

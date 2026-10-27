@@ -26,7 +26,10 @@ void NumberFormatDelegate::setEditorData(QWidget *editor, const QModelIndex &ind
 void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
 {
     if (auto *line = qobject_cast<QLineEdit *>(editor)) {
-        model->setData(index, storedNumber(line->text()), Qt::EditRole);
+        // An amount is stored in cents; other text goes to the model as typed, so its
+        // validator refuses it with a message (or, when empty, clears the cell).
+        const QString typed = line->text().trimmed();
+        model->setData(index, isAmount(typed) ? storedNumber(typed) : typed, Qt::EditRole);
         return;
     }
     QStyledItemDelegate::setModelData(editor, model, index);
@@ -34,7 +37,12 @@ void NumberFormatDelegate::setModelData(QWidget *editor, QAbstractItemModel *mod
 
 QString NumberFormatDelegate::storedNumber(const QString &typed)
 {
-    return typed.trimmed().replace(QLatin1Char(','), QLatin1Char('.'));
+    return moneyText(typed);   // "12," and "2,5" are stored as "12.00" and "2.50", like every amount writer
+}
+
+bool NumberFormatDelegate::isAmount(const QString &typed)
+{
+    return moneyParse(typed, nullptr);
 }
 
 QString DecimalCommaDelegate::displayText(const QVariant &value, const QLocale &) const

@@ -14,6 +14,7 @@ target_link_libraries(listado
     appsettings
     reporthtml
     uikit
+    verifactu_types
     PUBLIC
     tableview
 )

@@ -7,10 +7,7 @@
 #include "uikit.h"
 #include "verifactuintegration.h"
 
-#include <QCheckBox>
 #include <QDateEdit>
-#include <QDialogButtonBox>
-#include <QEventLoop>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -71,10 +68,7 @@ void PayDialog::buildUi()
 
     m_lblTotal = new QLabel(this);
     m_lblTotal->setAlignment(Qt::AlignRight);
-    QFont totalFont = m_lblTotal->font();
-    totalFont.setPointSizeF(totalFont.pointSizeF() + 2);
-    totalFont.setBold(true);
-    m_lblTotal->setFont(totalFont);
+    UiKit::emphasize(m_lblTotal, 2);
     root->addWidget(m_lblTotal);
 
     auto *form = new QFormLayout;
@@ -95,6 +89,9 @@ void PayDialog::buildUi()
     m_lblStatus->setMinimumHeight(40);
     root->addWidget(m_lblStatus);
 
+    connect(m_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem *it) {
+        if (it && it->column() == COL_CHECK) recomputeTotal();
+    });
     connect(m_btnCobrar, &QPushButton::clicked, this, &PayDialog::onCobrarClicked);
     connect(m_btnCancel, &QPushButton::clicked, this, &QDialog::reject);
 }
@@ -102,6 +99,8 @@ void PayDialog::buildUi()
 bool PayDialog::loadTicket(const QString &ticketNum)
 {
     m_ticketNum = ticketNum;
+    m_cliente.clear();
+    const QSignalBlocker loading(m_table);   // recomputeTotal() runs once, after the rows are in
     m_table->setRowCount(0);
 
     int unpaidCount = 0;
@@ -165,10 +164,6 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     m_dePago->setMaximumDate(QDate::currentDate());
     if (m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate())
         m_dePago->setMinimumDate(m_fechaRecepcion);
-    connect(m_table, &QTableWidget::itemChanged,
-            this, [this](QTableWidgetItem *it) {
-        if (it && it->column() == COL_CHECK) recomputeTotal();
-    });
     recomputeTotal();
     return true;
 }
@@ -280,7 +275,7 @@ void PayDialog::onCobrarClicked()
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &PayDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
     m_pendingReqId = m_verifactu->submitSimplifiedInvoiceAsync(
-        invoiceId, fechaPago, taxBase, ivaRate, tr("Servicios de lavandería"));
+        invoiceId, fechaPago, taxBase, ivaRate, kInvoiceDescription);
 
     if (m_pendingReqId.isEmpty()) {
         // Nothing left: the payment stays PENDIENTE and the start-up recovery resends it.

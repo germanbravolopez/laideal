@@ -11,8 +11,9 @@ const char GS  = 0x1D;
 const char LF  = 0x0A;
 
 // Unicode -> PC858 (code page 858 = CP850 + euro) for the glyphs a Spanish
-// laundry ticket actually prints. ASCII (<= 0x7F) passes through unchanged; any
-// non-ASCII char absent from this map is emitted as '?'. PC858 is selected on
+// laundry ticket actually prints (typographic dashes and quotes are folded to ASCII
+// first). ASCII (<= 0x7F) passes through unchanged; any other char absent from this
+// map is emitted as '?'. PC858 is selected on
 // the device with `ESC t 19` in init().
 const QHash<ushort, uchar> &cp858Map()
 {
@@ -33,8 +34,25 @@ const QHash<ushort, uchar> &cp858Map()
         {0x00D3, 0xE0}, {0x00D4, 0xE2}, {0x00D2, 0xE3}, {0x00D5, 0xE5},
         {0x00DA, 0xE9}, {0x00DB, 0xEA}, {0x00D9, 0xEB}, {0x00DD, 0xED},
         {0x00B4, 0xEF}, {0x00B0, 0xF8}, {0x00B7, 0xFA},
+        {0x00B2, 0xFD}, {0x00B3, 0xFC}, {0x00B9, 0xFB}, {0x00D7, 0x9E}, {0x00AE, 0xA9},
+        {0x00B1, 0xF1}, {0x00A7, 0xF5}, {0x00B5, 0xE6}, {0x00E5, 0x86}, {0x00C5, 0x8F},
+        {0x00E6, 0x91}, {0x00C6, 0x92}, {0x00F8, 0x9B}, {0x00D8, 0x9D}, {0x00DF, 0xE1},
+        {0x00F5, 0xE4}, {0x00FD, 0xEC}, {0x00FF, 0x98}, {0x00A2, 0xBD}, {0x00A5, 0xBE},
     };
     return m;
+}
+
+// Typographic punctuation pasted into names or notes, as the plain text it stands for.
+const char *asciiFold(ushort u)
+{
+    switch (u) {
+    case 0x00A0: return " ";
+    case 0x2010: case 0x2011: case 0x2012: case 0x2013: case 0x2014: case 0x2212: return "-";
+    case 0x2018: case 0x2019: case 0x201A: return "'";
+    case 0x201C: case 0x201D: case 0x201E: return "\"";
+    case 0x2026: return "...";
+    default: return nullptr;
+    }
 }
 } // namespace
 
@@ -62,6 +80,8 @@ QByteArray EscPosBuilder::toCp858(const QString &s)
             out.append(' ');   // a control character in a name must not become a printer command
         } else if (u <= 0x7F) {
             out.append(static_cast<char>(u));
+        } else if (const char *folded = asciiFold(u)) {
+            out.append(folded);
         } else {
             const auto it = map.constFind(u);
             out.append(static_cast<char>(it != map.constEnd() ? it.value() : uchar('?')));
@@ -151,6 +171,7 @@ EscPosBuilder &EscPosBuilder::line(const QString &s)
 EscPosBuilder &EscPosBuilder::feed(int n)
 {
     if (n <= 0) return *this;
+    if (n > 255) n = 255;
     const char seq[] = { ESC, 'd', static_cast<char>(n) };
     m_buf.append(seq, sizeof(seq));
     return *this;
@@ -222,7 +243,7 @@ EscPosBuilder &EscPosBuilder::rasterImage(const QImage &img)
 {
     if (img.isNull())
         return *this;
-    const QImage mono = img.convertToFormat(QImage::Format_Mono);
+    const QImage mono = img.convertToFormat(QImage::Format_Mono, Qt::MonoOnly | Qt::ThresholdDither);
     const int w = mono.width();
     const int h = mono.height();
     const int widthBytes = (w + 7) / 8;

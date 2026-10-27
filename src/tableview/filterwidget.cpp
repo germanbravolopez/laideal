@@ -1,7 +1,5 @@
 #include "filterwidget.h"
 
-#include <QIcon>
-#include <QPixmap>
 #include <QMenu>
 #include <QAction>
 #include <QActionGroup>
@@ -58,7 +56,7 @@ Qt::CaseSensitivity FilterWidget::caseSensitivity() const
 
 static inline FilterWidget::PatternSyntax patternSyntaxFromAction(const QAction *a)
 {
-    return static_cast<FilterWidget::PatternSyntax>(a->data().toInt());
+    return a ? static_cast<FilterWidget::PatternSyntax>(a->data().toInt()) : FilterWidget::RegularExpression;
 }
 
 FilterWidget::PatternSyntax FilterWidget::patternSyntax() const

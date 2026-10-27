@@ -34,9 +34,12 @@ public:
     void setReportFolder(const QString &folder) { m_reportFolder = folder; }
     QString reportFile() const { return m_reportFile; }
     const QVector<SelfCheck::Check> &checks() const { return m_checks; }
+    // Every check is correct or omitted (the process exit code of --self-check).
+    bool allPassed() const { return m_finished && m_allOk; }
 
 public slots:
     void start();
+    void reject() override;   // closing early still writes the report, the unanswered checks "SIN HACER"
 
 private slots:
     void answer(bool yes);
@@ -68,6 +71,8 @@ private:
     QVector<SelfCheck::Check> m_checks;
     QVector<Question> m_questions;
     int m_current = -1;
+    bool m_finished = false;
+    bool m_allOk = false;
 
     QTableWidget *m_table = nullptr;
     QGroupBox *m_grpQuestion = nullptr;

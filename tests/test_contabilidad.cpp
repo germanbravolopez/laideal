@@ -1,8 +1,9 @@
-// Tests for Contabilidad::periodRangeFor() - the pure period-range date math
-// extracted from the dialog. The range is half-open: endExclusive is the first
-// day AFTER the period.
+// Tests for Contabilidad's pure statics (period ranges, figures, counts, detail HTML) and
+// the lock status over a throwaway database (TestSchema, closeQuarter). Period ranges are
+// half-open: endExclusive is the first day AFTER the period.
 
 #include <QtTest>
+#include <cmath>
 #include <QDate>
 #include <QRegularExpression>
 #include <QSqlDatabase>
@@ -164,6 +165,25 @@ private slots:
         QSqlDatabase::removeDatabase(conn);
     }
 
+    // A closure history that cannot be read must not read as "no records".
+    void test_lockStatusMessage_unreadableHistoryReadsBlocked()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString conn = "test_contabilidad_lock_unreadable";
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+            db.setDatabaseName(dir.filePath("lock.db"));
+            QVERIFY(TestSchema::create(db));
+            db.open();
+            QVERIFY(QSqlQuery(db).exec("DROP TABLE accounting_closures"));
+            db.close();
+            const QString message = Contabilidad::lockStatusMessage(db, Contabilidad::Trimestral, 1, 2026);
+            QVERIFY2(message.contains("bloqueado") && !message.contains("no tiene registros"), qPrintable(message));
+        }
+        QSqlDatabase::removeDatabase(conn);
+    }
+
     // A quarter closed by the old edit_lock flag has no real close date.
     void test_lockStatusMessage_migratedClosureHasNoDate()
     {
@@ -289,6 +309,54 @@ private slots:
         QVERIFY(qAbs(year.ingRegularizacion - 242.0) < 1e-9);
     }
 
+    // Cancelling more than the period earned leaves a negative, finite net.
+    void test_figuresFromDetails_negativeNet()
+    {
+        IncomeTicketDetail t; t.nRecibo = "1"; t.importe = 60.5;
+        RegularizationDetail r; r.nRecibo = "9"; r.importe = 121.0; r.fechaPago = "10-02-2026";
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({t}, {r}, {}, 21.0,
+                                                                               QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QVERIFY(qAbs(f.ingImporte + 60.5) < 1e-9);
+        QVERIFY(f.ingBase < 0 && f.ingIva < 0);
+        QVERIFY(f.resultadoIva() < 0);
+        QVERIFY(std::isfinite(f.ingBase) && std::isfinite(f.resultadoPeriodo()));
+    }
+
+    void test_figuresFromDetails_ivaRateOtherThan21()
+    {
+        IncomeTicketDetail t; t.nRecibo = "1"; t.importe = 110.0;
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({t}, {}, {}, 10.0,
+                                                                               QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QVERIFY(qAbs(f.ingBase - 100.0) < 1e-9);
+        QVERIFY(qAbs(f.ingIva - 10.0) < 1e-9);
+    }
+
+    // Ticket A paid in Q1, B paid and cancelled in Q2, A's Q1 payment also cancelled in Q2.
+    void test_netTicketCount_acrossQuarters()
+    {
+        IncomeTicketDetail a; a.nRecibo = "A"; a.importe = 10.0;
+        IncomeTicketDetail b; b.nRecibo = "B"; b.importe = 20.0;
+        RegularizationDetail ra; ra.nRecibo = "A"; ra.importe = 10.0; ra.fechaPago = "10-02-2026";
+        RegularizationDetail rb; rb.nRecibo = "B"; rb.importe = 20.0; rb.fechaPago = "10-05-2026";
+        QCOMPARE(Contabilidad::netTicketCount({a}, {}, QDate(2026, 1, 1), QDate(2026, 4, 1)), 1);
+        QCOMPARE(Contabilidad::netTicketCount({b}, {ra, rb}, QDate(2026, 4, 1), QDate(2026, 7, 1)), 0);
+    }
+
+    void test_invalidAmountCount_countsRegularizations()
+    {
+        RegularizationDetail r; r.nRecibo = "9"; r.invalidAmounts = 2;
+        QCOMPARE(Contabilidad::invalidAmountCount({}, {r}, {}), 2);
+    }
+
+    void test_detailRegularizaciones_flaggedAndEscaped()
+    {
+        RegularizationDetail r; r.nRecibo = "9"; r.cliente = "<b>Ana</b>"; r.importe = 10.0; r.invalidAmounts = 1;
+        const QString html = Contabilidad::createHtmlDetailRegularizaciones({r}, 21.0);
+        QVERIFY(html.contains("<td>9 *</td>"));
+        QVERIFY(html.contains("&lt;b&gt;Ana&lt;/b&gt;") && !html.contains("<b>Ana"));
+        QVERIFY(html.contains("1 ticket(s) con alguna prenda"));
+    }
+
     void test_detailRegularizaciones()
     {
         QVERIFY(Contabilidad::createHtmlDetailRegularizaciones({}, 21.0).isEmpty());   // no table when none
@@ -331,6 +399,18 @@ private slots:
         const Contabilidad::PeriodFigures f =
             Contabilidad::figuresFromDetails({full, partial, kept}, {rFull, rPartial, rOther}, {}, 21.0, q2, q3);
         QCOMPARE(f.ingTickets, 2);
+    }
+
+    // A regularisation whose payment date is empty or unreadable is netted in the amounts, so it
+    // offsets its ticket's count in the period being computed.
+    void test_netTicketCount_emptyOrInvalidFechaPago()
+    {
+        const QDate q2(2026, 4, 1), q3(2026, 7, 1);
+        IncomeTicketDetail t; t.nRecibo = "7"; t.importe = 40.0;
+        RegularizationDetail empty;   empty.nRecibo = "7";   empty.importe = 40.0;   empty.fechaPago = "";
+        RegularizationDetail invalid; invalid.nRecibo = "7"; invalid.importe = 40.0; invalid.fechaPago = "31-31-2026";
+        QCOMPARE(Contabilidad::netTicketCount({t}, {empty}, q2, q3), 0);
+        QCOMPARE(Contabilidad::netTicketCount({t}, {invalid}, q2, q3), 0);
     }
 
     void test_yearTicketCountNetsCancellationsWithinTheYear()

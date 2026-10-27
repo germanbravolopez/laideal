@@ -18,13 +18,13 @@ Docs drift: architecture.md:135 and updater.h:20,52-53 still say `%TEMP%`; code 
 | Medium ✅ FIXED 20-10-2026 | bug | updaterdialog.cpp:110-112, 113-120 | `qputenv("TMP"/"TEMP")` is process-wide and never restored; if `startDetached` fails the app keeps running with TEMP redirected (QTemporaryDir, preview/PDF temp files, `--self-check` copies). | Use a `QProcess` instance with `setProcessEnvironment`, or restore the old values on failure. | S |
 | Medium ✅ FIXED 19-10-2026 | bug | updater.cpp:179-186 | Whole installer is `readAll()`-ed after finish and written non-atomically to the final name; a crash mid-write leaves a truncated `laideal_setup_X.Y.exe` that the failure hint (updaterdialog.cpp:118) tells the user to run manually. | Stream to `.part`, verify hash/size, then `QFile::rename`. | M |
 | Medium ✅ FIXED 20-10-2026 | bug | updater.cpp:36-40,53-55 | Version regex is an unanchored prefix match: `12.0.1`, `12.0-beta` compare as `12.0`; on a non-match it falls back to `QString::compare(a,b)` so e.g. tag "nightly" > "12.0" would offer an update. Tags are strictly X.Y today (ci.yml:123), so latent. | Anchor with `$`; treat non-match as checkFailed, never as newer. | S |
-| Low | bug | updater.cpp:108-118 | Asset = first `laideal_setup_*.exe`; not checked against `laideal_setup_<tag>.exe`. `QUrl::isValid()` is true for an empty URL, so an asset without `browser_download_url` passes the check at :116 and the dialog would try to download "". | Match exact name; test `isEmpty()` too. | S |
-| Low | bug | updater.cpp:141-142, 144-147 | Every `*.exe` in the updates folder is deleted before each download (errors ignored); local filename comes from the server-supplied URL (`installerUrl.fileName()`, percent-decoded, could carry odd names such as `x.exe:stream`). | Delete only `laideal_setup_*.exe`; build the name from the validated tag. | S |
-| Low | design | updaterdialog.cpp:107-124 | After `startDetached` returns true the app calls `accept()` + `quit()` without knowing the installer really ran (AV kill); only a `qDebug` records it. | Write an entry to the app log/Logger before quitting so the self-check/support report shows an attempted update. | S |
-| Low | design | updaterdialog.cpp:60-62; ci.yml:239 | Release body is bilingual Markdown ("## Español ... ## English ...") shown with `setPlainText`: raw `##` markers and both languages whatever the UI language. | `setMarkdown` and show only the section of the UI language. | S |
-| Low | design | updater.cpp:62-66, mainwindow.cpp:1610-1616 | Manual failure text is the raw `errorString()` (English Qt text); GitHub anonymous rate limit (60/h per IP, shared in a shop network, HTTP 403) not distinguished. | Map `NetworkError`/HTTP status to Spanish messages. | S |
-| Low | design | updater.cpp:19-21 | URL hardcoded and parsing inside the network slot: no seam to test anything beyond `compareVersions`. | Extract pure `parseRelease(QByteArray) -> {tag, notes, installerUrl, error}`; add `setApiUrl()`; injectable launcher in the dialog. | S |
-| Low | design | updater.cpp:97-101 | `/releases/latest` ignores drafts/pre-releases (no beta channel) and a downgrade reports "ya tiene la más reciente". By design but undocumented. | Document in architecture.md / CONTRIBUTING.md. | S |
+| Low ✅ FIXED 26-10-2026 (the exact laideal_setup_<tag>.exe is preferred, an empty URL is no longer valid) | bug | updater.cpp:108-118 | Asset = first `laideal_setup_*.exe`; not checked against `laideal_setup_<tag>.exe`. `QUrl::isValid()` is true for an empty URL, so an asset without `browser_download_url` passes the check at :116 and the dialog would try to download "". | Match exact name; test `isEmpty()` too. | S |
+| Low ✅ FIXED 26-10-2026 (only laideal_setup*.exe and *.part are deleted; the local name is checked, else laideal_setup.exe) | bug | updater.cpp:141-142, 144-147 | Every `*.exe` in the updates folder is deleted before each download (errors ignored); local filename comes from the server-supplied URL (`installerUrl.fileName()`, percent-decoded, could carry odd names such as `x.exe:stream`). | Delete only `laideal_setup_*.exe`; build the name from the validated tag. | S |
+| Low ✅ FIXED 26-10-2026 (a log line when the installer started) | design | updaterdialog.cpp:107-124 | After `startDetached` returns true the app calls `accept()` + `quit()` without knowing the installer really ran (AV kill); only a `qDebug` records it. | Write an entry to the app log/Logger before quitting so the self-check/support report shows an attempted update. | S |
+| Low ✅ FIXED 26-10-2026 (only the Spanish section, rendered as Markdown) | design | updaterdialog.cpp:60-62; ci.yml:239 | Release body is bilingual Markdown ("## Español ... ## English ...") shown with `setPlainText`: raw `##` markers and both languages whatever the UI language. | `setMarkdown` and show only the section of the UI language. | S |
+| Low ✅ FIXED 26-10-2026 (Updater::describeNetworkError) | design | updater.cpp:62-66, mainwindow.cpp:1610-1616 | Manual failure text is the raw `errorString()` (English Qt text); GitHub anonymous rate limit (60/h per IP, shared in a shop network, HTTP 403) not distinguished. | Map `NetworkError`/HTTP status to Spanish messages. | S |
+| Low ✅ FIXED 26-10-2026 (parseRelease + setApiUrl; the injectable launcher was not added) | design | updater.cpp:19-21 | URL hardcoded and parsing inside the network slot: no seam to test anything beyond `compareVersions`. | Extract pure `parseRelease(QByteArray) -> {tag, notes, installerUrl, error}`; add `setApiUrl()`; injectable launcher in the dialog. | S |
+| Low ✅ FIXED 26-10-2026 (CONTRIBUTING.md; architecture.md is outside this pass) | design | updater.cpp:97-101 | `/releases/latest` ignores drafts/pre-releases (no beta channel) and a downgrade reports "ya tiene la más reciente". By design but undocumented. | Document in architecture.md / CONTRIBUTING.md. | S |
 | Low | bug | ci.yml:238 | Notes regex lookahead `^r?\d+\.\d+` has a stray `r?` (probably `\r?`); harmless now. | Fix to `^\d+\.\d+\r?\n`. | S |
 | Low ✅ FIXED 23-10-2026 | design | releases/laideal.iss:84-85, 87-88 | New Start-menu shortcut "Comprobar tras actualizar" is correct (no admin, runs `--self-check`), but nothing prompts the shop to run it after an in-app update (the only post-install action relaunches the app). | Optional second `[Run]` entry (unchecked checkbox) or a first-start-after-version-change notice. | M |
 | Medium ✅ FIXED 19-10-2026 | security | ci.yml:195-210 (cross-module) | Required-DLL guard does not list Qt's TLS backend plugin (`tls\qschannelbackend.dll` / OpenSSL). If absent the updater fails with a TLS error that is silent at startup and unnoticed. UI smoke does not exercise the network. | Verify with the packaging reviewer; add to the required list and to the self-check. | S |
@@ -37,14 +37,14 @@ Checked and fine: 11.10 > 11.9 numeric compare (updater.cpp:46-52, test_updater.
 | Doc (file:line) | Says | Code (file:line) | Fix |
 |---|---|---|---|
 | docs/architecture.md:135 ✅ FIXED 23-10-2026 | installer saved to `%TEMP%` | updater.cpp:128-147: `AppLocalDataLocation/updates`, stale `*.exe` deleted first | Update text |
-| src/updater/updater.h:20,52-53 | "saves to %TEMP%\laideal_setup_X.Y.exe", "reused across runs" | same | Fix comments |
+| src/updater/updater.h:20,52-53 ✅ FIXED 26-10-2026 | "saves to %TEMP%\laideal_setup_X.Y.exe", "reused across runs" | same | Fix comments |
 | docs/architecture.md:135 ✅ FIXED 23-10-2026 | `compareVersions` "major.minor numeric (tolerates a leading v)" | prefix match + lexicographic fallback (updater.cpp:36-40) | Say so or change the code |
-| docs/architecture.md:131-142 | No mention that the installer is unverified, that the release body is bilingual Markdown shown as plain text, or that drafts/pre-releases are invisible | updater.cpp:174-189; ci.yml:239; updaterdialog.cpp:60 | Add "Trust model" paragraph |
+| docs/architecture.md:131-142 ✅ FIXED 27-10-2026 | No mention that the installer is unverified, that the release body is bilingual Markdown shown as plain text, or that drafts/pre-releases are invisible | updater.cpp:174-189; ci.yml:239; updaterdialog.cpp:60 | Add "Trust model" paragraph |
 | docs/architecture.md:136 ✅ FIXED 23-10-2026 | `Updater`/dialog desc. | New launch uses TMP/TEMP of the whole process (updaterdialog.cpp:110) | Mention it is process-wide |
-| CONTRIBUTING.md:84-86 | assets and bare tag consumed by the updater | ci.yml consistent; contract not stated (asset prefix `laideal_setup_`, `.exe`, release must not be draft/prerelease) | Add one line |
-| README.md:24 | in-app updater bullet | no pointer to "Comprobar tras actualizar" after updating | Link docs/testing/smoke_test.md part 2 |
-| docs/testing/e2e.md:15, ui_smoke.md:57, tests/ui/seed.py:58 | update check is switched off | no scenario enables it | See gaps |
-| docs/testing/unit_suites.md:30,101 | `test_versioncompare` covers compareVersions + currentVersion | tests/test_updater.cpp:14-40 correct | none |
+| CONTRIBUTING.md:84-86 ✅ FIXED 26-10-2026 | assets and bare tag consumed by the updater | ci.yml consistent; contract not stated (asset prefix `laideal_setup_`, `.exe`, release must not be draft/prerelease) | Add one line |
+| README.md:24 ✅ FIXED 26-10-2026 | in-app updater bullet | no pointer to "Comprobar tras actualizar" after updating | Link docs/testing/smoke_test.md part 2 |
+| docs/testing/e2e.md:15, ui_smoke.md:57, tests/ui/seed.py:58 ✅ obsolete 27-10-2026 (the docs correctly say the check is off; no scenario enabling it is a test gap) | update check is switched off | no scenario enables it | See gaps |
+| docs/testing/unit_suites.md:30,101 ✅ obsolete 27-10-2026 (row said none, the docs are accurate) | `test_versioncompare` covers compareVersions + currentVersion | tests/test_updater.cpp:14-40 correct | none |
 
 ## Test gaps
 Existing: `test_versioncompare` (tests/test_updater.cpp): `test_compareVersions`, `test_currentVersion`. Nothing else.
@@ -53,17 +53,17 @@ Existing: `test_versioncompare` (tests/test_updater.cpp): `test_compareVersions`
 | Proposed test | Assertions | Effort |
 |---|---|---|
 | `test_compareVersions_malformedNeverNewer` ✅ FIXED 23-10-2026 | "nightly" vs "12.0" -> no update; "12.0.1"/"12.0-beta" behaviour pinned | S |
-| `test_compareVersions_boundary11to12` | "12.0" > "11.10" > "11.9"; "12.00" == "12.0" | S |
-| `test_parseRelease_picksInstallerAsset` | zip + `laideal_setup_12.0.exe` -> exe url; zip only -> error naming the tag; two exes -> exact-name one; empty `browser_download_url` -> error | S |
-| `test_parseRelease_missingTagOrBadJson` | empty tag -> "tag_name" error; garbage / array JSON -> "Respuesta JSON inválida" | S |
-| `test_parseRelease_sameOrOlderTag_noUpdate` | tag == current and tag < current | S |
-| `test_parseRelease_rejectsForeignHostOrHttp` (after hardening) | non-github host / http -> error | S |
-| `test_checkForUpdates_localServer_updateAvailable` | QTcpServer canned JSON; QSignalSpy `updateAvailable` args (tag, notes, url) | M |
-| `test_checkForUpdates_serverDown_http404_timeout` | exactly one `checkFailed`, no `updateAvailable` | M |
+| `test_compareVersions_boundary11to12` ✅ FIXED 26-10-2026 | "12.0" > "11.10" > "11.9"; "12.00" == "12.0" | S |
+| `test_parseRelease_picksInstallerAsset` ✅ FIXED 26-10-2026 | zip + `laideal_setup_12.0.exe` -> exe url; zip only -> error naming the tag; two exes -> exact-name one; empty `browser_download_url` -> error | S |
+| `test_parseRelease_missingTagOrBadJson` ✅ FIXED 26-10-2026 | empty tag -> "tag_name" error; garbage / array JSON -> "Respuesta JSON inválida" | S |
+| `test_parseRelease_sameOrOlderTag_noUpdate` ✅ FIXED 26-10-2026 | tag == current and tag < current | S |
+| `test_parseRelease_rejectsForeignHostOrHttp` ✅ FIXED 26-10-2026 (after hardening) | non-github host / http -> error | S |
+| `test_checkForUpdates_localServer_updateAvailable` ✅ FIXED 26-10-2026 | QTcpServer canned JSON; QSignalSpy `updateAvailable` args (tag, notes, url) | M |
+| `test_checkForUpdates_serverDown_http404_timeout` ✅ FIXED 26-10-2026 (404 and server down; the timeout is not exercised) | exactly one `checkFailed`, no `updateAvailable` | M |
 | `test_downloadInstaller_writesFileAndCleansStale` | stale `x.exe` removed; content equal; `downloadFinished(path)`; progress emitted | M |
 | `test_downloadInstaller_hashMismatch_noLaunch` (after hashing) | `downloadFailed`, no file left | M |
 | `test_downloadInstaller_truncated_noFinalFile` | server closes early -> `downloadFailed`, no final file | M |
-| `test_silentFlagPerRequest` (after fix) | manual check during silent one is not hidden/shown wrongly; second concurrent check ignored | S |
+| `test_silentFlagPerRequest` ✅ FIXED 26-10-2026 (after fix) | manual check during silent one is not hidden/shown wrongly; second concurrent check ignored | S |
 
 ### E2E (test_e2e_app, offscreen)
 - `test_updater_dialog_showsVersionsAndNotes`: header has current + new version, notes shown, `btnLater`/`btnUpdate` present.
@@ -82,7 +82,7 @@ Existing: `test_versioncompare` (tests/test_updater.cpp): `test_compareVersions`
 
 ## Proposals summary
 1. Installer hash (then signature) verification published by ci.yml - M / L.
-2. Scheme/host allow-list for asset URL and redirects - S.
+2. Scheme/host allow-list for asset URL and redirects - S. ✅ DONE 27-10-2026 (`test_downloadInstaller_redirectedToForeignHost_refused`, a redirect to 127.0.0.2).
 3. Download timeout, cancel, reject handling, `.part` + atomic rename, size check - M.
 4. Per-request silent flag and in-flight guard - S.
 5. Child-only TMP/TEMP, restore on failure - S.

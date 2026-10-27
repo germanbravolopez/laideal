@@ -7,13 +7,10 @@
 #include <functional>
 #include <QSortFilterProxyModel>
 
-// INGRESOS_COL_* lives in sql_lite.h - this header used to also carry an
-// INGRESOS_IDX_* duplicate set with diverging names. Consumers that need
-// the ingresos column indices must include "sql_lite.h" directly.
-
 #define GASTOS_IDX_ID          0
 #define GASTOS_IDX_CLIENT      4
 #define GASTOS_IDX_FECHA       5
+#define GASTOS_IDX_IVA         6
 #define GASTOS_IDX_IMPORTE     7
 #define GASTOS_IDX_CONTAB      8
 
@@ -34,6 +31,8 @@ public:
 
     // Sets the regex and the normalized text together with a single re-filter
     // (setFilterRegularExpression + setNormalizedFilter would filter twice).
+    // Exclusive: a non-empty regex is the only filter (an invalid one matches nothing);
+    // the normalized text applies only when the regex is empty.
     void setFilters(const QRegularExpression &regex, const QString &normalizedText, int column = -1);
 
     // Number of source columns the text filter looks at.
@@ -42,16 +41,24 @@ public:
     // Parses a stored number, accepting a decimal comma ("12,5").
     static double numericValue(const QString &text, bool *ok);
 
+    // The date of a dd-MM-yyyy cell (spaces around it ignored); an invalid QDate when it
+    // is empty or malformed, which sorts first.
+    static QDate parseFecha(const QString &text);
+
     // Strips Spanish/common diacritics from a string for locale-insensitive comparison.
     static QString removeDiacritics(const QString &text);
 
-    QString table_name;
+    // Which table the rows come from: picks the comparators, the searched columns and
+    // the read-only rules. Set by the owner before the model is used.
+    enum class Schema { Generic, Ingresos, Gastos, Prendas };
+    Schema schema = Schema::Generic;
+    static Schema schemaForTable(const QString &tableName);
 
     // A gastos row whose fecha is in a quarter closed by Contabilidad is read-only.
     // closedQuarters holds quarterKey()s (sql_lite closedQuarterKeys), set by the view.
     Qt::ItemFlags flags(const QModelIndex &index) const override;
     bool rowLocked(int proxyRow) const;
-    QSet<int> closedQuarters;
+    void setClosedQuarters(const QSet<int> &quarterKeys);
 
     // Checked before an edit is written: a non-empty message refuses it (editRefused).
     std::function<QString(const QModelIndex &index, const QVariant &value)> editValidator;
@@ -65,6 +72,7 @@ protected:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 
 private:
+    QSet<int> m_closedQuarters;
     QString m_normalizedFilterText;
     int m_filterColumn = -1;
     QRegularExpression m_ownRegex;   // set by setFilters(); wins over filterRegularExpression()

@@ -60,6 +60,22 @@ void AeatStore::close(bool wasOpen)
         m_db.close();
 }
 
+void AeatStore::addColumnIfMissing(const QString &table, const QString &column, const QString &definition)
+{
+    QSqlQuery info(m_db);
+    if (!info.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table)))
+        return;
+    while (info.next())
+        if (info.value(1).toString() == column)
+            return;
+    info.finish();
+    QSqlQuery alter(m_db);
+    if (!alter.exec(QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3").arg(table, column, definition))) {
+        m_lastError = alter.lastError().text();
+        qWarning() << "AeatStore::ensureSchema: cannot add" << table << column << "-" << m_lastError;
+    }
+}
+
 bool AeatStore::ensureSchema()
 {
     bool wasOpen = false;
@@ -91,9 +107,9 @@ bool AeatStore::ensureSchema()
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
     } else {
-        // Tables made by an earlier build of the research branch lack them (fails once added).
-        QSqlQuery(m_db).exec("ALTER TABLE aeat_chain ADD COLUMN generated_at TEXT NOT NULL DEFAULT ''");
-        QSqlQuery(m_db).exec("ALTER TABLE aeat_records ADD COLUMN reached INTEGER NOT NULL DEFAULT 0");
+        // Tables made by an earlier build of the research branch lack them.
+        addColumnIfMissing("aeat_chain", "generated_at", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing("aeat_records", "reached", "INTEGER NOT NULL DEFAULT 0");
     }
     close(wasOpen);
     return ok;

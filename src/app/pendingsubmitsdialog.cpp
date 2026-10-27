@@ -24,8 +24,8 @@ constexpr int COL_ACTIONS  = 4;
 constexpr int COL_COUNT    = 5;
 } // namespace
 
-PendingSubmitsDialog::PendingSubmitsDialog(QSqlDatabase &db, QWidget *parent)
-    : QDialog(parent), db(db)
+PendingSubmitsDialog::PendingSubmitsDialog(const QSqlDatabase &database, QWidget *parent)
+    : QDialog(parent), db(database)
 {
     UiKit::setUpDialog(this, tr("Envíos Verifactu pendientes"), 720);
     setMinimumHeight(400);

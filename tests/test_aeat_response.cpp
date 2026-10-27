@@ -159,6 +159,33 @@ private slots:
         QCOMPARE(chainTip({ loop1, loop2 })->invoiceNumber, QStringLiteral("2"));
     }
 
+    // Two tips with an unreadable generation time: the readable one wins, in either order.
+    void test_chainTipWithUnreadableTimes()
+    {
+        RecordSummary bad{ true, "Alta", "89890001K", "1", "10-10-2026", QString(64, 'A'), "garbage", "" };
+        RecordSummary good{ true, "Alta", "89890001K", "2", "10-10-2026", QString(64, 'B'), "2026-10-10T10:00:00+02:00", "" };
+        QCOMPARE(chainTip({ bad, good })->invoiceNumber, QStringLiteral("2"));
+        QCOMPARE(chainTip({ good, bad })->invoiceNumber, QStringLiteral("2"));
+    }
+
+    // An alta and an anulacion of one number in a reply are told apart by the operation.
+    void test_lineForMatchesOperation()
+    {
+        Submission r;
+        r.parsed = true;
+        Line alta;
+        alta.invoiceNumber = "1";
+        alta.operation = "Alta";
+        alta.state = "Correcto";
+        Line cancel = alta;
+        cancel.operation = "Anulacion";
+        cancel.state = "Incorrecto";
+        r.lines = { alta, cancel };
+        QCOMPARE(r.lineFor("1", "Alta")->state, QStringLiteral("Correcto"));
+        QCOMPARE(r.lineFor("1", "Anulacion")->state, QStringLiteral("Incorrecto"));
+        QVERIFY(!r.lineFor("2", "Alta"));
+    }
+
     // A stored record gives its identity, hash, generation time and link.
     void test_summarizeRecord()
     {
@@ -182,6 +209,29 @@ private slots:
         QCOMPARE(r.previousHash, QString(64, 'P'));
         QCOMPARE(r.generatedAt, QStringLiteral("2026-10-10T11:00:00+02:00"));
         QVERIFY(!query.isEmpty());
+    }
+
+    // Two records under one number: the one with the asked date wins; without a date, the last.
+    void test_remoteRecordForSeveralRecords()
+    {
+        Query q;
+        q.parsed = true;
+        QueryRecord september;
+        september.invoiceNumber = "7";
+        september.issueDate = "03-09-2026";
+        september.totalAmount = "10.00";
+        september.state = "Correcto";
+        QueryRecord october = september;
+        october.issueDate = "10-10-2026";
+        october.totalAmount = "20.00";
+        q.records = { september, october };
+        QCOMPARE(remoteRecordFor(q, "7").totalAmount, 20.0);
+        QCOMPARE(remoteRecordFor(q, "7").recordCount, 2);
+        const VerifactuRemoteRecord sept = remoteRecordFor(q, "7", QDate(2026, 9, 3));
+        QCOMPARE(sept.totalAmount, 10.0);
+        QCOMPARE(sept.recordCount, 1);
+        // A date AEAT does not hold the number under: all of its records, so the mismatch shows.
+        QCOMPARE(remoteRecordFor(q, "7", QDate(2026, 8, 1)).recordCount, 2);
     }
 
     void test_queryEmpty()

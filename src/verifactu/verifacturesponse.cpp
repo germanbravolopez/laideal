@@ -1,6 +1,7 @@
 #include "verifacturesponse.h"
 
 #include <QDateTime>
+#include <cmath>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,8 +18,11 @@ QString firstString(const QJsonObject &o, std::initializer_list<const char *> ke
         const QJsonValue v = o.value(QLatin1String(k));
         if (v.isString() && !v.toString().isEmpty())
             return v.toString();
-        if (v.isDouble())
-            return QString::number(v.toDouble(), 'f', 2);
+        if (v.isDouble()) {
+            const double d = v.toDouble();
+            // A whole number is an ID or a code ("31121"), never "31121.00".
+            return d == std::floor(d) ? QString::number(qint64(d)) : QString::number(d, 'f', 2);
+        }
     }
     return QString();
 }
@@ -80,13 +84,8 @@ bool recordLooksAccepted(const QJsonObject &o)
     return !firstString(o, { "CSV", "Csv" }).isEmpty();
 }
 
-// The service keeps EVERY submission attempt for an InvoiceID, so a ticket that
-// was submitted once and retried four times comes back as five records - four of
-// them duplicate-rejections with a null CSV, and the original acceptance last.
-// Picking Items[0] therefore reads a failure and hides the CSV we are looking for
-// (observed on ticket 31121: Count=5, the accepted record was the last element).
-// Prefer the accepted one; fall back to the first so the dialog can still show
-// what came back.
+// The service keeps every submission attempt, so a retried ticket has several records
+// (the accepted one may be last): prefer it, else the first. See the module README.
 QJsonObject chooseRecord(const QJsonArray &items)
 {
     for (const QJsonValue &v : items) {

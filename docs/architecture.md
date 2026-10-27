@@ -51,7 +51,7 @@ Shared infrastructure:
 ### MainWindow (`src/app/`)
 Central controller. Owns the SQLite `db` connection. Instantiates all child windows.
 
-`src/app/` builds the `laideal_app` static library (MainWindow + the Cancel / Rectify / Void / Pending dialogs) and the `laideal` executable (`main.cpp`, the Qt resources and the Windows version resource) linking it, so the end-to-end bench can drive the windows ([testing/e2e.md](testing/e2e.md)). `main.cpp` allows one copy per database (`InstanceLock`: a `QLockFile` in the user's temp folder keyed on the database path; a second start waits 3 s for a closing copy, then says the app is already open), and takes `--settings <file>` (run with another settings file) and `--self-check` (*Comprobar tras actualizar*, `SelfCheckDialog` instead of MainWindow: the shop user's post-update check on a copy of the newest backup, [testing/smoke_test.md](testing/smoke_test.md) part 2).
+`src/app/` builds the `laideal_app` static library (MainWindow, the Cancel / Rectify / Pending / Refused-invoices dialogs, the AEAT export and its dialog, the self-check and its dialog, `InstanceLock`; the Void dialog lives in `src/recog_prendas/`) and the `laideal` executable (`main.cpp`, the Qt resources and the Windows version resource) linking it, so the end-to-end bench can drive the windows ([testing/e2e.md](testing/e2e.md)). `main.cpp` allows one copy per database (`InstanceLock`: a `QLockFile` in the user's temp folder keyed on the database path; a second start waits 3 s for a closing copy, then says the app is already open), and takes `--settings <file>` (run with another settings file) and `--self-check` (*Comprobar tras actualizar*, `SelfCheckDialog` instead of MainWindow: the shop user's post-update check on a copy of the newest backup, [testing/smoke_test.md](testing/smoke_test.md) part 2).
 
 Key methods:
 
@@ -60,11 +60,11 @@ Key methods:
 | `mainwindowInitialSettings()` | Runs `migrateDatabase()`, then UI setup (table columns, buttons) |
 | `initializeVerifactu()` | Creates `VerifactuIntegration`; shows a warning if not configured (paid saves are then refused) |
 | `resetAllContents()` | Clears form after save |
-| `validateTicket()` | Pre-save checks: client present, amounts consistent, quarter not locked |
+| `validateTicket()` | Pre-save checks: ticket number and client, the Verifactu chain / invoicing gates, per-row quantity / garment / non-negative price, at least one priced garment, no unmeasured m2 garment when paid, reception date not in a closed quarter |
 | `saveTicket()` | Writes rows to `ingresos` with `verifactu_estado` = PENDIENTE when paid / SIN COBRAR when not; async submit patches the paid rows when AEAT replies |
 | `verifactuSubmitInvoice(ticketNum, date, total)` | Fires `VerifactuIntegration::submitSimplifiedInvoiceAsync()`, tracks `reqId → ticketNum` in `m_pendingSubmits`, shows status bar progress |
 | `onVerifactuRequestFinished(reqId, result)` | Slot — looks up the ticket, UPDATEs `verifactu_*` columns, updates status bar (success: CSV; error: description). No popups. |
-| `printRecibo()` / `printFra()` | Save-time print — `verifactuIntegration = nullptr` so no QR fetch is attempted (CSV still empty at save time). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
+| `printRecibo()` / `printFra(qr, verifactuIssued)` | Save-time print — `verifactuIntegration = nullptr`, so `Imprimir` resolves no QR itself: the QR on the factura is the preset `qrCode` the save flow hands to `printFra` (the direct client's, computed locally, or the gateway's reply within 3 s). `buildTicket()` always runs (ESC/POS bytes are built even with printing disabled); the actual `printTicket()` calls are guarded by `AppSettings::enablePrinting()`. Customer can reprint a Verifactu-complete copy with QR/CSV via `RecogPrendas → Imprimir` once AEAT has replied. |
 | `checkClientData()` | Adds/updates client in `clientes` table on save |
 
 Table column constants: `TABLE_TICKET_QNTY=0`, `GARM=1`, `SIZE=2`, `SERV=3`, `OBSE=4`, `PRIC=5`
@@ -89,7 +89,7 @@ Writes to the `gastos` table. Populated from the `proveedores` and `servicios` t
 
 ### Contabilidad (`src/contabilidad/`)
 Generates PDF accounting reports (via `src/reporthtml/` shared style). Three modes: `Mensual`, `Trimestral`, `Anual`.
-Per period it prints Ingresos, Gastos and a Resumen block (Liquidación de IVA = IVA repercutido − soportado; Resultado del periodo = base ingresos − base gastos; ticket/invoice counts). The annual mode adds a consolidated summary of the four quarters. Figures are gathered once into a `PeriodFigures` struct; the period date range flows through `periodRange()`. Counts are the number of detail rows (distinct paid tickets, gastos rows). A **Detalle** annex at the end lists the paid tickets and the gastos rows behind each period's figures (`incomeTicketsBetweenDates` / `expensesBetweenDates`). They share the totals' SQL predicate, so they always reconcile.
+Per period it prints Ingresos, Gastos and a Resumen block (Liquidación de IVA = IVA repercutido − soportado; Resultado del periodo = base ingresos − base gastos; ticket/invoice counts). The annual mode adds a consolidated summary of the four quarters. Figures are gathered once into a `PeriodFigures` struct; the period date range flows through `periodRange()`. Counts: net paid tickets (`netTicketCount`, netted by the period's regularisations - see [contabilidad.md](modules/contabilidad.md)) and gastos rows. A **Detalle** annex at the end lists the paid tickets, the period's cancellations / rectifications and the gastos rows behind each period's figures (`incomeTicketsBetweenDates` / `expensesBetweenDates`). They share the totals' SQL predicate, so they always reconcile.
 Can close (lock) a quarter to prevent further changes: a row in `accounting_closures` (below), checked by every writer against the row's date.
 `revertirOn = true` reopens a closed quarter (the closure is kept, with its `reopened_at`).
 All figures are derived from the period's detail rows (`incomeTicketsBetweenDates` / `expensesBetweenDates`, annual: `annualDetailsByQuarter`) via `Contabilidad::figuresFromDetails`; the income listing excludes `verifactu_estado IN ('ANULADA', 'RECTIFICADA')` rows (cancelled invoices must not appear in taxable income, and rows superseded by a substitution rectificativa are likewise excluded so the rectifying row carries the corrected total without double-counting). Both `ingresos` and `gastos` queries use a half-open date interval `[start, end)` to avoid double-counting on quarter boundaries.
@@ -120,7 +120,7 @@ pipeline; design dossier in `docs/modules/printer/`, reference in
 `docs/modules/printing.md`.
 
 ### AddGarment (`src/add_garment/`)
-Adds new garment rows to an existing ticket number already in the database.
+Adds new garment rows to an existing ticket number already in the database (Tickets → Añadir nuevas prendas, and Recogida's **Añadir prendas…**). A ticket that already has a paid garment is refused (it is an AEAT invoice). A garment added as paid is an invoice: the caller sets `invoicingBlocked` (refused when it returns a reason, or when unset) and submits it at once on `paidGarmentSaved` (seq 0).
 
 ### tableview (`src/tableview/`)
 Single CMake library (`tableview`) containing all table-view utility classes. All headers live in the same directory and are exposed via one INTERFACE include path.
@@ -145,7 +145,7 @@ In-app updater. Two entry points: an unattended startup check (gated by `AppSett
 
 In-place upgrade path: `releases/laideal.iss` sets `CloseApplications=yes` + `RestartApplications=yes` + `CloseApplicationsFilter=*.exe`. If the running app has not finished exiting by the time the installer starts touching `{app}\laideal.exe`, Inno detects it (filtered to .exe so we don't touch unrelated open files under `{app}`), prompts, and relaunches once install completes.
 
-Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome.
+Startup-check policy: the check is fired ~1.5 s after `MainWindow` is constructed via `QTimer::singleShot` (so the main window is fully painted first), and `silentOnNoUpdate=true` — offline / GitHub down / no-update are logged at `qDebug` and never surface a popup. The manual menu action uses `silentOnNoUpdate=false` so the user always sees an outcome. Trust model: the updater reads `/releases/latest`, so a draft or pre-release is invisible; the installer is the first asset named `laideal_setup_*.exe` and runs only after its size and SHA-256 match (asset `digest` or the `.sha256` asset) from an https github.com / `*.githubusercontent.com` URL (no code-signature check); the release body is the bilingual Markdown of the CI release job, shown as raw text; a network failure shows Qt's own (English) error text.
 
 Repo visibility: `/releases/latest` requires the repo to be **public** under unauthenticated calls (private repos return 404). If the repo is ever flipped back to private the updater will fail in `silent` mode silently and surface "Not Found" via the menu action.
 
@@ -154,10 +154,10 @@ Closes Verifactu Req. 4 (Art. 8.2.c RD 1007/2023): durable archive of the live S
 
 | Method | Behaviour |
 |--------|-----------|
-| `performBackup()` | Synchronous. Opens a dedicated `QSQLITE` connection named `laideal_backup_snapshot`, runs `VACUUM INTO '<target>'` for a transactionally-consistent snapshot without taking an exclusive lock on the live DB. Re-opens the copy read-only on a second connection (`laideal_backup_verify`) and runs `PRAGMA integrity_check`; any verdict other than `ok` deletes the file. On success, updates `AppSettings::backupLastTime` and calls `pruneOldBackups()`. Returns `{success, backupPath, errorMessage, bytesWritten}`. |
+| `performBackup()` | Synchronous. Opens a dedicated `QSQLITE` connection named `laideal_backup_snapshot`, runs `VACUUM INTO '<target>'` for a transactionally-consistent snapshot: no exclusive lock, but a read lock is held for the copy (rollback-journal mode), so a ticket being saved waits until it ends (busy timeout 30 s). Re-opens the copy read-only on a second connection (`laideal_backup_verify`) and runs `PRAGMA integrity_check`; any verdict other than `ok` deletes the file. On success, updates `AppSettings::backupLastTime` and calls `pruneOldBackups()`. Returns `{success, backupPath, errorMessage, bytesWritten}`. |
 | `needsBackup(minIntervalSeconds=24*3600)` | True when `AppSettings::backupEnabled()` is on and either no `backup.last_time` is recorded or it is older than the interval. |
 | `pruneOldBackups()` | Keeps every backup from the last 30 days; reduces 31-day-to-4-year backups to one per `(year, month)`; deletes everything older than 4 years. Returns the number of files removed. |
-| `backupDirectory()` | `backups/` next to the live DB, created if missing. |
+| `backupDirectory()` | `backups/` next to the live DB; creates nothing (`performBackup()` creates it through `ensureBackupDirectory()`, `pruneOldBackups()` on a missing one returns 0). |
 
 Triggers wired in `MainWindow`:
 - **Auto**: `MainWindow` schedules the backup via `QTimer::singleShot(3000)` if `needsBackup()` returns true, then runs `performBackup()` on a `QThread::create` worker (it uses its own dedicated DB connections and touches no GUI, so `VACUUM INTO` + `integrity_check` don't block the event loop); the `Result` is marshalled back to the GUI thread with `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`. Silent on success (status-bar message); a red result-panel message on failure — the regulatory requirement is durable storage, so a failed snapshot is the one path the operator must see.
@@ -174,15 +174,15 @@ Installed once in `main()` via `AppLogger::install()`. Redirects all `qDebug`, `
 - `AppLogger::logFilePath()` returns the path — used by `MainWindow::on_actionMostrar_log_triggered()` (Ayuda → Log de depuración) to show the customer the path with an "Abrir archivo" button that opens the log directly
 
 ### AppSettings (`src/appsettings/`)
-Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load. Saves are atomic (`QSaveFile`); a file that does not parse is kept aside as `.laideal_settings.json.corrupt-<timestamp>` before defaults apply, so the database path and credentials are never overwritten; the plaintext legacy `~/.verifactu_key` is removed once its key is saved encrypted. Both production switches (the gateway's *PRODUCCIÓN* box and the direct client's) ask for confirmation in and out, and leaving the direct connection never keeps its production flag.
+Singleton (`AppSettings::instance()`) that loads `~/.laideal_settings.json` on startup. All modules read from it at point of use. Migrates legacy `~/.laideal_cfg` and `~/.verifactu_key` (one-time file migration) and folds obsolete in-JSON keys via `migrateLegacyKeys()` on every load. Saves are atomic (`QSaveFile`); a file that does not parse is kept aside as `.laideal_settings.json.corrupt-<timestamp>` before defaults apply, so the database path and credentials are never overwritten (`loadReadOnly(path)` runs the same load in memory only, writing and moving nothing: it is for `--self-check`, which promises to only read the settings); the plaintext legacy `~/.verifactu_key` is removed once its key is saved encrypted. Both production switches (the gateway's *PRODUCCIÓN* box and the direct client's) ask for confirmation in and out, and leaving the direct connection never keeps its production flag.
 
-The Verifactu **service key is encrypted at rest** with Windows DPAPI (per-user `CryptProtectData`, no prompt): `setVerifactuServiceKey()` stores `dpapi:v1:<base64>` and `verifactuServiceKey()` decrypts on read, so callers only ever see plaintext. `encryptSecretsAtRest()` runs in `load()` and re-encrypts any legacy plaintext value (then `save()`s). The blob is bound to the Windows user+machine, so it is not portable — a decrypt failure returns empty and the operator re-enters the key. Requires linking `crypt32` (Windows only).
+The Verifactu **service key and the direct client's certificate password (`aeat_certificate_password`) are encrypted at rest** with Windows DPAPI (per-user `CryptProtectData`, no prompt): the setters store `dpapi:v1:<base64>` and the getters decrypt on read, so callers only ever see plaintext. `encryptSecretsAtRest()` runs in `load()` and re-encrypts any legacy plaintext value of either (then `save()`s). If DPAPI itself fails the value is kept in plaintext with a `qWarning` (a working key beats a broken connection) and retried at the next load. The blob is bound to the Windows user+machine, so it is not portable — a decrypt failure returns empty and the operator re-enters the key. Requires linking `crypt32` (Windows only).
 
 **UI language** (`app.language`, `es` / `en`) lives in `src/appsettings/applanguage.{h,cpp}` (namespace `AppLanguage`). `applyQtTranslations()` installs or removes Qt's bundled `qtbase_es.qm` for the standard dialogs; it is called at startup (`main.cpp`) and again live when Configuración is accepted. `releaseNotesResource()` picks `:/docs/releases_notes.txt` (en) or `:/docs/releases_notes_es.txt` (es) for Ayuda → Notas de la versión. On first run (`applyDefaults`, no language in the JSON yet) `initialLanguage(installerChoice())` uses the language picked in the Inno Setup installer, which writes `HKCU\Software\La Ideal\Language`. The app's own strings remain Spanish literals until the full translation pass.
 
-`SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept. The Verifactu tab's service key is masked (`QLineEdit::Password`) with a checkable **Mostrar / Ocultar** button beside it. The button only switches the echo mode; the stored value is unchanged. The dialog is rebuilt on every open, so the key always starts hidden.
+`SettingsDialog` — 4-tab code-only dialog (no `.ui` file). Accessible from Archivo → Configuración. Writes back to the JSON file on accept. The Verifactu tab also holds the *Conexión con la AEAT* choice (gateway / direct); the direct group (certificate from the Windows store or a .pfx and its password, the *Enviar a la AEAT real (PRODUCCIÓN)* switch, *Prueba con la AEAT*) and the gateway's PRODUCCIÓN box both ask for confirmation in and out of production. The Verifactu tab's service key is masked (`QLineEdit::Password`) with a checkable **Mostrar / Ocultar** button beside it. The button only switches the echo mode; the stored value is unchanged. The dialog is rebuilt on every open, so the key always starts hidden. Accepting checks and warns without blocking where it can: a database path that is not an existing file is asked about (Yes keeps it, No keeps the dialog open; `SettingsDialog::setMissingDbConfirm` replaces the question in tests); a saved certificate thumbprint missing from the Windows store stays selected as *no encontrado en el almacén* and is only replaced when the user picks another; a "Solo tickets desde" date after today shows a warning; a stored service key or certificate password that no longer decrypts shows *Clave ilegible*. The secret setters return false when DPAPI fails (the value is then kept in plain text, re-encrypted on the next load) and the dialog warns; a value already starting with `dpapi:v1:` is stored as is.
 
-The ingresos IVA rate is **not** a setting: it is the fixed `AppSettings::kIngresosIvaRate` (21 %), returned by the static `AppSettings::ivaRate()`. A legacy `taxes.iva_rate` key in old JSON files is left on disk for older versions but ignored. The settings keys are listed in the root `README.md` (Configuration) and defined in `appsettings.cpp`; notable ones: `print.enable` (bool — guards the actual `printTicket()` call), `print.printer_name` (RAW target queue; empty = Windows default printer), `print.paper_width_mm` (58/80, default 80; drives the ESC/POS column layout), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The printer name + paper width are edited in `SettingsDialog` → General (printer combo populated from `QPrinterInfo::availablePrinterNames()`). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
+The ingresos IVA rate is **not** a setting: it is the fixed `AppSettings::kIngresosIvaRate` (21 %), returned by the static `AppSettings::ivaRate()`. No key holds it: a `taxes.iva_rate` left in an old JSON file is ignored. The settings keys are listed in the root `README.md` (Configuration) and defined in `appsettings.cpp`; by group: `app.language`, `app.last_started_version`, `database.path`, `reports.root`, `business.{name,address,city,phone}`, `updater.check_on_startup`, `backup.{enabled,last_time,last_error,second_folder,last_version}`, `print.*` and `verifactu.*` (the Verifactu keys, with their formats, are in `docs/modules/verifactu/README.md` §Configuration: `connection`, `environment`, `company_name`, `service_key`, the `aeat_*` keys of the direct client, `pending_recovery_*`). Notable: `print.enable` and `print.use_status_api` (the string `"Yes"` / `"No"`, not a JSON bool; `print.enable` guards the actual `printTicket()` call), `print.printer_name` (RAW target queue; empty = Windows default printer), `print.paper_width_mm` (58/80, default 80; drives the ESC/POS column layout), `reports.root` (single user-configurable root; getters `contabilidadPath()` / `listadosPrendasPath()` / `listadosGastosPath()` compose `<root>/Contabilidad`, `<root>/Listados/Prendas`, `<root>/Listados/Gastos`), `updater.check_on_startup` (bool — default `true`, drives the auto-check at app launch). The printer name + paper width are edited in `SettingsDialog` → General (printer combo populated from `QPrinterInfo::availablePrinterNames()`). The app icon is no longer a setting — it ships embedded in the executable (Windows `IDI_ICON1`) and as a Qt resource (`:/icons/laideal.ico`).
 
 Migration: `migrateLegacyKeys()` strips `Contabilidad` / `Listados/Prendas` / `Listados/Gastos` suffixes from any of the three legacy report-path values to derive `reports.root`; obsolete keys (`reports.contabilidad_path`, `reports.listados_prendas_path`, `reports.listados_gastos_path`, `print.template_path`, `print.script_path`) are removed via the `removeNested()` helper.
 
@@ -270,7 +270,7 @@ Created by `AeatStore::ensureSchema` in the same DB (so the backups cover them).
 User fills form in MainWindow
   ↓
 on_pb_save_clicked() (Guardar ticket)
-  ├── validateTicket()                       — checks client, amounts, quarter lock
+  ├── validateTicket()                       — checks client, chain / invoicing gates, row amounts, quarter lock
   ├── checkClientData()                      — adds/updates client in `clientes`
   ├── saveTicket()                           — writes N rows to `ingresos` (verifactu_estado = PENDIENTE when paid, SIN COBRAR when not)
   ├── if (isPaid):
@@ -280,7 +280,7 @@ on_pb_save_clicked() (Guardar ticket)
   │     │   onVerifactuRequestFinished runs first (FIFO connect order) and UPDATEs ingresos
   │     │   to verifactu_estado = ENVIADA / ERROR before the lambda quits the loop
   │     └── if (result.isSuccess() && !result.qrCode.isNull()):
-  │             printFra(result.qrCode)        — factura simplificada with QR + AEAT leyenda
+  │             printFra(qr, true)             — factura simplificada with QR + AEAT leyenda
   │         else (timeout, or success w/o QR, or error):
   │             printRecibo()                   — paid recibo: "Importe pagado" stamp on customer copy
   ├── else (not paid):
@@ -334,11 +334,7 @@ AEAT QR validation (`aeathash.cpp`):
 
 ## Known Issues / Technical Debt
 
-| Issue | File | Priority | Notes |
-|-------|------|----------|-------|
-| ~~ServiceKey stored in plaintext JSON~~ | ~~`~/.laideal_settings.json`~~ | — | Fixed: encrypted at rest with Windows DPAPI (per-user), `dpapi:v1:` marker; auto-migrated on load. See AppSettings section |
-| ~~No retry for failed Verifactu submissions~~ | ~~`src/verifactu/`~~ | — | Fixed: `retryVerifactuSubmit()` in `RecogPrendas`; a save-time failure shows in the result panel (no pop-up) |
-| ~~Clients missing from Listado but present in MainWindow combobox~~ | ~~`src/listado/listado.cpp`~~ | — | Discarded: no current mechanism. `Listado::populateTable()` drains `fetchMore` for non-`ingresos` tables (loads every `clientes` row, replacing the old flaky scroll-to-bottom hack in b39cda7), and both the combobox and the view read `clientes.nombre` through the same SQLite driver so encoding cannot diverge. Reopen only if observed again. |
+None is tracked here: open and blocking items live in [`progress_tracker.md`](progress_tracker.md); fixed ones in [`completed_milestones.md`](completed_milestones.md).
 
 ---
 
@@ -352,6 +348,8 @@ AEAT QR validation (`aeathash.cpp`):
 | Qt Sql | System | SQLite driver |
 | Qt PrintSupport | System | `QPrinterInfo` (printer list in SettingsDialog) |
 | Qt Network | System | HTTP for the Verifactu gateway REST API |
+| winhttp, crypt32, ncrypt | System (Windows) | The direct AEAT client's mutual-TLS SOAP transport and certificate access (`verifactu`); `crypt32` also for DPAPI in `appsettings` |
+| qrcodegen | `src/third_party/qrcodegen/` (vendored) | Local QR encoder for the direct client (`AeatQr`) |
 | Qt Test | System | Unit / integration tests (`tests/`) |
 
 ---

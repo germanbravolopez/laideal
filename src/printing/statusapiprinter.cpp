@@ -57,7 +57,7 @@ QString defaultPrinterName()
 #endif
 
 bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString &queueName,
-                                         PrinterStatus *status, QString *err)
+                                         PrinterStatus *status, QString *err, StatusApiSendGate *gate)
 {
     auto fail = [err](const QString &m) { if (err) *err = m; return false; };
 
@@ -132,6 +132,11 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     // blocks before returning ERR_ACCESS - short enough that the warning appears
     // quickly and the caller's watchdog (which must sit above this) does not trip
     // on a normal offline print. An online send returns in tens of ms.
+    if (gate && !gate->beginSend()) {
+        close(handle);
+        FreeLibrary(dll);
+        return fail(QStringLiteral("Envío cancelado: la Status API tardó demasiado."));
+    }
     int readLen = 0;
     const int rc = io(handle,
                       escpos.size(),
@@ -139,9 +144,7 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                       &readLen, nullptr, 2500, 0, 0);
     bool sent = (rc == 0);
 
-    // The cover-open / paper-out ASB often lands only after the send attempt, so
-    // a pre-send read can still show "ready". Re-read on failure so the caller
-    // gets the real reason (and the log captures the raw word either way).
+    // The cover-open / paper-out ASB often lands only after the send: re-read on failure.
     if (!sent)
         readStatus("post-send");
 
@@ -156,13 +159,16 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     Q_UNUSED(escpos);
     Q_UNUSED(queueName);
     Q_UNUSED(status);
+    Q_UNUSED(gate);
     return fail(QStringLiteral("La Status API solo está disponible en Windows."));
 #endif
 }
 
 bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const QString &queueName,
-                                                PrinterStatus *status, QString *err, int timeoutMs)
+                                                PrinterStatus *status, QString *err, int timeoutMs,
+                                                bool *mayStillPrint)
 {
+    if (mayStillPrint) *mayStillPrint = false;
     // Latches on the first timeout so a firmware/driver hang delays only one
     // print, not every one after it. Never reset (a stuck DLL stays stuck until
     // the process restarts); the operator can also just disable the setting.
@@ -178,6 +184,7 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
         std::condition_variable cv;
         bool done = false;
         bool ret = false;
+        StatusApiSendGate gate;
         PrinterStatus status;
         QString err;
     };
@@ -188,7 +195,7 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
     std::thread([sh, bytes, queue]() {
         PrinterStatus st;
         QString e;
-        const bool r = StatusApiPrinter::sendAndReadStatus(bytes, queue, &st, &e);
+        const bool r = StatusApiPrinter::sendAndReadStatus(bytes, queue, &st, &e, &sh->gate);
         {
             std::lock_guard<std::mutex> lk(sh->m);
             sh->ret = r;
@@ -206,13 +213,16 @@ bool StatusApiPrinter::sendAndReadStatusBounded(const QByteArray &escpos, const 
         return sh->ret;
     }
 
-    // The worker is stuck inside the Epson DLL. Leave it detached (its shared
-    // state keeps its result slot alive harmlessly) and fall back to RAW.
+    // The worker is stuck in the DLL and stays detached: before the send it never will
+    // (RAW fallback is safe); inside the send it may still print (the caller must not).
+    const bool neverSends = sh->gate.abandon();
+    if (mayStillPrint) *mayStillPrint = !neverSends;
     s_unresponsive.store(true);
     qWarning() << "StatusApiPrinter: Status API blocked (>" << timeoutMs
                << "ms); disabled for this session, using RAW.";
     if (status) *status = PrinterStatus();
-    if (err) *err = QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs);
+    if (err) *err = neverSends ? QStringLiteral("Status API sin respuesta (%1 ms), usando RAW.").arg(timeoutMs)
+                                : QStringLiteral("Status API sin respuesta (%1 ms) durante el envío.").arg(timeoutMs);
     return false;
 }
 
