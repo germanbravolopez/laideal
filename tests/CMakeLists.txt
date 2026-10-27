@@ -493,3 +493,6 @@ target_link_libraries(test_applogger PRIVATE
 )
 add_test(NAME applogger
     COMMAND test_applogger -o ${CMAKE_BINARY_DIR}/test-results-applogger.xml,junitxml -o -,txt)
+# The sql_lite suite (migration fixtures on throwaway databases) takes ~65 s on a CI
+# runner and passed 120 s on a slow one.
+set_tests_properties(sql_lite PROPERTIES TIMEOUT 300)
