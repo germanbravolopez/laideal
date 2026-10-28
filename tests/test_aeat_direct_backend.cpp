@@ -551,7 +551,9 @@ private slots:
     // after AEAT's wait time; every step reported; a refusal stops it.
     void test_selfTest()
     {
-        m_server->setWaitSeconds(1);
+        // Long enough that the alta and the consulta cannot use it up on a slow runner,
+        // or the cancellation needs no wait and "Esperando" is (rightly) not reported.
+        m_server->setWaitSeconds(5);
         AeatDirectBackend::Config c = config();
         c.testEnvironment = false;                       // ignored: the self-test never uses production
         AeatSelfTest selfTest(c, m_db);
@@ -560,7 +562,7 @@ private slots:
         connect(&selfTest, &AeatSelfTest::progress, [&](bool, const QString &t) { steps << t; });
         connect(&selfTest, &AeatSelfTest::finished, [&](bool o) { finished = true; ok = o; });
         selfTest.run();
-        QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 30000);
         QVERIFY2(ok, qPrintable(steps.join(" | ")));
         QVERIFY(selfTest.invoiceNumber().startsWith("PRUEBA-"));
         QVERIFY(m_server->registered().contains("Alta:" + selfTest.invoiceNumber()));

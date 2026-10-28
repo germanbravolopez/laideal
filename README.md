@@ -47,7 +47,7 @@ There are four build folders, one per purpose. Each is a separate CMake tree, so
 | `build/` | The app (Release) and the test suites | Running the app, `ctest` | [Release build](#release-build) below |
 | `build-debug/` | The app (Debug) | Debugging in VSCode (F5) | [Debug in VSCode](#debug-in-vscode) below |
 | `build-uitest/` | The **UI-test** app (`-DLAIDEAL_UI_TEST=ON`, with the `--fake-aeat` switch) and the tools `fake_aeat_server` / `escpos_preview` | The UI smoke test and the AEAT pre-production dry run on this PC | [UI-test build](#ui-test-build) below |
-| `build-release/` | The installer `laideal_setup_X.Y.exe` (clean configure, `windeployqt`, Inno Setup) | A release without CI | `releases\release.ps1 X.Y` - see [CONTRIBUTING.md](./CONTRIBUTING.md#local-fallback-releasesreleaseps1) |
+| `build-release/` | The installer `laideal_setup_X.Y.exe` (clean configure, `windeployqt`, Inno Setup) | A release without CI | `releases\release.ps1 X.Y` (configure, build, `ctest`, then the shared `releases\package.ps1` recipe) - see [CONTRIBUTING.md](./CONTRIBUTING.md#local-fallback-releasesreleaseps1) |
 
 Every command below runs from a PowerShell prompt in the repo root, after putting the toolchain on `PATH` for the session:
 
@@ -108,8 +108,8 @@ Five kinds of test, from the fastest to the one that needs a person. Each row li
 
 | Suite | Where it runs | How to run it | Options | Steps |
 |-------|---------------|---------------|---------|-------|
-| **Unit + end-to-end suites** (`tests/test_*.cpp`, CTest: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | Locally after any build; CI (`ci.yml`) on every push / PR, and as the release gate | `ctest --test-dir build --output-on-failure` | `-R <regex>` runs some suites (e.g. `-R e2e`); `aeat_xsd` is skipped unless Python has `lxml` (`python -m pip install lxml`) | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
-| **UI smoke test, CI** (`tests/ui/smoke.py`: the installed app driven like a person, blocks A-E, against a fake AEAT) | GitHub `windows-latest` runner, about 9 min | `gh workflow run ui-smoke.yml --ref <branch>`, then `gh run watch` | Also runs on pushes touching `tests/ui/` or `tests/tools/`; results in the job summary and the `ui-smoke` artifact | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#where-it-runs) |
+| **Unit + end-to-end suites** (`tests/test_*.cpp`, CTest: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | Locally after any build; CI (`ci.yml`, `build` job) on every push to `develop` / `master` and every PR to them, and as the release gate | `ctest --test-dir build --output-on-failure` | `-R <regex>` runs some suites (e.g. `-R e2e`); `aeat_xsd` is skipped unless Python has `lxml` (`python -m pip install lxml`) | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
+| **UI smoke test, CI** (`tests/ui/smoke.py`: the installed app driven like a person, blocks A-E, against a fake AEAT) | GitHub `windows-latest` runner, about 9 min | `gh workflow run ci.yml --ref <branch>`, then `gh run watch` | The `ui-smoke` job of `ci.yml`: also runs on every PR to `develop` and `master`; results in the job summary and the `ui-smoke` artifact | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#where-it-runs) |
 | **UI smoke test, local** (the same script on this PC; it takes the mouse and keyboard for about 4 min) | This PC, from the [UI-test build](#ui-test-build) and its `.venv` | `.\.venv\Scripts\python.exe .\tests\ui\smoke.py --exe .\build-uitest\src\app\laideal.exe --tools .\build-uitest\tests --out ui-smoke-out` | `--blocks AB` (some blocks), `--printer LaIdeal-Smoke` (block C, after `tests/ui/printer.py install`), `--installer <setup.exe>` (E4, disposable machines only), `--out <folder>` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#smoke-test-against-the-fake-aeat) |
 | **AEAT pre-production run** (`tests/ui/aeat_preproduction.py`: paid ticket, two payments, cancellation, R5 rectifications, export, against AEAT's test environment) | **Locally only**, on a PC with the issuer's FNMT certificate | `.\.venv\Scripts\python.exe .\tests\ui\aeat_preproduction.py --exe .\build-uitest\src\app\laideal.exe --settings-from C:\Users\gebra\work\tintoreria\documents\prueba-aeat-settings.json --out aeat-run` | `--dry-run --tools .\build-uitest\tests` runs it against the fake AEAT with the UI-test build (no certificate; CI does this on every UI smoke run) | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#aeat-pre-production-run) |
 | **Smoke test** (part 1: how screens / PDFs look, AEAT pre-production; part 2: *Comprobar tras actualizar*, the shop's real schema, data and printer) | Part 1 on this PC before each release; part 2 on the shop PC after installing | Part 1: follow the checklist. Part 2: Start → La Ideal - Comprobar tras actualizar (`laideal.exe --self-check`) | M6 only when the release changes the direct AEAT client; part 2 works on a copy of the newest backup and saves a report on the Desktop | [docs/testing/smoke_test.md](docs/testing/smoke_test.md) |
@@ -186,7 +186,7 @@ See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Bl
 
 ## Contributing
 
-How to work on the code, test it, and cut a release (branching, version bump, merge, tag, the CI release job and the local `release.ps1` fallback): [CONTRIBUTING.md](./CONTRIBUTING.md).
+How to work on the code, test it, and cut a release (branching, version bump, release pull request, the CI release job that publishes on merge and the local `release.ps1` fallback): [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 

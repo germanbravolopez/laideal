@@ -15,7 +15,7 @@ on:
       - 'pyproject.toml'
       - '.github/workflows/docs.yml'
   pull_request:
-    branches: [ master ]
+    branches: [ develop, master ]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
@@ -35,9 +35,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Build runs on every push and PR. On a PR this is the publication test: it
-  # proves the site renders cleanly before anything reaches master/Pages.
-  build:
+  # Runs on every push and PR. On a PR this is the publication test: it proves
+  # the site renders cleanly before anything reaches master/Pages. Not named
+  # `build`: master's required check of that name is ci.yml's build job.
+  site:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -61,7 +62,7 @@ jobs:
 
   # Deploy + verify only on a real push to master (never on PRs from forks).
   deploy:
-    needs: build
+    needs: site
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:

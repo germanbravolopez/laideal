@@ -3,14 +3,14 @@
 Everything else is automated:
 
 - `ctest`: the unit suites and the end-to-end bench ([unit_suites.md](unit_suites.md), [e2e.md](e2e.md)).
-- The **UI smoke test** on a disposable runner ([ui_smoke.md](ui_smoke.md), `ui-smoke.yml`): the installed app driven like a person, from the first start and its migrations, through Recogida, Cobrar, printing, Contabilidad and the quarter lock, to backup, language and the installer's language.
+- The **UI smoke test** on a disposable runner ([ui_smoke.md](ui_smoke.md), the `ui-smoke` job of `ci.yml`): the installed app driven like a person, from the first start and its migrations, through Recogida, Cobrar, printing, Contabilidad and the quarter lock, to backup, language and the installer's language.
 - The **AEAT pre-production run** as a local script ([ui_smoke.md](ui_smoke.md#aeat-pre-production-run)).
 
 What is left needs either eyes before the release (part 1), or the shop's real data and printer after it is installed (part 2, the self-check the shop user runs).
 
 ---
 
-## 1. Before the release (you, after `ui-smoke.yml` is green, `/release` step 1)
+## 1. Before the release (you, after the `ui-smoke` job is green on the release PR, `/release` steps 1 and 5)
 
 | # | Area | Step | Expected |
 |---|------|------|----------|
