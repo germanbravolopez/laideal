@@ -1,5 +1,8 @@
 ﻿Releases:
 
+12.4
+- Maintenance release: no changes to the application; faster and more robust release and update process.
+
 12.3
 - Bug fix: invoices that could not be sent to Verifactu (for example during a gateway outage) are listed again in "Envíos Verifactu pendientes" and resent, also for tickets received before the "Solo tickets desde" date.
 - Every invoice is sent to AEAT with the same description, "Servicios de lavandería".
