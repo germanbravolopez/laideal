@@ -9,10 +9,9 @@
 #   3. Refuses to overwrite an existing release (zip / installer / staging dir).
 #   4. Configures CMake (Release, Ninja) into build-release/.
 #   5. Builds with all available cores, then runs ctest (as ci.yml does).
-#   6. Stages laideal.exe into releases/<version>/ and runs windeployqt.
-#   7. Zips the staged folder -> build-release/<version>.zip (as ci.yml does).
-#   8. Runs Inno Setup ISCC.exe -> build-release/laideal_setup_<version>.exe.
-#   9. Deletes the staging dir; leaves the installer and zip in build-release/.
+#   6. Packages with releases/package.ps1 (the recipe the CI release job uses):
+#      windeployqt + DLL check, build-release/<version>.zip, Inno Setup
+#      build-release/laideal_setup_<version>.exe and its .sha256.
 #
 # The installer is written into build-release/ (gitignored, wiped on each run)
 # rather than into a tracked releases/ subfolder, so the manual release flow
@@ -98,48 +97,11 @@ if ($LASTEXITCODE -ne 0) { Fail "ctest failed - no release is built from a red s
 
 $builtExe = Join-Path $BuildDir 'src\app\laideal.exe'
 if (-not (Test-Path $builtExe)) { Fail "Build succeeded but exe not at $builtExe" }
-# Same guard as the CI release job: a UI-test build (--fake-aeat) must never be released.
-$uiTestMarker = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes('--fake-aeat'))
-if ([BitConverter]::ToString([IO.File]::ReadAllBytes($builtExe)).Contains($uiTestMarker)) {
-    Fail "laideal.exe is a UI-test build (--fake-aeat): it must never be released."
-}
 
-Step "Staging release in $StagingDir"
-New-Item -ItemType Directory -Path $StagingDir | Out-Null
-Copy-Item $builtExe -Destination $StagingDir
-
-Step "Running windeployqt"
-$stagedExe = Join-Path $StagingDir 'laideal.exe'
-# Do NOT pass --release. windeployqt auto-detects the build type from the .exe PE
-# header, and on MinGW Qt installs it mis-identifies the release plugin DLLs (e.g.
-# plugins/platforms/qwindows.dll) as "debug" via its heuristic. With --release set
-# explicitly it then filters those out and aborts with "Unable to find the platform
-# plugin." Letting it auto-detect deploys the correct plugins.
-& windeployqt --no-translations --no-system-d3d-compiler $stagedExe
-if ($LASTEXITCODE -ne 0) { Fail "windeployqt failed" }
-# Same guard as ci.yml: an installer without these fails on the shop's machine.
-foreach ($d in @('libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll', 'Qt6Core.dll',
-                 'platforms\qwindows.dll', 'sqldrivers\qsqlite.dll', 'tls\qschannelbackend.dll')) {
-    if (-not (Test-Path (Join-Path $StagingDir $d))) { Fail "windeployqt did not deploy '$d'" }
-}
-
-Step "Creating ZIP archive"
+# Refuses a UI-test build and throws on any failure ($ErrorActionPreference = 'Stop').
+Step "Packaging (releases\package.ps1, the same recipe as the CI release job)"
+& (Join-Path $ReleasesDir 'package.ps1') -Exe $builtExe -Version $Version -OutDir $BuildDir -InnoSetupCompiler $InnoSetupCompiler
 $ZipPath = Join-Path $BuildDir "$Version.zip"
-Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-[IO.Compression.ZipFile]::CreateFromDirectory($StagingDir, $ZipPath)
-
-Step "Compiling installer (Inno Setup)"
-# /O overrides the .iss OutputDir so the installer lands in build-release\ (wiped
-# each run, gitignored) instead of accumulating inside releases\.
-& $InnoSetupCompiler "/DMyAppVersion=$Version" "/O$BuildDir" $IssFile
-if ($LASTEXITCODE -ne 0) { Fail "Inno Setup compile failed" }
-if (-not (Test-Path $InstallerPath)) { Fail "Installer not produced at $InstallerPath" }
-# Published next to the installer: the updater refuses an installer without a matching SHA-256.
-$hash = (Get-FileHash $InstallerPath -Algorithm SHA256).Hash.ToLower()
-[System.IO.File]::WriteAllText("$InstallerPath.sha256", "$hash  laideal_setup_$Version.exe`n")
-
-Step "Cleaning up staging"
-Remove-Item -Recurse -Force $StagingDir
 
 Write-Host ""
 Write-Host "Release v$Version ready:" -ForegroundColor Green

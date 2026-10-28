@@ -13,9 +13,9 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Current Status — October 2026
 
-**Branching**: one short-lived branch per change, cut from `master` and merged back by PR (`CONTRIBUTING.md`, Development workflow); no long-lived `develop`
+**Branching**: `develop` for the work (directly or via short-lived branches), `master` only for releases (PR-only, protected), `hotfix/X.Y` from `master` for fixes to the released version (`CONTRIBUTING.md`, Development workflow)
 
-**Latest release**: [12.3](https://github.com/germanbravolopez/laideal/releases/tag/12.3) — the pre-12.0 review closed (Medium and Low rounds, owner's decisions, leftovers, PR #63 review) and the 12.2 follow-up: unsent invoices paid after the floor date are listed and resent again. One accented AEAT description, the leyenda follows the paid rows, Configuración keeps unreadable secrets, printing reports failures truthfully and fits 58 mm. Declaración signed 27-10-2026. The shop stays on the IreneSolutions gateway in its TEST environment.
+**Latest release**: [12.4](https://github.com/germanbravolopez/laideal/releases/tag/12.4) — maintenance release, no application changes: the new release flow (develop back, one CI run per commit, merging the release PR into master publishes), cached and parallel CI, shared packaging script, extra updater refusal tests and a CI timing-flake fix. The shop stays on the IreneSolutions gateway in its TEST environment.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->

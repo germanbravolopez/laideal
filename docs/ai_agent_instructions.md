@@ -17,7 +17,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 - **Requirements**: CMake 3.5+, Qt 6.4.3 (MinGW 11.2), Ninja, C++17 (Windows only)
 - **Qt modules needed**: `Widgets`, `Sql`, `PrintSupport`, `Network`
 - Open `CMakeLists.txt` in Qt Creator, or, in PowerShell with the toolchain on `PATH` (see `README.md` §Build): `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build`
-- Release is automated as the second stage of CI: pushing an `X.Y` tag runs `.github/workflows/ci.yml`'s `build` job (configure + build + `ctest`) and then its tag-gated `release` job (`needs: build`), which reuses the built exe + windeployqt + zips + compiles the Inno Setup installer and publishes the GitHub Release. `releases\release.ps1 <version>` runs the same pipeline locally (offline fallback, no publish). See `CONTRIBUTING.md` "Release procedure"
+- Release is automated as the second stage of CI: merging the release PR (`develop` -> `master`) runs `.github/workflows/ci.yml`'s `build` job (configure + build + `ctest`) and then its `release` job (`needs: build`), which reuses the built exe, runs `releases\package.ps1` (windeployqt + zip + Inno Setup installer) and publishes the GitHub Release (tagging `X.Y` itself; on a PR to `master` it is a dry run). `releases\release.ps1 <version>` runs the same pipeline locally (offline fallback, no publish). See `CONTRIBUTING.md` "Release procedure"
 
 ## File Map — Where to Find What
 
@@ -81,7 +81,7 @@ Project skills live in `.claude/skills/<name>/SKILL.md`. Claude auto-loads one w
 | Update documentation | `/update-docs` | After any feature, fix, or new insight |
 | Create/update skills | `/update-skills` | When a new repeatable workflow is found |
 | Coding guidelines | `/coding-guidelines` | Before writing any new code — language, naming, Qt, DB rules |
-| Ship a release | `/release X.Y` | Manual only (`disable-model-invocation`) — merges to `master`, tags, publishes |
+| Ship a release | `/release X.Y` | Manual only (`disable-model-invocation`) — PR `develop` -> `master`, the merge publishes |
 | Security review | `/security-review` | Before release or when touching auth/data |
 | Code review | `/code-review` | Before merging significant changes (built-in) |
 | Simplify code | `/simplify` | After implementation, to improve quality |
