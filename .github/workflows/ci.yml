@@ -67,7 +67,7 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          ctest --test-dir build --output-on-failure --no-tests=error --timeout 120
+          ctest --test-dir build --output-on-failure --no-tests=error --timeout 120 --parallel 4
           $code = $LASTEXITCODE
           & .github/scripts/Render-TestSummary.ps1 -Title "Test results"
           exit $code

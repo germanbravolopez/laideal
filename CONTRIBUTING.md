@@ -140,7 +140,7 @@ The `release` job of `.github/workflows/ci.yml` (`needs: build`) packages **the 
 
 The updater's contract: a non-draft, non-pre-release GitHub release (`/releases/latest` ignores both, so there is no beta channel and a lower tag reads "ya tiene la más reciente"), tagged exactly `X.Y`, with an asset `laideal_setup_X.Y.exe` and its `laideal_setup_X.Y.exe.sha256`. The updater refuses an installer whose size or SHA-256 does not match.
 
-Toolchain caching: every job sets up Qt, MinGW 11.2 and Ninja through `.github/actions/setup-toolchain` (Qt and MinGW cached between runs), and the compiling jobs reuse a ccache compile cache, so a run mostly recompiles only what changed.
+Toolchain caching: every job sets up Qt, MinGW 11.2 and Ninja through `.github/actions/setup-toolchain` (Qt and MinGW cached between runs), and the compiling jobs reuse a ccache compile cache, so a run mostly recompiles only what changed. `ctest` runs four suites at a time (the runner has four cores): the suite stage takes about as long as the slowest suite, `aeat_direct_backend`.
 
 ### Local fallback: `releases\release.ps1`
 
