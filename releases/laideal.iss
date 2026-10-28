@@ -3,7 +3,8 @@
 ; Compile from the command line:
 ;   ISCC.exe /DMyAppVersion=<version> laideal.iss
 ;
-; The release.ps1 / release.bat scripts in this folder run this automatically.
+; releases/package.ps1 runs this automatically (via release.ps1 / release.bat locally,
+; and in the ci.yml release and ui-smoke jobs).
 ; All paths below are relative to this .iss file (releases/), so the script is
 ; portable across machines as long as the repo layout is preserved.
 

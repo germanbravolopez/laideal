@@ -1,27 +1,27 @@
 ---
 name: release
-description: Ship release X.Y end-to-end - pre-flight checks, version bump in CMakeLists.txt and the English + Spanish release notes, PR-style merge to master, tag push that triggers the ci.yml release job, then watch CI until the GitHub Release is published. Use only when the user explicitly asks to release, ship or cut a version.
+description: Ship release X.Y end-to-end (or a hotfix from hotfix/X.Y) - pre-flight checks, version bump in CMakeLists.txt and the English + Spanish release notes, pull request to master with CI checks and review in parallel, auto-merge (the merge publishes the GitHub Release), back-merge into develop. Use only when the user explicitly asks to release, ship or cut a version.
 argument-hint: "<X.Y>"
 disable-model-invocation: true
 ---
 
 # /release — Ship a Release X.Y End-to-End
 
-Executes the full release flow described in the **Development workflow** and **Release procedure** sections of `CONTRIBUTING.md`: prep the working branch, merge to `master` PR-style, then tag the merge commit — which triggers the `release` job in `.github/workflows/ci.yml` (the second stage of CI, gated on the `build` job + tag) to package the artifacts and publish the GitHub Release automatically, reusing the exe the build job already compiled and tested. The build + package + publish steps are no longer run by hand; the skill drives the merge/tag and then watches CI.
+Executes the flow described in the **Development workflow** (Release X.Y, Hotfix, Branch protection) and **Release procedure** sections of `CONTRIBUTING.md`: make `develop` release-ready, open a pull request `develop` -> `master`, let CI and the review run in parallel, merge it. **Merging is the release**: the push to `master` runs `.github/workflows/ci.yml` (`build` + `release` jobs), which tags `X.Y` on the merge commit and publishes the GitHub Release from the exe it just tested. There is no tag step. Then `master` is merged back into `develop`.
 
 Use when the user says "release X.Y", "ship X.Y", "cut release X.Y". Reject if no version is given — ask for it.
 
-`CONTRIBUTING.md` (Development workflow and Release procedure) is the source of truth. If a step here ever drifts from it, CONTRIBUTING wins; update this skill afterwards (`/update-skills`).
+`CONTRIBUTING.md` is the source of truth. If a step here ever drifts from it, CONTRIBUTING wins; update this skill afterwards (`/update-skills`).
 
 ---
 
 ## Preconditions (check before doing anything)
 
-1. **Release branch.** Releases are cut on a `release/X.Y` branch from an up-to-date `master` (`git checkout master && git pull --ff-only origin master && git checkout -b release/X.Y`) and merged back through a PR — never committed straight to `master`. Every change it ships must already be merged to `master` from its own branch. If the user is on another branch with unmerged work, ask whether to merge that first.
+1. **Branch.** On `develop` (release) or `hotfix/X.Y` cut from `master` (see *Hotfix* below), up to date with its remote. Every change the release ships is already on `develop`. If the user is on another branch with unmerged work, ask whether to merge that first.
 2. **Working tree is clean** (`git status` has no unstaged/untracked changes). If dirty, ask the user whether to commit, stash, or abort. Do not silently include stray edits in the release commit.
-3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the current `project(laideal VERSION ...)` in `CMakeLists.txt`. If equal or lower, abort.
-4. **`releases_notes.txt` and `releases_notes_es.txt` both have an `X.Y` section.** The `ci.yml` release job **fails the publish** if either section is missing or empty: together they become the GitHub release body (Spanish first, then English), which is also what the in-app updater shows the shop before installing. So this is a hard gate, not just a nicety. Verify it before tagging. (The local-artifact file `build-release\laideal_setup_X.Y.exe` only matters for the local fallback in step 8b — CI builds fresh on a runner.)
-5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404. (The workflow can replace an existing release, but for a clean cut both should be absent.)
+3. **Version argument is in `X.Y` form** (e.g. `8.2`, not `v8.2` or `8.2.0`). It must be **greater** than the latest release (and the current `project(laideal VERSION ...)` in `CMakeLists.txt`). If equal or lower, abort.
+4. **`releases_notes.txt` and `releases_notes_es.txt` both have an `X.Y` section** (or will after step 1). The `release` job **fails** if either is missing or empty: together they become the GitHub release body (Spanish first, then English), which is also what the in-app updater shows the shop before installing. Hard gate, verified on the PR by the `release` dry run.
+5. **No existing `X.Y` git tag and no existing `X.Y` GitHub release.** `git tag -l X.Y` must be empty; `gh release view X.Y` must 404.
 
 If any precondition fails, stop and surface the problem — don't try to "fix it up" without asking.
 
@@ -29,25 +29,24 @@ If any precondition fails, stop and surface the problem — don't try to "fix it
 
 ## Steps
 
-### 1. Pre-flight the release-ready checklist (CONTRIBUTING workflow step 3)
+### 1. Pre-flight the release-ready checklist (CONTRIBUTING, Release X.Y step 1)
 
-The working branch must be release-ready before the version-bump commit. Verify each item; if missing, fix it and stage the change for the bump commit (do not commit yet):
+`develop` must be release-ready before the version-bump commit. Verify each item; if missing, fix it and stage the change for the bump commit (do not commit yet):
 
 - [ ] **`CMakeLists.txt`** — `project(laideal VERSION X.Y ...)` bumped to the target version.
-- [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file when the installer runs in English; its section is the English half of the GitHub release body in step 8). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
-- [ ] **`releases_notes_es.txt`** — the same `X.Y` section in **Spanish** (the shop's language: Inno Setup shows it when the installer runs in Spanish, and Ayuda → Notas de la versión shows it when the app language is `es`). Same structure and version header as the English file; `ci.yml` refuses to publish without it and `test_appsettings` checks both files list the same versions. Keep both files UTF-8 with BOM.
+- [ ] **`releases_notes.txt`** — a new `X.Y` section at the **top** with customer-facing changes in **English** (Inno Setup shows this file when the installer runs in English; its section is the English half of the GitHub release body). Match the existing entries' tone. If missing, draft one from `git log` since the previous release tag and ask the user to confirm/edit before committing.
+- [ ] **`releases_notes_es.txt`** — the same `X.Y` section in **Spanish** (the shop's language: Inno Setup shows it when the installer runs in Spanish, and Ayuda → Notas de la versión shows it when the app language is `es`). Same structure and version header as the English file; the `release` job refuses to publish without it and `test_appsettings` checks both files list the same versions. Keep both files UTF-8 with BOM.
 - [ ] **`docs/progress_tracker.md`** — Current Status "Latest release" describes only the new release (no "previous release" trailer).
 - [ ] **`docs/completed_milestones.md`** — the milestone entries cover what shipped; suffix the top `### Post-<X.Y> development` header with `(shipped in X.Y)`.
 - [ ] **`docs/` and `README.md`** — run the `/update-docs` skill (or follow its checklist by hand); if anything user-visible, build-related, or workflow-related changed since the last release tag, the docs must reflect it. If nothing user-visible changed, this is a no-op.
 - [ ] **Declaración responsable (`src/verifactu/producerdeclaration.cpp`, `currentSignature`)** — when the release changes invoicing or the Verifactu records (always for 12.0), set the signature date to the release day (Germán signs the declaración for this version). The address comes from the settings and the place is fixed.
-- [ ] **Automated UI smoke test** — `gh workflow run ui-smoke.yml --ref <branch>`, then `gh run watch`: blocks A-E of the smoke test on the installed UI-test build against the fake AEAT (see `docs/testing/ui_smoke.md`). It must be green; read its `report.md` and glance at the step screenshots in the `ui-smoke` artifact. When the release changes the direct AEAT client, also run `tests/ui/aeat_preproduction.py` locally with the certificate (AEAT pre-production) and keep its report.
-- [ ] **Smoke test, part 1** — after the UI smoke test is green, `docs/testing/smoke_test.md` part 1: look through the `ui-smoke` artifact (M4) and, when the release changes the direct AEAT client, keep the pre-production report (M6). Skip only for a docs-only release. Part 2 (*Comprobar tras actualizar*, `laideal.exe --self-check`) is run by the shop user after installing; with a copy of the shop's data here you can run it before publishing too. For what a release changes, prefer a `test_e2e_app` scenario or a UI smoke step (`tests/ui/`); add a self-check or manual row only for what no test can see. A bug found here or in the shop's report is fixed on the working branch with `/debugging` (root cause + regression test), then re-checked.
+- [ ] **Smoke test, part 1** — the pull request in step 4 runs the automated UI smoke test (`ui-smoke` job, blocks A-E on the installed UI-test build against the fake AEAT, see `docs/testing/ui_smoke.md`). When it is green, do `docs/testing/smoke_test.md` part 1: look through its `ui-smoke` artifact (M4: `report.md` and the step screenshots) and, when the release changes the direct AEAT client, run `tests/ui/aeat_preproduction.py` locally with the certificate (AEAT pre-production) and keep its report (M6). Skip only for a docs-only release. Part 2 (*Comprobar tras actualizar*, `laideal.exe --self-check`) is run by the shop user after installing; with a copy of the shop's data here you can run it before publishing too. For what a release changes, prefer a `test_e2e_app` scenario or a UI smoke step (`tests/ui/`); add a self-check or manual row only for what no test can see. A bug found here or in the shop's report is fixed on `develop` with `/debugging` (root cause + regression test), then re-checked.
 - [ ] **Coding-guidelines audit (optional, recommended after a large cycle)** — delegate to the `guidelines-auditor` subagent (method in `.claude/skills/coding-guidelines/audit.md`) and fold real Tier-1 findings into the release or into the tracker.
 - [ ] **Bundled Qt translation (only if Qt was upgraded since the last release)** — `resources/i18n/qtbase_es.qm` is copied from `C:\Qt\<version>\mingw_64\translations\qtbase_es.qm` and embedded in the exe (the release runs windeployqt `--no-translations`). If the Qt version bumped, refresh this file from the new Qt so the Spanish standard-dialog strings match the shipped Qt. If Qt is unchanged, no-op.
 
 ### 2. Commit the version bump
 
-Stage `CMakeLists.txt`, `releases_notes.txt`, `releases_notes_es.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit as a **single** commit, single-line message in project style:
+Stage `CMakeLists.txt`, `releases_notes.txt`, `releases_notes_es.txt`, `docs/progress_tracker.md`, `docs/completed_milestones.md`, and any other docs touched in step 1. Commit on `develop` as a **single** commit, single-line message in project style:
 
 ```
 release X.Y - <one-line summary of what this release ships>
@@ -55,9 +54,9 @@ release X.Y - <one-line summary of what this release ships>
 
 The summary should mention the headline customer-facing change(s). Example from history: `release 8.1 - quick-turn bugfix / UX release on top of 8.0: ...`.
 
-### 3. Sanity build + tests (hard gate before opening the PR)
+### 3. Local build + the suites the release touches
 
-A plain Release build into the normal `build\` directory - same incantation the README documents - followed by the CTest suite. Cheap, fast, and catches both the "merged a branch that doesn't compile" foot-gun and any regression the tests cover before bothering reviewers or the release-artifact pipeline.
+A plain Release build into the normal `build\` directory (README incantation), then `ctest` for the suites the release touches (`-R <regex>`). CI runs every suite on the pull request, so this only catches a break before reviewers spend time on it.
 
 ```powershell
 # Add Qt + MinGW + CMake + Ninja to PATH for this shell session.
@@ -65,108 +64,67 @@ $env:PATH = "C:\Qt\Tools\Ninja;C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\mingw1120_64
 
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure -R <regex>
 ```
 
-Expected output: `build\src\app\laideal.exe` exists, the build ends with no errors, and `ctest` reports `100% tests passed`. Warnings are tolerated; errors and test failures are not. The user may run this via Qt Creator instead - that's equivalent.
+Expected: `build\src\app\laideal.exe` exists, no build errors, the selected suites pass. If the build or a test fails, **stop**: fix on `develop`, commit, rerun. Do not open the PR with broken code.
 
-If the build **or any test** fails, **stop**. Fix on the working branch, commit, and rerun. Do **not** open the PR with broken code or a failing test. (CI enforces the same gate: the `build` job in `ci.yml` runs `ctest`, and the `release` job `needs: build`, so a failing test aborts the publish even if this local step is skipped.)
+This step does **not** produce the customer-facing zip / installer; the `release` job does, from the merge commit on `master`.
 
-This step does **not** produce the customer-facing zip / installer - that happens in step 8, after merge + tag, so the released artifacts come from the tagged merge commit on `master` rather than from the working-branch tip.
+### 4. Open the pull request `develop` -> `master`
 
-### 4. Open a GitHub PR to `master` (CONTRIBUTING workflow step 4)
-
-`master` has a branch protection rule that requires changes to come through a pull request (since the repo went public in 8.3). Push the working branch and open the PR — but do **not** merge yet; step 5 reviews the diff first.
+`master` is protected: pull requests only, required checks `build`, `ui-smoke` and `release`, administrators included. Push `develop` and open the PR; do **not** merge yet.
 
 ```powershell
-# Push the working branch first so the PR has something to point at.
-git push -u origin <working-branch>
-
-# Open the PR. Title and body are short; the GitHub release in step 9 carries
-# the full notes, so the PR body just points there.
-gh pr create --base master --head <working-branch> `
-    --title "Release X.Y" `
-    --body "Release X.Y - see ``releases_notes.txt`` X.Y section / GitHub release for the changelog."
+git push origin develop
+gh pr create --base master --head develop --title "Release X.Y" `
+    --body "Release X.Y - see the X.Y section of releases_notes.txt / the GitHub release."
 ```
 
-Capture the PR number from `gh pr create`'s output (or `gh pr view --json number -q .number`) — step 5 needs it.
+Capture the PR number (`gh pr view --json number -q .number`).
 
-### 5. Review the PR before merging
+### 5. In parallel: CI checks, code review, compliance review
 
-A release merge is the last point at which something can be caught before it goes out to customers with a tagged version and a GitHub installer. Run a **medium**-effort review on the PR diff by default:
+Start all of these at once and wait for all:
 
-```
-/code-review medium <PR#>
-```
-
-`medium` is the default tradeoff for the release gate on this small solo project — high-confidence findings without the false-positive volume the broader tiers add. Escalate deliberately when a release warrants it: `high` widens coverage (weeks of accumulated changes on the working branch), and `max` / `ultra` (the cloud multi-agent variant) go deeper still. `max` was tried for the 8.4 gate and produced too much volume for the gain, so reserve it. Runs locally, not billed.
-
-**If the PR diff is too big to review as one unit** (a working branch that accumulated many commits across several features), review **commit by commit** instead of the whole diff — walk `git log master..<working-branch>` and run the review per logical commit (or per group of related commits). Smaller diffs keep the review focused and the findings attributable, and avoid overwhelming a single pass.
+- **CI.** The PR runs `build` (compile + `ctest`), `ui-smoke` and the `release` dry run (version, notes and installer checked; the installer is kept as the `installer` artifact to try by hand). `gh pr checks <PR#> --watch`. Never merge around a red check.
+- **Review.** `/code-review medium <PR#>` — high-confidence findings without the false-positive volume of the broader tiers. Escalate deliberately: `high` for weeks of accumulated changes, `max` / `ultra` reserved (`max` produced too much volume for the gain at 8.4). If the diff is too big to review as one unit, review commit by commit (`git log master..develop`).
+- **Verifactu / accounting gate.** When the diff touches `src/verifactu/`, invoice payment / cancellation / rectification, `n_recibo` numbering, the `ingresos` schema or `verifactu_*` / `fecha_anulacion` columns, or the Contabilidad figures, also run the `verifactu-compliance-auditor` subagent on `git diff <previous-tag>..develop -- src/`. It checks the ten Verifactu requirements and whether a closed quarter can change. Its "should-fix" findings are treated like genuine bugs.
 
 **What to do with the findings**:
-- **Genuine bugs / regressions / release-blockers**: fix on the working branch, push, and the PR updates automatically. Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
-- **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes — those are the high-blast-radius areas where false-positive triage should err on the side of fixing.
-- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them as new entries in `docs/progress_tracker.md` Open Non-Blocking Issues, do not block the release on them.
+- **Genuine bugs / regressions / release-blockers**: fix on `develop`, push (the PR updates and CI reruns). Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
+- **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes.
+- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them in `docs/progress_tracker.md` Open Non-Blocking Issues; do not block the release on them.
 
-**Verifactu / accounting gate**: when the release diff touches `src/verifactu/`, invoice payment / cancellation / rectification, `n_recibo` numbering, the `ingresos` schema or `verifactu_*` / `fecha_anulacion` columns, or the Contabilidad figures, also run the `verifactu-compliance-auditor` subagent on `git diff <previous-tag>..<working-branch> -- src/`. It checks the ten Verifactu requirements and whether a closed quarter can change, which a generic review does not. Its "should-fix" findings are treated like genuine bugs above. (In the 10.12 cycle it caught a path that could alter a filed quarter.)
+Proceed to step 6 only once the user has confirmed the review is clean (or that remaining findings are intentionally deferred), and the smoke test part 1 is done.
 
-Only proceed to step 6 once the user has confirmed the review is clean (or that remaining findings are intentionally deferred).
-
-### 6. Merge the PR
-
-**First, wait for GitHub Actions CI to pass on the pushed commit — always, without being asked.** The local sanity build in step 3 is not a substitute: CI builds on a clean `windows-latest` runner and runs the same `ctest` gate, and is the last automated check before the release becomes a tagged, public installer. Do not merge a red or still-running CI. Watch the `ci.yml` run for the working-branch tip and block on it:
+### 6. Merge the PR (this publishes)
 
 ```powershell
-# Wait for the CI run on the just-pushed commit to finish green.
-$rid = gh run list --workflow=ci.yml --branch <working-branch> --limit 1 --json databaseId -q '.[0].databaseId'
-gh run watch $rid --exit-status   # non-zero exit = CI failed -> do NOT merge
+gh pr merge --auto --merge
 ```
 
-`--exit-status` makes the command fail if CI failed. If CI is red, **stop**: read the failure, fix on the working branch, push, and re-wait — never merge around a failing build. Only once CI is green proceed to the merge:
+`--merge` (merge commit) is mandatory: not `--squash`, not `--rebase`. `--auto` merges as soon as branch protection is satisfied. **No `--admin`** (admins are bound by the protection rule) and **never `--delete-branch`**: it would delete `develop`.
+
+### 7. Watch the publishing run
+
+The push to `master` runs `ci.yml` again: `build`, then `release`, which tags `X.Y` on the merge commit and creates the GitHub Release.
 
 ```powershell
-# Merge with --merge (the merge-commit option, not --squash and not --rebase) +
-# --admin so the merge proceeds even if required-reviews / required-checks
-# aren't satisfied. This is a solo project; the PR exists to honour the
-# protection rule, not to gate on automated review.
-gh pr merge <working-branch> --merge --admin --delete-branch
-
-# Bring the merge commit into the local master so step 7 can tag it.
-git checkout master
-git pull --ff-only origin master
+gh run watch (gh run list --workflow=ci.yml --branch master --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
+gh release view X.Y
 ```
 
-`--merge` is mandatory — `--squash` or `--rebase` defeat the "release = single point on master" convention. `--delete-branch` removes `release/X.Y` once merged; the next change starts a new branch from `master`.
+`gh release view X.Y` must show 3 assets (`X.Y.zip`, `laideal_setup_X.Y.exe`, `laideal_setup_X.Y.exe.sha256`; without the `.sha256` the in-app updater refuses the installer) and a bilingual body (`## Español` then `## English`, both clean bulleted lists).
 
-Fallback if `gh` is unavailable or the PR can't merge cleanly: do the local merge instead (`git checkout master && git merge --no-ff <working-branch> -m "Merge branch '<working-branch>' for release X.Y" && git push origin master`). The push will succeed for an admin account but GitHub will log a `Bypassed rule violations` warning — flag it to the user when this happens so they can decide whether to tighten or relax the protection rule.
+**If the run fails**, read the failed step (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: version not higher than the latest release, no `X.Y` section in a notes file, or the `windeployqt` assertion / UI-test marker check in `releases\package.ps1` tripped. The merge commit is already public: fix forward on `develop` (a new PR; the failed run can be re-run if the cause was transient). Do not delete a tag or release without confirming.
 
-### 7. Tag the merge commit (CONTRIBUTING workflow step 5)
+#### Local fallback (only if GitHub Actions is unavailable)
 
-```powershell
-git tag -a X.Y -m "Release X.Y"
-git push origin X.Y
-```
-
-The tag points at the merge commit on `master`, not at the version-bump commit on the working branch. Master itself was pushed by `gh pr merge` in step 6; only the tag is pushed here. **Pushing the tag is the publish trigger** — the `X.Y` tag runs `ci.yml`'s `build` job and then its `release` job, which packages + publishes the GitHub Release (reusing the build job's exe). Steps 3 and 5 already validated the tagged code, so this is normally hands-off.
-
-### 8. Watch the release workflow (it packages the artifacts and publishes)
-
-The tag push in step 7 kicked off `ci.yml` (the `build` job, then the gated `release` job). Watch it to completion instead of building/publishing by hand:
+On the release merge commit (`master`), build locally and publish by hand. `release.ps1` runs configure -> build -> `ctest` -> `releases\package.ps1`; `--target master` makes `gh release create` tag the merge commit:
 
 ```powershell
-gh run watch (gh run list --workflow=ci.yml --branch X.Y --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
-```
-
-On success the `build` job compiled (CMake + Ninja, Release) + passed `ctest`, then the `release` job reused that exe -> `windeployqt` (with a runtime-DLL assertion) -> zipped -> compiled the Inno Setup installer -> created GitHub Release `X.Y` with `X.Y.zip` + `laideal_setup_X.Y.exe` + `laideal_setup_X.Y.exe.sha256` attached and a bilingual body: `## Español` (the `releases_notes_es.txt` `X.Y` section) followed by `## English` (the `releases_notes.txt` section). Confirm with `gh release view X.Y` that all three assets are present (without the `.sha256` the in-app updater refuses the installer) and both halves render as clean bulleted lists.
-
-**If the workflow fails**, read the failed step's log (`gh run view <id> --log-failed`) and diagnose with the user. Common causes: the tag doesn't match `CMakeLists.txt` (version step), no `X.Y` section in `releases_notes.txt` or `releases_notes_es.txt` (notes step), or the `windeployqt` assertion tripped (deployment regression). Do **not** delete the tag without confirming — the merge commit is already public. Fix forward on the working branch; if the fix needs a new merge commit, re-tag is the user's call.
-
-#### 8b. Local fallback (only if CI is unavailable)
-
-If GitHub Actions can't run, build and publish locally from the tagged `master` commit. This is exactly what the workflow automates:
-
-```powershell
-.\releases\release.ps1 X.Y   # configure -> build -> windeployqt -> Inno Setup installer, into build-release\
+.\releases\release.ps1 X.Y   # artifacts in build-release\
 
 $ver = 'X.Y'
 $tmpNotes = Join-Path $env:TEMP "laideal_release_$ver.md"
@@ -181,27 +139,50 @@ $body = "## Español`n`n$(Get-Section 'releases_notes_es.txt')`n`n## English`n`n
 Set-Content -Path $tmpNotes -Value $body -Encoding utf8
 
 gh release create $ver `
+    build-release/$ver.zip `
     build-release/laideal_setup_$ver.exe `
     build-release/laideal_setup_$ver.exe.sha256 `
-    --title "Release $ver" `
-    --notes-file $tmpNotes
+    --target master --title "Release $ver" --notes-file $tmpNotes
 
 Remove-Item $tmpNotes
 ```
 
-### 9. Post-release housekeeping
+If the protection rule itself blocks the merge while Actions is down, CONTRIBUTING (Branch protection) describes the temporary administrator switch; ask the user before touching it.
 
-- Confirm `git status` on `master` is clean and on the merge commit.
-- Surface the GitHub release URL from `gh release create` output.
-- Delete the local `release/X.Y` branch (`git branch -d release/X.Y`) and stay on an up-to-date `master` without committing; the next change starts its own branch from it.
+### 8. Back-merge `master` into `develop`
+
+So both branches share the release merge commit:
+
+```powershell
+git checkout develop
+git pull --ff-only origin develop
+git merge --ff-only origin/master
+git push origin develop
+```
+
+If `develop` moved during the release, drop `--ff-only` (a merge commit). Confirm `git status` is clean, surface the GitHub release URL, and stay on `develop`. Remind the user that after installing, the shop runs *Comprobar tras actualizar* (smoke test part 2).
+
+---
+
+## Hotfix (a fix for the released version)
+
+When `develop` holds unreleased work, a fix for the released version ships from `hotfix/X.Y` (X.Y = the hotfix version, higher than the latest release). Same preconditions 2-5.
+
+1. `git checkout master && git pull --ff-only origin master && git checkout -b hotfix/X.Y`.
+2. Fix the root cause with a regression test that fails without the fix (`/debugging`); run the affected suites locally. Bump `CMakeLists.txt`, add one `X.Y` bullet to both notes files, commit (`release X.Y - <fix>`). Update the docs the fix touches.
+3. `git push -u origin hotfix/X.Y`, then `gh pr create --base master --head hotfix/X.Y --title "Release X.Y"`. In parallel: CI checks, a scoped `/code-review` of the (small) diff, and `verifactu-compliance-auditor` only if the fix touches invoicing, numbering or the QR.
+4. Merge: `gh pr merge --auto --merge --delete-branch` (the hotfix branch may be deleted; it is not `develop`). The push to `master` publishes; watch it as in step 7.
+5. Bring the fix into `develop` (it can conflict with newer work): `git checkout develop && git pull --ff-only origin develop && git merge origin/master -m "Merge master (hotfix X.Y) into develop" && git push origin develop`. The next release from `develop` must use a higher version than the hotfix.
 
 ---
 
 ## Rules
 
-- **Always produce a merge commit on `master`** — `gh pr merge --merge` (preferred) or `git merge --no-ff` (fallback). Never `--squash`, `--rebase`, or fast-forward; those defeat the "release = single point on master" convention.
-- **Never commit to `master` directly.** Even if a last-minute fix is needed mid-release, commit it on the working branch and re-merge.
-- **One release at a time.** If two unrelated changesets are sitting on the working branch, ask the user whether to split them into two releases or bundle.
+- **Always produce a merge commit on `master`** — `gh pr merge --merge`. Never `--squash` or `--rebase`; they defeat the "every commit on `master` is a release" convention.
+- **Never commit or push to `master` directly**, and never use `--admin` to get around the protection. A last-minute fix goes on `develop` (or `hotfix/X.Y`) and the PR picks it up.
+- **Never delete `develop`** (`--delete-branch` is for `hotfix/X.Y` and short-lived branches only).
+- **Merging publishes.** Do not merge until CI is green, the review is settled and the user has confirmed.
+- **One release at a time.** If two unrelated changesets are sitting on `develop`, ask the user whether to split them into two releases or bundle.
 - **Stop on the first failure.** Build error, missing doc, dirty tree, tag conflict — surface it and wait, don't paper over.
 - **English in `releases_notes.txt`, Spanish in `releases_notes_es.txt`** (English everywhere else in the repo), same versions in both (`test_appsettings` enforces it), both UTF-8 with BOM. Inno Setup, the in-app notes, the updater dialog and the GitHub release (both languages) surface them to end users — keep them customer-readable, not changelog jargon.
 
@@ -209,6 +190,5 @@ Remove-Item $tmpNotes
 
 ## When NOT to use this skill
 
-- Just bumping `CMakeLists.txt` — that's part of release, but if the user only wants the bump (not the merge/tag/publish), do that one step.
+- Just bumping `CMakeLists.txt` — that's part of release, but if the user only wants the bump (not the PR/merge/publish), do that one step.
 - "Release notes" updates without an actual release — just edit `releases_notes.txt` and `releases_notes_es.txt` directly.
-- Hotfix that ships outside the normal flow — ask first; the workflow assumes a clean working-branch -> master merge.

@@ -1,11 +1,29 @@
 name: CI
 
+# Branches (CONTRIBUTING.md, Development workflow): work goes into develop; master
+# holds only releases and moves only by pull request. One run per commit:
+#
+#   PR to develop            build + ui-smoke
+#   push to develop          build                      (direct commits, merged PRs)
+#   PR to master             build + ui-smoke + release in dry run (packages the
+#                            installer, checks version and notes, publishes nothing)
+#   push to master           build + release: tags X.Y on the merge commit and
+#                            publishes the GitHub Release with the exe built here
+#   workflow_dispatch        build + ui-smoke on any branch
+#
+# master requires build, ui-smoke and release to pass before a PR can merge.
+
 on:
   push:
-    branches: [ '**' ]
-    tags: [ '[0-9]+.[0-9]+' ]
+    branches: [ develop, master ]
   pull_request:
-    branches: [ master ]
+    branches: [ develop, master ]
+  workflow_dispatch:
+
+# A newer push makes the running check obsolete; a publishing run on master is never cancelled.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   build:
@@ -15,34 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install Ninja
-        run: choco install ninja -y --no-progress
-
-      - name: Install Qt + MinGW
-        uses: jurplel/install-qt-action@v4
+      - uses: ./.github/actions/setup-toolchain
         with:
-          version: '6.4.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-
-      # Qt 6.4.3 win64_mingw is built with MinGW 11.2 (MSVCRT). Build with that same
-      # GCC: the runner's preinstalled C:\mingw64 is a newer UCRT toolchain whose
-      # binaries fail to load against Qt's bundled libstdc++ (0xC0000139), and Qt's
-      # own tools_mingw1120 is no longer on the Qt online repo. Same GCC/libstdc++
-      # version as README §Build (C:\Qt\Tools\mingw1120_64).
-      - name: Install MinGW 11.2 (matches Qt 6.4.3)
-        shell: pwsh
-        run: |
-          # The community feed intermittently answers "package not found": retry before failing.
-          $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-          for ($i = 1; $i -le 4 -and -not (Test-Path "$bin\g++.exe"); $i++) {
-            choco install mingw --version=11.2.0.07112021 -y --no-progress
-            if (-not (Test-Path "$bin\g++.exe")) { Write-Host "MinGW install attempt $i failed; retrying in 30 s"; Start-Sleep -Seconds 30 }
-          }
-          if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
-          & "$bin\g++.exe" --version | Select-Object -First 1
-          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          ccache-key: release
 
       # The aeat_xsd test validates the direct AEAT client's XML against the official
       # AEAT schemas with Python + lxml (it is skipped where lxml is missing).
@@ -53,7 +46,9 @@ jobs:
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
 
       - name: Build
-        run: cmake --build build
+        run: |
+          cmake --build build
+          ccache --show-stats
 
       # Guard against the toolchain mismatch coming back: every built exe must link
       # the MSVCRT runtime that Qt's MinGW 11.2 DLLs use, never the UCRT one.
@@ -98,155 +93,178 @@ jobs:
           path: build/test-results-*.xml
           if-no-files-found: ignore
 
-      # The release job reuses this exe instead of rebuilding, so upload it on
-      # every push (covers the X.Y tag push that drives a release).
-      - name: Upload artifact
+      # The release job packages exactly this tested exe.
+      - name: Upload the exe
         uses: actions/upload-artifact@v7
-        if: github.event_name == 'push'
         with:
           name: laideal
           path: build/src/app/laideal.exe
 
-  # Release stage: runs only for an X.Y tag push, and only after `build` (incl.
-  # the ctest gate) succeeds. It reuses the exe the build job already produced -
-  # no second compile/test - then deploys, packages and publishes the GitHub
-  # Release. Replaces the old standalone release.yml.
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+  # Drives the installed app like a person (docs/testing/ui_smoke.md): builds the
+  # UI-test build (CMake LAIDEAL_UI_TEST, which adds the --fake-aeat switch; never a
+  # release), packages it with the release recipe and installs it silently, installs
+  # a printer queue whose jobs are captured, then runs the smoke test blocks A-E
+  # (tests/ui/smoke.py) against the fake AEAT and a synthetic database (never shop
+  # data: the repository is public), and the AEAT pre-production script in its dry
+  # run. Screenshots, control trees on failure, the printed jobs, logs and databases
+  # are kept as the `ui-smoke` artifact. Runs on pull requests and on demand, in
+  # parallel with build.
+  ui-smoke:
+    if: github.event_name != 'push'
     runs-on: windows-latest
-    permissions:
-      contents: write   # gh release create
-      actions: read      # download-artifact from the build job
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Validate tag matches CMakeLists.txt version
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          inno-setup: 'true'
+          ccache-key: ui-test
+
+      - name: Build the UI-test app and the test tools
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
+          cmake --build build --target laideal fake_aeat_server escpos_preview
+
+      # The release packaging refuses an exe with this switch; check here that the marker
+      # it looks for is really in a UI-test build, so that guard cannot silently go blind.
+      - name: Check the UI-test marker the release guard looks for
         shell: pwsh
         run: |
-          $cmake = Get-Content CMakeLists.txt -Raw
-          if ($cmake -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
+          $bytes = [IO.File]::ReadAllBytes("build\src\app\laideal.exe")
+          $marker = [Text.Encoding]::Unicode.GetBytes('--fake-aeat')
+          $text = [BitConverter]::ToString($bytes)
+          if (-not $text.Contains([BitConverter]::ToString($marker))) { throw "The UI-test build has no --fake-aeat marker" }
+          Write-Host "Marker found: the release guard would refuse this exe."
+
+      - name: Package the installer and the tools
+        id: package
+        shell: pwsh
+        run: |
+          if ((Get-Content CMakeLists.txt -Raw) -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
             throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
           }
-          if ($matches[1] -ne '${{ github.ref_name }}') {
-            throw "Tag '${{ github.ref_name }}' doesn't match CMakeLists.txt version '$($matches[1])'. Update CMakeLists.txt first."
+          $ver = $matches[1]
+          & releases\package.ps1 -Exe build\src\app\laideal.exe -Version $ver -OutDir ui-package -AllowUiTest
+          echo "INSTALLER=$PWD\ui-package\laideal_setup_$ver.exe" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Path ui-tools -Force | Out-Null
+          foreach ($tool in 'fake_aeat_server', 'escpos_preview') {
+            Copy-Item "build\tests\$tool.exe" ui-tools
+            windeployqt --no-translations --no-system-d3d-compiler "ui-tools\$tool.exe"
+            if ($LASTEXITCODE -ne 0) { throw "windeployqt failed for $tool" }
           }
-          Write-Host "Version validated: $($matches[1])"
 
-      - name: Install Qt + MinGW
-        uses: jurplel/install-qt-action@v4
+      - name: Install silently
+        id: install
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\La Ideal"
+          $p = Start-Process -FilePath '${{ steps.package.outputs.INSTALLER }}' -Wait -PassThru `
+               -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LANG=spanish', "/DIR=`"$dir`"", "/LOG=`"$env:RUNNER_TEMP\install.log`""
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\laideal.exe")) { throw "laideal.exe not installed in $dir" }
+          echo "EXE=$dir\laideal.exe" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-python@v6
         with:
-          version: '6.4.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          # Needed for windeployqt and the MinGW runtime DLLs it copies
-          # (libgcc/libstdc++/libwinpthread). The build itself already ran in the
-          # `build` job - this job only repackages its exe, so no Ninja / cmake.
+          python-version: '3.12'
 
-      # Qt 6.4.3 win64_mingw is built with MinGW 11.2 (MSVCRT). Build with that same
-      # GCC: the runner's preinstalled C:\mingw64 is a newer UCRT toolchain whose
-      # binaries fail to load against Qt's bundled libstdc++ (0xC0000139), and Qt's
-      # own tools_mingw1120 is no longer on the Qt online repo. Same GCC/libstdc++
-      # version as README §Build (C:\Qt\Tools\mingw1120_64).
-      - name: Install MinGW 11.2 (matches Qt 6.4.3; windeployqt copies its runtime)
+      - name: Install the test's Python packages
+        run: python -m pip install --quiet -r tests/ui/requirements.txt
+
+      - name: Add the capturing printer queue
+        run: python tests/ui/printer.py install
+
+      # The build's Qt is taken off PATH: the installed app and the deployed tools must
+      # start on the DLLs next to them.
+      - name: Run the UI smoke test (blocks A-E)
         shell: pwsh
         run: |
-          # The community feed intermittently answers "package not found": retry before failing.
-          $bin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-          for ($i = 1; $i -le 4 -and -not (Test-Path "$bin\g++.exe"); $i++) {
-            choco install mingw --version=11.2.0.07112021 -y --no-progress
-            if (-not (Test-Path "$bin\g++.exe")) { Write-Host "MinGW install attempt $i failed; retrying in 30 s"; Start-Sleep -Seconds 30 }
-          }
-          if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
-          & "$bin\g++.exe" --version | Select-Object -First 1
-          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
+          python tests/ui/smoke.py --exe '${{ steps.install.outputs.EXE }}' --tools ui-tools --out ui-smoke-out `
+                 --printer LaIdeal-Smoke --installer '${{ steps.package.outputs.INSTALLER }}'
 
-      - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+      - name: Dry run of the AEAT pre-production script (fake AEAT)
+        if: always() && steps.install.outcome == 'success'
+        shell: pwsh
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
+          python tests/ui/aeat_preproduction.py --exe '${{ steps.install.outputs.EXE }}' --dry-run `
+                 --tools ui-tools --out ui-smoke-out\aeat-dry-run
 
-      - name: Download built exe from the build job
-        uses: actions/download-artifact@v8
+      - name: Keep the run's outputs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ui-smoke-out -Force | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\install.log" ui-smoke-out -ErrorAction SilentlyContinue
+          Copy-Item "$HOME\.laideal.log" ui-smoke-out -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: laideal
-          path: dist
+          name: ui-smoke
+          path: ui-smoke-out
+          if-no-files-found: ignore
 
-      - name: Stage release files
+  # Packages the exe the build job tested. On a PR to master it is the dry run (the
+  # merge cannot pass without it): the version must be new and higher than the
+  # latest release, both notes files need its section, and the installer must build
+  # (kept as the `installer` artifact). On the push to master that follows the merge
+  # it publishes: tag X.Y on this commit + GitHub Release with the zip, the
+  # installer, its .sha256 and the bilingual notes.
+  release:
+    needs: build
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'master')
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # gh release create (and its tag) on master
+      actions: read     # download-artifact from the build job
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PUBLISH: ${{ github.event_name == 'push' }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the version
+        id: version
         shell: pwsh
         run: |
-          # Locate the exe in the downloaded artifact (recurse so this is robust
-          # to whatever path layout upload-artifact preserved).
-          $exe = Get-ChildItem -Path dist -Filter laideal.exe -Recurse -File | Select-Object -First 1
-          if (-not $exe) { throw "laideal.exe not found in the 'laideal' artifact from the build job." }
-          New-Item -ItemType Directory -Path "releases\${{ github.ref_name }}" -Force
-          Copy-Item $exe.FullName -Destination "releases\${{ github.ref_name }}\"
-
-      # A UI-test build (CMake LAIDEAL_UI_TEST, ui-smoke.yml) can send AEAT records to a
-      # local fake AEAT through --fake-aeat; it must never be released.
-      - name: Refuse a UI-test build
-        shell: pwsh
-        run: |
-          $exe = "releases\${{ github.ref_name }}\laideal.exe"
-          $marker = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes('--fake-aeat'))
-          if ([BitConverter]::ToString([IO.File]::ReadAllBytes($exe)).Contains($marker)) {
-            throw "laideal.exe is a UI-test build (--fake-aeat): it must never be released."
+          if ((Get-Content CMakeLists.txt -Raw) -notmatch 'project\s*\(\s*laideal\s+VERSION\s+([0-9]+\.[0-9]+)') {
+            throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
           }
-          Write-Host "Not a UI-test build."
-
-      - name: Run windeployqt
-        shell: pwsh
-        run: |
-          $stage = "releases\${{ github.ref_name }}"
-          windeployqt --no-translations --no-system-d3d-compiler "$stage\laideal.exe"
-          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
-          # Fail loudly if the MinGW compiler runtime or Qt core were not deployed -
-          # the installed app would otherwise crash on launch on a clean machine with
-          # a missing-DLL error. The build job never runs windeployqt, so this is the
-          # only place that guards the packaging step. Without the SQLite driver there
-          # is no database; without the TLS backend every HTTPS call (AEAT, gateway,
-          # updater) fails.
-          $required = @(
-            'libgcc_s_seh-1.dll',
-            'libstdc++-6.dll',
-            'libwinpthread-1.dll',
-            'Qt6Core.dll',
-            'platforms\qwindows.dll',
-            'sqldrivers\qsqlite.dll',
-            'tls\qschannelbackend.dll'
-          )
-          foreach ($d in $required) {
-            if (-not (Test-Path (Join-Path $stage $d))) {
-              throw "windeployqt did not deploy '$d' - the installed app would fail to launch."
+          $ver = $matches[1]
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+          # Every merge into master is a release: it must bump the version.
+          $tagCommit = git ls-remote origin "refs/tags/$ver^{}" "refs/tags/$ver" | Select-Object -First 1
+          if ($tagCommit) {
+            # A re-run of this publishing run after a transient failure is allowed.
+            if ($env:PUBLISH -eq 'true' -and $tagCommit.Split()[0] -eq '${{ github.sha }}') {
+              Write-Host "Tag $ver already on this commit: re-publishing."
+              echo "RERUN=true" >> $env:GITHUB_OUTPUT
+              exit 0
             }
+            throw "Version $ver is already released. Bump project(laideal VERSION ...) in CMakeLists.txt."
           }
-          Write-Host "windeployqt deployment verified."
-
-      - name: Create ZIP archive
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path "releases\old_releases" -Force
-          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::CreateFromDirectory("releases\${{ github.ref_name }}", "releases\old_releases\${{ github.ref_name }}.zip")
-
-      - name: Compile Inno Setup installer
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path "releases\setup_outputs" -Force
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ github.ref_name }}" releases\laideal.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
-          $installer = "releases\setup_outputs\laideal_setup_${{ github.ref_name }}.exe"
-          if (-not (Test-Path $installer)) { throw "Installer not produced at $installer" }
+          $latest = gh release view --json tagName -q .tagName 2>$null
+          if ($latest -and [version]$ver -le [version]$latest) {
+            throw "Version $ver is not higher than the latest release $latest."
+          }
+          Write-Host "Version $ver (latest release: $latest)"
 
       - name: Extract release notes for this version
         id: release_notes
         shell: pwsh
         run: |
-          $ver = '${{ github.ref_name }}'
-          # Publish the version's section from BOTH notes files - Spanish first (the
-          # shop's language), then English. The body is what the in-app updater shows
-          # before installing, so it must never be empty: a missing or empty section
-          # in either file fails the release, like the CMakeLists version bump above.
+          $ver = '${{ steps.version.outputs.VERSION }}'
+          # Spanish first (the shop's language), then English. The body is what the
+          # in-app updater shows before installing, so a missing or empty section in
+          # either file fails the release.
           function Get-Section([string]$file) {
             $raw = Get-Content $file -Raw
             $m = [regex]::Match($raw, "(?ms)^$([regex]::Escape($ver))\r?\n(.*?)(?=^\r?\d+\.\d+\r?\n|\z)")
@@ -258,35 +276,47 @@ jobs:
           $es = Get-Section 'releases_notes_es.txt'
           $en = Get-Section 'releases_notes.txt'
           $body = "## Español`n`n$es`n`n## English`n`n$en"
-          $tmp = Join-Path $env:TEMP "laideal_release_$ver.md"
+          $tmp = Join-Path $env:RUNNER_TEMP "laideal_release_$ver.md"
           Set-Content -Path $tmp -Value $body -Encoding utf8
           echo "NOTES_PATH=$tmp" >> $env:GITHUB_OUTPUT
 
-      - name: Create GitHub Release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ver = '${{ github.ref_name }}'
-          $zip = "releases\old_releases\$ver.zip"
-          $installer = "releases\setup_outputs\laideal_setup_$ver.exe"
-          $notes = '${{ steps.release_notes.outputs.NOTES_PATH }}'
-          # Idempotent: if a release for this tag already exists (e.g. a re-run after a
-          # transient failure, or a moved tag), delete it first so create succeeds.
-          # The git tag itself is kept - it's what triggered this run.
-          gh release view $ver 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $ver already exists - deleting before recreating."
-            gh release delete $ver --yes
-            if ($LASTEXITCODE -ne 0) { throw "Failed to delete existing release $ver" }
-          }
-          # The updater runs the installer only when its SHA-256 matches this file.
-          $checksum = "$installer.sha256"
-          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-          [System.IO.File]::WriteAllText((Join-Path $PWD $checksum), "$hash  laideal_setup_$ver.exe`n")
-          gh release create $ver $zip $installer $checksum --title "Release $ver" --notes-file $notes
-          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+      # windeployqt (Qt) and the MinGW runtime it copies; nothing is compiled here.
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          inno-setup: 'true'
 
-      - name: Clean up staging
+      - name: Download the tested exe
+        uses: actions/download-artifact@v8
+        with:
+          name: laideal
+          path: dist
+
+      - name: Package
         shell: pwsh
-        run: Remove-Item -Recurse -Force "releases\${{ github.ref_name }}"
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter laideal.exe -Recurse -File | Select-Object -First 1
+          if (-not $exe) { throw "laideal.exe not found in the 'laideal' artifact from the build job." }
+          & releases\package.ps1 -Exe $exe.FullName -Version '${{ steps.version.outputs.VERSION }}' -OutDir out
+
+      - name: Keep the installer (dry run)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer
+          path: out
+
+      - name: Publish the GitHub Release
+        if: env.PUBLISH == 'true'
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.version.outputs.VERSION }}'
+          if ('${{ steps.version.outputs.RERUN }}' -eq 'true') {
+            gh release view $ver 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              gh release delete $ver --yes
+              if ($LASTEXITCODE -ne 0) { throw "Failed to delete the half-published release $ver" }
+            }
+          }
+          gh release create $ver "out\$ver.zip" "out\laideal_setup_$ver.exe" "out\laideal_setup_$ver.exe.sha256" `
+              --target '${{ github.sha }}' --title "Release $ver" --notes-file '${{ steps.release_notes.outputs.NOTES_PATH }}'
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

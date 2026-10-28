@@ -6,7 +6,7 @@ Two scripts share one set of operator flows:
 
 | Script | Where | What |
 |--------|-------|------|
-| `tests/ui/smoke.py` | CI (`ui-smoke.yml`), or any PC | Smoke test blocks A-E against a **fake AEAT**, on a synthetic database |
+| `tests/ui/smoke.py` | CI (the `ui-smoke` job of `ci.yml`), or any PC | Smoke test blocks A-E against a **fake AEAT**, on a synthetic database |
 | `tests/ui/aeat_preproduction.py` | **Locally**, on a PC with the issuer's certificate | The `laideal-prueba-aeat` kit's flows against **AEAT pre-production**, with a report |
 
 ---
@@ -17,15 +17,15 @@ The paid flows need Verifactu, and CI has neither a certificate nor AEAT. The CM
 
 It must never reach a shop, because it could mark invoices as sent without AEAT (the "no dual-use" requirement):
 
-- The release job in `ci.yml` **refuses an exe containing the `--fake-aeat` marker**. `ui-smoke.yml` checks that its own build does contain the marker, so the guard cannot go blind.
+- `releases/package.ps1` (the release job of `ci.yml`) **refuses an exe containing the `--fake-aeat` marker**. The `ui-smoke` job checks that its own build does contain the marker, so the guard cannot go blind.
 - `release.ps1` configures with `-DLAIDEAL_UI_TEST=OFF` and refuses the marker too; configuring the option ON prints a CMake warning (keep it in a separate `build-uitest` folder, since the option is cached).
-- `ui-smoke.yml` uploads no exe or installer.
+- The `ui-smoke` job uploads no exe or installer.
 
 `tests/tools/fake_aeat_server.cpp` runs the e2e suites' `FakeAeatServer` (`tests/support/fakeaeatserver`) as its own process. It writes its URL to a file and keeps a JSON copy of the records it registered.
 
 ## Where it runs
 
-`.github/workflows/ui-smoke.yml` runs on a GitHub-hosted `windows-latest` runner: a fresh VM with a desktop session for every run. Docker is out because Windows containers have no desktop and no printer spooler. Windows Sandbox and Hyper-V are out because they need Pro, and this PC runs Home.
+The `ui-smoke` job of `.github/workflows/ci.yml` runs on a GitHub-hosted `windows-latest` runner: a fresh VM with a desktop session for every run. Docker is out because Windows containers have no desktop and no printer spooler. Windows Sandbox and Hyper-V are out because they need Pro, and this PC runs Home.
 
 Triggers: `workflow_dispatch` (run it before every release, `/release` step 1), pull requests to `master`, and pushes to any branch but `master` that touch `tests/ui/`, `tests/tools/` or the workflow.
 
@@ -163,4 +163,4 @@ The steps:
 | `tests/ui/requirements.txt` | pywinauto, Pillow, pypdf, OpenCV (QR) |
 | `tests/tools/fake_aeat_server.cpp`, `tests/tools/escpos_preview.cpp` | The fake AEAT as a process; the ESC/POS job decoder |
 | `tests/support/escpospreview.h` | ESC/POS reader shared with `test_ticket_preview` |
-| `.github/workflows/ui-smoke.yml` | The CI run |
+| `.github/workflows/ci.yml` (`ui-smoke` job) | The CI run |

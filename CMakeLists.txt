@@ -33,7 +33,7 @@ add_subdirectory(src/verifactu)
 add_subdirectory(src/updater)
 add_subdirectory(src/backup)
 
-# UI smoke test build only (.github/workflows/ui-smoke.yml): compiles the --fake-aeat
+# UI smoke test build only (the `ui-smoke` job of .github/workflows/ci.yml): compiles the --fake-aeat
 # switch into laideal.exe. Never set for a release; the release job refuses such an exe.
 option(LAIDEAL_UI_TEST "Build laideal.exe for the UI smoke test (--fake-aeat)" OFF)
 if (LAIDEAL_UI_TEST)
