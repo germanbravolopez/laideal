@@ -1,5 +1,8 @@
 ﻿Versiones:
 
+12.4
+    - Entrada de prueba (nunca se publica).
+
 12.3
 - Corrección: las facturas que no se pudieron enviar a Verifactu (por ejemplo durante una caída de la pasarela) vuelven a aparecer en "Envíos Verifactu pendientes" y se reenvían, también en tickets recibidos antes de la fecha "Solo tickets desde".
 - Todas las facturas se envían a la AEAT con la misma descripción, "Servicios de lavandería".
