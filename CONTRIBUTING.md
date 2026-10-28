@@ -35,7 +35,7 @@ Short-lived branches are named after what they change: `feature/<topic>`, `fix/<
 | Event | `build` (compile + `ctest`) | `ui-smoke` (installed app, blocks A-E) | `release` |
 |---|---|---|---|
 | Pull request to `develop` | yes | yes | - |
-| Push to `develop` (direct commit or merged PR) | yes | - | - |
+| Push to `develop` (direct commit or merged PR) | yes (cancelled when the release PR `develop` -> `master` starts on the same commit: its run builds it anyway) | - | - |
 | Pull request to `master` | yes | yes | **dry run**: version, notes and installer checked, nothing published |
 | Push to `master` (only ever a merged PR) | yes | - | **publishes** `X.Y` from the exe this run tested |
 | Manual (`gh workflow run ci.yml --ref <branch>`, or Actions -> CI -> *Run workflow*) | yes | yes | - |

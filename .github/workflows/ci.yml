@@ -4,7 +4,8 @@ name: CI
 # holds only releases and moves only by pull request. One run per commit:
 #
 #   PR to develop            build + ui-smoke
-#   push to develop          build                      (direct commits, merged PRs)
+#   push to develop          build                      (direct commits, merged PRs;
+#                            cancelled by the PR to master of the same commit)
 #   PR to master             build + ui-smoke + release in dry run (packages the
 #                            installer, checks version and notes, publishes nothing)
 #   push to master           build + release: tags X.Y on the merge commit and
@@ -26,6 +27,23 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
+  # The release PR reruns build on the commit just pushed to develop: that push run is
+  # redundant, so it is cancelled. The PR run always starts after the push run.
+  skip-duplicate:
+    if: github.event_name == 'pull_request' && github.base_ref == 'master' && github.head_ref == 'develop'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel the develop push run of this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for id in $(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch develop --event push --commit "$SHA" --json databaseId,status -q '.[] | select(.status != "completed") | .databaseId'); do
+            echo "Cancelling run $id"; gh run cancel "$id" -R "$GITHUB_REPOSITORY"
+          done
+
   build:
     runs-on: windows-latest
     timeout-minutes: 45   # a hung step must not hold the runner for the 6 h default
