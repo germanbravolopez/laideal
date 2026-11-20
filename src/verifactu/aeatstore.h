@@ -113,6 +113,9 @@ public:
     // (a submission carries one issuer in its header).
     QList<Record> pending(int limit = 1000, const QString &issuerNif = QString());
 
+    // How many there are (no limit); 0 also when the table cannot be read.
+    int pendingCount(const QString &issuerNif = QString());
+
     bool markAttempt(qint64 id);
     // A send of the record got to AEAT (answered, or sent and the reply lost).
     bool markReached(qint64 id);

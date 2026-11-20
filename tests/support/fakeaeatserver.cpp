@@ -223,6 +223,8 @@ void FakeAeatServer::handle(QTcpSocket *socket)
 QByteArray FakeAeatServer::answer(const Request &request)
 {
     if (request.kind == QLatin1String("Consulta")) {
+        if (m_queriesUnavailable)
+            return faultReply(QStringLiteral("env:Server"), QStringLiteral("Servicio no disponible"));
         // One invoice, or (no number) every registration held.
         QList<SentRecord> held;
         for (auto it = m_registered.cbegin(); it != m_registered.cend(); ++it) {

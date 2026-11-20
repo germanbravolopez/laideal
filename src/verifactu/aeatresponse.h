@@ -69,6 +69,7 @@ struct QueryRecord {
 struct Query {
     bool    parsed = false;
     bool    fault = false;
+    QString faultCode;
     QString faultText;
     bool    hasData = false;      // ResultadoConsulta = ConDatos
     bool    morePages = false;    // IndicadorPaginacion = S

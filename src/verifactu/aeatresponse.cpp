@@ -116,6 +116,7 @@ Query parseQuery(const QByteArray &body)
         [&](const QStringList &path, const QString &text) {
             const QString &name = path.last();
             if (reply.fault) {
+                if (name == QLatin1String("faultcode"))   reply.faultCode = text;
                 if (name == QLatin1String("faultstring")) reply.faultText = text;
                 return;
             }

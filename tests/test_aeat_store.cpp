@@ -126,6 +126,10 @@ private slots:
         QVERIFY(!production.latest(AeatStore::Kind::Registration, "1").isValid());
         QVERIFY(production.pending().isEmpty());
         QCOMPARE(test.pending().size(), 1);
+        QCOMPARE(production.pendingCount(), 0);
+        QCOMPARE(test.pendingCount(), 1);
+        QCOMPARE(test.pendingCount("89890001K"), 1);
+        QCOMPARE(test.pendingCount("B11111111"), 0);
     }
 
     // Outcomes and attempts; pending lists only unconfirmed records, oldest first;
@@ -142,6 +146,7 @@ private slots:
         QVERIFY(store.markOutcome(b.id, AeatStore::kRejected, "", "1100", "ImporteTotal"));
         const QList<AeatStore::Record> pending = store.pending();
         QCOMPARE(pending.size(), 1);
+        QCOMPARE(store.pendingCount(), 1);
         QCOMPARE(pending[0].id, c.id);
         QCOMPARE(pending[0].kind, AeatStore::Kind::Cancellation);
         const AeatStore::Record latestA = store.latest(AeatStore::Kind::Registration, "1");

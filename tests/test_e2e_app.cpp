@@ -1011,6 +1011,48 @@ private slots:
         QVERIFY(!environment->isVisibleTo(&mw));
     }
 
+    // Art. 16.4 Orden HAC/1177/2024: records an incident left unsent are counted in the
+    // status bar from the start, until the direct client has sent them all.
+    void test_mainWindow_countsTheRecordsStillToSend()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        {
+            AppSettings::instance()->setVerifactuDirectAeat(true);
+            VerifactuIntegration earlier;
+            QVERIFY(earlier.initialize(m_db));
+            AppSettings::instance()->setVerifactuDirectAeat(false);
+            bool synced = false;
+            earlier.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+            QTRY_VERIFY(synced);
+            QTRY_COMPARE_WITH_TIMEOUT(earlier.unsentRecordCount(), 0, 10000);   // what other cases left
+            AeatDirectBackend::setRetryDelaySeconds(3600);                      // no retry before it closes
+            const auto restore = qScopeGuard([] { AeatDirectBackend::setRetryDelaySeconds(1); });
+            QSignalSpy answered(&earlier, &VerifactuIntegration::requestFinished);
+            aeat.server.enqueue({ QByteArray(), 200, 0, true });                // the send: no answer
+            QVERIFY(!earlier.submitSimplifiedInvoiceAsync("UNSENT-1", QDate::currentDate(), 10.0, 21.0).isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 1, 10000);
+            QCOMPARE(earlier.unsentRecordCount(), 1);
+        }                                                                       // closed before the retry
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        auto *unsent = mw.findChild<QLabel *>("lblUnsentRecords");
+        QVERIFY(unsent);
+        QVERIFY(unsent->isVisibleTo(&mw));
+        QVERIFY2(QRegularExpression("(^|\\D)1 registro").match(unsent->text()).hasMatch(), qPrintable(unsent->text()));
+        // After Configuración: the gateway never shows it; back on the direct client it does.
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        QVERIFY(!unsent->isVisibleTo(&mw));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        QMetaObject::invokeMethod(&mw, "initializeVerifactu");
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QVERIFY(unsent->isVisibleTo(&mw));
+        QTRY_VERIFY_WITH_TIMEOUT(!unsent->isVisibleTo(&mw), 10000);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "UNSENT-1").state, AeatStore::kAccepted);
+    }
+
     // A rectificativa the direct client still holds (its record pending at AEAT) is never
     // turned into an error: not at start, not when its dialog closes before the answer -
     // it goes out on its own, and a redo would send a second R5.

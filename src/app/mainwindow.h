@@ -75,6 +75,8 @@ private slots:
     void showRefusedInvoices();   // the list behind the red count
     // The status bar's notice that the direct client is in AEAT's test environment.
     void updateAeatEnvironment();
+    // The status bar's count of records still to send to AEAT after an incident (hidden at 0).
+    void updateUnsentRecords();
     // An AEAT refusal shown in the result panel (it can come after the factura was printed).
     void showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result);
     // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
@@ -184,6 +186,7 @@ private:
     Updater *m_updater = nullptr;
     class QLabel *m_aeatEnvironment = nullptr;   // status bar: the direct client in pre-production
     class QLabel *m_refusedInvoices = nullptr;   // status bar: invoices AEAT refused, until resent
+    class QLabel *m_unsentRecords = nullptr;     // status bar: records waiting to be sent after an incident
     BackupManager *m_backupManager = nullptr;
     QPointer<QThread> m_backupThread;   // the automatic backup, waited for on close
 };

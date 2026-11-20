@@ -77,6 +77,8 @@ public:
     void hideFromQuery(const QString &invoiceNumber) { m_hidden.insert(invoiceNumber); }
     // Answers a query without the SistemaInformatico block even when it was asked for.
     void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
+    // Every query is answered with a server SOAP fault (AEAT's service failing).
+    void setQueriesUnavailable(bool on) { m_queriesUnavailable = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
     void rejectNext(const QString &invoiceNumber, const QString &code, const QString &description);
     // Every submission carrying this invoice's record is refused whole with a client SOAP
@@ -122,6 +124,7 @@ private:
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     bool m_queryWithoutSystem = false;
+    bool m_queriesUnavailable = false;
     int m_counter = 0;
 };
 

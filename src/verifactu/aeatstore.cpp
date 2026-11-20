@@ -520,6 +520,23 @@ QList<AeatStore::Record> AeatStore::pending(int limit, const QString &issuerNif)
     return out;
 }
 
+int AeatStore::pendingCount(const QString &issuerNif)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return 0;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT COUNT(*) FROM aeat_records WHERE environment = :e AND state = :s"
+              " AND (:n = '' OR issuer_nif = :n)");
+    q.bindValue(":e", m_environment);
+    q.bindValue(":s", kPending);
+    q.bindValue(":n", text(issuerNif));
+    const int count = q.exec() && q.next() ? q.value(0).toInt() : 0;
+    q.finish();
+    close(wasOpen);
+    return count;
+}
+
 bool AeatStore::markReached(qint64 id)
 {
     bool wasOpen = false;

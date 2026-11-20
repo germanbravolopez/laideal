@@ -86,6 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_refusedInvoices, &QLabel::linkActivated, this, &MainWindow::showRefusedInvoices);
     statusBar()->addPermanentWidget(m_refusedInvoices);
     updateAeatEnvironment();
+    updateUnsentRecords();
     updateRefusedInvoices();
     auto *refusedTimer = new QTimer(this);
     connect(refusedTimer, &QTimer::timeout, this, &MainWindow::updateRefusedInvoices);
@@ -590,10 +591,12 @@ void MainWindow::initializeVerifactu()
                        + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
     }
 
-    if (first)
+    if (first) {
         connectVerifactu();
-    else
+    } else {
         updateAeatEnvironment();
+        updateUnsentRecords();
+    }
     settlePendingRectifications();
     if (m_verifactuIntegration->isDirect() && m_verifactuIntegration->isConfigured()) {
         QStringList warnings;   // HTML lines
@@ -630,6 +633,7 @@ void MainWindow::connectVerifactu()
     // Direct client: outcomes nobody waited for (records sent at start or retried on
     // their own) still settle their rows.
     connect(m_verifactuIntegration, &VerifactuIntegration::recordSettled, this, &MainWindow::onRecordSettled);
+    connect(m_verifactuIntegration, &VerifactuIntegration::unsentRecordsChanged, this, &MainWindow::updateUnsentRecords);
     // Any finished chain sync: AEAT may hold later numbers than the one on screen.
     connect(m_verifactuIntegration, &VerifactuIntegration::chainChecked, this, [this](bool ok) {
         if (!ok || m_saving)
@@ -1021,6 +1025,22 @@ void MainWindow::updateAeatEnvironment()
                                && !AppSettings::instance()->aeatDirectProduction();
     m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
     m_aeatEnvironment->setVisible(preProduction);
+}
+
+void MainWindow::updateUnsentRecords()
+{
+    // Art. 16.4 Orden HAC/1177/2024: in view from the incident until every record is sent.
+    if (!m_unsentRecords) {
+        m_unsentRecords = new QLabel(this);
+        m_unsentRecords->setObjectName("lblUnsentRecords");
+        m_unsentRecords->setToolTip(tr("Un fallo de conexión o del certificado ha impedido enviarlos. Están guardados: "
+                                       "si es la conexión, el envío se reintenta solo cada minuto; si es el "
+                                       "certificado, se envían al corregirlo en Archivo → Configuración."));
+        statusBar()->addPermanentWidget(m_unsentRecords);
+    }
+    const int unsent = m_verifactuIntegration ? m_verifactuIntegration->unsentRecordCount() : 0;
+    m_unsentRecords->setText(UiKit::warnHtml(tr("%n registro(s) pendiente(s) de enviar a la AEAT", "", unsent)));
+    m_unsentRecords->setVisible(unsent > 0);
 }
 
 void MainWindow::updateRefusedInvoices()

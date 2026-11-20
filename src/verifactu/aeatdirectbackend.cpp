@@ -40,7 +40,8 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
     m_sendTimer.setSingleShot(true);
     connect(&m_sendTimer, &QTimer::timeout, this, &AeatDirectBackend::sendPending);
     // Whole seconds, as the records' generation time is stored.
-    m_sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
+    m_sessionStart = m_config.sessionStart.isValid() ? m_config.sessionStart
+                                                     : QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
     m_transport->setTimeoutMs(kTransferTimeoutMs);
 
     if (m_config.issuerNif.trimmed().isEmpty() || m_config.issuerName.trimmed().isEmpty())
@@ -71,8 +72,13 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
     if (!m_sendError.isEmpty())
         qWarning() << "AeatDirectBackend: records will be generated but not sent -" << m_sendError;
     // Records left unsent when the app closed go first.
-    if (!m_store.pending(1, m_config.issuerNif).isEmpty())
-        scheduleSend();
+    const QList<AeatStore::Record> left = m_store.pending(1000, m_config.issuerNif);
+    if (left.isEmpty())
+        return;
+    scheduleSend();
+    refreshUnsentCount(std::any_of(left.cbegin(), left.cend(), [this](const AeatStore::Record &r) {
+        return delayedByIncident(r, m_sessionStart);
+    }));
 }
 
 AeatDirectBackend::~AeatDirectBackend() = default;
@@ -491,6 +497,7 @@ void AeatDirectBackend::storeAndQueueNow(
     }
     m_waiters[record.id] << requestId;
     scheduleSend();
+    refreshUnsentCount();
 }
 
 QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
@@ -633,6 +640,18 @@ void AeatDirectBackend::scheduleSend()
     m_sendTimer.start(int(msecsUntilNextSend()));
 }
 
+void AeatDirectBackend::refreshUnsentCount(bool incident)
+{
+    m_incident = m_incident || incident;
+    const int unsent = m_incident ? m_store.pendingCount(m_config.issuerNif) : 0;
+    if (unsent == 0)
+        m_incident = false;
+    if (unsent == m_unsentCount)
+        return;
+    m_unsentCount = unsent;
+    emit unsentRecordsChanged(unsent);
+}
+
 void AeatDirectBackend::sendPending()
 {
     if (m_inFlight)
@@ -660,6 +679,7 @@ void AeatDirectBackend::sendPending()
         for (const AeatStore::Record &record : records)
             for (const QString &requestId : m_waiters.take(record.id))
                 emit requestFinished(requestId, r);
+        refreshUnsentCount(true);
         return;
     }
     QStringList xmls;
@@ -813,6 +833,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
                 emit requestFinished(requestId, r);
         }
         scheduleSend();
+        refreshUnsentCount(true);
         return;
     }
 
@@ -879,6 +900,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     // Records created meanwhile, or left unanswered, go next.
     if (!m_store.pending(1, m_config.issuerNif).isEmpty())
         scheduleSend();
+    refreshUnsentCount(unanswered);
 }
 
 void AeatDirectBackend::isolateFaultedBatch(const QList<qint64> &sent, const QString &faultText,
@@ -931,6 +953,7 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
             qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "never shown by the query - marked ERROR";
             m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
             finishRecord(record, r, false);
+            refreshUnsentCount();
             return;
         }
         if (!query.parsed || query.fault || !held || !amountRead) {
@@ -944,6 +967,8 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
                                      .arg(record.invoiceNumber);
             answerWaiters(record.id, r);
             scheduleSend();
+            // As for a submission: no answer, or AEAT's own service failing, is an incident.
+            refreshUnsentCount(!query.parsed || (query.fault && query.faultCode.contains(QLatin1String("Server"))));
             return;
         }
         if (qAbs(heldTotal - record.total) > 0.005) {
@@ -966,5 +991,6 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
         }
         if (!m_store.pending(1, m_config.issuerNif).isEmpty())
             scheduleSend();
+        refreshUnsentCount();
     });
 }

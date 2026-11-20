@@ -75,11 +75,15 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.certificateThumbprint = settings->aeatCertificateThumbprint();
         c.certificatePath       = settings->aeatCertificateFile();
         c.certificatePassword   = settings->aeatCertificatePassword();
+        if (!m_sessionStart.isValid())
+            m_sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
+        c.sessionStart = m_sessionStart;
         c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
         c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };
         m_direct = new AeatDirectBackend(c, db.isValid() ? db : QSqlDatabase::database(QSqlDatabase::defaultConnection, false), this);
         m_backend = m_direct;
         connect(m_direct, &AeatDirectBackend::chainSynced, this, &VerifactuIntegration::chainChecked);
+        connect(m_direct, &AeatDirectBackend::unsentRecordsChanged, this, &VerifactuIntegration::unsentRecordsChanged);
     } else {
         m_manager = new VerifactuManager(this);
         loadEmitterConfiguration();
@@ -323,6 +327,11 @@ QString VerifactuIntegration::environmentName() const
 QString VerifactuIntegration::sendingError() const
 {
     return m_direct ? m_direct->sendingError() : QString();
+}
+
+int VerifactuIntegration::unsentRecordCount() const
+{
+    return m_direct ? m_direct->unsentRecordCount() : 0;
 }
 
 QString VerifactuIntegration::certificateExpiryWarning() const

@@ -830,6 +830,7 @@ private slots:
         const VerifactuResult kept = waitFor(synced, synced.submitInvoiceAsync(ticket("1", 10)));
         QCOMPARE(kept.status, VerifactuResult::NETWORK_ERROR);
         QVERIFY2(kept.errorDescription.contains("pendiente de envío"), qPrintable(kept.errorDescription));
+        QCOMPARE(synced.unsentRecordCount(), 1);                    // an incident too (art. 16.4)
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kPending);
     }
 
@@ -1117,8 +1118,10 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QVERIFY(!store.latest(AeatStore::Kind::Registration, "510").reached);
         AeatDirectBackend again(config(), m_db);                              // sends it at start
+        QCOMPARE(again.unsentRecordCount(), 1);
         QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "510").state, AeatStore::kDuplicate, 15000);
         QVERIFY(store.latest(AeatStore::Kind::Registration, "510").reached);
+        QTRY_COMPARE(again.unsentRecordCount(), 0);                 // settled by the duplicate check
     }
 
     // A reply with no line for a record it carried: that record stays pending (never
@@ -1139,6 +1142,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(answers.contains(first) && answers.contains(second), 10000);
         QVERIFY(answers[first].isSuccess());
         QCOMPARE(answers[second].status, VerifactuResult::PENDING);
+        QCOMPARE(backend.unsentRecordCount(), 1);                   // left unanswered: still to send
         AeatStore store(m_db, "pruebas");
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "971").state, AeatStore::kPending);
         QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "971").state, AeatStore::kAccepted, 10000);
@@ -1147,6 +1151,7 @@ private slots:
         for (const QList<QVariant> &s : settled)
             settled971 += s[0].toString() == QLatin1String("971");
         QCOMPARE(settled971, 1);
+        QCOMPARE(backend.unsentRecordCount(), 0);
     }
 
     // AEAT answers a query in pages: the sync follows ClavePaginacion to the last page,
@@ -1370,6 +1375,88 @@ private slots:
         QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("701", 10))).isSuccess());
         QTRY_COMPARE(settled.size(), 2);
         QCOMPARE(settled[1][0].toString(), QStringLiteral("701"));
+    }
+
+    // Art. 16.4 Orden HAC/1177/2024: from a send without an answer until nothing is left,
+    // the number of records still to send is reported (also the ones generated meanwhile,
+    // and at the next start). Without an incident it stays 0.
+    void test_unsentRecordCount()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(2);
+        const auto restore = qScopeGuard([] { AeatDirectBackend::setRetryDelaySeconds(3600); });
+        m_server->setWaitSeconds(0);
+        AeatStore store(m_db, "pruebas");
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(sync(backend));
+            QSignalSpy changed(&backend, &AeatDirectBackend::unsentRecordsChanged);
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("900", 10))).isSuccess());
+            QCOMPARE(backend.unsentRecordCount(), 0);
+            QVERIFY(changed.isEmpty());
+            m_server->enqueue({ QByteArray(), 200, 0, true });
+            QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("901", 10))).status, VerifactuResult::NETWORK_ERROR);
+            QCOMPARE(backend.unsentRecordCount(), 1);
+            backend.submitInvoiceAsync(ticket("902", 10));          // generated behind the incident
+            QCOMPARE(backend.unsentRecordCount(), 2);
+            QCOMPARE(changed.size(), 2);
+            QCOMPARE(changed.last().at(0).toInt(), 2);
+            QTRY_COMPARE_WITH_TIMEOUT(backend.unsentRecordCount(), 0, 10000);
+            QCOMPARE(changed.last().at(0).toInt(), 0);
+            // AEAT's own service failing is an incident too.
+            m_server->enqueue({ FakeAeatServer::faultReply("env:Server", "Servicio no disponible"), 500 });
+            QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("904", 10))).status, VerifactuResult::NETWORK_ERROR);
+            QCOMPARE(backend.unsentRecordCount(), 1);
+            QTRY_COMPARE_WITH_TIMEOUT(backend.unsentRecordCount(), 0, 10000);
+            QCOMPARE(store.latest(AeatStore::Kind::Registration, "902").state, AeatStore::kAccepted);
+            // Left unsent when the app closes.
+            AeatDirectBackend::setRetryDelaySeconds(3600);
+            m_server->enqueue({ QByteArray(), 200, 0, true });
+            QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("903", 10))).status, VerifactuResult::NETWORK_ERROR);
+        }
+        AeatDirectBackend next(config(), m_db);
+        QCOMPARE(next.unsentRecordCount(), 1);                      // known before anything is sent
+        QTRY_COMPARE_WITH_TIMEOUT(next.unsentRecordCount(), 0, 10000);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "903").state, AeatStore::kAccepted);
+    }
+
+    // A backend that replaces another in the same run (Configuración) does not take the
+    // records that one generated for an incident; a record of an earlier session is one.
+    void test_unsentRecordCountAcrossBackends()
+    {
+        m_server->setWaitSeconds(30);
+        AeatDirectBackend::Config c = config();
+        c.sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch() - 5);
+        {
+            AeatDirectBackend backend(c, m_db);
+            QVERIFY(sync(backend));
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("910", 10))).isSuccess());
+            backend.submitInvoiceAsync(ticket("911", 10));          // waits for AEAT's wait time
+            QCOMPARE(backend.unsentRecordCount(), 0);
+        }
+        {
+            AeatDirectBackend sameRun(c, m_db);
+            QCOMPARE(sameRun.unsentRecordCount(), 0);
+        }
+        QTest::qWait(1100);                                         // a later second than the record's
+        AeatDirectBackend nextStart(config(), m_db);
+        QCOMPARE(nextStart.unsentRecordCount(), 1);
+    }
+
+    // A duplicate whose check gets AEAT's server fault is an incident; one AEAT answers
+    // without showing the record is not.
+    void test_unsentRecordCountWhileADuplicateIsChecked()
+    {
+        registerElsewhere({ "920" });
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        const auto restore = qScopeGuard([] { AeatDirectBackend::setRetryDelaySeconds(3600); });
+        m_server->setWaitSeconds(0);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        m_server->hideFromQuery("920");
+        QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("920", 10))).status, VerifactuResult::NETWORK_ERROR);
+        QCOMPARE(backend.unsentRecordCount(), 0);
+        m_server->setQueriesUnavailable(true);
+        QTRY_COMPARE_WITH_TIMEOUT(backend.unsentRecordCount(), 1, 10000);
     }
 
     // AEAT returns records without their hash: the sync fails instead of starting a new chain.
