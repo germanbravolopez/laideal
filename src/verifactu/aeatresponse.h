@@ -58,6 +58,7 @@ struct QueryRecord {
     QString previousHash;         // Huella of the record it chains to (empty: the first)
     QString systemId;             // IdSistemaInformatico / producer NIF of the system that
     QString producerNif;          //   generated it (only when the query asked for them)
+    QString installationNumber;   // its NumeroInstalacion (same block)
     QString state;                // Correcto / AceptadoConErrores / Anulado
     QString errorCode;
     QString errorDescription;
@@ -88,6 +89,7 @@ struct RecordSummary {
     QString hash;
     QString generatedAt;          // FechaHoraHusoGenRegistro
     QString previousHash;         // Huella of the record it chains to
+    QString installationNumber;   // NumeroInstalacion, only for a record AEAT reported
 };
 
 // The newest record of a chain: the one no other record chains to; among several

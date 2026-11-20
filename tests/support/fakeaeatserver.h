@@ -37,6 +37,7 @@ public:
         QString generatedAt;      // FechaHoraHusoGenRegistro
         QString systemId;         // IdSistemaInformatico / producer NIF of the system that
         QString producerNif;      //   generated it (SistemaInformatico block)
+        QString installationNumber;   // NumeroInstalacion of that block
         bool    afterRejection = false;
         QString previousRejection;   // RechazoPrevio as sent (X: alta, S: anulación)
     };

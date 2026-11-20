@@ -143,7 +143,7 @@ All configuration is managed through a single JSON file at `~/.laideal_settings.
 | Gateway environment | `verifactu.environment` | `TESTING` or `PRODUCTION` |
 | Direct client production | `verifactu.aeat_direct_production` | `false` = AEAT pre-production, `true` = production |
 | Direct client certificate | `verifactu.aeat_certificate_thumbprint`, `verifactu.aeat_certificate_file`, `verifactu.aeat_certificate_password` | Windows store thumbprint, or a .pfx file and its password (stored encrypted) |
-| Direct client internals | `verifactu.aeat_installation`, `verifactu.aeat_chain_marker` | Written by the app (installation number, chain marker); do not edit |
+| Direct client internals | `verifactu.aeat_chain_marker` | Written by the app (chain marker); do not edit. The records' installation number (`NumeroInstalacion`) is kept in the database, so it travels with it to a new PC |
 | Startup recovery | `verifactu.pending_recovery_enabled`, `verifactu.pending_recovery_floor_date` | Whether the start lists PENDIENTE rows to resend, and the oldest date it considers |
 | Update check | `updater.check_on_startup` | `true` by default |
 | Backups | `backup.enabled`, `backup.second_folder`, `backup.last_time`, `backup.last_version` | Daily backup on/off (default on); the last two are written by the app |

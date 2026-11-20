@@ -47,6 +47,12 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
         m_configError = tr("Falta el NIF o el nombre del emisor.");
     else if (!m_store.ensureSchema())
         m_configError = tr("No se pueden crear las tablas de registros AEAT: %1").arg(m_store.lastError());
+    else {
+        // The number lives with the chain (one SIF per database): no record is generated without it.
+        m_config.system.installationNumber = m_store.installationNumber();
+        if (m_config.system.installationNumber.isEmpty())
+            m_configError = tr("No se puede leer el número de instalación de los registros AEAT: %1").arg(m_store.lastError());
+    }
     if (!m_configError.isEmpty()) {
         qWarning() << "AeatDirectBackend: not configured -" << m_configError;
         return;
@@ -162,6 +168,18 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (!tip) {
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
+    }
+    // The chain's last record is at AEAT under another NumeroInstalacion (a database
+    // restored from before it, or a new one): the number belongs to the chain, so ours
+    // becomes that one before anything is generated. Before the head, so a failure repeats.
+    if (!tip->installationNumber.isEmpty() && tip->installationNumber != m_config.system.installationNumber) {
+        if (!m_store.setInstallationNumber(tip->installationNumber)) {
+            *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
+            return false;
+        }
+        qWarning() << "AeatDirectBackend: NumeroInstalacion" << m_config.system.installationNumber << "->"
+                   << tip->installationNumber << "(the chain's last record at AEAT)";
+        m_config.system.installationNumber = tip->installationNumber;
     }
     if (tip->hash != head.hash) {
         const AeatRecord::PreviousRecord moved{
@@ -294,6 +312,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             s.hash = r.hash;
             s.generatedAt = r.generatedAt;
             s.previousHash = r.previousHash;
+            s.installationNumber = r.installationNumber;
             if (s.valid)
                 found << s;
             else
@@ -484,9 +503,10 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
         answerLater(requestId, r);
         return requestId;
     }
-    const AeatRecord::SystemInfo system = m_config.system;
+    // The system block is read when the record is built: the chain sync a held request
+    // waits for may change the installation number.
     return storeAndQueue(AeatStore::Kind::Registration, invoice.getInvoiceNumber(),
-                         [invoice, system](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
+                         [this, invoice](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
         AeatRecord::Registration r = registrationFrom(invoice, previous, QDateTime::currentDateTime());
         r.afterRejection = afterRejection;
         AeatStore::Built b;
@@ -494,7 +514,7 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
         b.issueDate = r.invoice.issueDate;
         b.total = r.totalAmount();
         b.hash = AeatRecord::hashOf(r);
-        b.xml = AeatRecord::registrationXml(r, system);
+        b.xml = AeatRecord::registrationXml(r, m_config.system);
         b.generatedAt = r.generatedAt;
         return b;
     });
@@ -503,9 +523,8 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
 QString AeatDirectBackend::cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
     const QString nif = m_config.issuerNif;
-    const AeatRecord::SystemInfo system = m_config.system;
     return storeAndQueue(AeatStore::Kind::Cancellation, invoiceNumber,
-                         [=](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
+                         [this, nif, invoiceNumber, invoiceDate](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
         AeatRecord::Cancellation c;
         c.invoice = { nif, invoiceNumber, invoiceDate };
         c.previous = previous;
@@ -515,7 +534,7 @@ QString AeatDirectBackend::cancelInvoiceAsync(const QString &invoiceNumber, cons
         b.invoiceNumber = invoiceNumber;
         b.issueDate = invoiceDate;
         b.hash = AeatRecord::hashOf(c);
-        b.xml = AeatRecord::cancellationXml(c, system);
+        b.xml = AeatRecord::cancellationXml(c, m_config.system);
         b.generatedAt = c.generatedAt;
         return b;
     });

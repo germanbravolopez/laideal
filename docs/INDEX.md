@@ -115,7 +115,7 @@ Project-specific agents callable via the `Agent` tool with `subagent_type: "<nam
 | Stored AEAT chain verifier (art. 8.1 detection), direct client | `src/verifactu/aeatchaincheck.h` | `.cpp` |
 | AEAT records + SOAP envelopes, direct client | `src/verifactu/aeatrecord.h` | `.cpp` |
 | AEAT replies, record summary, chain tip | `src/verifactu/aeatresponse.h` | `.cpp` |
-| AEAT chain head + record outbox (tables aeat_chain / aeat_records) | `src/verifactu/aeatstore.h` | `.cpp` |
+| AEAT chain head + record outbox + installation number (tables aeat_chain / aeat_records / aeat_installation) | `src/verifactu/aeatstore.h` | `.cpp` |
 | Verifactu QR drawn locally (vendored qrcodegen) | `src/verifactu/aeatqr.h` | `.cpp` |
 | Owner's certificate (Windows store / .pfx) | `src/verifactu/aeatcertificate.h` | `.cpp` |
 | WinHTTP SOAP transport with client certificate | `src/verifactu/aeattransport.h` | `.cpp` |

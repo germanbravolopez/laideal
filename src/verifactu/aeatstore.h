@@ -1,12 +1,13 @@
 #ifndef AEATSTORE_H
 #define AEATSTORE_H
 
-// What the direct AEAT client keeps in the shop database (two tables it creates
+// What the direct AEAT client keeps in the shop database (tables it creates
 // itself): the head of each issuer's record chain (aeat_chain) and every record it
 // generated, with the exact XML sent and its outcome (aeat_records) - the outbox a
 // resend reuses unchanged. Test and production records are kept apart by
-// `environment`, each with its own chain. A connection that is already open stays
-// open (the app's table models read through it).
+// `environment`, each with its own chain. The records' NumeroInstalacion
+// (aeat_installation) is one per database: it travels with the chain to a new PC.
+// A connection that is already open stays open (the app's table models read through it).
 
 #include <QSet>
 #include <QDate>
@@ -70,6 +71,14 @@ public:
 
     bool ensureSchema();
 
+    // NumeroInstalacion of this database's records, created and stored on first use.
+    // Empty (see lastError) when it cannot be read or stored - never an unstored number.
+    QString installationNumber();
+    // Replaces it with the number of the chain this database continues (AEAT's).
+    bool setInstallationNumber(const QString &number);
+    // The NumeroInstalacion a record's XML carries, or empty.
+    static QString installationNumberFromXml(const QString &xml);
+
     // The issuer's last record (empty hash: the chain has not started). `ok` is false
     // when the table could not be read - never to be taken as "no chain".
     AeatRecord::PreviousRecord chainHead(const QString &issuerNif, bool *ok = nullptr);
@@ -126,6 +135,8 @@ private:
     // Upgrade of a table made by an earlier build (call with the connection open).
     void addColumnIfMissing(const QString &table, const QString &column, const QString &definition);
     Record readRecord(QSqlQuery &q) const;
+    // The number for a database without one yet (connection open); false: records unreadable.
+    bool seedInstallationNumber(QString *number);
 };
 
 #endif // AEATSTORE_H

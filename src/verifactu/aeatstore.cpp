@@ -6,7 +6,9 @@
 #include <QDebug>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QUuid>
 #include <QVariant>
+#include <QXmlStreamReader>
 
 const QString AeatStore::kPending  = QStringLiteral("PENDIENTE");
 const QString AeatStore::kAccepted = QStringLiteral("ACEPTADO");
@@ -102,7 +104,10 @@ bool AeatStore::ensureSchema()
         // their record (a sync adopted AEAT's head): the only links AeatChainCheck accepts so.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_anchors ("
                   " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, hash TEXT NOT NULL, adopted_at TEXT NOT NULL,"
-                  " PRIMARY KEY (environment, issuer_nif, hash))");
+                  " PRIMARY KEY (environment, issuer_nif, hash))")
+        // One row per database, whatever the environment or issuer: the number belongs to the chain.
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_installation ("
+                  " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)");
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
@@ -111,6 +116,114 @@ bool AeatStore::ensureSchema()
         addColumnIfMissing("aeat_chain", "generated_at", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("aeat_records", "reached", "INTEGER NOT NULL DEFAULT 0");
     }
+    close(wasOpen);
+    return ok;
+}
+
+QString AeatStore::installationNumberFromXml(const QString &xml)
+{
+    QXmlStreamReader reader(xml);
+    reader.setNamespaceProcessing(false);   // tolerant: also reads a fragment whose prefix is not declared
+    while (!reader.atEnd()) {
+        if (reader.readNext() != QXmlStreamReader::StartElement)
+            continue;
+        const QString name = reader.qualifiedName().toString();
+        if (name.mid(name.indexOf(QLatin1Char(':')) + 1) == QLatin1String("NumeroInstalacion"))
+            return reader.readElementText().trimmed();
+    }
+    return QString();
+}
+
+bool AeatStore::seedInstallationNumber(QString *number)
+{
+    // What AEAT already holds for this chain: the newest record's number (settings are never a seed).
+    QSqlQuery q(m_db);
+    q.prepare("SELECT xml FROM aeat_records ORDER BY id DESC");
+    if (!q.exec()) {
+        m_lastError = q.lastError().text();
+        return false;
+    }
+    while (number->isEmpty() && q.next())
+        *number = installationNumberFromXml(q.value(0).toString());
+    if (number->isEmpty())
+        *number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
+    return true;
+}
+
+QString AeatStore::installationNumber()
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return QString();
+    QString number;
+    // Not ours to roll back when the connection is already inside a transaction.
+    if (!m_db.transaction()) {
+        m_lastError = m_db.lastError().text();
+        qWarning() << "AeatStore::installationNumber: no transaction -" << m_lastError;
+        close(wasOpen);
+        return QString();
+    }
+    bool ok = true;
+    {
+        QSqlQuery q(m_db);
+        const auto fail = [&] { ok = false; m_lastError = q.lastError().text(); };
+        const auto readStored = [&] {
+            q.prepare("SELECT number FROM aeat_installation WHERE id = 1");
+            if (!q.exec())
+                fail();
+            else if (q.next())
+                number = q.value(0).toString();
+        };
+        if (ok)
+            readStored();
+        QString seed;
+        if (ok && number.isEmpty() && (ok = seedInstallationNumber(&seed))) {
+            // A row another process stored meanwhile wins, and is the one read back; an
+            // empty one (a damaged database) is replaced.
+            q.prepare("INSERT INTO aeat_installation (id, number, created_at) VALUES (1, :n, :t) "
+                      "ON CONFLICT(id) DO UPDATE SET number = excluded.number, created_at = excluded.created_at "
+                      "WHERE aeat_installation.number = ''");
+            q.bindValue(":n", seed);
+            q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+            if (!q.exec())
+                fail();
+            else
+                readStored();
+        }
+        q.finish();
+    }
+    if (ok && !m_db.commit()) {
+        ok = false;
+        m_lastError = m_db.lastError().text();
+    }
+    if (!ok || number.isEmpty()) {
+        qWarning() << "AeatStore::installationNumber: not available -" << m_lastError;
+        m_db.rollback();
+        number.clear();
+    }
+    close(wasOpen);
+    return number;
+}
+
+bool AeatStore::setInstallationNumber(const QString &number)
+{
+    if (number.trimmed().isEmpty()) {
+        m_lastError = QStringLiteral("empty installation number");
+        return false;
+    }
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("INSERT OR REPLACE INTO aeat_installation (id, number, created_at) VALUES (1, :n, :t)");
+    q.bindValue(":n", number.trimmed());
+    q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+    const bool ok = q.exec();
+    if (!ok) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::setInstallationNumber failed -" << m_lastError;
+    }
+    q.finish();
     close(wasOpen);
     return ok;
 }

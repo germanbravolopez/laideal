@@ -733,7 +733,7 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     c.issuerNif = nif;
     c.issuerName = name;
     c.system = AeatRecord::laIdealSystem(QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR),
-                                         AppSettings::instance()->aeatInstallationNumber());
+                                         QString());
     c.certificateThumbprint = thumbprint;
     c.certificatePath = certificateFile;
     c.certificatePassword = certificatePassword;

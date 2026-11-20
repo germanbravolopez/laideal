@@ -134,6 +134,7 @@ Query parseQuery(const QByteArray &body)
             if (under(path, QStringLiteral("SistemaInformatico"))) {
                 if (name == QLatin1String("IdSistemaInformatico")) record.systemId = text;
                 else if (name == QLatin1String("NIF"))         record.producerNif = text;
+                else if (name == QLatin1String("NumeroInstalacion")) record.installationNumber = text;
                 return;
             }
             const bool inId = path.size() >= 2 && path.at(path.size() - 2) == QLatin1String("IDFactura");

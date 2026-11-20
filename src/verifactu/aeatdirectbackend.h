@@ -58,6 +58,7 @@ public:
         bool    testEnvironment = true;      // AEAT pre-production (no tax effect) vs production
         QString issuerNif;
         QString issuerName;
+        // Producer and version; installationNumber is ignored: the backend takes the database's.
         AeatRecord::SystemInfo system;
         QString certificateThumbprint;       // from the Windows personal store, or else
         QString certificatePath;             // the owner's .pfx / .p12 file

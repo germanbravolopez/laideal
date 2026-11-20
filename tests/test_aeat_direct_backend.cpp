@@ -9,6 +9,8 @@
 #include <QSslKey>
 #include <QSslSocket>
 #include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QFile>
 #include <QTemporaryDir>
 
 #include "aeatcertificate.h"
@@ -533,6 +535,138 @@ private slots:
         QCOMPARE(s.systemName, QStringLiteral("La Ideal"));                    // as in the declaración's a)
         QCOMPARE(s.version, QStringLiteral("12.0"));
         QCOMPARE(s.installationNumber, QStringLiteral("LAIDEAL-1"));
+    }
+
+    // NumeroInstalacion comes from the database, never from the caller: every record of
+    // every backend on it carries the stored number, in both environments.
+    void test_recordsCarryTheDatabaseInstallationNumber()
+    {
+        m_server->setWaitSeconds(0);
+        QString number;
+        {
+            AeatStore store(m_db, "pruebas");
+            QVERIFY(store.ensureSchema());
+            number = store.installationNumber();
+        }
+        QVERIFY(number.startsWith("LAIDEAL-") && number != config().system.installationNumber);
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+            QVERIFY(waitFor(backend, backend.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        AeatDirectBackend::Config other = config();
+        other.system.installationNumber = "FROM-OTHER-SETTINGS";
+        {
+            AeatDirectBackend second(other, m_db);
+            QVERIFY(waitFor(second, second.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        }
+        other.testEnvironment = false;
+        AeatDirectBackend production(other, m_db);
+        QVERIFY(waitFor(production, production.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        const QList<FakeAeatServer::SentRecord> sent = m_server->sentRecords();
+        QCOMPARE(sent.size(), 4);
+        for (const FakeAeatServer::SentRecord &record : sent)
+            QCOMPARE(record.installationNumber, number);
+        QCOMPARE(AeatStore::installationNumberFromXml(AeatStore(m_db, "pruebas").recordXmls().first()), number);
+    }
+
+    // A new PC: the database file restored there (new settings, so another number in the
+    // caller's config) keeps sending the number its chain was registered with.
+    void test_copiedDatabaseKeepsItsInstallationNumber()
+    {
+        m_server->setWaitSeconds(0);
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        m_db.close();
+        const QString number = m_server->sentRecords().last().installationNumber;
+        QVERIFY(number.startsWith("LAIDEAL-"));
+        const QString copyPath = m_dir.filePath(QString("copy_%1.db").arg(m_dbCounter));
+        QVERIFY(QFile::copy(m_db.databaseName(), copyPath));
+        {
+            QSqlDatabase copy = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            copy.setDatabaseName(copyPath);
+            AeatDirectBackend::Config c = config();
+            c.system.installationNumber = "LAIDEAL-NEWPC000";
+            AeatDirectBackend newPc(c, copy);
+            QVERIFY(waitFor(newPc, newPc.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+            copy.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+        QCOMPARE(m_server->sentRecords().size(), 2);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, number);
+        QCOMPARE(m_server->sentRecords().last().previousHash, m_server->sentRecords().first().hash);
+    }
+
+    // A database without records of its own (a backup from before the direct client, or a
+    // new one) continues the chain AEAT holds: it takes that chain's number, not a new one.
+    void test_emptyDatabaseTakesTheNumberOfItsChainAtAeat()
+    {
+        m_server->setWaitSeconds(0);
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString number = m_server->sentRecords().last().installationNumber;
+        const QString emptyPath = m_dir.filePath(QString("empty_%1.db").arg(m_dbCounter));
+        {
+            QSqlDatabase empty = QSqlDatabase::addDatabase("QSQLITE", "aeat_empty_db");
+            empty.setDatabaseName(emptyPath);
+            {
+                AeatDirectBackend restored(config(), empty);
+                QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+            }
+            QCOMPARE(m_server->sentRecords().last().installationNumber, number);
+            QCOMPARE(m_server->sentRecords().last().previousHash, m_server->sentRecords().first().hash);
+            // Stored: the next start has it before any sync.
+            QCOMPARE(AeatStore(empty, "pruebas").installationNumber(), number);
+            empty.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_empty_db");
+    }
+
+    // A database of an earlier build (records sent, no number stored) goes on with the
+    // number of its records, not with a new one.
+    void test_olderDatabaseKeepsTheNumberOfItsRecords()
+    {
+        m_server->setWaitSeconds(0);
+        {
+            AeatStore store(m_db, "pruebas");
+            QVERIFY(store.ensureSchema());
+            QVERIFY(m_db.open());
+            QVERIFY(QSqlQuery(m_db).exec("INSERT INTO aeat_installation (id, number, created_at) "
+                                         "VALUES (1, 'LAIDEAL-FROMSETT', '2026-10-01T10:00:00')"));
+            m_db.close();
+            AeatDirectBackend old(config(), m_db);
+            QVERIFY(waitFor(old, old.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("DROP TABLE aeat_installation"));
+        m_db.close();
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().installationNumber, QStringLiteral("LAIDEAL-FROMSETT"));
+    }
+
+    // Without the number no record is generated: the backend is not configured.
+    void test_notConfiguredWithoutInstallationNumber()
+    {
+        {
+            AeatStore store(m_db, "pruebas");
+            QVERIFY(store.ensureSchema());
+        }
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TRIGGER no_installation BEFORE INSERT ON aeat_installation "
+                                     "BEGIN SELECT RAISE(ABORT, 'read only'); END"));
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(!backend.isConfigured());
+        QVERIFY2(backend.configurationError().contains("instalaci"), qPrintable(backend.configurationError()));
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10)));
+        QVERIFY(!r.isSuccess());
+        QVERIFY(m_server->sentRecords().isEmpty());
+        QVERIFY(AeatStore(m_db, "pruebas").recordXmls().isEmpty());
+        m_db.close();
     }
 
     // Our own cancellation can be the head: the next record chains to it, also after a

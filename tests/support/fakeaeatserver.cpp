@@ -88,6 +88,8 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                     record.systemId = text;
                 else if (name == QLatin1String("NIF"))
                     record.producerNif = text;
+                else if (name == QLatin1String("NumeroInstalacion"))
+                    record.installationNumber = text;
                 continue;
             }
             if (path.contains(QStringLiteral("FacturasRectificadas")))
@@ -278,8 +280,9 @@ QByteArray FakeAeatServer::answer(const Request &request)
                      !request.showSystem || m_queryWithoutSystem ? QString()
                      : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
                                       "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
-                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>1</tik:NumeroInstalacion>"
-                                      "</tikLRRC:SistemaInformatico>").arg(h.producerNif, h.systemId))
+                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>%3</tik:NumeroInstalacion>"
+                                      "</tikLRRC:SistemaInformatico>")
+                           .arg(h.producerNif, h.systemId, h.installationNumber.isEmpty() ? QStringLiteral("1") : h.installationNumber))
                 .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif);
         }
         return envelope(QStringLiteral(

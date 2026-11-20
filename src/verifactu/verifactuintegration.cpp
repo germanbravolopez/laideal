@@ -71,7 +71,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.testEnvironment = !settings->aeatDirectProduction();
         c.issuerNif  = m_emitterNif;
         c.issuerName = m_emitterName;
-        c.system = AeatRecord::laIdealSystem(QString(PROJECT_VERSION), settings->aeatInstallationNumber());
+        c.system = AeatRecord::laIdealSystem(QString(PROJECT_VERSION), QString());   // NumeroInstalacion: the database's
         c.certificateThumbprint = settings->aeatCertificateThumbprint();
         c.certificatePath       = settings->aeatCertificateFile();
         c.certificatePassword   = settings->aeatCertificatePassword();
