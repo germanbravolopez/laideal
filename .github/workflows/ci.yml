@@ -65,6 +65,10 @@ jobs:
           fi
 
   build:
+    # Its own name on a push to develop: master requires the check `build`, and a skipped
+    # job counts as a passed check, so the skipped duplicate must never carry that name
+    # on the commit the release PR is about to build.
+    name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'build (develop)' || 'build' }}
     needs: gate
     if: needs.gate.outputs.duplicate != 'true'
     runs-on: windows-latest
