@@ -54,6 +54,7 @@ public:
         QString   errorDescription;
         int       attempts = 0;
         bool      reached = false;     // an earlier send got to AEAT, or was cut off (AEAT may hold it)
+        bool      delayed = false;     // an incident kept it from being sent (no answer, no certificate)
         bool      isValid() const { return id > 0; }
     };
 
@@ -113,10 +114,12 @@ public:
     // (a submission carries one issuer in its header).
     QList<Record> pending(int limit = 1000, const QString &issuerNif = QString());
 
-    // How many there are (no limit); 0 also when the table cannot be read.
+    // How many there are (no limit); -1 when the table cannot be read.
     int pendingCount(const QString &issuerNif = QString());
 
     bool markAttempt(qint64 id);
+    // An incident kept the record from being sent: its later send says Incidencia = S.
+    bool markDelayed(qint64 id);
     // A send of the record got to AEAT (answered, or sent and the reply lost).
     bool markReached(qint64 id);
     // Around a send: before it, "may reach AEAT" (a send cut off by closing the app or a

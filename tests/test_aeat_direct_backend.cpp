@@ -468,9 +468,11 @@ private slots:
         QVERIFY(!AeatDirectBackend::delayedByIncident(record, start));
         record.generatedAt = start.addSecs(30);
         QVERIFY(!AeatDirectBackend::delayedByIncident(record, start));
-        record.attempts = 1;
+        record.attempts = 1;                                        // a send in progress is no incident
+        QVERIFY(!AeatDirectBackend::delayedByIncident(record, start));
+        record.delayed = true;
         QVERIFY(AeatDirectBackend::delayedByIncident(record, start));
-        record.attempts = 0;
+        record.delayed = false;
         record.generatedAt = start.addSecs(-1);
         QVERIFY(AeatDirectBackend::delayedByIncident(record, start));
     }
@@ -831,6 +833,8 @@ private slots:
         QCOMPARE(kept.status, VerifactuResult::NETWORK_ERROR);
         QVERIFY2(kept.errorDescription.contains("pendiente de envío"), qPrintable(kept.errorDescription));
         QCOMPARE(synced.unsentRecordCount(), 1);                    // an incident too (art. 16.4)
+        // Kept on the record: sent with Incidencia = S once the certificate is fixed in this run.
+        QVERIFY(store.latest(AeatStore::Kind::Registration, "1").delayed);
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "1").state, AeatStore::kPending);
     }
 
@@ -1440,6 +1444,59 @@ private slots:
         QTest::qWait(1100);                                         // a later second than the record's
         AeatDirectBackend nextStart(config(), m_db);
         QCOMPARE(nextStart.unsentRecordCount(), 1);
+    }
+
+    // Configuración accepted while a submission is in flight: the next backend resends the
+    // record, but no incident happened - no notice, no Incidencia.
+    void test_backendReplacedMidSendIsNoIncident()
+    {
+        m_server->setWaitSeconds(0);
+        AeatDirectBackend::Config c = config();
+        c.sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch() - 5);
+        {
+            AeatDirectBackend backend(c, m_db);
+            QVERIFY(sync(backend));
+            m_server->enqueue({ QByteArray(), 200, 2000 });                   // registered, answered late
+            backend.submitInvoiceAsync(ticket("930", 10));
+            QTRY_COMPARE_WITH_TIMEOUT(m_server->submissions().size(), 1, 10000);
+        }                                                                     // replaced before the answer
+        AeatDirectBackend next(c, m_db);
+        QCOMPARE(next.unsentRecordCount(), 0);
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(!store.latest(AeatStore::Kind::Registration, "930").delayed);
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "930").state, AeatStore::kAccepted, 15000);
+        for (const FakeAeatServer::Request &submission : m_server->submissions())
+            QVERIFY(!submission.afterIncident);
+    }
+
+    // A backend working beside the shop's own on another chain (the self-test while the
+    // shop is in production) never changes the database's installation number.
+    void test_backendBesideTheShopsKeepsTheInstallationNumber()
+    {
+        m_server->setWaitSeconds(0);
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString atAeat = m_server->sentRecords().last().installationNumber;
+        const QString otherPath = m_dir.filePath(QString("beside_%1.db").arg(m_dbCounter));
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_beside_db");
+            other.setDatabaseName(otherPath);
+            AeatStore store(other, "pruebas");
+            QVERIFY(store.ensureSchema());
+            const QString own = store.installationNumber();
+            QVERIFY(!own.isEmpty() && own != atAeat);
+            AeatDirectBackend::Config c = config();
+            c.adoptInstallationNumber = false;
+            {
+                AeatDirectBackend beside(c, other);
+                QVERIFY(sync(beside));
+            }
+            QCOMPARE(store.installationNumber(), own);
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_beside_db");
     }
 
     // A duplicate whose check gets AEAT's server fault is an incident; one AEAT answers

@@ -127,6 +127,12 @@ private slots:
         QVERIFY(production.pending().isEmpty());
         QCOMPARE(test.pending().size(), 1);
         QCOMPARE(production.pendingCount(), 0);
+        // Unreadable is not "none": the notice of unsent records must not vanish on it.
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records RENAME TO aeat_records_away"));
+        QCOMPARE(production.pendingCount(), -1);
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records_away RENAME TO aeat_records"));
+        m_db.close();
         QCOMPARE(test.pendingCount(), 1);
         QCOMPARE(test.pendingCount("89890001K"), 1);
         QCOMPARE(test.pendingCount("B11111111"), 0);
@@ -147,6 +153,9 @@ private slots:
         const QList<AeatStore::Record> pending = store.pending();
         QCOMPARE(pending.size(), 1);
         QCOMPARE(store.pendingCount(), 1);
+        QVERIFY(!pending[0].delayed);
+        QVERIFY(store.markDelayed(c.id));
+        QVERIFY(store.pending()[0].delayed);
         QCOMPARE(pending[0].id, c.id);
         QCOMPARE(pending[0].kind, AeatStore::Kind::Cancellation);
         const AeatStore::Record latestA = store.latest(AeatStore::Kind::Registration, "1");

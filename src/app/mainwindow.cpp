@@ -744,6 +744,10 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
     AppSettings *settings = AppSettings::instance();
     const bool shopInPreProduction = VerifactuIntegration::selfTestSharesShopChain(settings->verifactuDirectAeat(),
                                                                                  settings->aeatDirectProduction());
+    // The shop's chain only when it is the one the self-test works on.
+    c.adoptInstallationNumber = shopInPreProduction;
+    if (m_verifactuIntegration)
+        c.sessionStart = m_verifactuIntegration->sessionStart();
     if (shopInPreProduction) {
         c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
         c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };

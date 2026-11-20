@@ -56,6 +56,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     m_manager = nullptr;
     m_backend = nullptr;
     VerifactuConfig::removeLegacyIni();
+    if (!m_sessionStart.isValid())
+        m_sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
     AppSettings *settings = AppSettings::instance();
     m_emitterNif  = settings->verifactuNif();
     m_emitterName = settings->verifactuName();
@@ -75,8 +77,6 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         c.certificateThumbprint = settings->aeatCertificateThumbprint();
         c.certificatePath       = settings->aeatCertificateFile();
         c.certificatePassword   = settings->aeatCertificatePassword();
-        if (!m_sessionStart.isValid())
-            m_sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
         c.sessionStart = m_sessionStart;
         c.readChainMarker  = [] { return AppSettings::instance()->aeatChainMarker(); };
         c.writeChainMarker = [](const QString &marker) { AppSettings::instance()->setAeatChainMarker(marker); };

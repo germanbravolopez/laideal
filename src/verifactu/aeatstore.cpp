@@ -21,7 +21,7 @@ namespace {
 const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
-    "state, csv, error_code, error_description, attempts, reached";
+    "state, csv, error_code, error_description, attempts, reached, delayed";
 
 // A null QString binds as SQL NULL, which the NOT NULL text columns refuse.
 QString text(const QString &value)
@@ -115,6 +115,7 @@ bool AeatStore::ensureSchema()
         // Tables made by an earlier build of the research branch lack them.
         addColumnIfMissing("aeat_chain", "generated_at", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("aeat_records", "reached", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("aeat_records", "delayed", "INTEGER NOT NULL DEFAULT 0");
     }
     close(wasOpen);
     return ok;
@@ -474,6 +475,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     r.errorDescription = q.value(12).toString();
     r.attempts         = q.value(13).toInt();
     r.reached          = q.value(14).toInt() == 1;   // 2: only the send in progress
+    r.delayed          = q.value(15).toInt() == 1;
     return r;
 }
 
@@ -524,14 +526,16 @@ int AeatStore::pendingCount(const QString &issuerNif)
 {
     bool wasOpen = false;
     if (!open(&wasOpen))
-        return 0;
+        return -1;
     QSqlQuery q(m_db);
     q.prepare("SELECT COUNT(*) FROM aeat_records WHERE environment = :e AND state = :s"
               " AND (:n = '' OR issuer_nif = :n)");
     q.bindValue(":e", m_environment);
     q.bindValue(":s", kPending);
     q.bindValue(":n", text(issuerNif));
-    const int count = q.exec() && q.next() ? q.value(0).toInt() : 0;
+    const int count = q.exec() && q.next() ? q.value(0).toInt() : -1;
+    if (count < 0)
+        m_lastError = q.lastError().text();
     q.finish();
     close(wasOpen);
     return count;
@@ -585,6 +589,19 @@ bool AeatStore::markAttempt(qint64 id)
     QSqlQuery q(m_db);
     q.prepare("UPDATE aeat_records SET attempts = attempts + 1, last_attempt = :t WHERE id = :id");
     q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
+    q.bindValue(":id", id);
+    const bool ok = q.exec() && q.numRowsAffected() == 1;
+    close(wasOpen);
+    return ok;
+}
+
+bool AeatStore::markDelayed(qint64 id)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE aeat_records SET delayed = 1 WHERE id = :id");
     q.bindValue(":id", id);
     const bool ok = q.exec() && q.numRowsAffected() == 1;
     close(wasOpen);

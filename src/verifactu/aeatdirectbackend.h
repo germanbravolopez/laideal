@@ -71,6 +71,9 @@ public:
         // (Configuración): the records that one generated were not left by an earlier
         // session. Unset: now.
         QDateTime sessionStart;
+        // False for a backend that works beside the shop's own on another chain (the
+        // self-test while the shop is in production): it never changes the database's number.
+        bool adoptInstallationNumber = true;
         std::function<QString()> readChainMarker;
         std::function<void(const QString &)> writeChainMarker;
     };
@@ -147,8 +150,8 @@ public:
     // Wait before an automatic retry after a failed send (60 s; tests shorten it).
     static void setRetryDelaySeconds(int seconds);
 
-    // Whether a technical incident delayed the record: an earlier send of it got no
-    // answer, or it was left unsent by an earlier session (`sessionStart`).
+    // Whether a technical incident delayed the record: one kept it from being sent (no
+    // answer, no certificate), or an earlier session left it unsent (`sessionStart`).
     static bool delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart);
 
     // Art. 16.4 Orden HAC/1177/2024: the records still to send since an incident kept one

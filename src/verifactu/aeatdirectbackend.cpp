@@ -178,7 +178,8 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     // The chain's last record is at AEAT under another NumeroInstalacion (a database
     // restored from before it, or a new one): the number belongs to the chain, so ours
     // becomes that one before anything is generated. Before the head, so a failure repeats.
-    if (!tip->installationNumber.isEmpty() && tip->installationNumber != m_config.system.installationNumber) {
+    if (m_config.adoptInstallationNumber && !tip->installationNumber.isEmpty()
+        && tip->installationNumber != m_config.system.installationNumber) {
         if (!m_store.setInstallationNumber(tip->installationNumber)) {
             *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
             return false;
@@ -644,6 +645,11 @@ void AeatDirectBackend::refreshUnsentCount(bool incident)
 {
     m_incident = m_incident || incident;
     const int unsent = m_incident ? m_store.pendingCount(m_config.issuerNif) : 0;
+    if (unsent < 0) {
+        // Unreadable now: the notice stays as it is, never taken for "all sent".
+        qWarning() << "AeatDirectBackend: pending records not counted -" << m_store.lastError();
+        return;
+    }
     if (unsent == 0)
         m_incident = false;
     if (unsent == m_unsentCount)
@@ -676,19 +682,21 @@ void AeatDirectBackend::sendPending()
         VerifactuResult r;
         r.status = VerifactuResult::NETWORK_ERROR;
         r.errorDescription = tr("Registro guardado, pendiente de envío: %1").arg(m_sendError);
-        for (const AeatStore::Record &record : records)
+        for (const AeatStore::Record &record : records) {
+            if (!record.delayed)
+                m_store.markDelayed(record.id);
             for (const QString &requestId : m_waiters.take(record.id))
                 emit requestFinished(requestId, r);
+        }
         refreshUnsentCount(true);
         return;
     }
     QStringList xmls;
     m_inFlightIds.clear();
     m_inFlightRecords.clear();
-    // The one-by-one resend after a client fault on a batch is not an incident.
     bool afterIncident = false;
     for (const AeatStore::Record &record : records) {
-        afterIncident = afterIncident || (!m_sendSingly.contains(record.id) && delayedByIncident(record, m_sessionStart));
+        afterIncident = afterIncident || delayedByIncident(record, m_sessionStart);
         xmls << record.xml;
         m_inFlightIds << record.id;
         m_inFlightRecords.insert(record.id, record);
@@ -705,7 +713,7 @@ void AeatDirectBackend::sendPending()
 
 bool AeatDirectBackend::delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart)
 {
-    return record.attempts > 0 || (record.generatedAt.isValid() && record.generatedAt < sessionStart);
+    return record.delayed || (record.generatedAt.isValid() && record.generatedAt < sessionStart);
 }
 
 void AeatDirectBackend::releaseWaiters()
@@ -829,6 +837,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         r.status = VerifactuResult::NETWORK_ERROR;
         r.errorDescription = tr("Sin respuesta de la AEAT: %1").arg(why);
         for (qint64 id : sent) {
+            m_store.markDelayed(id);
             for (const QString &requestId : m_waiters.take(id))
                 emit requestFinished(requestId, r);
         }
@@ -865,6 +874,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         if (!parsed.fault && !line) {
             // AEAT did not report on it: still unknown, keep it pending.
             unanswered = true;
+            m_store.markDelayed(record.id);
             VerifactuResult r;
             r.status = VerifactuResult::PENDING;
             r.errorDescription = tr("La AEAT no ha respondido sobre el registro %1").arg(record.invoiceNumber);
@@ -968,7 +978,10 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
             answerWaiters(record.id, r);
             scheduleSend();
             // As for a submission: no answer, or AEAT's own service failing, is an incident.
-            refreshUnsentCount(!query.parsed || (query.fault && query.faultCode.contains(QLatin1String("Server"))));
+            const bool incident = !query.parsed || (query.fault && query.faultCode.contains(QLatin1String("Server")));
+            if (incident)
+                m_store.markDelayed(record.id);
+            refreshUnsentCount(incident);
             return;
         }
         if (qAbs(heldTotal - record.total) > 0.005) {

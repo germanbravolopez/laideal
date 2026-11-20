@@ -125,6 +125,8 @@ public:
     // An invoice sent through this facade whose answer has not arrived yet: the start-up
     // recovery never resends it (the window that sent it, or Recogida, applies its answer).
     bool isInFlight(const QString &invoiceId) const;
+    // When this run's first backend started (invalid before): a backend beside it is the same session.
+    QDateTime sessionStart() const { return m_sessionStart; }
     // UI test builds: sends the direct client to a fake AEAT at this URL.
     static void setAeatEndpointOverride(const QString &url);
 
