@@ -11,7 +11,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 
 ## Completed Milestones
 
-### Post-12.4 development — October 2026
+### Post-12.4 development — November 2026 (shipped in 12.5)
 
 - [x] **CI: the two long suites get a 600 s limit** (CI run of 20-11-2026 on `d162474`): `aeat_direct_backend` was stopped by its 300 s CTest `TIMEOUT` with every case still passing. The suite has grown to about 75 scenarios against the fake AEAT (185 s locally, 245-254 s on the last green CI runs, more on a slow runner), so the limit no longer told a hang from a slow machine; the new count-of-unsent-records cases added about 13 s. `e2e_app` was at 245 s of its 300 s in the same run. Both limits are now 600 s; the other suites keep 120 s. Key files: `tests/CMakeLists.txt`, `docs/testing/README.md`.
 - [x] **UI smoke test: a reused output folder no longer fails A3** (found running it locally, 20-11-2026): `smoke.py` appends each session's log to `laideal-run.log` in `--out` but never emptied it, so a second local run in the same `ui-smoke-out` read the earlier run's lines, with that run's fake AEAT port, and A3 / A3-end failed with "AEAT URLs other than the fake AEAT" (both URLs were `127.0.0.1`; nothing left the PC). CI never saw it because its folder is always new. `Run.__init__` now deletes the old log, as it already did for the database and the fake's URL file. Key file: `tests/ui/smoke.py`.

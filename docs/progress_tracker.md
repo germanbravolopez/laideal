@@ -11,16 +11,16 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ---
 
-## Current Status — October 2026
+## Current Status — November 2026
 
 **Branching**: `develop` for the work (directly or via short-lived branches), `master` only for releases (PR-only, protected), `hotfix/X.Y` from `master` for fixes to the released version (`CONTRIBUTING.md`, Development workflow)
 
-**Latest release**: [12.4](https://github.com/germanbravolopez/laideal/releases/tag/12.4) — maintenance release, no application changes: the new release flow (develop back, one CI run per commit, merging the release PR into master publishes), cached and parallel CI, shared packaging script, extra updater refusal tests and a CI timing-flake fix. The shop stays on the IreneSolutions gateway in its TEST environment.
+**Latest release**: [12.5](https://github.com/germanbravolopez/laideal/releases/tag/12.5) — the direct AEAT client adapted to AEAT's written answers of 04-11-2026: `RechazoPrevio = X` on a registration resent after a refusal, `Incidencia = S` on late sends, the status-bar count of records still to send (Orden HAC/1177/2024 art. 16.4), `NumeroInstalacion` kept in the database with the chain, and the declaración responsable naming its third-party components (signed 20-11-2026). The shop stays on the IreneSolutions gateway in its TEST environment, where none of this changes what it sees.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->
 
-**Next**: the shop runs 12.0 on the gateway in TEST and sends back the self-check report. The switch to PRODUCTION with the **direct AEAT client** is parked in the Backlog (owner, 20-11-2026: it will come much later); the follow-ups of AEAT's written answers of 04-11-2026 are applied, and one question is waiting for AEAT's answer by email (the row below).
+**Next**: the shop installs 12.5, keeps running on the gateway in TEST and sends back the self-check report. The switch to PRODUCTION with the **direct AEAT client** is parked in the Backlog (owner, 20-11-2026: it will come much later); the follow-ups of AEAT's written answers of 04-11-2026 are applied, and one question is waiting for AEAT's answer by email (the row below).
 
 ---
 
