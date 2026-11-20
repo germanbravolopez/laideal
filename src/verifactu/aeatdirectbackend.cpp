@@ -39,6 +39,8 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
 {
     m_sendTimer.setSingleShot(true);
     connect(&m_sendTimer, &QTimer::timeout, this, &AeatDirectBackend::sendPending);
+    // Whole seconds, as the records' generation time is stored.
+    m_sessionStart = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
     m_transport->setTimeoutMs(kTransferTimeoutMs);
 
     if (m_config.issuerNif.trimmed().isEmpty() || m_config.issuerName.trimmed().isEmpty())
@@ -644,18 +646,27 @@ void AeatDirectBackend::sendPending()
     QStringList xmls;
     m_inFlightIds.clear();
     m_inFlightRecords.clear();
+    // The one-by-one resend after a client fault on a batch is not an incident.
+    bool afterIncident = false;
     for (const AeatStore::Record &record : records) {
+        afterIncident = afterIncident || (!m_sendSingly.contains(record.id) && delayedByIncident(record, m_sessionStart));
         xmls << record.xml;
         m_inFlightIds << record.id;
         m_inFlightRecords.insert(record.id, record);
         m_store.markAttempt(record.id);
         m_store.markSending(record.id);
     }
-    const QString envelope = AeatRecord::submissionEnvelope(m_config.issuerName, m_config.issuerNif, xmls);
-    qDebug() << "AeatDirectBackend: sending" << records.size() << "record(s) to" << endpointUrl(m_config.testEnvironment);
+    const QString envelope = AeatRecord::submissionEnvelope(m_config.issuerName, m_config.issuerNif, xmls, afterIncident);
+    qDebug() << "AeatDirectBackend: sending" << records.size() << "record(s) to" << endpointUrl(m_config.testEnvironment)
+             << (afterIncident ? "(Incidencia = S)" : "");
     m_inFlight = true;
     m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
                       [this](const AeatTransport::Response &response) { onSubmissionReply(response); });
+}
+
+bool AeatDirectBackend::delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart)
+{
+    return record.attempts > 0 || (record.generatedAt.isValid() && record.generatedAt < sessionStart);
 }
 
 void AeatDirectBackend::releaseWaiters()

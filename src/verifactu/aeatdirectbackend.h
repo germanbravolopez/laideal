@@ -23,8 +23,8 @@
 //    flagged Subsanacion / RechazoPrevio;
 //  - records are sent together (up to 1000), never before TiempoEsperaEnvio of the
 //    previous reply, retried on their own after a failure, and sent at the next
-//    start if the app closed first; outcomes nobody waited for are reported on
-//    recordSettled;
+//    start if the app closed first (such late sends say Incidencia = S); outcomes
+//    nobody waited for are reported on recordSettled;
 //  - a duplicate is checked with a query first: AEAT's record must have our amount
 //    and date (else ERROR); one from another system is accepted without claiming our
 //    record; a duplicate of an invoice AEAT holds as cancelled is reported and never
@@ -142,6 +142,10 @@ public:
     // Wait before an automatic retry after a failed send (60 s; tests shorten it).
     static void setRetryDelaySeconds(int seconds);
 
+    // Whether a technical incident delayed the record: an earlier send of it got no
+    // answer, or it was left unsent by an earlier session (`sessionStart`).
+    static bool delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart);
+
     // Seconds the next submission still has to wait (0 = it may go now).
     int secondsUntilNextSend() const;
     qint64 msecsUntilNextSend() const;
@@ -165,6 +169,7 @@ private:
     AeatTransport             *m_transport = nullptr;
     QTimer                     m_sendTimer;
     QDateTime                  m_nextSendAllowed;
+    QDateTime                  m_sessionStart;   // records generated before it were left by an earlier session
     bool                       m_inFlight = false;
     QList<qint64>              m_inFlightIds;
     QHash<qint64, AeatStore::Record> m_inFlightRecords;

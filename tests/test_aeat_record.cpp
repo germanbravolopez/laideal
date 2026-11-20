@@ -185,7 +185,8 @@ private slots:
         writeSample("alta_r5_differences.xml", submissionEnvelope(r.issuerName, "89890001K", { registrationXml(r, system()) }));
     }
 
-    // A record sent again after AEAT rejected the earlier one carries Subsanacion / RechazoPrevio.
+    // A registration sent again after AEAT rejected the earlier one is AEAT's "alta por
+    // rechazo": Subsanacion = S with RechazoPrevio = X (S + S needs a record at AEAT).
     void test_afterRejectionFlags()
     {
         Registration r = ticket("30902", 8.26);
@@ -193,7 +194,7 @@ private slots:
         QHash<QString, QString> t;
         const QStringList n = names(registrationXml(r, system()), &t);
         QCOMPARE(t.value("Subsanacion"), QStringLiteral("S"));
-        QCOMPARE(t.value("RechazoPrevio"), QStringLiteral("S"));
+        QCOMPARE(t.value("RechazoPrevio"), QStringLiteral("X"));
         QCOMPARE(n.indexOf("NombreRazonEmisor") + 1, n.indexOf("Subsanacion"));
         writeSample("alta_after_rejection.xml", submissionEnvelope(r.issuerName, "89890001K", { registrationXml(r, system()) }));
     }
@@ -233,6 +234,18 @@ private slots:
             reader.readNext();
         QVERIFY2(!reader.hasError(), qPrintable(reader.errorString()));
         writeSample("alta_escaped.xml", envelope);
+    }
+
+    // Records delayed by a technical incident go in a submission whose header says so.
+    void test_incidentHeader()
+    {
+        const Registration r = ticket("30960", 8.26);
+        const QString record = registrationXml(r, system());
+        QVERIFY(!submissionEnvelope(r.issuerName, "89890001K", { record }).contains("RemisionVoluntaria"));
+        const QString late = submissionEnvelope(r.issuerName, "89890001K", { record }, true);
+        QVERIFY(late.contains("</sf:ObligadoEmision><sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia>"
+                              "</sf:RemisionVoluntaria></sfLR:Cabecera>"));
+        writeSample("alta_after_incident.xml", late);
     }
 
     // NombreRazonEmisor and the envelopes' NombreRazon hold at most 120 characters: a
@@ -288,6 +301,9 @@ private slots:
         QVERIFY(pending.contains(":</b> " + AeatRecord::laIdealSystem("12.0", QString()).systemName + "</p>"));
         QVERIFY(pending.contains(QString::fromUtf8("versión 12.0")));
         QVERIFY(pending.contains("(pendiente)"));
+        // d) names the third-party components (AEAT, 04-11-2026: the producer lists them).
+        for (const char *component : { "Qt", "SQLite", "QR Code generator" })
+            QVERIFY2(pending.contains(QLatin1String(component)), component);
         QVERIFY(!ProducerDeclaration::isComplete({}));
 
         const ProducerDeclaration::Signature signed_{ "Calle Mayor 1, 18001 Granada", QDate(2026, 10, 14), QString::fromUtf8("Granada, España") };

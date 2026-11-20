@@ -60,6 +60,10 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                 request.issuerNif = text;
                 continue;
             }
+            if (name == QLatin1String("Incidencia")) {
+                request.afterIncident = (text == QLatin1String("S"));
+                continue;
+            }
             if (request.kind == QLatin1String("Consulta")) {
                 if (name == QLatin1String("NumSerieFactura") && path.contains(QStringLiteral("ClavePaginacion")))
                     request.pageAfter = text;
@@ -100,8 +104,10 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                 record.hash = text;
             else if (name == QLatin1String("FechaHoraHusoGenRegistro"))
                 record.generatedAt = text;
-            else if (name == QLatin1String("RechazoPrevio"))
-                record.afterRejection = (text == QLatin1String("S"));
+            else if (name == QLatin1String("RechazoPrevio")) {
+                record.previousRejection = text;
+                record.afterRejection = (text == QLatin1String("S") || text == QLatin1String("X"));
+            }
         }
     }
     return request;

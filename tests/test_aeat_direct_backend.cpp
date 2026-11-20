@@ -215,7 +215,7 @@ private slots:
     }
 
     // A rejection is final for that record; a new attempt is a new record flagged
-    // Subsanacion / RechazoPrevio, chained after the rejected one.
+    // Subsanacion / RechazoPrevio = X, chained after the rejected one.
     void test_rejectionThenNewRecord()
     {
         m_server->rejectNext("30838", "1100", "Valor o tipo incorrecto del campo: ImporteTotal");
@@ -231,6 +231,7 @@ private slots:
         const QList<FakeAeatServer::SentRecord> sent = m_server->sentRecords();
         QCOMPARE(sent.size(), 2);
         QVERIFY(!sent[0].afterRejection && sent[1].afterRejection);
+        QCOMPARE(sent[1].previousRejection, QStringLiteral("X"));
         QVERIFY(sent[1].hash != sent[0].hash);
         QCOMPARE(sent[1].previousHash, sent[0].hash);
     }
@@ -450,6 +451,26 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "30837").state, AeatStore::kAccepted, 10000);
         QCOMPARE(m_server->submissions().size(), 2);
+        // The late send says a technical incident delayed it; the first one did not.
+        QVERIFY(!m_server->submissions().at(0).afterIncident);
+        QVERIFY(m_server->submissions().at(1).afterIncident);
+    }
+
+    // What counts as delayed by an incident: an earlier send without an answer, or a
+    // record an earlier session left unsent. A record waiting for AEAT's wait time is not.
+    void test_delayedByIncident()
+    {
+        const QDateTime start(QDate(2026, 11, 20), QTime(10, 0, 0));
+        AeatStore::Record record;
+        record.generatedAt = start;
+        QVERIFY(!AeatDirectBackend::delayedByIncident(record, start));
+        record.generatedAt = start.addSecs(30);
+        QVERIFY(!AeatDirectBackend::delayedByIncident(record, start));
+        record.attempts = 1;
+        QVERIFY(AeatDirectBackend::delayedByIncident(record, start));
+        record.attempts = 0;
+        record.generatedAt = start.addSecs(-1);
+        QVERIFY(AeatDirectBackend::delayedByIncident(record, start));
     }
 
     // The query reads what AEAT holds; a cancelled registration is found but not usable.
@@ -1206,6 +1227,7 @@ private slots:
         QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("700", 10))).status, VerifactuResult::NETWORK_ERROR);
         AeatStore store(m_db, "pruebas");
         QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "700").state, AeatStore::kAccepted, 10000);
+        QVERIFY(m_server->submissions().last().afterIncident);            // the retry after the failed send
         QTRY_COMPARE(settled.size(), 1);
         QCOMPARE(settled[0][0].toString(), QStringLiteral("700"));
         QVERIFY(!settled[0][1].toBool());

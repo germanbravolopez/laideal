@@ -38,10 +38,12 @@ public:
         QString systemId;         // IdSistemaInformatico / producer NIF of the system that
         QString producerNif;      //   generated it (SistemaInformatico block)
         bool    afterRejection = false;
+        QString previousRejection;   // RechazoPrevio as sent (X: alta, S: anulación)
     };
     struct Request {
         QString           kind;   // RegFactu / Consulta
         QString           issuerNif;            // ObligadoEmision of the header
+        bool              afterIncident = false;   // RemisionVoluntaria / Incidencia = S
         QByteArray        body;
         QList<SentRecord> records;
         QString           queriedNumber;
