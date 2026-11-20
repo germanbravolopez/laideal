@@ -36,7 +36,6 @@ None open.
 
 | Issue | File | Notes |
 |-------|------|-------|
-| CI: `skip-duplicate` can miss the push run it should cancel | `.github/workflows/ci.yml` (`skip-duplicate`) | From the 12.5 code review (20-11-2026), a nit: the job assumes the pull-request run starts after the push run of the same commit. When a fix is pushed to `develop` with the release PR already open, both runs start together and the job can list the runs before the push run exists, so the commit is built twice (only cost, never a wrong result). Proposed: retry the listing for a short while, or skip the build inside the push run when an open `develop` -> `master` PR has the same head SHA. |
 | Restore of an older backup: a later cancellation of ours is invisible (ask `verifactu@correo.aeat.es`) | `src/verifactu/aeatdirectbackend.cpp` (`syncChain`, `queryMonth`) | The second written request (`GZ44-2026CTE29840004R`, answered 04-11-2026) did not address it: AEAT pointed to its technical documents and to the developers' mailbox. The documents confirm the query returns registrations only (no cancellation records, nothing by generation time), so after restoring a backup older than a cancellation of ours the chain continues from the last registration AEAT shows. Known limit: restore the newest backup. Email sent to `verifactu@correo.aeat.es` on 20-11-2026 (question 3b of the request, plus confirmation that the program restored with its database keeps its `NumeroInstalacion`, which the app now assumes). Waiting for AEAT's answer; nothing to do until then. |
 ---
 
