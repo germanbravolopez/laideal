@@ -464,12 +464,13 @@ get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
 # Tripwire (src/verifactu/testhostguard.h): no test may reach a host but this machine.
 set_property(TEST ${_laideal_tests} APPEND PROPERTY ENVIRONMENT "LAIDEAL_TEST=1")
-# The direct client's suite drives the fake AEAT server through ~45 scenarios (~100 s
-# locally, more on a CI runner): a longer limit, still well short of a real hang.
-set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 300)
-# The app bench waits on many fixed AEAT delays (5 s waits, slow fake replies): about 105 s
-# on a CI runner, close to the 120 s above.
-set_tests_properties(e2e_app PROPERTIES TIMEOUT 300)
+# The direct client's suite drives the fake AEAT server through ~75 scenarios: about 185 s
+# locally and 245-300 s on a CI runner (20-11-2026: a slow runner passed 300 s with every
+# case still running). A limit of twice that, still short of a real hang.
+set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 600)
+# The app bench waits on many fixed AEAT delays (5 s waits, slow fake replies): 85 s
+# locally, 170-245 s on a CI runner.
+set_tests_properties(e2e_app PROPERTIES TIMEOUT 600)
 
 # Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
 # the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port
