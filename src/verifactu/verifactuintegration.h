@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QString>
 #include <QDate>
+#include <QDateTime>
 #include <QPixmap>
 #include <QSqlDatabase>
 #include <functional>
@@ -113,6 +114,9 @@ public:
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
     QString certificateExpiryWarning() const;
+    // Records the direct client still has to send since an incident (art. 16.4 Orden
+    // HAC/1177/2024); 0 without one and with the gateway.
+    int unsentRecordCount() const;
     // Recomputes the direct client's stored chain; true (nothing to check) with the gateway.
     // On false `problem` is user-facing; `continuations` counts records linking to AEAT-only huellas.
     bool verifyStoredChain(QString *problem, int *continuations) const;
@@ -121,6 +125,8 @@ public:
     // An invoice sent through this facade whose answer has not arrived yet: the start-up
     // recovery never resends it (the window that sent it, or Recogida, applies its answer).
     bool isInFlight(const QString &invoiceId) const;
+    // When this run's first backend started (invalid before): a backend beside it is the same session.
+    QDateTime sessionStart() const { return m_sessionStart; }
     // UI test builds: sends the direct client to a fake AEAT at this URL.
     static void setAeatEndpointOverride(const QString &url);
 
@@ -129,6 +135,7 @@ signals:
     void queryFinished(const QString &requestId, const VerifactuRemoteRecord &record);
     void recordSettled(const QString &invoiceId, bool cancellation, const VerifactuResult &result);
     void chainChecked(bool ok);                 // every finished chain sync of the direct client
+    void unsentRecordsChanged(int count);       // unsentRecordCount() changed
 
 private:
     VerifactuBackend  *m_backend = nullptr;
@@ -138,6 +145,7 @@ private:
     QString m_emitterName;
     QString m_lastError;
     QHash<QString, QString> m_inFlight;   // request id -> invoice id, until its answer
+    QDateTime m_sessionStart;             // the first initialize(): later backends are the same session
 
     void loadEmitterConfiguration();
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,

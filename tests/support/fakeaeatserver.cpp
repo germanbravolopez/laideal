@@ -60,6 +60,10 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                 request.issuerNif = text;
                 continue;
             }
+            if (name == QLatin1String("Incidencia")) {
+                request.afterIncident = (text == QLatin1String("S"));
+                continue;
+            }
             if (request.kind == QLatin1String("Consulta")) {
                 if (name == QLatin1String("NumSerieFactura") && path.contains(QStringLiteral("ClavePaginacion")))
                     request.pageAfter = text;
@@ -84,6 +88,8 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                     record.systemId = text;
                 else if (name == QLatin1String("NIF"))
                     record.producerNif = text;
+                else if (name == QLatin1String("NumeroInstalacion"))
+                    record.installationNumber = text;
                 continue;
             }
             if (path.contains(QStringLiteral("FacturasRectificadas")))
@@ -100,8 +106,10 @@ FakeAeatServer::Request parseRequest(const QByteArray &body)
                 record.hash = text;
             else if (name == QLatin1String("FechaHoraHusoGenRegistro"))
                 record.generatedAt = text;
-            else if (name == QLatin1String("RechazoPrevio"))
-                record.afterRejection = (text == QLatin1String("S"));
+            else if (name == QLatin1String("RechazoPrevio")) {
+                record.previousRejection = text;
+                record.afterRejection = (text == QLatin1String("S") || text == QLatin1String("X"));
+            }
         }
     }
     return request;
@@ -215,6 +223,8 @@ void FakeAeatServer::handle(QTcpSocket *socket)
 QByteArray FakeAeatServer::answer(const Request &request)
 {
     if (request.kind == QLatin1String("Consulta")) {
+        if (m_queriesUnavailable)
+            return faultReply(QStringLiteral("env:Server"), QStringLiteral("Servicio no disponible"));
         // One invoice, or (no number) every registration held.
         QList<SentRecord> held;
         for (auto it = m_registered.cbegin(); it != m_registered.cend(); ++it) {
@@ -272,8 +282,9 @@ QByteArray FakeAeatServer::answer(const Request &request)
                      !request.showSystem || m_queryWithoutSystem ? QString()
                      : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
                                       "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
-                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>1</tik:NumeroInstalacion>"
-                                      "</tikLRRC:SistemaInformatico>").arg(h.producerNif, h.systemId))
+                                      "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>%3</tik:NumeroInstalacion>"
+                                      "</tikLRRC:SistemaInformatico>")
+                           .arg(h.producerNif, h.systemId, h.installationNumber.isEmpty() ? QStringLiteral("1") : h.installationNumber))
                 .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif);
         }
         return envelope(QStringLiteral(

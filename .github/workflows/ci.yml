@@ -4,7 +4,9 @@ name: CI
 # holds only releases and moves only by pull request. One run per commit:
 #
 #   PR to develop            build + ui-smoke
-#   push to develop          build                      (direct commits, merged PRs)
+#   push to develop          build                      (direct commits, merged PRs;
+#                            skipped when the release PR to master is open on the
+#                            same commit: that PR's run builds it)
 #   PR to master             build + ui-smoke + release in dry run (packages the
 #                            installer, checks version and notes, publishes nothing)
 #   push to master           build + release: tags X.Y on the merge commit and
@@ -26,7 +28,49 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
+  # The release PR develop -> master builds the commit pushed to develop, so that push
+  # run would build it a second time: it skips its build instead (a skipped job is
+  # grey; a cancelled run shows as a red failure on the commit). Runs in every event,
+  # never skipped itself: a skipped job would skip release, which needs build.
+  # The release commit is pushed seconds before its PR is opened, so only for it
+  # ("release X.Y - ...") the PR is waited for, up to a minute.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      duplicate: ${{ steps.check.outputs.duplicate }}
+    steps:
+      - name: Is the release PR open on this commit?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          duplicate=false
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/develop" ]; then
+            tries=1
+            case "$MESSAGE" in "release "*) tries=12 ;; esac
+            for i in $(seq "$tries"); do
+              # An API error counts as "no PR": the build then runs, never the reverse.
+              head=$(gh pr list -R "$GITHUB_REPOSITORY" --base master --head develop --state open --json headRefOid -q '.[0].headRefOid' || true)
+              if [ "$head" = "$GITHUB_SHA" ]; then duplicate=true; break; fi
+              if [ "$i" -lt "$tries" ]; then sleep 5; fi
+            done
+          fi
+          echo "duplicate=$duplicate" >> "$GITHUB_OUTPUT"
+          if [ "$duplicate" = "true" ]; then
+            echo "The release PR develop -> master builds this commit: the build is skipped here." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   build:
+    # Its own name on a push to develop: master requires the check `build`, and a skipped
+    # job counts as a passed check, so the skipped duplicate must never carry that name
+    # on the commit the release PR is about to build.
+    name: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'build (develop)' || 'build' }}
+    needs: gate
+    if: needs.gate.outputs.duplicate != 'true'
     runs-on: windows-latest
     timeout-minutes: 45   # a hung step must not hold the runner for the 6 h default
 

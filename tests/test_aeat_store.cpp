@@ -2,6 +2,7 @@
 // SQLite database.
 
 #include <QtTest>
+#include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -34,6 +35,35 @@ private:
             b.generatedAt = QDateTime(QDate(2026, 10, 10), QTime(10, 0), Qt::OffsetFromUTC, 7200);
             return b;
         };
+    }
+
+    // A record whose XML carries `installation` in its SistemaInformatico block, as the real ones.
+    static std::function<AeatStore::Built(const AeatRecord::PreviousRecord &)>
+    builderWithInstallation(const QString &number, const QString &hash, const QString &installation)
+    {
+        return [=](const AeatRecord::PreviousRecord &head) {
+            AeatStore::Built b = builder(number, hash)(head);
+            b.xml = "<sf:RegistroAlta><sf:SistemaInformatico><sf:IdSistemaInformatico>LI</sf:IdSistemaInformatico>"
+                    "<sf:NumeroInstalacion>" + installation + "</sf:NumeroInstalacion></sf:SistemaInformatico>"
+                    "</sf:RegistroAlta>";
+            return b;
+        };
+    }
+
+    int installationRows()
+    {
+        const bool wasOpen = m_db.isOpen();
+        if (!wasOpen && !m_db.open())
+            return -1;
+        int rows = -1;
+        {
+            QSqlQuery q(m_db);
+            if (q.exec("SELECT COUNT(*) FROM aeat_installation") && q.next())
+                rows = q.value(0).toInt();
+        }
+        if (!wasOpen)
+            m_db.close();
+        return rows;
     }
 
 private slots:
@@ -96,6 +126,16 @@ private slots:
         QVERIFY(!production.latest(AeatStore::Kind::Registration, "1").isValid());
         QVERIFY(production.pending().isEmpty());
         QCOMPARE(test.pending().size(), 1);
+        QCOMPARE(production.pendingCount(), 0);
+        // Unreadable is not "none": the notice of unsent records must not vanish on it.
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records RENAME TO aeat_records_away"));
+        QCOMPARE(production.pendingCount(), -1);
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records_away RENAME TO aeat_records"));
+        m_db.close();
+        QCOMPARE(test.pendingCount(), 1);
+        QCOMPARE(test.pendingCount("89890001K"), 1);
+        QCOMPARE(test.pendingCount("B11111111"), 0);
     }
 
     // Outcomes and attempts; pending lists only unconfirmed records, oldest first;
@@ -112,6 +152,10 @@ private slots:
         QVERIFY(store.markOutcome(b.id, AeatStore::kRejected, "", "1100", "ImporteTotal"));
         const QList<AeatStore::Record> pending = store.pending();
         QCOMPARE(pending.size(), 1);
+        QCOMPARE(store.pendingCount(), 1);
+        QVERIFY(!pending[0].delayed);
+        QVERIFY(store.markDelayed(c.id));
+        QVERIFY(store.pending()[0].delayed);
         QCOMPARE(pending[0].id, c.id);
         QCOMPARE(pending[0].kind, AeatStore::Kind::Cancellation);
         const AeatStore::Record latestA = store.latest(AeatStore::Kind::Registration, "1");
@@ -220,6 +264,157 @@ private slots:
         const auto b = store.append(AeatStore::Kind::Registration, "89890001K", builder("2", "BBB"));
         QVERIFY(store.markReached(b.id));
         QVERIFY(store.latest(AeatStore::Kind::Registration, "2").reached);
+    }
+
+    // NumeroInstalacion: created once per database, the same for every store on it,
+    // whatever the environment (AEAT keys the system on it: it may never change).
+    void test_installationNumberCreatedOnce()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QCOMPARE(installationRows(), 0);                                 // nothing until first use
+        const QString number = store.installationNumber();
+        QVERIFY2(QRegularExpression("^LAIDEAL-[0-9A-F]{8}$").match(number).hasMatch(), qPrintable(number));
+        QCOMPARE(store.installationNumber(), number);
+        QCOMPARE(AeatStore(m_db, "pruebas").installationNumber(), number);
+        QCOMPARE(AeatStore(m_db, "produccion").installationNumber(), number);
+        QCOMPARE(installationRows(), 1);
+        QVERIFY(!m_db.isOpen());                                         // the closed connection is closed again
+        // Records generated later never change it.
+        store.append(AeatStore::Kind::Registration, "89890001K", builderWithInstallation("1", "AAA", "ANOTHER-1"));
+        QCOMPARE(store.installationNumber(), number);
+    }
+
+    // Two databases never share a generated number.
+    void test_installationNumberIsPerDatabase()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const QString number = store.installationNumber();
+        QVERIFY(!number.isEmpty());
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_store_other");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1.db").arg(QDateTime::currentMSecsSinceEpoch())));
+            AeatStore otherStore(other, "pruebas");
+            QVERIFY(otherStore.ensureSchema());
+            const QString otherNumber = otherStore.installationNumber();
+            QVERIFY(!otherNumber.isEmpty());
+            QVERIFY(otherNumber != number);
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_store_other");
+    }
+
+    // A database that already sent records (made before the number was stored) adopts the
+    // number of its newest record, of any environment or issuer: what AEAT holds for the chain.
+    void test_installationNumberAdoptedFromNewestRecord()
+    {
+        AeatStore test(m_db, "pruebas"), production(m_db, "produccion");
+        QVERIFY(test.ensureSchema());
+        test.append(AeatStore::Kind::Registration, "89890001K", builderWithInstallation("1", "AAA", "LAIDEAL-OLDEST"));
+        production.append(AeatStore::Kind::Registration, "B00000000", builderWithInstallation("2", "BBB", "LAIDEAL-SENT0001"));
+        QCOMPARE(installationRows(), 0);
+        QCOMPARE(test.installationNumber(), QStringLiteral("LAIDEAL-SENT0001"));
+        QCOMPARE(production.installationNumber(), QStringLiteral("LAIDEAL-SENT0001"));
+        QCOMPARE(installationRows(), 1);
+    }
+
+    // The same for a database of an earlier build, which has no aeat_installation table yet.
+    void test_installationNumberAdoptedByOlderDatabase()
+    {
+        {
+            AeatStore old(m_db, "pruebas");
+            QVERIFY(old.ensureSchema());
+            old.append(AeatStore::Kind::Registration, "89890001K", builderWithInstallation("1", "AAA", "LAIDEAL-0BADC0DE"));
+            // The newest record carries none (never the case in real ones): the one before it counts.
+            old.append(AeatStore::Kind::Registration, "89890001K", builder("2", "BBB"));
+            QVERIFY(m_db.open());
+            QVERIFY(QSqlQuery(m_db).exec("DROP TABLE aeat_installation"));
+            m_db.close();
+        }
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QCOMPARE(store.installationNumber(), QStringLiteral("LAIDEAL-0BADC0DE"));
+    }
+
+    void test_installationNumberFromXml()
+    {
+        const AeatRecord::SystemInfo system{ "Producer", "12345678Z", "LAIDEAL", "LI", "12.0", "LAIDEAL-1A2B3C4D" };
+        AeatRecord::Cancellation cancellation;
+        cancellation.invoice = { "89890001K", "30837", QDate(2026, 10, 10) };
+        cancellation.generatedAt = QDateTime(QDate(2026, 10, 10), QTime(10, 0), Qt::OffsetFromUTC, 7200);
+        // A real record, as stored.
+        const QString real = AeatRecord::cancellationXml(cancellation, system);
+        QCOMPARE(AeatStore::installationNumberFromXml(real), QStringLiteral("LAIDEAL-1A2B3C4D"));
+        QCOMPARE(AeatStore::installationNumberFromXml(
+                     "<RegistroAlta><SistemaInformatico><NumeroInstalacion> N-1 </NumeroInstalacion>"
+                     "</SistemaInformatico></RegistroAlta>"), QStringLiteral("N-1"));
+        QCOMPARE(AeatStore::installationNumberFromXml(
+                     "<a xmlns:x=\"urn:x\"><x:NumeroInstalacion>A&amp;B</x:NumeroInstalacion></a>"), QStringLiteral("A&B"));
+        QVERIFY(AeatStore::installationNumberFromXml("<sf:RegistroAlta>1</sf:RegistroAlta>").isEmpty());
+        QVERIFY(AeatStore::installationNumberFromXml("<a><NumeroInstalacionX>1</NumeroInstalacionX></a>").isEmpty());
+        QVERIFY(AeatStore::installationNumberFromXml("not xml").isEmpty());
+        QVERIFY(AeatStore::installationNumberFromXml(QString()).isEmpty());
+    }
+
+    // A database that cannot be opened, read or written gives no number - never a made-up one.
+    void test_installationNumberEmptyWhenUnavailable()
+    {
+        {
+            QSqlDatabase missing = QSqlDatabase::addDatabase("QSQLITE", "aeat_store_missing");
+            missing.setDatabaseName(m_dir.filePath("no_such_folder/store.db"));
+            AeatStore unopened(missing, "pruebas");
+            QVERIFY(unopened.installationNumber().isEmpty());
+            QVERIFY(!unopened.lastError().isEmpty());
+        }
+        QSqlDatabase::removeDatabase("aeat_store_missing");
+
+        AeatStore noTables(m_db, "pruebas");                             // ensureSchema() never ran
+        QVERIFY(noTables.installationNumber().isEmpty());
+        QVERIFY(!noTables.lastError().isEmpty());
+
+        // The records cannot be read: not "no records", so no new number either.
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records RENAME TO aeat_records_gone"));
+        QVERIFY(store.installationNumber().isEmpty());
+        QVERIFY(!store.lastError().isEmpty());
+        QCOMPARE(installationRows(), 0);
+        QVERIFY(QSqlQuery(m_db).exec("ALTER TABLE aeat_records_gone RENAME TO aeat_records"));
+        // A number that cannot be stored is not returned.
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TRIGGER no_installation BEFORE INSERT ON aeat_installation "
+                                     "BEGIN SELECT RAISE(ABORT, 'read only'); END"));
+        QVERIFY(store.installationNumber().isEmpty());
+        QCOMPARE(installationRows(), 0);
+        QVERIFY(QSqlQuery(m_db).exec("DROP TRIGGER no_installation"));
+        QVERIFY(!store.installationNumber().isEmpty());
+        // Inside a caller's transaction: refused, and the caller's work is not rolled back.
+        QVERIFY(m_db.transaction());
+        QVERIFY(QSqlQuery(m_db).exec("DELETE FROM aeat_installation"));
+        QVERIFY(store.installationNumber().isEmpty());
+        QVERIFY(m_db.commit());
+        QCOMPARE(installationRows(), 0);
+        m_db.close();
+    }
+
+    // An empty stored number (a damaged database) is replaced; the number of the chain
+    // adopted from AEAT replaces whatever was stored.
+    void test_installationNumberRepairedAndReplaced()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("INSERT INTO aeat_installation (id, number, created_at) VALUES (1, '', '')"));
+        const QString repaired = store.installationNumber();
+        QVERIFY(repaired.startsWith("LAIDEAL-"));
+        QCOMPARE(store.installationNumber(), repaired);
+        QVERIFY(store.setInstallationNumber("LAIDEAL-ATAEAT00"));
+        QCOMPARE(AeatStore(m_db, "produccion").installationNumber(), QStringLiteral("LAIDEAL-ATAEAT00"));
+        QCOMPARE(installationRows(), 1);
+        QVERIFY(!store.setInstallationNumber(" "));
+        QCOMPARE(store.installationNumber(), QStringLiteral("LAIDEAL-ATAEAT00"));
+        m_db.close();
     }
 
     // An open connection stays open (the app's models read through it); a closed one is closed again.

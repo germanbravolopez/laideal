@@ -26,14 +26,14 @@ const char *const kMonths[] = { "enero", "febrero", "marzo", "abril", "mayo", "j
 Signature currentSignature()
 {
     // j) the shop's address from the settings (never in the source); the date is the day
-    // the producer signed the version that ships (12.0), set again for each such release.
+    // the producer signed the version that ships (12.5), set again for each such release.
     const AppSettings *s = AppSettings::instance();
     QStringList lines;
     for (const QString &line : { s->businessAddress().trimmed(), s->businessCity().trimmed() })
         if (!line.isEmpty())
             lines << line;
     const QString address = lines.join(QStringLiteral(", "));
-    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 10, 27),
+    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 11, 20),
              QString::fromUtf8("Granada, España") };
 }
 
@@ -59,7 +59,8 @@ QString html(const QString &version, const Signature &signature)
         << item("b", QString::fromUtf8("Código identificador del sistema informático"), system.systemId)
         << item("c", QString::fromUtf8("Identificador completo de la versión"), version.toHtmlEscaped())
         << item("d", QString::fromUtf8("Componentes, hardware y software, y descripción de lo que hace y de sus principales funcionalidades"),
-                QString::fromUtf8("programa La Ideal para Windows (C++ con Qt, base de datos SQLite local), "
+                QString::fromUtf8("programa La Ideal para Windows (C++ con las bibliotecas de terceros Qt, SQLite para la "
+                                  "base de datos local y QR Code generator de Project Nayuki para el código QR), "
                                   "ordenador personal con Windows, impresora térmica de tickets y certificado "
                                   "electrónico del obligado tributario. Gestiona la recepción y la recogida de "
                                   "prendas de una tintorería; expide facturas simplificadas y rectificativas; "

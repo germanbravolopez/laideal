@@ -146,6 +146,7 @@ One line each; the test body has the exact assertions.
 | `test_mainWindow_preMigrationCopyWithBackupsOff` | A new version copies the database before migrating it, also with automatic backups off |
 | `test_mainWindow_reinitialisesOneBackend` | Aceptar in Configuración re-initialises Verifactu with one integration and one backend (two direct clients would both send the outbox) |
 | `test_mainWindow_showsThePreProductionEnvironment` | The status bar says when the direct client registers in AEAT's test environment |
+| `test_mainWindow_countsTheRecordsStillToSend` | A record an incident left unsent is counted in the status bar at the start, until the direct client has sent it; never with the gateway |
 
 **Direct connection in the main window, Recogida and Cobrar**
 

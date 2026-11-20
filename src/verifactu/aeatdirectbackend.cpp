@@ -39,12 +39,21 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
 {
     m_sendTimer.setSingleShot(true);
     connect(&m_sendTimer, &QTimer::timeout, this, &AeatDirectBackend::sendPending);
+    // Whole seconds, as the records' generation time is stored.
+    m_sessionStart = m_config.sessionStart.isValid() ? m_config.sessionStart
+                                                     : QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
     m_transport->setTimeoutMs(kTransferTimeoutMs);
 
     if (m_config.issuerNif.trimmed().isEmpty() || m_config.issuerName.trimmed().isEmpty())
         m_configError = tr("Falta el NIF o el nombre del emisor.");
     else if (!m_store.ensureSchema())
         m_configError = tr("No se pueden crear las tablas de registros AEAT: %1").arg(m_store.lastError());
+    else {
+        // The number lives with the chain (one SIF per database): no record is generated without it.
+        m_config.system.installationNumber = m_store.installationNumber();
+        if (m_config.system.installationNumber.isEmpty())
+            m_configError = tr("No se puede leer el número de instalación de los registros AEAT: %1").arg(m_store.lastError());
+    }
     if (!m_configError.isEmpty()) {
         qWarning() << "AeatDirectBackend: not configured -" << m_configError;
         return;
@@ -63,8 +72,13 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
     if (!m_sendError.isEmpty())
         qWarning() << "AeatDirectBackend: records will be generated but not sent -" << m_sendError;
     // Records left unsent when the app closed go first.
-    if (!m_store.pending(1, m_config.issuerNif).isEmpty())
-        scheduleSend();
+    const QList<AeatStore::Record> left = m_store.pending(1000, m_config.issuerNif);
+    if (left.isEmpty())
+        return;
+    scheduleSend();
+    refreshUnsentCount(std::any_of(left.cbegin(), left.cend(), [this](const AeatStore::Record &r) {
+        return delayedByIncident(r, m_sessionStart);
+    }));
 }
 
 AeatDirectBackend::~AeatDirectBackend() = default;
@@ -160,6 +174,19 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (!tip) {
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
+    }
+    // The chain's last record is at AEAT under another NumeroInstalacion (a database
+    // restored from before it, or a new one): the number belongs to the chain, so ours
+    // becomes that one before anything is generated. Before the head, so a failure repeats.
+    if (m_config.adoptInstallationNumber && !tip->installationNumber.isEmpty()
+        && tip->installationNumber != m_config.system.installationNumber) {
+        if (!m_store.setInstallationNumber(tip->installationNumber)) {
+            *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
+            return false;
+        }
+        qWarning() << "AeatDirectBackend: NumeroInstalacion" << m_config.system.installationNumber << "->"
+                   << tip->installationNumber << "(the chain's last record at AEAT)";
+        m_config.system.installationNumber = tip->installationNumber;
     }
     if (tip->hash != head.hash) {
         const AeatRecord::PreviousRecord moved{
@@ -292,6 +319,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             s.hash = r.hash;
             s.generatedAt = r.generatedAt;
             s.previousHash = r.previousHash;
+            s.installationNumber = r.installationNumber;
             if (s.valid)
                 found << s;
             else
@@ -470,6 +498,7 @@ void AeatDirectBackend::storeAndQueueNow(
     }
     m_waiters[record.id] << requestId;
     scheduleSend();
+    refreshUnsentCount();
 }
 
 QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
@@ -482,9 +511,10 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
         answerLater(requestId, r);
         return requestId;
     }
-    const AeatRecord::SystemInfo system = m_config.system;
+    // The system block is read when the record is built: the chain sync a held request
+    // waits for may change the installation number.
     return storeAndQueue(AeatStore::Kind::Registration, invoice.getInvoiceNumber(),
-                         [invoice, system](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
+                         [this, invoice](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
         AeatRecord::Registration r = registrationFrom(invoice, previous, QDateTime::currentDateTime());
         r.afterRejection = afterRejection;
         AeatStore::Built b;
@@ -492,7 +522,7 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
         b.issueDate = r.invoice.issueDate;
         b.total = r.totalAmount();
         b.hash = AeatRecord::hashOf(r);
-        b.xml = AeatRecord::registrationXml(r, system);
+        b.xml = AeatRecord::registrationXml(r, m_config.system);
         b.generatedAt = r.generatedAt;
         return b;
     });
@@ -501,9 +531,8 @@ QString AeatDirectBackend::submitInvoiceAsync(const VerifactuInvoice &invoice)
 QString AeatDirectBackend::cancelInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
     const QString nif = m_config.issuerNif;
-    const AeatRecord::SystemInfo system = m_config.system;
     return storeAndQueue(AeatStore::Kind::Cancellation, invoiceNumber,
-                         [=](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
+                         [this, nif, invoiceNumber, invoiceDate](const AeatRecord::PreviousRecord &previous, bool afterRejection) {
         AeatRecord::Cancellation c;
         c.invoice = { nif, invoiceNumber, invoiceDate };
         c.previous = previous;
@@ -513,7 +542,7 @@ QString AeatDirectBackend::cancelInvoiceAsync(const QString &invoiceNumber, cons
         b.invoiceNumber = invoiceNumber;
         b.issueDate = invoiceDate;
         b.hash = AeatRecord::hashOf(c);
-        b.xml = AeatRecord::cancellationXml(c, system);
+        b.xml = AeatRecord::cancellationXml(c, m_config.system);
         b.generatedAt = c.generatedAt;
         return b;
     });
@@ -612,6 +641,23 @@ void AeatDirectBackend::scheduleSend()
     m_sendTimer.start(int(msecsUntilNextSend()));
 }
 
+void AeatDirectBackend::refreshUnsentCount(bool incident)
+{
+    m_incident = m_incident || incident;
+    const int unsent = m_incident ? m_store.pendingCount(m_config.issuerNif) : 0;
+    if (unsent < 0) {
+        // Unreadable now: the notice stays as it is, never taken for "all sent".
+        qWarning() << "AeatDirectBackend: pending records not counted -" << m_store.lastError();
+        return;
+    }
+    if (unsent == 0)
+        m_incident = false;
+    if (unsent == m_unsentCount)
+        return;
+    m_unsentCount = unsent;
+    emit unsentRecordsChanged(unsent);
+}
+
 void AeatDirectBackend::sendPending()
 {
     if (m_inFlight)
@@ -636,26 +682,38 @@ void AeatDirectBackend::sendPending()
         VerifactuResult r;
         r.status = VerifactuResult::NETWORK_ERROR;
         r.errorDescription = tr("Registro guardado, pendiente de envío: %1").arg(m_sendError);
-        for (const AeatStore::Record &record : records)
+        for (const AeatStore::Record &record : records) {
+            if (!record.delayed)
+                m_store.markDelayed(record.id);
             for (const QString &requestId : m_waiters.take(record.id))
                 emit requestFinished(requestId, r);
+        }
+        refreshUnsentCount(true);
         return;
     }
     QStringList xmls;
     m_inFlightIds.clear();
     m_inFlightRecords.clear();
+    bool afterIncident = false;
     for (const AeatStore::Record &record : records) {
+        afterIncident = afterIncident || delayedByIncident(record, m_sessionStart);
         xmls << record.xml;
         m_inFlightIds << record.id;
         m_inFlightRecords.insert(record.id, record);
         m_store.markAttempt(record.id);
         m_store.markSending(record.id);
     }
-    const QString envelope = AeatRecord::submissionEnvelope(m_config.issuerName, m_config.issuerNif, xmls);
-    qDebug() << "AeatDirectBackend: sending" << records.size() << "record(s) to" << endpointUrl(m_config.testEnvironment);
+    const QString envelope = AeatRecord::submissionEnvelope(m_config.issuerName, m_config.issuerNif, xmls, afterIncident);
+    qDebug() << "AeatDirectBackend: sending" << records.size() << "record(s) to" << endpointUrl(m_config.testEnvironment)
+             << (afterIncident ? "(Incidencia = S)" : "");
     m_inFlight = true;
     m_transport->post(endpointUrl(m_config.testEnvironment), envelope.toUtf8(),
                       [this](const AeatTransport::Response &response) { onSubmissionReply(response); });
+}
+
+bool AeatDirectBackend::delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart)
+{
+    return record.delayed || (record.generatedAt.isValid() && record.generatedAt < sessionStart);
 }
 
 void AeatDirectBackend::releaseWaiters()
@@ -779,10 +837,12 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         r.status = VerifactuResult::NETWORK_ERROR;
         r.errorDescription = tr("Sin respuesta de la AEAT: %1").arg(why);
         for (qint64 id : sent) {
+            m_store.markDelayed(id);
             for (const QString &requestId : m_waiters.take(id))
                 emit requestFinished(requestId, r);
         }
         scheduleSend();
+        refreshUnsentCount(true);
         return;
     }
 
@@ -814,6 +874,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         if (!parsed.fault && !line) {
             // AEAT did not report on it: still unknown, keep it pending.
             unanswered = true;
+            m_store.markDelayed(record.id);
             VerifactuResult r;
             r.status = VerifactuResult::PENDING;
             r.errorDescription = tr("La AEAT no ha respondido sobre el registro %1").arg(record.invoiceNumber);
@@ -849,6 +910,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     // Records created meanwhile, or left unanswered, go next.
     if (!m_store.pending(1, m_config.issuerNif).isEmpty())
         scheduleSend();
+    refreshUnsentCount(unanswered);
 }
 
 void AeatDirectBackend::isolateFaultedBatch(const QList<qint64> &sent, const QString &faultText,
@@ -901,6 +963,7 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
             qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "never shown by the query - marked ERROR";
             m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
             finishRecord(record, r, false);
+            refreshUnsentCount();
             return;
         }
         if (!query.parsed || query.fault || !held || !amountRead) {
@@ -914,6 +977,11 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
                                      .arg(record.invoiceNumber);
             answerWaiters(record.id, r);
             scheduleSend();
+            // As for a submission: no answer, or AEAT's own service failing, is an incident.
+            const bool incident = !query.parsed || (query.fault && query.faultCode.contains(QLatin1String("Server")));
+            if (incident)
+                m_store.markDelayed(record.id);
+            refreshUnsentCount(incident);
             return;
         }
         if (qAbs(heldTotal - record.total) > 0.005) {
@@ -936,5 +1004,6 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
         }
         if (!m_store.pending(1, m_config.issuerNif).isEmpty())
             scheduleSend();
+        refreshUnsentCount();
     });
 }

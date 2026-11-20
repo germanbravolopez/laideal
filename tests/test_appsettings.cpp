@@ -148,19 +148,33 @@ private slots:
         QCOMPARE(AppSettings::instance()->ivaRate(), 21.0);
     }
 
-    // The direct client's NumeroInstalacion and chain marker are written to the file at
-    // once: every record carries the number, so a crash before another save must not
-    // give the next run a different one.
-    void test_installationNumberAndChainMarkerPersistAtOnce()
+    // The direct client's chain marker is written to the file at once: it must survive a
+    // crash before any other save.
+    void test_chainMarkerPersistsAtOnce()
     {
         const QString path = loadJson(R"({"database":{"path":"x.db"}})");
-        const QString number = AppSettings::instance()->aeatInstallationNumber();
-        QVERIFY(number.startsWith("LAIDEAL-"));
-        QCOMPARE(rawValue(path, "verifactu", "aeat_installation"), number);
         AppSettings::instance()->setAeatChainMarker("30839|ABC");
         QCOMPARE(rawValue(path, "verifactu", "aeat_chain_marker"), QStringLiteral("30839|ABC"));
         AppSettings::instance()->loadFrom(path);                       // the next run
-        QCOMPARE(AppSettings::instance()->aeatInstallationNumber(), number);
+        QCOMPARE(AppSettings::instance()->aeatChainMarker(), QStringLiteral("30839|ABC"));
+    }
+
+    // A file from before 12.5 still carries verifactu.aeat_installation (the number now
+    // lives in the database): it loads and saves as any other, the key ignored.
+    void test_oldInstallationNumberKeyIsIgnored()
+    {
+        const QString path = loadJson(R"({"database":{"path":"x.db"},
+                                          "verifactu":{"aeat_installation":"LAIDEAL-0LDF11E0","nif":"12345678Z",
+                                                       "aeat_chain_marker":"pruebas|12345678Z|ABC"}})");
+        AppSettings *s = AppSettings::instance();
+        QCOMPARE(s->dbPath(), QStringLiteral("x.db"));
+        QCOMPARE(s->verifactuNif(), QStringLiteral("12345678Z"));
+        QCOMPARE(s->aeatChainMarker(), QStringLiteral("pruebas|12345678Z|ABC"));
+        QVERIFY(s->save());
+        QVERIFY(s->lastSaveError().isEmpty());
+        QCOMPARE(QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + ".corrupt-*" }).size(), 0);
+        s->loadFrom(path);
+        QCOMPARE(s->verifactuNif(), QStringLiteral("12345678Z"));
     }
 
     // A settings file that cannot be read is kept aside before defaults apply: the next

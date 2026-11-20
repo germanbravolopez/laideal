@@ -45,6 +45,8 @@ class Run:
         (self.out / "steps").mkdir(exist_ok=True)
         self.db = self.out / "shop.db"
         self.settings = self.out / "settings.json"
+        # A reused folder: an earlier run's log (another fake AEAT port) would fail A3.
+        (self.out / "laideal-run.log").unlink(missing_ok=True)
         self.results = []           # (block, step id, title, status, detail, seconds)
         self.app = None
         self.fake = None

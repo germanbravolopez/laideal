@@ -65,8 +65,9 @@ struct Registration {
     double            rectifiedTax  = 0.0;
     QString           description;              // DescripcionOperacion, max 500
     QList<TaxLine>    taxLines;
-    // Sent again after AEAT rejected an earlier record of the same invoice
-    // (Subsanacion = S, RechazoPrevio = S).
+    // Sent again after AEAT rejected the invoice's first record, so AEAT holds none:
+    // AEAT's "alta por rechazo" (Subsanacion = S, RechazoPrevio = X). "S" is only for
+    // a refused correction of a record AEAT already holds, which the app never sends.
     bool              afterRejection = false;
     PreviousRecord    previous;
     QDateTime         generatedAt;              // FechaHoraHusoGenRegistro
@@ -93,7 +94,10 @@ QString registrationXml(const Registration &record, const SystemInfo &system);
 QString cancellationXml(const Cancellation &record, const SystemInfo &system);
 
 // SOAP 1.1 envelope of a submission: header (the issuer) and 1-1000 records.
-QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, const QStringList &recordXmls);
+// `afterIncident`: a technical incident delayed some of them (Incidencia = S, Orden
+// HAC/1177/2024 art. 16.4).
+QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, const QStringList &recordXmls,
+                           bool afterIncident = false);
 
 // SOAP 1.1 envelope of a query for the issuer's records of one month, optionally one
 // invoice; `showSystem` asks for each record's SistemaInformatico block.

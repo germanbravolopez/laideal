@@ -1,5 +1,12 @@
 ﻿Versiones:
 
+12.5
+- Conexión directa con la AEAT (en preparación; la tienda sigue usando la pasarela): adaptada a las respuestas escritas de la AEAT del 4 de noviembre de 2026.
+- Un registro reenviado tras un rechazo, y los enviados con retraso tras un fallo de conexión, se marcan como exige la AEAT.
+- La barra de estado indica cuántos registros quedan pendientes de enviar a la AEAT tras un fallo de conexión o del certificado, hasta que se envían todos.
+- El número de instalación de los registros se guarda en la base de datos: el programa restaurado con su base de datos en un PC nuevo sigue siendo el mismo sistema.
+- La declaración responsable nombra los componentes de terceros utilizados (Qt, SQLite y el generador de QR).
+
 12.4
 - Versión de mantenimiento: sin cambios en la aplicación; proceso de publicación y actualización más rápido y robusto.
 

@@ -6,7 +6,6 @@
 #include <QSaveFile>
 #include <QFileInfo>
 #include <QTextStream>
-#include <QUuid>
 #include <QJsonDocument>
 #include <QDebug>
 #include <QThread>
@@ -444,18 +443,6 @@ void AppSettings::setAeatChainMarker(const QString &v)
     assertMainThread();
     setStr({"verifactu", "aeat_chain_marker"}, v);
     save();   // at once: it must survive a crash before any other save
-}
-
-QString AppSettings::aeatInstallationNumber()
-{
-    QString number = str({"verifactu", "aeat_installation"});
-    if (number.isEmpty()) {
-        assertMainThread();
-        number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
-        setStr({"verifactu", "aeat_installation"}, number);
-        save();   // at once: every record carries it, so it may never change between runs
-    }
-    return number;
 }
 
 bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled); }

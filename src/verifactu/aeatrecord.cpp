@@ -170,7 +170,7 @@ QString registrationXml(const Registration &r, const SystemInfo &system)
     w.text(QStringLiteral("NombreRazonEmisor"), issuerNameText(r.issuerName));
     if (r.afterRejection) {
         w.text(QStringLiteral("Subsanacion"), QStringLiteral("S"));
-        w.text(QStringLiteral("RechazoPrevio"), QStringLiteral("S"));
+        w.text(QStringLiteral("RechazoPrevio"), QStringLiteral("X"));
     }
     w.text(QStringLiteral("TipoFactura"), r.invoiceType);
     if (!r.rectificationType.isEmpty()) {
@@ -226,8 +226,12 @@ QString cancellationXml(const Cancellation &c, const SystemInfo &system)
     return out;
 }
 
-QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, const QStringList &recordXmls)
+QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, const QStringList &recordXmls,
+                           bool afterIncident)
 {
+    const QString incident = afterIncident
+        ? QStringLiteral("<sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>")
+        : QString();
     QString body;
     for (const QString &record : recordXmls)
         body += QStringLiteral("<sfLR:RegistroFactura>") + record + QStringLiteral("</sfLR:RegistroFactura>");
@@ -235,10 +239,11 @@ QString submissionEnvelope(const QString &issuerName, const QString &issuerNif, 
                           "<soapenv:Envelope xmlns:soapenv=\"%1\" xmlns:sfLR=\"%2\" xmlns:sf=\"%3\">"
                           "<soapenv:Header/><soapenv:Body><sfLR:RegFactuSistemaFacturacion>"
                           "<sfLR:Cabecera><sf:ObligadoEmision><sf:NombreRazon>%4</sf:NombreRazon>"
-                          "<sf:NIF>%5</sf:NIF></sf:ObligadoEmision></sfLR:Cabecera>%6"
+                          "<sf:NIF>%5</sf:NIF></sf:ObligadoEmision>%6</sfLR:Cabecera>%7"
                           "</sfLR:RegFactuSistemaFacturacion></soapenv:Body></soapenv:Envelope>")
         .arg(QString::fromLatin1(kSoapNs), QString::fromLatin1(kSuministroLRNs),
-             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerNameText(issuerName)), escaped(issuerNif), body);
+             QString::fromLatin1(kSuministroInformacionNs), escaped(issuerNameText(issuerName)), escaped(issuerNif),
+             incident, body);
 }
 
 SystemInfo laIdealSystem(const QString &version, const QString &installationNumber)

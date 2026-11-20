@@ -23,8 +23,8 @@
 //    flagged Subsanacion / RechazoPrevio;
 //  - records are sent together (up to 1000), never before TiempoEsperaEnvio of the
 //    previous reply, retried on their own after a failure, and sent at the next
-//    start if the app closed first; outcomes nobody waited for are reported on
-//    recordSettled;
+//    start if the app closed first (such late sends say Incidencia = S); outcomes
+//    nobody waited for are reported on recordSettled;
 //  - a duplicate is checked with a query first: AEAT's record must have our amount
 //    and date (else ERROR); one from another system is accepted without claiming our
 //    record; a duplicate of an invoice AEAT holds as cancelled is reported and never
@@ -58,6 +58,7 @@ public:
         bool    testEnvironment = true;      // AEAT pre-production (no tax effect) vs production
         QString issuerNif;
         QString issuerName;
+        // Producer and version; installationNumber is ignored: the backend takes the database's.
         AeatRecord::SystemInfo system;
         QString certificateThumbprint;       // from the Windows personal store, or else
         QString certificatePath;             // the owner's .pfx / .p12 file
@@ -66,6 +67,13 @@ public:
         // database (the settings file): a database whose chain differs - restored from an
         // older backup, or moved to a new PC - must reach AEAT before any record, as on a
         // first start. Unset: not kept.
+        // When the app started, for a backend that replaces another in the same run
+        // (Configuración): the records that one generated were not left by an earlier
+        // session. Unset: now.
+        QDateTime sessionStart;
+        // False for a backend that works beside the shop's own on another chain (the
+        // self-test while the shop is in production): it never changes the database's number.
+        bool adoptInstallationNumber = true;
         std::function<QString()> readChainMarker;
         std::function<void(const QString &)> writeChainMarker;
     };
@@ -142,6 +150,15 @@ public:
     // Wait before an automatic retry after a failed send (60 s; tests shorten it).
     static void setRetryDelaySeconds(int seconds);
 
+    // Whether a technical incident delayed the record: one kept it from being sent (no
+    // answer, no certificate), or an earlier session left it unsent (`sessionStart`).
+    static bool delayedByIncident(const AeatStore::Record &record, const QDateTime &sessionStart);
+
+    // Art. 16.4 Orden HAC/1177/2024: the records still to send since an incident kept one
+    // from being sent (no AEAT answer, certificate unusable, left by an earlier session),
+    // until none is left. 0 while there is no incident.
+    int unsentRecordCount() const { return m_unsentCount; }
+
     // Seconds the next submission still has to wait (0 = it may go now).
     int secondsUntilNextSend() const;
     qint64 msecsUntilNextSend() const;
@@ -149,6 +166,7 @@ public:
 signals:
     // Every finished chain sync (AEAT may hold later numbers than the database).
     void chainSynced(bool ok);
+    void unsentRecordsChanged(int count);
 
 private:
     QString qrUrlFor(const VerifactuInvoice &invoice) const;
@@ -165,6 +183,7 @@ private:
     AeatTransport             *m_transport = nullptr;
     QTimer                     m_sendTimer;
     QDateTime                  m_nextSendAllowed;
+    QDateTime                  m_sessionStart;   // records generated before it were left by an earlier session
     bool                       m_inFlight = false;
     QList<qint64>              m_inFlightIds;
     QHash<qint64, AeatStore::Record> m_inFlightRecords;
@@ -180,6 +199,8 @@ private:
     int                        m_highestNumberAtAeat = 0;
     int                        m_highestRectificationAtAeat = 0;
     bool                       m_lastSyncFailed = false;
+    bool                       m_incident = false;       // a send failed and records are still pending
+    int                        m_unsentCount = 0;
     QList<ChainDone>           m_syncWaiters;   // held requests, resumed when the sync ends
 
     QString nextRequestId();
@@ -190,6 +211,8 @@ private:
     void answerLater(const QString &requestId, const VerifactuResult &result);
     VerifactuResult resultFromStored(const AeatStore::Record &record) const;
     void scheduleSend();
+    // Recounts unsentRecordCount(); `incident`: one has just kept a record from being sent.
+    void refreshUnsentCount(bool incident = false);
     void sendPending();
     void onSubmissionReply(const AeatTransport::Response &response);
     // A client fault on a batch: keep its records pending and resend them singly.

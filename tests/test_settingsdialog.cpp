@@ -136,8 +136,6 @@ private slots:
 #ifdef Q_OS_WIN
         QVERIFY(!json.contains("clave-del-pfx"));                     // never in plain text
 #endif
-        QVERIFY(s->aeatInstallationNumber().startsWith("LAIDEAL-"));
-        QCOMPARE(s->aeatInstallationNumber(), s->aeatInstallationNumber());   // created once
 
         SettingsDialog reopened;
         reopened.setCertificateChoices({ qMakePair(QStringLiteral("PRUEBA"), thumbprint) });

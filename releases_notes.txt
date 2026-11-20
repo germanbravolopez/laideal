@@ -1,5 +1,12 @@
 ﻿Releases:
 
+12.5
+- Direct connection with AEAT (in preparation; the shop keeps using the gateway): adapted to AEAT's written answers of 4 November 2026.
+- A record resent after a refusal, and records sent late after a connection failure, are marked as AEAT requires.
+- The status bar shows how many records are still waiting to be sent to AEAT after a connection or certificate failure, until all of them are sent.
+- The records' installation number is kept in the database: the program restored with its database on a new PC is still the same system.
+- The responsible declaration (declaración responsable) names the third-party components used (Qt, SQLite and the QR generator).
+
 12.4
 - Maintenance release: no changes to the application; faster and more robust release and update process.
 
