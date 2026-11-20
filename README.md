@@ -40,6 +40,23 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 ## Build
 
+**Everyday commands**: `make.ps1` in the repository root wraps the commands of this section and of [Tests](#tests), and puts the toolchain on `PATH` by itself. From PowerShell or cmd: `.\make <target>`.
+
+| Command | Does |
+|---------|------|
+| `.\make help` | Lists the targets |
+| `.\make build` / `.\make debug` | Release build into `build\` / Debug build into `build-debug\` (configures the folder when needed) |
+| `.\make test` | Builds, then runs the test suites; `-Filter e2e` runs some, `-Jobs 8` sets the parallel suites |
+| `.\make xsd` | The direct client's XML against AEAT's schemas (needs Python `lxml`) |
+| `.\make uitest` / `.\make venv` | The UI-test build into `build-uitest\` / the Python environment of the UI scripts |
+| `.\make ui-smoke` | UI smoke test (builds what it needs first; takes the mouse and keyboard); `-Blocks AB`, `-Printer LaIdeal-Smoke` |
+| `.\make aeat-dry` | AEAT pre-production run against the fake AEAT, into a new `aeat-run\<date>-dry` folder |
+| `.\make aeat-real -Settings <file>` | The same against AEAT's test environment with the issuer's certificate; asks before sending |
+| `.\make regression` | `build`, `test`, `uitest`, `ui-smoke`, `aeat-dry` in a row; stops at the first failure and prints a line per stage |
+| `.\make clean` / `.\make clean-all` | Deletes the test outputs (real AEAT runs are kept) / also the build folders (asks first) |
+
+The rest of this section is what those targets run, for when one is needed by hand. A release is not a target: see [CONTRIBUTING.md](./CONTRIBUTING.md#release-procedure).
+
 There are four build folders, one per purpose. Each is a separate CMake tree, so they coexist (all are git-ignored by `build*`):
 
 | Folder | What it builds | For | How |
@@ -104,7 +121,7 @@ Then run them as listed in [Tests](#tests).
 
 ### Tests
 
-Five kinds of test, from the fastest to the one that needs a person. Each row links to the document with the full steps; the commands run from the repository root.
+Five kinds of test, from the fastest to the one that needs a person. Each row links to the document with the full steps; the commands run from the repository root. `.\make test`, `ui-smoke`, `aeat-dry`, `aeat-real` and `regression` run the local ones (table in [Build](#build)).
 
 | Suite | Where it runs | How to run it | Options | Steps |
 |-------|---------------|---------------|---------|-------|

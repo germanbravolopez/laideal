@@ -19,6 +19,7 @@ How the application is tested, how to run the tests, and where each kind of test
 ```powershell
 cmake --build build
 ctest --test-dir build --output-on-failure        # all suites
+.\make test                                       # the same after building, toolchain PATH included (-Filter e2e for some)
 ctest --test-dir build -R e2e --output-on-failure  # one suite, by name regex
 ```
 
