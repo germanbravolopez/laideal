@@ -40,7 +40,7 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 
 ## Build
 
-**Everyday commands**: `make.ps1` in the repository root wraps the commands of this section and of [Tests](#tests), and puts the toolchain on `PATH` by itself. From PowerShell or cmd: `.\make <target>`.
+**Everyday commands**: `make.ps1` in the repository root wraps the commands of this section and of [Tests](#tests), and puts the toolchain on `PATH` by itself. From PowerShell or cmd: `.\make <target>`. CI (`ci.yml`) runs these same targets, so a command is written once.
 
 | Command | Does |
 |---------|------|
@@ -49,7 +49,8 @@ Desktop management software for a dry-cleaning and laundry shop. Built with **C+
 | `.\make test` | Builds, then runs the test suites; `-Filter e2e` runs some, `-Jobs 8` sets the parallel suites |
 | `.\make xsd` | The direct client's XML against AEAT's schemas (needs Python `lxml`) |
 | `.\make uitest` / `.\make venv` | The UI-test build into `build-uitest\` / the Python environment of the UI scripts |
-| `.\make ui-smoke` | UI smoke test (builds what it needs first; takes the mouse and keyboard); `-Blocks AB`, `-Printer LaIdeal-Smoke` |
+| `.\make printer` | Adds the capturing printer queue `LaIdeal-Smoke` of smoke block C (once, as administrator) |
+| `.\make ui-smoke` | UI smoke test (builds what it needs first; takes the mouse and keyboard); `-Blocks AB`, `-Printer LaIdeal-Smoke`. With `-Exe <laideal.exe> -Tools <folder>` it tests an installed UI-test app instead (as CI does; also `aeat-dry`), `-Installer <setup.exe>` adds the reinstall step, `-Out <folder>` names the results folder |
 | `.\make aeat-dry` | AEAT pre-production run against the fake AEAT, into a new `aeat-run\<date>-dry` folder |
 | `.\make aeat-real -Settings <file>` | The same against AEAT's test environment with the issuer's certificate; asks before sending |
 | `.\make regression` | `build`, `test`, `uitest`, `ui-smoke`, `aeat-dry` in a row; stops at the first failure and prints a line per stage |

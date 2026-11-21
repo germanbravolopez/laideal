@@ -6,7 +6,10 @@
 #   .\make.ps1 test            build, then every test suite
 #   .\make.ps1 regression      everything CI runs, on this PC
 #
-# From cmd.exe (or without the .\): make <target>   (make.cmd)
+# From cmd.exe: make <target>   (make.cmd)
+#
+# .github\workflows\ci.yml runs these same targets. There the toolchain comes from
+# .github\actions\setup-toolchain (PATH and the CXX variable), not from $ToolDirs.
 
 [CmdletBinding()]
 param(
@@ -16,6 +19,10 @@ param(
     [string]$Blocks,          # ui-smoke: only these blocks, e.g. AB
     [string]$Printer,         # ui-smoke: printer queue for block C (tests\ui\printer.py install)
     [string]$Settings,        # aeat-real: settings file with the issuer and its certificate
+    [string]$Exe,             # ui-smoke / aeat-dry: an installed UI-test app, instead of build-uitest
+    [string]$Tools,           # ui-smoke / aeat-dry: the folder of fake_aeat_server.exe and escpos_preview.exe
+    [string]$Installer,       # ui-smoke: laideal_setup_X.Y.exe, for the reinstall step E4
+    [string]$Out,             # ui-smoke / aeat-dry / aeat-real: the results folder
     [switch]$Force            # clean-all / aeat-real: do not ask
 )
 
@@ -33,8 +40,10 @@ $VenvPython = Join-Path $Root '.venv\Scripts\python.exe'
 $UiTestExe  = Join-Path $Root 'build-uitest\src\app\laideal.exe'
 $UiTools    = Join-Path $Root 'build-uitest\tests'
 $BuildDirs  = @('build', 'build-debug', 'build-uitest', 'build-release')
+$OnGitHub   = $env:GITHUB_ACTIONS -eq 'true'
 
 function Use-Toolchain {
+    if ($OnGitHub) { return }
     foreach ($dir in $ToolDirs) {
         if (-not (Test-Path $dir)) { throw "Toolchain folder not found: $dir (see README.md, Build)" }
     }
@@ -71,9 +80,17 @@ function Invoke-UiTest  { Invoke-Tree 'build-uitest' @('-DCMAKE_BUILD_TYPE=Relea
 
 function Invoke-Test {
     Invoke-Build
-    $ctestArgs = @('--test-dir', (Join-Path $Root 'build'), '--output-on-failure', '-j', "$Jobs")
+    $ctestArgs = @('--test-dir', (Join-Path $Root 'build'), '--output-on-failure', '--no-tests=error',
+                   '--timeout', '120', '-j', "$Jobs")
     if ($Filter) { $ctestArgs += @('-R', $Filter) }
-    Invoke-Step 'ctest' $ctestArgs
+    try {
+        Invoke-Step 'ctest' $ctestArgs
+    } finally {
+        # The run's summary page on GitHub, also for a red suite.
+        if ($OnGitHub) {
+            & (Join-Path $Root '.github\scripts\Render-TestSummary.ps1') -Title 'Test results' -BuildDir (Join-Path $Root 'build')
+        }
+    }
 }
 
 function Invoke-Xsd {
@@ -102,31 +119,56 @@ function Invoke-Venv {
     }
 }
 
+# The capturing printer queue of smoke block C; Windows asks for an administrator.
+function Invoke-Printer {
+    Invoke-Step 'python' @((Join-Path $Root 'tests\ui\printer.py'), 'install')
+}
+
+# The app under test: the UI-test build, or with -Exe an installed one (-Tools is then its
+# tools folder). An installed app must start on the DLLs next to it, so the build's Qt and
+# MinGW leave PATH.
+function Resolve-UiApp {
+    if (-not $Exe) {
+        if ($Tools -or $Installer) { throw "-Tools and -Installer go with -Exe (an installed UI-test app)" }
+        Invoke-UiTest | Out-Host   # its output must not join the value returned here
+        return @{ Exe = $UiTestExe; Tools = $UiTools }
+    }
+    if (-not $Tools) { throw "-Exe needs -Tools <folder of fake_aeat_server.exe and escpos_preview.exe>" }
+    foreach ($path in @($Exe, $Tools)) {
+        if (-not (Test-Path $path)) { throw "Not found: $path" }
+    }
+    $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
+    return @{ Exe = (Resolve-Path $Exe).Path; Tools = (Resolve-Path $Tools).Path }
+}
+
 function Invoke-UiSmoke {
-    Invoke-UiTest
+    $app = Resolve-UiApp
     Invoke-Venv
-    $smokeArgs = @((Join-Path $Root 'tests\ui\smoke.py'), '--exe', $UiTestExe, '--tools', $UiTools,
-                   '--out', (Join-Path $Root 'ui-smoke-out'))
-    if ($Blocks)  { $smokeArgs += @('--blocks', $Blocks) }
-    if ($Printer) { $smokeArgs += @('--printer', $Printer) }
+    $folder = Join-Path $Root 'ui-smoke-out'
+    if ($Out) { $folder = $Out }
+    $smokeArgs = @((Join-Path $Root 'tests\ui\smoke.py'), '--exe', $app.Exe, '--tools', $app.Tools, '--out', $folder)
+    if ($Blocks)    { $smokeArgs += @('--blocks', $Blocks) }
+    if ($Printer)   { $smokeArgs += @('--printer', $Printer) }
+    if ($Installer) { $smokeArgs += @('--installer', (Resolve-Path $Installer).Path) }
     Write-Host "The UI smoke test takes the mouse and keyboard for a few minutes." -ForegroundColor Yellow
     Invoke-Step $VenvPython $smokeArgs
 }
 
-# aeat_preproduction.py wants an empty folder: every run gets its own.
+# aeat_preproduction.py wants an empty folder: every run gets its own, unless -Out names one.
 function New-AeatRunFolder {
     param([string]$Kind)
     $folder = Join-Path $Root ("aeat-run\{0}-{1}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $Kind)
+    if ($Out) { $folder = $Out }
     Write-Host "Results: $folder"
     return $folder
 }
 
 function Invoke-AeatDry {
-    Invoke-UiTest
+    $app = Resolve-UiApp
     Invoke-Venv
-    $out = New-AeatRunFolder 'dry'
-    Invoke-Step $VenvPython @((Join-Path $Root 'tests\ui\aeat_preproduction.py'), '--exe', $UiTestExe,
-                              '--dry-run', '--tools', $UiTools, '--out', $out)
+    $folder = New-AeatRunFolder 'dry'
+    Invoke-Step $VenvPython @((Join-Path $Root 'tests\ui\aeat_preproduction.py'), '--exe', $app.Exe,
+                              '--dry-run', '--tools', $app.Tools, '--out', $folder)
 }
 
 function Invoke-AeatReal {
@@ -138,12 +180,14 @@ function Invoke-AeatReal {
     }
     Invoke-UiTest
     Invoke-Venv
-    $out = New-AeatRunFolder 'real'
+    $folder = New-AeatRunFolder 'real'
     Invoke-Step $VenvPython @((Join-Path $Root 'tests\ui\aeat_preproduction.py'), '--exe', $UiTestExe,
-                              '--settings-from', (Resolve-Path $Settings).Path, '--out', $out)
+                              '--settings-from', (Resolve-Path $Settings).Path, '--out', $folder)
 }
 
 function Invoke-Regression {
+    # Its stages cannot share a results folder: aeat-dry wants an empty one.
+    if ($Out) { throw "regression takes no -Out: every stage writes to its own folder" }
     $stages = [ordered]@{
         'build'    = { Invoke-Build }
         'test'     = { Invoke-Test }
@@ -202,6 +246,7 @@ $Targets = [ordered]@{
     'xsd'        = @{ Text = 'the direct client''s XML against AEAT''s schemas (needs Python lxml)';      Run = { Invoke-Xsd } }
     'uitest'     = @{ Text = 'UI-test build into build-uitest\ (never for the shop)';                    Run = { Invoke-UiTest } }
     'venv'       = @{ Text = 'the Python environment of the UI scripts (.venv)';                         Run = { Invoke-Venv } }
+    'printer'    = @{ Text = 'the capturing printer queue LaIdeal-Smoke of block C (as administrator)';  Run = { Invoke-Printer } }
     'ui-smoke'   = @{ Text = 'UI smoke test, takes mouse and keyboard  [-Blocks AB] [-Printer <queue>]'; Run = { Invoke-UiSmoke } }
     'aeat-dry'   = @{ Text = 'AEAT pre-production run against the fake AEAT (no certificate)';           Run = { Invoke-AeatDry } }
     'aeat-real'  = @{ Text = 'the same against AEAT''s test environment   -Settings <file> [-Force]';     Run = { Invoke-AeatReal } }
@@ -215,6 +260,8 @@ function Show-Help {
     foreach ($name in $Targets.Keys) {
         Write-Host ("  {0,-11} {1}" -f $name, $Targets[$name].Text)
     }
+    Write-Host "`nui-smoke and aeat-dry test an installed UI-test app with -Exe <laideal.exe> -Tools <folder>"
+    Write-Host "(ui-smoke also -Installer <setup.exe>); -Out <folder> names the results folder."
     Write-Host "`nNot here: a release (releases\release.ps1 X.Y, or /release) and the manual"
     Write-Host "smoke checklist (docs\testing\smoke_test.md). Details: README.md, Tests."
 }

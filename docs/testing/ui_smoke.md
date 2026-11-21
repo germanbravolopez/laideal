@@ -111,6 +111,8 @@ Both scripts run from the repository root, in a PowerShell session with the tool
 
 ### Smoke test against the fake AEAT
 
+`.\make printer` (once, as administrator) and `.\make ui-smoke -Printer LaIdeal-Smoke` run the two commands below, after building what they need; the `ui-smoke` job of CI calls the same targets with `-Exe`, `-Tools` and `-Installer` for the installed app.
+
 ```powershell
 .\.venv\Scripts\python.exe .\tests\ui\printer.py install          # once, for block C
 .\.venv\Scripts\python.exe .\tests\ui\smoke.py --exe .\build-uitest\src\app\laideal.exe `

@@ -30,7 +30,7 @@ Two long-lived branches:
 
 Short-lived branches are named after what they change: `feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `tests/<topic>`, `ci/<topic>` (cut from `develop`), and `hotfix/X.Y` (cut from `master`, see [Hotfix](#hotfix-a-fix-for-the-released-version)).
 
-**When the code is built and tested** (`.github/workflows/ci.yml`, one run per commit, a newer push cancels the obsolete run):
+**When the code is built and tested** (`.github/workflows/ci.yml`, one run per commit, a newer push cancels the obsolete run; its build and test steps are `make.ps1` targets, the ones run locally):
 
 | Event | `build` (compile + `ctest`) | `ui-smoke` (installed app, blocks A-E) | `release` |
 |---|---|---|---|
