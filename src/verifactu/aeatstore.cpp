@@ -121,6 +121,8 @@ bool AeatStore::ensureSchema()
         addColumnIfMissing("aeat_chain", "generated_at", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("aeat_records", "reached", "INTEGER NOT NULL DEFAULT 0");
         addColumnIfMissing("aeat_records", "delayed", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("aeat_chain_restarts", "previous_number", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing("aeat_chain_restarts", "cancelled_invoice", "TEXT NOT NULL DEFAULT ''");
     }
     close(wasOpen);
     return ok;

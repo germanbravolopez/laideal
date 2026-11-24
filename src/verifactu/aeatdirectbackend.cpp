@@ -195,17 +195,19 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (m_firstSync && m_config.adoptInstallationNumber) {
         const AeatResponse::RecordSummary *lost = nullptr;
         QString seen;
-        if (lastSeenHead(&seen)) {
+        // An empty marker names no record (a chain not started, or just restarted): it
+        // proves nothing about a copy restored afterwards.
+        if (lastSeenHead(&seen) && !seen.isEmpty()) {
             // This installation's settings name its last record. Visible (here or at AEAT):
             // nothing of ours came after it, whoever cancelled an invoice since. Not
             // visible: it is the lost record.
-            bool visible = seen.isEmpty();
+            bool visible = false;
             for (const AeatResponse::RecordSummary &c : candidates)
                 visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
             if (!visible)
                 lost = AeatResponse::lostCancellation(candidates);
         } else {
-            // A new PC (no settings): only AEAT's own times can tell.
+            // A new PC (no settings), or no record named: only AEAT's own times can tell.
             lost = AeatResponse::lostCancellationAfter(candidates, *tip);
         }
         if (lost)

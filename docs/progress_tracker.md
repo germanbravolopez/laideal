@@ -34,7 +34,10 @@ None open.
 
 ## Open Non-Blocking Issues
 
-None open.
+| Issue | File | Notes |
+|-------|------|-------|
+| AEAT chain marker: tied to the PC, not to the database | `src/appsettings/appsettings.cpp` (`setAeatChainMarker`), `src/verifactu/aeatdirectbackend.cpp` (`lastSeenHead`) | 12.6 re-audit (24-11-2026). The marker lives in the settings file. A settings file copied along with an older database, or restored from a copy, names an older record that is still visible, so a cancellation lost after it is not detected (the chain continues: a fork). A failed save is now logged (`qCritical`). Idea: store the database's `NumeroInstalacion` and a counter in the marker, or warn when the settings file is older than the newest record. Before the direct client goes to production. |
+| Chain restart waiting for unsent records: say which record blocks | `src/verifactu/aeatdirectbackend.cpp` (`restartChain`, `resumeDeferredRestart`) | 12.6 re-audit (24-11-2026). While a restart waits for the old chain's unsent records, saving stays blocked; a record AEAT keeps faulting, or a certificate that breaks meanwhile, keeps it blocked until fixed. The message gives the count only: name the invoice(s) and point to the certificate when that is the cause. Also missing: a test of the restart's same-second filter (`adoptTip`). |
 
 ---
 

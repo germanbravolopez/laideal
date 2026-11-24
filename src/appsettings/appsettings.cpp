@@ -442,7 +442,10 @@ void AppSettings::setAeatChainMarker(const QString &v)
 {
     assertMainThread();
     setStr({"verifactu", "aeat_chain_marker"}, v);
-    save();   // at once: it must survive a crash before any other save
+    // At once: it must survive a crash before any other save. A stale marker would hide a
+    // record lost with a restored copy.
+    if (!save())
+        qCritical() << "AppSettings: the AEAT chain marker could not be saved to the settings file";
 }
 
 bool    AppSettings::verifactuPendingRecoveryEnabled() const   { return bln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled); }

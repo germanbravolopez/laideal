@@ -925,6 +925,50 @@ private slots:
         QSqlDatabase::removeDatabase("aeat_copy_db");
     }
 
+    // After a restart the marker names no record. The same backup restored again, before
+    // any record of the new chain, must not be taken for "nothing lost": it restarts again
+    // instead of chaining to the old chain's record.
+    void test_backupRestoredAgainAfterARestart()
+    {
+        m_server->setWaitSeconds(0);
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString backupA = backupOfDatabase("again_a"), backupB = backupOfDatabase("again_b");
+        QVERIFY(!backupA.isEmpty() && !backupB.isEmpty());
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backupA);
+            {
+                AeatDirectBackend restored(c, restoredDb);
+                QVERIFY(sync(restored));
+                QVERIFY(!restored.takeRestartNotice().isEmpty());
+            }
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+        QVERIFY(marker.endsWith(QLatin1Char('|')));                          // no record named
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backupB);
+            {
+                AeatDirectBackend restored(c, restoredDb);
+                QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+                QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+                QVERIFY(!restored.takeRestartNotice().isEmpty());
+            }
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+    }
+
     // Another system cancels an invoice of ours, as the latest change at AEAT. The settings'
     // marker names our last record and it is there: nothing of ours is lost, the chain goes on.
     void test_cancellationByAnotherSystemDoesNotRestart()

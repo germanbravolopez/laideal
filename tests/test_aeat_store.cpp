@@ -206,6 +206,19 @@ private slots:
         QVERIFY(other.recordXmls().isEmpty());
     }
 
+    // An aeat_chain_restarts table without the trace columns (an earlier 12.6 build) is completed.
+    void test_olderRestartsTableUpgraded()
+    {
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TABLE aeat_chain_restarts (environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, "
+                                     "installation_number TEXT NOT NULL, restarted_at TEXT NOT NULL, "
+                                     "PRIMARY KEY (environment, issuer_nif, installation_number))"));
+        m_db.close();
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY2(store.restartChain("89890001K", "LAIDEAL-NEW00001", "7"), qPrintable(store.lastError()));
+    }
+
     // A restart clears the head, renews the installation number and is recorded per environment.
     void test_restartChain()
     {
