@@ -1,5 +1,10 @@
 ﻿Versiones:
 
+12.6
+- Conexión directa con la AEAT (en preparación; la tienda sigue usando la pasarela): adaptada a la respuesta de la AEAT del 24 de noviembre de 2026 sobre copias de seguridad restauradas.
+- Si se restaura una copia y falta una anulación posterior que pudo ser el último registro enviado, el programa empieza una nueva cadena de registros con un nuevo número de instalación, como indica la AEAT, y lo avisa en la barra de estado.
+- La comprobación de los registros guardados al arrancar acepta esa nueva cadena; cualquier otro reinicio se sigue avisando.
+
 12.5
 - Conexión directa con la AEAT (en preparación; la tienda sigue usando la pasarela): adaptada a las respuestas escritas de la AEAT del 4 de noviembre de 2026.
 - Un registro reenviado tras un rechazo, y los enviados con retraso tras un fallo de conexión, se marcan como exige la AEAT.

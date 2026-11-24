@@ -556,6 +556,9 @@ private slots:
             QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
             QVERIFY(waitFor(backend, backend.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
         }
+        // The fake holds both environments' records: "2" must be generated a second after
+        // the cancellation, or production's first sync takes it for a lost head and restarts.
+        QTest::qWait(1100);
         AeatDirectBackend::Config other = config();
         other.system.installationNumber = "FROM-OTHER-SETTINGS";
         {

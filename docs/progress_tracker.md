@@ -15,12 +15,12 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Branching**: `develop` for the work (directly or via short-lived branches), `master` only for releases (PR-only, protected), `hotfix/X.Y` from `master` for fixes to the released version (`CONTRIBUTING.md`, Development workflow)
 
-**Latest release**: [12.5](https://github.com/germanbravolopez/laideal/releases/tag/12.5) — the direct AEAT client adapted to AEAT's written answers of 04-11-2026: `RechazoPrevio = X` on a registration resent after a refusal, `Incidencia = S` on late sends, the status-bar count of records still to send (Orden HAC/1177/2024 art. 16.4), `NumeroInstalacion` kept in the database with the chain, and the declaración responsable naming its third-party components (signed 20-11-2026). The shop stays on the IreneSolutions gateway in its TEST environment, where none of this changes what it sees.
+**Latest release**: [12.6](https://github.com/germanbravolopez/laideal/releases/tag/12.6) — the direct AEAT client adapted to AEAT's email answer of 24-11-2026: a database restored from a backup that lost a cancellation which may be the chain's last record starts a new chain under a new `NumeroInstalacion` with `PrimerRegistro = S` (art. 7.b of Orden HAC/1177/2024), and the chain check accepts that recorded restart (declaración responsable signed 24-11-2026). Also the root task runner `make.ps1`, which CI now runs. The shop stays on the IreneSolutions gateway in its TEST environment, where none of this changes what it sees.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->
 
-**Next**: the shop installs 12.5, keeps running on the gateway in TEST and sends back the self-check report. The switch to PRODUCTION with the **direct AEAT client** is parked in the Backlog (owner, 20-11-2026: it will come much later); the follow-ups of AEAT's written answers of 04-11-2026 and of its email answer of 24-11-2026 (a restored backup that lost a cancellation) are applied.
+**Next**: the shop installs 12.6, keeps running on the gateway in TEST and sends back the self-check report. The switch to PRODUCTION with the **direct AEAT client** is parked in the Backlog (owner, 20-11-2026: it will come much later); the follow-ups of AEAT's written answers of 04-11-2026 and of its email answer of 24-11-2026 (a restored backup that lost a cancellation) are applied.
 
 ---
 
