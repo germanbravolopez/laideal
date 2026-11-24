@@ -334,7 +334,7 @@ AEAT QR validation (`aeathash.cpp`):
 
 ## Known Issues / Technical Debt
 
-None is tracked here: open and blocking items live in [`progress_tracker.md`](progress_tracker.md); fixed ones in [`completed_milestones.md`](completed_milestones.md).
+None is tracked here: open items live in [`progress_tracker.md`](progress_tracker.md); fixed ones in [`completed_milestones.md`](completed_milestones.md).
 
 ---
 

@@ -10,7 +10,7 @@ La Ideal is a **Windows desktop laundry management app** — C++17 + Qt 6.4.3 (M
 
 ## Critical Issues — Check Before Touching Anything
 
-No blocking critical issues. See `docs/progress_tracker.md` for the full issue list.
+No release-gating issues. See `docs/progress_tracker.md` for the full issue list.
 
 ## Build & Run
 
@@ -63,7 +63,7 @@ No blocking critical issues. See `docs/progress_tracker.md` for the full issue l
 | `README.md` | Repository root readme files with the project description and initial overview |
 | `docs/INDEX.md` | **Quick-find**: every doc, source file, concept |
 | `docs/architecture.md` | Module details, DB schema, data flow, dependencies |
-| `docs/progress_tracker.md` | Current status, blocking / open issues, backlog |
+| `docs/progress_tracker.md` | Current status, open issues, backlog |
 | `docs/completed_milestones.md` | Finished work, newest first, plus the Archive |
 | `docs/testing/` | Testing: how to run, conventions and patterns (`README.md`), every suite (`unit_suites.md`), the end-to-end bench with the fake Verifactu and fake AEAT servers (`e2e.md`), the UI smoke test (`ui_smoke.md`), the manual pre-release checklist (`smoke_test.md`) |
 | `docs/ai_agent_instructions.md` | This file |

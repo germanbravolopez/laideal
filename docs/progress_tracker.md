@@ -1,13 +1,12 @@
 # Progress Tracker — La Ideal
 
 **Rule**: Track only what is actionable now. The active sections are:
-- **Blocking Issues** — must-fix items before merging the current branch and cutting a release. Items move out of here once resolved (into [`completed_milestones.md`](completed_milestones.md)).
-- **Open Non-Blocking Issues** — known backlog that does not gate the release but is still worth doing.
+- **Open Issues** — the one to-do list: everything worth doing now. An item that must be fixed before the next release says so at the start of its Notes ("Gates the release"). Items move out of here once resolved (into [`completed_milestones.md`](completed_milestones.md)).
 - **Backlog (deferred — low value / not currently planned)** — items consciously parked because the effort outweighs the value (or they depend on an external trigger). Not "open work": revisit only if the trade-off changes. Keeps the Open list a real to-do list.
 
 Finished work (and its Archive) lives in [`completed_milestones.md`](completed_milestones.md), not here.
 
-Add new entries at the **top** of the relevant section. Do not keep an "In Progress" list — work in progress lives in the branch and in Blocking Issues if it gates the release.
+Add new entries at the **top** of the relevant section. Do not keep an "In Progress" list — work in progress lives in the branch, and in Open Issues if it gates the release.
 
 ---
 
@@ -24,15 +23,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ---
 
-## Blocking Issues (must fix before the next release)
-
-> Verifactu legal-compliance gaps below come from the audit in [`docs/modules/verifactu/verifactu-requirements.md`](modules/verifactu/verifactu-requirements.md) (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance). Each one corresponds to a numbered requirement in that file.
-
-None open.
-
----
-
-## Open Non-Blocking Issues
+## Open Issues
 
 None open.
 

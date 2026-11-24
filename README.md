@@ -190,7 +190,7 @@ mkdocs serve   # http://127.0.0.1:8000
 | [Architecture](./docs/architecture.md) | Module overview, DB schema, data flow, known issues |
 | [Module docs](./docs/README.md) | One reference page per module |
 | [Verifactu](./docs/modules/verifactu/README.md) | AEAT digital invoicing — setup, API, DB schema |
-| [Progress tracker](./docs/progress_tracker.md) | Open issues, blocking items, roadmap |
+| [Progress tracker](./docs/progress_tracker.md) | Open issues, backlog |
 | [Completed milestones](./docs/completed_milestones.md) | History of finished work, newest first |
 | [Quick-find index](./docs/INDEX.md) | Every file, function, concept — Ctrl+F entry point |
 
@@ -198,7 +198,7 @@ mkdocs serve   # http://127.0.0.1:8000
 
 ## Known issues
 
-See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Blocking issues for the current release are at the top.
+See [docs/progress_tracker.md](./docs/progress_tracker.md) for the full list. Issues that gate the next release say so in their notes.
 
 ---
 

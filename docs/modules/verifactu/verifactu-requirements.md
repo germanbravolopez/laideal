@@ -8,7 +8,7 @@
 - [Ley 11/2021 (Ley Antifraude)](https://www.boe.es/buscar/act.php?id=BOE-A-2021-11473) — article 29.2.j) LGT, the parent law.
 - [AEAT — Sistemas Informáticos de Facturación y VERI\*FACTU](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu.html).
 
-Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially satisfied or relies on a third-party component · **[MISSING]** = not satisfied; a blocking issue is filed in `docs/progress_tracker.md`.
+Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially satisfied or relies on a third-party component · **[MISSING]** = not satisfied; a release-gating issue is filed in `docs/progress_tracker.md`.
 
 ---
 
@@ -144,4 +144,4 @@ Status legend: **[COVERED]** = fully satisfied · **[PARTIAL]** = partially sati
 | 9 | QR + mandatory text | COVERED |
 | 10 | No doble-uso software | COVERED |
 
-**Blocking issues filed** (one per non-covered gap) — see `docs/progress_tracker.md`. As of 2026-05-31, every Verifactu compliance requirement is COVERED. Req. 4 was closed via the new `BackupManager` module; Req. 5 was closed by stating the monoperador scope in the declaración responsable. If the shop later adds a second clerk, Req. 5 re-opens and the full per-operator-stamping fix needs to ship before that second account starts invoicing.
+**Issues filed** (one per non-covered gap): a Verifactu legal-compliance gap found by this audit (RD 1007/2023 + Orden HAC/1177/2024 + AEAT guidance) is filed in the Open Issues of [`docs/progress_tracker.md`](../../progress_tracker.md), names the numbered requirement of this file it corresponds to and gates the release. As of 2026-05-31, every Verifactu compliance requirement is COVERED. Req. 4 was closed via the new `BackupManager` module; Req. 5 was closed by stating the monoperador scope in the declaración responsable. If the shop later adds a second clerk, Req. 5 re-opens and the full per-operator-stamping fix needs to ship before that second account starts invoicing.
