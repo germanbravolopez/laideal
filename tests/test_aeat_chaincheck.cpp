@@ -106,6 +106,26 @@ private slots:
         QCOMPARE(r.failedIndex, 4);
     }
 
+    // A restart the store recorded (a new SIF under a new NumeroInstalacion) is accepted,
+    // once, for the first record carrying that number.
+    void test_recordedRestartAccepted()
+    {
+        QStringList records = chain();
+        SystemInfo renewed = system();
+        renewed.installationNumber = "LAIDEAL-0002";
+        const Registration first = alta("A-9", 5.0, {}, 9);
+        records << registrationXml(first, renewed)
+                << registrationXml(alta("A-10", 5.0, link("A-9", hashOf(first)), 10), renewed);
+        const QSet<QString> none;
+        QVERIFY(!AeatChainCheck::verify(records, &none).ok);
+        QVERIFY(!AeatChainCheck::verify(records, &none, { "LAIDEAL-0001" }).ok);   // not that number's restart
+        const AeatChainCheck::Result r = AeatChainCheck::verify(records, &none, { "LAIDEAL-0002" });
+        QVERIFY2(r.ok, qPrintable(r.problem));
+        QVERIFY(AeatChainCheck::verify(records, nullptr, { "LAIDEAL-0002" }).ok);
+        records << registrationXml(alta("A-11", 5.0, {}, 11), renewed);             // a second one under it
+        QVERIFY(!AeatChainCheck::verify(records, &none, { "LAIDEAL-0002" }).ok);
+    }
+
     // A record continuing one this database does not hold (a restored copy, the rest at
     // AEAT) is counted, not reported as an alteration; every record is still checked.
     void test_continuationOfARecordOnlyAtAeat()

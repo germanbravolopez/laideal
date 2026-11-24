@@ -79,6 +79,8 @@ public:
     bool setInstallationNumber(const QString &number);
     // The NumeroInstalacion a record's XML carries, or empty.
     static QString installationNumberFromXml(const QString &xml);
+    // A number never used before ("LAIDEAL-XXXXXXXX").
+    static QString newInstallationNumber();
 
     // The issuer's last record (empty hash: the chain has not started). `ok` is false
     // when the table could not be read - never to be taken as "no chain".
@@ -100,6 +102,16 @@ public:
     // The anchors of this environment; *tracked is false until markAnchorsTracked().
     QSet<QString> chainAnchors(bool *tracked = nullptr);
     bool markAnchorsTracked();
+
+    // The issuer's chain starts again under `installationNumber` (a new SIF, art. 7.b of
+    // Orden HAC/1177/2024: the previous record cannot be obtained): in one transaction the
+    // restart is recorded, the number becomes the database's and the head is cleared, so
+    // the next record says PrimerRegistro.
+    bool restartChain(const QString &issuerNif, const QString &installationNumber);
+    // When the issuer's chain last restarted (invalid: never). Older records are not its links.
+    QDateTime chainRestartedAt(const QString &issuerNif);
+    // The installation numbers this environment's chains restarted under, upper-case.
+    QSet<QString> chainRestarts();
 
     // Builds and stores the next record of the issuer's chain in one transaction:
     // reads the head, calls `build` with it, inserts the record and moves the head to

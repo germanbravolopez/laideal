@@ -105,8 +105,9 @@ Result fail(int index, int checked, const QString &problem)
 
 } // namespace
 
-Result verify(const QStringList &recordXmls, const QSet<QString> *anchors)
+Result verify(const QStringList &recordXmls, const QSet<QString> *anchors, const QSet<QString> &restarts)
 {
+    QSet<QString> usedRestarts;                  // issuer + installation number
     QList<ParsedRecord> records;
     QHash<QString, QSet<QString>> knownHashes;   // issuer -> every stored huella
     for (const QString &xml : recordXmls) {
@@ -137,9 +138,16 @@ Result verify(const QStringList &recordXmls, const QSet<QString> *anchors)
         const bool hasPrevious = lastHash.contains(issuer);
         const bool anchored = anchors && anchors->contains(linked);
         bool linkOk;
-        if (first)
+        if (first) {
             linkOk = !hasPrevious && linked.isEmpty();
-        else if (hasPrevious && linked == lastHash.value(issuer))
+            // A recorded restart (a new SIF): once per installation number.
+            const QString installation = r.get(QStringLiteral("SistemaInformatico/NumeroInstalacion")).toUpper();
+            const QString restartKey = issuer + QLatin1Char('|') + installation;
+            if (hasPrevious && linked.isEmpty() && restarts.contains(installation) && !usedRestarts.contains(restartKey)) {
+                usedRestarts.insert(restartKey);
+                linkOk = true;
+            }
+        } else if (hasPrevious && linked == lastHash.value(issuer))
             linkOk = true;
         else if (!linked.isEmpty() && !knownHashes.value(issuer).contains(linked)) {
             linkOk = !anchors || anchored;   // a continuation of a record only AEAT holds

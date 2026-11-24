@@ -64,6 +64,7 @@ struct QueryRecord {
     QString errorDescription;
     QString requestId;            // IdPeticion of the submission that registered it
     QString presentedAt;
+    QString stateChangedAt;       // TimestampUltimaModificacion: when AEAT last changed its state
 };
 
 struct Query {
@@ -91,11 +92,20 @@ struct RecordSummary {
     QString generatedAt;          // FechaHoraHusoGenRegistro
     QString previousHash;         // Huella of the record it chains to
     QString installationNumber;   // NumeroInstalacion, only for a record AEAT reported
+    bool    cancelledAtAeat = false;   // AEAT reported this registration as Anulado ...
+    QString cancelledAt;               // ... since then (TimestampUltimaModificacion)
 };
 
 // The newest record of a chain: the one no other record chains to; among several
 // such (or a broken chain), the latest generated. nullptr for an empty list.
 const RecordSummary *chainTip(const QList<RecordSummary> &records);
+
+// The query never returns cancellation records. A registration AEAT holds as cancelled
+// whose cancellation record is not among `records` (lost with a restored backup) hides
+// a record of the chain: unless AEAT cancelled it before `tip` was generated, that
+// cancellation may be the chain's real last record, whose huella cannot be recovered.
+// Returns such a registration (the invoice to name), or nullptr.
+const RecordSummary *lostCancellationAfter(const QList<RecordSummary> &records, const RecordSummary &tip);
 RecordSummary summarizeRecord(const QString &xml);
 
 // The app's result for one record of a submission. Correcto and AceptadoConErrores

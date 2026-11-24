@@ -206,6 +206,28 @@ private slots:
         QVERIFY(other.recordXmls().isEmpty());
     }
 
+    // A restart clears the head, renews the installation number and is recorded per environment.
+    void test_restartChain()
+    {
+        AeatStore store(m_db, "pruebas"), other(m_db, "produccion");
+        QVERIFY(store.ensureSchema());
+        store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(!store.chainHead("89890001K").isFirst());
+        QVERIFY(!store.chainRestartedAt("89890001K").isValid());
+        const QString number = AeatStore::newInstallationNumber();
+        QVERIFY(number != AeatStore::newInstallationNumber());
+        QVERIFY(!store.restartChain("89890001K", " "));
+        QVERIFY(store.restartChain("89890001K", number));
+        bool read = false;
+        QVERIFY(store.chainHead("89890001K", &read).isFirst());
+        QVERIFY(read);
+        QCOMPARE(store.installationNumber(), number);
+        QVERIFY(store.chainRestartedAt("89890001K").isValid());
+        QVERIFY(!store.chainRestartedAt("00000000T").isValid());
+        QCOMPARE(store.chainRestarts(), QSet<QString>{ number });
+        QVERIFY(other.chainRestarts().isEmpty());
+    }
+
     // An aeat_chain created by an earlier build (no generated_at) is completed, not left unreadable.
     void test_olderChainTableUpgraded()
     {

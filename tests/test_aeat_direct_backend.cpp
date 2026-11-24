@@ -869,6 +869,80 @@ private slots:
         QCOMPARE(queriesSince(before), 2);
     }
 
+    // Registers "1" and "2" at the fake AEAT from another database of our system and cancels
+    // "1" there, before "2" (`cancelFirst`, a second apart) or after it. Returns the hash of "2".
+    QString registerAndCancelElsewhere(bool cancelFirst)
+    {
+        QString secondHash;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_cancel.db").arg(m_dbCounter)));
+            AeatDirectBackend elsewhere(config(), other);
+            const auto cancel = [&] {
+                const VerifactuResult r = waitFor(elsewhere, elsewhere.cancelInvoiceAsync("1", QDate(2026, 10, 10)));
+                if (!r.isSuccess())
+                    qWarning() << "registerAndCancelElsewhere: not cancelled -" << r.errorDescription;
+            };
+            if (!waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket("1", 10))).isSuccess())
+                qWarning() << "registerAndCancelElsewhere: 1 not registered";
+            if (cancelFirst) {
+                cancel();
+                QTest::qWait(1100);                     // generation times have one-second precision
+            }
+            secondHash = waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket("2", 20))).rawHash;
+            if (!cancelFirst)
+                cancel();
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        return secondHash;
+    }
+
+    // A restored database lacks a cancellation AEAT holds, and nothing proves a record of
+    // ours came after it: its huella cannot be recovered (the query returns no cancellations),
+    // so the chain starts again as a new SIF (AEAT, 24-11-2026): a new NumeroInstalacion and
+    // PrimerRegistro. Later starts keep the new chain, and the chain check accepts it.
+    void test_lostCancellationAsHeadRestartsTheChain()
+    {
+        m_server->setWaitSeconds(0);
+        QVERIFY(!registerAndCancelElsewhere(false).isEmpty());
+        QCOMPARE(m_server->sentRecords().last().operation, QStringLiteral("Anulacion"));
+        const QString oldNumber = m_server->sentRecords().last().installationNumber;
+        {
+            AeatDirectBackend restored(config(), m_db);
+            QVERIFY(sync(restored));
+        }
+        QString renewed, firstHash;
+        {
+            AeatDirectBackend daily(config(), m_db);                 // no record yet in the new chain
+            firstHash = waitFor(daily, daily.submitInvoiceAsync(ticket("3", 30))).rawHash;
+            QVERIFY(!firstHash.isEmpty());
+            renewed = m_server->sentRecords().last().installationNumber;
+            QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+            QVERIFY(!renewed.isEmpty() && renewed != oldNumber);
+        }
+        AeatDirectBackend next(config(), m_db);
+        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("4", 40))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, firstHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, renewed);
+        const AeatChainCheck::Result chain = next.verifyStoredChain();
+        QVERIFY2(chain.ok, qPrintable(chain.problem));
+    }
+
+    // The lost cancellation reached AEAT before our newest registration there was generated:
+    // that registration follows it, so the chain continues from it as after any restore.
+    void test_lostCancellationBeforeTheTipContinuesTheChain()
+    {
+        m_server->setWaitSeconds(0);
+        const QString tipHash = registerAndCancelElsewhere(true);
+        QVERIFY(!tipHash.isEmpty());
+        const QString number = m_server->sentRecords().last().installationNumber;
+        AeatDirectBackend restored(config(), m_db);
+        QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, tipHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, number);
+    }
+
     // A first sync (here a database that never synced, as after a restore or on a new PC)
     // reads every month: the chain's newest record may be dated months back (a resend),
     // and the next record must follow it. A later, daily sync reads two months only.

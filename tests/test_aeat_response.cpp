@@ -168,6 +168,30 @@ private slots:
         QCOMPARE(chainTip({ good, bad })->invoiceNumber, QStringLiteral("2"));
     }
 
+    // A registration AEAT holds as cancelled whose cancellation record is missing may hide
+    // the chain's last record, unless AEAT cancelled it before the tip was generated.
+    void test_lostCancellationAfter()
+    {
+        const QString h1(64, 'A'), h2(64, 'B'), h3(64, 'C');
+        RecordSummary cancelled{ true, "Alta", "89890001K", "1", "10-10-2026", h1, "2026-10-10T10:00:00+02:00", "" };
+        cancelled.cancelledAtAeat = true;
+        cancelled.cancelledAt = "2026-10-10T12:00:00+02:00";
+        RecordSummary tip{ true, "Alta", "89890001K", "2", "10-10-2026", h2, "2026-10-10T11:00:00+02:00", h1 };
+        const RecordSummary *lost = lostCancellationAfter({ cancelled, tip }, tip);
+        QVERIFY(lost);
+        QCOMPARE(lost->invoiceNumber, QStringLiteral("1"));
+        RecordSummary held{ true, "Anulacion", "89890001K", "1", "10-10-2026", h3, "2026-10-10T11:30:00+02:00", h2 };
+        QVERIFY(!lostCancellationAfter({ cancelled, tip, held }, held));          // the database holds it
+        RecordSummary laterTip = tip;
+        laterTip.generatedAt = "2026-10-10T13:00:00+02:00";
+        QVERIFY(!lostCancellationAfter({ cancelled, laterTip }, laterTip));       // the tip follows it
+        cancelled.cancelledAt = "garbage";
+        QVERIFY(lostCancellationAfter({ cancelled, laterTip }, laterTip));        // nothing proven
+        cancelled.cancelledAtAeat = false;
+        QVERIFY(!lostCancellationAfter({ cancelled, laterTip }, laterTip));
+        QVERIFY(!parseQuery(fixture("query_cancelled.xml")).records.value(0).stateChangedAt.isEmpty());
+    }
+
     // An alta and an anulacion of one number in a reply are told apart by the operation.
     void test_lineForMatchesOperation()
     {

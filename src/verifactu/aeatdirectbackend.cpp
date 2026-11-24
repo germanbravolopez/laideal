@@ -4,6 +4,8 @@
 #include "aeatqr.h"
 #include "aeatresponse.h"
 
+#include <algorithm>
+
 #include <QDebug>
 #include <QPixmap>
 #include <QSet>
@@ -156,6 +158,13 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         return false;
     }
     QList<AeatResponse::RecordSummary> candidates = found;
+    // Records from before a restart belong to the chain that ended there.
+    const QDateTime restartedAt = m_store.chainRestartedAt(m_config.issuerNif);
+    if (restartedAt.isValid()) {
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const AeatResponse::RecordSummary &c) {
+            return QDateTime::fromString(c.generatedAt, Qt::ISODate) <= restartedAt;
+        }), candidates.end());
+    }
     QSet<QString> hashes;
     for (const AeatResponse::RecordSummary &c : candidates)
         hashes.insert(c.hash);
@@ -174,6 +183,13 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (!tip) {
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
+    }
+    // A restored database (first sync) that lacks a cancellation AEAT holds: the query
+    // never returns it, so when it may be the chain's last record the chain cannot be
+    // continued and starts again as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden).
+    if (m_firstSync && m_config.adoptInstallationNumber) {
+        if (const AeatResponse::RecordSummary *lost = AeatResponse::lostCancellationAfter(candidates, *tip))
+            return restartChain(lost->invoiceNumber, message);
     }
     // The chain's last record is at AEAT under another NumeroInstalacion (a database
     // restored from before it, or a new one): the number belongs to the chain, so ours
@@ -200,6 +216,23 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     *message = tr("La cadena continúa tras el registro %1 (%2, %3).")
                    .arg(tip->invoiceNumber, tip->operation == kCancellation ? tr("anulación") : tr("alta"),
                         tip->generatedAt.isEmpty() ? tr("generado antes") : tip->generatedAt);
+    return true;
+}
+
+bool AeatDirectBackend::restartChain(const QString &cancelledInvoice, QString *message)
+{
+    const QString number = AeatStore::newInstallationNumber();
+    if (!m_store.restartChain(m_config.issuerNif, number)) {
+        *message = tr("No se pudo guardar el nuevo inicio de la cadena: %1").arg(m_store.lastError());
+        return false;
+    }
+    qWarning() << "AeatDirectBackend: AEAT holds invoice" << cancelledInvoice << "as cancelled and this database lacks"
+               << "that cancellation record: the chain restarts, NumeroInstalacion" << m_config.system.installationNumber
+               << "->" << number;
+    m_config.system.installationNumber = number;
+    *message = tr("La AEAT tiene anulada la factura %1 y esta base de datos no guarda su registro de anulación, que "
+                  "puede ser el último de la cadena: la cadena empieza de nuevo con el número de instalación %2.")
+                   .arg(cancelledInvoice, number);
     return true;
 }
 
@@ -320,6 +353,8 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             s.generatedAt = r.generatedAt;
             s.previousHash = r.previousHash;
             s.installationNumber = r.installationNumber;
+            s.cancelledAtAeat = r.state.startsWith(QLatin1String("Anulad"));
+            s.cancelledAt = r.stateChangedAt;
             if (s.valid)
                 found << s;
             else
@@ -767,9 +802,10 @@ AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
     const QStringList xmls = m_store.recordXmls();
     bool tracked = false;
     QSet<QString> anchors = m_store.chainAnchors(&tracked);
+    const QSet<QString> restarts = m_store.chainRestarts();
     if (!tracked) {
         // A store from before the anchors: what it continues today is taken as given, once.
-        const AeatChainCheck::Result lenient = AeatChainCheck::verify(xmls);
+        const AeatChainCheck::Result lenient = AeatChainCheck::verify(xmls, nullptr, restarts);
         if (!lenient.ok)
             return lenient;
         for (const QString &hash : lenient.continuationHashes)
@@ -777,7 +813,7 @@ AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
                 anchors.insert(hash);
         m_store.markAnchorsTracked();
     }
-    AeatChainCheck::Result result = AeatChainCheck::verify(xmls, &anchors);
+    AeatChainCheck::Result result = AeatChainCheck::verify(xmls, &anchors, restarts);
     bool headRead = false;
     const QString head = m_store.chainHead(m_config.issuerNif, &headRead).hash;
     if (result.ok && headRead) {

@@ -148,6 +148,7 @@ Query parseQuery(const QByteArray &body)
             else if (name == QLatin1String("FechaHoraHusoGenRegistro"))  record.generatedAt = text;
             else if (name == QLatin1String("IdPeticion"))                record.requestId = text;
             else if (name == QLatin1String("TimestampPresentacion"))     record.presentedAt = text;
+            else if (name == QLatin1String("TimestampUltimaModificacion")) record.stateChangedAt = text;
             else if (name == QLatin1String("EstadoRegistro"))            record.state = text;
             else if (name == QLatin1String("CodigoErrorRegistro"))       record.errorCode = text;
             else if (name == QLatin1String("DescripcionErrorRegistro"))  record.errorDescription = text;
@@ -218,6 +219,27 @@ const RecordSummary *chainTip(const QList<RecordSummary> &records)
         }
     }
     return tip;
+}
+
+const RecordSummary *lostCancellationAfter(const QList<RecordSummary> &records, const RecordSummary &tip)
+{
+    const QDateTime tipAt = QDateTime::fromString(tip.generatedAt, Qt::ISODate);
+    for (const RecordSummary &r : records) {
+        if (!r.cancelledAtAeat)
+            continue;
+        bool held = false;
+        for (const RecordSummary &other : records)
+            held = held || (other.operation == QLatin1String("Anulacion") && other.invoiceNumber == r.invoiceNumber
+                            && other.issueDate == r.issueDate);
+        if (held)
+            continue;
+        // Generated no later than AEAT registered it: cancelled before the tip existed
+        // means the tip follows it. An unreadable time proves nothing.
+        const QDateTime cancelledAt = QDateTime::fromString(r.cancelledAt, Qt::ISODate);
+        if (!cancelledAt.isValid() || !tipAt.isValid() || cancelledAt >= tipAt)
+            return &r;
+    }
+    return nullptr;
 }
 
 VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber, const QString &operation)

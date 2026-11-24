@@ -13,7 +13,9 @@
 //    continues records La Ideal itself generated - never the gateway's - and starts
 //    with PrimerRegistro when there are none. At each start it is synced with AEAT
 //    (records of our system, this month and the previous; up to two years the first
-//    time), so a database restored from an older backup continues where AEAT is; no
+//    time), so a database restored from an older backup continues where AEAT is (or
+//    starts a new chain under a new NumeroInstalacion when a cancellation it lost may
+//    be the chain's last record: AEAT's query does not return cancellations); no
 //    record is generated before that and requests made meanwhile wait. The first sync
 //    needs AEAT; later ones fall back to the local chain when AEAT cannot be reached;
 //  - submit / cancel store the record at once (even when the certificate or the
@@ -225,6 +227,8 @@ private:
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
+    // Starts the issuer's chain again under a new NumeroInstalacion (a new SIF).
+    bool restartChain(const QString &cancelledInvoice, QString *message);
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,
                     QList<AeatResponse::RecordSummary> found, bool sawUnusable);
     void queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious,
