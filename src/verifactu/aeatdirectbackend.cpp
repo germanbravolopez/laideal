@@ -21,6 +21,7 @@ const int kTransferTimeoutMs = 30000;
 const int kQrPixelsPerModule = 5;
 const int kMonthsBack = 24;           // how far the first sync looks for the issuer's records
 const int kMonthsAlwaysQueried = 2;   // this month and the previous one, always
+const int kBlockingRecordsNamed = 5;  // unsent records a waiting chain restart names in its message
 
 QString s_endpointOverride;
 constexpr int kMaxUnverifiedDuplicates = 5;   // duplicate answers AEAT's query never confirms
@@ -198,14 +199,18 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         // An empty marker names no record (a chain not started, or just restarted): it
         // proves nothing about a copy restored afterwards.
         if (lastSeenHead(&seen) && !seen.isEmpty()) {
-            // This installation's settings name its last record. Visible (here or at AEAT):
+            // This installation's settings name its last record. It is the chain's tip:
             // nothing of ours came after it, whoever cancelled an invoice since. Not
-            // visible: it is the lost record.
+            // visible (here or at AEAT): it is the lost record. Visible with records of
+            // ours after it: the settings are older than this database (a settings file
+            // restored or copied), so they prove nothing and AEAT's own times decide.
             bool visible = false;
             for (const AeatResponse::RecordSummary &c : candidates)
                 visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
             if (!visible)
                 lost = AeatResponse::lostCancellation(candidates);
+            else if (tip->hash.compare(seen, Qt::CaseInsensitive) != 0)
+                lost = AeatResponse::lostCancellationAfter(candidates, *tip);
         } else {
             // A new PC (no settings), or no record named: only AEAT's own times can tell.
             lost = AeatResponse::lostCancellationAfter(candidates, *tip);
@@ -275,10 +280,27 @@ bool AeatDirectBackend::restartChain(const QString &cancelledInvoice, QString *m
     const int unsent = m_store.pendingCount(m_config.issuerNif);
     if (unsent != 0) {
         m_restartDeferred = true;
-        *message = unsent < 0
-            ? tr("No se pueden contar los registros pendientes de enviar: %1").arg(m_store.lastError())
-            : tr("Hay %1 registro(s) anteriores pendientes de enviar a la AEAT: se envían antes de empezar una "
-                 "nueva cadena de registros, y la comprobación se repite sola.").arg(unsent);
+        if (unsent < 0) {
+            *message = tr("No se pueden contar los registros pendientes de enviar: %1").arg(m_store.lastError());
+            return false;
+        }
+        // Which ones, and why they do not go out: saving stays blocked until they do.
+        QStringList invoices;
+        QString refusal;
+        for (const AeatStore::Record &r : m_store.pending(kBlockingRecordsNamed, m_config.issuerNif)) {
+            invoices << r.invoiceNumber;
+            if (refusal.isEmpty() && !r.errorDescription.isEmpty())
+                refusal = r.invoiceNumber + QStringLiteral(": ") + r.errorDescription;
+        }
+        if (unsent > invoices.size())
+            invoices << QStringLiteral("...");
+        *message = tr("Hay %1 registro(s) anteriores pendientes de enviar a la AEAT (factura %2): se envían antes de "
+                      "empezar una nueva cadena de registros, y la comprobación se repite sola.")
+                       .arg(unsent).arg(invoices.join(QStringLiteral(", ")));
+        if (!m_sendError.isEmpty())
+            *message += QLatin1Char(' ') + tr("Ahora no se pueden enviar: %1").arg(m_sendError);
+        else if (!refusal.isEmpty())
+            *message += QLatin1Char(' ') + tr("Último error de la AEAT (%1).").arg(refusal);
         return false;
     }
     const QString number = AeatStore::newInstallationNumber();
