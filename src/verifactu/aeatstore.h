@@ -105,12 +105,14 @@ public:
 
     // The issuer's chain starts again under `installationNumber` (a new SIF, art. 7.b of
     // Orden HAC/1177/2024: the previous record cannot be obtained): in one transaction the
-    // restart is recorded, the number becomes the database's and the head is cleared, so
-    // the next record says PrimerRegistro.
-    bool restartChain(const QString &issuerNif, const QString &installationNumber);
+    // restart is recorded (with the number it replaces and the invoice whose lost
+    // cancellation caused it), the number becomes the database's and the head is cleared,
+    // so the next record says PrimerRegistro.
+    bool restartChain(const QString &issuerNif, const QString &installationNumber,
+                      const QString &cancelledInvoice = QString());
     // When the issuer's chain last restarted (invalid: never). Older records are not its links.
     QDateTime chainRestartedAt(const QString &issuerNif);
-    // The installation numbers this environment's chains restarted under, upper-case.
+    // The restarts of this environment's chains, as "<ISSUER NIF>|<INSTALLATION NUMBER>", upper-case.
     QSet<QString> chainRestarts();
 
     // Builds and stores the next record of the issuer's chain in one transaction:

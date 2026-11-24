@@ -217,14 +217,25 @@ private slots:
         const QString number = AeatStore::newInstallationNumber();
         QVERIFY(number != AeatStore::newInstallationNumber());
         QVERIFY(!store.restartChain("89890001K", " "));
-        QVERIFY(store.restartChain("89890001K", number));
+        const QString previous = store.installationNumber();
+        QVERIFY(store.restartChain("89890001K", number, "31277"));
         bool read = false;
         QVERIFY(store.chainHead("89890001K", &read).isFirst());
         QVERIFY(read);
         QCOMPARE(store.installationNumber(), number);
         QVERIFY(store.chainRestartedAt("89890001K").isValid());
         QVERIFY(!store.chainRestartedAt("00000000T").isValid());
-        QCOMPARE(store.chainRestarts(), QSet<QString>{ number });
+        QCOMPARE(store.chainRestarts(), QSet<QString>{ "89890001K|" + number });
+        // The trace: which number it replaced and why, with a UTC time.
+        QVERIFY(m_db.open());
+        {
+            QSqlQuery q(m_db);
+            QVERIFY(q.exec("SELECT previous_number, cancelled_invoice, restarted_at FROM aeat_chain_restarts") && q.next());
+            QCOMPARE(q.value(0).toString(), previous);
+            QCOMPARE(q.value(1).toString(), QStringLiteral("31277"));
+            QVERIFY(q.value(2).toString().endsWith(QLatin1Char('Z')));
+        }
+        m_db.close();
         QVERIFY(other.chainRestarts().isEmpty());
     }
 

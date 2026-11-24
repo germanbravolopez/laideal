@@ -108,7 +108,8 @@ bool AeatStore::ensureSchema()
         // A chain started again as a new SIF: the one second PrimerRegistro AeatChainCheck accepts.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_restarts ("
                   " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, installation_number TEXT NOT NULL,"
-                  " restarted_at TEXT NOT NULL, PRIMARY KEY (environment, issuer_nif, installation_number))")
+                  " restarted_at TEXT NOT NULL, previous_number TEXT NOT NULL DEFAULT '',"
+                  " cancelled_invoice TEXT NOT NULL DEFAULT '', PRIMARY KEY (environment, issuer_nif, installation_number))")
         // One row per database, whatever the environment or issuer: the number belongs to the chain.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_installation ("
                   " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)");
@@ -372,7 +373,7 @@ bool AeatStore::markAnchorsTracked()
     return addChainAnchor(QString::fromLatin1(kAnchorsTrackedMarker), QStringLiteral("-"));
 }
 
-bool AeatStore::restartChain(const QString &issuerNif, const QString &installationNumber)
+bool AeatStore::restartChain(const QString &issuerNif, const QString &installationNumber, const QString &cancelledInvoice)
 {
     const QString number = installationNumber.trimmed();
     if (number.isEmpty()) {
@@ -387,16 +388,19 @@ bool AeatStore::restartChain(const QString &issuerNif, const QString &installati
         close(wasOpen);
         return false;
     }
-    const QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);   // UTC: no DST or time zone doubt
     bool ok = true;
     {
         QSqlQuery q(m_db);
-        q.prepare("INSERT OR REPLACE INTO aeat_chain_restarts (environment, issuer_nif, installation_number, restarted_at) "
-                  "VALUES (:e, :n, :i, :t)");
+        // Why and from which number: the trace of the restart, kept with the records.
+        q.prepare("INSERT OR REPLACE INTO aeat_chain_restarts (environment, issuer_nif, installation_number, restarted_at, "
+                  "previous_number, cancelled_invoice) "
+                  "VALUES (:e, :n, :i, :t, COALESCE((SELECT number FROM aeat_installation WHERE id = 1), ''), :c)");
         q.bindValue(":e", m_environment);
         q.bindValue(":n", issuerNif);
         q.bindValue(":i", number);
         q.bindValue(":t", now);
+        q.bindValue(":c", text(cancelledInvoice));
         ok = q.exec();
         if (ok) {
             q.prepare("INSERT OR REPLACE INTO aeat_installation (id, number, created_at) VALUES (1, :i, :t)");
@@ -450,11 +454,11 @@ QSet<QString> AeatStore::chainRestarts()
     if (!open(&wasOpen))
         return out;
     QSqlQuery q(m_db);
-    q.prepare("SELECT installation_number FROM aeat_chain_restarts WHERE environment = :e");
+    q.prepare("SELECT issuer_nif, installation_number FROM aeat_chain_restarts WHERE environment = :e");
     q.bindValue(":e", m_environment);
     if (q.exec())
         while (q.next())
-            out.insert(q.value(0).toString().toUpper());
+            out.insert((q.value(0).toString() + QLatin1Char('|') + q.value(1).toString()).toUpper());
     q.finish();
     close(wasOpen);
     return out;

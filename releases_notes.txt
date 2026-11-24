@@ -2,7 +2,7 @@
 
 12.6
 - Direct connection with AEAT (in preparation; the shop keeps using the gateway): adapted to AEAT's answer of 24 November 2026 about restored backups.
-- When a backup is restored and a cancellation made after it is missing and may have been the last record sent, the program starts a new chain of records with a new installation number, as AEAT indicates, and says so in the status bar.
+- When a backup is restored and a cancellation made after it is missing and may have been the last record sent, the program starts a new chain of records with a new installation number, as AEAT indicates. The restart is recorded in the database and in the program's log.
 - The check of the stored records at start accepts that new chain; any other restart is still reported.
 
 12.5

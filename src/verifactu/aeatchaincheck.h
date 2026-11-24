@@ -32,8 +32,9 @@ struct Result {
 // (the head moved back by a sync), is accepted only when it is an anchor: a deleted record
 // is then reported too.
 //
-// `restarts` (AeatStore::chainRestarts): the installation numbers a chain started again
-// under, as a new SIF. The first record carrying one may say PrimerRegistro after others.
+// `restarts` (AeatStore::chainRestarts, "<ISSUER>|<NUMBER>"): the installation numbers an
+// issuer's chain started again under, as a new SIF. That issuer's first record carrying
+// one may say PrimerRegistro after others.
 Result verify(const QStringList &recordXmls, const QSet<QString> *anchors = nullptr,
               const QSet<QString> &restarts = {});
 

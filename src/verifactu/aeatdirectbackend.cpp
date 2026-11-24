@@ -222,7 +222,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
 bool AeatDirectBackend::restartChain(const QString &cancelledInvoice, QString *message)
 {
     const QString number = AeatStore::newInstallationNumber();
-    if (!m_store.restartChain(m_config.issuerNif, number)) {
+    if (!m_store.restartChain(m_config.issuerNif, number, cancelledInvoice)) {
         *message = tr("No se pudo guardar el nuevo inicio de la cadena: %1").arg(m_store.lastError());
         return false;
     }
