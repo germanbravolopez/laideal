@@ -168,6 +168,47 @@ private slots:
         QCOMPARE(chainTip({ good, bad })->invoiceNumber, QStringLiteral("2"));
     }
 
+    // A registration AEAT holds as cancelled whose cancellation record is missing may hide
+    // the chain's last record, unless AEAT cancelled it before it received the tip. Only
+    // AEAT's clock counts: the tip's generation time (the PC's clock) proves nothing.
+    void test_lostCancellationAfter()
+    {
+        const QString h1(64, 'A'), h2(64, 'B'), h3(64, 'C');
+        RecordSummary cancelled{ true, "Alta", "89890001K", "1", "10-10-2026", h1, "2026-10-10T10:00:00+02:00", "" };
+        cancelled.cancelledAtAeat = true;
+        cancelled.cancelledAt = "2026-10-10T12:00:00+02:00";
+        RecordSummary tip{ true, "Alta", "89890001K", "2", "10-10-2026", h2, "2026-10-10T11:00:00+02:00", h1 };
+        tip.presentedAt = "2026-10-10T11:00:30+02:00";
+        const QList<RecordSummary> both{ cancelled, tip };          // the result points into the list
+        const RecordSummary *lost = lostCancellationAfter(both, tip);
+        QVERIFY(lost);
+        QCOMPARE(lost->invoiceNumber, QStringLiteral("1"));
+        QVERIFY(lostCancellation(both) == lost);
+        RecordSummary held{ true, "Anulacion", "89890001K", "1", "10-10-2026", h3, "2026-10-10T11:30:00+02:00", h2 };
+        QVERIFY(!lostCancellationAfter({ cancelled, tip, held }, held));          // the database holds it
+        QVERIFY(!lostCancellation({ cancelled, tip, held }));
+        RecordSummary laterTip = tip;
+        laterTip.presentedAt = "2026-10-10T13:00:00+02:00";
+        QVERIFY(!lostCancellationAfter({ cancelled, laterTip }, laterTip));       // AEAT received the tip later
+        QVERIFY(lostCancellation({ cancelled, laterTip }));                       // lost all the same
+        RecordSummary fastClock = tip;                                            // the PC's clock ran ahead
+        fastClock.generatedAt = "2026-10-10T13:00:00+02:00";
+        QVERIFY(lostCancellationAfter({ cancelled, fastClock }, fastClock));
+        RecordSummary sameSecond = tip;
+        sameSecond.presentedAt = cancelled.cancelledAt;
+        QVERIFY(lostCancellationAfter({ cancelled, sameSecond }, sameSecond));
+        RecordSummary localTip = laterTip;                                        // never seen at AEAT
+        localTip.presentedAt.clear();
+        QVERIFY(lostCancellationAfter({ cancelled, localTip }, localTip));
+        cancelled.cancelledAt = "garbage";
+        QVERIFY(lostCancellationAfter({ cancelled, laterTip }, laterTip));        // nothing proven
+        cancelled.cancelledAtAeat = false;
+        QVERIFY(!lostCancellationAfter({ cancelled, laterTip }, laterTip));
+        QVERIFY(!lostCancellation({ cancelled, laterTip }));
+        const QueryRecord parsed = parseQuery(fixture("query_cancelled.xml")).records.value(0);
+        QVERIFY(!parsed.stateChangedAt.isEmpty() && !parsed.presentedAt.isEmpty());
+    }
+
     // An alta and an anulacion of one number in a reply are told apart by the operation.
     void test_lineForMatchesOperation()
     {

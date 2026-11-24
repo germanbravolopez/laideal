@@ -56,6 +56,8 @@ runs:
         if (-not (Test-Path "$bin\g++.exe")) { throw "MinGW 11.2 g++ not found at $bin" }
         & "$bin\g++.exe" --version | Select-Object -First 1
         $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        # CMake takes the compiler from CXX when a build folder is configured (make.ps1).
+        "CXX=$($bin -replace '\\', '/')/g++.exe" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
     # CMake picks the launcher up from the environment; each run saves a new cache
     # entry and restores the newest one of its kind (same branch first, then its base).

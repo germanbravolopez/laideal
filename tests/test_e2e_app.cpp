@@ -709,6 +709,35 @@ private slots:
         QCOMPARE(nextTicketNumber(m_db, mw.findChild<VerifactuIntegration *>()->highestNumberAtAeat()), 990002);
     }
 
+    // A copy from before a cancellation: the start's sync restarts the chain, and the result
+    // panel says so (not only the log and a status-bar message).
+    void test_mainWindow_showsAChainRestart()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        {
+            VerifactuIntegration before;
+            QVERIFY(before.initialize(m_db));
+            bool synced = false;
+            before.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+            QTRY_VERIFY(synced);
+            QVERIFY(!before.submitSimplifiedInvoiceAsync("990101", QDate::currentDate(), 10.0, 21.0).isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "990101").state, AeatStore::kAccepted, 10000);
+            QVERIFY(!before.directBackend()->cancelInvoiceAsync("990101", QDate::currentDate()).isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Cancellation, "990101").state, AeatStore::kAccepted, 10000);
+        }
+        // The settings still name the cancellation as the chain's last record; the database no longer has it.
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_records WHERE invoice_number = '990101' AND kind = 'anulacion'"));
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain"));
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        QLabel *result = mw.findChild<QLabel *>("lblResult");
+        QTRY_VERIFY2_WITH_TIMEOUT(result->text().contains("empieza de nuevo"), qPrintable(result->text()), 20000);
+        QCOMPARE(store.chainRestarts().size(), 1);
+    }
+
     // The R5 names the corrected invoice as its stored record has it (here dated at
     // reception, before the payment date), not the fallback.
     void test_rectifyNamesTheStoredRecordsInvoice()

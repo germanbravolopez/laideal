@@ -14,6 +14,10 @@ name: CI
 #   workflow_dispatch        build + ui-smoke on any branch
 #
 # master requires build, ui-smoke and release to pass before a PR can merge.
+#
+# The build and test commands are the targets of make.ps1 (the ones a developer runs:
+# .\make help), so they are written once. A make call is the last line of its step:
+# its exit code is the step's.
 
 on:
   push:
@@ -86,13 +90,11 @@ jobs:
       - name: Install lxml for the AEAT schema check
         run: python -m pip install --quiet lxml
 
-      - name: Configure CMake
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
-
       - name: Build
-        run: |
-          cmake --build build
-          ccache --show-stats
+        run: ./make.ps1 build
+
+      - name: Compile cache statistics
+        run: ccache --show-stats
 
       # Guard against the toolchain mismatch coming back: every built exe must link
       # the MSVCRT runtime that Qt's MinGW 11.2 DLLs use, never the UCRT one.
@@ -108,13 +110,9 @@ jobs:
           if ($bad) { throw "Built with a UCRT toolchain (mismatches Qt's MinGW 11.2 runtime): $($bad -join ', ')" }
           Write-Host "All executables link msvcrt.dll."
 
+      # Also writes the run's summary page (.github/scripts/Render-TestSummary.ps1).
       - name: Test
-        shell: pwsh
-        run: |
-          ctest --test-dir build --output-on-failure --no-tests=error --timeout 120 --parallel 4
-          $code = $LASTEXITCODE
-          & .github/scripts/Render-TestSummary.ps1 -Title "Test results"
-          exit $code
+        run: ./make.ps1 test
 
       # The ticket_preview test renders a sample recibo + factura to PNG. GitHub
       # strips inline images from the run summary (it shows the ASCII receipt
@@ -167,16 +165,14 @@ jobs:
           ccache-key: ui-test
 
       - name: Build the UI-test app and the test tools
-        run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAIDEAL_UI_TEST=ON -DCMAKE_CXX_COMPILER=C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin/g++.exe
-          cmake --build build --target laideal fake_aeat_server escpos_preview
+        run: ./make.ps1 uitest
 
       # The release packaging refuses an exe with this switch; check here that the marker
       # it looks for is really in a UI-test build, so that guard cannot silently go blind.
       - name: Check the UI-test marker the release guard looks for
         shell: pwsh
         run: |
-          $bytes = [IO.File]::ReadAllBytes("build\src\app\laideal.exe")
+          $bytes = [IO.File]::ReadAllBytes("build-uitest\src\app\laideal.exe")
           $marker = [Text.Encoding]::Unicode.GetBytes('--fake-aeat')
           $text = [BitConverter]::ToString($bytes)
           if (-not $text.Contains([BitConverter]::ToString($marker))) { throw "The UI-test build has no --fake-aeat marker" }
@@ -190,11 +186,11 @@ jobs:
             throw "Could not find project(laideal VERSION X.Y) in CMakeLists.txt"
           }
           $ver = $matches[1]
-          & releases\package.ps1 -Exe build\src\app\laideal.exe -Version $ver -OutDir ui-package -AllowUiTest
+          & releases\package.ps1 -Exe build-uitest\src\app\laideal.exe -Version $ver -OutDir ui-package -AllowUiTest
           echo "INSTALLER=$PWD\ui-package\laideal_setup_$ver.exe" >> $env:GITHUB_OUTPUT
           New-Item -ItemType Directory -Path ui-tools -Force | Out-Null
           foreach ($tool in 'fake_aeat_server', 'escpos_preview') {
-            Copy-Item "build\tests\$tool.exe" ui-tools
+            Copy-Item "build-uitest\tests\$tool.exe" ui-tools
             windeployqt --no-translations --no-system-d3d-compiler "ui-tools\$tool.exe"
             if ($LASTEXITCODE -ne 0) { throw "windeployqt failed for $tool" }
           }
@@ -215,27 +211,23 @@ jobs:
           python-version: '3.12'
 
       - name: Install the test's Python packages
-        run: python -m pip install --quiet -r tests/ui/requirements.txt
+        run: ./make.ps1 venv
 
       - name: Add the capturing printer queue
-        run: python tests/ui/printer.py install
+        run: ./make.ps1 printer
 
-      # The build's Qt is taken off PATH: the installed app and the deployed tools must
-      # start on the DLLs next to them.
+      # With -Exe the targets test the installed app, and take the build's Qt off PATH:
+      # the app and the deployed tools must start on the DLLs next to them.
       - name: Run the UI smoke test (blocks A-E)
-        shell: pwsh
-        run: |
-          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
-          python tests/ui/smoke.py --exe '${{ steps.install.outputs.EXE }}' --tools ui-tools --out ui-smoke-out `
-                 --printer LaIdeal-Smoke --installer '${{ steps.package.outputs.INSTALLER }}'
+        run: >-
+          ./make.ps1 ui-smoke -Exe '${{ steps.install.outputs.EXE }}' -Tools ui-tools
+          -Printer LaIdeal-Smoke -Installer '${{ steps.package.outputs.INSTALLER }}'
 
       - name: Dry run of the AEAT pre-production script (fake AEAT)
         if: always() && steps.install.outcome == 'success'
-        shell: pwsh
-        run: |
-          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Qt\\' -and $_ -notmatch 'mingw' }) -join ';'
-          python tests/ui/aeat_preproduction.py --exe '${{ steps.install.outputs.EXE }}' --dry-run `
-                 --tools ui-tools --out ui-smoke-out\aeat-dry-run
+        run: >-
+          ./make.ps1 aeat-dry -Exe '${{ steps.install.outputs.EXE }}' -Tools ui-tools
+          -Out ui-smoke-out\aeat-dry-run
 
       - name: Keep the run's outputs
         if: always()

@@ -105,6 +105,11 @@ bool AeatStore::ensureSchema()
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_anchors ("
                   " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, hash TEXT NOT NULL, adopted_at TEXT NOT NULL,"
                   " PRIMARY KEY (environment, issuer_nif, hash))")
+        // A chain started again as a new SIF: the one second PrimerRegistro AeatChainCheck accepts.
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_chain_restarts ("
+                  " environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, installation_number TEXT NOT NULL,"
+                  " restarted_at TEXT NOT NULL, previous_number TEXT NOT NULL DEFAULT '',"
+                  " cancelled_invoice TEXT NOT NULL DEFAULT '', PRIMARY KEY (environment, issuer_nif, installation_number))")
         // One row per database, whatever the environment or issuer: the number belongs to the chain.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_installation ("
                   " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)");
@@ -116,6 +121,8 @@ bool AeatStore::ensureSchema()
         addColumnIfMissing("aeat_chain", "generated_at", "TEXT NOT NULL DEFAULT ''");
         addColumnIfMissing("aeat_records", "reached", "INTEGER NOT NULL DEFAULT 0");
         addColumnIfMissing("aeat_records", "delayed", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing("aeat_chain_restarts", "previous_number", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing("aeat_chain_restarts", "cancelled_invoice", "TEXT NOT NULL DEFAULT ''");
     }
     close(wasOpen);
     return ok;
@@ -147,8 +154,13 @@ bool AeatStore::seedInstallationNumber(QString *number)
     while (number->isEmpty() && q.next())
         *number = installationNumberFromXml(q.value(0).toString());
     if (number->isEmpty())
-        *number = QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
+        *number = newInstallationNumber();
     return true;
+}
+
+QString AeatStore::newInstallationNumber()
+{
+    return QStringLiteral("LAIDEAL-") + QUuid::createUuid().toString(QUuid::WithoutBraces).left(8).toUpper();
 }
 
 QString AeatStore::installationNumber()
@@ -361,6 +373,101 @@ QSet<QString> AeatStore::chainAnchors(bool *tracked)
 bool AeatStore::markAnchorsTracked()
 {
     return addChainAnchor(QString::fromLatin1(kAnchorsTrackedMarker), QStringLiteral("-"));
+}
+
+bool AeatStore::restartChain(const QString &issuerNif, const QString &installationNumber, const QString &cancelledInvoice)
+{
+    const QString number = installationNumber.trimmed();
+    if (number.isEmpty()) {
+        m_lastError = QStringLiteral("empty installation number");
+        return false;
+    }
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    if (!m_db.transaction()) {
+        m_lastError = m_db.lastError().text();
+        close(wasOpen);
+        return false;
+    }
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);   // UTC: no DST or time zone doubt
+    bool ok = true;
+    {
+        QSqlQuery q(m_db);
+        // Why and from which number: the trace of the restart, kept with the records.
+        q.prepare("INSERT OR REPLACE INTO aeat_chain_restarts (environment, issuer_nif, installation_number, restarted_at, "
+                  "previous_number, cancelled_invoice) "
+                  "VALUES (:e, :n, :i, :t, COALESCE((SELECT number FROM aeat_installation WHERE id = 1), ''), :c)");
+        q.bindValue(":e", m_environment);
+        q.bindValue(":n", issuerNif);
+        q.bindValue(":i", number);
+        q.bindValue(":t", now);
+        q.bindValue(":c", text(cancelledInvoice));
+        ok = q.exec();
+        if (ok) {
+            q.prepare("INSERT OR REPLACE INTO aeat_installation (id, number, created_at) VALUES (1, :i, :t)");
+            q.bindValue(":i", number);
+            q.bindValue(":t", now);
+            ok = q.exec();
+        }
+        if (ok) {
+            q.prepare("DELETE FROM aeat_chain WHERE environment = :e AND issuer_nif = :n");
+            q.bindValue(":e", m_environment);
+            q.bindValue(":n", issuerNif);
+            ok = q.exec();
+        }
+        if (!ok)
+            m_lastError = q.lastError().text();
+        q.finish();
+    }
+    if (ok && !m_db.commit()) {
+        ok = false;
+        m_lastError = m_db.lastError().text();
+    }
+    if (!ok) {
+        qWarning() << "AeatStore::restartChain failed -" << m_lastError;
+        m_db.rollback();
+    }
+    close(wasOpen);
+    return ok;
+}
+
+QDateTime AeatStore::chainRestartedAt(const QString &issuerNif, QString *installationNumber)
+{
+    QDateTime at;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return at;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT restarted_at, installation_number FROM aeat_chain_restarts "
+              "WHERE environment = :e AND issuer_nif = :n ORDER BY restarted_at DESC LIMIT 1");
+    q.bindValue(":e", m_environment);
+    q.bindValue(":n", issuerNif);
+    if (q.exec() && q.next()) {
+        at = QDateTime::fromString(q.value(0).toString(), Qt::ISODate);
+        if (installationNumber)
+            *installationNumber = q.value(1).toString();
+    }
+    q.finish();
+    close(wasOpen);
+    return at;
+}
+
+QSet<QString> AeatStore::chainRestarts()
+{
+    QSet<QString> out;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT issuer_nif, installation_number FROM aeat_chain_restarts WHERE environment = :e");
+    q.bindValue(":e", m_environment);
+    if (q.exec())
+        while (q.next())
+            out.insert((q.value(0).toString() + QLatin1Char('|') + q.value(1).toString()).toUpper());
+    q.finish();
+    close(wasOpen);
+    return out;
 }
 
 int AeatStore::highestRectificationNumber()

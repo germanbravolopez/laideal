@@ -30,7 +30,7 @@ Two long-lived branches:
 
 Short-lived branches are named after what they change: `feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `tests/<topic>`, `ci/<topic>` (cut from `develop`), and `hotfix/X.Y` (cut from `master`, see [Hotfix](#hotfix-a-fix-for-the-released-version)).
 
-**When the code is built and tested** (`.github/workflows/ci.yml`, one run per commit, a newer push cancels the obsolete run):
+**When the code is built and tested** (`.github/workflows/ci.yml`, one run per commit, a newer push cancels the obsolete run; its build and test steps are `make.ps1` targets, the ones run locally):
 
 | Event | `build` (compile + `ctest`) | `ui-smoke` (installed app, blocks A-E) | `release` |
 |---|---|---|---|
@@ -63,7 +63,7 @@ A pull request into `master` can only merge when `build`, `ui-smoke` and `releas
 
 A release is a pull request from `develop` to `master`. Its merge is the release: the push to `master` it causes builds, tests, tags `X.Y` on the merge commit and publishes the GitHub Release. There is no separate tag step. The `/release` skill drives these steps.
 
-1. On `develop` (directly, or on a `release/X.Y` branch merged into `develop` first), make it **release-ready**:
+1. On `develop` (directly, or on a `release/X.Y` branch merged into `develop` first), make it **release-ready** (`.\make regression` runs on this PC what CI will run on the pull request):
    - `CMakeLists.txt` is bumped to `project(laideal VERSION X.Y ...)`, higher than the latest release.
    - `releases_notes.txt` (English) **and** `releases_notes_es.txt` (Spanish) both have a new `X.Y` section at the top with the customer-facing changes. Inno Setup shows the file for the language picked at install time and the GitHub Release body (what the in-app updater shows) is built from both. Keep both files UTF-8 **with BOM** so the installer renders accents.
    - The docs are current - the `/update-docs` checklist: `docs/progress_tracker.md` (Current Status points at `X.Y`), `docs/completed_milestones.md` (the top section suffixed `(shipped in X.Y)`), `docs/architecture.md`, the relevant `docs/modules/*.md`, `docs/INDEX.md`, the root `README.md`, and this file if the workflow changed.

@@ -288,6 +288,11 @@ QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, co
     return m_backend->queryInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
+QString VerifactuIntegration::takeChainRestartNotice()
+{
+    return m_direct ? m_direct->takeRestartNotice() : QString();
+}
+
 int VerifactuIntegration::highestNumberAtAeat() const
 {
     // Only the real AEAT: pre-production holds test numbers far above the shop's.

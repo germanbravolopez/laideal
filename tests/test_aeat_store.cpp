@@ -206,6 +206,54 @@ private slots:
         QVERIFY(other.recordXmls().isEmpty());
     }
 
+    // An aeat_chain_restarts table without the trace columns (an earlier 12.6 build) is completed.
+    void test_olderRestartsTableUpgraded()
+    {
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("CREATE TABLE aeat_chain_restarts (environment TEXT NOT NULL, issuer_nif TEXT NOT NULL, "
+                                     "installation_number TEXT NOT NULL, restarted_at TEXT NOT NULL, "
+                                     "PRIMARY KEY (environment, issuer_nif, installation_number))"));
+        m_db.close();
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QVERIFY2(store.restartChain("89890001K", "LAIDEAL-NEW00001", "7"), qPrintable(store.lastError()));
+    }
+
+    // A restart clears the head, renews the installation number and is recorded per environment.
+    void test_restartChain()
+    {
+        AeatStore store(m_db, "pruebas"), other(m_db, "produccion");
+        QVERIFY(store.ensureSchema());
+        store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(!store.chainHead("89890001K").isFirst());
+        QVERIFY(!store.chainRestartedAt("89890001K").isValid());
+        const QString number = AeatStore::newInstallationNumber();
+        QVERIFY(number != AeatStore::newInstallationNumber());
+        QVERIFY(!store.restartChain("89890001K", " "));
+        const QString previous = store.installationNumber();
+        QVERIFY(store.restartChain("89890001K", number, "31277"));
+        bool read = false;
+        QVERIFY(store.chainHead("89890001K", &read).isFirst());
+        QVERIFY(read);
+        QCOMPARE(store.installationNumber(), number);
+        QString restartNumber;
+        QVERIFY(store.chainRestartedAt("89890001K", &restartNumber).isValid());
+        QCOMPARE(restartNumber, number);
+        QVERIFY(!store.chainRestartedAt("00000000T").isValid());
+        QCOMPARE(store.chainRestarts(), QSet<QString>{ "89890001K|" + number });
+        // The trace: which number it replaced and why, with a UTC time.
+        QVERIFY(m_db.open());
+        {
+            QSqlQuery q(m_db);
+            QVERIFY(q.exec("SELECT previous_number, cancelled_invoice, restarted_at FROM aeat_chain_restarts") && q.next());
+            QCOMPARE(q.value(0).toString(), previous);
+            QCOMPARE(q.value(1).toString(), QStringLiteral("31277"));
+            QVERIFY(q.value(2).toString().endsWith(QLatin1Char('Z')));
+        }
+        m_db.close();
+        QVERIFY(other.chainRestarts().isEmpty());
+    }
+
     // An aeat_chain created by an earlier build (no generated_at) is completed, not left unreadable.
     void test_olderChainTableUpgraded()
     {

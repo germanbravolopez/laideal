@@ -4,6 +4,8 @@
 #include "aeatqr.h"
 #include "aeatresponse.h"
 
+#include <algorithm>
+
 #include <QDebug>
 #include <QPixmap>
 #include <QSet>
@@ -19,6 +21,7 @@ const int kTransferTimeoutMs = 30000;
 const int kQrPixelsPerModule = 5;
 const int kMonthsBack = 24;           // how far the first sync looks for the issuer's records
 const int kMonthsAlwaysQueried = 2;   // this month and the previous one, always
+const int kBlockingRecordsNamed = 5;  // unsent records a waiting chain restart names in its message
 
 QString s_endpointOverride;
 constexpr int kMaxUnverifiedDuplicates = 5;   // duplicate answers AEAT's query never confirms
@@ -156,6 +159,18 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         return false;
     }
     QList<AeatResponse::RecordSummary> candidates = found;
+    // Records from before a restart belong to the chain that ended there.
+    QString restartNumber;
+    const QDateTime restartedAt = m_store.chainRestartedAt(m_config.issuerNif, &restartNumber);
+    if (restartedAt.isValid()) {
+        // Whole seconds on both sides; in the restart's own second only a record AEAT
+        // shows under the new number belongs to the new chain.
+        const qint64 restartSecs = restartedAt.toSecsSinceEpoch();
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const AeatResponse::RecordSummary &c) {
+            const qint64 secs = QDateTime::fromString(c.generatedAt, Qt::ISODate).toSecsSinceEpoch();
+            return secs < restartSecs || (secs == restartSecs && c.installationNumber != restartNumber);
+        }), candidates.end());
+    }
     QSet<QString> hashes;
     for (const AeatResponse::RecordSummary &c : candidates)
         hashes.insert(c.hash);
@@ -174,6 +189,34 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     if (!tip) {
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
+    }
+    // A restored database (first sync) that lacks a cancellation AEAT holds: the query
+    // never returns it, so when it may be the chain's last record the chain cannot be
+    // continued and starts again as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden).
+    if (m_firstSync && m_config.adoptInstallationNumber) {
+        const AeatResponse::RecordSummary *lost = nullptr;
+        QString seen;
+        // An empty marker names no record (a chain not started, or just restarted): it
+        // proves nothing about a copy restored afterwards.
+        if (lastSeenHead(&seen) && !seen.isEmpty()) {
+            // This installation's settings name its last record. It is the chain's tip:
+            // nothing of ours came after it, whoever cancelled an invoice since. Not
+            // visible (here or at AEAT): it is the lost record. Visible with records of
+            // ours after it: the settings are older than this database (a settings file
+            // restored or copied), so they prove nothing and AEAT's own times decide.
+            bool visible = false;
+            for (const AeatResponse::RecordSummary &c : candidates)
+                visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
+            if (!visible)
+                lost = AeatResponse::lostCancellation(candidates);
+            else if (tip->hash.compare(seen, Qt::CaseInsensitive) != 0)
+                lost = AeatResponse::lostCancellationAfter(candidates, *tip);
+        } else {
+            // A new PC (no settings), or no record named: only AEAT's own times can tell.
+            lost = AeatResponse::lostCancellationAfter(candidates, *tip);
+        }
+        if (lost)
+            return restartChain(lost->invoiceNumber, message);
     }
     // The chain's last record is at AEAT under another NumeroInstalacion (a database
     // restored from before it, or a new one): the number belongs to the chain, so ours
@@ -200,6 +243,79 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     *message = tr("La cadena continúa tras el registro %1 (%2, %3).")
                    .arg(tip->invoiceNumber, tip->operation == kCancellation ? tr("anulación") : tr("alta"),
                         tip->generatedAt.isEmpty() ? tr("generado antes") : tip->generatedAt);
+    return true;
+}
+
+bool AeatDirectBackend::lastSeenHead(QString *hash) const
+{
+    if (!m_config.readChainMarker)
+        return false;
+    const QStringList parts = m_config.readChainMarker().split(QLatin1Char('|'));
+    if (parts.size() != 3 || parts.at(0) != environmentName() || parts.at(1) != m_config.issuerNif
+        || parts.at(2) == QLatin1String("?"))
+        return false;
+    *hash = parts.at(2);
+    return true;
+}
+
+void AeatDirectBackend::resumeDeferredRestart()
+{
+    if (!m_restartDeferred || m_syncRunning || m_store.pendingCount(m_config.issuerNif) != 0)
+        return;
+    m_restartDeferred = false;
+    QTimer::singleShot(0, this, [this] { syncChain(nullptr); });
+}
+
+QString AeatDirectBackend::takeRestartNotice()
+{
+    const QString notice = m_restartNotice;
+    m_restartNotice.clear();
+    return notice;
+}
+
+bool AeatDirectBackend::restartChain(const QString &cancelledInvoice, QString *message)
+{
+    // Records generated in the old chain and not yet at AEAT belong to it: they are sent
+    // first (the outbox does it on its own), and the new chain starts after them.
+    const int unsent = m_store.pendingCount(m_config.issuerNif);
+    if (unsent != 0) {
+        m_restartDeferred = true;
+        if (unsent < 0) {
+            *message = tr("No se pueden contar los registros pendientes de enviar: %1").arg(m_store.lastError());
+            return false;
+        }
+        // Which ones, and why they do not go out: saving stays blocked until they do.
+        QStringList invoices;
+        QString refusal;
+        for (const AeatStore::Record &r : m_store.pending(kBlockingRecordsNamed, m_config.issuerNif)) {
+            invoices << r.invoiceNumber;
+            if (refusal.isEmpty() && !r.errorDescription.isEmpty())
+                refusal = r.invoiceNumber + QStringLiteral(": ") + r.errorDescription;
+        }
+        if (unsent > invoices.size())
+            invoices << QStringLiteral("...");
+        *message = tr("Hay %1 registro(s) anteriores pendientes de enviar a la AEAT (factura %2): se envían antes de "
+                      "empezar una nueva cadena de registros, y la comprobación se repite sola.")
+                       .arg(unsent).arg(invoices.join(QStringLiteral(", ")));
+        if (!m_sendError.isEmpty())
+            *message += QLatin1Char(' ') + tr("Ahora no se pueden enviar: %1").arg(m_sendError);
+        else if (!refusal.isEmpty())
+            *message += QLatin1Char(' ') + tr("Último error de la AEAT (%1).").arg(refusal);
+        return false;
+    }
+    const QString number = AeatStore::newInstallationNumber();
+    if (!m_store.restartChain(m_config.issuerNif, number, cancelledInvoice)) {
+        *message = tr("No se pudo guardar el nuevo inicio de la cadena: %1").arg(m_store.lastError());
+        return false;
+    }
+    qWarning() << "AeatDirectBackend: AEAT holds invoice" << cancelledInvoice << "as cancelled and this database lacks"
+               << "that cancellation record: the chain restarts, NumeroInstalacion" << m_config.system.installationNumber
+               << "->" << number;
+    m_config.system.installationNumber = number;
+    *message = tr("La AEAT tiene anulada la factura %1 y esta base de datos no guarda su registro de anulación, que "
+                  "puede ser el último de la cadena: la cadena empieza de nuevo con el número de instalación %2.")
+                   .arg(cancelledInvoice, number);
+    m_restartNotice = *message;
     return true;
 }
 
@@ -320,6 +436,9 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             s.generatedAt = r.generatedAt;
             s.previousHash = r.previousHash;
             s.installationNumber = r.installationNumber;
+            s.presentedAt = r.presentedAt;
+            s.cancelledAtAeat = r.state.startsWith(QLatin1String("Anulad"));
+            s.cancelledAt = r.stateChangedAt;
             if (s.valid)
                 found << s;
             else
@@ -643,6 +762,7 @@ void AeatDirectBackend::scheduleSend()
 
 void AeatDirectBackend::refreshUnsentCount(bool incident)
 {
+    resumeDeferredRestart();           // called after every outcome: the outbox may be empty now
     m_incident = m_incident || incident;
     const int unsent = m_incident ? m_store.pendingCount(m_config.issuerNif) : 0;
     if (unsent < 0) {
@@ -767,9 +887,10 @@ AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
     const QStringList xmls = m_store.recordXmls();
     bool tracked = false;
     QSet<QString> anchors = m_store.chainAnchors(&tracked);
+    const QSet<QString> restarts = m_store.chainRestarts();
     if (!tracked) {
         // A store from before the anchors: what it continues today is taken as given, once.
-        const AeatChainCheck::Result lenient = AeatChainCheck::verify(xmls);
+        const AeatChainCheck::Result lenient = AeatChainCheck::verify(xmls, nullptr, restarts);
         if (!lenient.ok)
             return lenient;
         for (const QString &hash : lenient.continuationHashes)
@@ -777,7 +898,7 @@ AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
                 anchors.insert(hash);
         m_store.markAnchorsTracked();
     }
-    AeatChainCheck::Result result = AeatChainCheck::verify(xmls, &anchors);
+    AeatChainCheck::Result result = AeatChainCheck::verify(xmls, &anchors, restarts);
     bool headRead = false;
     const QString head = m_store.chainHead(m_config.issuerNif, &headRead).hash;
     if (result.ok && headRead) {

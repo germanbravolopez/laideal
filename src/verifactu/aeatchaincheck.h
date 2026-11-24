@@ -31,7 +31,12 @@ struct Result {
 // huella this database does not hold, or to another stored record than the previous one
 // (the head moved back by a sync), is accepted only when it is an anchor: a deleted record
 // is then reported too.
-Result verify(const QStringList &recordXmls, const QSet<QString> *anchors = nullptr);
+//
+// `restarts` (AeatStore::chainRestarts, "<ISSUER>|<NUMBER>"): the installation numbers an
+// issuer's chain started again under, as a new SIF. That issuer's first record carrying
+// one may say PrimerRegistro after others.
+Result verify(const QStringList &recordXmls, const QSet<QString> *anchors = nullptr,
+              const QSet<QString> &restarts = {});
 
 // The issuer's newest stored record must be the chain head (`headHash`, the huella the next
 // record will link to), unless the head is an anchor a sync adopted: otherwise the newest

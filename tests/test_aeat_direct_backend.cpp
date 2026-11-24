@@ -556,6 +556,9 @@ private slots:
             QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
             QVERIFY(waitFor(backend, backend.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
         }
+        // The fake holds both environments' records: "2" must reach it a second after the
+        // cancellation, or production's first sync takes it for a lost head and restarts.
+        QTest::qWait(1100);
         AeatDirectBackend::Config other = config();
         other.system.installationNumber = "FROM-OTHER-SETTINGS";
         {
@@ -867,6 +870,363 @@ private slots:
         QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
         QCOMPARE(m_server->sentRecords().last().previousHash, afterBackup);
         QCOMPARE(queriesSince(before), 2);
+    }
+
+    // The settings' chain marker of one installation, as the app wires it.
+    static AeatDirectBackend::Config configWithMarker(QString *marker)
+    {
+        AeatDirectBackend::Config c = config();
+        c.readChainMarker = [marker] { return *marker; };
+        c.writeChainMarker = [marker](const QString &value) { *marker = value; };
+        return c;
+    }
+
+    // A copy of the test database as it is now (a backup), on its own connection name.
+    QString backupOfDatabase(const QString &tag)
+    {
+        m_db.close();
+        const QString path = m_dir.filePath(QString("backup_%1_%2.db").arg(m_dbCounter).arg(tag));
+        return QFile::copy(m_db.databaseName(), path) ? path : QString();
+    }
+
+    // The same PC after a restore: the settings know the chain's last record, the cancellation
+    // made after the backup. It is nowhere to be seen (AEAT's query has no cancellations), so
+    // the chain restarts - whatever the clocks say, even with a registration received later.
+    void test_markerShowsTheLostCancellationWhateverTheTimes()
+    {
+        m_server->setWaitSeconds(0);
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        QString backup;
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        backup = backupOfDatabase("marker");
+        QVERIFY(!backup.isEmpty());
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        const QString cancellationHash = m_server->sentRecords().last().hash;
+        QVERIFY(marker.endsWith(cancellationHash));
+        QTest::qWait(1100);
+        registerElsewhere({ "2" });      // AEAT receives a registration of ours later: no proof for this PC
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backup);
+            AeatDirectBackend restored(c, restoredDb);
+            QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+            QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+            QVERIFY(restored.takeRestartNotice().contains("empieza de nuevo"));
+            QVERIFY(restored.takeRestartNotice().isEmpty());                 // handed out once
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+    }
+
+    // After a restart the marker names no record. The same backup restored again, before
+    // any record of the new chain, must not be taken for "nothing lost": it restarts again
+    // instead of chaining to the old chain's record.
+    void test_backupRestoredAgainAfterARestart()
+    {
+        m_server->setWaitSeconds(0);
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString backupA = backupOfDatabase("again_a"), backupB = backupOfDatabase("again_b");
+        QVERIFY(!backupA.isEmpty() && !backupB.isEmpty());
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backupA);
+            {
+                AeatDirectBackend restored(c, restoredDb);
+                QVERIFY(sync(restored));
+                QVERIFY(!restored.takeRestartNotice().isEmpty());
+            }
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+        QVERIFY(marker.endsWith(QLatin1Char('|')));                          // no record named
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backupB);
+            {
+                AeatDirectBackend restored(c, restoredDb);
+                QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+                QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+                QVERIFY(!restored.takeRestartNotice().isEmpty());
+            }
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+    }
+
+    // Another system cancels an invoice of ours, as the latest change at AEAT. The settings'
+    // marker names our last record and it is there: nothing of ours is lost, the chain goes on.
+    void test_cancellationByAnotherSystemDoesNotRestart()
+    {
+        m_server->setWaitSeconds(0);
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        QString lastHash;
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+            lastHash = waitFor(first, first.submitInvoiceAsync(ticket("2", 20))).rawHash;
+            QVERIFY(!lastHash.isEmpty());
+        }
+        const QString number = m_server->sentRecords().last().installationNumber;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_gateway.db").arg(m_dbCounter)));
+            AeatDirectBackend::Config gatewayConfig = config();
+            gatewayConfig.system = { "Otro", "87654321X", "OTRO", "OT", "1.0", "OTRO-1" };
+            AeatDirectBackend gateway(gatewayConfig, other);
+            QVERIFY(waitFor(gateway, gateway.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("DELETE FROM aeat_chain_sync"));          // a first sync again
+        m_db.close();
+        AeatDirectBackend again(c, m_db);
+        QVERIFY(waitFor(again, again.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, lastHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, number);
+        QVERIFY(again.takeRestartNotice().isEmpty());
+    }
+
+    // The restored copy holds a record of the old chain that never reached AEAT. The restart
+    // waits: that record is sent first (on its own retry), then the sync repeats itself and
+    // the new chain starts after it.
+    void test_restartWaitsForTheOldChainsUnsentRecords()
+    {
+        m_server->setWaitSeconds(0);
+        AeatDirectBackend::setRetryDelaySeconds(2);
+        const auto restore = qScopeGuard([] { AeatDirectBackend::setRetryDelaySeconds(3600); });
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString backup = backupOfDatabase("unsent");
+        QVERIFY(!backup.isEmpty());
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backup);
+            {
+                // A record generated in the copy's chain and left unsent (its send is lost).
+                AeatStore store(restoredDb, "pruebas");
+                AeatDirectBackend::Config quiet = config();                   // no marker: not a first sync
+                AeatDirectBackend old(quiet, restoredDb);
+                QVERIFY(sync(old));
+                FakeAeatServer::Reply lost;
+                lost.drop = true;
+                m_server->enqueue(lost);
+                QVERIFY(!waitFor(old, old.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+                QCOMPARE(store.pendingCount("89890001K"), 1);
+            }
+            AeatStore store(restoredDb, "pruebas");
+            const int sentBefore = m_server->sentRecords().size();
+            FakeAeatServer::Reply lostAgain;
+            lostAgain.drop = true;
+            m_server->enqueue(lostAgain);                                     // the start's own resend fails too
+            const int requestsBefore = m_server->requests().size();
+            AeatDirectBackend restored(c, restoredDb);
+            QTRY_VERIFY_WITH_TIMEOUT(m_server->requests().size() > requestsBefore, 10000);
+            bool done = false, ok = true;
+            QString message;
+            restored.syncChain([&](bool o, const QString &m) { done = true; ok = o; message = m; });
+            QTRY_VERIFY_WITH_TIMEOUT(done, 30000);
+            QVERIFY2(!ok && message.contains("pendientes de enviar a la AEAT (factura 2)"), qPrintable(message));
+            QVERIFY(!restored.chainReady());
+            // The retry sends "2"; the sync then repeats on its own and restarts the chain.
+            QTRY_VERIFY_WITH_TIMEOUT(restored.chainReady(), 40000);
+            QCOMPARE(store.pendingCount("89890001K"), 0);
+            QVERIFY(m_server->sentRecords().size() > sentBefore);
+            QCOMPARE(m_server->sentRecords().last().invoiceNumber, QStringLiteral("2"));
+            QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+            QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+    }
+
+    // A settings file older than the database (restored or copied on its own): the record it
+    // names is still visible, but records of ours follow it, so it proves nothing about what
+    // came later. AEAT's times decide, and the cancellation lost after the copy restarts the chain.
+    void test_markerOlderThanTheDatabaseProvesNothing()
+    {
+        m_server->setWaitSeconds(0);
+        QString marker;
+        const AeatDirectBackend::Config c = configWithMarker(&marker);
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        const QString oldMarker = marker;
+        QVERIFY(oldMarker.endsWith(m_server->sentRecords().last().hash));
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("2", 20))).isSuccess());
+        }
+        const QString backup = backupOfDatabase("stale");
+        QVERIFY(!backup.isEmpty());
+        QTest::qWait(1100);
+        {
+            AeatDirectBackend first(c, m_db);
+            QVERIFY(waitFor(first, first.cancelInvoiceAsync("1", QDate(2026, 10, 10))).isSuccess());
+        }
+        marker = oldMarker;                                                   // the settings of before "2"
+        {
+            QSqlDatabase restoredDb = QSqlDatabase::addDatabase("QSQLITE", "aeat_copy_db");
+            restoredDb.setDatabaseName(backup);
+            {
+                AeatDirectBackend restored(c, restoredDb);
+                QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+                QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+                QVERIFY(restored.takeRestartNotice().contains("empieza de nuevo"));
+            }
+            restoredDb.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_copy_db");
+    }
+
+    // In the restart's own second, a record under the old installation number belongs to the
+    // chain that ended and one under the new number to the chain that started.
+    void test_restartSecondBelongsToTheNewNumbersRecords()
+    {
+        m_server->setWaitSeconds(0);
+        const QString oldTipHash = registerAndCancelElsewhere(false);
+        QVERIFY(!oldTipHash.isEmpty());
+        QString oldTipGenerated;
+        for (const FakeAeatServer::SentRecord &r : m_server->sentRecords()) {
+            if (r.hash == oldTipHash)
+                oldTipGenerated = r.generatedAt;
+        }
+        {
+            AeatDirectBackend restored(config(), m_db);
+            QVERIFY(sync(restored));
+            QVERIFY(!restored.takeRestartNotice().isEmpty());
+        }
+        const auto moveRestartTo = [this](const QString &generatedAt) {
+            const QDateTime at = QDateTime::fromString(generatedAt, Qt::ISODate).toUTC();
+            if (!at.isValid() || !m_db.open())
+                return false;
+            QSqlQuery q(m_db);
+            q.prepare("UPDATE aeat_chain_restarts SET restarted_at = :t");
+            q.bindValue(":t", at.toString(Qt::ISODate));
+            return q.exec() && q.numRowsAffected() == 1;
+        };
+        // The old chain's newest registration, generated in the second of the restart: left behind.
+        QVERIFY(moveRestartTo(oldTipGenerated));
+        m_db.close();
+        QTest::qWait(1100);
+        QString firstHash, renewed;
+        {
+            AeatDirectBackend daily(config(), m_db);
+            firstHash = waitFor(daily, daily.submitInvoiceAsync(ticket("3", 30))).rawHash;
+            QVERIFY(!firstHash.isEmpty());
+            QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+            renewed = m_server->sentRecords().last().installationNumber;
+        }
+        // The new chain's first record, generated in that second and known only to AEAT: the tip.
+        QVERIFY(moveRestartTo(m_server->sentRecords().last().generatedAt));
+        QVERIFY(QSqlQuery(m_db).exec("DELETE FROM aeat_records WHERE invoice_number = '3'"));
+        QVERIFY(QSqlQuery(m_db).exec("DELETE FROM aeat_chain"));
+        QVERIFY(QSqlQuery(m_db).exec("DELETE FROM aeat_chain_sync"));
+        m_db.close();
+        AeatDirectBackend next(config(), m_db);
+        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("4", 40))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, firstHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, renewed);
+    }
+
+    // Registers "1" and "2" at the fake AEAT from another database of our system and cancels
+    // "1" there, before "2" (`cancelFirst`, a second apart) or after it. Returns the hash of "2".
+    QString registerAndCancelElsewhere(bool cancelFirst)
+    {
+        QString secondHash;
+        {
+            QSqlDatabase other = QSqlDatabase::addDatabase("QSQLITE", "aeat_other_db");
+            other.setDatabaseName(m_dir.filePath(QString("other_%1_cancel.db").arg(m_dbCounter)));
+            AeatDirectBackend elsewhere(config(), other);
+            const auto cancel = [&] {
+                const VerifactuResult r = waitFor(elsewhere, elsewhere.cancelInvoiceAsync("1", QDate(2026, 10, 10)));
+                if (!r.isSuccess())
+                    qWarning() << "registerAndCancelElsewhere: not cancelled -" << r.errorDescription;
+            };
+            if (!waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket("1", 10))).isSuccess())
+                qWarning() << "registerAndCancelElsewhere: 1 not registered";
+            if (cancelFirst) {
+                cancel();
+                QTest::qWait(1100);                     // generation times have one-second precision
+            }
+            secondHash = waitFor(elsewhere, elsewhere.submitInvoiceAsync(ticket("2", 20))).rawHash;
+            if (!cancelFirst)
+                cancel();
+            other.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_other_db");
+        return secondHash;
+    }
+
+    // A new PC (no settings marker): a restored database lacks a cancellation AEAT holds, and
+    // nothing proves a record of ours came after it: its huella cannot be recovered (the query returns no cancellations),
+    // so the chain starts again as a new SIF (AEAT, 24-11-2026): a new NumeroInstalacion and
+    // PrimerRegistro. Later starts keep the new chain, and the chain check accepts it.
+    void test_lostCancellationAsHeadRestartsTheChain()
+    {
+        m_server->setWaitSeconds(0);
+        QVERIFY(!registerAndCancelElsewhere(false).isEmpty());
+        QCOMPARE(m_server->sentRecords().last().operation, QStringLiteral("Anulacion"));
+        const QString oldNumber = m_server->sentRecords().last().installationNumber;
+        {
+            AeatDirectBackend restored(config(), m_db);
+            QVERIFY(sync(restored));
+        }
+        QString renewed, firstHash;
+        {
+            AeatDirectBackend daily(config(), m_db);                 // no record yet in the new chain
+            firstHash = waitFor(daily, daily.submitInvoiceAsync(ticket("3", 30))).rawHash;
+            QVERIFY(!firstHash.isEmpty());
+            renewed = m_server->sentRecords().last().installationNumber;
+            QVERIFY(m_server->sentRecords().last().previousHash.isEmpty());
+            QVERIFY(!renewed.isEmpty() && renewed != oldNumber);
+        }
+        AeatDirectBackend next(config(), m_db);
+        QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("4", 40))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, firstHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, renewed);
+        const AeatChainCheck::Result chain = next.verifyStoredChain();
+        QVERIFY2(chain.ok, qPrintable(chain.problem));
+    }
+
+    // The lost cancellation reached AEAT before our newest registration there did (records
+    // arrive in generation order): that registration follows it, so the chain continues from it as after any restore.
+    void test_lostCancellationBeforeTheTipContinuesTheChain()
+    {
+        m_server->setWaitSeconds(0);
+        const QString tipHash = registerAndCancelElsewhere(true);
+        QVERIFY(!tipHash.isEmpty());
+        const QString number = m_server->sentRecords().last().installationNumber;
+        AeatDirectBackend restored(config(), m_db);
+        QVERIFY(waitFor(restored, restored.submitInvoiceAsync(ticket("3", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, tipHash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, number);
     }
 
     // A first sync (here a database that never synced, as after a restore or on a new PC)

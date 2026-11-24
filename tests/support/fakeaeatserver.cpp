@@ -258,15 +258,18 @@ QByteArray FakeAeatServer::answer(const Request &request)
         for (const SentRecord &h : held) {
             if (m_hidden.contains(h.invoiceNumber))
                 continue;
-            const bool cancelled = m_registered.contains(keyOf(h.issuerNif, QStringLiteral("Anulacion"), h.invoiceNumber));
+            const QString cancellationKey = keyOf(h.issuerNif, QStringLiteral("Anulacion"), h.invoiceNumber);
+            const bool cancelled = m_registered.contains(cancellationKey);
+            // Both on this server's clock: the state last changed when the cancellation arrived.
+            const QString changedAt = cancelled ? m_registered.value(cancellationKey).receivedAt : h.receivedAt;
             records += QStringLiteral(
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>%10</tik:IDEmisorFactura>"
                 "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
                 "<tikLRRC:DatosRegistroFacturacion><tikLRRC:ImporteTotal>%3</tikLRRC:ImporteTotal>%8%9"
                 "<tikLRRC:FechaHoraHusoGenRegistro>%7</tikLRRC:FechaHoraHusoGenRegistro>%4"
                 "</tikLRRC:DatosRegistroFacturacion><tikLRRC:DatosPresentacion><tik:NIFPresentador>89890001K</tik:NIFPresentador>"
-                "<tik:TimestampPresentacion>2026-10-10T10:00:05+02:00</tik:TimestampPresentacion><tik:IdPeticion>%5</tik:IdPeticion>"
-                "</tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>2026-10-10T10:00:05+02:00"
+                "<tik:TimestampPresentacion>%12</tik:TimestampPresentacion><tik:IdPeticion>%5</tik:IdPeticion>"
+                "</tikLRRC:DatosPresentacion><tikLRRC:EstadoRegistro><tikLRRC:TimestampUltimaModificacion>%11"
                 "</tikLRRC:TimestampUltimaModificacion><tikLRRC:EstadoRegistro>%6</tikLRRC:EstadoRegistro></tikLRRC:EstadoRegistro>"
                 "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
                 .arg(h.invoiceNumber, h.issueDate, h.total,
@@ -285,7 +288,7 @@ QByteArray FakeAeatServer::answer(const Request &request)
                                       "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>%3</tik:NumeroInstalacion>"
                                       "</tikLRRC:SistemaInformatico>")
                            .arg(h.producerNif, h.systemId, h.installationNumber.isEmpty() ? QStringLiteral("1") : h.installationNumber))
-                .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif);
+                .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif, changedAt, h.receivedAt);
         }
         return envelope(QStringLiteral(
             "<tikLRRC:RespuestaConsultaFactuSistemaFacturacion xmlns:tikLRRC=\"%1RespuestaConsultaLR.xsd\" xmlns:tik=\"%1SuministroInformacion.xsd\">"
@@ -330,7 +333,9 @@ QByteArray FakeAeatServer::answer(const Request &request)
                                                                         record.invoiceNumber)))
                                  ? QStringLiteral("Anulada") : QStringLiteral("Correcta"));
         } else {
-            m_registered.insert(key, record);
+            SentRecord received = record;
+            received.receivedAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            m_registered.insert(key, received);
             m_registeredRequestId.insert(key, requestId);
             ++accepted;
         }

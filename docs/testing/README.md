@@ -19,12 +19,13 @@ How the application is tested, how to run the tests, and where each kind of test
 ```powershell
 cmake --build build
 ctest --test-dir build --output-on-failure        # all suites
+.\make test                                       # the same after building, toolchain PATH included (-Filter e2e for some)
 ctest --test-dir build -R e2e --output-on-failure  # one suite, by name regex
 ```
 
 A suite can also be run directly for its full per-function report, e.g. `build\tests\test_sql_lite.exe`. GUI suites need `QT_QPA_PLATFORM=offscreen` when run by hand; CTest sets it for them.
 
-**In CI** the single `ci.yml` workflow runs the same `ctest` on every push to `develop` / `master`, every PR to them, and on demand. Its `release` job `needs: build`, so a failing test aborts a publish (the push to `master` that publishes). Each suite writes `build/test-results-<suite>.xml` (JUnit); `.github/scripts/Render-TestSummary.ps1` turns those into a foldable per-suite, per-method table in the run's step summary, and appends the `test_ticket_preview` ASCII receipt (GitHub strips images from summaries; the PNG renders are uploaded as the `ticket-previews` artifact).
+**In CI** the single `ci.yml` workflow runs the same `ctest` (through `.\make test`) on every push to `develop` / `master`, every PR to them, and on demand. Its `release` job `needs: build`, so a failing test aborts a publish (the push to `master` that publishes). Each suite writes `build/test-results-<suite>.xml` (JUnit); `.github/scripts/Render-TestSummary.ps1` turns those into a foldable per-suite, per-method table in the run's step summary, and appends the `test_ticket_preview` ASCII receipt (GitHub strips images from summaries; the PNG renders are uploaded as the `ticket-previews` artifact).
 
 ---
 
