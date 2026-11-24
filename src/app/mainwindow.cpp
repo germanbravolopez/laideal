@@ -642,6 +642,12 @@ void MainWindow::connectVerifactu()
         if (m_numberingRefused)
             m_result->setText(UiKit::okHtml(tr("Conexión directa con la AEAT: cadena comprobada, ya se pueden guardar tickets.")));
         m_numberingRefused = false;
+        // A chain restart must be seen, whichever sync decided it.
+        const QString restart = m_verifactuIntegration->takeChainRestartNotice();
+        if (!restart.isEmpty()) {
+            qWarning() << "MainWindow: direct AEAT chain restarted -" << restart;
+            m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(restart.toHtmlEscaped())));
+        }
     });
 }
 

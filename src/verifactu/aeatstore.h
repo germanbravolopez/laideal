@@ -110,8 +110,9 @@ public:
     // so the next record says PrimerRegistro.
     bool restartChain(const QString &issuerNif, const QString &installationNumber,
                       const QString &cancelledInvoice = QString());
-    // When the issuer's chain last restarted (invalid: never). Older records are not its links.
-    QDateTime chainRestartedAt(const QString &issuerNif);
+    // When the issuer's chain last restarted (invalid: never), and under which number.
+    // Older records are not its links.
+    QDateTime chainRestartedAt(const QString &issuerNif, QString *installationNumber = nullptr);
     // The restarts of this environment's chains, as "<ISSUER NIF>|<INSTALLATION NUMBER>", upper-case.
     QSet<QString> chainRestarts();
 

@@ -430,18 +430,22 @@ bool AeatStore::restartChain(const QString &issuerNif, const QString &installati
     return ok;
 }
 
-QDateTime AeatStore::chainRestartedAt(const QString &issuerNif)
+QDateTime AeatStore::chainRestartedAt(const QString &issuerNif, QString *installationNumber)
 {
     QDateTime at;
     bool wasOpen = false;
     if (!open(&wasOpen))
         return at;
     QSqlQuery q(m_db);
-    q.prepare("SELECT MAX(restarted_at) FROM aeat_chain_restarts WHERE environment = :e AND issuer_nif = :n");
+    q.prepare("SELECT restarted_at, installation_number FROM aeat_chain_restarts "
+              "WHERE environment = :e AND issuer_nif = :n ORDER BY restarted_at DESC LIMIT 1");
     q.bindValue(":e", m_environment);
     q.bindValue(":n", issuerNif);
-    if (q.exec() && q.next())
+    if (q.exec() && q.next()) {
         at = QDateTime::fromString(q.value(0).toString(), Qt::ISODate);
+        if (installationNumber)
+            *installationNumber = q.value(1).toString();
+    }
     q.finish();
     close(wasOpen);
     return at;

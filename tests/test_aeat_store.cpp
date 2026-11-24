@@ -223,7 +223,9 @@ private slots:
         QVERIFY(store.chainHead("89890001K", &read).isFirst());
         QVERIFY(read);
         QCOMPARE(store.installationNumber(), number);
-        QVERIFY(store.chainRestartedAt("89890001K").isValid());
+        QString restartNumber;
+        QVERIFY(store.chainRestartedAt("89890001K", &restartNumber).isValid());
+        QCOMPARE(restartNumber, number);
         QVERIFY(!store.chainRestartedAt("00000000T").isValid());
         QCOMPARE(store.chainRestarts(), QSet<QString>{ "89890001K|" + number });
         // The trace: which number it replaced and why, with a UTC time.

@@ -15,7 +15,9 @@
 //    (records of our system, this month and the previous; up to two years the first
 //    time), so a database restored from an older backup continues where AEAT is (or
 //    starts a new chain under a new NumeroInstalacion when a cancellation it lost may
-//    be the chain's last record: AEAT's query does not return cancellations); no
+//    be the chain's last record: AEAT's query does not return cancellations. The
+//    settings' chain marker tells whether the last record is visible; without it, on
+//    a new PC, AEAT's own times do. Unsent records of the old chain go first); no
 //    record is generated before that and requests made meanwhile wait. The first sync
 //    needs AEAT; later ones fall back to the local chain when AEAT cannot be reached;
 //  - submit / cancel store the record at once (even when the certificate or the
@@ -161,6 +163,10 @@ public:
     // until none is left. 0 while there is no incident.
     int unsentRecordCount() const { return m_unsentCount; }
 
+    // The user-facing text of a chain restart nobody was shown yet (see restartChain); it
+    // is handed out once.
+    QString takeRestartNotice();
+
     // Seconds the next submission still has to wait (0 = it may go now).
     int secondsUntilNextSend() const;
     qint64 msecsUntilNextSend() const;
@@ -201,6 +207,8 @@ private:
     int                        m_highestNumberAtAeat = 0;
     int                        m_highestRectificationAtAeat = 0;
     bool                       m_lastSyncFailed = false;
+    bool                       m_restartDeferred = false;   // a restart waits for the outbox to empty
+    QString                    m_restartNotice;
     bool                       m_incident = false;       // a send failed and records are still pending
     int                        m_unsentCount = 0;
     QList<ChainDone>           m_syncWaiters;   // held requests, resumed when the sync ends
@@ -227,8 +235,13 @@ private:
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
-    // Starts the issuer's chain again under a new NumeroInstalacion (a new SIF).
+    // Starts the issuer's chain again under a new NumeroInstalacion (a new SIF). Not while
+    // records of the old chain are still to send: they go first, then the sync runs again.
     bool restartChain(const QString &cancelledInvoice, QString *message);
+    // The chain's last record as this installation's settings last saw it; false when
+    // they hold none for this environment and issuer (a new PC).
+    bool lastSeenHead(QString *hash) const;
+    void resumeDeferredRestart();
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,
                     QList<AeatResponse::RecordSummary> found, bool sawUnusable);
     void queryInvoiceMonth(const QString &requestId, const QString &invoiceNumber, QDate month, bool tryPrevious,

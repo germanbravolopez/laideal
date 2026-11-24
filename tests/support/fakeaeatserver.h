@@ -40,6 +40,7 @@ public:
         QString installationNumber;   // NumeroInstalacion of that block
         bool    afterRejection = false;
         QString previousRejection;   // RechazoPrevio as sent (X: alta, S: anulación)
+        QString receivedAt;          // when this server registered it (its TimestampPresentacion)
     };
     struct Request {
         QString           kind;   // RegFactu / Consulta

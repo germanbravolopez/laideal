@@ -170,6 +170,7 @@ One line each; the test body has the exact assertions.
 | `test_mainWindow_numberRefreshedAfterAnyChainSync` | Any sync that succeeds after a failed first check moves the number on screen past AEAT's highest |
 | `test_mainWindow_syncDuringASaveKeepsItsNumber` | A sync ending while a paid save waits never changes the number on screen |
 | `test_mainWindow_numbersAboveAeatAfterARestore` | A restored (older) database continues above the numbers AEAT holds for our system |
+| `test_mainWindow_showsAChainRestart` | A copy from before a cancellation: the start's sync restarts the chain and the result panel says so |
 | `test_mainWindow_preProductionNumbersFollowTheDatabase` | In pre-production AEAT's test numbers never move the shop's numbering and no restore warning shows |
 | `test_noInvoiceWhileVerifactuIsNotConfigured` | Nothing is charged (save, Cobrar, Añadir with a paid garment) while Verifactu is not configured; an unpaid ticket still saves |
 | `test_selfTestSharesTheShopChainOnlyInPreProduction` | The self-test shares the shop's chain only while the direct client is in pre-production |

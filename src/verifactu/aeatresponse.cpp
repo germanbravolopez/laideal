@@ -221,9 +221,12 @@ const RecordSummary *chainTip(const QList<RecordSummary> &records)
     return tip;
 }
 
-const RecordSummary *lostCancellationAfter(const QList<RecordSummary> &records, const RecordSummary &tip)
+namespace {
+
+// `tip` null: any lost cancellation; else only those not proven older than it.
+const RecordSummary *findLostCancellation(const QList<RecordSummary> &records, const RecordSummary *tip)
 {
-    const QDateTime tipAt = QDateTime::fromString(tip.generatedAt, Qt::ISODate);
+    const QDateTime tipAt = tip ? QDateTime::fromString(tip->presentedAt, Qt::ISODate) : QDateTime();
     for (const RecordSummary &r : records) {
         if (!r.cancelledAtAeat)
             continue;
@@ -233,13 +236,23 @@ const RecordSummary *lostCancellationAfter(const QList<RecordSummary> &records, 
                             && other.issueDate == r.issueDate);
         if (held)
             continue;
-        // Generated no later than AEAT registered it: cancelled before the tip existed
-        // means the tip follows it. An unreadable time proves nothing.
         const QDateTime cancelledAt = QDateTime::fromString(r.cancelledAt, Qt::ISODate);
-        if (!cancelledAt.isValid() || !tipAt.isValid() || cancelledAt >= tipAt)
+        if (!tip || !cancelledAt.isValid() || !tipAt.isValid() || cancelledAt >= tipAt)
             return &r;
     }
     return nullptr;
+}
+
+} // namespace
+
+const RecordSummary *lostCancellation(const QList<RecordSummary> &records)
+{
+    return findLostCancellation(records, nullptr);
+}
+
+const RecordSummary *lostCancellationAfter(const QList<RecordSummary> &records, const RecordSummary &tip)
+{
+    return findLostCancellation(records, &tip);
 }
 
 VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber, const QString &operation)
