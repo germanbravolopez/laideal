@@ -86,6 +86,8 @@ private:
     QWidget   *m_vCertFileRow;
     QWidget   *m_vGatewayGroup;         // the gateway's rows: shown only while it is the connection
     QWidget   *m_vDirectGroup;
+    QWidget   *m_vSelfTest = nullptr;   // "Prueba con la AEAT": hidden while it is of no use
+    bool       m_selfTestAllowed = true;
     QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;
     QLabel    *m_vKeyUnreadable = nullptr;

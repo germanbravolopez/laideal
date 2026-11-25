@@ -341,19 +341,12 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     auto *btnSelfTest = new QPushButton(tr("Prueba con la AEAT (entorno de pruebas)"));
     btnSelfTest->setObjectName("btnAeatSelfTest");
     btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
-    // The shop's own direct client in pre-production already is the test, and both would
-    // send the same pre-production outbox at once.
-    // The reason is written under the button: as a tooltip it left the button greyed out unexplained.
-    auto *selfTestOff = new QLabel(tr("<i>La conexión directa ya trabaja en el entorno de pruebas de la AEAT: los "
-                                      "propios tickets son la prueba.</i>"));
-    selfTestOff->setObjectName("lblSelfTestOff");
-    selfTestOff->setWordWrap(true);
-    selfTestOff->setHidden(true);
-    if (AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction()) {
-        btnSelfTest->setEnabled(false);
-        btnSelfTest->setToolTip(QString());
-        selfTestOff->setHidden(false);
-    }
+    // Shown only while it is of use (updateDirectRows): not while the shop's own direct
+    // client works in pre-production (the tickets are the test, and both would send the
+    // same pre-production outbox at once), nor with the PRODUCCIÓN box ticked (a test
+    // button beside the real AEAT's switch misleads).
+    m_vSelfTest = btnSelfTest;
+    m_selfTestAllowed = !(AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction());
     connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
         emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
                                    m_vCertFile->text().trimmed(), m_vCertPassword->text());
@@ -372,7 +365,6 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertPasswordUnreadable->setVisible(s->aeatCertificatePasswordUnreadable());
     direct->addRow(m_vCertPasswordUnreadable);
     direct->addRow(btnSelfTest);
-    direct->addRow(selfTestOff);
     // Always available: a query only, in the environment ticked above.
     auto *btnDirectTest = new QPushButton(tr("Probar conexión"));
     btnDirectTest->setObjectName("btnAeatTestConnection");
@@ -386,6 +378,7 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     fl->addRow(m_vDirectGroup);
     connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
     connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
+    connect(m_vDirectProduction, &QCheckBox::toggled, this, &SettingsDialog::updateDirectRows);
     updateDirectRows();
 
     // Common to both connections.
@@ -525,6 +518,7 @@ void SettingsDialog::updateDirectRows()
     const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
     m_vDirectGroup->setVisible(directAeat);
     m_vGatewayGroup->setVisible(!directAeat);
+    m_vSelfTest->setVisible(m_selfTestAllowed && !m_vDirectProduction->isChecked());
     const bool file = selectedThumbprint().isEmpty();
     m_vCertFileRow->setEnabled(file);
     m_vCertPassword->setEnabled(file);

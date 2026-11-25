@@ -349,9 +349,10 @@ private slots:
         QCOMPARE(spy[1][5].toBool(), true);
     }
 
-    // While the shop's own direct client works in pre-production the self-test is off: the
-    // tickets are the test, and both would send the same pre-production outbox at once.
-    void test_selfTestOffWhileTheShopIsInPreProduction()
+    // "Prueba con la AEAT" shows only while it is of use: not while the shop's own direct
+    // client works in pre-production (the tickets are the test, and both would send the
+    // same pre-production outbox at once), nor with the PRODUCCIÓN box ticked.
+    void test_selfTestShownOnlyWhileOfUse()
     {
         AppSettings *s = AppSettings::instance();
         const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
@@ -359,18 +360,26 @@ private slots:
         s->setAeatDirectProduction(false);
         {
             SettingsDialog dlg;
-            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
-            QVERIFY(!dlg.findChild<QLabel *>("lblSelfTestOff")->isHidden());       // the reason, in sight
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
+            dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
+            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatTestConnection")->isHidden());   // always there
         }
         s->setAeatDirectProduction(true);
         {
             SettingsDialog dlg;
-            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
-            QVERIFY(dlg.findChild<QLabel *>("lblSelfTestOff")->isHidden());
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());           // box ticked
         }
         s->setVerifactuDirectAeat(false);
-        SettingsDialog gateway;
-        QVERIFY(gateway.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        s->setAeatDirectProduction(false);
+        SettingsDialog gateway;                  // before the switch: the rehearsal
+        auto *selfTest = gateway.findChild<QPushButton *>("btnAeatSelfTest");
+        auto *production = gateway.findChild<QCheckBox *>("chkDirectProduction");
+        QVERIFY(!selfTest->isHidden());
+        production->setChecked(true);
+        QVERIFY(selfTest->isHidden());
+        production->setChecked(false);
+        QVERIFY(!selfTest->isHidden());
     }
 
     // Leaving the direct connection is refused while it has unsent records.
