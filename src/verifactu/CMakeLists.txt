@@ -36,6 +36,8 @@ set(PROJECT_SOURCES
     aeatdirectbackend.cpp
     aeatselftest.h
     aeatselftest.cpp
+    aeatconnectionprobe.h
+    aeatconnectionprobe.cpp
     producerdeclaration.h
     producerdeclaration.cpp
     ../third_party/qrcodegen/qrcodegen.hpp

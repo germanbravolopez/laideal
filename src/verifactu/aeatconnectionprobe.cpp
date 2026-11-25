@@ -1,0 +1,91 @@
+#include "aeatconnectionprobe.h"
+
+#include "aeatdirectbackend.h"
+#include "aeatrecord.h"
+#include "aeatresponse.h"
+
+#include <QDate>
+#include <QDebug>
+
+namespace {
+const int kProbeTimeoutMs = 15000;
+}
+
+AeatConnectionProbe::AeatConnectionProbe(const Settings &settings, QObject *parent)
+    : QObject(parent)
+    , m_settings(settings)
+    , m_transport(new AeatTransport(this))
+{
+    m_transport->setTimeoutMs(kProbeTimeoutMs);
+}
+
+void AeatConnectionProbe::fail(const QString &text)
+{
+    qWarning() << "AeatConnectionProbe:" << text;
+    emit progress(false, text);
+    emit finished(false);
+}
+
+void AeatConnectionProbe::run()
+{
+    if (m_settings.issuerNif.trimmed().isEmpty() || m_settings.issuerName.trimmed().isEmpty()) {
+        fail(tr("Falta el NIF o el nombre del emisor."));
+        return;
+    }
+    const QString url = AeatDirectBackend::endpointUrl(m_settings.testEnvironment);
+    // The tests' local server is plain http and takes no certificate.
+    if (url.startsWith(QLatin1String("https"))) {
+        QString error;
+        const bool loaded = m_settings.certificateThumbprint.isEmpty()
+            ? m_certificate.loadFromFile(m_settings.certificatePath, m_settings.certificatePassword, &error)
+            : m_certificate.loadFromStore(m_settings.certificateThumbprint, &error);
+        if (!loaded) {
+            fail(tr("Certificado: %1").arg(error));
+            return;
+        }
+        const AeatCertificate::Info cert = m_certificate.info();
+        if (cert.expiry.isValid() && cert.expiry < QDateTime::currentDateTime()) {
+            fail(tr("Certificado: %1 caducó el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
+            return;
+        }
+        emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
+        // AEAT accepts requests presented by the issuer, or by someone it holds as her representative.
+        if (!cert.nif.isEmpty() && cert.nif.compare(m_settings.issuerNif, Qt::CaseInsensitive) != 0)
+            emit progress(false, tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
+                                    "consta como representante de %2 (apoderamiento o colaboración social).")
+                                     .arg(cert.nif, m_settings.issuerNif));
+        m_transport->setCertificate(&m_certificate);
+    }
+    const QDate today = QDate::currentDate();
+    const QString envelope = AeatRecord::queryEnvelope(m_settings.issuerName, m_settings.issuerNif, today.year(), today.month());
+    qDebug() << "AeatConnectionProbe: query to" << url;
+    m_transport->post(url, envelope.toUtf8(), [this](const AeatTransport::Response &response) {
+        bool ok = false;
+        const QString text = verdict(response, &ok);
+        if (!ok) {
+            fail(text);
+            return;
+        }
+        qDebug() << "AeatConnectionProbe: AEAT answered the query, HTTP" << response.httpStatus;
+        emit progress(true, text);
+        emit finished(true);
+    });
+}
+
+QString AeatConnectionProbe::verdict(const AeatTransport::Response &response, bool *ok)
+{
+    *ok = false;
+    if (!response.error.isEmpty())
+        return tr("No se pudo conectar con la AEAT: %1").arg(response.error);
+    const AeatResponse::Query reply = AeatResponse::parseQuery(response.body);
+    if (reply.fault)
+        return tr("La AEAT responde, pero rechaza la consulta: %1").arg(reply.faultText);
+    if (!reply.parsed)
+        return tr("La AEAT no ha dado una respuesta reconocible (HTTP %1): puede que no acepte el certificado.")
+            .arg(response.httpStatus);
+    *ok = true;
+    if (reply.records.isEmpty())
+        return tr("La AEAT responde: no tiene facturas del emisor este mes.");
+    return reply.morePages ? tr("La AEAT responde: tiene más de %1 facturas del emisor este mes.").arg(reply.records.size())
+                           : tr("La AEAT responde: tiene %1 factura(s) del emisor este mes.").arg(reply.records.size());
+}

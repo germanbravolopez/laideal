@@ -32,6 +32,7 @@
 #include "aeatexportdialog.h"
 #include "aeatcertificate.h"
 #include "aeatselftest.h"
+#include "aeatconnectionprobe.h"
 #include "producerdeclaration.h"
 #include "selfcheck.h"
 #include "reporthtml.h"
@@ -513,6 +514,11 @@ void MainWindow::mainwindowInitialSettings()
                              const QString &file, const QString &password) {
             runAeatSelfTest(&dlg, nif, name, thumbprint, file, password);
         });
+        connect(&dlg, &SettingsDialog::aeatConnectionTestRequested, &dlg,
+                [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
+                             const QString &file, const QString &password, bool production) {
+            runAeatConnectionTest(&dlg, nif, name, thumbprint, file, password, production);
+        });
         connect(&dlg, &SettingsDialog::testConnectionRequested,
                 &dlg, [&dlg](const QString &nif, const QString &name,
                              const QString &serviceKey, bool production) {
@@ -719,6 +725,40 @@ void MainWindow::continueDirectChain()
                 m_result->setText(UiKit::warnHtml(tr("Conexión directa con la AEAT: %1").arg(message.toHtmlEscaped())));
             statusBar()->showMessage(tr("Conexión directa con la AEAT: %1").arg(message), 10000);
         });
+}
+
+void MainWindow::runAeatConnectionTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
+                                       const QString &certificateFile, const QString &certificatePassword,
+                                       bool production)
+{
+    QDialog dlg(parent);
+    UiKit::setUpDialog(&dlg, tr("Probar conexión con la AEAT"), 620);
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->addWidget(UiKit::introPanel(
+        production ? tr("Comprueba el certificado elegido y consulta a la AEAT real (PRODUCCIÓN) las facturas del "
+                        "emisor de este mes. Solo consulta: no se registra ni se envía nada.")
+                   : tr("Comprueba el certificado elegido y consulta al entorno de pruebas de la AEAT las facturas "
+                        "del emisor de este mes. Solo consulta: no se registra ni se envía nada.")));
+    auto *panel = new UiKit::ResultPanel(tr("Conectando con la AEAT..."));
+    panel->setObjectName("lblAeatConnectionTest");
+    layout->addWidget(panel);
+    layout->addLayout(UiKit::closeRow(&dlg));
+
+    AeatConnectionProbe::Settings settings;
+    settings.testEnvironment = !production;
+    settings.issuerNif = nif;
+    settings.issuerName = name;
+    settings.certificateThumbprint = thumbprint;
+    settings.certificatePath = certificateFile;
+    settings.certificatePassword = certificatePassword;
+    AeatConnectionProbe probe(settings);
+    QStringList lines;
+    connect(&probe, &AeatConnectionProbe::progress, &dlg, [&lines, panel](bool ok, const QString &text) {
+        lines << (ok ? UiKit::okHtml(text.toHtmlEscaped()) : UiKit::errorHtml(text.toHtmlEscaped()));
+        panel->setText(lines.join("<br>"));
+    });
+    QTimer::singleShot(0, &probe, &AeatConnectionProbe::run);
+    dlg.exec();
 }
 
 void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,

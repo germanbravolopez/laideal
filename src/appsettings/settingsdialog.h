@@ -43,6 +43,10 @@ signals:
     // "Prueba con la AEAT": the direct connection's self-test with the form's values.
     void aeatSelfTestRequested(const QString &nif, const QString &name, const QString &thumbprint,
                                const QString &certificateFile, const QString &certificatePassword);
+    // "Probar conexión" of the direct connection: certificate and one query, nothing is sent.
+    void aeatConnectionTestRequested(const QString &nif, const QString &name, const QString &thumbprint,
+                                     const QString &certificateFile, const QString &certificatePassword,
+                                     bool production);
 
 private slots:
     void accept() override;
@@ -80,6 +84,7 @@ private:
     QLineEdit *m_vCertFile;
     QLineEdit *m_vCertPassword;
     QWidget   *m_vCertFileRow;
+    QWidget   *m_vGatewayGroup;         // the gateway's rows: shown only while it is the connection
     QWidget   *m_vDirectGroup;
     QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;

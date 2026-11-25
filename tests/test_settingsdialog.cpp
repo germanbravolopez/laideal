@@ -290,15 +290,63 @@ private slots:
         QLineEdit *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
         QVERIFY(key);
         key->setText("  spaced-key  ");
-        QPushButton *test = nullptr;
-        for (QPushButton *b : dlg.findChildren<QPushButton *>())
-            if (b->text().startsWith(QLatin1String("Probar conex")))
-                test = b;
+        auto *test = dlg.findChild<QPushButton *>("btnTestConnection");    // the gateway's
         QVERIFY(test);
         QSignalSpy spy(&dlg, &SettingsDialog::testConnectionRequested);
         test->click();
         QCOMPARE(spy.size(), 1);
         QCOMPARE(spy[0][2].toString(), QStringLiteral("spaced-key"));
+    }
+
+    // Each connection shows only its own fields: the gateway's key, PRODUCCIÓN box and
+    // "Probar conexión" are hidden on the direct connection, whose rows are hidden on the
+    // gateway (the shop saw both PRODUCCIÓN boxes and both tests at once, 25-11-2026).
+    void test_onlyTheChosenConnectionsRowsShow()
+    {
+        SettingsDialog dlg;
+        dlg.show();
+        auto *tabs = dlg.findChild<QTabWidget *>();
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabText(i) == QLatin1String("Verifactu"))
+                tabs->setCurrentIndex(i);
+        auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+        auto *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
+        auto *gatewayProduction = dlg.findChild<QCheckBox *>("chkProduction");
+        auto *gatewayTest = dlg.findChild<QPushButton *>("btnTestConnection");
+        auto *directProduction = dlg.findChild<QCheckBox *>("chkDirectProduction");
+        auto *selfTest = dlg.findChild<QPushButton *>("btnAeatSelfTest");
+        QVERIFY(connection && key && gatewayProduction && gatewayTest && directProduction && selfTest);
+        QCOMPARE(connection->currentData().toString(), QStringLiteral("irenesolutions"));
+        QVERIFY(key->isVisible() && gatewayProduction->isVisible() && gatewayTest->isVisible());
+        QVERIFY(!directProduction->isVisible() && !selfTest->isVisible());
+        connection->setCurrentIndex(connection->findData("aeat"));
+        QVERIFY(!key->isVisible() && !gatewayProduction->isVisible() && !gatewayTest->isVisible());
+        QVERIFY(directProduction->isVisible() && selfTest->isVisible());
+        QVERIFY(dlg.findChild<QDateEdit *>()->isVisible());            // the common rows stay
+        connection->setCurrentIndex(connection->findData("irenesolutions"));
+        QVERIFY(key->isVisible() && !directProduction->isVisible());
+    }
+
+    // The direct connection's "Probar conexión" sends the form's values, with the
+    // environment ticked in the form, and stays enabled in pre-production (it only queries).
+    void test_directConnectionTestSignal()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        SettingsDialog dlg;
+        auto *test = dlg.findChild<QPushButton *>("btnAeatTestConnection");
+        QVERIFY(test && test->isEnabled());
+        dlg.findChild<QLineEdit *>("leCertificateFile")->setText("  C:/cert.pfx ");
+        QSignalSpy spy(&dlg, &SettingsDialog::aeatConnectionTestRequested);
+        test->click();
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy[0][3].toString(), QStringLiteral("C:/cert.pfx"));
+        QCOMPARE(spy[0][5].toBool(), false);
+        dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+        test->click();
+        QCOMPARE(spy[1][5].toBool(), true);
     }
 
     // While the shop's own direct client works in pre-production the self-test is off: the
@@ -312,11 +360,13 @@ private slots:
         {
             SettingsDialog dlg;
             QVERIFY(!dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+            QVERIFY(!dlg.findChild<QLabel *>("lblSelfTestOff")->isHidden());       // the reason, in sight
         }
         s->setAeatDirectProduction(true);
         {
             SettingsDialog dlg;
             QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+            QVERIFY(dlg.findChild<QLabel *>("lblSelfTestOff")->isHidden());
         }
         s->setVerifactuDirectAeat(false);
         SettingsDialog gateway;

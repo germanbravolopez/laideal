@@ -16,6 +16,7 @@
 #include "aeatcertificate.h"
 #include "aeatrecord.h"
 #include "aeatselftest.h"
+#include "aeatconnectionprobe.h"
 #include "aeatdirectbackend.h"
 #include "aeatstore.h"
 #include "sql_lite.h"
@@ -709,6 +710,83 @@ private slots:
 
     // The proof-of-concept run: test invoice registered, queried back and cancelled,
     // after AEAT's wait time; every step reported; a refusal stops it.
+    // "Probar conexión" of the direct connection: one query for the current month, no
+    // record sent and no database needed; AEAT's fault, an unreachable server and
+    // missing issuer data are failures with their reason.
+    void test_connectionProbe()
+    {
+        const auto runProbe = [](const AeatConnectionProbe::Settings &settings, QStringList *lines) {
+            AeatConnectionProbe probe(settings);
+            connect(&probe, &AeatConnectionProbe::progress, &probe, [lines](bool, const QString &text) { *lines << text; });
+            QSignalSpy finished(&probe, &AeatConnectionProbe::finished);
+            probe.run();
+            if (finished.isEmpty() && !finished.wait(30000))
+                return false;
+            return finished[0][0].toBool();
+        };
+        AeatConnectionProbe::Settings settings;
+        settings.issuerNif = "89890001K";
+        settings.issuerName = "Tintorería La Ideal";
+
+        QStringList lines;
+        QVERIFY(runProbe(settings, &lines));
+        QVERIFY2(lines.last().contains("no tiene facturas"), qPrintable(lines.last()));
+        QCOMPARE(m_server->requests().size(), 1);
+        QCOMPARE(m_server->requests().last().kind, QStringLiteral("Consulta"));
+        QCOMPARE(m_server->requests().last().issuerNif, QStringLiteral("89890001K"));
+        QCOMPARE(m_server->requests().last().month, QDate::currentDate().month());
+        QVERIFY(m_server->sentRecords().isEmpty());
+
+        // AEAT holds a record of the month: it is counted.
+        {
+            AeatDirectBackend backend(config(), m_db);
+            QVERIFY(sync(backend));
+            QCOMPARE(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).status, VerifactuResult::SUCCESS);
+        }
+        lines.clear();
+        QVERIFY(runProbe(settings, &lines));
+        QVERIFY2(lines.last().contains("1 factura(s)"), qPrintable(lines.last()));
+        QCOMPARE(m_server->sentRecords().size(), 1);             // the probe sent nothing more
+
+        m_server->setQueriesUnavailable(true);
+        lines.clear();
+        QVERIFY(!runProbe(settings, &lines));
+        QVERIFY2(lines.last().contains("rechaza la consulta"), qPrintable(lines.last()));
+        m_server->setQueriesUnavailable(false);
+
+        AeatConnectionProbe::Settings noNif = settings;
+        noNif.issuerNif.clear();
+        const int before = m_server->requests().size();
+        lines.clear();
+        QVERIFY(!runProbe(noNif, &lines));
+        QCOMPARE(m_server->requests().size(), before);           // nothing asked
+
+        QTcpServer closed;
+        QVERIFY(closed.listen(QHostAddress::LocalHost));
+        const quint16 port = closed.serverPort();
+        closed.close();
+        AeatDirectBackend::setEndpointOverride(QStringLiteral("http://127.0.0.1:%1/unreachable").arg(port));
+        lines.clear();
+        QVERIFY(!runProbe(settings, &lines));
+        QVERIFY2(lines.last().contains("No se pudo conectar"), qPrintable(lines.last()));
+    }
+
+    // What the probe says of each kind of answer.
+    void test_connectionProbeVerdict()
+    {
+        bool ok = true;
+        AeatTransport::Response html;
+        html.httpStatus = 403;
+        html.body = "<html><body>Forbidden</body></html>";
+        QVERIFY(AeatConnectionProbe::verdict(html, &ok).contains("403"));
+        QVERIFY(!ok);
+        AeatTransport::Response fault;
+        fault.httpStatus = 500;
+        fault.body = FakeAeatServer::faultReply("env:Client", "Codigo[4104].NIF no identificado");
+        QVERIFY(AeatConnectionProbe::verdict(fault, &ok).contains("4104"));
+        QVERIFY(!ok);
+    }
+
     void test_selfTest()
     {
         // Long enough that the alta and the consulta cannot use it up on a slow runner,

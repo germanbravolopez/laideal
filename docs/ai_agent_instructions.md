@@ -50,7 +50,7 @@ No release-gating issues. See `docs/progress_tracker.md` for the full issue list
 | Verifactu facade | `src/verifactu/verifactuintegration.h` / `.cpp` |
 | Verifactu gateway REST manager | `src/verifactu/verifactumanager.h` / `.cpp` |
 | Verifactu backend interface, `VerifactuEstado` and `VerifactuResult` | `src/verifactu/verifactubackend.h`, `src/verifactu/verifactutypes.h` |
-| Direct AEAT client | `src/verifactu/aeat*.h` / `.cpp`: `aeatdirectbackend` (flow), `aeatstore` (`aeat_*` tables), `aeatrecord`, `aeathash`, `aeatqr`, `aeatcertificate`, `aeattransport`, `aeatresponse`, `aeatchaincheck`, `aeatselftest`; `producerdeclaration` |
+| Direct AEAT client | `src/verifactu/aeat*.h` / `.cpp`: `aeatdirectbackend` (flow), `aeatstore` (`aeat_*` tables), `aeatrecord`, `aeathash`, `aeatqr`, `aeatcertificate`, `aeattransport`, `aeatresponse`, `aeatchaincheck`, `aeatselftest`, `aeatconnectionprobe`; `producerdeclaration` |
 | Verifactu config | `src/verifactu/verifactuconfig.h` / `.cpp` |
 | Verifactu invoice model | `src/verifactu/verifactuinvoice.h` / `.cpp` |
 | In-app updater (Ayuda → Buscar actualizaciones / startup check) | `src/updater/updater.h` / `.cpp` + `src/updater/updaterdialog.h` / `.cpp` |

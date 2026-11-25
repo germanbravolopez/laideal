@@ -32,6 +32,24 @@ QLabel *warningLabel(const char *objectName, const QString &text)
     label->setHidden(true);
     return label;
 }
+
+// One label column for forms stacked one under another.
+void alignLabelColumns(const QList<QFormLayout *> &forms)
+{
+    int width = 0;
+    QList<QWidget *> labels;
+    for (QFormLayout *form : forms) {
+        for (int row = 0; row < form->rowCount(); ++row) {
+            QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
+            if (!item || !item->widget())
+                continue;
+            labels << item->widget();
+            width = qMax(width, item->widget()->sizeHint().width());
+        }
+    }
+    for (QWidget *label : labels)
+        label->setMinimumWidth(width);
+}
 } // namespace
 
 void SettingsDialog::setMissingDbConfirm(MissingDbConfirm confirm) { g_missingDbConfirm = std::move(confirm); }
@@ -259,21 +277,6 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
 
     fl->addRow(tr("NIF del emisor:"),     m_vNif);
     fl->addRow(tr("Nombre empresa:"),     m_vName);
-    fl->addRow(tr("Clave de servicio:"),  keyRow);
-    m_vKeyUnreadable = warningLabel("lblKeyUnreadable",
-        tr("Clave ilegible: la clave guardada no se puede descifrar (otro usuario o equipo de Windows). "
-           "Vuelva a introducirla."));
-    m_vKeyUnreadable->setVisible(s->verifactuServiceKeyUnreadable());
-    fl->addRow(m_vKeyUnreadable);
-    fl->addRow(m_vProduction);
-    fl->addRow(m_vPendingRecoveryEnabled);
-    fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
-    m_vFloorFuture = warningLabel("lblFloorFuture",
-        tr("Esta fecha es posterior a hoy: hasta entonces no se avisará de ningún envío pendiente ni "
-           "factura rechazada."));
-    fl->addRow(m_vFloorFuture);
-    connect(m_vPendingRecoveryFloor, &QDateEdit::dateChanged, this, &SettingsDialog::updateFloorWarning);
-    updateFloorWarning();
 
     auto *note = new QLabel(tr(
         "<i>La clave de servicio se obtiene en "
@@ -281,7 +284,6 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
         "facturae.irenesolutions.com</a>.</i>"));
     note->setOpenExternalLinks(true);
     note->setWordWrap(true);
-    fl->addRow(note);
 
     // Direct connection with AEAT (research, docs/modules/verifactu/aeat-direct-investigation.md).
     m_vConnection = new QComboBox;
@@ -290,6 +292,32 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vConnection->addItem(tr("Directa con la AEAT"), QStringLiteral("aeat"));
     m_vConnection->setCurrentIndex(s->verifactuDirectAeat() ? 1 : 0);
     fl->addRow(tr("Conexión con la AEAT:"), m_vConnection);
+
+    // Only the chosen connection's fields show: each has its own credential, its own
+    // PRODUCCIÓN switch and its own test (two PRODUCCIÓN boxes in sight at once misled).
+    m_vGatewayGroup = new QWidget;
+    m_vGatewayGroup->setObjectName("gatewayGroup");
+    auto *gateway = new QFormLayout(m_vGatewayGroup);
+    gateway->setContentsMargins(0, 0, 0, 0);
+    gateway->addRow(tr("Clave de servicio:"), keyRow);
+    m_vKeyUnreadable = warningLabel("lblKeyUnreadable",
+        tr("Clave ilegible: la clave guardada no se puede descifrar (otro usuario o equipo de Windows). "
+           "Vuelva a introducirla."));
+    m_vKeyUnreadable->setVisible(s->verifactuServiceKeyUnreadable());
+    gateway->addRow(m_vKeyUnreadable);
+    gateway->addRow(m_vProduction);
+    gateway->addRow(note);
+    auto *btnTest = new QPushButton(tr("Probar conexión"));
+    btnTest->setObjectName("btnTestConnection");
+    btnTest->setToolTip(tr("Comprueba que el servidor de IreneSolutions es accesible con los valores actuales del formulario"));
+    connect(btnTest, &QPushButton::clicked, this, [this]() {
+        emit testConnectionRequested(m_vNif->text().trimmed(),
+                                     m_vName->text().trimmed(),
+                                     m_vKey->text().trimmed(),
+                                     m_vProduction->isChecked());
+    });
+    gateway->addRow(btnTest);
+    fl->addRow(m_vGatewayGroup);
 
     m_vDirectGroup = new QWidget;
     auto *direct = new QFormLayout(m_vDirectGroup);
@@ -315,10 +343,16 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
     // The shop's own direct client in pre-production already is the test, and both would
     // send the same pre-production outbox at once.
+    // The reason is written under the button: as a tooltip it left the button greyed out unexplained.
+    auto *selfTestOff = new QLabel(tr("<i>La conexión directa ya trabaja en el entorno de pruebas de la AEAT: los "
+                                      "propios tickets son la prueba.</i>"));
+    selfTestOff->setObjectName("lblSelfTestOff");
+    selfTestOff->setWordWrap(true);
+    selfTestOff->setHidden(true);
     if (AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction()) {
         btnSelfTest->setEnabled(false);
-        btnSelfTest->setToolTip(tr("La conexión directa ya trabaja en el entorno de pruebas de la AEAT: los propios "
-                                   "tickets son la prueba."));
+        btnSelfTest->setToolTip(QString());
+        selfTestOff->setHidden(false);
     }
     connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
         emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
@@ -338,20 +372,32 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertPasswordUnreadable->setVisible(s->aeatCertificatePasswordUnreadable());
     direct->addRow(m_vCertPasswordUnreadable);
     direct->addRow(btnSelfTest);
+    direct->addRow(selfTestOff);
+    // Always available: a query only, in the environment ticked above.
+    auto *btnDirectTest = new QPushButton(tr("Probar conexión"));
+    btnDirectTest->setObjectName("btnAeatTestConnection");
+    btnDirectTest->setToolTip(tr("Comprueba el certificado y consulta a la AEAT las facturas del mes, sin enviar nada"));
+    connect(btnDirectTest, &QPushButton::clicked, this, [this]() {
+        emit aeatConnectionTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
+                                         m_vCertFile->text().trimmed(), m_vCertPassword->text(),
+                                         m_vDirectProduction->isChecked());
+    });
+    direct->addRow(btnDirectTest);
     fl->addRow(m_vDirectGroup);
     connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
     connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
     updateDirectRows();
 
-    auto *btnTest = new QPushButton(tr("Probar conexión"));
-    btnTest->setToolTip(tr("Comprueba que el servidor Verifactu es accesible con los valores actuales del formulario"));
-    connect(btnTest, &QPushButton::clicked, this, [this]() {
-        emit testConnectionRequested(m_vNif->text().trimmed(),
-                                     m_vName->text().trimmed(),
-                                     m_vKey->text().trimmed(),
-                                     m_vProduction->isChecked());
-    });
-    fl->addRow(btnTest);
+    // Common to both connections.
+    fl->addRow(m_vPendingRecoveryEnabled);
+    fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
+    m_vFloorFuture = warningLabel("lblFloorFuture",
+        tr("Esta fecha es posterior a hoy: hasta entonces no se avisará de ningún envío pendiente ni "
+           "factura rechazada."));
+    fl->addRow(m_vFloorFuture);
+    connect(m_vPendingRecoveryFloor, &QDateEdit::dateChanged, this, &SettingsDialog::updateFloorWarning);
+    updateFloorWarning();
+    alignLabelColumns({ fl, gateway, direct });
 
     tabs->addTab(w, tr("Verifactu"));
 }
@@ -478,6 +524,7 @@ void SettingsDialog::updateDirectRows()
 {
     const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
     m_vDirectGroup->setVisible(directAeat);
+    m_vGatewayGroup->setVisible(!directAeat);
     const bool file = selectedThumbprint().isEmpty();
     m_vCertFileRow->setEnabled(file);
     m_vCertPassword->setEnabled(file);

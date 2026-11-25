@@ -15,7 +15,7 @@ What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conve
 | `test_aeat_response` | `verifactu` | - | AEAT replies / faults and their mapping; record summary; chain tip; a lost cancellation |
 | `test_aeat_store` | `verifactu` | - | Chain head and record outbox on a throwaway SQLite DB |
 | `test_aeat_qr` | `verifactu` | offscreen | The locally drawn QR (structure; a sample PNG) |
-| `test_aeat_direct_backend` | `verifactu` | offscreen | The direct backend against the fake AEAT SOAP service; certificates; self-test |
+| `test_aeat_direct_backend` | `verifactu` | offscreen | The direct backend against the fake AEAT SOAP service; certificates; self-test; the connection probe (*Probar conexión*) |
 | `test_appsettings` | `appsettings` | guiless | DPAPI secret, settings getters, language, fixed IVA |
 | `test_settingsdialog` | `appsettings` | offscreen | Configuración dialog behaviour |
 | `test_mysortfilterproxymodel` | `tableview` | guiless | Search and sort in the grids |
@@ -79,7 +79,7 @@ Links `contabilidad` (and `reporthtml` for amount formatting). Mostly pure stati
 ## Settings — `test_appsettings`, `test_settingsdialog`
 
 - **`test_appsettings`**: DPAPI helpers (marker, encrypt ↔ decrypt round-trip, legacy plaintext passthrough, empty input); getters through `loadFrom(path)` against a throwaway file (derived report paths); `encryptSecretsAtRest` on-load migration and no re-encryption; fixed IVA (`ivaRate()` = 21 whatever the JSON says); language — `initialLanguage` from the installer choice, `releaseNotesResource`, and a parity check that `releases_notes.txt` and `releases_notes_es.txt` list the same versions in the same order.
-- **`test_settingsdialog`** (offscreen): drives the real `SettingsDialog` on a throwaway settings file. Service key masked by default; `Mostrar` reveals it without changing the text; a second click hides it; a new dialog starts masked. The direct-AEAT group: connection choice and certificate controls, the production confirmations (direct and gateway) in and out, leaving the direct connection never keeps its production flag and is refused with pending records, the self-test button state while the shop is in pre-production. Some tests accept the dialog.
+- **`test_settingsdialog`** (offscreen): drives the real `SettingsDialog` on a throwaway settings file. Only the chosen connection's rows show (gateway: key, PRODUCCIÓN box, *Probar conexión*; direct: its group), the common rows stay; the disabled self-test shows its reason; the direct connection's *Probar conexión* sends the form's values and environment. Service key masked by default; `Mostrar` reveals it without changing the text; a second click hides it; a new dialog starts masked. The direct-AEAT group: connection choice and certificate controls, the production confirmations (direct and gateway) in and out, leaving the direct connection never keeps its production flag and is refused with pending records, the self-test button state while the shop is in pre-production. Some tests accept the dialog.
 
 ---
 

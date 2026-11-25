@@ -1,6 +1,6 @@
 # Verifactu Module (`src/verifactu/`)
 
-AEAT mandatory digital invoicing integration. Submits invoices to AEAT in real time, either through the Irene Solutions REST gateway (the shop's connection in 12.0, on AEAT's test environment) or directly (the direct client, §Direct AEAT connection, for the later production switch), captures the CSV security code and QR image, and persists them with the ticket. Required for Spanish businesses from 2026.
+AEAT mandatory digital invoicing integration. Submits invoices to AEAT in real time, either through the Irene Solutions REST gateway (the shop's connection until 25-11-2026, on AEAT's test environment) or directly (the direct client, §Direct AEAT connection: the shop's connection since 25-11-2026, in AEAT pre-production until the later production switch), captures the CSV security code and QR image, and persists them with the ticket. Required for Spanish businesses from 2026.
 
 **Status (12.0 in development)**: the direct client is validated in AEAT pre-production; production waits for AEAT's written answer (see `docs/progress_tracker.md`). The gateway (v8.0-11.x) stays selectable in Configuración.
 
@@ -179,6 +179,7 @@ The write is `sql_lite::reconcileVerifactuFromAeat()`, which refuses an empty CS
 | `aeattransport.*` | SOAP POST through WinHTTP presenting the certificate (Qt's Schannel backend cannot read PKCS#12) |
 | `aeatdirectbackend.*` | Builds, chains, stores and sends the records; flow control (`TiempoEsperaEnvio`); resend of a stored record; replacement of a rejected one; `syncChain` (our system's own chain, synced with AEAT) |
 | `aeatselftest.*` | The proof of concept run from Configuración, always against AEAT pre-production |
+| `aeatconnectionprobe.*` | *Probar conexión* of the direct connection: loads the chosen certificate (refuses an expired one, warns when its NIF is not the issuer's) and asks AEAT for the issuer's invoices of the current month, in the environment ticked in the form. A query only: no record, no database, so it also runs while the shop's direct client works in pre-production, when the self-test is disabled |
 | `producerdeclaration.*` | The declaración responsable (art. 15 of the Orden): items a) to l) from `AeatRecord::laIdealSystem`, shown in Acerca de Verifactu and saved as PDF |
 
 Tables of the direct client (created by `AeatStore`, in the shop DB, covered by the backups):
@@ -207,7 +208,7 @@ Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via 
 | `verifactu.company_name` | Emitter name (`CompanyName` sent to AEAT) |
 | `verifactu.service_key` | API ServiceKey, stored DPAPI-encrypted (`dpapi:v1:`) — obtain at https://facturae.irenesolutions.com/verifactu/go |
 | `verifactu.environment` | `"TESTING"` (default) or `"PRODUCTION"` (exact string). For the gateway the ServiceKey decides the environment (both endpoints are the same URL): this box does not route invoices, it only changes the (unused) validation URL and makes the app refuse gateway rectificativas in PRODUCTION |
-| `verifactu.connection` | `irenesolutions` (default until the shop switches) or `aeat` - the direct client |
+| `verifactu.connection` | `irenesolutions` (the default) or `aeat` - the direct client (the shop's value since 25-11-2026) |
 | `verifactu.aeat_direct_production` | The direct client's environment: `false` (default) = AEAT pre-production. Set in Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)*, which asks for confirmation; never the gateway's PRODUCCIÓN box. While it is `false`, the main window's status bar shows "AEAT: entorno de PRUEBAS" (`lblAeatEnvironment`) |
 | `verifactu.aeat_chain_marker` | Written by the direct client: `<environment>|<issuer>|<huella of the chain's last record>` as this installation last saw it. A database whose chain differs (restored from an older backup, or a new PC) must reach AEAT at start before any record, as on a first start |
 | `verifactu.aeat_certificate_thumbprint` | Direct client: the owner's certificate in the Windows personal store (SHA-1 thumbprint) |
