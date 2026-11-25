@@ -688,9 +688,26 @@ private slots:
             QVERIFY2(cancelled.isSuccess(), qPrintable(cancelled.errorDescription));
             cancellationHash = m_server->sentRecords().last().hash;
         }
+        // The sync names the tip for what it is, also when AEAT's query carries the
+        // cancellation's huella under the invoice's record, which the client reads as a
+        // registration (the shop's log of 25-11-2026 said "alta" of its cancellation).
+        for (const bool shown : { false, true }) {
+            m_server->setQueryShowsCancellationRecord(shown);
+            AeatDirectBackend synced(config(), m_db);
+            QString message;
+            synced.syncChain([&](bool, const QString &m) { message = m; });
+            QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+            QVERIFY2(message.contains(QStringLiteral("(anulación,")), qPrintable(message));
+        }
         AeatDirectBackend restarted(config(), m_db);
         QVERIFY(waitFor(restarted, restarted.submitInvoiceAsync(ticket("2", 20))).isSuccess());
         QCOMPARE(m_server->sentRecords().last().previousHash, cancellationHash);
+        // A tip that is a registration keeps its name.
+        AeatDirectBackend again(config(), m_db);
+        QString message;
+        again.syncChain([&](bool, const QString &m) { message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(message.contains(QStringLiteral("(alta,")), qPrintable(message));
     }
 
     // AEAT holds nothing for the issuer: the chain starts with PrimerRegistro. An empty

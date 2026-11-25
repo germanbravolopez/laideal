@@ -240,8 +240,14 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
             return false;
         }
     }
+    // A record AEAT's query returns is read as a registration, and the head taken from the
+    // store carries no operation: a tip whose huella is our cancellation's is named from
+    // the stored record (the shop's first sync, 25-11-2026, called its cancellation "alta").
+    const bool cancellation = tip->operation == kCancellation
+        || m_store.latest(AeatStore::Kind::Cancellation, tip->invoiceNumber, m_config.issuerNif)
+               .hash.compare(tip->hash, Qt::CaseInsensitive) == 0;
     *message = tr("La cadena continúa tras el registro %1 (%2, %3).")
-                   .arg(tip->invoiceNumber, tip->operation == kCancellation ? tr("anulación") : tr("alta"),
+                   .arg(tip->invoiceNumber, cancellation ? tr("anulación") : tr("alta"),
                         tip->generatedAt.isEmpty() ? tr("generado antes") : tip->generatedAt);
     return true;
 }
