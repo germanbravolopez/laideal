@@ -338,13 +338,13 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertPassword = new QLineEdit(s->aeatCertificatePassword());
     m_vCertPassword->setObjectName("leCertificatePassword");
     m_vCertPassword->setEchoMode(QLineEdit::Password);
-    auto *btnSelfTest = new QPushButton(tr("Prueba con la AEAT (entorno de pruebas)"));
+    auto *btnSelfTest = new QPushButton(tr("Ensayo en el entorno de pruebas de la AEAT"));
     btnSelfTest->setObjectName("btnAeatSelfTest");
     btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
-    // Shown only while it is of use (updateDirectRows): not while the shop's own direct
-    // client works in pre-production (the tickets are the test, and both would send the
-    // same pre-production outbox at once), nor with the PRODUCCIÓN box ticked (a test
-    // button beside the real AEAT's switch misleads).
+    // Hidden (updateDirectRows) while the shop's own direct client works in pre-production:
+    // the tickets are the test, and both would send the same pre-production outbox at
+    // once. In production it stays, as the rehearsal for a new certificate or version;
+    // its name says where it runs, beside the real AEAT's switch.
     m_vSelfTest = btnSelfTest;
     m_selfTestAllowed = !(AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction());
     connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
@@ -378,7 +378,6 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     fl->addRow(m_vDirectGroup);
     connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
     connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
-    connect(m_vDirectProduction, &QCheckBox::toggled, this, &SettingsDialog::updateDirectRows);
     updateDirectRows();
 
     // Common to both connections.
@@ -518,7 +517,7 @@ void SettingsDialog::updateDirectRows()
     const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
     m_vDirectGroup->setVisible(directAeat);
     m_vGatewayGroup->setVisible(!directAeat);
-    m_vSelfTest->setVisible(m_selfTestAllowed && !m_vDirectProduction->isChecked());
+    m_vSelfTest->setVisible(m_selfTestAllowed);
     const bool file = selectedThumbprint().isEmpty();
     m_vCertFileRow->setEnabled(file);
     m_vCertPassword->setEnabled(file);

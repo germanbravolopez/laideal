@@ -769,7 +769,7 @@ void MainWindow::runAeatSelfTest(QWidget *parent, const QString &nif, const QStr
         return;
     }
     QDialog dlg(parent);
-    UiKit::setUpDialog(&dlg, tr("Prueba con la AEAT"), 620);
+    UiKit::setUpDialog(&dlg, tr("Ensayo en el entorno de pruebas de la AEAT"), 620);
     auto *layout = new QVBoxLayout(&dlg);
     layout->addWidget(UiKit::introPanel(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas "
                                            "de la AEAT, sin efectos tributarios, con el certificado elegido.")));

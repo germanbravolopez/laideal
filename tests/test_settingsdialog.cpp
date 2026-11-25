@@ -349,10 +349,10 @@ private slots:
         QCOMPARE(spy[1][5].toBool(), true);
     }
 
-    // "Prueba con la AEAT" shows only while it is of use: not while the shop's own direct
-    // client works in pre-production (the tickets are the test, and both would send the
-    // same pre-production outbox at once), nor with the PRODUCCIÓN box ticked.
-    void test_selfTestShownOnlyWhileOfUse()
+    // The self-test is hidden while the shop's own direct client works in pre-production
+    // (the tickets are the test, and both would send the same pre-production outbox at
+    // once); before the switch and in production it shows, named after where it runs.
+    void test_selfTestHiddenWhileTheShopIsInPreProduction()
     {
         AppSettings *s = AppSettings::instance();
         const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
@@ -361,25 +361,19 @@ private slots:
         {
             SettingsDialog dlg;
             QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
-            dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
-            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
             QVERIFY(!dlg.findChild<QPushButton *>("btnAeatTestConnection")->isHidden());   // always there
         }
         s->setAeatDirectProduction(true);
         {
             SettingsDialog dlg;
-            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());           // box ticked
+            auto *selfTest = dlg.findChild<QPushButton *>("btnAeatSelfTest");
+            QVERIFY(!selfTest->isHidden());
+            QVERIFY2(selfTest->text().contains("entorno de pruebas"), qPrintable(selfTest->text()));
         }
         s->setVerifactuDirectAeat(false);
         s->setAeatDirectProduction(false);
         SettingsDialog gateway;                  // before the switch: the rehearsal
-        auto *selfTest = gateway.findChild<QPushButton *>("btnAeatSelfTest");
-        auto *production = gateway.findChild<QCheckBox *>("chkDirectProduction");
-        QVERIFY(!selfTest->isHidden());
-        production->setChecked(true);
-        QVERIFY(selfTest->isHidden());
-        production->setChecked(false);
-        QVERIFY(!selfTest->isHidden());
+        QVERIFY(!gateway.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
     }
 
     // Leaving the direct connection is refused while it has unsent records.

@@ -40,7 +40,7 @@ signals:
                                  const QString &name,
                                  const QString &serviceKey,
                                  bool production);
-    // "Prueba con la AEAT": the direct connection's self-test with the form's values.
+    // "Ensayo en el entorno de pruebas de la AEAT": the direct connection's self-test with the form's values.
     void aeatSelfTestRequested(const QString &nif, const QString &name, const QString &thumbprint,
                                const QString &certificateFile, const QString &certificatePassword);
     // "Probar conexión" of the direct connection: certificate and one query, nothing is sent.
@@ -86,7 +86,7 @@ private:
     QWidget   *m_vCertFileRow;
     QWidget   *m_vGatewayGroup;         // the gateway's rows: shown only while it is the connection
     QWidget   *m_vDirectGroup;
-    QWidget   *m_vSelfTest = nullptr;   // "Prueba con la AEAT": hidden while it is of no use
+    QWidget   *m_vSelfTest = nullptr;   // the self-test button: hidden while the shop works in pre-production
     bool       m_selfTestAllowed = true;
     QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;

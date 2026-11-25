@@ -55,7 +55,7 @@ Command-line switches (`main.cpp`): `--settings <file>` runs with another settin
 | `updateRefusedInvoices()` / `showRefusedInvoices()` | The red status-bar count of invoices AEAT refused (refreshed on every outcome and every 30 s) and the list behind it |
 | `showVerifactuRejection()` | A definitive AEAT refusal in the result panel (it can come after the factura was printed) |
 | `verifactuQrBeforeReply()` | With the direct client the QR is known before AEAT answers: the factura prints with it at once |
-| `runAeatSelfTest()` | The "Prueba con la AEAT" window of the Settings dialog |
+| `runAeatSelfTest()` | The "Ensayo en el entorno de pruebas de la AEAT" window (the self-test) of the Settings dialog |
 | `resetAllContents()` | Clears form after a ticket save |
 | `setNextTicketNumber()` | Auto-increments `n_recibo` from the max in `ingresos` |
 | `populateCbClient()` | Fills the client combobox from `clientes` table |
