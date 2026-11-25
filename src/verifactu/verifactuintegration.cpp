@@ -127,6 +127,14 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
         qWarning() << m_lastError;
         return QString();
     }
+    // Dated before production (the test environment, or the gateway): a retry must not
+    // register it at the real AEAT now. A new invoice is asked this before it is stored.
+    if (!dateBeforeProductionReason(invoiceDate).isEmpty()) {
+        m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
+                          .arg(invoiceNumber, invoiceDate.toString("dd-MM-yyyy"), productionStartDate().toString("dd-MM-yyyy"));
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << invoiceNumber << "- dated before production";
+        return QString();
+    }
 
     const QString requestId = m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
     if (!requestId.isEmpty())
@@ -155,6 +163,13 @@ QString VerifactuIntegration::cancelInvoiceAsync(
     if (!isConfigured()) {
         m_lastError = "Verifactu no está configurado correctamente";
         qWarning() << m_lastError;
+        return QString();
+    }
+    // The real AEAT never held it: there is nothing to cancel there (Anular does it in the books).
+    if (invoicePredatesProduction(invoiceNumber, invoiceDate)) {
+        m_lastError = tr("La factura %1 es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
+                         "su anulación.").arg(invoiceNumber);
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << invoiceNumber << "- issued before production";
         return QString();
     }
     return m_backend->cancelInvoiceAsync(invoiceNumber, invoiceDate);
@@ -327,6 +342,34 @@ bool VerifactuIntegration::storedRegistrationOutcome(const QString &invoiceNumbe
 QString VerifactuIntegration::environmentName() const
 {
     return m_direct ? m_direct->environmentName() : QString();
+}
+
+QDate VerifactuIntegration::productionStartDate() const
+{
+    return m_direct && m_direct->environmentName() == QLatin1String("produccion") ? m_direct->startDate() : QDate();
+}
+
+void VerifactuIntegration::markProductionStarted()
+{
+    if (m_direct && m_direct->environmentName() == QLatin1String("produccion"))
+        m_direct->restartPeriod();
+}
+
+bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate) const
+{
+    if (!m_direct || m_direct->environmentName() != QLatin1String("produccion") || m_direct->holdsRegistration(invoiceNumber))
+        return false;
+    const QDate start = m_direct->startDate();
+    return (start.isValid() && invoiceDate.isValid() && invoiceDate < start) || m_direct->acceptedInTestEnvironment(invoiceNumber);
+}
+
+QString VerifactuIntegration::dateBeforeProductionReason(const QDate &invoiceDate) const
+{
+    const QDate start = productionStartDate();
+    if (!start.isValid() || !invoiceDate.isValid() || invoiceDate >= start)
+        return QString();
+    return tr("La fecha %1 es anterior al paso a PRODUCCIÓN (%2): una factura nueva no puede llevarla, porque no "
+              "se registraría en la AEAT real.").arg(invoiceDate.toString("dd-MM-yyyy"), start.toString("dd-MM-yyyy"));
 }
 
 QString VerifactuIntegration::sendingError() const

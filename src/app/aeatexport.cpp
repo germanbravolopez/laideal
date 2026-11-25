@@ -102,6 +102,8 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
             w.writeAttribute("importe",   QString::number(r.importe, 'f', 2));
             w.writeAttribute("csv",       r.csv);
             w.writeAttribute("estado",    r.estado);
+            if (!r.environment.isEmpty())
+                w.writeAttribute("entorno", r.environment);      // a test-environment record has no tax effect
             if (!r.fechaAnulacion.isEmpty())
                 w.writeAttribute("fechaAnulacion", r.fechaAnulacion);
             if (!r.rectifiesNRecibo.isEmpty()) {
@@ -122,6 +124,10 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
             w.writeAttribute("nRecibo",        r.nRecibo);
             w.writeAttribute("invoiceId",      r.invoiceId);
             w.writeAttribute("fechaPago",      r.fechaPago);
+            if (!r.environment.isEmpty())
+                w.writeAttribute("entorno", r.environment);
+            if (r.cancelXml.contains(QLatin1String("<AnulacionLocal")))
+                w.writeAttribute("local", "1");                  // in the books only: AEAT was not sent it
             if (undatedCancel)
                 w.writeAttribute("sinFecha", "1");
             else

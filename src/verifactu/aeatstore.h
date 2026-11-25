@@ -88,6 +88,16 @@ public:
     // Moves the head to `head` (the chain tip found by a sync), whatever it was.
     bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
 
+    // When the direct client began working in this environment on this database; for
+    // "produccion", the moment the shop went to the real AEAT. markStarted() keeps the
+    // moment already stored unless `again` (the owner entered production anew);
+    // startedAt() is invalid until then.
+    bool markStarted(bool again = false);
+    QDateTime startedAt();
+    // A registration record of the invoice is stored for `environment`, whatever its
+    // issuer; with `acceptedOnly`, one AEAT accepted.
+    bool holdsRegistrationIn(const QString &environment, const QString &invoiceNumber, bool acceptedOnly = false);
+
     // Whether the chain of this issuer and environment was synced with AEAT once (the
     // first sync, which must reach AEAT). Until then no record may be generated.
     bool chainSynced(const QString &issuerNif);

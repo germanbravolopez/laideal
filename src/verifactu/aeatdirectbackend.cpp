@@ -61,6 +61,9 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
         qWarning() << "AeatDirectBackend: not configured -" << m_configError;
         return;
     }
+    // Kept if already marked. A client that runs in an environment has begun there,
+    // however it got its settings.
+    m_store.markStarted();
     // The certificate is only needed to send: records are generated without it.
     if (endpointUrl(m_config.testEnvironment).startsWith(QLatin1String("https"))) {
         QString error;
@@ -85,6 +88,26 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
 }
 
 AeatDirectBackend::~AeatDirectBackend() = default;
+
+QDate AeatDirectBackend::startDate()
+{
+    return m_store.startedAt().date();
+}
+
+void AeatDirectBackend::restartPeriod()
+{
+    m_store.markStarted(true);
+}
+
+bool AeatDirectBackend::holdsRegistration(const QString &invoiceNumber)
+{
+    return m_store.holdsRegistrationIn(environmentName(), invoiceNumber);
+}
+
+bool AeatDirectBackend::acceptedInTestEnvironment(const QString &invoiceNumber)
+{
+    return m_store.holdsRegistrationIn(QStringLiteral("pruebas"), invoiceNumber, true);
+}
 
 QString AeatDirectBackend::endpointUrl(bool testEnvironment)
 {

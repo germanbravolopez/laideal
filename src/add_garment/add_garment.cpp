@@ -299,6 +299,9 @@ QString AddGarment::validationError()
                                                  : tr("Verifactu no está disponible: no se puede cobrar.");
         if (!blocked.isEmpty())
             return UiKit::errorHtml(blocked);
+        const QString early = invoiceDateRefused ? invoiceDateRefused(m_deFechaRecepcion->date()) : QString();
+        if (!early.isEmpty())
+            return UiKit::errorHtml(early);
     }
     if (quarterIsClosed(db, m_deFechaRecepcion->date()))
         return UiKit::errorHtml("Trimestre bloqueado.")

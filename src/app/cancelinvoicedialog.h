@@ -46,6 +46,8 @@ private:
     // the database could not be read.
     // The first press of a row's Anular says what will be cancelled; the second sends it.
     void armCancellation(int row);
+    // An invoice from before production: cancelled in the books, nothing sent to AEAT.
+    void cancelLocally(int row);
     void disarmCancellation();
 
     struct Event {

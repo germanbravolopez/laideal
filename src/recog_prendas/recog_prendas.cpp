@@ -1244,6 +1244,14 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
         summary->setText(tr("<b>No se ha podido interpretar la respuesta de AEAT.</b><br>"
                             "Esto <i>no</i> significa que la factura no esté registrada. "
                             "Revisa el detalle de abajo y consulta la sede electrónica."));
+    } else if (!rec.found && m_verifactuIntegration
+               && m_verifactuIntegration->invoicePredatesProduction(invoiceId, QDate::fromString(ev.fechaPago, "dd-MM-yyyy"))) {
+        // Not a lost invoice: it was issued before production, in the test environment.
+        summary->setText(tr("<b>La AEAT real no tiene la factura %1, y es lo esperado.</b><br>"
+                            "Es del %2, anterior al paso a PRODUCCIÓN (%3): se registró en el entorno de "
+                            "pruebas o con IreneSolutions. No hay que reenviarla.")
+                             .arg(invoiceId, ev.fechaPago,
+                                  m_verifactuIntegration->productionStartDate().toString("dd-MM-yyyy")));
     } else if (!rec.found) {
         // Deliberately not "se puede reenviar con seguridad": the query reply does
         // not echo the filter we sent, so an empty result is not yet proof that the

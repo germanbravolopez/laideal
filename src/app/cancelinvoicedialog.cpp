@@ -261,6 +261,10 @@ void CancelInvoiceDialog::onCancelClicked(int row)
         return;
     }
     disarmCancellation();
+    if (m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate)) {
+        cancelLocally(row);
+        return;
+    }
     setActionsEnabled(false);
     m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId.toHtmlEscaped()));
 
@@ -291,11 +295,41 @@ void CancelInvoiceDialog::armCancellation(int row)
     m_armedRow = row;
     btn->setText(tr("Confirmar anulación"));
     const Event &e = m_events[row];
+    if (m_verifactu && m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate)) {
+        m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la contabilidad la factura %1 del %2 por %3 €.")
+                                                 .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
+                                                      displayMoney(e.importe)))
+                             + "<br>" + tr("Es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
+                                           "nada. La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> "
+                                           "para hacerla, o busque otro ticket para no hacer nada."));
+        return;
+    }
     m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la AEAT la factura %1 del %2 por %3 €.")
                                              .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
                                                   displayMoney(e.importe)))
                          + "<br>" + tr("La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> para "
                                        "enviarla, o busque otro ticket para no hacer nada."));
+}
+
+void CancelInvoiceDialog::cancelLocally(int row)
+{
+    const Event e = m_events[row];
+    // A warning on purpose: the one cancellation AEAT is not told about must be found in the log.
+    qWarning() << "CancelInvoiceDialog: invoice" << e.invoiceId << "of" << e.invoiceDate.toString(Qt::ISODate) << "(ticket"
+               << m_loadedTicket << "seq" << e.seq << ") predates production - cancelled in the books on"
+               << m_pendingCancelDate.toString(Qt::ISODate) << ", nothing sent to AEAT";
+    // In place of AEAT's cancellation record, so the AEAT export says what this one is.
+    const QString note = QStringLiteral("<AnulacionLocal motivo=\"Factura anterior al paso a PRODUCCION: la AEAT real "
+                                        "no la tiene y no se le envia registro de anulacion\"/>");
+    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, m_pendingCancelDate, note)) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo guardar la anulación de %1 en la base de datos. Revise el "
+                                                 "log de depuración.").arg(e.invoiceId.toHtmlEscaped())));
+        return;
+    }
+    onSearchClicked();                       // the table, from what is stored now
+    m_lblResult->setText(UiKit::okHtml(tr("Factura %1 anulada en la contabilidad.").arg(e.invoiceId.toHtmlEscaped()))
+                         + "<br>" + tr("No se ha enviado nada a la AEAT: la factura es anterior al paso a PRODUCCIÓN "
+                                       "y la AEAT real no la tiene."));
 }
 
 void CancelInvoiceDialog::disarmCancellation()

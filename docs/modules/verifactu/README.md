@@ -198,6 +198,16 @@ The chain gate (`VerifactuIntegration::numberingBlockedReason`) is enforced in t
 
 A cancellation whose reply was lost is resent as the same record; when AEAT answers that it already holds it (a duplicate, the invoice *Anulada*), the cancellation is accepted, never an error (`AeatDirectBackend::onSubmissionReply`). The chain marker is written to the settings file the moment it changes (`AppSettings::setAeatChainMarker`). The installation number (`NumeroInstalacion`) lives in the database (`aeat_installation`, `AeatStore::installationNumber`): it belongs to the chain, so the program restored with its database on a new PC keeps it. It is created on first use from the newest stored record's number, else new; a chain sync that finds the chain's last record at AEAT under another number takes that one (`AeatDirectBackend::adoptTip`). Without a stored number the backend is not configured and generates nothing.
 
+### Going to production
+
+The shop registers in AEAT's test environment until Configuración → Verifactu → *Enviar a la AEAT real (PRODUCCIÓN)* is ticked and accepted. Nothing else is needed that day, and no release: the app treats what came before by itself.
+
+- **The switch** (`SettingsDialog::accept`) is refused while test-environment records are unsent and when the production check fails (`AeatConnectionProbe`: the certificate, and one read-only query to the real AEAT); then it asks for confirmation. The production chain is new: its first record says `PrimerRegistro`, after a first sync that reads 24 months.
+- **The day production began** is kept in the database (`aeat_environment_start`, one row per environment; `AeatStore::markStarted`): set when the owner confirms the switch (again if production is left and entered anew), or the first time a production client runs. The status bar shows it (*AEAT: PRODUCCIÓN desde el <día>*).
+- **An invoice dated before that day is never sent to the real AEAT** (`VerifactuIntegration::dateBeforeProductionReason`, in `submitSimplifiedInvoiceAsync`): a retry of an old ticket is refused, and the pending / refused lists use that day as their floor when it is later than *Solo tickets desde* (`verifactuRecoveryFloorIso`). A new invoice cannot carry such a date: the payment date in Recogida starts at that day, and a paid ticket or paid added garment dated earlier is refused before it is stored.
+- **Anular of an invoice the real AEAT never held** (`invoicePredatesProduction`: no production record of it, and dated before that day or, on the day itself, accepted by the test environment) cancels it in the books only: nothing is sent, the log keeps a warning, `verifactu_cancel_xml` holds an `<AnulacionLocal>` note and the AEAT export writes `local="1"` on its `<Anulacion>`. `cancelInvoiceAsync` refuses to send one.
+- **Left as they are:** a rectificativa issued in production that corrects an earlier ticket is sent (a new invoice; AEAT's answer to the reference is untested); a reprint keeps the QR the invoice was issued with (the test host for earlier ones); the AEAT export marks every record's `entorno` from its QR host.
+
 ## Configuration
 
 Source of truth: `~/.laideal_settings.json`, managed by `AppSettings`. Edit via **Archivo → Configuración… → Verifactu tab**.

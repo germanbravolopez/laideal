@@ -514,6 +514,37 @@ void MainWindow::mainwindowInitialSettings()
                              const QString &file, const QString &password) {
             runAeatSelfTest(&dlg, nif, name, thumbprint, file, password);
         });
+        // Before production is accepted: the certificate, and an answer from the real AEAT.
+        dlg.setProductionCheck([&dlg](const QString &nif, const QString &name, const QString &thumbprint,
+                                      const QString &file, const QString &password) {
+            AeatConnectionProbe::Settings settings;
+            settings.testEnvironment = false;
+            settings.issuerNif = nif;
+            settings.issuerName = name;
+            settings.certificateThumbprint = thumbprint;
+            settings.certificatePath = file;
+            settings.certificatePassword = password;
+            AeatConnectionProbe probe(settings);
+            QString problem;
+            bool done = false;
+            connect(&probe, &AeatConnectionProbe::progress, &dlg, [&problem](bool ok, const QString &text) {
+                if (!ok)
+                    problem = text;
+            });
+            QEventLoop loop;
+            connect(&probe, &AeatConnectionProbe::finished, &loop, [&done, &loop, &problem](bool ok) {
+                done = true;
+                if (ok)
+                    problem.clear();             // a warning on the way (the certificate's NIF) does not stop it
+                loop.quit();
+            });
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            probe.run();
+            if (!done)
+                loop.exec();
+            QApplication::restoreOverrideCursor();
+            return problem;
+        });
         connect(&dlg, &SettingsDialog::aeatConnectionTestRequested, &dlg,
                 [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
                              const QString &file, const QString &password, bool production) {
@@ -553,9 +584,19 @@ void MainWindow::mainwindowInitialSettings()
                         .arg(result.errorDescription, env, endpoint));
             }
         });
+        const AppSettings *settings = AppSettings::instance();
+        const bool wasInProduction = settings->verifactuDirectAeat() && settings->aeatDirectProduction();
         if (dlg.exec() == QDialog::Accepted) {
             // Reload Verifactu with potentially new credentials
             initializeVerifactu();
+            // Production entered now, confirmed by the owner: its period begins today, also
+            // on a database that was in production before and left it.
+            if (!wasInProduction && settings->verifactuDirectAeat() && settings->aeatDirectProduction()
+                && m_verifactuIntegration) {
+                m_verifactuIntegration->markProductionStarted();
+                updateAeatEnvironment();
+                updateRefusedInvoices();
+            }
         }
     });
 
@@ -962,6 +1003,11 @@ bool MainWindow::validateTicket()
                                                                 : QString();
         if (!notInvoiced.isEmpty())
             return refuse(notInvoiced + " " + tr("Puede guardar el ticket sin cobrar."));
+        // A paid ticket is invoiced under its reception date.
+        const QString early = ui->pb_payment->isChecked()
+            ? m_verifactuIntegration->dateBeforeProductionReason(ui->de_date_recep->date()) : QString();
+        if (!early.isEmpty())
+            return refuse(early + " " + tr("Puede guardar el ticket sin cobrar y cobrarlo en Recogida de prendas."));
     }
     double totalCost = 0.0;
     bool sizePending = false;   // an m2 garment can be left at the shop before it is measured
@@ -1062,6 +1108,12 @@ QString MainWindow::verifactuSubmitInvoice(const QString &ticketNum, const QDate
     return reqId;
 }
 
+QString MainWindow::recoveryFloorIso()
+{
+    AppSettings *s = AppSettings::instance();
+    return verifactuRecoveryFloorIso(db, s->verifactuPendingRecoveryFloorDate(), s->verifactuDirectAeat() && s->aeatDirectProduction());
+}
+
 void MainWindow::updateAeatEnvironment()
 {
     // The direct client registers in AEAT's test environment unless production was chosen:
@@ -1071,10 +1123,14 @@ void MainWindow::updateAeatEnvironment()
         m_aeatEnvironment->setObjectName("lblAeatEnvironment");
         statusBar()->addPermanentWidget(m_aeatEnvironment);
     }
-    const bool preProduction = m_verifactuIntegration && m_verifactuIntegration->isDirect()
-                               && !AppSettings::instance()->aeatDirectProduction();
-    m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
-    m_aeatEnvironment->setVisible(preProduction);
+    const bool direct = m_verifactuIntegration && m_verifactuIntegration->isDirect();
+    const QDate productionStart = direct ? m_verifactuIntegration->productionStartDate() : QDate();
+    // In production too: which AEAT the tickets go to is always in sight, with the day it began.
+    if (productionStart.isValid())
+        m_aeatEnvironment->setText(tr("AEAT: PRODUCCIÓN desde el %1").arg(productionStart.toString("dd-MM-yyyy")));
+    else
+        m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
+    m_aeatEnvironment->setVisible(direct);
 }
 
 void MainWindow::updateUnsentRecords()
@@ -1097,7 +1153,7 @@ void MainWindow::updateRefusedInvoices()
 {
     if (!m_refusedInvoices)
         return;                                     // an outcome settled before the window finished building
-    const int refused = refusedInvoiceCount(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate());
+    const int refused = refusedInvoiceCount(db, recoveryFloorIso());
     // A link: the count opens the list of those invoices (showRefusedInvoices).
     m_refusedInvoices->setText("<a href=\"refused\" style=\"text-decoration:none\">"
                                + UiKit::errorHtml(tr("%n factura(s) rechazada(s) por la AEAT: pulse aquí para ver "
@@ -1107,7 +1163,7 @@ void MainWindow::updateRefusedInvoices()
 
 void MainWindow::showRefusedInvoices()
 {
-    auto *dlg = new RefusedInvoicesDialog(db, AppSettings::instance()->verifactuPendingRecoveryFloorDate(), this);
+    auto *dlg = new RefusedInvoicesDialog(db, recoveryFloorIso(), this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &RefusedInvoicesDialog::openTicket, this, [this, dlg](const QString &nRecibo, int seq) {
         auto *recogida = new RecogPrendas(db, this);
@@ -1626,6 +1682,9 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     ui_add_garment->setAttribute(Qt::WA_DeleteOnClose);
     ui_add_garment->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
+    };
+    ui_add_garment->invoiceDateRefused = [this](const QDate &date) {
+        return m_verifactuIntegration ? m_verifactuIntegration->dateBeforeProductionReason(date) : QString();
     };
     ui_add_garment->aeatEnvironment = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();

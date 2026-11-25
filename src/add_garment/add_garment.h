@@ -31,6 +31,8 @@ public:
     // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
     // Unset: paid garments are refused.
     std::function<QString()> invoicingBlocked;
+    // Why a paid garment cannot be invoiced under this date (before production began), or empty.
+    std::function<QString(const QDate &)> invoiceDateRefused;
     // The AEAT environment of the direct client, whose used numbers a new invoice skips; unset: all.
     std::function<QString()> aeatEnvironment;
 

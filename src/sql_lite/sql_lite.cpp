@@ -1348,6 +1348,27 @@ static QStringList aeatInvoiceNumbersOfTicket(QSqlDatabase &db, const QString &t
     return numbers;
 }
 
+QString aeatProductionStartIso(QSqlDatabase &db)
+{
+    if (dbNotConfigured(db, __func__)) return QString();
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) return QString();
+    // The table exists only once the direct client was used: a failed query reads as "never".
+    QSqlQuery q(db);
+    q.prepare("SELECT substr(started_at, 1, 10) FROM aeat_environment_start WHERE environment = 'produccion'");
+    return q.exec() && q.next() ? q.value(0).toString() : QString();
+}
+
+QString verifactuRecoveryFloorIso(QSqlDatabase &db, const QString &floorIso, bool directProduction)
+{
+    if (!directProduction)
+        return floorIso;
+    const QString start = aeatProductionStartIso(db);
+    const QDate startDate = QDate::fromString(start, Qt::ISODate);
+    const QDate floorDate = QDate::fromString(floorIso, Qt::ISODate);
+    return startDate.isValid() && (!floorDate.isValid() || startDate > floorDate) ? start : floorIso;
+}
+
 int aeatPendingRecordCount(QSqlDatabase &db, const QString &environment)
 {
     if (dbNotConfigured(db, __func__)) return 0;
@@ -2216,7 +2237,7 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
               "       COALESCE(MAX(verifactu_estado), ''), COALESCE(" + kLatestFechaAnulacion + ", ''), "
               "       COALESCE(MAX(verifactu_rectifies_n_recibo), ''), "
               "       COALESCE(MAX(verifactu_rectification_type), ''), COALESCE(MAX(verifactu_xml), ''), "
-              "       COALESCE(MAX(verifactu_cancel_xml), '') "
+              "       COALESCE(MAX(verifactu_cancel_xml), ''), COALESCE(MAX(verifactu_url_qr), '') "
               "FROM ingresos "
               "WHERE pagado = 'SI' "
               "  AND ((verifactu_xml IS NOT NULL AND verifactu_xml != '') "
@@ -2249,6 +2270,12 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
         r.rectificationType = q.value(9).toString();
         r.xml               = q.value(10).toString();
         r.cancelXml         = q.value(11).toString();
+        // AEAT's QR host says where the invoice was registered: its test site, or the real one.
+        const QString qrUrl = q.value(12).toString();
+        if (qrUrl.contains(QLatin1String("//prewww")))
+            r.environment = QStringLiteral("pruebas");
+        else if (qrUrl.contains(QLatin1String("//www2.agenciatributaria.gob.es")) || qrUrl.contains(QLatin1String("//www2.aeat.es")))
+            r.environment = QStringLiteral("produccion");
         // Legacy rows predate the stored id; they were sent under the same rule.
         if (r.invoiceId.isEmpty())
             r.invoiceId = verifactuInvoiceId(r.nRecibo, r.seq);

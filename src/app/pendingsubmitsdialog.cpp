@@ -79,7 +79,8 @@ bool PendingSubmitsDialog::loadPending()
     AppSettings *s = AppSettings::instance();
     if (!s->verifactuPendingRecoveryEnabled())
         return false;
-    const QString floorIso = s->verifactuPendingRecoveryFloorDate();
+    const QString floorIso = verifactuRecoveryFloorIso(db, s->verifactuPendingRecoveryFloorDate(),
+                                                       s->verifactuDirectAeat() && s->aeatDirectProduction());
 
     // One entry per (n_recibo, verifactu_invoice_seq) whose any row is still
     // PENDIENTE on/after the recovery floor. Grouping by seq surfaces partial-

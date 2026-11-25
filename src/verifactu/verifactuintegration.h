@@ -114,6 +114,20 @@ public:
     bool storedRegistrationOutcome(const QString &invoiceNumber, VerifactuResult *result) const;
     // "pruebas" / "produccion" for the direct client, empty with the gateway.
     QString environmentName() const;
+    // The direct client in production: the day it began on this database. Invalid otherwise.
+    QDate productionStartDate() const;
+    // The owner has just entered production: the period begins now.
+    void markProductionStarted();
+    // The boundary is the day production began: an invoice dated before it was issued in
+    // AEAT's test environment (or by the gateway) and the real AEAT never held it. The
+    // reason such a date cannot go to the real AEAT, or empty: asked before a new invoice
+    // is stored as paid, and applied to every submission (a retry of an old ticket).
+    QString dateBeforeProductionReason(const QDate &invoiceDate) const;
+    // An existing invoice the real AEAT never held, so nothing about it is sent there
+    // (Anular cancels it in the books): the direct client is in production, holds no
+    // production registration of it, and it is dated before that day - or, on the day
+    // itself, AEAT's test environment accepted it before the switch.
+    bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate) const;
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
     QString certificateExpiryWarning() const;

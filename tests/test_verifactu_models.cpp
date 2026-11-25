@@ -130,7 +130,7 @@ private slots:
         QVERIFY(c.getQrUrl().endsWith("/GetQrCode"));
 
         c.setEnvironment(VerifactuConfig::PRODUCTION);
-        QVERIFY(c.getValidationUrl().contains("www2.aeat"));
+        QVERIFY(c.getValidationUrl().startsWith("https://www2.agenciatributaria.gob.es/"));   // AEAT's production host, as AeatHash
         QVERIFY(!c.getValidationUrl().contains("prewww2"));
     }
 

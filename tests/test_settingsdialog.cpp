@@ -175,6 +175,39 @@ private slots:
             QMetaObject::invokeMethod(&dlg, "accept");
             QVERIFY(s->aeatDirectProduction());
         }
+        // Entering production again is refused while test records are unsent, and when the
+        // check MainWindow gives (certificate, the real AEAT's answer) finds a problem.
+        {
+            s->setAeatDirectProduction(false);
+            SettingsDialog unsent;
+            unsent.setDirectPendingCount(1);
+            unsent.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&unsent, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+
+            SettingsDialog unreachable;
+            QString checkedNif;
+            unreachable.setProductionCheck([&checkedNif](const QString &nif, const QString &, const QString &, const QString &,
+                                                         const QString &) {
+                checkedNif = nif;
+                return QStringLiteral("No se pudo conectar con la AEAT");
+            });
+            unreachable.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&unreachable, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+            QCOMPARE(checkedNif, s->verifactuNif());
+
+            SettingsDialog reachable;
+            reachable.setProductionCheck([](const QString &, const QString &, const QString &, const QString &, const QString &) {
+                return QString();
+            });
+            reachable.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&reachable, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
         // Leaving production: refused while production records are unsent, then confirmed.
         {
             SettingsDialog pending;

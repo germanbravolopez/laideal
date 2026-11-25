@@ -555,6 +555,114 @@ private slots:
         QCOMPARE(refusedInvoiceCount(m_db), 0);
     }
 
+    // The direct client in PRODUCTION and tickets invoiced before it (AEAT's test
+    // environment, or the gateway): the real AEAT never held them, so nothing about them
+    // goes there - a retry is refused, the pending list leaves them out, and Anular cancels
+    // them in the books only. An invoice registered in production is cancelled at AEAT.
+    void test_production_invoicesFromBeforeItStayLocal()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
+        const QDate yesterday = QDate::currentDate().addDays(-1);
+        QVERIFY(E2e::seedSentGarment(m_db, "771", "h771a", "10.00", yesterday.toString("dd-MM-yyyy"), "A-TEST0771"));
+        QVERIFY(E2e::seedSentGarment(m_db, "772", "h772a", "12.10", yesterday.toString("dd-MM-yyyy"), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h772a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "773", "h773a", "12.10", today(), ""));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AppSettings::instance()->setAeatDirectProduction(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        AppSettings::instance()->setAeatDirectProduction(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        QCOMPARE(direct.environmentName(), QStringLiteral("produccion"));
+        QCOMPARE(direct.productionStartDate(), QDate::currentDate());
+
+        // A retry of yesterday's pending ticket is refused; the lists leave it out.
+        QVERIFY(direct.submitSimplifiedInvoiceAsync("772", yesterday, 10.0, 21.0).isEmpty());
+        QVERIFY2(direct.getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(direct.getLastError()));
+        QCOMPARE(pendingVerifactuEvents(m_db, verifactuRecoveryFloorIso(m_db, "2026-01-01", false)).size(), 1);
+        QCOMPARE(pendingVerifactuEvents(m_db, verifactuRecoveryFloorIso(m_db, "2026-01-01", true)).size(), 0);
+        QVERIFY(aeat.server.sentRecords().isEmpty());
+
+        // Today's invoice is registered in production.
+        QVERIFY(!direct.submitSimplifiedInvoiceAsync("773", QDate::currentDate(), 10.0, 21.0).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "773").state, AeatStore::kAccepted, 10000);
+        QVERIFY(direct.invoicePredatesProduction("771", yesterday));
+        QVERIFY(!direct.invoicePredatesProduction("773", QDate::currentDate()));
+        // On the day itself: a ticket never registered anywhere is production's (it is sent);
+        // one the test environment accepted this morning is not (Anular stays local).
+        QVERIFY(!direct.invoicePredatesProduction("774", QDate::currentDate()));
+        {
+            AeatStore testStore(m_db, "pruebas");
+            QVERIFY(testStore.ensureSchema());
+            QVERIFY(E2e::exec(m_db, "INSERT INTO aeat_records (environment, kind, issuer_nif, invoice_number, issue_date, "
+                                    "total, hash, xml, generated_at, state) VALUES ('pruebas', 'alta', 'B00000000', '774', "
+                                    "'01-01-2026', 1, 'H774', '<x/>', '2026-01-01T10:00:00+01:00', 'ACEPTADO')"));
+        }
+        QVERIFY(direct.invoicePredatesProduction("774", QDate::currentDate()));
+        // A new invoice is refused its date before anything is stored as paid.
+        QVERIFY(direct.dateBeforeProductionReason(QDate::currentDate()).isEmpty());
+        QVERIFY(direct.dateBeforeProductionReason(yesterday).contains("anterior al paso a PRODUCCI"));
+        // Recogida: a ticket received yesterday can only be paid from the day production
+        // began, and a payment with an earlier date is refused with nothing stored as paid
+        // (it would be a paid invoice the real AEAT never gets).
+        QVERIFY(E2e::seedGarment(m_db, "775", "h775a", "9.00", yesterday.toString("dd-MM-yyyy")));
+        {
+            PayDialog pay(m_db);
+            pay.m_verifactu = &direct;
+            QVERIFY(pay.loadTicket("775"));
+            auto *payDate = pay.findChild<QDateEdit *>();
+            QVERIFY(payDate);
+            QCOMPARE(payDate->minimumDate(), QDate::currentDate());
+            payDate->setMinimumDate(yesterday);                       // as if the limit were not there
+            payDate->setDate(yesterday);
+            QMetaObject::invokeMethod(&pay, "onCobrarClicked");
+            QVERIFY2(pay.findChild<QLabel *>("lblResult")->text().contains("anterior al paso a PRODUCCI"),
+                     qPrintable(pay.findChild<QLabel *>("lblResult")->text()));
+            QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h775a'"), QStringLiteral("NO"));
+        }
+        // The owner enters production anew: the period begins again (today, here).
+        direct.markProductionStarted();
+        QCOMPARE(direct.productionStartDate(), QDate::currentDate());
+        QVERIFY(direct.cancelInvoiceAsync("771", yesterday).isEmpty());        // the facade refuses it too
+        QCOMPARE(aeat.server.sentRecords().size(), 1);
+
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("771");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("en la contabilidad") && result->text().contains("no se le env"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));     // Confirmar anulación
+        QVERIFY2(result->text().contains("anulada en la contabilidad"), qPrintable(result->text()));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h771a'"),
+                 QStringLiteral("ANULADA|%1").arg(today()));
+        QCOMPARE(aeat.server.sentRecords().size(), 1);                         // nothing sent for it
+        QVERIFY(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE hash='h771a'").startsWith("<AnulacionLocal"));
+        {
+            QVector<AeatExportRecord> records;
+            QVERIFY(aeatExportRecords(m_db, yesterday, QDate::currentDate(), records));
+            QBuffer buffer;
+            QVERIFY(buffer.open(QIODevice::WriteOnly));
+            writeAeatExportXml(&buffer, records, yesterday, QDate::currentDate(), "B00000000", "Tintoreria E2E");
+            QCOMPARE(buffer.data().count("local=\"1\""), 1);              // the export says it never went to AEAT
+        }
+
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("773");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("anular en la AEAT"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 15000);
+        QCOMPARE(aeat.server.sentRecords().last().operation, QStringLiteral("Anulacion"));
+        QCOMPARE(aeat.server.sentRecords().last().invoiceNumber, QStringLiteral("773"));
+    }
+
     // While a rectificativa of a ticket waits for AEAT, the ticket can be neither rectified
     // nor cancelled again (a second R5, or a cancellation the late R5 would overwrite).
     void test_pendingRectificativaBlocksTheTicket()
@@ -1014,8 +1122,9 @@ private slots:
                  QStringLiteral("SI"));
     }
 
-    // The status bar says when the direct client registers in AEAT's test environment
-    // (its default): real sales must never go there unnoticed.
+    // The status bar says which AEAT the direct client registers in: the test environment
+    // (its default: real sales must never go there unnoticed), or production with the day
+    // it began on this database.
     void test_mainWindow_showsThePreProductionEnvironment()
     {
         {
@@ -1028,14 +1137,16 @@ private slots:
         auto *environment = mw.findChild<QLabel *>("lblAeatEnvironment");
         QVERIFY(environment->isVisibleTo(&mw));
         QVERIFY(environment->text().contains("PRUEBAS"));
-        // After Configuración: production hides it, the gateway too.
+        // After Configuración: production says so, the gateway hides it.
         AppSettings::instance()->setVerifactuDirectAeat(true);
         AppSettings::instance()->setAeatDirectProduction(true);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
-        QVERIFY(!environment->isVisibleTo(&mw));
+        QVERIFY(environment->isVisibleTo(&mw));
+        QVERIFY2(environment->text().contains("PRODUCCIÓN desde el " + today()), qPrintable(environment->text()));
         AppSettings::instance()->setAeatDirectProduction(false);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
         QVERIFY(environment->isVisibleTo(&mw));
+        QVERIFY(environment->text().contains("PRUEBAS"));
         AppSettings::instance()->setVerifactuDirectAeat(false);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
         QVERIFY(!environment->isVisibleTo(&mw));
@@ -3470,6 +3581,9 @@ private slots:
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
                                 "'<RegistroAlta><IDFactura>1900</IDFactura></RegistroAlta>', "
                                 "verifactu_estado = 'ANULADA', fecha_anulacion = '02-04-2026' WHERE hash='h1900a'"));
+        // The QR link says where it was registered: the export marks a test-environment record.
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = "
+                                "'https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000' WHERE hash='h1900a'"));
 
         QVector<AeatExportRecord> records;
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), records));
@@ -3479,6 +3593,8 @@ private slots:
                                                "B00000000", "Tintoreria E2E");
         buffer.close();
         QCOMPARE(written, 5);
+        QCOMPARE(buffer.data().count("entorno=\"pruebas\""), 1);          // 1900 only: the others tell nothing
+        QVERIFY(!buffer.data().contains("entorno=\"produccion\""));
 
         QXmlStreamReader xml(buffer.data());
         QStringList registros, anulaciones, payloadIds;

@@ -189,6 +189,58 @@ private slots:
         m_db.close();
     }
 
+    // The day an environment's client first ran on the database is kept (the first one, per
+    // environment), and the pending / refused lists take the production day as their floor
+    // when it is later than the setting's and the direct client is in production.
+    void test_environmentStartAndRecoveryFloor()
+    {
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2026-09-01"));   // no table yet
+        AeatStore test(m_db, "pruebas"), production(m_db, "produccion");
+        QVERIFY(test.ensureSchema());
+        QVERIFY(!production.startedAt().isValid());
+        QVERIFY(test.markStarted());
+        QVERIFY(test.startedAt().isValid());
+        QVERIFY(!production.startedAt().isValid());                   // each environment its own
+        QVERIFY(aeatProductionStartIso(m_db).isEmpty());
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2026-09-01"));
+
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("INSERT INTO aeat_environment_start (environment, started_at) "
+                                     "VALUES ('produccion', '2027-01-15T09:30:00+01:00')"));
+        m_db.close();
+        QVERIFY(production.markStarted());                            // the stored moment stays
+        QCOMPARE(production.startedAt().date(), QDate(2027, 1, 15));
+        QVERIFY(!production.holdsRegistrationIn("produccion", "1"));
+        test.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(production.holdsRegistrationIn("pruebas", "1"));     // by environment, whoever asks
+        QVERIFY(!production.holdsRegistrationIn("pruebas", "1", true));                 // not accepted yet
+        QVERIFY(!production.holdsRegistrationIn("produccion", "1"));
+        QCOMPARE(aeatProductionStartIso(m_db), QStringLiteral("2027-01-15"));
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2027-01-15"));
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", false), QStringLiteral("2026-09-01"));  // not in production
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2027-03-01", true), QStringLiteral("2027-03-01"));   // a later setting wins
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "", true), QStringLiteral("2027-01-15"));
+    }
+
+    // A record's generation time is stored with its UTC offset, as the record itself says
+    // it: read back, it is the same instant whatever the clock's offset is by then.
+    void test_generatedAtKeepsItsOffset()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const AeatStore::Record stored = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(stored.isValid());
+        QVERIFY(m_db.open());
+        QSqlQuery q(m_db);
+        QVERIFY(q.exec("SELECT generated_at FROM aeat_records") && q.next());
+        const QString text = q.value(0).toString();
+        q.finish();
+        m_db.close();
+        QVERIFY2(QRegularExpression("T\\d\\d:\\d\\d:\\d\\d[+-]\\d\\d:\\d\\d$").match(text).hasMatch(), qPrintable(text));
+        const AeatStore::Record read = store.latest(AeatStore::Kind::Registration, "1");
+        QCOMPARE(read.generatedAt.toSecsSinceEpoch(), QDateTime::fromString(text, Qt::ISODate).toSecsSinceEpoch());
+    }
+
     // The head can be moved (a sync); the sync flag and the records' XML are kept per environment.
     void test_moveHeadAndSyncFlag()
     {

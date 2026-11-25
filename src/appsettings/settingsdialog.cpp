@@ -407,10 +407,28 @@ void SettingsDialog::accept()
     }
     const bool directProduction = m_vConnection->currentData().toString() == QLatin1String("aeat")
                                   && m_vDirectProduction->isChecked();
-    if (directProduction && !AppSettings::instance()->aeatDirectProduction()
+    const bool enteringProduction = directProduction && !AppSettings::instance()->aeatDirectProduction();
+    // The test environment's unsent records would stay behind for good (an outbox per environment).
+    if (enteringProduction && AppSettings::instance()->verifactuDirectAeat() && m_directPending > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 registro(s) del entorno de pruebas sin confirmar por la AEAT. Espere a que se "
+                                "envíen antes de pasar a PRODUCCIÓN.").arg(m_directPending));
+        return;
+    }
+    if (enteringProduction && m_productionCheck) {
+        const QString problem = m_productionCheck(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
+                                                  m_vCertFile->text().trimmed(), m_vCertPassword->text());
+        if (!problem.isEmpty()) {
+            QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                                 tr("No se puede pasar a PRODUCCIÓN: %1").arg(problem));
+            return;
+        }
+    }
+    if (enteringProduction
         && QMessageBox::question(this, tr("Conexión con la AEAT"),
                                  tr("Las facturas se registrarán en la AEAT real, con efectos tributarios, "
-                                    "con el certificado elegido. ¿Pasar a PRODUCCIÓN?"),
+                                    "con el certificado elegido. Las facturas anteriores a hoy no se enviarán: "
+                                    "quedan como están. ¿Pasar a PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
     // Leaving production: its unsent records would stay behind (the outbox is per

@@ -142,6 +142,7 @@ private:
                          const QString &certificateFile, const QString &certificatePassword);
     void runAeatConnectionTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
                                const QString &certificateFile, const QString &certificatePassword, bool production);
+    QString recoveryFloorIso();
     void continueDirectChain();
     // A PENDIENTE rectificativa: settled from AEAT's stored answer, left to the direct
     // client while its record is pending, else an ERROR to redo.

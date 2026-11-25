@@ -112,7 +112,9 @@ bool AeatStore::ensureSchema()
                   " cancelled_invoice TEXT NOT NULL DEFAULT '', PRIMARY KEY (environment, issuer_nif, installation_number))")
         // One row per database, whatever the environment or issuer: the number belongs to the chain.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_installation ("
-                  " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)");
+                  " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)")
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_environment_start ("
+                  " environment TEXT PRIMARY KEY, started_at TEXT NOT NULL)");
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
@@ -296,6 +298,59 @@ bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::Previou
         qWarning() << "AeatStore::setChainHead failed -" << q.lastError().text();
     close(wasOpen);
     return ok;
+}
+
+bool AeatStore::holdsRegistrationIn(const QString &environment, const QString &invoiceNumber, bool acceptedOnly)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT 1 FROM aeat_records WHERE environment = :e AND invoice_number = :num AND kind = :k"
+              " AND (:any = 1 OR state = :s) LIMIT 1");
+    q.bindValue(":e", environment);
+    q.bindValue(":num", invoiceNumber);
+    q.bindValue(":k", kindText(Kind::Registration));
+    q.bindValue(":any", acceptedOnly ? 0 : 1);
+    q.bindValue(":s", kAccepted);
+    const bool held = q.exec() && q.next();
+    q.finish();
+    close(wasOpen);
+    return held;
+}
+
+bool AeatStore::markStarted(bool again)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("INSERT OR %1 INTO aeat_environment_start (environment, started_at) VALUES (:e, :t)")
+                  .arg(again ? QStringLiteral("REPLACE") : QStringLiteral("IGNORE")));
+    q.bindValue(":e", m_environment);
+    q.bindValue(":t", AeatHash::timestampText(QDateTime::currentDateTime()));
+    const bool ok = q.exec();
+    if (!ok) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::markStarted failed -" << m_lastError;
+    }
+    q.finish();
+    close(wasOpen);
+    return ok;
+}
+
+QDateTime AeatStore::startedAt()
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return QDateTime();
+    QSqlQuery q(m_db);
+    q.prepare("SELECT started_at FROM aeat_environment_start WHERE environment = :e");
+    q.bindValue(":e", m_environment);
+    const QDateTime started = q.exec() && q.next() ? QDateTime::fromString(q.value(0).toString(), Qt::ISODate) : QDateTime();
+    q.finish();
+    close(wasOpen);
+    return started;
 }
 
 bool AeatStore::chainSynced(const QString &issuerNif)
@@ -533,7 +588,7 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":t", built.total);
         q.bindValue(":h", built.hash);
         q.bindValue(":x", text(built.xml));
-        q.bindValue(":g", built.generatedAt.toString(Qt::ISODate));
+        q.bindValue(":g", AeatHash::timestampText(built.generatedAt));    // with its UTC offset, as the record says it
         q.bindValue(":s", kPending);
         ok = q.exec();
     }

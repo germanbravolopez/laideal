@@ -170,6 +170,12 @@ QString nextRectificationNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = 
 // paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
 // any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
 // never be resent and must not keep the warning up.
+// The day (ISO) the direct AEAT client first ran in PRODUCTION on this database, or empty.
+QString aeatProductionStartIso(QSqlDatabase &db);
+// The floor the pending / refused lists apply: `floorIso` (the setting), or the production
+// start when it is later and the direct client works in production - a ticket paid before
+// that day was never invoiced at the real AEAT and must not be sent there.
+QString verifactuRecoveryFloorIso(QSqlDatabase &db, const QString &floorIso, bool directProduction);
 int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso = QString());
 // The same invoices, one per payment event, newest payment first: what the operator
 // needs to find and resend each one.
@@ -380,6 +386,7 @@ struct AeatExportRecord {
     QString rectificationType; // a rectificativa: "S" (substitution) or "I" (differences)
     QString xml;          // the stored AEAT payload; empty when only the CSV is known
     QString cancelXml;    // AEAT's cancellation record, when cancelled and stored
+    QString environment;  // "pruebas" / "produccion", read from the invoice's QR link; empty when it tells nothing
 };
 
 // One record per paid payment event (n_recibo, verifactu_invoice_seq) that AEAT holds -

@@ -162,8 +162,13 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     m_lblHeader->setText(headerText);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
     m_dePago->setMaximumDate(QDate::currentDate());
-    if (m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate())
-        m_dePago->setMinimumDate(m_fechaRecepcion);
+    QDate earliest = m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate() ? m_fechaRecepcion : QDate();
+    // Nor before the day production began: such an invoice would never reach the real AEAT.
+    if (const QDate start = m_verifactu ? m_verifactu->productionStartDate() : QDate();
+        start.isValid() && start <= QDate::currentDate() && (!earliest.isValid() || start > earliest))
+        earliest = start;
+    if (earliest.isValid())
+        m_dePago->setMinimumDate(earliest);
     recomputeTotal();
     return true;
 }
@@ -234,6 +239,10 @@ void PayDialog::onCobrarClicked()
     }
 
     const QDate fechaPago = m_dePago->date();
+    if (const QString early = m_verifactu->dateBeforeProductionReason(fechaPago); !early.isEmpty()) {
+        m_lblStatus->setText(UiKit::errorHtml(early));
+        return;
+    }
     // The whole quarter: a month without rows inside a closed quarter is closed too.
     if (quarterIsClosed(db, fechaPago)) {
         m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))

@@ -91,6 +91,14 @@ public:
     // The QR of the pending registration stored for `invoice` (this issuer, same date and
     // amount), drawn from that record; null when there is none.
     QPixmap queuedRecordQr(const VerifactuInvoice &invoice);
+    // The day this environment's client began on this database (AeatStore::markStarted);
+    // restartPeriod() moves it to now: the owner entered the environment anew.
+    QDate startDate();
+    void restartPeriod();
+    // A registration record of the invoice is stored for this environment (whatever its
+    // outcome) / AEAT's test environment accepted one. Whatever the issuer.
+    bool holdsRegistration(const QString &invoiceNumber);
+    bool acceptedInTestEnvironment(const QString &invoiceNumber);
     // A record of this kind for the invoice is pending at AEAT (generated, not answered:
     // it goes out on its own). A refused or settled one is not.
     bool holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber);
