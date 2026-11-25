@@ -693,6 +693,10 @@ private slots:
         // registration (the shop's log of 25-11-2026 said "alta" of its cancellation).
         for (const bool shown : { false, true }) {
             m_server->setQueryShowsCancellationRecord(shown);
+            // The log tells which record's huella AEAT's query carried for the cancelled invoice.
+            QTest::ignoreMessage(QtDebugMsg, QRegularExpression(
+                QStringLiteral("AEAT returns cancelled invoice \"1\" with the huella of its \"%1\" record")
+                    .arg(shown ? QStringLiteral("cancellation") : QStringLiteral("registration"))));
             AeatDirectBackend synced(config(), m_db);
             QString message;
             synced.syncChain([&](bool, const QString &m) { message = m; });

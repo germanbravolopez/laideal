@@ -241,6 +241,9 @@ private:
     // The chain's last record as this installation's settings last saw it; false when
     // they hold none for this environment and issuer (a new PC).
     bool lastSeenHead(QString *hash) const;
+    // Which of our stored records the huella AEAT's query gives for a cancelled invoice
+    // belongs to: "registration", "cancellation" or "unknown" (neither is stored here).
+    QString cancelledHuellaOwner(const QString &invoiceNumber, const QString &hash);
     void resumeDeferredRestart();
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,
                     QList<AeatResponse::RecordSummary> found, bool sawUnusable);

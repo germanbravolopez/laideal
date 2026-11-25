@@ -359,6 +359,16 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
                kMonthsAlwaysQueried, {}, {}, false);
 }
 
+QString AeatDirectBackend::cancelledHuellaOwner(const QString &invoiceNumber, const QString &hash)
+{
+    const auto holds = [&](AeatStore::Kind kind) {
+        return m_store.latest(kind, invoiceNumber, m_config.issuerNif).hash.compare(hash, Qt::CaseInsensitive) == 0;
+    };
+    if (holds(AeatStore::Kind::Cancellation))
+        return QStringLiteral("cancellation");
+    return holds(AeatStore::Kind::Registration) ? QStringLiteral("registration") : QStringLiteral("unknown");
+}
+
 QString AeatDirectBackend::chainMarker()
 {
     bool read = false;
@@ -449,6 +459,10 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
                 found << s;
             else
                 sawUnusable = true;
+            // The chain restart rests on this being the registration's (AEAT, 24-11-2026).
+            if (s.valid && s.cancelledAtAeat)
+                qDebug() << "AeatDirectBackend: AEAT returns cancelled invoice" << s.invoiceNumber << "with the huella of its"
+                         << cancelledHuellaOwner(s.invoiceNumber, s.hash) << "record, generated" << s.generatedAt;
         }
         if (reply.morePages && !reply.records.isEmpty()) {
             const AeatResponse::QueryRecord &last = reply.records.last();

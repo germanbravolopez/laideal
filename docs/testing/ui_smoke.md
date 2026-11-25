@@ -126,7 +126,7 @@ Both scripts run from the repository root, in a PowerShell session with the tool
 
 ### AEAT pre-production run
 
-`aeat_preproduction.py` is the automated form of the `laideal-prueba-aeat` kit. It stays local because the certificate must not become a secret of a public repository.
+`aeat_preproduction.py` is the automated form of the `laideal-prueba-aeat` kit. Its last step (8) restarts the app after the run's cancellation and reports which record's huella AEAT's query gave for the cancelled invoice (a finding printed under the report's table, not a verdict). It stays local because the certificate must not become a secret of a public repository.
 
 ```powershell
 .\.venv\Scripts\python.exe .\tests\ui\aeat_preproduction.py --exe .\build-uitest\src\app\laideal.exe --settings-from C:\Users\gebra\work\tintoreria\documents\prueba-aeat-settings.json --out aeat-run

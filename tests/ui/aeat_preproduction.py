@@ -12,6 +12,7 @@ answered:
     5  rectifications R5: the step-2 ticket by differences, a new paid ticket by substitution
     6  the export of the AEAT records of the day
     7  the log: every request went to prewww1.aeat.es
+    8  after a restart: which huella AEAT's query carries for the cancelled invoice
 
     python tests/ui/aeat_preproduction.py --exe <laideal.exe> --out <new folder>
         --settings-from %USERPROFILE%/work/tintoreria/documents/prueba-aeat-settings.json
@@ -48,6 +49,8 @@ AEAT_URL = re.compile(r'(?:endpoint: |record\(s\) to ")(https?://[^\s",]+)')
 ISSUER_KEYS = ("nif", "company_name", "aeat_certificate_thumbprint", "aeat_certificate_file",
                "aeat_certificate_password")
 AEAT_WAIT = 240   # AEAT asks up to 60 s between submissions; a record may wait for the next turn
+# The sync's line about an invoice AEAT holds as cancelled: its number, then whose huella the query carried.
+CANCELLED_HUELLA = re.compile(r'AEAT returns cancelled invoice "([^"]+)" with the huella of its "?(\w+)"? record')
 
 
 def issuer_settings(path: Path) -> dict:
@@ -140,6 +143,8 @@ def main():
                             "ORDER BY rowid", base)
         run.notes = ["| Ticket | Garment | Invoice | Estado | CSV | AEAT error |", "|---|---|---|---|---|---|"] + [
             "| " + " | ".join(str(v or "").replace("|", "/") for v in row) + " |" for row in invoices]
+        if getattr(run, "finding", ""):
+            run.notes += ["", "**" + run.finding + ".**"]
     finally:
         ok = run.report()
         run.close()
@@ -206,6 +211,18 @@ def steps(run, expected: str, base: int):
         safety(run, expected)
         for forbidden in ("agenciatributaria.gob.es", "irenesolutions"):
             run.check(forbidden not in run.log().lower(), f"the log mentions {forbidden}")
+
+    # A finding, not a verdict on AEAT: the chain restart of a restored backup rests on the query
+    # giving the registration's huella for a cancelled invoice (tracker, 25-11-2026).
+    with run.step("P3", "8", "After a restart: the huella AEAT's query gives for the cancelled invoice"):
+        app = run.fresh_start()
+        wait_ready(app, timeout=180)
+        owners = dict(CANCELLED_HUELLA.findall(run.log()))
+        run.check(second in owners, f"the sync logged nothing about the cancelled invoice {second}: {owners}")
+        run.finding = f"AEAT's query gives the cancelled invoice {second} with the huella of its {owners[second]} record"
+        print(run.finding)
+        run.check(owners[second] in ("registration", "cancellation"),
+                  f"the huella AEAT gives for {second} is of neither stored record ({owners[second]})")
 
 
 if __name__ == "__main__":
