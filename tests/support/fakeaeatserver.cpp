@@ -262,14 +262,17 @@ QByteArray FakeAeatServer::answer(const Request &request)
             const bool cancelled = m_registered.contains(cancellationKey);
             // Both on this server's clock: the state last changed when the cancellation arrived.
             const QString changedAt = cancelled ? m_registered.value(cancellationKey).receivedAt : h.receivedAt;
-            // The huella, its time and its link: the registration's, or (on request) the cancellation's.
+            // The huella, its time and its link: the cancellation's, or (on request) the registration's.
             SentRecord shown = h;
-            if (cancelled && m_queryShowsCancellation) {
+            if (cancelled && !m_queryHidesCancellation) {
                 const SentRecord cancellation = m_registered.value(cancellationKey);
                 shown.hash = cancellation.hash;
                 shown.generatedAt = cancellation.generatedAt;
                 shown.previousHash = cancellation.previousHash;
             }
+            SentRecord system = h;
+            if (cancelled && m_queryShowsCancellersSystem)
+                system = m_registered.value(cancellationKey);
             records += QStringLiteral(
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>%10</tik:IDEmisorFactura>"
                 "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
@@ -295,7 +298,7 @@ QByteArray FakeAeatServer::answer(const Request &request)
                                       "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
                                       "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>%3</tik:NumeroInstalacion>"
                                       "</tikLRRC:SistemaInformatico>")
-                           .arg(h.producerNif, h.systemId, h.installationNumber.isEmpty() ? QStringLiteral("1") : h.installationNumber))
+                           .arg(system.producerNif, system.systemId, system.installationNumber.isEmpty() ? QStringLiteral("1") : system.installationNumber))
                 .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif, changedAt, h.receivedAt);
         }
         return envelope(QStringLiteral(

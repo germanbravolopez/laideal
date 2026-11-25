@@ -78,10 +78,14 @@ public:
     void hideFromQuery(const QString &invoiceNumber) { m_hidden.insert(invoiceNumber); }
     // Answers a query without the SistemaInformatico block even when it was asked for.
     void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
-    // A cancelled invoice is returned with the huella, time and link of its cancellation
-    // record instead of its registration's (what the shop's first sync of 25-11-2026 may
-    // have been given; not confirmed against AEAT).
-    void setQueryShowsCancellationRecord(bool on) { m_queryShowsCancellation = on; }
+    // By default a cancelled invoice is returned like AEAT's test environment does
+    // (25-11-2026): the invoice's data with the huella, time and link of its cancellation
+    // record. On: with those of its registration, the cancellation hidden (AEAT's written
+    // answer of 24-11-2026, the case that restarts a chain).
+    void setQueryHidesCancellationRecord(bool on) { m_queryHidesCancellation = on; }
+    // A cancelled invoice's SistemaInformatico block is the registration's by default; on:
+    // the cancellation's (which of the two AEAT sends is not known).
+    void setQueryShowsCancellersSystem(bool on) { m_queryShowsCancellersSystem = on; }
     // Every query is answered with a server SOAP fault (AEAT's service failing).
     void setQueriesUnavailable(bool on) { m_queriesUnavailable = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
@@ -129,7 +133,8 @@ private:
     int m_waitSeconds = 0;
     bool m_queryWithoutHashes = false;
     bool m_queryWithoutSystem = false;
-    bool m_queryShowsCancellation = false;
+    bool m_queryHidesCancellation = false;
+    bool m_queryShowsCancellersSystem = false;
     bool m_queriesUnavailable = false;
     int m_counter = 0;
 };

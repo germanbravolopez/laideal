@@ -6,6 +6,7 @@
 #include <QtTest>
 
 #include "aeatresponse.h"
+#include "aeathash.h"
 
 using namespace AeatResponse;
 
@@ -171,6 +172,40 @@ private slots:
     // A registration AEAT holds as cancelled whose cancellation record is missing may hide
     // the chain's last record, unless AEAT cancelled it before it received the tip. Only
     // AEAT's clock counts: the tip's generation time (the PC's clock) proves nothing.
+    // The record of a cancelled invoice is its cancellation record when its huella is the
+    // one a RegistroAnulacion of the reply's own fields has (AEAT's test environment,
+    // 25-11-2026); with any other huella it is the registration, the cancellation hidden.
+    void test_carriesCancellationRecord()
+    {
+        QueryRecord record;
+        record.issuerNif = "89890001K";
+        record.invoiceNumber = "30837";
+        record.issueDate = "10-10-2026";
+        record.previousHash = QString(64, 'A');
+        record.generatedAt = "2026-10-10T10:05:00+02:00";
+        record.state = "Anulado";
+        record.hash = AeatHash::cancellationHash({ record.issuerNif, record.invoiceNumber, QDate(2026, 10, 10),
+                                                   record.previousHash, record.generatedAt });
+        QVERIFY(carriesCancellationRecord(record));
+        QueryRecord lower = record;
+        lower.hash = record.hash.toLower();
+        QVERIFY(carriesCancellationRecord(lower));
+        QueryRecord first = record;                       // a chain's first record: no previous huella
+        first.previousHash.clear();
+        first.hash = AeatHash::cancellationHash({ first.issuerNif, first.invoiceNumber, QDate(2026, 10, 10), QString(), first.generatedAt });
+        QVERIFY(carriesCancellationRecord(first));
+        QueryRecord live = record;                        // not cancelled: never
+        live.state = "Correcto";
+        QVERIFY(!carriesCancellationRecord(live));
+        QueryRecord registration = record;                // another huella: the registration's
+        registration.hash = QString(64, 'B');
+        QVERIFY(!carriesCancellationRecord(registration));
+        QueryRecord otherLink = record;                   // a field off: not that record
+        otherLink.previousHash = QString(64, 'C');
+        QVERIFY(!carriesCancellationRecord(otherLink));
+        QVERIFY(!carriesCancellationRecord(parseQuery(fixture("query_cancelled.xml")).records.value(0)));
+    }
+
     void test_lostCancellationAfter()
     {
         const QString h1(64, 'A'), h2(64, 'B'), h3(64, 'C');

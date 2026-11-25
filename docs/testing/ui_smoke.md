@@ -164,5 +164,6 @@ The steps:
 | `tests/ui/aeat_preproduction.py` | The local AEAT pre-production run (and its dry run) |
 | `tests/ui/requirements.txt` | pywinauto, Pillow, pypdf, OpenCV (QR) |
 | `tests/tools/fake_aeat_server.cpp`, `tests/tools/escpos_preview.cpp` | The fake AEAT as a process; the ESC/POS job decoder |
+| `tests/tools/aeat_query_dump.cpp` | Saves AEAT's raw reply to one query (`--settings <kit settings> --out <file> [--month yyyy-MM] [--invoice n]`): a query only, always the TEST environment, run locally with the issuer's certificate; the reply holds the issuer's data, so it is not a fixture as it is |
 | `tests/support/escpospreview.h` | ESC/POS reader shared with `test_ticket_preview` |
 | `.github/workflows/ci.yml` (`ui-smoke` job) | The CI run |

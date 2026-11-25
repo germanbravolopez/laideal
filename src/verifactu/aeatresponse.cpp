@@ -1,5 +1,7 @@
 #include "aeatresponse.h"
 
+#include "aeathash.h"
+
 #include <QDateTime>
 #include <QSet>
 #include <QStringList>
@@ -221,6 +223,16 @@ const RecordSummary *chainTip(const QList<RecordSummary> &records)
     return tip;
 }
 
+bool carriesCancellationRecord(const QueryRecord &record)
+{
+    if (!record.state.startsWith(QLatin1String("Anulad")) || record.hash.isEmpty() || record.generatedAt.isEmpty())
+        return false;
+    const AeatHash::CancellationFields fields{ record.issuerNif, record.invoiceNumber,
+                                               QDate::fromString(record.issueDate, QStringLiteral("dd-MM-yyyy")),
+                                               record.previousHash, record.generatedAt };
+    return AeatHash::cancellationHash(fields).compare(record.hash, Qt::CaseInsensitive) == 0;
+}
+
 namespace {
 
 // `tip` null: any lost cancellation; else only those not proven older than it.
@@ -228,7 +240,7 @@ const RecordSummary *findLostCancellation(const QList<RecordSummary> &records, c
 {
     const QDateTime tipAt = tip ? QDateTime::fromString(tip->presentedAt, Qt::ISODate) : QDateTime();
     for (const RecordSummary &r : records) {
-        if (!r.cancelledAtAeat)
+        if (!r.cancelledAtAeat || (!tip && r.foreignSystem))
             continue;
         bool held = false;
         for (const RecordSummary &other : records)

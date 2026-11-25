@@ -714,6 +714,7 @@ private slots:
     void test_mainWindow_showsAChainRestart()
     {
         LiveAeat aeat(suiteAeatEndpoint());
+        aeat.server.setQueryHidesCancellationRecord(true);       // the case that restarts a chain
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
         AppSettings::instance()->setVerifactuDirectAeat(true);

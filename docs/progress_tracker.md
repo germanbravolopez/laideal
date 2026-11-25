@@ -25,9 +25,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Open Issues
 
-| Issue | File | Notes |
-|-------|------|-------|
-| Chain restart after a lost cancellation: AEAT's query does give the cancellation's huella | `src/verifactu/aeatdirectbackend.cpp` (`adoptTip`, `queryMonth`), `src/verifactu/aeatresponse.cpp` (`lostCancellation*`), `tests/support/fakeaeatserver.*`, `docs/modules/verifactu/` | **Decide before the PRODUCTION switch.** Raised 25-11-2026 from the pre-production run of that day (`aeat-run/20261125-231818-real`, step 8): for an invoice it holds as *Anulado*, AEAT's query returned the huella and `FechaHoraHusoGenRegistro` of the **cancellation** record, not the registration's. 12.6 was built on the opposite premise (AEAT's email of 24-11-2026: the query never shows a cancellation, so a restored database that lost one that may be the chain's last record restarts as a new SIF, art. 7.b). Seen in pre-production only, on one invoice of the run plus the shop's self-test of the same day; the reply's `Encadenamiento` block was not captured, and production may differ. **Consequences to work out** (owner + `verifactu-compliance-auditor`, Advanced tier): (1) with that huella in the reply the chain can be continued after a lost cancellation, so when should a restart still happen, if ever; (2) `adoptTip` reads every queried record as a registration: check `lostCancellation` / `lostCancellationAfter` against replies of this shape (a needless restart is a new SIF chain nobody asked for); (3) `FakeAeatServer` answers with the registration's huella by default (`setQueryShowsCancellationRecord` is the real shape): make the real shape the default and keep the other as the variant, then re-read the 12.6 restart tests; (4) capture one real reply as a fixture (`tests/fixtures/aeat-responses`), with its `Encadenamiento`; (5) tell AEAT's mailbox what its pre-production returns and ask whether production does the same. Nothing is wrong at the shop meanwhile: it is in pre-production, its chain and marker are consistent, and no restart has happened. |
+None open.
 
 ---
 

@@ -206,6 +206,8 @@ private:
     bool                       m_firstSync = false;      // no sync with AEAT stored yet
     int                        m_highestNumberAtAeat = 0;
     int                        m_highestRectificationAtAeat = 0;
+    // Cancelled invoices the running sync was given under another system's block.
+    QList<AeatResponse::RecordSummary> m_foreignCancelled;
     bool                       m_lastSyncFailed = false;
     bool                       m_restartDeferred = false;   // a restart waits for the outbox to empty
     QString                    m_restartNotice;
@@ -241,9 +243,6 @@ private:
     // The chain's last record as this installation's settings last saw it; false when
     // they hold none for this environment and issuer (a new PC).
     bool lastSeenHead(QString *hash) const;
-    // Which of our stored records the huella AEAT's query gives for a cancelled invoice
-    // belongs to: "registration", "cancellation" or "unknown" (neither is stored here).
-    QString cancelledHuellaOwner(const QString &invoiceNumber, const QString &hash);
     void resumeDeferredRestart();
     void queryMonth(QDate month, int monthsLeft, int mustQuery, AeatRecord::InvoiceRef pageAfter,
                     QList<AeatResponse::RecordSummary> found, bool sawUnusable);

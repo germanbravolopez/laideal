@@ -158,7 +158,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         *message = tr("No se puede leer la cadena de registros: %1").arg(m_store.lastError());
         return false;
     }
-    QList<AeatResponse::RecordSummary> candidates = found;
+    QList<AeatResponse::RecordSummary> candidates = found + m_foreignCancelled;
     // Records from before a restart belong to the chain that ended there.
     QString restartNumber;
     const QDateTime restartedAt = m_store.chainRestartedAt(m_config.issuerNif, &restartNumber);
@@ -171,8 +171,44 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
             return secs < restartSecs || (secs == restartSecs && c.installationNumber != restartNumber);
         }), candidates.end());
     }
+    // A cancellation AEAT returned under one of our invoices is a link of our chain only
+    // when it is proven ours: this database or the settings' marker hold its huella, or it
+    // chains to a record of ours (another system chains to its own). Unproven, it counts
+    // as a cancellation the query hides: never a link, and a reason to restart below.
+    QString seen;
+    const bool markerRead = lastSeenHead(&seen) && !seen.isEmpty();
+    QSet<QString> ours = m_store.chainAnchors();
+    ours.insert(head.hash.toUpper());
+    if (markerRead)
+        ours.insert(seen.toUpper());
+    for (const AeatResponse::RecordSummary &c : candidates) {
+        if (!c.cancellationFromQuery && !c.foreignSystem)
+            ours.insert(c.hash.toUpper());
+    }
+    ours.remove(QString());
+    for (bool grown = true; grown;) {
+        grown = false;
+        for (const AeatResponse::RecordSummary &c : candidates) {
+            const QString hash = c.hash.toUpper();
+            if (c.cancellationFromQuery && !ours.contains(hash) && ours.contains(c.previousHash.toUpper())) {
+                ours.insert(hash);
+                grown = true;
+            }
+        }
+    }
+    QList<AeatResponse::RecordSummary> chain;
+    for (AeatResponse::RecordSummary &c : candidates) {
+        if (c.cancellationFromQuery && !ours.contains(c.hash.toUpper())) {
+            c.operation = kRegistration;
+            c.cancelledAtAeat = true;
+            continue;
+        }
+        if (c.foreignSystem && !c.cancellationFromQuery)
+            continue;                    // another system's registration: never a link of ours
+        chain << c;
+    }
     QSet<QString> hashes;
-    for (const AeatResponse::RecordSummary &c : candidates)
+    for (const AeatResponse::RecordSummary &c : chain)
         hashes.insert(c.hash);
     // The current head takes part too: a newer record chains to it, or it is the tip.
     if (!head.isFirst() && !hashes.contains(head.hash)) {
@@ -183,29 +219,34 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         h.issueDate = head.invoice.issueDate.toString(kDateFormat);
         h.hash = head.hash;
         h.generatedAt = head.generatedAt;
-        candidates << h;
+        chain << h;
     }
-    const AeatResponse::RecordSummary *tip = AeatResponse::chainTip(candidates);
+    const bool mayRestart = m_firstSync && m_config.adoptInstallationNumber;
+    const AeatResponse::RecordSummary *tip = AeatResponse::chainTip(chain);
     if (!tip) {
+        // Nothing to continue from, yet AEAT holds a cancellation that may be ours.
+        if (const AeatResponse::RecordSummary *lost = mayRestart ? AeatResponse::lostCancellation(candidates) : nullptr)
+            return restartChain(lost->invoiceNumber, message);
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
     }
-    // A restored database (first sync) that lacks a cancellation AEAT holds: the query
-    // never returns it, so when it may be the chain's last record the chain cannot be
-    // continued and starts again as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden).
-    if (m_firstSync && m_config.adoptInstallationNumber) {
+    // A restored database (first sync) that lacks a cancellation AEAT holds and does not
+    // return (cancelledAtAeat: the reply carried the registration, not the cancellation
+    // record): when it may be the chain's last record the chain cannot be continued and
+    // starts again as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden). A cancellation
+    // AEAT returns is a candidate like any record, and the chain continues from it.
+    if (mayRestart) {
         const AeatResponse::RecordSummary *lost = nullptr;
-        QString seen;
         // An empty marker names no record (a chain not started, or just restarted): it
         // proves nothing about a copy restored afterwards.
-        if (lastSeenHead(&seen) && !seen.isEmpty()) {
+        if (markerRead) {
             // This installation's settings name its last record. It is the chain's tip:
             // nothing of ours came after it, whoever cancelled an invoice since. Not
             // visible (here or at AEAT): it is the lost record. Visible with records of
             // ours after it: the settings are older than this database (a settings file
             // restored or copied), so they prove nothing and AEAT's own times decide.
             bool visible = false;
-            for (const AeatResponse::RecordSummary &c : candidates)
+            for (const AeatResponse::RecordSummary &c : chain)
                 visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
             if (!visible)
                 lost = AeatResponse::lostCancellation(candidates);
@@ -221,15 +262,29 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     // The chain's last record is at AEAT under another NumeroInstalacion (a database
     // restored from before it, or a new one): the number belongs to the chain, so ours
     // becomes that one before anything is generated. Before the head, so a failure repeats.
-    if (m_config.adoptInstallationNumber && !tip->installationNumber.isEmpty()
-        && tip->installationNumber != m_config.system.installationNumber) {
-        if (!m_store.setInstallationNumber(tip->installationNumber)) {
+    // A cancellation AEAT returned may carry the block of the invoice it cancels (an older
+    // number of ours, or another system's): the chain's number is then the one of its
+    // newest registration at AEAT.
+    QString chainNumber = tip->installationNumber;
+    if (tip->cancellationFromQuery) {
+        chainNumber.clear();
+        QDateTime newest;
+        for (const AeatResponse::RecordSummary &c : chain) {
+            const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
+            if (!c.cancellationFromQuery && !c.installationNumber.isEmpty() && (!newest.isValid() || generated > newest)) {
+                newest = generated;
+                chainNumber = c.installationNumber;
+            }
+        }
+    }
+    if (m_config.adoptInstallationNumber && !chainNumber.isEmpty() && chainNumber != m_config.system.installationNumber) {
+        if (!m_store.setInstallationNumber(chainNumber)) {
             *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
             return false;
         }
         qWarning() << "AeatDirectBackend: NumeroInstalacion" << m_config.system.installationNumber << "->"
-                   << tip->installationNumber << "(the chain's last record at AEAT)";
-        m_config.system.installationNumber = tip->installationNumber;
+                   << chainNumber << "(the chain's last record at AEAT)";
+        m_config.system.installationNumber = chainNumber;
     }
     if (tip->hash != head.hash) {
         const AeatRecord::PreviousRecord moved{
@@ -337,6 +392,7 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
     if (m_syncRunning)
         return;
     m_syncRunning = true;
+    m_foreignCancelled.clear();
     // The first time, AEAT must be asked (the database may be new for a system that
     // already sent records); afterwards it is asked too - a database restored from an
     // older backup continues the same chain - but the local chain is enough without it.
@@ -357,16 +413,6 @@ void AeatDirectBackend::syncChain(const ChainDone &done)
     const QDate today = QDate::currentDate();
     queryMonth(QDate(today.year(), today.month(), 1), m_firstSync ? kMonthsBack : kMonthsAlwaysQueried,
                kMonthsAlwaysQueried, {}, {}, false);
-}
-
-QString AeatDirectBackend::cancelledHuellaOwner(const QString &invoiceNumber, const QString &hash)
-{
-    const auto holds = [&](AeatStore::Kind kind) {
-        return m_store.latest(kind, invoiceNumber, m_config.issuerNif).hash.compare(hash, Qt::CaseInsensitive) == 0;
-    };
-    if (holds(AeatStore::Kind::Cancellation))
-        return QStringLiteral("cancellation");
-    return holds(AeatStore::Kind::Registration) ? QStringLiteral("registration") : QStringLiteral("unknown");
 }
 
 QString AeatDirectBackend::chainMarker()
@@ -439,12 +485,20 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
                 sawUnusable = true;
                 continue;
             }
-            // Another system's records (e.g. the gateway's) belong to its own chain.
-            if (r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif)
+            // Another system's records (e.g. the gateway's) belong to its own chain. A
+            // cancelled one stays in view: its block may be the registration's or the
+            // cancellation's, so a cancellation of ours may be behind it (adoptTip).
+            const bool foreign = r.systemId != m_config.system.systemId || r.producerNif != m_config.system.producerNif;
+            const bool cancelled = r.state.startsWith(QLatin1String("Anulad"));
+            if (foreign && !cancelled)
                 continue;
+            // An invoice AEAT holds as cancelled comes back as its cancellation record (its
+            // huella, time and link) or, should AEAT hide it, as the registration it was.
+            const bool cancellationShown = cancelled && AeatResponse::carriesCancellationRecord(r);
             AeatResponse::RecordSummary s;
             s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
-            s.operation = kRegistration;
+            s.operation = cancellationShown ? kCancellation : kRegistration;
+            s.cancellationFromQuery = cancellationShown;
             s.issuerNif = r.issuerNif;
             s.invoiceNumber = r.invoiceNumber;
             s.issueDate = r.issueDate;
@@ -452,17 +506,25 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             s.generatedAt = r.generatedAt;
             s.previousHash = r.previousHash;
             s.installationNumber = r.installationNumber;
-            s.presentedAt = r.presentedAt;
-            s.cancelledAtAeat = r.state.startsWith(QLatin1String("Anulad"));
+            // AEAT received the cancellation when the invoice's state last changed.
+            s.presentedAt = cancellationShown ? r.stateChangedAt : r.presentedAt;
+            s.cancelledAtAeat = cancelled && !cancellationShown;
             s.cancelledAt = r.stateChangedAt;
+            s.foreignSystem = foreign;
+            if (foreign) {
+                if (s.valid)
+                    m_foreignCancelled << s;
+                continue;
+            }
             if (s.valid)
                 found << s;
             else
                 sawUnusable = true;
-            // The chain restart rests on this being the registration's (AEAT, 24-11-2026).
-            if (s.valid && s.cancelledAtAeat)
+            // Only a hidden cancellation can force a chain restart: worth a line either way.
+            if (s.valid && cancelled)
                 qDebug() << "AeatDirectBackend: AEAT returns cancelled invoice" << s.invoiceNumber << "with the huella of its"
-                         << cancelledHuellaOwner(s.invoiceNumber, s.hash) << "record, generated" << s.generatedAt;
+                         << (cancellationShown ? QStringLiteral("cancellation") : QStringLiteral("registration"))
+                         << "record, generated" << s.generatedAt;
         }
         if (reply.morePages && !reply.records.isEmpty()) {
             const AeatResponse::QueryRecord &last = reply.records.last();

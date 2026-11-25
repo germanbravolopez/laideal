@@ -482,6 +482,10 @@ add_executable(fake_aeat_server tools/fake_aeat_server.cpp
 target_include_directories(fake_aeat_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(fake_aeat_server PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network)
 
+# Saves AEAT's raw reply to a query (TEST environment only, local use: see the file's header).
+add_executable(aeat_query_dump tools/aeat_query_dump.cpp)
+target_link_libraries(aeat_query_dump PRIVATE Qt${QT_VERSION_MAJOR}::Core verifactu)
+
 add_executable(escpos_preview tools/escpos_preview.cpp support/escpospreview.h)
 target_include_directories(escpos_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(escpos_preview PRIVATE Qt${QT_VERSION_MAJOR}::Gui printing)
