@@ -19,7 +19,7 @@ ui->show();
 | `empresa` | combo from `proveedores`, Spanish alphabetical order (`UiKit::sortedNames`) | |
 | `servicio` | editable combo from `servicios`, same order | any non-blank text, stored trimmed |
 | `descripcion` | free text | optional |
-| `iva` | combo 21 / 10 / 0 | the rates the accounting sums (`Contabilidad::expenseIvaIsSummarised`) |
+| `iva` | combo 21 / 10 / 0 | the rates the accounting sums (`expenseIvaIsSummarised`, `sql_lite.h`) |
 | `importe` | free text | total, IVA included |
 
 Base and cuota update as `importe` or the rate change, with `splitGross` (`src/verifactu/verifactutypes.h`): base in cents, IVA the rest, so they add up to the amount typed.

@@ -49,7 +49,7 @@ The quarter's state is read from `accounting_closures` (`quarterIsClosed`): clos
 Every figure comes from the detail rows of the period, fetched once (`incomeTicketsBetweenDates`, `regularizationsBetweenDates`, `expensesBetweenDates`; annual: `annualDetailsByQuarter`, one scan per table bucketed by quarter). The one pure builder is `figuresFromDetails(income, regularizations, expenses, ivaRate, periodStart, periodEnd)`, which returns a `PeriodFigures`; the summary therefore cannot disagree with its detail tables.
 
 - **Ingresos**: importe (IVA incl.), base, IVA repercutido at `AppSettings::ivaRate()` (21 %). Regularisations are netted out (`ingRegularizacion`): the table shows "Ingresos del periodo", "Anulaciones / rectificaciones del periodo" and the net "Importe total".
-- **Gastos**: columns IVA 21 %, IVA 10 %, **Subtotal con IVA**, Sin IVA, Total. Only rates 0, 10 and 21 are summed (`expenseIvaIsSummarised`, the single list of supported rates).
+- **Gastos**: columns IVA 21 %, IVA 10 %, **Subtotal con IVA**, Sin IVA, Total. Only rates 0, 10 and 21 are summed (`expenseIvaIsSummarised` in `sql_lite.h`, the single list of supported rates).
 - **Resumen**: Liquidación de IVA (repercutido − soportado = **Resultado IVA**, "a ingresar" / "a compensar"), Resultado del periodo (base ingresos − base gastos), and the operation counts.
 - **Gastos not summed**: `gasFacturas` counts only the supplier invoices that are summed. Those left out (`gasNoSumadas`: unreadable amount, or an IVA rate other than 0 / 10 / 21, including NULL or "21,5") are named in the summary and flagged in the detail. They also feed `invalidAmountCount`, which raises the red warning after generating.
 - **Comma-decimal and non-numeric amounts** (`10,50`, "abc", empty) are never summed: the collectors flag them (`IncomeTicketDetail::invalidAmounts`, `ExpenseDetail::invalidAmount`), the detail marks them, and the panel's red line points at the decimal clean-up tool.
@@ -90,6 +90,6 @@ Rules and states: [Verifactu](verifactu/README.md). Here:
 |-------|-----------|
 | Period | `periodRangeFor`, `quarterLastDay`, `lockOptionAvailable`, `lockStatusMessage` |
 | Files | `reportRelativePath`, `regeneratedPath` |
-| Figures | `figuresFromDetails`, `PeriodFigures` (+ `accumulate`), `netTicketCount`, `yearTicketCount`, `invalidAmountCount`, `expenseIvaIsSummarised` |
+| Figures | `figuresFromDetails`, `PeriodFigures` (+ `accumulate`), `netTicketCount`, `yearTicketCount`, `invalidAmountCount` |
 | HTML | `createHtmlDetailIngresos`, `createHtmlDetailRegularizaciones`, `createHtmlDetailGastos`, `createHtmlTableGastos` |
 | Dialog | `confirmRevert` (injectable), `Purpose` (`Generate`, `Revert`) |

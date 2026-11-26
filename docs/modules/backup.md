@@ -14,9 +14,9 @@
 | `backupsToPrune(fileNames, now)` | Pure retention decision, no I/O |
 | `backupWarning(enabled, lastSuccessIso, lastError, now)` / `currentBackupWarning()` | Pure warning text / the same fed from `AppSettings` |
 
-`Result`: `success`, `skipped`, `backupPath`, `errorMessage` (Spanish), `bytesWritten`, `finishedAt`, `secondCopyPath`, `secondCopyError`.
+`Result`: `success`, `skipped`, `skipReason` (`AlreadyRunning` / `SameSecond`), `backupPath`, `errorMessage` (Spanish), `bytesWritten`, `finishedAt`, `secondCopyPath`, `secondCopyError`.
 
-- **`skipped`** means refused, not failed: a run is already going, or a copy with this second's name exists (that copy is left as it is). Callers show a notice (manual) or stay silent (automatic), and it is never stored as the last error.
+- **`skipped`** means refused, not failed: a run is already going, or a copy with this second's name exists (that copy is left as it is). Callers show a notice (manual) or stay silent (automatic), and it is never stored as the last error. At start-up the data repairs of a new version run only after a copy of that start exists: `SameSecond` counts, `AlreadyRunning` does not.
 
 ## How a backup runs
 

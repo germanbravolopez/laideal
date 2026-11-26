@@ -7,7 +7,8 @@
 - `recog_prendas.h/cpp` - the window (`QMainWindow`)
 - `pay_dialog.h/cpp` - `PayDialog` (Cobrar)
 - `voidgarmentsdialog.h/cpp` - `VoidGarmentsDialog` (Anular prendas)
-- `aeatreconcilesummary.h` - `aeatReconcileSummaryHtml`, the pure text above the "Consultar en AEAT" table
+- `invoicingpolicy.cpp` - `invoicingPolicyOf(VerifactuIntegration *)`, the `AddGarment::InvoicingPolicy` both wiring sites use
+- `aeatreconcilesummary.h` / `.cpp` - `aeatReconcileSummaryHtml`, the pure text above the "Consultar en AEAT" table
 
 ## Window
 

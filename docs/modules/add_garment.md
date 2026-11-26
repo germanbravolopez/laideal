@@ -15,10 +15,7 @@ Source: `src/add_garment/add_garment.h/cpp`. A `QDialog` built in code with the 
 
 ```cpp
 AddGarment *ui = new AddGarment(db, this);
-ui->invoicingBlocked   = [..] { return integration->invoicingBlockedReason(); };
-ui->invoiceDateRefused = [..](const QDate &d) { return ...; };
-ui->productionStartDate = [..] { return ...; };
-ui->aeatEnvironment    = [..] { return integration->environmentName(); };
+ui->invoicing = invoicingPolicyOf(integration);   // recog_prendas.h; null-safe
 connect(ui, &AddGarment::paidGarmentSaved, this, /* submit to AEAT */);
 ```
 
@@ -26,10 +23,11 @@ connect(ui, &AddGarment::paidGarmentSaved, this, /* submit to AEAT */);
 |--------|---------|
 | `loadTicket(num)` | Types the number and searches it (Recogida). |
 | `ticketFound()` | Read-only accessor (tests). |
-| `invoicingBlocked` | Why a paid garment cannot be invoiced now, or empty. Unset: every paid add is refused. |
-| `invoiceDateRefused(date)` | Why an invoice cannot carry that payment date (before production), or empty. |
-| `productionStartDate` | Day production began: the payment date's minimum. |
-| `aeatEnvironment` | Direct client's environment, whose used numbers a new invoice skips. Unset: all count. |
+| `invoicing` | An `AddGarment::InvoicingPolicy`: the four callbacks below, built in one place by `invoicingPolicyOf(VerifactuIntegration *)` (`src/recog_prendas/invoicingpolicy.cpp`) for both the main window and Recogida. |
+| `invoicing.invoicingBlocked` | Why a paid garment cannot be invoiced now, or empty. Unset: every paid add is refused. |
+| `invoicing.invoiceDateRefused(date)` | Why an invoice cannot carry that payment date (before production), or empty. |
+| `invoicing.productionStartDate` | Day production began: the payment date's minimum. |
+| `invoicing.aeatEnvironment` | Direct client's environment, whose used numbers a new invoice skips. Unset: all count. |
 | `garmentSaved(ticket)` | Emitted for every saved garment. |
 | `paidGarmentSaved(ticket, paymentDate, amount, seq)` | Emitted for a garment saved as paid: the opener submits it to AEAT at once (MainWindow with `verifactuSubmitInvoice`, Recogida with `retryVerifactuSubmit(ticket, seq)`). |
 

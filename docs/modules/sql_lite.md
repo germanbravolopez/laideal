@@ -83,7 +83,7 @@ Rows that need a manual look are logged once (`migration_notes`).
 | `updateTicketVerifactuFields(db, n, result, seq)` | Writes an AEAT reply onto the paid rows of that event only (`pagado = 'SI'` is load-bearing: unpaid siblings share seq 0). Never rewrites ENVIADA / ANULADA / RECTIFICADA. Rows changed; 0 already settled; -1 failure. |
 | `applySettledVerifactuResult(db, invoiceId, result)` | An outcome nobody waited for, applied to the event the id names; an accepted substitution also marks the original RECTIFICADA in an open period. -1: id names no event. |
 | `applySettledVerifactuCancellation(db, invoiceId, date, result)` | Late accepted cancellation: 1 marked, 2 already marked, 0 not, -1 no event. |
-| `markInvoiceSeqCancelled(db, n, seq, date, cancelXml)` | ANULADA on the event's paid rows with `fecha_anulacion` (existing date kept); rows already ANULADA keep state and date, and an empty cancellation XML is filled. False when no paid row matched. |
+| `markInvoiceSeqCancelled(db, n, seq, date, cancelXml)` | ANULADA on the event's paid rows with `fecha_anulacion` (existing date kept); rows already ANULADA keep state and date, and an empty cancellation XML is filled. One transaction (all or none). False when no paid row matched. |
 | `markTicketRectified(db, n, date)` | RECTIFICADA on the paid rows with `fecha_anulacion`. |
 | `markPendingEventUnreconciled(db, n, seq)` | Start-up "Marcar como error": that event's empty / PENDIENTE **paid** rows -> ERROR. |
 | `reconcileVerifactuFromAeat(db, n, seq, csv, url)` | Adopts AEAT's CSV / QR: ERROR / PENDIENTE paid rows -> ENVIADA; never touches ENVIADA / ANULADA / RECTIFICADA. Caller confirms identity first. |

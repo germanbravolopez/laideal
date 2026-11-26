@@ -67,7 +67,7 @@ on_pb_save_clicked          (m_saving blocks a second click while waiting for AE
 
 Each takes the `db` reference at open time: `Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`, `CancelInvoiceDialog`, `RectifyInvoiceDialog`, `RefusedInvoicesDialog`, `AeatExportDialog`, `PendingSubmitsDialog` (start-up), `SelfCheckDialog`. `VoidGarmentsDialog` is opened from [RecogPrendas](recog_prendas.md).
 
-`AddGarment` gets four callbacks: `invoicingBlocked` (`invoicingBlockedReason`), `invoiceDateRefused` and `productionStartDate` (the payment date's production limit), and `aeatEnvironment`; on `paidGarmentSaved` it calls `verifactuSubmitInvoice`. See [add_garment.md](add_garment.md).
+`AddGarment` gets its `InvoicingPolicy` from `invoicingPolicyOf(integration)` (why invoicing is blocked, the payment date's production limit, the AEAT environment); on `paidGarmentSaved` it calls `verifactuSubmitInvoice`. See [add_garment.md](add_garment.md).
 
 | Dialog | Does |
 |--------|------|

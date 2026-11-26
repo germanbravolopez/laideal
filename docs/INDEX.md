@@ -68,7 +68,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | `src/logging/` | `applogger.*` | Debug log |
 | `src/sql_lite/` | `sql_lite.*`, `ingresos_schema.h` | Database functions, migrations, shared helpers, `ingresos` column indices |
 | `src/listado/` | `listado.*`, `insertnewitem.*`, `genlistado.*` | List viewer, insert dialog, list PDF |
-| `src/recog_prendas/` | `recog_prendas.*`, `pay_dialog.*`, `voidgarmentsdialog.*`, `aeatreconcilesummary.h` | Pickup panel, partial payment, void garments, text of the "Consultar en AEAT" dialog |
+| `src/recog_prendas/` | `recog_prendas.*`, `pay_dialog.*`, `voidgarmentsdialog.*`, `aeatreconcilesummary.*`, `invoicingpolicy.cpp` | Pickup panel, partial payment, void garments, text of the "Consultar en AEAT" dialog |
 | `src/add_garment/` | `add_garment.*` | Add garments to a ticket |
 | `src/facturas/` | `facturas.*` | Supplier-invoice form |
 | `src/contabilidad/` | `contabilidad.*` | Accounting reports and quarter close |
