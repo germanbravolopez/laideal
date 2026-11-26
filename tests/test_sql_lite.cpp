@@ -1119,6 +1119,26 @@ private slots:
         QCOMPARE(scalar("SELECT importe FROM gastos"), QStringLiteral("12.50"));
     }
 
+    // Each amount writer keeps its own rule: a negative charge is refused, a negative
+    // expense (a supplier's credit note) is stored.
+    void test_amountGuards_negativeRules()
+    {
+        insertRow("95n", "h95n");
+        QVERIFY(!storeChargedGarments(m_db, "95n", { {"h95n", "-1.00"} }, QDate(2026, 5, 4), 0, "95n"));
+        QVERIFY(!updateGarmentQtyAndImporte(m_db, "95n", "h95n", "1", "-1"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash = 'h95n'"), QStringLiteral("NO"));
+        QVERIFY(insertExpenseInvoice(m_db, "F99", "s", "d", "e", QDate(2026, 5, 4), "21", "-3,5"));
+        QCOMPARE(scalar("SELECT importe FROM gastos WHERE n_factura = 'F99'"), QStringLiteral("-3.50"));
+    }
+
+    // Why the rectificativa writers keep moneyText(QString::number(x, 'f', 2)): rounding the
+    // decimal text first and rounding the double directly differ just below a half cent.
+    void test_moneyText_textRoundingDiffersFromDouble()
+    {
+        QCOMPARE(moneyText(QString::number(1.004999999, 'f', 2)), QStringLiteral("1.00"));
+        QCOMPARE(moneyText(1.004999999), QStringLiteral("1.01"));
+    }
+
     void test_splitGarmentRow_refusesUnreadableAmount()
     {
         insertRow("99", "h99a", "1.234,50");

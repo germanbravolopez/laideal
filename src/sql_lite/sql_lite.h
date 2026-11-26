@@ -177,16 +177,16 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
 // "R-<n>", n one above the highest R- number stored or at AEAT. Empty with *ok false when
 // it cannot be read. Earlier rectificativas keep their ticket-series numbers.
 QString nextRectificationNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
-// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
-// paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
-// any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
-// never be resent and must not keep the warning up.
 // The day (ISO) the direct AEAT client first ran in PRODUCTION on this database, or empty.
 QString aeatProductionStartIso(QSqlDatabase &db);
 // The floor the pending / refused lists apply: `floorIso` (the setting), or the production
 // start when it is later and the direct client works in production - a ticket paid before
 // that day was never invoiced at the real AEAT and must not be sent there.
 QString verifactuRecoveryFloorIso(QSqlDatabase &db, const QString &floorIso, bool directProduction);
+// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
+// paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
+// any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
+// never be resent and must not keep the warning up.
 int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso = QString());
 // The same invoices, one per payment event, newest payment first: what the operator
 // needs to find and resend each one.
@@ -415,7 +415,7 @@ struct IncomeTicketDetail {
     QString nRecibo, cliente, fechaPago;
     double  importe  = 0.0;
     int     garments = 0;
-    int     invalidAmounts = 0;   // garment rows whose importe uses a comma decimal: listed, not summed
+    int     invalidAmounts = 0;   // garment rows whose importe is unreadable: listed, not summed
     QMap<int, double> invoices;   // verifactu_invoice_seq -> its gross: one AEAT invoice each
 };
 // One gastos row behind the Contabilidad gastos summary. iva is the stored rate
@@ -424,7 +424,7 @@ struct ExpenseDetail {
     QString nFactura, empresa, servicio, fecha;
     int     iva     = 0;
     double  importe = 0.0;
-    bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
+    bool    invalidAmount = false;  // importe unreadable (a comma decimal or any text): listed, not summed (importe = 0)
 };
 
 // A paid ticket later cancelled at AEAT (ANULADA) or superseded by a substitution
@@ -444,8 +444,8 @@ struct RegularizationDetail {
 // the single source of every Contabilidad figure: the report sums these same rows,
 // so a summary and its detail table cannot disagree. Income: one entry per paid
 // n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
-// expenses: every gastos row. Ordered by date, then ticket number / id. A
-// comma-decimal importe is never summed: it is counted in invalidAmounts /
+// expenses: every gastos row. Ordered by date, then ticket number / id. An
+// unreadable importe (a comma decimal included) is never summed: it is counted in invalidAmounts /
 // invalidAmount so the report can flag it. A paid row cancelled / rectified with a
 // fecha_anulacion still counts as income in its payment period, and is listed by
 // regularizationsBetweenDates in the period of its fecha_anulacion. (Pre-10.12

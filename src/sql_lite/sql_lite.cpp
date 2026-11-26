@@ -9,6 +9,7 @@
 #include <QSqlRecord>
 
 #include <cmath>
+#include <functional>
 
 // ---------------------------------------------------------------------------
 // DB path - set once in main() before MainWindow is constructed
@@ -187,27 +188,56 @@ static const char *const kBaseSchema[] = {
     "CREATE TABLE IF NOT EXISTS migration_notes (note TEXT PRIMARY KEY, first_seen TEXT NOT NULL)",
 };
 
-bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
+namespace {
+
+// The state every migration step shares: a failed step marks the run failed and goes on.
+struct MigrationRun
 {
-    if (dbNotConfigured(db, __func__)) return false;
-    qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
-    ConnectionScope scope(db);
-    if (!scope.isOpen()) {
-        qCritical() << "migrateDatabase: the database cannot be opened -" << db.lastError().text();
-        return false;
-    }
-    QSqlQuery q(db);
-    bool baseOk = true;
-    for (const char *sql : kBaseSchema)
-        baseOk = q.exec(QString::fromLatin1(sql)) && baseOk;
+    QSqlDatabase &db;
+    bool ok = true;
+
+    QDebug fail() { ok = false; return qWarning(); }
+
     // True the first time this notice is seen (then logged); false afterwards.
-    const auto firstNotice = [&db](const QString &note) {
+    bool firstNotice(const QString &note)
+    {
         QSqlQuery n(db);
         n.prepare("INSERT OR IGNORE INTO migration_notes (note, first_seen) VALUES (:n, :t)");
         n.bindValue(":n", note);
         n.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
         return !n.exec() || n.numRowsAffected() == 1;   // a failed insert still logs
-    };
+    }
+};
+
+} // namespace
+
+// Runs body(0..count-1) in one transaction: every row or none. A body that fails logs its
+// own reason through run.fail(). Nothing to do (count 0) opens no transaction.
+static bool runAllOrNone(MigrationRun &run, const char *label, int count, const std::function<bool(int)> &body)
+{
+    if (count == 0) return true;
+    if (!run.db.transaction()) {
+        run.fail() << "migrateDatabase:" << label << "skipped, no transaction -" << run.db.lastError().text();
+        return false;
+    }
+    bool done = true;
+    for (int i = 0; done && i < count; ++i)
+        done = body(i);
+    if (done && !run.db.commit()) {
+        done = false;
+        run.fail() << "migrateDatabase:" << label << "commit failed -" << run.db.lastError().text();
+    }
+    if (!done)
+        run.db.rollback();
+    return done;
+}
+
+static void migrateSchema(MigrationRun &run)
+{
+    QSqlQuery q(run.db);
+    bool baseOk = true;
+    for (const char *sql : kBaseSchema)
+        baseOk = q.exec(QString::fromLatin1(sql)) && baseOk;
     // Each exec() silently fails if the column already exists - safe to call repeatedly.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_csv TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_timestamp TEXT");
@@ -220,62 +250,47 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
     // verifactu_rectification_type is "S" (sustitucion) or "I" (diferencias).
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectifies_n_recibo TEXT");
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_rectification_type TEXT");
-    // Partial-payment sequence (8.5+). Each payment event for a given n_recibo
-    // submits as InvoiceID "<n_recibo>-<seq>" so multiple partial payments do
-    // not collide at AEAT. Legacy rows (8.0-8.4) leave it 0 - those tickets
-    // were submitted as "<n_recibo>" (no seq), which is its own distinct ID.
+    // Payment sequence: a payment event submits as InvoiceID "<n_recibo>-<seq>". Rows of
+    // 8.0-8.4 keep 0, submitted as the bare "<n_recibo>".
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_seq INTEGER DEFAULT 0");
-    // Literal AEAT InvoiceID submitted for the row (8.5+). MainWindow save-time
-    // submission writes the bare "<n_recibo>"; PayDialog partial-pay writes
-    // "<n_recibo>-<seq>"; rectificativa writes its own new "<n_recibo>". Reads
-    // authoritatively for reprint / QR regen so we never have to guess from
-    // seq=0 whether the original AEAT format was bare or "-0".
+    // The literal InvoiceID submitted, so a reprint never guesses bare vs "-0" from seq 0.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_invoice_id TEXT");
-    // Date a garment was cancelled (10.12+): voided in place (Anular prendas), cancelled
-    // at AEAT, or superseded by a substitution rectificativa. Empty otherwise.
+    // Date a garment was voided in place, cancelled at AEAT or superseded by a substitution.
     q.exec("ALTER TABLE ingresos ADD COLUMN fecha_anulacion TEXT");
     // AEAT's cancellation record (Return.Xml of the /Cancel reply), for the Hacienda export.
     q.exec("ALTER TABLE ingresos ADD COLUMN verifactu_cancel_xml TEXT");
     // The ALTERs fail on purpose when the column exists: check the result instead.
-    bool ok = baseOk;
-    const auto fail = [&ok]() { ok = false; return qWarning(); };   // a step that failed
     if (!baseOk)
-        fail() << "migrateDatabase: creating the base tables failed -" << q.lastError().text();
-    if (db.record("ingresos").count() <= INGRESOS_COL_VERIFACTU_CANCEL_XML)
-        fail() << "migrateDatabase: adding the verifactu_* columns failed";
+        run.fail() << "migrateDatabase: creating the base tables failed -" << q.lastError().text();
+    if (run.db.record("ingresos").count() <= INGRESOS_COL_VERIFACTU_CANCEL_XML)
+        run.fail() << "migrateDatabase: adding the verifactu_* columns failed";
 
-    // Before kAmountEditableWhere is used below: it reads accounting_closures.
-    ok = migrateAccountingClosures(db) && ok;
+    // Before kAmountEditableWhere is used by the repairs: it reads accounting_closures.
+    run.ok = migrateAccountingClosures(run.db) && run.ok;
     for (const char *sql : kIngresosGuards)
         if (!q.exec(QString::fromLatin1(sql)))
-            fail() << "migrateDatabase: an ingresos guard trigger failed -" << q.lastError().text();
+            run.fail() << "migrateDatabase: an ingresos guard trigger failed -" << q.lastError().text();
+}
 
-    // Everything below rewrites rows: never without a copy of the database as it was.
-    if (!rewriteData) {
-        qWarning() << "migrateDatabase: schema only - the data repairs wait until a backup succeeds";
-        q.finish();
-        return ok;
-    }
-
-    // 10.9 backfill: before the Unpaid/NotSubmitted split, saveTicket stamped every
-    // row PENDIENTE regardless of payment, so unpaid garments claimed to be awaiting
-    // an AEAT reply. Re-label those as SIN COBRAR. Idempotent (the filter excludes
-    // rows it already rewrote) and scoped to the literal 'PENDIENTE' on purpose:
-    // NULL/'' rows are legacy split-off garments that several queries detect via
-    // `verifactu_estado != ''`, so making them non-empty would change print/cancel
-    // behaviour. See docs/modules/verifactu/README.md.
+// 10.9: saveTicket stamped unpaid rows PENDIENTE; they become SIN COBRAR. Only the literal
+// 'PENDIENTE': NULL / '' rows are legacy split-offs that queries detect by `verifactu_estado != ''`.
+static void relabelUnpaidPending(MigrationRun &run)
+{
+    QSqlQuery q(run.db);
     if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
                 "WHERE verifactu_estado = 'PENDIENTE' "
                 "  AND (COALESCE(pagado, '') != 'SI' OR fecha_pago IS NULL OR fecha_pago = '')"))
-        fail() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
+        run.fail() << "migrateDatabase: SIN COBRAR backfill failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: re-labelled" << q.numRowsAffected()
                  << "unpaid PENDIENTE rows as SIN COBRAR";
+}
 
-    // 10.12 backfill: garments voided in place used to carry the void date in
-    // fecha_pago and fecha_recogida although they were never paid nor collected.
-    // Move it to fecha_anulacion and empty both. Idempotent (only rows without a
-    // fecha_anulacion), and scoped to local voids: pagado != 'SI'.
+// 10.12: a garment voided in place carried the void date in fecha_pago / fecha_recogida;
+// it moves to fecha_anulacion.
+static void moveVoidDates(MigrationRun &run)
+{
+    QSqlQuery q(run.db);
     if (!q.exec("UPDATE ingresos SET "
                 "fecha_anulacion = COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')), "
                 "fecha_pago = '', fecha_recogida = '' "
@@ -283,315 +298,284 @@ bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
                 "  AND (pagado IS NULL OR pagado != 'SI') "
                 "  AND (fecha_anulacion IS NULL OR fecha_anulacion = '') "
                 "  AND COALESCE(NULLIF(fecha_pago, ''), NULLIF(fecha_recogida, '')) IS NOT NULL"))
-        fail() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
+        run.fail() << "migrateDatabase: void-date backfill failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: moved the void date to fecha_anulacion on"
                  << q.numRowsAffected() << "voided garments";
+}
 
-    // 10.12 repair: before 10.12 an AEAT cancellation also marked the ticket's UNPAID
-    // garments (they share seq 0) ANULADA, which left them neither chargeable nor
-    // counted. A cancelled invoice only ever covered the paid rows, so relabel them
-    // SIN COBRAR so they can be charged. Local voids (estado Anulado) are genuinely
-    // cancelled and untouched. Idempotent.
-    // RECTIFICADA is deliberately NOT repaired: an older substitution could have been
-    // submitted with the unpaid garments' amounts included, so re-opening them could
-    // invoice them twice. Those rows are only logged for manual review.
-    {
-        QSqlQuery review(db);
-        if (review.exec("SELECT DISTINCT n_recibo FROM ingresos "
-                        "WHERE (pagado IS NULL OR pagado != 'SI') AND verifactu_estado = 'RECTIFICADA' "
-                        "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
-            while (review.next())
-                if (firstNotice("rectificada-unpaid:" + review.value(0).toString()))
-                    qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
-                               << "has unpaid garments marked RECTIFICADA - review manually before charging them";
-    }
+// 10.12: an AEAT cancellation also marked the unpaid garments (same seq 0) ANULADA; they
+// become SIN COBRAR again. RECTIFICADA ones are only logged: an older substitution may have
+// included their amounts, so re-opening them could invoice them twice.
+static void reopenCancelledUnpaid(MigrationRun &run)
+{
+    QSqlQuery review(run.db);
+    if (review.exec("SELECT DISTINCT n_recibo FROM ingresos "
+                    "WHERE (pagado IS NULL OR pagado != 'SI') AND verifactu_estado = 'RECTIFICADA' "
+                    "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
+        while (review.next())
+            if (run.firstNotice("rectificada-unpaid:" + review.value(0).toString()))
+                qWarning() << "migrateDatabase: ticket" << review.value(0).toString()
+                           << "has unpaid garments marked RECTIFICADA - review manually before charging them";
+    QSqlQuery q(run.db);
     if (!q.exec("UPDATE ingresos SET verifactu_estado = 'SIN COBRAR' "
                 "WHERE (pagado IS NULL OR pagado != 'SI') "
                 "  AND verifactu_estado = 'ANULADA' "
                 "  AND (estado IS NULL OR estado != '" INGRESOS_ESTADO_ANULADO "')"))
-        fail() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
+        run.fail() << "migrateDatabase: unpaid-remainder repair failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: relabelled" << q.numRowsAffected()
                  << "unpaid garments wrongly marked ANULADA by a cancellation as SIN COBRAR";
+}
 
-    // 12.2 repair: before 10.10 the AEAT answer of a ticket's first payment was also
-    // written onto its unpaid garments (same seq 0), which then carry a paid sibling's
-    // ENVIADA + CSV for an invoice that never covered them; since 12.0 the guard trigger
-    // refuses to charge them. Clear the copy: SIN COBRAR, or ANULADA when voided in
-    // place. The estado moves first, so the trigger no longer guards the row. Idempotent.
-    {
-        const QString stamped = QStringLiteral(
-            "SELECT u.rowid, u.n_recibo, u.verifactu_csv, u.verifactu_invoice_seq, u.estado FROM ingresos u "
-            "WHERE COALESCE(u.pagado, '') IN ('', 'NO') "
-            "  AND u.verifactu_estado = 'ENVIADA' AND COALESCE(u.verifactu_csv, '') != '' "
-            "  AND EXISTS (SELECT 1 FROM ingresos p WHERE p.n_recibo = u.n_recibo AND p.pagado = 'SI' "
-            "              AND p.verifactu_csv = u.verifactu_csv)");
-        QVector<qlonglong> rows;
-        QSqlQuery find(db);
-        if (!find.exec(stamped))
-            fail() << "migrateDatabase: stamped-unpaid search failed -" << find.lastError().text();
-        while (find.next()) {
-            rows.append(find.value(0).toLongLong());
-            // The cleared columns leave no other trace: say which row held what.
-            qWarning() << "migrateDatabase: unpaid garment row" << find.value(0).toLongLong() << "of ticket"
-                       << find.value(1).toString() << "carried the paid invoice's CSV" << find.value(2).toString()
-                       << "seq" << find.value(3).toInt() << "- cleared to"
-                       << (find.value(4).toString() == QLatin1String(INGRESOS_ESTADO_ANULADO) ? "ANULADA" : "SIN COBRAR");
-        }
-        find.finish();
-        QSqlQuery relabel(db), clear(db);
-        relabel.prepare("UPDATE ingresos SET verifactu_estado = CASE WHEN estado = '" INGRESOS_ESTADO_ANULADO
-                        "' THEN 'ANULADA' ELSE 'SIN COBRAR' END WHERE rowid = :r");
-        clear.prepare("UPDATE ingresos SET verifactu_csv = NULL, verifactu_timestamp = NULL, "
-                      "verifactu_error = NULL, verifactu_url_qr = NULL, verifactu_xml = NULL, "
-                      "verifactu_hash = NULL, verifactu_invoice_id = NULL, verifactu_invoice_seq = 0 "
-                      "WHERE rowid = :r");
-        // Every row or none: relabelled but not cleared, a row would no longer match.
-        bool cleared = rows.isEmpty() || db.transaction();
-        if (!cleared)
-            fail() << "migrateDatabase: stamped-unpaid repair skipped, no transaction -" << db.lastError().text();
-        for (qlonglong r : cleared ? rows : QVector<qlonglong>()) {
-            relabel.bindValue(":r", r);
-            clear.bindValue(":r", r);
-            if (!relabel.exec() || !clear.exec()) {
-                cleared = false;
-                fail() << "migrateDatabase: stamped-unpaid repair failed -"
-                       << relabel.lastError().text() << clear.lastError().text();
-                break;
-            }
-        }
-        if (!rows.isEmpty() && cleared && !db.commit()) {
-            cleared = false;
-            fail() << "migrateDatabase: stamped-unpaid repair commit failed -" << db.lastError().text();
-        }
-        if (!rows.isEmpty() && !cleared)
-            db.rollback();
-        if (cleared && !rows.isEmpty())
-            qDebug() << "migrateDatabase: cleared a paid sibling's AEAT invoice data from"
-                     << rows.size() << "unpaid garment(s)";
+// Before 10.10 the AEAT answer of a first payment was copied onto the unpaid garments of the
+// ticket (ENVIADA + the paid sibling's CSV). Cleared to SIN COBRAR, or ANULADA when voided;
+// the estado moves first, so the guard trigger no longer covers the row.
+static void clearStampedUnpaid(MigrationRun &run)
+{
+    QVector<qlonglong> rows;
+    QSqlQuery find(run.db);
+    if (!find.exec("SELECT u.rowid, u.n_recibo, u.verifactu_csv, u.verifactu_invoice_seq, u.estado FROM ingresos u "
+                   "WHERE COALESCE(u.pagado, '') IN ('', 'NO') "
+                   "  AND u.verifactu_estado = 'ENVIADA' AND COALESCE(u.verifactu_csv, '') != '' "
+                   "  AND EXISTS (SELECT 1 FROM ingresos p WHERE p.n_recibo = u.n_recibo AND p.pagado = 'SI' "
+                   "              AND p.verifactu_csv = u.verifactu_csv)"))
+        run.fail() << "migrateDatabase: stamped-unpaid search failed -" << find.lastError().text();
+    while (find.next()) {
+        rows.append(find.value(0).toLongLong());
+        // The cleared columns leave no other trace: say which row held what.
+        qWarning() << "migrateDatabase: unpaid garment row" << find.value(0).toLongLong() << "of ticket"
+                   << find.value(1).toString() << "carried the paid invoice's CSV" << find.value(2).toString()
+                   << "seq" << find.value(3).toInt() << "- cleared to"
+                   << (find.value(4).toString() == QLatin1String(INGRESOS_ESTADO_ANULADO) ? "ANULADA" : "SIN COBRAR");
     }
+    find.finish();
+    QSqlQuery relabel(run.db), clear(run.db);
+    relabel.prepare("UPDATE ingresos SET verifactu_estado = CASE WHEN estado = '" INGRESOS_ESTADO_ANULADO
+                    "' THEN 'ANULADA' ELSE 'SIN COBRAR' END WHERE rowid = :r");
+    clear.prepare("UPDATE ingresos SET verifactu_csv = NULL, verifactu_timestamp = NULL, "
+                  "verifactu_error = NULL, verifactu_url_qr = NULL, verifactu_xml = NULL, "
+                  "verifactu_hash = NULL, verifactu_invoice_id = NULL, verifactu_invoice_seq = 0 "
+                  "WHERE rowid = :r");
+    // Every row or none: relabelled but not cleared, a row would no longer match.
+    const bool cleared = runAllOrNone(run, "stamped-unpaid repair", rows.size(), [&](int i) {
+        relabel.bindValue(":r", rows[i]);
+        clear.bindValue(":r", rows[i]);
+        if (relabel.exec() && clear.exec()) return true;
+        run.fail() << "migrateDatabase: stamped-unpaid repair failed -"
+                   << relabel.lastError().text() << clear.lastError().text();
+        return false;
+    });
+    if (cleared && !rows.isEmpty())
+        qDebug() << "migrateDatabase: cleared a paid sibling's AEAT invoice data from"
+                 << rows.size() << "unpaid garment(s)";
+}
 
-    // 11.0 repair: Separar prendas used to insert the split-off garments with empty
-    // verifactu_* columns and seq 0, so a split of a paid row fell out of the invoice
-    // AEAT registered for it (export total, cancellation, reprint). Such a row is paid
-    // with an empty estado at seq 0 and has, on the same ticket, rows of exactly one
-    // AEAT invoice with the same fecha_pago, prenda and servicio: copy that invoice's
-    // columns. Only ENVIADA invoices are relinked, which leaves every Contabilidad
-    // figure as it was; a match with a cancelled, rectified or second invoice would move
-    // income between periods, so it is only logged. One join (SQLite builds a temporary
-    // index for it) keeps this cheap enough to run at every start.
-    {
-        QSqlQuery match(db);
-        QVector<QPair<qlonglong, qlonglong>> relinks;   // (split row, invoice row)
-        if (!match.exec("SELECT c.rowid, c.n_recibo, c.hash, c.importe, c.fecha_pago, "
-                        "  COUNT(DISTINCT s.verifactu_invoice_seq), SUM(s.verifactu_estado != 'ENVIADA'), MIN(s.rowid) "
-                        "FROM ingresos c JOIN ingresos s ON s.n_recibo = c.n_recibo AND s.pagado = 'SI' "
-                        "  AND s.fecha_pago = c.fecha_pago AND s.prenda = c.prenda AND s.servicio = c.servicio "
-                        "  AND COALESCE(s.verifactu_csv, '') != '' "
-                        "WHERE c.pagado = 'SI' AND COALESCE(c.verifactu_estado, '') = '' "
-                        "  AND COALESCE(c.verifactu_invoice_seq, 0) = 0 "
-                        "GROUP BY c.rowid"))
-            fail() << "migrateDatabase: split-row search failed -" << match.lastError().text();
-        while (match.next()) {
-            const QString ticket = match.value(1).toString();
-            if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
-                if (firstNotice("split-ambiguous:" + match.value(2).toString()))
-                    qWarning() << "migrateDatabase: ticket" << ticket
-                               << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
-                                  " - review manually";
-                continue;
-            }
-            // A payment made with Verifactu off by a version before 8.5 on the same day,
-            // garment and service matches the same way, so every relink is logged.
-            qWarning() << "migrateDatabase: relinking paid garment" << match.value(2).toString()
-                       << "of ticket" << ticket << "(" << match.value(3).toString()
-                       << "paid" << match.value(4).toString()
-                       << ") to its AEAT invoice as a split-off part - check it if it was a separate payment";
-            relinks.append({ match.value(0).toLongLong(), match.value(7).toLongLong() });
+// Before 11.0 Separar prendas inserted the split-off garments with empty verifactu_* and
+// seq 0. A paid row like that whose same-day, same-garment siblings belong to exactly one
+// ENVIADA invoice gets that invoice's columns; any other match would move income between
+// periods and is only logged. One join (SQLite builds a temporary index) keeps it cheap.
+static void relinkSplitRows(MigrationRun &run)
+{
+    QSqlQuery match(run.db);
+    QVector<QPair<qlonglong, qlonglong>> relinks;   // (split row, invoice row)
+    if (!match.exec("SELECT c.rowid, c.n_recibo, c.hash, c.importe, c.fecha_pago, "
+                    "  COUNT(DISTINCT s.verifactu_invoice_seq), SUM(s.verifactu_estado != 'ENVIADA'), MIN(s.rowid) "
+                    "FROM ingresos c JOIN ingresos s ON s.n_recibo = c.n_recibo AND s.pagado = 'SI' "
+                    "  AND s.fecha_pago = c.fecha_pago AND s.prenda = c.prenda AND s.servicio = c.servicio "
+                    "  AND COALESCE(s.verifactu_csv, '') != '' "
+                    "WHERE c.pagado = 'SI' AND COALESCE(c.verifactu_estado, '') = '' "
+                    "  AND COALESCE(c.verifactu_invoice_seq, 0) = 0 "
+                    "GROUP BY c.rowid"))
+        run.fail() << "migrateDatabase: split-row search failed -" << match.lastError().text();
+    while (match.next()) {
+        const QString ticket = match.value(1).toString();
+        if (match.value(5).toInt() != 1 || match.value(6).toInt() != 0) {
+            if (run.firstNotice("split-ambiguous:" + match.value(2).toString()))
+                qWarning() << "migrateDatabase: ticket" << ticket
+                           << "has a split-off paid garment of a cancelled / rectified or ambiguous invoice"
+                              " - review manually";
+            continue;
         }
-        match.finish();
-        QSqlQuery upd(db);
-        upd.prepare("UPDATE ingresos SET (verifactu_csv, verifactu_timestamp, verifactu_estado, "
-                    "  verifactu_error, verifactu_url_qr, verifactu_xml, verifactu_hash, "
-                    "  verifactu_rectifies_n_recibo, verifactu_rectification_type, "
-                    "  verifactu_invoice_seq, verifactu_invoice_id, fecha_anulacion, verifactu_cancel_xml) = "
-                    "(SELECT s.verifactu_csv, s.verifactu_timestamp, s.verifactu_estado, "
-                    "  s.verifactu_error, s.verifactu_url_qr, s.verifactu_xml, s.verifactu_hash, "
-                    "  s.verifactu_rectifies_n_recibo, s.verifactu_rectification_type, "
-                    "  s.verifactu_invoice_seq, s.verifactu_invoice_id, s.fecha_anulacion, "
-                    "  s.verifactu_cancel_xml FROM ingresos s WHERE s.rowid = :src) "
-                    "WHERE rowid = :dst AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = ''");
-        // Every relink or none.
-        bool relinked = relinks.isEmpty() || db.transaction();
-        if (!relinked)
-            fail() << "migrateDatabase: split-row relink skipped, no transaction -" << db.lastError().text();
-        for (const auto &r : relinked ? relinks : QVector<QPair<qlonglong, qlonglong>>()) {
-            upd.bindValue(":src", r.second);
-            upd.bindValue(":dst", r.first);
-            if (!upd.exec()) {
-                relinked = false;
-                fail() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
-                break;
-            }
-        }
-        if (!relinks.isEmpty() && relinked && !db.commit()) {
-            relinked = false;
-            fail() << "migrateDatabase: split-row relink commit failed -" << db.lastError().text();
-        }
-        if (!relinks.isEmpty() && !relinked)
-            db.rollback();
-        if (!relinks.isEmpty() && relinked)
-            qDebug() << "migrateDatabase: relinked" << relinks.size()
-                     << "split-off paid garment(s) to their AEAT invoice";
+        // A pre-8.5 payment with Verifactu off on the same day, garment and service matches
+        // the same way, so every relink is logged.
+        qWarning() << "migrateDatabase: relinking paid garment" << match.value(2).toString()
+                   << "of ticket" << ticket << "(" << match.value(3).toString()
+                   << "paid" << match.value(4).toString()
+                   << ") to its AEAT invoice as a split-off part - check it if it was a separate payment";
+        relinks.append({ match.value(0).toLongLong(), match.value(7).toLongLong() });
     }
+    match.finish();
+    QSqlQuery upd(run.db);
+    upd.prepare("UPDATE ingresos SET (verifactu_csv, verifactu_timestamp, verifactu_estado, "
+                "  verifactu_error, verifactu_url_qr, verifactu_xml, verifactu_hash, "
+                "  verifactu_rectifies_n_recibo, verifactu_rectification_type, "
+                "  verifactu_invoice_seq, verifactu_invoice_id, fecha_anulacion, verifactu_cancel_xml) = "
+                "(SELECT s.verifactu_csv, s.verifactu_timestamp, s.verifactu_estado, "
+                "  s.verifactu_error, s.verifactu_url_qr, s.verifactu_xml, s.verifactu_hash, "
+                "  s.verifactu_rectifies_n_recibo, s.verifactu_rectification_type, "
+                "  s.verifactu_invoice_seq, s.verifactu_invoice_id, s.fecha_anulacion, "
+                "  s.verifactu_cancel_xml FROM ingresos s WHERE s.rowid = :src) "
+                "WHERE rowid = :dst AND pagado = 'SI' AND COALESCE(verifactu_estado, '') = ''");
+    const bool relinked = runAllOrNone(run, "split-row relink", relinks.size(), [&](int i) {
+        upd.bindValue(":src", relinks[i].second);
+        upd.bindValue(":dst", relinks[i].first);
+        if (upd.exec()) return true;
+        run.fail() << "migrateDatabase: split-row relink failed -" << upd.lastError().text();
+        return false;
+    });
+    if (!relinks.isEmpty() && relinked)
+        qDebug() << "migrateDatabase: relinked" << relinks.size()
+                 << "split-off paid garment(s) to their AEAT invoice";
+}
 
-    // 12.0: a row is found by (n_recibo, hash), so two rows of one ticket sharing a hash
-    // (the rand() era) or an empty hash were hit together by every write. Before the
-    // rounding below, which writes by that key too, each such row gets a new hash -
-    // replacing the old "Crear hash en ingresos" action. A row with a CSV keeps its own
-    // and is only logged; within a group the row kept is one with a CSV if there is one.
-    {
-        QSqlQuery sel(db);
-        if (!sel.exec("SELECT i.rowid, i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') != '' "
-                      "FROM ingresos i JOIN (SELECT n_recibo, COALESCE(hash, '') AS h FROM ingresos "
-                      "      GROUP BY n_recibo, COALESCE(hash, '') HAVING COUNT(*) > 1 OR h = '') d "
-                      "  ON d.n_recibo = i.n_recibo AND d.h = COALESCE(i.hash, '') "
-                      "ORDER BY i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') = '', i.rowid"))
-            fail() << "migrateDatabase: duplicate-hash search failed -" << sel.lastError().text();
-        struct Change { qlonglong rowid; QString ticket, oldHash; };
-        QVector<Change> changes;
-        QString groupTicket, groupHash;
-        bool keptOne = false;
+// 12.0: rows are found by (n_recibo, hash); rows of one ticket sharing a hash (the rand()
+// era) or with an empty one get a new hash, before the rounding that writes by that key.
+// A row with a CSV keeps its hash and is only logged; per group a row with a CSV is kept.
+static void rehashDuplicates(MigrationRun &run)
+{
+    QSqlQuery sel(run.db);
+    if (!sel.exec("SELECT i.rowid, i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') != '' "
+                  "FROM ingresos i JOIN (SELECT n_recibo, COALESCE(hash, '') AS h FROM ingresos "
+                  "      GROUP BY n_recibo, COALESCE(hash, '') HAVING COUNT(*) > 1 OR h = '') d "
+                  "  ON d.n_recibo = i.n_recibo AND d.h = COALESCE(i.hash, '') "
+                  "ORDER BY i.n_recibo, COALESCE(i.hash, ''), COALESCE(i.verifactu_csv, '') = '', i.rowid"))
+        run.fail() << "migrateDatabase: duplicate-hash search failed -" << sel.lastError().text();
+    struct Change { qlonglong rowid; QString ticket, oldHash; };
+    QVector<Change> changes;
+    QString groupTicket, groupHash;
+    bool keptOne = false;
+    while (sel.next()) {
+        const QString ticket = sel.value(1).toString(), hash = sel.value(2).toString();
+        const bool sent = sel.value(3).toBool();
+        if (ticket != groupTicket || hash != groupHash) {
+            groupTicket = ticket;
+            groupHash = hash;
+            keptOne = false;
+        }
+        if (!hash.isEmpty() && !keptOne) {   // sorted: a row with a CSV comes first
+            keptOne = true;
+            continue;
+        }
+        if (sent) {
+            if (run.firstNotice("sent-hash:" + sel.value(0).toString()))
+                qWarning() << "migrateDatabase: ticket" << ticket << "has a row sent to AEAT whose hash"
+                           << hash << "is empty or shared - review manually";
+        }
+        else
+            changes.append({ sel.value(0).toLongLong(), ticket, hash });
+    }
+    sel.finish();
+    QSqlQuery upd(run.db);
+    upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
+    runAllOrNone(run, "rehash", changes.size(), [&](int i) {
+        const Change &c = changes[i];
+        const QString newHash = genHash16();
+        upd.bindValue(":h",   newHash);
+        upd.bindValue(":rid", c.rowid);
+        if (upd.exec()) {
+            qDebug() << "migrateDatabase: ticket" << c.ticket << "rowid" << c.rowid
+                     << "hash" << c.oldHash << "->" << newHash;
+            return true;
+        }
+        run.fail() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
+        return false;
+    });
+    // Every write is keyed by (n_recibo, hash): from now on the database keeps it unique.
+    // A sent row left sharing its hash (logged above) keeps the index from being built.
+    if (!QSqlQuery(run.db).exec("CREATE UNIQUE INDEX IF NOT EXISTS ingresos_ticket_hash ON ingresos (n_recibo, hash)"))
+        qWarning() << "migrateDatabase: (n_recibo, hash) is not unique yet - the index waits for the review";
+}
+
+// 10.14: amounts are stored in cents. Open rows (unpaid, never sent) an older Recogida m2
+// edit stored with more decimals are rounded as they will be charged; paid rows keep theirs.
+static void roundOpenAmounts(MigrationRun &run)
+{
+    QSqlQuery sel(run.db);
+    QVector<QPair<QString, QString>> rows;   // (n_recibo, hash)
+    QStringList values;
+    if (sel.exec("SELECT n_recibo, hash, importe FROM ingresos "
+                 "WHERE importe GLOB '*.[0-9][0-9][0-9]*'" + kAmountEditableWhere)) {
         while (sel.next()) {
-            const QString ticket = sel.value(1).toString(), hash = sel.value(2).toString();
-            const bool sent = sel.value(3).toBool();
-            if (ticket != groupTicket || hash != groupHash) {
-                groupTicket = ticket;
-                groupHash = hash;
-                keptOne = false;
-            }
-            if (!hash.isEmpty() && !keptOne) {   // sorted: a row with a CSV comes first
-                keptOne = true;
-                continue;
-            }
-            if (sent) {
-                if (firstNotice("sent-hash:" + sel.value(0).toString()))
-                    qWarning() << "migrateDatabase: ticket" << ticket << "has a row sent to AEAT whose hash"
-                               << hash << "is empty or shared - review manually";
-            }
-            else
-                changes.append({ sel.value(0).toLongLong(), ticket, hash });
-        }
-        sel.finish();
-        QSqlQuery upd(db);
-        upd.prepare("UPDATE ingresos SET hash = :h WHERE rowid = :rid");
-        // Every new hash or none.
-        bool rehashed = changes.isEmpty() || db.transaction();
-        if (!rehashed)
-            fail() << "migrateDatabase: rehash skipped, no transaction -" << db.lastError().text();
-        for (const Change &c : rehashed ? changes : QVector<Change>()) {
-            const QString newHash = genHash16();
-            upd.bindValue(":h",   newHash);
-            upd.bindValue(":rid", c.rowid);
-            if (upd.exec())
-                qDebug() << "migrateDatabase: ticket" << c.ticket << "rowid" << c.rowid
-                         << "hash" << c.oldHash << "->" << newHash;
-            else {
-                rehashed = false;
-                fail() << "migrateDatabase: new hash for rowid" << c.rowid << "failed -" << upd.lastError().text();
-                break;
-            }
-        }
-        if (!changes.isEmpty() && rehashed && !db.commit()) {
-            rehashed = false;
-            fail() << "migrateDatabase: rehash commit failed -" << db.lastError().text();
-        }
-        if (!changes.isEmpty() && !rehashed)
-            db.rollback();
-        // Every write is keyed by (n_recibo, hash): from now on the database keeps it unique.
-        // A sent row left sharing its hash (logged above) keeps the index from being built.
-        if (!QSqlQuery(db).exec("CREATE UNIQUE INDEX IF NOT EXISTS ingresos_ticket_hash ON ingresos (n_recibo, hash)"))
-            qWarning() << "migrateDatabase: (n_recibo, hash) is not unique yet - the index waits for the review";
-    }
-
-    // 10.14: amounts are stored in cents. Rows still open (unpaid, never sent) that an
-    // older Recogida m2 edit stored with more decimals are rounded the way they will be
-    // charged; no invoice covers them yet. Paid rows keep what was stored.
-    {
-        QSqlQuery sel(db);
-        QVector<QPair<QString, QString>> rows;   // (n_recibo, hash)
-        QStringList values;
-        if (sel.exec("SELECT n_recibo, hash, importe FROM ingresos "
-                     "WHERE importe GLOB '*.[0-9][0-9][0-9]*'" + kAmountEditableWhere)) {
-            while (sel.next()) {
-                rows.append({ sel.value(0).toString(), sel.value(1).toString() });
-                values << moneyText(sel.value(2).toString());
-            }
-        }
-        sel.finish();
-        QSqlQuery upd(db);
-        upd.prepare("UPDATE ingresos SET importe = :imp WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
-        // Every rounding or none.
-        bool rounded = rows.isEmpty() || db.transaction();
-        if (!rounded)
-            fail() << "migrateDatabase: rounding skipped, no transaction -" << db.lastError().text();
-        for (int i = 0; rounded && i < rows.size(); ++i) {
-            upd.bindValue(":imp", values[i]);
-            upd.bindValue(":n",   rows[i].first);
-            upd.bindValue(":h",   rows[i].second);
-            if (!upd.exec()) {
-                rounded = false;
-                fail() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
-                           << upd.lastError().text();
-                break;
-            }
-        }
-        if (!rows.isEmpty() && rounded && !db.commit()) {
-            rounded = false;
-            fail() << "migrateDatabase: rounding commit failed -" << db.lastError().text();
-        }
-        if (!rows.isEmpty() && !rounded)
-            db.rollback();
-        if (!rows.isEmpty() && rounded)
-            qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
-    }
-
-    // 12.0: comma decimals ("5,50") in the non-invoice amounts, which nothing sums or
-    // prices, become dots (the Listado editors now store a dot); one with a dot as well
-    // ("1.234,50") is ambiguous and left as it is. A gasto of a closed
-    // quarter keeps its value: its report was filed without it. Paid ingresos are
-    // invoices and are never rewritten.
-    {
-        const QStringList fixes = {
-            "UPDATE gastos SET importe = REPLACE(TRIM(importe), ',', '.') "
-            "WHERE importe LIKE '%,%' AND importe NOT LIKE '%.%' AND NOT " + closedQuarterSql("gastos.fecha"),
-            "UPDATE prendas SET precio_limpieza = REPLACE(TRIM(precio_limpieza), ',', '.') WHERE precio_limpieza LIKE '%,%' AND precio_limpieza NOT LIKE '%.%'",
-            "UPDATE prendas SET precio_plancha = REPLACE(TRIM(precio_plancha), ',', '.') WHERE precio_plancha LIKE '%,%' AND precio_plancha NOT LIKE '%.%'",
-        };
-        for (const QString &sql : fixes) {
-            if (!q.exec(sql))
-                fail() << "migrateDatabase: comma-decimal fix failed -" << q.lastError().text();
-            else if (q.numRowsAffected() > 0)
-                qDebug() << "migrateDatabase: replaced the decimal comma in" << q.numRowsAffected() << "amount(s) -" << sql.left(30);
+            rows.append({ sel.value(0).toString(), sel.value(1).toString() });
+            values << moneyText(sel.value(2).toString());
         }
     }
+    sel.finish();
+    QSqlQuery upd(run.db);
+    upd.prepare("UPDATE ingresos SET importe = :imp WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
+    const bool rounded = runAllOrNone(run, "rounding", rows.size(), [&](int i) {
+        upd.bindValue(":imp", values[i]);
+        upd.bindValue(":n",   rows[i].first);
+        upd.bindValue(":h",   rows[i].second);
+        if (upd.exec()) return true;
+        run.fail() << "migrateDatabase: rounding importe of" << rows[i].first << "failed -"
+                   << upd.lastError().text();
+        return false;
+    });
+    if (!rows.isEmpty() && rounded)
+        qDebug() << "migrateDatabase: rounded" << rows.size() << "unpaid amount(s) to cents";
+}
 
-    // Canonical casing. PendingSubmitsDialog used to write a literal 'Error',
-    // which verifactuEstadoFromString() does not recognise (it fell through to
-    // NotSubmitted, so those rows stopped offering "Reintentar"). Every canonical
-    // estado is upper-case, and the SQL filters elsewhere compare case-sensitively,
-    // so the stored value - not just the C++ read - has to be normalised.
+// 12.0: comma decimals ("5,50") in the non-invoice amounts become dots; "1.234,50" is
+// ambiguous and stays. A gasto of a closed quarter keeps its value: its report was filed.
+static void fixCommaDecimals(MigrationRun &run)
+{
+    const QStringList fixes = {
+        "UPDATE gastos SET importe = REPLACE(TRIM(importe), ',', '.') "
+        "WHERE importe LIKE '%,%' AND importe NOT LIKE '%.%' AND NOT " + closedQuarterSql("gastos.fecha"),
+        "UPDATE prendas SET precio_limpieza = REPLACE(TRIM(precio_limpieza), ',', '.') WHERE precio_limpieza LIKE '%,%' AND precio_limpieza NOT LIKE '%.%'",
+        "UPDATE prendas SET precio_plancha = REPLACE(TRIM(precio_plancha), ',', '.') WHERE precio_plancha LIKE '%,%' AND precio_plancha NOT LIKE '%.%'",
+    };
+    QSqlQuery q(run.db);
+    for (const QString &sql : fixes) {
+        if (!q.exec(sql))
+            run.fail() << "migrateDatabase: comma-decimal fix failed -" << q.lastError().text();
+        else if (q.numRowsAffected() > 0)
+            qDebug() << "migrateDatabase: replaced the decimal comma in" << q.numRowsAffected() << "amount(s) -" << sql.left(30);
+    }
+}
+
+// A literal 'Error' once written by PendingSubmitsDialog is not a known estado, and the SQL
+// filters compare case-sensitively: the stored value is upper-cased.
+static void normaliseEstadoCase(MigrationRun &run)
+{
+    QSqlQuery q(run.db);
     if (!q.exec("UPDATE ingresos SET verifactu_estado = UPPER(verifactu_estado) "
                 "WHERE verifactu_estado IS NOT NULL AND verifactu_estado != '' "
                 "  AND verifactu_estado != UPPER(verifactu_estado)"))
-        fail() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
+        run.fail() << "migrateDatabase: estado case normalisation failed -" << q.lastError().text();
     else if (q.numRowsAffected() > 0)
         qDebug() << "migrateDatabase: normalised casing on" << q.numRowsAffected()
                  << "verifactu_estado value(s)";
+}
 
-    q.finish();
-    return ok;
+bool migrateDatabase(QSqlDatabase &db, bool rewriteData)
+{
+    if (dbNotConfigured(db, __func__)) return false;
+    qDebug() << "migrateDatabase: ensuring verifactu_* columns exist on ingresos (idempotent ALTER TABLE)";
+    ConnectionScope scope(db);
+    if (!scope.isOpen()) {
+        qCritical() << "migrateDatabase: the database cannot be opened -" << db.lastError().text();
+        return false;
+    }
+    MigrationRun run{ db };
+    migrateSchema(run);
+    // Everything below rewrites rows: never without a copy of the database as it was.
+    if (!rewriteData) {
+        qWarning() << "migrateDatabase: schema only - the data repairs wait until a backup succeeds";
+        return run.ok;
+    }
+    relabelUnpaidPending(run);
+    moveVoidDates(run);
+    reopenCancelledUnpaid(run);
+    clearStampedUnpaid(run);
+    relinkSplitRows(run);
+    rehashDuplicates(run);   // before the rounding, which writes by (n_recibo, hash)
+    roundOpenAmounts(run);
+    fixCommaDecimals(run);
+    normaliseEstadoCase(run);
+    return run.ok;
 }
 
 int readMaxValueInColumnFromTable(QSqlDatabase &db, const QString &column, const QString &table, bool *ok)
@@ -830,6 +814,27 @@ bool updateTicketObservations(QSqlDatabase &db, const QString &nRecibo, const QS
     return ok;
 }
 
+// The guard of every amount writer: an unreadable importe (or a negative one, unless
+// allowNegative) is refused and logged under the caller's name. *value gets the amount.
+static bool acceptAmount(const QString &text, const char *caller, const QString &subject,
+                         bool allowNegative = false, double *value = nullptr)
+{
+    double amount = 0.0;
+    if (!moneyParse(text, &amount) || (!allowNegative && amount < 0.0)) {
+        qWarning().nospace().noquote() << caller << ": refused an unreadable"
+                                       << (allowNegative ? "" : " or negative") << " importe '" << text
+                                       << "' for " << subject;
+        return false;
+    }
+    if (value) *value = amount;
+    return true;
+}
+
+static QString rowSubject(const QString &nRecibo, const QString &hash)
+{
+    return nRecibo + QLatin1Char(' ') + hash;
+}
+
 // Runs one amount UPDATE; false (and logged) when the row is invoiced or missing.
 static bool execAmountUpdate(QSqlQuery &q, const char *caller, const QString &nRecibo, const QString &hash)
 {
@@ -849,10 +854,7 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
                               const QString &size, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
-        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
-        return false;
-    }
+    if (!acceptAmount(importe, __func__, rowSubject(nRecibo, hash))) return false;
 
     ConnectionScope scope(db);
     QSqlQuery q(db);
@@ -862,18 +864,14 @@ bool updateTicketSizeAndPrice(QSqlDatabase &db, const QString &nRecibo, const QS
     q.bindValue(":imp", moneyText(importe));
     q.bindValue(":n",   nRecibo);
     q.bindValue(":h",   hash);
-    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    return ok;
+    return execAmountUpdate(q, __func__, nRecibo, hash);
 }
 
 bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const QString &hash,
                                 const QString &cantidad, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
-        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
-        return false;
-    }
+    if (!acceptAmount(importe, __func__, rowSubject(nRecibo, hash))) return false;
 
     ConnectionScope scope(db);
     QSqlQuery q(db);
@@ -883,8 +881,7 @@ bool updateGarmentQtyAndImporte(QSqlDatabase &db, const QString &nRecibo, const 
     q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    return ok;
+    return execAmountUpdate(q, __func__, nRecibo, hash);
 }
 
 QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &hash, int nGarm)
@@ -899,7 +896,7 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
         qWarning() << "splitGarmentRow: could not start a transaction -" << db.lastError().text();
         return QString();
     }
-    const auto abort = [&db]() {
+    const auto rollbackAndFail = [&db]() {
         db.rollback();
         return QString();
     };
@@ -910,26 +907,24 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     q.bindValue(":h", hash);
     if (!q.exec() || !q.first()) {
         qWarning() << "splitGarmentRow: row not found -" << nRecibo << hash << q.lastError().text();
-        return abort();
+        return rollbackAndFail();
     }
     const int qty = q.value(0).toInt();
     const QString oldImporte = q.value(1).toString();
     if (q.value(2).toBool()) {
         qWarning() << "splitGarmentRow: row is locked by Contabilidad -" << nRecibo << hash;
-        return abort();
+        return rollbackAndFail();
     }
     if (nGarm < 1 || nGarm >= qty) {
         qWarning() << "splitGarmentRow: cannot split" << nGarm << "of" << qty << "on" << nRecibo << hash;
-        return abort();
+        return rollbackAndFail();
     }
     // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
     // so the two rows add up to the stored importe and an older paid amount stored
     // with more decimals is never re-rounded.
     double total = 0.0;
-    if (!moneyParse(oldImporte, &total) || total < 0.0) {
-        qWarning() << "splitGarmentRow: unreadable importe" << oldImporte << "on" << nRecibo << hash;
-        return abort();
-    }
+    if (!acceptAmount(oldImporte, __func__, rowSubject(nRecibo, hash), false, &total))
+        return rollbackAndFail();
     const qint64 total4 = qRound64(total * 10000.0);
     const qint64 split4 = qRound64(roundToCents(total * nGarm / qty) * 100.0) * 100;
     const auto money = [](qint64 v4) {
@@ -990,10 +985,7 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
                                     const QString &servicio, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (double amount = 0.0; !moneyParse(importe, &amount) || amount < 0.0) {
-        qWarning() << __func__ << ": refused an unreadable or negative importe" << importe << "for" << nRecibo << hash;
-        return false;
-    }
+    if (!acceptAmount(importe, __func__, rowSubject(nRecibo, hash))) return false;
 
     ConnectionScope scope(db);
     QSqlQuery q(db);
@@ -1003,8 +995,7 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
     q.bindValue(":imp",  moneyText(importe));
     q.bindValue(":n",    nRecibo);
     q.bindValue(":h",    hash);
-    const bool ok = execAmountUpdate(q, __func__, nRecibo, hash);
-    return ok;
+    return execAmountUpdate(q, __func__, nRecibo, hash);
 }
 
 bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado)
@@ -1089,8 +1080,7 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo, bool *ok)
         return true;
     }
     if (ok) *ok = true;
-    const bool paid = q.value(0).toInt() > 0;
-    return paid;
+    return q.value(0).toInt() > 0;
 }
 
 TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok)
@@ -1118,11 +1108,7 @@ TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok)
 // Runs the INSERT on an already open db; the callers open, close and own the transaction.
 static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
-    if (double amount = 0.0; !moneyParse(row.importe, &amount) || amount < 0.0) {
-        qWarning() << "insertGarmentRow: refused an unreadable or negative importe" << row.importe
-                   << "for" << row.nRecibo << row.hash;
-        return false;
-    }
+    if (!acceptAmount(row.importe, "insertGarmentRow", rowSubject(row.nRecibo, row.hash))) return false;
     QSqlQuery q(db);
     // A paid row is never inserted into a closed quarter.
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
@@ -1165,8 +1151,7 @@ bool insertGarmentRow(QSqlDatabase &db, const IngresoGarmentRow &row)
     if (dbNotConfigured(db, __func__)) return false;
 
     ConnectionScope scope(db);
-    const bool ok = execGarmentInsert(db, row);
-    return ok;
+    return execGarmentInsert(db, row);
 }
 
 bool insertGarmentRows(QSqlDatabase &db, const QList<IngresoGarmentRow> &rows)
@@ -1703,11 +1688,7 @@ bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<
 {
     if (dbNotConfigured(db, __func__) || amountByHash.isEmpty()) return false;
     for (auto it = amountByHash.cbegin(); it != amountByHash.cend(); ++it) {
-        if (double amount = 0.0; !moneyParse(it.value(), &amount) || amount < 0.0) {
-            qWarning() << "storeChargedGarments: refused an unreadable or negative importe" << it.value()
-                       << "for garment" << it.key() << "of ticket" << nRecibo;
-            return false;
-        }
+        if (!acceptAmount(it.value(), __func__, "garment " + it.key() + " of ticket " + nRecibo)) return false;
     }
     if (quarterIsClosed(db, paymentDate)) {
         qWarning() << "storeChargedGarments: the payment date of" << invoiceId << "is in a closed quarter";
@@ -1912,7 +1893,7 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
     ConnectionScope scope(db);
     if (!scope.isOpen())
         return 0;
-    int outcome = 0;   // 0 = mark it (if accepted)
+    int paidRows = 0, uncancelledRows = 0;
     {
         QSqlQuery q(db);
         q.prepare("SELECT COUNT(*), SUM(COALESCE(verifactu_estado, '') != 'ANULADA') FROM ingresos "
@@ -1921,17 +1902,17 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
         q.bindValue(":seq", seq);
         if (!q.exec() || !q.next()) {
             qWarning() << "applySettledVerifactuCancellation: lookup failed for" << invoiceId << "-" << q.lastError().text();
-            outcome = 3;                                            // read failure: not marked
-        } else if (q.value(0).toInt() == 0) {
-            outcome = -1;
-        } else if (result.isSuccess() && q.value(1).toInt() == 0) {
-            outcome = 2;                                            // already marked (its dialog did)
+            return 0;
         }
+        paidRows = q.value(0).toInt();
+        uncancelledRows = q.value(1).toInt();
     }
-    if (outcome == -1 || outcome == 2)
-        return outcome;
-    if (outcome == 3 || !result.isSuccess())
+    if (paidRows == 0)
+        return -1;
+    if (!result.isSuccess())
         return 0;
+    if (uncancelledRows == 0)
+        return 2;   // already marked (its dialog did)
     return markInvoiceSeqCancelled(db, nRecibo, seq, stampDate, result.rawXml) ? 1 : 0;
 }
 
@@ -2076,10 +2057,7 @@ bool insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QStri
                           const QString &iva, const QString &importe)
 {
     if (dbNotConfigured(db, __func__)) return false;
-    if (double amount = 0.0; !moneyParse(importe, &amount)) {
-        qWarning() << "insertExpenseInvoice: refused an unreadable importe" << importe << "for" << nFactura;
-        return false;
-    }
+    if (!acceptAmount(importe, __func__, nFactura, true)) return false;
 
     ConnectionScope scope(db);
     if (!scope.isOpen())
@@ -2247,34 +2225,13 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
         return events;
     }
 
-    // One entry per (n_recibo, verifactu_invoice_seq) whose ANY row is still
-    // PENDIENTE. Aggregate uses MIN over fecha_pago/client (constants across the
-    // rows of one event) and SUM(importe) for that event's own total. The estado
-    // filter covers legacy empty strings and the canonical "PENDIENTE".
-    //
-    // The payment gate is belt-and-braces since the SIN COBRAR split (10.9): an
-    // unpaid row now carries its own estado and the filter above already drops it.
-    // Kept because it also covers legacy NULL/'' rows, which the backfill leaves
-    // alone on purpose (issue #43).
-    //
-    // Grouping by seq (not only n_recibo) is what makes partial-pay recovery
-    // possible: a PayDialog event (seq>0, InvoiceID "<n_recibo>-<seq>") left
-    // PENDIENTE by a timeout surfaces as its own row and is re-submitted with
-    // its own SUM(importe) under the right InvoiceID, instead of being excluded
-    // (the old query filtered verifactu_invoice_seq = 0).
-    //
-    // fechaPago = the date the invoice was/should be submitted under. AEAT keys
-    // an invoice on (emisor, InvoiceID, FechaExpedicionFactura), so a retry MUST
-    // reuse the original submission date or AEAT treats it as a new invoice and
-    // the duplicate-InvoiceID guard never fires. That date is fecha_pago: a
-    // PayDialog event (seq>0) submitted with its payment date, a save-time event
-    // (seq 0) submitted with the reception date which equals fecha_pago for a
-    // paid-at-save row. A row with no fecha_pago (unpaid) yields an invalid date
-    // the dialog refuses to retry - correct, it has no AEAT invoice to recover.
-    //
-    // The recovery FLOOR gates on the invoice's own date (its earliest fecha_pago), like
-    // refusedInvoices: a legacy ticket paid before Verifactu is left out, while a ticket
-    // received before the floor and paid after it is an invoice and must be listed.
+    // One entry per payment event (n_recibo, seq) still pending, with its own total.
+    // Grouping by seq lets a partial payment left pending be resent alone under its own
+    // InvoiceID. The pagado gate also covers the legacy NULL / '' rows (issue #43).
+    // fechaPago is the date the invoice was submitted under: AEAT keys an invoice on
+    // (emisor, InvoiceID, FechaExpedicionFactura), so a retry must reuse it.
+    // The floor gates on the invoice's own date (its earliest fecha_pago), like
+    // refusedInvoices: a ticket received before the floor and paid after it is listed.
     QSqlQuery q(db);
     q.prepare(
         "SELECT n_recibo, verifactu_invoice_seq, " + kEarliestFechaPago + ", "
@@ -2397,23 +2354,17 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
 
     const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
     const VerifactuEstado estadoEnum = verifactuEstadoForResult(result.status);
-    const QString estado    = verifactuEstadoToString(estadoEnum);
+    const QString statusText = verifactuEstadoToString(estadoEnum);
     // Unknown outcome (timeout / transport failure): keep the InvoiceID so a
     // retry reuses the identity AEAT may already hold, and keep the error text
     // as a diagnostic. Only a definitive rejection clears the identity.
     const bool outcomeUnknown = estadoEnum == VerifactuEstado::NotSubmitted;
-    // seq=0 = save-time / retry submit (bare n_recibo); seq>0 = PayDialog event
-    // (<n_recibo>-<seq>). The WHERE clause always scopes by seq so a retry of
-    // save-time never clobbers PayDialog rows.
-    //
-    // pagado='SI' is load-bearing, not defensive: the FIRST partial payment of an
-    // unpaid ticket gets seq 0 (nextVerifactuInvoiceSeq counts paid rows, of which
-    // there are none yet), and the still-unpaid siblings are also seq 0 - so
-    // scoping by seq alone would stamp them ENVIADA + CSV for an invoice that only
-    // covered the paid subset. An AEAT result can only ever belong to a paid row.
+    // Scoped by seq, so one event's reply never touches another's rows. pagado = 'SI' is
+    // load-bearing: the first partial payment of a ticket is seq 0, like its unpaid
+    // siblings, which an invoice of the paid subset never covers.
     const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
     qDebug() << "updateTicketVerifactuFields: ticket" << ticketNum << "seq=" << seq
-             << "estado=" << estado
+             << "estado=" << statusText
              << "csv=" << (result.isSuccess() ? result.csv : QString())
              << "xml_len=" << (result.isSuccess() ? result.rawXml.size() : 0)
              << "error=" << (result.isSuccess() ? QString() : result.errorDescription);
@@ -2430,7 +2381,7 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     if (result.isSuccess()) {
         q.bindValue(":csv",    result.csv);
         q.bindValue(":ts",     timestamp);
-        q.bindValue(":estado", estado);
+        q.bindValue(":estado", statusText);
         q.bindValue(":error",  "");
         q.bindValue(":url",    result.validationUrl);
         q.bindValue(":xml",    result.rawXml);
@@ -2439,7 +2390,7 @@ int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
     } else {
         q.bindValue(":csv",    "");
         q.bindValue(":ts",     timestamp);
-        q.bindValue(":estado", estado);
+        q.bindValue(":estado", statusText);
         q.bindValue(":error",  result.errorDescription);
         q.bindValue(":url",    "");
         q.bindValue(":xml",    "");
@@ -2493,12 +2444,8 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QS
 
 QString genHash16()
 {
-    // QUuid::Id128 is the 32-char hex form without braces/dashes. Truncating
-    // to 16 leaves 64 bits of cryptographic entropy - 2^32 row birthday-
-    // collision is around one chance in 4 billion, far below any plausible
-    // ingresos size. Replaces a homegrown alphanum loop on QRandomGenerator
-    // that had a legacy rand()-era predecessor, whose duplicate hashes
-    // migrateDatabase repairs.
+    // 16 hex characters of a random UUID: 64 bits, so a collision is negligible at any
+    // plausible ingresos size.
     return QUuid::createUuid().toString(QUuid::Id128).left(16);
 }
 
@@ -2517,11 +2464,7 @@ QString removeSpecialChars(const QString &str)
 static int singleBucket(const QString &) { return 0; }
 static int quarterBucket(const QString &ddMMyyyy) { return quarterOfMonth(ddMMyyyy.mid(3, 2).toInt()) - 1; }
 
-// Runs the shared income predicate over [start, end) and aggregates the rows by
-// n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
-// COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
-// a bucket keeps its first payment date. A comma-decimal importe is not summed;
-// it is counted in invalidAmounts so the report can flag it, like any amount that is not a plain number.
+// A plain stored number: a comma decimal or any other text is unreadable (reported, not summed).
 static bool readPlainAmount(const QString &text, double *value)
 {
     bool ok = false;
@@ -2531,6 +2474,10 @@ static bool readPlainAmount(const QString &text, double *value)
     return ok;
 }
 
+// Runs the shared income predicate over [start, end) and aggregates the rows by
+// n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
+// COUNT(DISTINCT n_recibo) for its range. A ticket paid in several events within
+// a bucket keeps its first payment date; an unreadable importe is counted in invalidAmounts.
 static bool collectIncomeTickets(QSqlDatabase &db, QDate start, QDate end,
                                  QVector<IncomeTicketDetail> *buckets, int bucketCount,
                                  int (*bucketOf)(const QString &))
