@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDate>
+#include <QDateEdit>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -307,6 +308,97 @@ private slots:
         QCOMPARE(scalar("SELECT pagado || '|' || fecha_pago || '|' || verifactu_estado || '|' || verifactu_invoice_seq "
                         "FROM ingresos WHERE hash != 'seedhash'"),
                  "SI|" + day(QDate::currentDate()) + "|PENDIENTE|0");
+    }
+
+    // The invoice is dated by the payment, not the reception: a ticket received before
+    // production and paid after it is accepted; a payment dated before it is refused.
+    void test_save_paid_receivedBeforeProduction_paidAfter_accepted()
+    {
+        const QDate start = QDate::currentDate().addDays(-2);
+        seedTicket(QDate::currentDate().addDays(-5));
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        dlg.invoiceDateRefused = [start](const QDate &date) {
+            return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
+        };
+        dlg.productionStartDate = [start] { return start; };
+        searchTicket(dlg);
+        fillGarment(dlg);
+        pay(dlg);                                                   // paid today
+        save(dlg);
+        QVERIFY2(panel(dlg).contains("Prenda añadida"), qPrintable(panel(dlg)));
+        QCOMPARE(garmentRows(), 2);
+    }
+
+    void test_save_paymentDateBeforeProduction_refusedAndNothingStored()
+    {
+        const QDate start = QDate::currentDate().addDays(-2);
+        seedTicket(QDate::currentDate().addDays(-5));
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        dlg.invoiceDateRefused = [start](const QDate &date) {
+            return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
+        };
+        dlg.productionStartDate = [start] { return start; };
+        searchTicket(dlg);
+        auto *payDate = dlg.findChild<QDateEdit *>("deFechaPago");
+        QCOMPARE(payDate->minimumDate(), start);                    // not offered earlier
+        payDate->setMinimumDate(QDate::currentDate().addDays(-5));  // as if the limit were not there
+        payDate->setDate(start.addDays(-1));
+        fillGarment(dlg);
+        pay(dlg);
+        save(dlg);
+        QVERIFY2(panel(dlg).contains("PRODUCCION"), qPrintable(panel(dlg)));
+        QCOMPARE(garmentRows(), 1);
+    }
+
+    // The invoice number or the paid check cannot be read: refused, with its own message, nothing stored.
+    void test_save_unreadableInvoiceNumber_refusedNothingStored()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        QSignalSpy paid(&dlg, &AddGarment::paidGarmentSaved);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        pay(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq TO verifactu_invoice_seq_off");
+        save(dlg);
+        const QString text = panel(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq_off TO verifactu_invoice_seq");
+        QVERIFY2(text.contains("numeración"), qPrintable(text));
+        QCOMPARE(garmentRows(), 1);
+        QCOMPARE(paid.count(), 0);
+    }
+
+    void test_unreadablePaidCheck_isNotReportedAsPaid()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN pagado TO pagado_off");
+        save(dlg);
+        const QString atSave = panel(dlg);
+        searchTicket(dlg);
+        const QString atSearch = panel(dlg);
+        const bool found = dlg.ticketFound();
+        exec("ALTER TABLE ingresos RENAME COLUMN pagado_off TO pagado");
+        QVERIFY2(atSave.contains("No se pudo comprobar el recibo") && !atSave.contains("ya tiene prendas pagadas"),
+                 qPrintable(atSave));
+        QVERIFY2(atSearch.contains("No se pudo comprobar el recibo") && !atSearch.contains("ya tiene prendas pagadas"),
+                 qPrintable(atSearch));
+        QVERIFY(!found);
+        QCOMPARE(garmentRows(), 1);
+    }
+
+    void test_search_emptyNumber_saysItIsMissing()
+    {
+        AddGarment dlg(m_db);
+        searchTicket(dlg, "  ");
+        QVERIFY2(panel(dlg).contains("Falta el Nº de recibo") && !panel(dlg).contains("No se ha encontrado"),
+                 qPrintable(panel(dlg)));
     }
 
     // A number the direct client already used for an invoice of the ticket is skipped, and

@@ -6,6 +6,9 @@
 #include "textcolordelegate.h"
 #include "ingresoscolumns.h"
 #include "uikit.h"
+#include "contabilidad.h"
+
+#include <cmath>
 
 #include <QCloseEvent>
 #include <QHash>
@@ -154,6 +157,15 @@ void Listado::configureForTable()
     table_listado->deleteRowAction()->setEnabled(c.del);
 }
 
+QString Listado::supportedExpenseIva(const QString &text)
+{
+    double rate = 0.0;
+    if (!moneyParse(text, &rate) || rate != std::floor(rate) || rate > 100.0
+            || !Contabilidad::expenseIvaIsSummarised(int(rate)))
+        return QString();
+    return QString::number(int(rate));
+}
+
 void Listado::populateTable()
 {
     configureForTable();
@@ -185,7 +197,10 @@ void Listado::populateTable()
                 if (rowLockedNow(index.row()))
                     return UiKit::errorHtml("Fila bloqueada.")
                            + "<br>Pertenece a un trimestre cerrado por la contabilidad: no se ha cambiado.";
-                if (index.column() == GASTOS_IDX_IMPORTE || index.column() == GASTOS_IDX_IVA) {
+                if (index.column() == GASTOS_IDX_IVA && supportedExpenseIva(value.toString()).isEmpty())
+                    return UiKit::errorHtml("Tipo de IVA no admitido.")
+                           + "<br>Escriba 0, 10 o 21: la contabilidad solo suma esos tipos. No se ha cambiado.";
+                if (index.column() == GASTOS_IDX_IMPORTE) {
                     double number = 0.0;
                     if (!moneyParse(value.toString(), &number) || number < 0.0)
                         return UiKit::errorHtml("Número no válido.")
@@ -290,6 +305,8 @@ void Listado::populateTable()
         // Lock row height so lazily-loaded rows use the same compact height.
         if (model->rowCount() > 0)
             table_listado->verticalHeader()->setDefaultSectionSize(table_listado->rowHeight(0));
+        if (!filter_widget->text().trimmed().isEmpty())   // the typed search still applies to the new rows
+            textFilterChanged();
     }
     if (table_listado->model())
         resizeWindowToTable();
@@ -340,17 +357,7 @@ void Listado::loadEveryRow()
 
 void Listado::on_actionActualizar_triggered()
 {
-    QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
-    verticalScrollBar->setValue(verticalScrollBar->minimum());
-    if (tableName == "gastos")
-        table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-    else if (tableName == "ingresos")
-        table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
-    else
-        table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
-    table_listado->resizeColumnsToContents();
-    table_listado->resizeRowsToContents();
-    resizeWindowToTable();
+    populateTable();   // re-reads the table: rows changed elsewhere appear
 }
 
 void Listado::on_actionAnadir_fila_triggered()
@@ -432,9 +439,14 @@ void Listado::on_actionEliminar_fila_triggered()
 
 void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
 {
+    // The PDF is made from the rows on screen: a search shortens it, so say so.
+    const QString filterNote = filter_widget->text().trimmed().isEmpty()
+        ? QString()
+        : UiKit::warnHtml("El listado incluye solo las filas que cumplen la búsqueda actual.");
     if (tableName == "gastos") {
         GenListado generator(db, this);
         generator.model = table_listado->model();
+        generator.filterNote = filterNote;
         generator.exec();
         populateTable();
     } else if (tableName == "prendas") {
@@ -442,7 +454,8 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
         generator.model = table_listado->model();
         if (generator.print_table())
             m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF.") + "<br>"
-                                 + UiKit::fileLinkHtml(generator.printedFile()));
+                                 + UiKit::fileLinkHtml(generator.printedFile())
+                                 + (filterNote.isEmpty() ? QString() : "<br>" + filterNote));
         else
             m_lblResult->setText(UiKit::errorHtml("No se pudo escribir el PDF.") + "<br>"
                                  + generator.printedFile().toHtmlEscaped());

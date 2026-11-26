@@ -293,6 +293,54 @@ private slots:
         QCOMPARE(model->item(1, GASTOS_IDX_ID)->text(), QStringLiteral("2"));
     }
 
+    // Any path that removes a row through the proxy is refused for a closed quarter's gasto.
+    void test_removeRows_refusesLockedRow()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        proxy.setClosedQuarters({ 20261 });
+        QVERIFY(!proxy.removeRow(0));                       // Q1: closed
+        QCOMPARE(model->rowCount(), 2);
+        QVERIFY(!proxy.removeRows(0, 2));                   // a range holding a locked row
+        QCOMPARE(model->rowCount(), 2);
+        QVERIFY(proxy.removeRow(1));                        // Q2: open
+        QCOMPARE(model->rowCount(), 1);
+        QCOMPARE(model->item(0, GASTOS_IDX_ID)->text(), QStringLiteral("1"));
+    }
+
+    // The hidden edit_lock column of gastos is not searched: "0" / "1" must not match through it.
+    void test_filter_gastosDoesNotSearchTheHiddenLockColumn()
+    {
+        QStandardItemModel model(2, 9);
+        model.setItem(0, GASTOS_IDX_CLIENT, new QStandardItem("Alfa"));
+        model.setItem(1, GASTOS_IDX_CLIENT, new QStandardItem("Beta"));
+        model.setItem(0, GASTOS_IDX_CONTAB, new QStandardItem("1"));
+        model.setItem(1, GASTOS_IDX_CONTAB, new QStandardItem("0"));
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(&model);
+        QCOMPARE(proxy.searchColumnCount(), GASTOS_IDX_CONTAB);
+        proxy.setSearchText("1");
+        QCOMPARE(proxy.rowCount(), 0);
+        proxy.setSearchText("beta");
+        QCOMPARE(proxy.rowCount(), 1);
+    }
+
+    // The rate is stored as an integer text whatever way it was typed.
+    void test_setData_gastosIvaIsStoredAsInteger()
+    {
+        std::unique_ptr<QStandardItemModel> model(gastosModel());
+        MySortFilterProxyModel proxy;
+        proxy.schema = MySortFilterProxyModel::Schema::Gastos;
+        proxy.setSourceModel(model.get());
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_IVA), " 21,0 "));
+        QCOMPARE(model->item(0, GASTOS_IDX_IVA)->text(), QStringLiteral("21"));
+        QVERIFY(proxy.setData(proxy.index(0, GASTOS_IDX_IVA), "10"));
+        QCOMPARE(model->item(0, GASTOS_IDX_IVA)->text(), QStringLiteral("10"));
+    }
+
     void test_setClosedQuarters_notifiesTheView()
     {
         std::unique_ptr<QStandardItemModel> model(gastosModel());

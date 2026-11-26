@@ -15,6 +15,7 @@
 #include <QIntValidator>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -110,11 +111,15 @@ private slots:
         auto *check = new QCheckBox("x");
         auto *fixedCombo = new QComboBox;
         fixedCombo->addItem("a");
-        for (QWidget *w : QList<QWidget *>{list, check, fixedCombo}) {
+        auto *radio = new QRadioButton("y");
+        for (QWidget *w : QList<QWidget *>{list, check, radio, fixedCombo}) {
             f.dialog.layout()->addWidget(w);
             w->show();
             press(w);
+            QCOMPARE(f.dialog.focusWidget(), w);        // it really has the focus
         }
+        QVERIFY(!check->isChecked());                   // Enter did not toggle them
+        QVERIFY(!radio->isChecked());
         QCOMPARE(f.primaryClicks, 0);
         QCOMPARE(f.otherClicks, 0);
         auto *editable = new QComboBox;

@@ -61,6 +61,8 @@ public:
     // Checked before an edit is written: a non-empty message refuses it (editRefused).
     std::function<QString(const QModelIndex &index, const QVariant &value)> editValidator;
     bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+    // Refuses a locked row, like setData.
+    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
 
 signals:
     void editRefused(const QString &message);

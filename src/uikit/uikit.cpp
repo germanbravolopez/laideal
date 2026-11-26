@@ -87,7 +87,7 @@ protected:
             return true;
         // A focused button that ignored Enter (secondary buttons are not auto-default)
         // presses itself: Enter on Cerrar must never fire the primary action.
-        if (auto *focused = qobject_cast<QAbstractButton *>(m_dialog->focusWidget());
+        if (auto *focused = qobject_cast<QPushButton *>(m_dialog->focusWidget());
                 focused && focused->isEnabled()) {
             focused->click();
             return true;

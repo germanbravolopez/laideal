@@ -151,16 +151,14 @@ QString GenListado::generate_html_prendas_table(const QVector<int> &rows)
             html_table += "<tr style='background-color: #f6f7f9;'>";
         // set row content
         html_table += "<td>" + model->index(row, 0).data().toString().toHtmlEscaped() + "</td>";
-        if (model->index(row, 1).data().toFloat() == 0.0)
-            html_table += "<td></td>";
-        else
-            html_table += "<td style='text-align:right;'>"
-                    + ReportHtml::formatEuro(model->index(row, 1).data().toFloat()) + "</td>";
-        if (model->index(row, 2).data().toFloat() == 0.0)
-            html_table += "<td></td>";
-        else
-            html_table += "<td style='text-align:right;'>"
-                    + ReportHtml::formatEuro(model->index(row, 2).data().toFloat()) + "</td>";
+        for (const int column : { 1, 2 }) {
+            // A price may be stored with a decimal comma; an empty or zero price prints blank.
+            double price = 0.0;
+            if (!moneyParse(model->index(row, column).data().toString(), &price) || price == 0.0)
+                html_table += "<td></td>";
+            else
+                html_table += "<td style='text-align:right;'>" + ReportHtml::formatEuro(price) + "</td>";
+        }
         html_table += "</tr>";
         row_printed++;
     }
@@ -338,5 +336,6 @@ void GenListado::onGenerateClicked()
         m_lblResult->setText(UiKit::errorHtml("No se pudo escribir el PDF.") + "<br>" + file.toHtmlEscaped());
         return;
     }
-    m_lblResult->setText(UiKit::okHtml("Listado de gastos generado.") + "<br>" + UiKit::fileLinkHtml(file));
+    m_lblResult->setText(UiKit::okHtml("Listado de gastos generado.") + "<br>" + UiKit::fileLinkHtml(file)
+                         + (filterNote.isEmpty() ? QString() : "<br>" + filterNote));
 }

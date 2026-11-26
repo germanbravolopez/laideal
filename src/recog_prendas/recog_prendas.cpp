@@ -538,6 +538,8 @@ void RecogPrendas::on_le_search_returnPressed()
 
 void RecogPrendas::on_cb_search_date_currentTextChanged(const QString &)
 {
+    if (ui->le_search->text().isEmpty())   // nothing to search: keep the table and its message
+        return;
     on_pb_search_clicked();
 }
 
@@ -659,7 +661,7 @@ void RecogPrendas::runSearch(const QString &query)
                 }
             }
         }
-        else if (query.isSimpleText()) {
+        else {
             QDate dateSlash = QDate::fromString(query, "dd/MM/yyyy");
             QDate dateDash = QDate::fromString(query, "dd-MM-yyyy");
             QDate date = (!dateSlash.isNull()) ? dateSlash : dateDash;
@@ -688,12 +690,6 @@ void RecogPrendas::runSearch(const QString &query)
                          << sqlQueryModel->rowCount() << "rows; filter=" << nameSearchFilter;
             }
         }
-        else {
-            qWarning() << "Search: unrecognized input:" << query;
-            m_result->setText(UiKit::warnHtml(tr("No se reconoce la búsqueda."))
-                              + "<br>" + tr("Escriba un Nº de recibo, un teléfono, un nombre o una fecha dd-mm-aaaa."));
-            searchProblem = true;
-        }
         // Complete model and set to the view
         sqlQueryModel->setHeaderData(INGRESOS_COL_N_RECIBO   , Qt::Horizontal, tr("Nº"));
         sqlQueryModel->setHeaderData(INGRESOS_COL_CLIENTE   , Qt::Horizontal, tr("Cliente"));
@@ -717,6 +713,15 @@ void RecogPrendas::runSearch(const QString &query)
             proxyModel->setSearchText(nameSearchFilter, INGRESOS_COL_CLIENTE);
         proxyModel->setSourceModel(sqlQueryModel);
         ui->tableView->setModel(proxyModel);
+        // Arrow keys move the highlighted row without a click: the details must follow it.
+        connect(ui->tableView->selectionModel(), &QItemSelectionModel::currentRowChanged, this,
+                [this](const QModelIndex &current) {
+            if (!current.isValid() || !proxyModel)
+                return;
+            if (isCellClicked && proxyModel->mapToSource(current).row() == rowClickedCell)
+                return;   // already loaded: keep what the operator typed
+            on_tableView_clicked(current);
+        });
         if (oldProxy)
             oldProxy->deleteLater();
         ui->tableView->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
@@ -800,6 +805,12 @@ void RecogPrendas::on_pb_add_clicked()
     dlg->invoicingBlocked = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
     };
+    dlg->invoiceDateRefused = [this](const QDate &date) {
+        return m_verifactuIntegration ? m_verifactuIntegration->dateBeforeProductionReason(date) : QString();
+    };
+    dlg->productionStartDate = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->productionStartDate() : QDate();
+    };
     dlg->aeatEnvironment = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
     };
@@ -832,9 +843,10 @@ void RecogPrendas::on_pb_void_clicked()
     dlg.loadTicket(ticketNum);
     dlg.exec();
     const int voided = dlg.voidedCount();
+    const QString voidedTicket = dlg.voidedTicket();
     runSearch(m_submittedQuery);
     m_result->setText(voided > 0
-        ? UiKit::okHtml(tr("%1 prenda(s) del ticket %2 anuladas.").arg(voided).arg(ticketNum.toHtmlEscaped()))
+        ? UiKit::okHtml(tr("%1 prenda(s) del ticket %2 anuladas.").arg(voided).arg(voidedTicket.toHtmlEscaped()))
         : UiKit::warnHtml(tr("No se ha anulado ninguna prenda del ticket %1.").arg(ticketNum.toHtmlEscaped())));
 }
 
@@ -1064,7 +1076,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     if (!error.isEmpty())
         addRow(tr("Error:"), error);
     if (!url.isEmpty()) {
-        QLabel *urlLabel = new QLabel(QString("<a href='%1'>%2</a>").arg(url.toHtmlEscaped(), tr("Abrir en la sede de AEAT")));
+        QLabel *urlLabel = new QLabel(QString("<a href=\"%1\">%2</a>").arg(url.toHtmlEscaped(), tr("Abrir en la sede de AEAT")));
         urlLabel->setOpenExternalLinks(true);
         urlLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
         info->addRow(tr("Validación:"), urlLabel);
@@ -1337,6 +1349,12 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
     }
 }
 
+// The status bar guesses plain or rich text: wrapped in a tag, escaped AEAT text shows as typed.
+static QString richStatus(const QString &escapedText)
+{
+    return QStringLiteral("<span>") + escapedText + QStringLiteral("</span>");
+}
+
 void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
@@ -1356,10 +1374,10 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
 
     // Nothing to reconcile either: AEAT already holds the invoice we have.
     if (changed <= 0) {
-        statusBar()->showMessage(changed == 0
+        statusBar()->showMessage(richStatus(changed == 0
             ? tr("Respuesta de AEAT para el ticket %1 ignorada: la factura ya estaba registrada")
-                  .arg(verifactuInvoiceId(ticketNum, seq))
-            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq)),
+                  .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped())
+            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped())),
             15000);
         return;
     }
@@ -1368,15 +1386,16 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
         qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
         // An adopted reply landed after the customer already got a QR-less recibo,
         // so say the factura can now be printed rather than just "enviado".
-        statusBar()->showMessage(
-            adopted ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR")
-                          .arg(verifactuInvoiceId(ticketNum, seq))
-                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(ticketNum, result.csv),
+        const QString invoiceId = verifactuInvoiceId(ticketNum, seq).toHtmlEscaped();
+        statusBar()->showMessage(richStatus(
+            adopted ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR").arg(invoiceId)
+                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(invoiceId, result.csv.toHtmlEscaped())),
             adopted ? 30000 : 10000);
     } else {
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
-        statusBar()->showMessage(
-            tr("Error al enviar ticket %1: %2").arg(ticketNum, result.errorDescription), 15000);
+        statusBar()->showMessage(richStatus(tr("Error al enviar ticket %1: %2")
+                                                .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped(),
+                                                     result.errorDescription.toHtmlEscaped())), 15000);
         // A definitive refusal can come after the customer got the factura with its QR:
         // it stays in the panel until someone resends it.
         if (result.status == VerifactuResult::ERROR

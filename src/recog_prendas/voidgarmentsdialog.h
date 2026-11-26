@@ -30,6 +30,8 @@ public:
     void loadTicket(const QString &ticketNum);
     // Garments voided while the dialog was open.
     int voidedCount() const { return m_voidedTotal; }
+    // The ticket those garments belong to (the operator may search another one in the dialog).
+    QString voidedTicket() const { return m_voidedTicket; }
 
 private slots:
     void onSearchClicked();
@@ -57,6 +59,7 @@ private:
     QVector<Garment>  m_garments;
     QSqlDatabase      db;
     int               m_voidedTotal = 0;
+    QString           m_voidedTicket;
 
     void buildUi();
     void rebuildTable();

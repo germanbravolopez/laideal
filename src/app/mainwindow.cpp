@@ -1724,6 +1724,9 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     ui_add_garment->invoiceDateRefused = [this](const QDate &date) {
         return m_verifactuIntegration ? m_verifactuIntegration->dateBeforeProductionReason(date) : QString();
     };
+    ui_add_garment->productionStartDate = [this] {
+        return m_verifactuIntegration ? m_verifactuIntegration->productionStartDate() : QDate();
+    };
     ui_add_garment->aeatEnvironment = [this] {
         return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
     };

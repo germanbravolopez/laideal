@@ -492,6 +492,7 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
                                                              const QDate &periodStart, const QDate &periodEnd)
 {
     double ingImporte = 0.0, regularizacion = 0.0, gas10 = 0.0, gas21 = 0.0, gasNi = 0.0;
+    int gasSummed = 0;   // the invoices the detail table counts: readable amount, supported rate
     for (const IncomeTicketDetail &t : income)
         ingImporte += t.importe;
     for (const RegularizationDetail &r : regularizations)
@@ -500,10 +501,12 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
         if (e.iva == 10)      gas10 += e.importe;
         else if (e.iva == 21) gas21 += e.importe;
         else if (e.iva == 0)  gasNi += e.importe;
+        if (!e.invalidAmount && expenseIvaIsSummarised(e.iva))
+            ++gasSummed;
     }
     PeriodFigures f = figuresFromTotals(ingImporte - regularizacion,
                                         netTicketCount(income, regularizations, periodStart, periodEnd),
-                                        gas10, gas21, gasNi, expenses.size(), ivaRate);
+                                        gas10, gas21, gasNi, gasSummed, ivaRate);
     f.ingRegularizacion = regularizacion;
 
     // Modelo 303 carries the IVA as invoiced: the sum of each invoice's cuota, rounded per

@@ -259,9 +259,10 @@ private slots:
         ExpenseDetail g10;  g10.iva = 10;  g10.importe = 110.0;
         ExpenseDetail g0;   g0.iva = 0;    g0.importe = 40.0;
         ExpenseDetail g4;   g4.iva = 4;    g4.importe = 104.0;    // unrecognised rate: counted only
-        ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: counted only
+        ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: left out
+        ExpenseDetail gBad; gBad.iva = 21; gBad.invalidAmount = true;   // unreadable amount: left out
         const Contabilidad::PeriodFigures f =
-            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul}, 21.0,
+            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul, gBad}, 21.0,
                                              QDate(2026, 4, 1), QDate(2026, 7, 1));
         QVERIFY(qAbs(f.ingImporte - 145.2) < 1e-9);
         QVERIFY(qAbs(f.ingBase - 120.0) < 1e-9);
@@ -270,7 +271,9 @@ private slots:
         QVERIFY(qAbs(f.gas10Base - 100.0) < 1e-9);
         QVERIFY(qAbs(f.gasNiImporte - 40.0) < 1e-9);
         QVERIFY(qAbs(f.gastosImporteTotal() - 271.0) < 1e-9);       // 4 % and NULL rows not summed
-        QCOMPARE(f.gasFacturas, 5);                                  // but every row is counted
+        // The summary counts only the invoices it sums, as the detail table does.
+        QCOMPARE(f.gasFacturas, 3);
+        QVERIFY(Contabilidad::createHtmlDetailGastos({g21, g10, g0, g4, gNul, gBad}).contains("Total (3 facturas)"));
     }
 
     // A regularisation (cancellation of an earlier closed quarter's ticket) nets the

@@ -189,6 +189,12 @@ void AddGarment::resetAllContents()
     m_leNRecibo->setFocus();
 }
 
+static QString unreadableTicketRefusal()
+{
+    return UiKit::errorHtml("No se pudo comprobar el recibo.")
+           + "<br>Consulte el log (Ayuda → Log de depuración).";
+}
+
 static QString paidTicketRefusal(const QString &ticket)
 {
     return UiKit::errorHtml("El recibo Nº " + ticket.toHtmlEscaped() + " ya tiene prendas pagadas.")
@@ -205,7 +211,7 @@ void AddGarment::onSearchClicked()
     m_grpState->setEnabled(false);
 
     if (ticket.isEmpty()) {
-        m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
+        m_lblResult->setText(UiKit::warnHtml("Falta el Nº de recibo: introduzca el número y pulse \"Buscar\"."));
         return;
     }
     {
@@ -223,7 +229,13 @@ void AddGarment::onSearchClicked()
     }
     // A paid ticket has already been submitted to AEAT; only unpaid receipts
     // (not yet submitted) may be altered locally by adding garments.
-    if (ticketHasPaidGarment(db, ticket)) {
+    bool paidReadOk = false;
+    const bool hasPaid = ticketHasPaidGarment(db, ticket, &paidReadOk);
+    if (!paidReadOk) {
+        m_lblResult->setText(unreadableTicketRefusal());
+        return;
+    }
+    if (hasPaid) {
         m_lblResult->setText(paidTicketRefusal(ticket));
         return;
     }
@@ -238,6 +250,10 @@ void AddGarment::onSearchClicked()
         if (m_deFechaRecepcion->date() <= QDate::currentDate())
             edit->setMinimumDate(m_deFechaRecepcion->date());
     }
+    // Nor before the day production began: such an invoice would never reach the real AEAT.
+    if (const QDate start = productionStartDate ? productionStartDate() : QDate();
+        start.isValid() && start <= QDate::currentDate() && start > m_deFechaPago->minimumDate())
+        m_deFechaPago->setMinimumDate(start);
     populateGarments();
     m_grpTicket->setEnabled(true);
     m_grpGarment->setEnabled(true);
@@ -277,7 +293,11 @@ QString AddGarment::validationError()
                + "<br>Pulse \"Buscar\" con el número del recibo al que se añade la prenda.";
     }
     // Re-checked at save: a ticket paid meanwhile has an invoice at AEAT and cannot grow.
-    if (ticketHasPaidGarment(db, m_searchedTicket)) {
+    bool paidReadOk = false;
+    const bool hasPaid = ticketHasPaidGarment(db, m_searchedTicket, &paidReadOk);
+    if (!paidReadOk)
+        return unreadableTicketRefusal();
+    if (hasPaid) {
         qWarning() << "AddGarment: ticket" << m_searchedTicket << "has a paid garment - refused";
         return paidTicketRefusal(m_searchedTicket);
     }
@@ -299,7 +319,7 @@ QString AddGarment::validationError()
                                                  : tr("Verifactu no está disponible: no se puede cobrar.");
         if (!blocked.isEmpty())
             return UiKit::errorHtml(blocked);
-        const QString early = invoiceDateRefused ? invoiceDateRefused(m_deFechaRecepcion->date()) : QString();
+        const QString early = invoiceDateRefused ? invoiceDateRefused(m_deFechaPago->date()) : QString();
         if (!early.isEmpty())
             return UiKit::errorHtml(early);
     }
@@ -323,9 +343,11 @@ void AddGarment::onSaveClicked()
     const QString garment = m_cbPrenda->currentText();
     const QString amount = displayMoney(m_leImporte->text());
     const bool paid = m_chkPagado->isChecked();
+    m_saveError.clear();
     if (!saveGarment()) {
-        m_lblResult->setText(UiKit::errorHtml("No se pudo añadir la prenda.")
-                             + "<br>Consulte el log (Ayuda → Log de depuración).");
+        m_lblResult->setText(!m_saveError.isEmpty() ? m_saveError
+                             : UiKit::errorHtml("No se pudo añadir la prenda.")
+                               + "<br>Consulte el log (Ayuda → Log de depuración).");
         return;
     }
     // A paid ticket is refused from now on; an unpaid one stays loaded for the next garment.
@@ -369,8 +391,16 @@ bool AddGarment::saveGarment()
              << "pagado=" << row.pagado << "hash=" << hash;
     // A ticket with a paid garment is refused above, but a number the direct client already
     // used for an invoice of it (a payment never stored as paid) is not reused.
-    if (row.pagado == QLatin1String("SI"))
-        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, aeatEnvironment ? aeatEnvironment() : QString());
+    if (row.pagado == QLatin1String("SI")) {
+        bool seqOk = false;
+        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, aeatEnvironment ? aeatEnvironment() : QString(), &seqOk);
+        if (!seqOk) {
+            qWarning() << "AddGarment: invoice number unreadable for ticket" << row.nRecibo << "- nothing stored";
+            m_saveError = UiKit::errorHtml("No se pudo leer la numeración de facturas del recibo.")
+                          + "<br>No se ha guardado nada. Consulte el log (Ayuda → Log de depuración).";
+            return false;
+        }
+    }
     if (!insertGarmentRow(db, row))
         return false;
     emit garmentSaved(row.nRecibo);

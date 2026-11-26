@@ -205,6 +205,10 @@ void VoidGarmentsDialog::onVoidSelectedClicked()
     qDebug() << "VoidGarmentsDialog: voided" << voided << "of" << rowsToVoid.size()
              << "garment(s) for ticket" << m_loadedTicket;
 
+    if (voided > 0 && m_voidedTicket != m_loadedTicket) {   // the count is of the last ticket voided in
+        m_voidedTicket = m_loadedTicket;
+        m_voidedTotal = 0;
+    }
     m_voidedTotal += voided;
     QString done = UiKit::okHtml(tr("%1 prenda(s) del recibo %2 anuladas.").arg(voided).arg(m_loadedTicket.toHtmlEscaped()));
     if (voided < rowsToVoid.size())

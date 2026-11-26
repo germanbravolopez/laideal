@@ -2,6 +2,7 @@
 // the gastos-PDF filename suffix and the per-row year/accounting-type filter.
 
 #include <QtTest>
+#include <QSqlDatabase>
 #include <QStandardItemModel>
 
 #include "genlistado.h"
@@ -99,6 +100,32 @@ private slots:
         QVERIFY(!Listado::isOpenableQrUrl(QString()));
     }
 
+    // A price stored with a decimal comma prints; an empty or zero one stays blank.
+    void test_prendasTable_commaPriceIsPrinted()
+    {
+        QStandardItemModel model(0, 3);
+        model.appendRow({ new QStandardItem("Camisa"), new QStandardItem("12,5"), new QStandardItem("3.50") });
+        model.appendRow({ new QStandardItem("Abrigo"), new QStandardItem(""), new QStandardItem("0,00") });
+        QSqlDatabase db;
+        GenListado generator(db);
+        generator.model = &model;
+        const QString html = generator.generate_html_prendas_table({ 0, 1 });
+        QVERIFY2(html.contains("12,50"), qPrintable(html));
+        QVERIFY2(html.contains("3,50"), qPrintable(html));
+        QCOMPARE(html.count("<td></td>"), 2);
+    }
+
+    // The IVA of a gasto: only the rates the accounting sums, as integer text.
+    void test_supportedExpenseIva()
+    {
+        QCOMPARE(Listado::supportedExpenseIva("21"), QStringLiteral("21"));
+        QCOMPARE(Listado::supportedExpenseIva(" 21,0 "), QStringLiteral("21"));
+        QCOMPARE(Listado::supportedExpenseIva("10.00"), QStringLiteral("10"));
+        QCOMPARE(Listado::supportedExpenseIva("0"), QStringLiteral("0"));
+        for (const QString &bad : { "4", "21,5", "-5", "abc", "", "2100", "121" })
+            QVERIFY2(Listado::supportedExpenseIva(bad).isEmpty(), qPrintable(bad));
+    }
+
     void test_shouldPrintGastoRow()
     {
         // All years + all types -> always printed.
@@ -117,5 +144,5 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(TestGenListado)
+QTEST_MAIN(TestGenListado)
 #include "test_genlistado.moc"

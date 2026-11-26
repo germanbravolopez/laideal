@@ -157,7 +157,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     }
 
     QString headerText = tr("Ticket %1 - %2 - Recepción %3")
-                         .arg(ticketNum, m_cliente,
+                         .arg(ticketNum.toHtmlEscaped(), m_cliente.toHtmlEscaped(),
                               m_fechaRecepcion.toString("dd-MM-yyyy"));
     m_lblHeader->setText(headerText);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
@@ -250,7 +250,14 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
-    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName());
+    bool seqOk = false;
+    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName(), &seqOk);
+    if (!seqOk) {
+        qWarning() << "PayDialog: invoice number unreadable for ticket" << m_ticketNum << "- nothing charged";
+        m_lblStatus->setText(UiKit::errorHtml(tr("No se ha podido leer la numeración de facturas del ticket."))
+                             + "<br>" + tr("No se ha cobrado ni enviado nada. Consulte el log (Ayuda → Log de depuración)."));
+        return;
+    }
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum

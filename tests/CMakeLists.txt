@@ -57,6 +57,8 @@ target_link_libraries(test_genlistado PRIVATE
 )
 add_test(NAME genlistado
     COMMAND test_genlistado -o ${CMAKE_BINARY_DIR}/test-results-genlistado.xml,junitxml -o -,txt)
+# QTEST_MAIN (QApplication): the generator is a QDialog.
+set_tests_properties(genlistado PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # facturas: pure IVA split, amount parsing and the dialog save on a throwaway DB.
 add_executable(test_facturas test_facturas.cpp)
