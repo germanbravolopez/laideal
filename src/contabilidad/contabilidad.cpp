@@ -501,6 +501,7 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
     f.gasNiImporte = gasNi;     // sin IVA: base == importe
     f.ingTickets = netTicketCount(income, regularizations, periodStart, periodEnd);
     f.gasFacturas = gasSummed;
+    f.gasNoSumadas = expenses.size() - gasSummed;
 
     // Modelo 303 carries the IVA as invoiced: the sum of each invoice's cuota, rounded per
     // invoice exactly as registered at AEAT (splitGross), not the IVA of the summed gross.
@@ -577,7 +578,7 @@ int Contabilidad::invalidAmountCount(const QVector<IncomeTicketDetail> &income,
     for (const RegularizationDetail &r : regularizations)
         n += r.invalidAmounts;
     for (const ExpenseDetail &e : expenses)
-        n += e.invalidAmount || e.iva < 0 ? 1 : 0;   // either is left out of the sums
+        n += e.invalidAmount || !expenseIvaIsSummarised(e.iva) ? 1 : 0;   // either is left out of the sums
     return n;
 }
 
@@ -662,6 +663,11 @@ QString Contabilidad::createHtmlSummary(const PeriodFigures &f, const QString &h
             "<td style='text-align:right; font-weight:bold;'>" + ReportHtml::formatEuro(f.resultadoPeriodo()) + "</td></tr>"
         "<tr><td>N&uacute;mero de tickets (ingresos)</td><td style='text-align:right;'>" + QString::number(f.ingTickets) + "</td></tr>"
         "<tr style='background-color:#f6f7f9;'><td>N&uacute;mero de facturas (gastos)</td><td style='text-align:right;'>" + QString::number(f.gasFacturas) + "</td></tr>"
+        // Never silent: a gasto left out of the sums is named in the summary itself.
+        + (f.gasNoSumadas > 0
+               ? "<tr><td>Facturas de gastos NO sumadas (importe no v&aacute;lido o tipo de IVA distinto de 0, 10 o 21)</td>"
+                 "<td style='text-align:right; font-weight:bold;'>" + QString::number(f.gasNoSumadas) + "</td></tr>"
+               : QString()) +
     "</table>";
 }
 

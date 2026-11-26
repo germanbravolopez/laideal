@@ -481,6 +481,14 @@ private slots:
         ExpenseDetail bad; bad.nFactura = "F-8"; bad.iva = -1; bad.importe = 50.0;
         ExpenseDetail ok;  ok.nFactura = "F-1"; ok.iva = 21;  ok.importe = 121.0;
         QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, ok}), 1);
+        // A positive rate the accounting does not sum (4 %) is left out too: it must be
+        // counted, and the summary itself says how many invoices it does not include.
+        ExpenseDetail four; four.nFactura = "F-4"; four.iva = 4; four.importe = 104.0;
+        QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, four, ok}), 2);
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({}, {}, {bad, four, ok}, 21.0,
+                                                                              QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(f.gasFacturas, 1);
+        QCOMPARE(f.gasNoSumadas, 2);
     }
 
     void test_invalidAmountsFlagged()

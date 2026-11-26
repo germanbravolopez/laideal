@@ -1059,6 +1059,20 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
     }
 }
 
+void AeatDirectBackend::settleRecord(const AeatStore::Record &record, const QString &state,
+                                     const VerifactuResult &result, bool claimRecord)
+{
+    if (m_store.markOutcome(record.id, state, result.csv, result.errorCode, result.errorDescription)) {
+        finishRecord(record, result, claimRecord);
+        return;
+    }
+    qWarning() << "AeatDirectBackend: record" << record.id << "of" << record.invoiceNumber
+               << "was no longer pending - AEAT's answer not applied";
+    m_unverifiedDuplicates.remove(record.id);
+    const AeatStore::Record now = m_store.latest(record.kind, record.invoiceNumber, m_config.issuerNif);
+    answerWaiters(record.id, resultFromStored(now.isValid() ? now : record));
+}
+
 AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
 {
     const QStringList xmls = m_store.recordXmls();
@@ -1191,21 +1205,17 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
             // send of it reached AEAT.
             const bool ours = reachedBefore.value(record.id, false);
             result.status = VerifactuResult::SUCCESS;
-            m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
-                                result.csv, result.errorCode, result.errorDescription);
-            finishRecord(record, result, ours);
+            settleRecord(record, ours ? AeatStore::kAccepted : AeatStore::kDuplicate, result, ours);
         } else if (line && line->duplicate && line->duplicateState == QLatin1String("Anulada")) {
             // AEAT holds the invoice as cancelled: never register it again.
             result.status = VerifactuResult::ERROR;
             result.errorDescription = tr("La AEAT tiene la factura %1 anulada.").arg(record.invoiceNumber);
-            m_store.markOutcome(record.id, AeatStore::kCancelledAtAeat, QString(), result.errorCode, result.errorDescription);
-            finishRecord(record, result, false);
+            result.csv.clear();
+            settleRecord(record, AeatStore::kCancelledAtAeat, result, false);
         } else if (line && line->duplicate && result.isSuccess()) {
             verifyDuplicate(record, result, reachedBefore.value(record.id, false));
         } else {
-            m_store.markOutcome(record.id, result.isSuccess() ? AeatStore::kAccepted : AeatStore::kRejected,
-                                result.csv, result.errorCode, result.errorDescription);
-            finishRecord(record, result);
+            settleRecord(record, result.isSuccess() ? AeatStore::kAccepted : AeatStore::kRejected, result);
         }
     }
     if (unanswered)
@@ -1263,8 +1273,7 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
             r.errorDescription = tr("La AEAT dice que ya tiene la factura %1 del %2, pero no la devuelve al consultarla: "
                                     "compruébela con Consultar en AEAT.").arg(record.invoiceNumber, date);
             qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "never shown by the query - marked ERROR";
-            m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
-            finishRecord(record, r, false);
+            settleRecord(record, AeatStore::kRejected, r, false);
             refreshUnsentCount();
             return;
         }
@@ -1294,15 +1303,12 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
                                     "no es esta factura.")
                                      .arg(record.invoiceNumber, date, held->totalAmount, AeatHash::amountText(record.total));
             qWarning() << "AeatDirectBackend: duplicate of" << record.invoiceNumber << "with another amount -" << held->totalAmount;
-            m_store.markOutcome(record.id, AeatStore::kRejected, QString(), r.errorCode, r.errorDescription);
-            finishRecord(record, r, false);
+            settleRecord(record, AeatStore::kRejected, r, false);
         } else {
             // Ours only when an earlier send of it got to AEAT (the reply lost) and AEAT's
             // huella, when given, is our record's; else another system's record.
             const bool ours = reachedBefore && (held->hash.isEmpty() || held->hash.compare(record.hash, Qt::CaseInsensitive) == 0);
-            m_store.markOutcome(record.id, ours ? AeatStore::kAccepted : AeatStore::kDuplicate,
-                                result.csv, result.errorCode, result.errorDescription);
-            finishRecord(record, result, ours);
+            settleRecord(record, ours ? AeatStore::kAccepted : AeatStore::kDuplicate, result, ours);
         }
         if (!m_store.pending(1, m_config.issuerNif).isEmpty())
             scheduleSend();

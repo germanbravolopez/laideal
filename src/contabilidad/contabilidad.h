@@ -81,7 +81,8 @@ public:
         double gas10Importe = 0.0, gas10Base = 0.0, gas10Iva = 0.0;
         double gas21Importe = 0.0, gas21Base = 0.0, gas21Iva = 0.0;
         double gasNiImporte = 0.0;                 // gastos without IVA (base == importe)
-        int ingTickets = 0, gasFacturas = 0;       // operation counts
+        int ingTickets = 0, gasFacturas = 0;       // operation counts (gastos: the summed ones)
+        int gasNoSumadas = 0;                      // gastos left out: unreadable amount or IVA rate not 0 / 10 / 21
 
         // Gastos with IVA (10 % + 21 %), the subtotal the gastos table shows before sin IVA.
         double gastosConIvaImporte() const { return gas10Importe + gas21Importe; }
@@ -98,7 +99,7 @@ public:
             gas10Importe += o.gas10Importe; gas10Base += o.gas10Base; gas10Iva += o.gas10Iva;
             gas21Importe += o.gas21Importe; gas21Base += o.gas21Base; gas21Iva += o.gas21Iva;
             gasNiImporte += o.gasNiImporte;
-            ingTickets += o.ingTickets; gasFacturas += o.gasFacturas;
+            ingTickets += o.ingTickets; gasFacturas += o.gasFacturas; gasNoSumadas += o.gasNoSumadas;
         }
     };
 

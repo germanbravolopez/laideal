@@ -1,5 +1,7 @@
 #include "verifactuinvoice.h"
 
+#include "aeathash.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 
@@ -13,8 +15,8 @@ void VerifactuInvoice::computeTotals(double &amount, double &taxAmount) const
     qint64 baseCents = 0;
     qint64 taxCents = 0;
     for (const auto &item : m_taxItems) {
-        taxCents += qRound64(item.getTaxAmount() * 100.0);
-        baseCents += qRound64(item.getTaxBase() * 100.0);
+        taxCents += AeatHash::amountCents(item.getTaxAmount());
+        baseCents += AeatHash::amountCents(item.getTaxBase());
     }
     taxAmount = taxCents / 100.0;
     amount = (baseCents + taxCents) / 100.0;

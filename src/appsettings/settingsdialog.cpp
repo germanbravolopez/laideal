@@ -562,7 +562,7 @@ void SettingsDialog::updateFloorWarning()
 
 void SettingsDialog::updateDirectRows()
 {
-    const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
+    const bool directAeat = directSelected();
     m_vDirectGroup->setVisible(directAeat);
     m_vGatewayGroup->setVisible(!directAeat);
     m_vSelfTest->setVisible(m_selfTestAllowed);

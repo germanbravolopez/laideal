@@ -242,6 +242,9 @@ private:
     void verifyDuplicate(const AeatStore::Record &record, const VerifactuResult &result, bool reachedBefore);
     void answerWaiters(qint64 recordId, const VerifactuResult &result);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord = true);
+    // Stores AEAT's answer and finishes the record; a row settled meanwhile keeps its answer.
+    void settleRecord(const AeatStore::Record &record, const QString &state, const VerifactuResult &result,
+                      bool claimRecord = true);
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);

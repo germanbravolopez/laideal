@@ -1374,18 +1374,27 @@ static int pendingAeatRecordCount(QSqlDatabase &db, const QString &environment)
     return q.exec() && q.next() ? q.value(0).toInt() : 0;
 }
 
-static QStringList aeatInvoiceNumbersOfTicket(QSqlDatabase &db, const QString &ticketNum, const QString &environment)
+// *ok is false only when the table exists but cannot be read: without it there are no numbers.
+static QStringList aeatInvoiceNumbersOfTicket(QSqlDatabase &db, const QString &ticketNum, const QString &environment,
+                                              bool *ok)
 {
+    *ok = true;
     QStringList numbers;
+    if (!db.tables().contains(QStringLiteral("aeat_records")))
+        return numbers;
     QSqlQuery q(db);
     q.prepare("SELECT invoice_number FROM aeat_records WHERE kind = 'alta' "
               "AND (invoice_number = :n OR invoice_number LIKE :prefix) AND (:e = '' OR environment = :e)");
     q.bindValue(":n", ticketNum);
     q.bindValue(":e", environment);
     q.bindValue(":prefix", ticketNum + QStringLiteral("-%"));
-    if (q.exec())
-        while (q.next())
-            numbers << q.value(0).toString();
+    if (!q.exec()) {
+        qWarning() << "aeatInvoiceNumbersOfTicket: SELECT failed for" << ticketNum << "-" << q.lastError().text();
+        *ok = false;
+        return numbers;
+    }
+    while (q.next())
+        numbers << q.value(0).toString();
     return numbers;
 }
 
@@ -2431,14 +2440,16 @@ int nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QS
     // Nor a number the direct client already generated a record for (a payment whose
     // garments could not be stored as paid left no paid row behind): an InvoiceID names
     // one invoice. The table exists only once the direct connection was used.
+    bool aeatRead = false;
     for (const QString &id : aeatInvoiceNumbersOfTicket(db, ticketNum,
-                                                       aeatEnvironment.isNull() ? QStringLiteral("") : aeatEnvironment)) {
+                                                       aeatEnvironment.isNull() ? QStringLiteral("") : aeatEnvironment,
+                                                       &aeatRead)) {
         bool numeric = true;
         const int seq = id == ticketNum ? 0 : id.mid(ticketNum.size() + 1).toInt(&numeric);
         if (numeric)
             next = qMax(next, seq + 1);
     }
-    if (ok) *ok = read;
+    if (ok) *ok = read && aeatRead;
     return next;
 }
 
@@ -2694,6 +2705,21 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
     bool ok = q.exec();
+    if (ok && !cancelXml.isEmpty()) {
+        // Rows marked earlier without AEAT's record still get it; a stored one is kept.
+        QSqlQuery x(db);
+        x.prepare("UPDATE ingresos SET verifactu_cancel_xml = :cxml "
+                  "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
+                  "  AND COALESCE(verifactu_cancel_xml, '') = ''");
+        x.bindValue(":cxml", cancelXml);
+        x.bindValue(":num",  nRecibo);
+        x.bindValue(":seq",  seq);
+        if (!x.exec()) {
+            qWarning() << "markInvoiceSeqCancelled: storing the cancellation record failed for ticket" << nRecibo
+                       << "seq" << seq << "-" << x.lastError().text();
+            return false;
+        }
+    }
     if (ok && q.numRowsAffected() == 0) {
         // Rows already ANULADA keep their stamp; that is still a success (a late reply).
         QSqlQuery c(db);

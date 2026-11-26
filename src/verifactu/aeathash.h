@@ -51,6 +51,8 @@ QString cancellationHash(const CancellationFields &fields);
 
 // Amount as the record writes it: two decimals, '.' separator ("123.40", never "123.4").
 QString amountText(double amount);
+// The same rounding, in cents.
+qint64 amountCents(double amount);
 
 // Generation time with its UTC offset, "yyyy-MM-ddTHH:mm:ss+hh:mm" (never "Z").
 QString timestampText(const QDateTime &moment);

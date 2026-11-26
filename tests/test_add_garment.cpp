@@ -353,6 +353,25 @@ private slots:
         QCOMPARE(garmentRows(), 1);
     }
 
+    // A ticket without a readable reception date never keeps the previous search's minimum.
+    void test_search_invalidReceptionDate_dropsThePreviousMinimum()
+    {
+        const QDate reception = QDate::currentDate().addDays(-5);
+        seedTicket(reception);
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, importe, pagado, estado, "
+             "cantidad, prenda, servicio, hash, verifactu_estado) VALUES ('0', '101', 'Eva', 'nunca', '4.00', 'NO', "
+             "'En tienda', '1', 'Camisa', 'Limp.', 'seedhash101', 'SIN COBRAR')");
+        AddGarment dlg(m_db);
+        searchTicket(dlg);
+        auto *payDate = dlg.findChild<QDateEdit *>("deFechaPago");
+        auto *pickupDate = dlg.findChild<QDateEdit *>("deFechaRecogida");
+        QCOMPARE(payDate->minimumDate(), reception);
+        searchTicket(dlg, "101");
+        QVERIFY2(dlg.ticketFound(), qPrintable(panel(dlg)));
+        QVERIFY(payDate->minimumDate() < reception);
+        QVERIFY(pickupDate->minimumDate() < reception);
+    }
+
     // The invoice number or the paid check cannot be read: refused, with its own message, nothing stored.
     void test_save_unreadableInvoiceNumber_refusedNothingStored()
     {

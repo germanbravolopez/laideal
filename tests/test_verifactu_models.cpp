@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QStandardPaths>
 
+#include "aeathash.h"
 #include "verifactuconfig.h"
 #include "verifactumanager.h"
 #include "verifactuinvoice.h"
@@ -206,6 +207,18 @@ private slots:
         sum.addTaxItem(vatItem(21.0, 0.1, 0.0));
         sum.addTaxItem(vatItem(21.0, 0.2, 0.0));
         QCOMPARE(QString::number(sum.toJson().value("TotalAmount").toDouble(), 'g', 17), QStringLiteral("0.29999999999999999"));   // 0.3, not 0.30000000000000004
+    }
+
+    // A binary x.xx5 amount rounds as the direct client's record writes it, so the QR of
+    // either names the same total.
+    void test_invoiceTotalsRoundAsTheRecord()
+    {
+        for (const double v : { 1.005, -1.005, 2.675, -2.675 }) {
+            VerifactuInvoice inv;
+            inv.addTaxItem(vatItem(21.0, v, v));
+            QCOMPARE(QString::number(inv.getTotalAmount(), 'f', 2), AeatHash::amountText(2 * AeatHash::amountText(v).toDouble()));
+            QCOMPARE(QString::number(inv.toJson().value("TotalTaxAmount").toDouble(), 'f', 2), AeatHash::amountText(v));
+        }
     }
 
     // The error follows the current state, not the last failed check.

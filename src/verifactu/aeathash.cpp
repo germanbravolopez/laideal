@@ -63,11 +63,15 @@ QString cancellationHash(const CancellationFields &fields)
     return sha256Hex(cancellationHashInput(fields));
 }
 
-QString amountText(double amount)
+qint64 amountCents(double amount)
 {
     // Rounded half away from zero like every stored amount (sql_lite::roundToCents).
-    const double cents = amount < 0 ? -qRound64(-amount * 100.0 + 1e-6) : qRound64(amount * 100.0 + 1e-6);
-    return QString::number(cents / 100.0, 'f', 2);
+    return amount < 0 ? -qRound64(-amount * 100.0 + 1e-6) : qRound64(amount * 100.0 + 1e-6);
+}
+
+QString amountText(double amount)
+{
+    return QString::number(amountCents(amount) / 100.0, 'f', 2);
 }
 
 QString timestampText(const QDateTime &moment)

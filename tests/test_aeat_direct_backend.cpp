@@ -423,6 +423,29 @@ private slots:
         QCOMPARE(r.csv, QStringLiteral("A-SETTLED"));
     }
 
+    // A record settled while its duplicate was being verified keeps the stored answer:
+    // AEAT's late one is neither stored, answered nor announced.
+    void test_recordSettledDuringDuplicateCheckKeepsItsAnswer()
+    {
+        registerElsewhere({ "530" });
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        QSignalSpy settled(&backend, &AeatDirectBackend::recordSettled);
+        m_server->enqueue({});                                            // the submission: duplicate
+        m_server->enqueue({ QByteArray(), 200, 2000 });                   // the verifying query, slow
+        const int before = m_server->requests().size();
+        const QString id = backend.submitInvoiceAsync(ticket("530", 10));
+        QTRY_VERIFY_WITH_TIMEOUT(queriesSince(before) == 1, 10000);
+        AeatStore store(m_db, "pruebas");
+        const AeatStore::Record record = store.latest(AeatStore::Kind::Registration, "530");
+        QVERIFY(store.markOutcome(record.id, AeatStore::kRejected, QString(), "9999", "SETTLED"));
+        const VerifactuResult r = waitFor(backend, id);
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QCOMPARE(r.errorDescription, QStringLiteral("SETTLED"));
+        QCOMPARE(settled.count(), 0);
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "530").state, AeatStore::kRejected);
+    }
+
     // Tripwire: with LAIDEAL_TEST=1 (CTest sets it for every suite) the transport refuses
     // any host but this machine before connecting. The refused host never resolves anyway.
     void test_tripwireRefusesNonLocalHosts()

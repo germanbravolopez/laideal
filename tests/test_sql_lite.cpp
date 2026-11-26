@@ -659,6 +659,14 @@ private slots:
         QVERIFY(markInvoiceSeqCancelled(m_db, "42", 0, QDate(2026, 5, 20)));
         QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='42'"), QStringLiteral("<anulacion/>"));
         QCOMPARE(scalar("SELECT COALESCE(verifactu_cancel_xml, '') FROM ingresos WHERE n_recibo='41'"), QString());
+
+        // Marked first without the record: the call that brings it stores it, the date
+        // stays, and a stored record is never replaced.
+        QVERIFY(markInvoiceSeqCancelled(m_db, "41", 1, QDate(2026, 5, 25), "<anulacion41/>"));
+        QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='41'"), QStringLiteral("<anulacion41/>"));
+        QCOMPARE(scalar("SELECT fecha_anulacion FROM ingresos WHERE n_recibo='41'"), QStringLiteral("15-05-2026"));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "41", 1, QDate(2026, 5, 25), "<other/>"));
+        QCOMPARE(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE n_recibo='41'"), QStringLiteral("<anulacion41/>"));
     }
 
     // Cancelling / rectifying an invoice touches only the paid rows it covered: the
@@ -1046,6 +1054,18 @@ private slots:
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
         insertIngreso("T1", "", "10.00", "NO", "", /*seq=*/9); // unpaid: ignored
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
+    }
+
+    // No aeat_records table reads as "no numbers"; one that cannot be read is a failure.
+    void test_nextVerifactuInvoiceSeq_aeatReadFails()
+    {
+        bool ok = false;
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1", QString(), &ok), 0);
+        QVERIFY(ok);
+        exec("CREATE TABLE aeat_records (id INTEGER PRIMARY KEY, environment TEXT, kind TEXT, number_off TEXT)");
+        const auto drop = qScopeGuard([this] { exec("DROP TABLE aeat_records"); });
+        nextVerifactuInvoiceSeq(m_db, "T1", QString(), &ok);
+        QVERIFY(!ok);
     }
 
     // --- wave 2 review fixes ------------------------------------------------------------

@@ -229,10 +229,14 @@ void AddGarment::onSearchClicked()
     m_ticketFound = true;
     m_searchedTicket = ticket;
     m_leCliente->setText(header.client);
-    m_deFechaRecepcion->setDate(parseDbDate(header.receptionDate));
+    const QDate receptionDate = parseDbDate(header.receptionDate);
+    m_deFechaRecepcion->setDate(receptionDate);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
-    for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida })
-        UiKit::limitDateRange(edit, { m_deFechaRecepcion->date() }, QDate::currentDate());
+    // A previous search's minimum never carries over.
+    for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida }) {
+        edit->clearMinimumDate();
+        UiKit::limitDateRange(edit, { receptionDate }, QDate::currentDate());
+    }
     // Nor before the day production began: such an invoice would never reach the real AEAT.
     // The current minimum is a candidate too, so the reception date is never lowered.
     UiKit::limitDateRange(m_deFechaPago,
