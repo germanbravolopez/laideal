@@ -2,7 +2,7 @@
 
 One entry per CTest suite, grouped by module: the CTest name, the test file, the library under test and what it covers. The test files hold the exact assertions. Conventions, seams and timeouts are in [README.md](README.md); the suites that drive whole windows against a fake server (`e2e_verifactu`, `e2e_app`, `e2e_aeat_direct`) are in [e2e.md](e2e.md).
 
-"Offscreen" means the suite sets `QT_QPA_PLATFORM=offscreen` (it needs a widget or `QPixmap`); the others are guiless. Every suite is registered in `tests/CMakeLists.txt` with a 120 s timeout, except `sql_lite` (300 s) and `aeat_direct_backend` (600 s).
+"Offscreen" means the suite sets `QT_QPA_PLATFORM=offscreen` (it needs a widget or `QPixmap`); the others are guiless. Every suite is registered in `tests/CMakeLists.txt` with a 120 s timeout, except the three long ones (`sql_lite`, `aeat_direct_backend`, `e2e_app`): their limits are in [README.md](README.md#running-the-tests).
 
 ---
 

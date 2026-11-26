@@ -30,6 +30,9 @@ def qr_text(png) -> str:
                                                     interpolation=cv2.INTER_NEAREST)
         found, _, _ = cv2.QRCodeDetector().detectAndDecode(sized)
         if found:
+            if scale != 1:
+                # Said in the run's output: a QR only ever read resized deserves a look.
+                print(f"  WARNING: QR of {png.name} not read at the printed size, read at x{scale}")
             return found
     return ""
 
