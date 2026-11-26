@@ -17,6 +17,12 @@
 struct VerifactuResult;
 enum class VerifactuEstado;
 
+// Dates are stored as text in this format ("05-03-2026"); parseDbDate gives an invalid
+// QDate for anything else.
+inline const QString kDbDateFormat = QStringLiteral("dd-MM-yyyy");
+inline QDate parseDbDate(const QString &text) { return QDate::fromString(text, kDbDateFormat); }
+inline QString dbDateText(const QDate &date) { return date.toString(kDbDateFormat); }
+
 // Configured once at startup by main() via setDbPath().
 // dbPath() returns the runtime-configured value.
 void    setDbPath(const QString &path);
@@ -74,6 +80,12 @@ bool        moneyParse(const QString &text, double *value);
 // ("28,41"), no thousands separator. Storage, the maths and AEAT keep the dot.
 QString     displayMoney(double value);
 QString     displayMoney(const QString &stored);
+// displayMoney followed by a space and the euro sign.
+QString     displayEuro(double value);
+QString     displayEuro(const QString &stored);
+// Reads a typed decimal that may use a comma ("2,5"): trimmed, comma read as the dot.
+// Lenient like QString::toDouble (0 and *ok false when unreadable); moneyParse is the strict one.
+double      parseDecimal(const QString &text, bool *ok = nullptr);
 // A stored decimal such as a size ("2.5") shown with the comma ("2,5"); other text unchanged.
 QString     displayDecimal(const QString &stored);
 QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
@@ -466,13 +478,27 @@ bool reopenQuarter(QSqlDatabase &db, int quarter, int year);
 QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year);
 // quarterKey() of every closed quarter, for views that check many rows at once.
 QSet<int> closedQuarterKeys(QSqlDatabase &db);
+// The quarter (1-4) of a month (1-12), and its first / last day.
+inline int quarterOfMonth(int month) { return (month + 2) / 3; }
+inline QDate quarterFirstDay(int quarter, int year) { return QDate(year, (quarter - 1) * 3 + 1, 1); }
+inline QDate quarterLastDay(int quarter, int year) { return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1); }
 inline int quarterKey(int quarter, int year) { return year * 10 + quarter; }
-inline int quarterKey(QDate date) { return date.isValid() ? quarterKey((date.month() + 2) / 3, date.year()) : 0; }
+inline int quarterKey(QDate date) { return date.isValid() ? quarterKey(quarterOfMonth(date.month()), date.year()) : 0; }
 // Any payment, cancellation (fecha_anulacion) or gasto dated in the quarter: something to report.
 bool quarterHasMovements(QSqlDatabase &db, int quarter, int year);
 // `preferred` when its quarter is open, else today, else the first day of the next
 // open quarter: where a late change (a subtraction) may still be counted.
 QDate openPeriodDate(QSqlDatabase &db, QDate preferred);
+
+// The client and reception date shared by the rows of a ticket (receptionDate as
+// stored). found is false when no row has a client; *ok is false when the read failed
+// (found is false too).
+struct TicketHeader {
+    bool    found = false;
+    QString client;
+    QString receptionDate;
+};
+TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok = nullptr);
 
 // Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.
 // A rectificativa may not be dated before it.

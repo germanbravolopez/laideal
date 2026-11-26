@@ -120,11 +120,11 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         while (q.next()) {
             if (m_cliente.isEmpty()) {
                 m_cliente        = q.value(0).toString();
-                m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+                m_fechaRecepcion = parseDbDate(q.value(1).toString());
             }
             const QString pagado   = q.value(8).toString();
             const QString estado   = q.value(10).toString();
-            if (pagado == "SI") continue;
+            if (pagado == INGRESOS_PAGADO_SI) continue;
             // A locally voided garment (estado "Anulado") is never chargeable - it
             // must not enter the payable set or it could be submitted to AEAT.
             if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
@@ -158,7 +158,7 @@ bool PayDialog::loadTicket(const QString &ticketNum)
 
     QString headerText = tr("Ticket %1 - %2 - Recepción %3")
                          .arg(ticketNum.toHtmlEscaped(), m_cliente.toHtmlEscaped(),
-                              m_fechaRecepcion.toString("dd-MM-yyyy"));
+                              dbDateText(m_fechaRecepcion));
     m_lblHeader->setText(headerText);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
     m_dePago->setMaximumDate(QDate::currentDate());
@@ -255,7 +255,7 @@ void PayDialog::onCobrarClicked()
     if (!seqOk) {
         qWarning() << "PayDialog: invoice number unreadable for ticket" << m_ticketNum << "- nothing charged";
         m_lblStatus->setText(UiKit::errorHtml(tr("No se ha podido leer la numeración de facturas del ticket."))
-                             + "<br>" + tr("No se ha cobrado ni enviado nada. Consulte el log (Ayuda → Log de depuración)."));
+                             + "<br>" + tr("No se ha cobrado ni enviado nada. Consulte el log (Ayuda \u2192 Log de depuración)."));
         return;
     }
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
@@ -285,7 +285,7 @@ void PayDialog::onCobrarClicked()
     }
 
     const double ivaRate = AppSettings::instance()->ivaRate();
-    const double taxBase = total / (1.0 + ivaRate / 100.0);
+    const double taxBase = taxBaseFromGross(total, ivaRate);
 
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &PayDialog::onVerifactuRequestFinished, Qt::UniqueConnection);

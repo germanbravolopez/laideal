@@ -40,5 +40,11 @@
 // `estado` column value for a garment voided locally (erroneous receipt or a
 // change of mind before delivery). Sits alongside "Recogido" / "En tienda".
 #define INGRESOS_ESTADO_ANULADO "Anulado"
+#define INGRESOS_ESTADO_RECOGIDO "Recogido"
+#define INGRESOS_ESTADO_EN_TIENDA "En tienda"
+
+// `pagado` column values.
+#define INGRESOS_PAGADO_SI "SI"
+#define INGRESOS_PAGADO_NO "NO"
 
 #endif // INGRESOS_SCHEMA_H

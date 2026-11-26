@@ -496,7 +496,7 @@ void MainWindow::mainwindowInitialSettings()
     // Verifactu start-up messages, which replace the panel).
     if (SelfCheck::isFirstStartAfterUpdate(previousVersion, version))
         m_updateNotice = UiKit::warnHtml(tr("La Ideal se ha actualizado a la versión %1.").arg(version))
-                         + "<br>" + tr("Ejecute <b>Ayuda → Comprobar tras actualizar…</b> (o Inicio → La Ideal - Comprobar "
+                         + "<br>" + tr("Ejecute <b>Ayuda \u2192 Comprobar tras actualizar\u2026</b> (o Inicio \u2192 La Ideal - Comprobar "
                                        "tras actualizar) y envíe el informe que guarda en el escritorio.");
     if (AppSettings::instance()->lastStartedVersion() != version) {
         AppSettings::instance()->setLastStartedVersion(version);
@@ -647,7 +647,7 @@ void MainWindow::initializeVerifactu()
         qWarning() << "Verifactu initialization failed:" << m_verifactuIntegration->getLastError();
         appendToResult(UiKit::warnHtml(tr("Verifactu no está disponible: %1")
                                            .arg(m_verifactuIntegration->getLastError().toHtmlEscaped()))
-                       + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo → Configuración."));
+                       + "<br>" + tr("Los tickets se guardan en local; configure Verifactu en Archivo \u2192 Configuración."));
     }
 
     if (first) {
@@ -1048,7 +1048,7 @@ bool MainWindow::validateTicket()
             sizePending = true;
         else if (ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().isEmpty())
             return refuse(tr("La prenda de la fila %1 no tiene precio.").arg(row + 1));
-        const double price = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(',', '.').toDouble();
+        const double price = parseDecimal(ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text());
         if (price < 0.0)
             return refuse(tr("La prenda de la fila %1 tiene un importe negativo; las correcciones se hacen "
                              "con Rectificar factura.").arg(row + 1));
@@ -1159,7 +1159,7 @@ void MainWindow::updateUnsentRecords()
         m_unsentRecords->setObjectName("lblUnsentRecords");
         m_unsentRecords->setToolTip(tr("Un fallo de conexión o del certificado ha impedido enviarlos. Están guardados: "
                                        "si es la conexión, el envío se reintenta solo cada minuto; si es el "
-                                       "certificado, se envían al corregirlo en Archivo → Configuración."));
+                                       "certificado, se envían al corregirlo en Archivo \u2192 Configuración."));
         statusBar()->addPermanentWidget(m_unsentRecords);
     }
     const int unsent = m_verifactuIntegration ? m_verifactuIntegration->unsentRecordCount() : 0;
@@ -1282,13 +1282,13 @@ bool MainWindow::saveTicket(double &storedTotal)
             IngresoGarmentRow r;
             r.nRecibo        = ui->le_nr_ticket->text();
             r.cliente        = ui->cb_client->currentText();
-            r.fechaRecepcion = ui->de_date_recep->date().toString("dd-MM-yyyy");
+            r.fechaRecepcion = dbDateText(ui->de_date_recep->date());
             // A paid-at-save ticket books the payment on the reception date.
             r.fechaPago      = ui->pb_payment->isChecked() ? r.fechaRecepcion : QString("");
             r.fechaRecogida  = "";
             r.importe        = ui->table_ticket->item(row, TABLE_TICKET_PRIC)->text().replace(",",".");
-            r.pagado         = ui->pb_payment->isChecked() ? "SI" : "NO";
-            r.estado         = "En tienda";
+            r.pagado         = ui->pb_payment->isChecked() ? INGRESOS_PAGADO_SI : INGRESOS_PAGADO_NO;
+            r.estado         = INGRESOS_ESTADO_EN_TIENDA;
             r.cantidad       = ui->table_ticket->item(row, TABLE_TICKET_QNTY)->text();
             r.prenda         = cbGarment->currentText();
             r.size           = ui->table_ticket->item(row, TABLE_TICKET_SIZE)
@@ -1300,7 +1300,7 @@ bool MainWindow::saveTicket(double &storedTotal)
             // An unpaid row has no invoice to send, so it is SIN COBRAR, not PENDIENTE;
             // a paid one starts PENDIENTE and the async AEAT submit patches it on reply.
             r.verifactuEstado = verifactuEstadoToString(
-                r.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
+                r.pagado == QLatin1String(INGRESOS_PAGADO_SI) ? VerifactuEstado::NotSubmitted
                                                 : VerifactuEstado::Unpaid);
 
             storedTotal += roundToCents(moneyText(r.importe).toDouble());
@@ -1392,7 +1392,7 @@ void MainWindow::on_pb_save_clicked()
                 // Nothing is sent nor printed for a ticket that was not stored whole.
                 m_result->setText(UiKit::errorHtml(tr("No se pudo guardar el ticket %1 completo.").arg(ticketNum))
                                   + "<br>" + tr("No se ha guardado ninguna prenda ni se ha enviado a AEAT o impreso. "
-                                                "Revise el log (Ayuda → Log de depuración) antes de repetirlo."));
+                                                "Revise el log (Ayuda \u2192 Log de depuración) antes de repetirlo."));
                 return;
             }
             // Only for a stored ticket: a retry after a failed save must not add the client twice.
@@ -1505,7 +1505,7 @@ void MainWindow::on_table_ticket_cellChanged(int row, int column)
         for (int rowCnt = 0; rowCnt < ui->table_ticket->rowCount(); rowCnt++) {
             QTableWidgetItem *priceItem = ui->table_ticket->item(rowCnt, column);
             if (priceItem && !priceItem->text().isEmpty()) {
-                const double priceValue = priceItem->text().replace(',', '.').toDouble();
+                const double priceValue = parseDecimal(priceItem->text());
                 priceItem->setText(displayMoney(priceValue));
                 priceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 totalPrice += roundToCents(priceValue);
@@ -1748,7 +1748,7 @@ void MainWindow::on_actionAnular_factura_verifactu_triggered()
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "Cancel invoice action: Verifactu not configured";
         m_result->setText(UiKit::errorHtml(tr("Verifactu no está configurado."))
-                          + "<br>" + tr("Configure las credenciales en Archivo → Configuración."));
+                          + "<br>" + tr("Configure las credenciales en Archivo \u2192 Configuración."));
         return;
     }
     CancelInvoiceDialog dlg(db, this);
@@ -1763,7 +1763,7 @@ void MainWindow::on_actionRectificar_factura_verifactu_triggered()
     if (!m_verifactuIntegration || !m_verifactuIntegration->isConfigured()) {
         qWarning() << "Rectify invoice action: Verifactu not configured";
         m_result->setText(UiKit::errorHtml(tr("Verifactu no está configurado."))
-                          + "<br>" + tr("Configure las credenciales en Archivo → Configuración."));
+                          + "<br>" + tr("Configure las credenciales en Archivo \u2192 Configuración."));
         return;
     }
     RectifyInvoiceDialog dlg(db, this);
@@ -1790,7 +1790,7 @@ void MainWindow::on_actionComprobar_tras_actualizar_triggered()
     const bool started = QProcess::startDetached(QCoreApplication::applicationFilePath(),
         { QStringLiteral("--settings"), AppSettings::instance()->filePath(), QStringLiteral("--self-check") });
     m_result->setText(started ? tr("La comprobación se abre en su propia ventana; este programa puede seguir abierto.")
-                              : UiKit::errorHtml(tr("No se pudo iniciar la comprobación: use Inicio → La Ideal - "
+                              : UiKit::errorHtml(tr("No se pudo iniciar la comprobación: use Inicio \u2192 La Ideal - "
                                                     "Comprobar tras actualizar.")));
 }
 

@@ -176,20 +176,17 @@ void RectifyInvoiceDialog::onSearchClicked()
     const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
-    QString cliente, fecha;
+    bool headerOk = false;
+    const TicketHeader header = ticketHeader(db, ticketNum, &headerOk);
+    if (!headerOk || !header.found) {
+        m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
+        return;
+    }
+    const QString cliente = header.client;
+    const QString fecha   = header.receptionDate;
     bool hasPartialPays = false;
     {
         ConnectionScope scope(db);
-        QSqlQuery q(db);
-        q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) FROM ingresos WHERE n_recibo = :num");
-        q.bindValue(":num", ticketNum);
-        if (!q.exec() || !q.first() || q.value(0).isNull()) {
-            m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
-            return;
-        }
-        cliente = q.value(0).toString();
-        fecha   = q.value(1).toString();
-        q.finish();
 
         // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
         // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
@@ -329,7 +326,7 @@ void RectifyInvoiceDialog::onRectifyClicked()
     const QDate lastPayment = ticketLastPaymentDate(db, m_loadedTicket);
     if (lastPayment.isValid() && rectifyDate < lastPayment) {
         m_lblResult->setText(UiKit::errorHtml(tr("La fecha de la rectificativa no puede ser anterior "
-                                                 "al cobro del ticket original (%1).").arg(lastPayment.toString("dd-MM-yyyy"))));
+                                                 "al cobro del ticket original (%1).").arg(dbDateText(lastPayment))));
         return;
     }
     if (quarterIsClosed(db, rectifyDate)) {
@@ -422,11 +419,11 @@ void RectifyInvoiceDialog::onRectifyClicked()
     // The corrected invoice as AEAT holds it: from its stored record, else the event's
     // own InvoiceID and earliest payment date.
     QString rectifiedNumber = verifactuInvoiceId(m_loadedTicket, 0);
-    QDate rectifiedDate = QDate::fromString(verifactuEventFor(db, m_loadedTicket, 0).fechaPago, "dd-MM-yyyy");
+    QDate rectifiedDate = parseDbDate(verifactuEventFor(db, m_loadedTicket, 0).fechaPago);
     const AeatResponse::RecordSummary stored = AeatResponse::summarizeRecord(verifactuEventRecordXml(db, m_loadedTicket, 0));
     if (stored.valid) {
         rectifiedNumber = stored.invoiceNumber;
-        rectifiedDate = QDate::fromString(stored.issueDate, "dd-MM-yyyy");
+        rectifiedDate = parseDbDate(stored.issueDate);
     }
     m_pendingRectifyId = m_verifactu->submitRectificationAsync(
         m_newInvoiceNumber, m_newInvoiceDate, invoiceType, rectType,
@@ -460,7 +457,7 @@ bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double a
         old.bindValue(":o", m_submittedTicket);
         read = old.exec() && old.next();
         if (read) {
-            oldDate = QDate::fromString(old.value(0).toString(), "dd-MM-yyyy");
+            oldDate = parseDbDate(old.value(0).toString());
             oldAmount = old.value(1).toDouble();
             oldSubstitution = old.value(2).toString() == QLatin1String("S");
         }

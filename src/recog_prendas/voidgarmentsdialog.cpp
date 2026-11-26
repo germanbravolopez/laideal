@@ -121,7 +121,7 @@ void VoidGarmentsDialog::onSearchClicked()
             g.estado          = q.value(6).toString();
             g.voidable        = garmentIsLocallyVoidable(g.pagado, g.verifactuEstado)
                                 && g.estado != QLatin1String(INGRESOS_ESTADO_ANULADO)
-                                && g.estado != QLatin1String("Recogido");
+                                && g.estado != QLatin1String(INGRESOS_ESTADO_RECOGIDO);
             if (client.isEmpty()) client = q.value(7).toString();
             if (date.isEmpty())   date   = q.value(8).toString();
             m_garments.append(g);
@@ -154,13 +154,13 @@ void VoidGarmentsDialog::rebuildTable()
 
         m_table->setItem(row, COL_PRENDA,  new QTableWidgetItem(g.prenda));
         m_table->setItem(row, COL_CANT,    new QTableWidgetItem(g.cantidad));
-        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(displayMoney(g.importe) + " €"));
+        m_table->setItem(row, COL_IMPORTE, new QTableWidgetItem(displayEuro(g.importe)));
         // Reason a row is not selectable: already voided, handed to the client, or
         // paid/sent to AEAT (must go through "Anular Factura Verifactu").
         QString estadoText = g.estado;
         if (g.estado == QLatin1String(INGRESOS_ESTADO_ANULADO))
             estadoText = tr("Anulado");
-        else if (g.estado == QLatin1String("Recogido"))
+        else if (g.estado == QLatin1String(INGRESOS_ESTADO_RECOGIDO))
             estadoText = tr("Entregada: cobrar o anular factura");
         else if (!g.voidable)
             estadoText = tr("Pagado/enviado - usar Anular Factura");

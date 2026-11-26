@@ -218,7 +218,7 @@ void SelfCheckDialog::runAutomatic()
         const QString quarter = tr("trimestre %1 de %2").arg(m_facts.closedQuarter).arg(m_facts.closedYear);
         m_questions.append({ i,
             tr("¿Coinciden estas cifras con las del informe de contabilidad presentado del %1?").arg(quarter),
-            tr("Ingresos: %1 € (IVA %2 €) · Gastos: %3 € · Liquidación de IVA: %4 €")
+            tr("Ingresos: %1 € (IVA %2 €) \u00b7 Gastos: %3 € \u00b7 Liquidación de IVA: %4 €")
                 .arg(displayMoney(m_facts.income), displayMoney(m_facts.incomeIva),
                      displayMoney(m_facts.expenses), displayMoney(m_facts.ivaResult))
                 + (m_facts.reportFile.isEmpty() ? tr("\nNo se ha encontrado el PDF del informe en la carpeta de Contabilidad.")
@@ -342,7 +342,7 @@ void SelfCheckDialog::finish()
                       + "<li>" + tr("El registro del programa: ") + UiKit::fileLinkHtml(logFile, QDir::toNativeSeparators(logFile))
                       + "</li>"
                       + "<li>" + tr("Una foto de la primera factura cobrada que imprima con esta versión (el código QR y el "
-                                    "texto «Factura verificable en la sede electrónica de la AEAT» debajo).") + "</li></ol>");
+                                    "texto \u00abFactura verificable en la sede electrónica de la AEAT\u00bb debajo).") + "</li></ol>");
 }
 
 void SelfCheckDialog::cleanUp()

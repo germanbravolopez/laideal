@@ -446,7 +446,7 @@ QString VerifactuIntegration::invoicingBlockedReason()
     else if (m_manager)
         missing = m_manager->getConfig()->getValidationError();
     return tr("Verifactu no está configurado (%1): no se puede cobrar ni emitir facturas. Configúrelo en "
-              "Archivo → Configuración.")
+              "Archivo \u2192 Configuración.")
         .arg(missing.isEmpty() ? tr("falta la configuración") : missing);
 }
 

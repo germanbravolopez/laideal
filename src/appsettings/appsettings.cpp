@@ -309,7 +309,7 @@ void AppSettings::migrateLegacyKeys()
 
 void AppSettings::migrateFromLegacyFiles()
 {
-    // ~/.laideal_cfg  →  verifactu.nif / verifactu.company_name
+    // ~/.laideal_cfg  ->  verifactu.nif / verifactu.company_name
     QFile cfgFile(QDir::homePath() + "/.laideal_cfg");
     if (cfgFile.exists() && cfgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&cfgFile);
@@ -324,7 +324,7 @@ void AppSettings::migrateFromLegacyFiles()
         qDebug() << "AppSettings: migrated emitter config from ~/.laideal_cfg";
     }
 
-    // ~/.verifactu_key  →  verifactu.service_key
+    // ~/.verifactu_key  ->  verifactu.service_key
     QFile keyFile(QDir::homePath() + "/.verifactu_key");
     if (keyFile.exists() && keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&keyFile);

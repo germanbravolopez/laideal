@@ -145,7 +145,7 @@ int MySortFilterProxyModel::searchColumnCount() const
 
 double MySortFilterProxyModel::numericValue(const QString &text, bool *ok)
 {
-    return QString(text).trimmed().replace(',', '.').toDouble(ok);
+    return parseDecimal(text, ok);
 }
 
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,

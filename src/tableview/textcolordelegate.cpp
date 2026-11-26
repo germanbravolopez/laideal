@@ -13,9 +13,9 @@ TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText
 {
     if (rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO) || rowVerifactuEstado == QLatin1String("ANULADA"))
         return TextColor::Green;
-    if (cellText == "SI" || cellText == "Recogido")
+    if (cellText == INGRESOS_PAGADO_SI || cellText == INGRESOS_ESTADO_RECOGIDO)
         return TextColor::Green;
-    if (cellText == "NO" || cellText == "En tienda")
+    if (cellText == INGRESOS_PAGADO_NO || cellText == INGRESOS_ESTADO_EN_TIENDA)
         return TextColor::Red;
     return TextColor::Default;
 }

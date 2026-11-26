@@ -161,7 +161,7 @@ QString Imprimir::displayInvoiceId() const
 
 bool Imprimir::checkTicketPaid(int row)
 {
-    return sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() == "SI";
+    return sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() == INGRESOS_PAGADO_SI;
 }
 
 bool Imprimir::checkAnyItemPaid()
@@ -224,8 +224,8 @@ QPixmap Imprimir::resolveQrCode()
     for (int row = 0; row < sqlQueryModel->rowCount(); ++row) {
         if (!checkTicketPaid(row))
             continue;
-        invoiceDate = QDate::fromString(
-            sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString(), "dd-MM-yyyy");
+        invoiceDate = parseDbDate(
+            sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_FECHA_PAGO)).toString());
         if (invoiceDate.isValid()) break;
     }
     if (!invoiceDate.isValid())
@@ -235,7 +235,7 @@ QPixmap Imprimir::resolveQrCode()
     double total = 0.0;
     QSet<int> seqs;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() != QLatin1String("SI"))
+        if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() != QLatin1String(INGRESOS_PAGADO_SI))
             continue;
         total += sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
         seqs.insert(sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
@@ -246,7 +246,7 @@ QPixmap Imprimir::resolveQrCode()
     }
 
     double ivaRate = AppSettings::instance()->ivaRate();
-    double taxBase = total / (1.0 + ivaRate / 100.0);
+    double taxBase = taxBaseFromGross(total, ivaRate);
 
     if (!hasCsv) {
         // Not confirmed by AEAT yet: only the direct client, whose record is generated,

@@ -297,7 +297,7 @@ void RecogPrendas::resetAllContents()
 bool RecogPrendas::rowClickedLocked()
 {
     const QString fechaPago = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString();
-    return quarterIsClosed(db, QDate::fromString(fechaPago, "dd-MM-yyyy"));
+    return quarterIsClosed(db, parseDbDate(fechaPago));
 }
 
 double RecogPrendas::manualUnitPrice()
@@ -310,7 +310,7 @@ double RecogPrendas::manualUnitPrice()
     const QString size = cellText(INGRESOS_COL_SIZE);
     if (garmentUnmeasured(garment, size))
         return -1.0;
-    const double stored = cellText(INGRESOS_COL_IMPORTE).replace(',', '.').toDouble();
+    const double stored = parseDecimal(cellText(INGRESOS_COL_IMPORTE));
     const double listed = garmentImporte(qty, size, readGarmentPrice(db, garment, cellText(INGRESOS_COL_SERVICIO)));
     const double perUnit = garmentImporte(qty, size, 1.0);
     if (qRound64(stored * 100.0) == qRound64(listed * 100.0) || perUnit <= 0.0)
@@ -353,10 +353,10 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
     switch (op) {
     case PKU_YES:
         updateTicketPickup(db, ticketNum, rowHash,
-                           ui->de_date_pickup->date().toString("dd-MM-yyyy"), "Recogido");
+                           dbDateText(ui->de_date_pickup->date()), INGRESOS_ESTADO_RECOGIDO);
         break;
     case PKU_NO:
-        updateTicketPickup(db, ticketNum, rowHash, "", "En tienda");
+        updateTicketPickup(db, ticketNum, rowHash, "", INGRESOS_ESTADO_EN_TIENDA);
         break;
     case OBSV:
         updateTicketObservations(db, ticketNum, rowHash, ui->le_obsv->text());
@@ -390,7 +390,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         if (!editLock && !ui->pb_payment->isChecked()
                 && ui->cb_servic->currentText() != cellText(INGRESOS_COL_SERVICIO)) {
             const bool manual = manualUnitPrice() >= 0.0;
-            const double importe = manual ? cellText(INGRESOS_COL_IMPORTE).replace(',', '.').toDouble()
+            const double importe = manual ? parseDecimal(cellText(INGRESOS_COL_IMPORTE))
                 : garmentUnmeasured(ui->le_garm->text(), ui->le_size->text()) ? 0.0
                 : garmentImporte(ui->le_qty->text(), ui->le_size->text(),
                                  readGarmentPrice(db, ui->le_garm->text(), ui->cb_servic->currentText()));
@@ -403,7 +403,7 @@ void RecogPrendas::updateDb(UpdateDBop op, int nGarm)
         // Manual importe override (comma-normalised); size is left as-is.
         if (!editLock && !ui->pb_payment->isChecked()) {
             // Negative amounts are corrections, made with Rectificar factura once charged.
-            if (QString(ui->le_price->text()).replace(',', '.').toDouble() < 0.0)
+            if (parseDecimal(ui->le_price->text()) < 0.0)
                 failure = tr("El importe no puede ser negativo.");
             else if (!updateTicketSizeAndPrice(db, ticketNum, rowHash,
                                                ui->le_size->text().replace(",", "."),
@@ -455,24 +455,24 @@ void RecogPrendas::updateRowClickedToFields()
     // A locally voided garment (estado "Anulado") is read-only everywhere except
     // observations: it can never be paid, picked up, split or re-priced again.
     const bool isAnulado = rowEstado == QLatin1String(INGRESOS_ESTADO_ANULADO);
-    const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI";
+    const bool isPaid = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == INGRESOS_PAGADO_SI;
     const bool editLock = rowClickedLocked();
     // Quantity / service / importe / size are editable only before payment (and while
     // not accounting-locked or voided): a paid row was already submitted to AEAT.
     const bool priceEditable = !isAnulado && !isPaid && !editLock;
-    ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == "SI");
-    ui->pb_state->setChecked(rowEstado == "Recogido");
-    ui->de_date_recep->setDate(QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString(),"dd-MM-yyyy"));
+    ui->pb_payment->setChecked(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == INGRESOS_PAGADO_SI);
+    ui->pb_state->setChecked(rowEstado == INGRESOS_ESTADO_RECOGIDO);
+    ui->de_date_recep->setDate(parseDbDate(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECEPCION)).toString()));
     showOptionalDate(ui->de_date_paym, sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_PAGO)).toString());
     const QString anulDate = sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_ANULACION)).toString();
     showOptionalDate(ui->de_date_anul, anulDate);
     // Green like the table: a cancelled garment is settled, not a debt.
-    ui->lbl_anul_badge->setText(QDate::fromString(anulDate, "dd-MM-yyyy").isValid()
+    ui->lbl_anul_badge->setText(parseDbDate(anulDate).isValid()
                                     ? UiKit::okHtml(tr("Anulada")) : QString());
     // setChecked() above only signals a change, so set the labels for every row.
     on_pb_payment_toggled(isPaid);
-    showPickupBadge(rowEstado == "Recogido");
-    const QDate pickup = QDate::fromString(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString(), "dd-MM-yyyy");
+    showPickupBadge(rowEstado == INGRESOS_ESTADO_RECOGIDO);
+    const QDate pickup = parseDbDate(sqlQueryModel->data(sqlQueryModel->index(rowClickedCell, INGRESOS_COL_FECHA_RECOGIDA)).toString());
     if (isAnulado) {
         // Never paid nor collected: no NO / En tienda labels, no pickup date.
         ui->lbl_payment_badge->clear();
@@ -663,7 +663,7 @@ void RecogPrendas::runSearch(const QString &query)
         }
         else {
             QDate dateSlash = QDate::fromString(query, "dd/MM/yyyy");
-            QDate dateDash = QDate::fromString(query, "dd-MM-yyyy");
+            QDate dateDash = parseDbDate(query);
             QDate date = (!dateSlash.isNull()) ? dateSlash : dateDash;
             // date_type values come from a hard-coded ComboBox - not user input
             static const char *const dateColumns[] = { "fecha_recepcion", "fecha_pago", "fecha_recogida", "fecha_anulacion" };
@@ -673,7 +673,7 @@ void RecogPrendas::runSearch(const QString &query)
                 ConnectionScope scope(db);
                 QSqlQuery q(db);
                 q.prepare("SELECT * FROM ingresos WHERE " + dateType + " = :date");
-                q.bindValue(":date", date.toString("dd-MM-yyyy"));
+                q.bindValue(":date", dbDateText(date));
                 loadEveryRow(sqlQueryModel, std::move(q));
             }
             else {
@@ -788,7 +788,7 @@ void RecogPrendas::on_pb_payment_toggled(bool checked)
 void RecogPrendas::showOptionalDate(QDateEdit *edit, const QString &ddMMyyyy)
 {
     // An empty date (unpaid, never voided) shows "-" instead of a misleading today.
-    const QDate date = QDate::fromString(ddMMyyyy, "dd-MM-yyyy");
+    const QDate date = parseDbDate(ddMMyyyy);
     edit->setMinimumDate(QDate(2000, 1, 1));
     edit->setSpecialValueText(QStringLiteral("-"));
     edit->setDate(date.isValid() ? date : edit->minimumDate());
@@ -972,7 +972,7 @@ void RecogPrendas::on_pb_pku_all_clicked()
         sqlQueryModel->index(rowClickedCell, INGRESOS_COL_N_RECIBO)).toString();
     if (ticketNum.isEmpty()) return;
 
-    const QString date = ui->de_date_pickup->date().toString("dd-MM-yyyy");
+    const QString date = dbDateText(ui->de_date_pickup->date());
     markTicketPickedUp(db, ticketNum, date);
 
     runSearch(m_submittedQuery);
@@ -991,7 +991,7 @@ void RecogPrendas::on_pb_print_clicked()
     if (isCellClicked) {
         const QString pagado = sqlQueryModel->data(sqlQueryModel->index(
                                    rowClickedCell, INGRESOS_COL_PAGADO)).toString();
-        if (pagado != "SI") {
+        if (pagado != INGRESOS_PAGADO_SI) {
             m_result->setText(UiKit::warnHtml(tr("La prenda seleccionada no está pagada."))
                               + "<br>" + tr("Seleccione una prenda ya pagada del pago que quiera reimprimir."));
             return;
@@ -1098,7 +1098,7 @@ void RecogPrendas::on_pb_verifactu_clicked()
     // on an already-settled row it simply confirms what AEAT holds (the apply
     // button stays disabled there). An unpaid row has no invoice to ask about.
     const bool rowPaid = sqlQueryModel->data(
-        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == QLatin1String("SI");
+        sqlQueryModel->index(rowClickedCell, INGRESOS_COL_PAGADO)).toString() == QLatin1String(INGRESOS_PAGADO_SI);
     const bool alreadySettled = stateEnum == VerifactuEstado::Enviada
                              || stateEnum == VerifactuEstado::Anulada
                              || stateEnum == VerifactuEstado::Rectificada;
@@ -1155,7 +1155,7 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
         return;
     }
     const PendingVerifactuEvent ev = verifactuEventFor(db, ticketNum, seq);
-    const QDate invoiceDate = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+    const QDate invoiceDate = parseDbDate(ev.fechaPago);
     if (ev.nRecibo.isEmpty() || !invoiceDate.isValid()) {
         qWarning() << "retryVerifactuSubmit: no paid event" << invoiceId
                    << "- nothing to re-submit";
@@ -1169,7 +1169,7 @@ void RecogPrendas::retryVerifactuSubmit(const QString &ticketNum, int seq)
     const QString reqId = m_verifactuIntegration->submitSimplifiedInvoiceAsync(
         invoiceId,
         invoiceDate,
-        ev.importe / (1.0 + ivaRate / 100.0),
+        taxBaseFromGross(ev.importe, ivaRate),
         ivaRate,
         kInvoiceDescription
     );
@@ -1199,7 +1199,7 @@ void RecogPrendas::queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
         return;
     }
 
-    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId, QDate::fromString(ev.fechaPago, "dd-MM-yyyy"));
+    const QString reqId = m_verifactuIntegration->queryInvoiceAsync(invoiceId, parseDbDate(ev.fechaPago));
     if (reqId.isEmpty()) {
         const QString detail = m_verifactuIntegration->getLastError();
         m_result->setText(UiKit::errorHtml(tr("No se ha podido consultar %1 en AEAT.").arg(invoiceId.toHtmlEscaped())
@@ -1248,13 +1248,13 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
                             "Esto <i>no</i> significa que la factura no esté registrada. "
                             "Revisa el detalle de abajo y consulta la sede electrónica."));
     } else if (!rec.found && m_verifactuIntegration
-               && m_verifactuIntegration->invoicePredatesProduction(invoiceId, QDate::fromString(ev.fechaPago, "dd-MM-yyyy"))) {
+               && m_verifactuIntegration->invoicePredatesProduction(invoiceId, parseDbDate(ev.fechaPago))) {
         // Not a lost invoice: it was issued before production, in the test environment.
         summary->setText(tr("<b>La AEAT real no tiene la factura %1, y es lo esperado.</b><br>"
                             "Es del %2, anterior al paso a PRODUCCIÓN (%3): se registró en el entorno de "
                             "pruebas o con IreneSolutions. No hay que reenviarla.")
                              .arg(invoiceId, ev.fechaPago,
-                                  m_verifactuIntegration->productionStartDate().toString("dd-MM-yyyy")));
+                                  dbDateText(m_verifactuIntegration->productionStartDate())));
     } else if (!rec.found) {
         // Deliberately not "se puede reenviar con seguridad": the query reply does
         // not echo the filter we sent, so an empty result is not yet proof that the

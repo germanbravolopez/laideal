@@ -371,7 +371,7 @@ void Listado::on_actionAnadir_fila_triggered()
         return;
     }
     if (tableName == "gastos") {
-        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Contabilidad → Añadir factura de gastos "
+        m_lblResult->setText(UiKit::warnHtml("Los gastos nuevos se añaden con Contabilidad \u2192 Añadir factura de gastos "
                                              "en la ventana principal."));
         return;
     }

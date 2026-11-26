@@ -1009,7 +1009,7 @@ bool updateGarmentServiceAndImporte(QSqlDatabase &db, const QString &nRecibo, co
 
 bool garmentIsLocallyVoidable(const QString &pagado, const QString &verifactuEstado)
 {
-    if (pagado == QLatin1String("SI"))
+    if (pagado == QLatin1String(INGRESOS_PAGADO_SI))
         return false;
     return verifactuEstadoIsUnsubmitted(verifactuEstadoFromString(verifactuEstado));
 }
@@ -1060,7 +1060,7 @@ bool voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString &has
               "WHERE n_recibo = :n AND hash = :h" + kAmountEditableWhere);
     q.bindValue(":est",   QStringLiteral(INGRESOS_ESTADO_ANULADO));
     q.bindValue(":vest",  verifactuEstadoToString(VerifactuEstado::Anulada));
-    q.bindValue(":fecha", QDate::currentDate().toString("dd-MM-yyyy"));
+    q.bindValue(":fecha", dbDateText(QDate::currentDate()));
     q.bindValue(":n",     nRecibo);
     q.bindValue(":h",     hash);
     // Only an open garment is voided here: never a paid, sent, cancelled or locked one.
@@ -1091,6 +1091,28 @@ bool ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo, bool *ok)
     if (ok) *ok = true;
     const bool paid = q.value(0).toInt() > 0;
     return paid;
+}
+
+TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok)
+{
+    if (ok) *ok = false;
+    TicketHeader header;
+    ConnectionScope scope(db);
+    QSqlQuery q(db);
+    // Constant across the rows of a ticket, so MIN is fine.
+    q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) FROM ingresos WHERE n_recibo = :num");
+    q.bindValue(":num", nRecibo);
+    if (!q.exec() || !q.first()) {
+        qWarning() << "ticketHeader: query failed for" << nRecibo << "-" << q.lastError().text();
+        return header;
+    }
+    if (ok) *ok = true;
+    if (q.value(0).isNull())
+        return header;
+    header.found = true;
+    header.client = q.value(0).toString();
+    header.receptionDate = q.value(1).toString();
+    return header;
 }
 
 // Runs the INSERT on an already open db; the callers open, close and own the transaction.
@@ -1450,7 +1472,7 @@ int applySettledVerifactuResult(QSqlDatabase &db, const QString &invoiceId, cons
             q.bindValue(":n", nRecibo);
             const bool read = q.exec() && q.next();
             const QString type = read ? q.value(0).toString() : QString();
-            const QDate date = read ? QDate::fromString(q.value(1).toString(), "dd-MM-yyyy") : QDate();
+            const QDate date = read ? parseDbDate(q.value(1).toString()) : QDate();
             q.finish();
             // Into an open period: a quarter closed meanwhile must not change.
             const QDate when = openPeriodDate(db, date);
@@ -1707,14 +1729,14 @@ bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<
               "  AND NOT " + closedQuarterSql(QStringLiteral(":fp2")));
     bool ok = true;
     for (auto it = amountByHash.cbegin(); ok && it != amountByHash.cend(); ++it) {
-        q.bindValue(":fp",     paymentDate.toString("dd-MM-yyyy"));
+        q.bindValue(":fp",     dbDateText(paymentDate));
         q.bindValue(":seq",    seq);
         q.bindValue(":imp",    moneyText(it.value()));
         q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
         q.bindValue(":id",     invoiceId);
         q.bindValue(":n",      nRecibo);
         q.bindValue(":h",      it.key());
-        q.bindValue(":fp2",    paymentDate.toString("dd-MM-yyyy"));
+        q.bindValue(":fp2",    dbDateText(paymentDate));
         if (!q.exec() || q.numRowsAffected() != 1) {
             qWarning() << "storeChargedGarments: garment" << it.key() << "of ticket" << nRecibo
                        << "not stored as paid (paid, voided or quarter closed meanwhile?) -" << q.lastError().text();
@@ -1758,7 +1780,7 @@ bool insertRectificativaRow(QSqlDatabase &db, const RectificativaRow &row)
     }
     ConnectionScope scope(db);
     if (!scope.isOpen()) return false;
-    const QString date = row.date.toString("dd-MM-yyyy");
+    const QString date = dbDateText(row.date);
     QSqlQuery q(db);
     // A rectificativa row carries the verifactu_* set IngresoGarmentRow does not; AEAT's
     // metadata is written by applyRectificativaResult on the reply.
@@ -1801,8 +1823,8 @@ bool resetRefusedRectificativa(QSqlDatabase &db, const RectificativaRow &row)
               "verifactu_rectification_type = :t, verifactu_estado = :pending, verifactu_error = '' "
               "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o AND verifactu_estado = :refused "
               "  AND NOT " + closedQuarterSql(QStringLiteral(":f2")));
-    q.bindValue(":f",       row.date.toString("dd-MM-yyyy"));
-    q.bindValue(":f2",      row.date.toString("dd-MM-yyyy"));
+    q.bindValue(":f",       dbDateText(row.date));
+    q.bindValue(":f2",      dbDateText(row.date));
     q.bindValue(":imp",     moneyText(QString::number(row.amount, 'f', 2)));
     q.bindValue(":t",       row.type);
     q.bindValue(":pending", verifactuEstadoToString(VerifactuEstado::NotSubmitted));
@@ -1936,25 +1958,25 @@ int expenseIvaRate(const QVariant &stored)
     if (stored.isNull())
         return -1;
     bool ok = false;
-    const double rate = stored.toString().trimmed().replace(',', '.').toDouble(&ok);
+    const double rate = parseDecimal(stored.toString(), &ok);
     return ok && rate >= 0.0 && rate == std::floor(rate) ? int(rate) : -1;
 }
 
 double garmentImporte(const QString &quantityText, const QString &sizeText, double unitPrice)
 {
-    const double quantity = quantityText.trimmed().replace(',', '.').toDouble();
+    const double quantity = parseDecimal(quantityText);
     // The price list is in cents; readGarmentPrice hands a float, so re-round first.
     double price = quantity * roundToCents(unitPrice);
     if (price < 0.0)
         return 0.0;
-    const double size = sizeText.trimmed().replace(',', '.').toDouble();
+    const double size = parseDecimal(sizeText);
     return qMax(0.0, roundToCents((size != 0.0) ? size * price : price));   // a negative size too
 }
 
 bool garmentUnmeasured(const QString &garment, const QString &sizeText)
 {
     return garment.contains(QLatin1String("m2"))
-           && QString(sizeText).trimmed().replace(',', '.').toDouble() <= 0.0;
+           && parseDecimal(sizeText) <= 0.0;
 }
 
 double roundToCents(double value)
@@ -1970,7 +1992,7 @@ QString moneyText(double value)
 
 QString moneyText(const QString &value)
 {
-    return moneyText(QString(value).trimmed().replace(',', '.').toDouble());
+    return moneyText(parseDecimal(value));
 }
 
 bool moneyParse(const QString &text, double *value)
@@ -1994,6 +2016,21 @@ QString displayMoney(double value)
 QString displayMoney(const QString &stored)
 {
     return displayMoney(moneyText(stored).toDouble());
+}
+
+QString displayEuro(double value)
+{
+    return displayMoney(value) + QStringLiteral(" €");
+}
+
+QString displayEuro(const QString &stored)
+{
+    return displayMoney(stored) + QStringLiteral(" €");
+}
+
+double parseDecimal(const QString &text, bool *ok)
+{
+    return text.trimmed().replace(QLatin1Char(','), QLatin1Char('.')).toDouble(ok);
 }
 
 QString displayDecimal(const QString &stored)
@@ -2058,7 +2095,7 @@ bool insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QStri
     q.bindValue(":servicio", servicio);
     q.bindValue(":descripcion", descripcion);
     q.bindValue(":empresa", empresa);
-    q.bindValue(":fecha", date.toString("dd-MM-yyyy"));
+    q.bindValue(":fecha", dbDateText(date));
     q.bindValue(":iva", iva);
     q.bindValue(":importe", moneyText(importe));
     if (!q.exec()) {
@@ -2478,7 +2515,7 @@ QString removeSpecialChars(const QString &str)
 // Bucket selectors for the detail collectors: a single period listing, or the
 // four quarters of a year keyed on the dd-MM-yyyy month.
 static int singleBucket(const QString &) { return 0; }
-static int quarterBucket(const QString &ddMMyyyy) { return (ddMMyyyy.mid(3, 2).toInt() + 2) / 3 - 1; }
+static int quarterBucket(const QString &ddMMyyyy) { return quarterOfMonth(ddMMyyyy.mid(3, 2).toInt()) - 1; }
 
 // Runs the shared income predicate over [start, end) and aggregates the rows by
 // n_recibo into buckets[bucketOf(fecha_pago)], so each bucket matches
@@ -2604,8 +2641,8 @@ static bool collectRegularizations(QSqlDatabase &db, QDate start, QDate end,
         RegularizationDetail &r = regs[it.value()];
         // Several cancelled payment events merge into one entry: keep the LATEST payment,
         // which is in this period exactly when any of them is (they precede the cancellation).
-        const QDate rowPago = QDate::fromString(q.value(2).toString(), "dd-MM-yyyy");
-        if (rowPago.isValid() && rowPago > QDate::fromString(r.fechaPago, "dd-MM-yyyy"))
+        const QDate rowPago = parseDbDate(q.value(2).toString());
+        if (rowPago.isValid() && rowPago > parseDbDate(r.fechaPago))
             r.fechaPago = q.value(2).toString();
         double amount = 0.0;
         if (!readPlainAmount(q.value(5).toString(), &amount)) {
@@ -2660,7 +2697,7 @@ QuarterlyDetails annualDetailsByQuarter(QSqlDatabase &db, int year, bool *ok)
 
 bool quarterIsClosed(QSqlDatabase &db, QDate date)
 {
-    return date.isValid() && quarterIsClosed(db, (date.month() + 2) / 3, date.year());
+    return date.isValid() && quarterIsClosed(db, quarterOfMonth(date.month()), date.year());
 }
 
 QDate openPeriodDate(QSqlDatabase &db, QDate preferred)
@@ -2669,7 +2706,7 @@ QDate openPeriodDate(QSqlDatabase &db, QDate preferred)
         return preferred;
     QDate day = QDate::currentDate();
     for (int quarters = 0; quarters < 8 && quarterIsClosed(db, day); ++quarters)
-        day = QDate(day.year(), ((day.month() - 1) / 3) * 3 + 1, 1).addMonths(3);
+        day = quarterFirstDay(quarterOfMonth(day.month()), day.year()).addMonths(3);
     if (quarterIsClosed(db, day))
         qWarning() << "openPeriodDate: no open quarter in two years from today - using" << day;
     return day;
@@ -2705,7 +2742,7 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
               "  AND COALESCE(verifactu_estado, '') != :estado2");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Anulada));
     q.bindValue(":estado2", verifactuEstadoToString(VerifactuEstado::Anulada));
-    q.bindValue(":fecha",  cancelDate.toString("dd-MM-yyyy"));
+    q.bindValue(":fecha",  dbDateText(cancelDate));
     q.bindValue(":cxml",   cancelXml);
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
@@ -2737,7 +2774,7 @@ bool markTicketRectified(QSqlDatabase &db, const QString &nRecibo, QDate rectifi
               "WHERE n_recibo = :num AND pagado = 'SI' "
               "AND COALESCE(verifactu_estado, '') NOT IN ('ANULADA', 'RECTIFICADA')");
     q.bindValue(":estado", verifactuEstadoToString(VerifactuEstado::Rectificada));
-    q.bindValue(":fecha",  rectificationDate.toString("dd-MM-yyyy"));
+    q.bindValue(":fecha",  dbDateText(rectificationDate));
     q.bindValue(":num",    nRecibo);
     const bool ok = q.exec() && q.numRowsAffected() > 0;   // no paid row matched = nothing marked
     if (!ok)

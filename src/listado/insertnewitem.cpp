@@ -57,7 +57,7 @@ void InsertNewItem::onSaveClicked()
     if (!insertNewItemToTable(db, { name, m_lePhone->text().trimmed(), m_leMobile->text().trimmed(),
                                     m_leAddress->text().trimmed() }, "clientes")) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo guardar el cliente.")
-                             + "<br>Consulte el log (Ayuda → Log de depuración).");
+                             + "<br>Consulte el log (Ayuda \u2192 Log de depuración).");
         return;
     }
     accept();

@@ -92,7 +92,7 @@ bool PendingSubmitsDialog::loadPending()
         Entry e;
         e.ticketNum  = ev.nRecibo;
         e.seq        = ev.seq;
-        e.fechaPago  = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+        e.fechaPago  = parseDbDate(ev.fechaPago);
         e.client     = ev.cliente;
         e.importe    = ev.importe;
         m_entries.append(e);
@@ -115,10 +115,10 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
     m_table->setItem(row, COL_N_RECIBO,
         new QTableWidgetItem(verifactuInvoiceId(e.ticketNum, e.seq)));
     m_table->setItem(row, COL_FECHA,
-        new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
+        new QTableWidgetItem(dbDateText(e.fechaPago)));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
-        new QTableWidgetItem(displayMoney(e.importe) + " €"));
+        new QTableWidgetItem(displayEuro(e.importe)));
 
     auto *cell = new QWidget(m_table);
     auto *h = new QHBoxLayout(cell);

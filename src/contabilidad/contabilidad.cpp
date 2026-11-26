@@ -192,7 +192,7 @@ QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int u
     if (mode == Trimestral)
         return quarterLine(unit);
     if (mode == Mensual) {
-        const int q = (unit - 1) / 3 + 1;
+        const int q = quarterOfMonth(unit);
         return "El mes " + QString::number(unit) + " de " + QString::number(year)
                + " pertenece al trimestre " + QString::number(q) + ", que "
                + (quarterIsClosed(db, QDate(year, unit, 1)) ? "está bloqueado." : "no está bloqueado.");
@@ -213,7 +213,7 @@ void Contabilidad::onCheckLockClicked()
 
 QDate Contabilidad::quarterLastDay(int quarter, int year)
 {
-    return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1);
+    return ::quarterLastDay(quarter, year);
 }
 
 bool Contabilidad::revertConfirmed(const QString &quarterName)
@@ -286,7 +286,7 @@ void Contabilidad::onGenerateClicked()
                 qDebug() << "Contabilidad: trim" << trim << "year" << year << "not ended, not locked";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           + warnHtml("El trimestre no se ha bloqueado: todavía no ha terminado. Se puede bloquear "
-                                     "a partir de su último día, el " + quarterLastDay(trim, year).toString("dd-MM-yyyy") + ".");
+                                     "a partir de su último día, el " + dbDateText(quarterLastDay(trim, year)) + ".");
             } else if (!closeQuarter(db, trim, year, QFileInfo(file).fileName())) {
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           + errorHtml("No se pudo bloquear el trimestre.") + " Vuelva a intentarlo.";
@@ -334,7 +334,7 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledRe
     const int year = m_sbYear->value();
     const double ivaRate = AppSettings::ivaRate();
     const bool withDetail = m_chkDetail->isChecked();
-    const QString detailTitle = withDetail ? QStringLiteral(" · Detalle") : QString();
+    const QString detailTitle = withDetail ? QStringLiteral(" \u00b7 Detalle") : QString();
     QString contabilidadHtml;
     invalidAmounts = 0;
     m_dataReadFailed = false;
@@ -356,14 +356,14 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledRe
 
         QString title, subtitle = periodSubtitle(0);
         if (currentMode() == Trimestral) {
-            title = "Contabilidad - Trimestre " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
+            title = "Contabilidad - Trimestre " + QString::number(m_sbPeriod->value()) + " \u00b7 " + QString::number(year);
         }
         else {
             // Closing is quarterly: the month reads closed when its quarter is, even a
             // month without rows.
             const bool cerrada = quarterIsClosed(db, QDate(year, m_sbPeriod->value(), 1));
-            title = "Reporte Mensual - Mes " + QString::number(m_sbPeriod->value()) + " · " + QString::number(year);
-            subtitle += cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada";
+            title = "Reporte Mensual - Mes " + QString::number(m_sbPeriod->value()) + " \u00b7 " + QString::number(year);
+            subtitle += cerrada ? " \u00b7 Contabilidad cerrada" : " \u00b7 Contabilidad no cerrada";
         }
         contabilidadHtml = ReportHtml::documentOpen(title + detailTitle, subtitle)
                 + renderSection(figuresFromDetails(income, regs, expenses, ivaRate, start, endExclusive),
@@ -392,7 +392,7 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledRe
             annual.accumulate(f);
             invalidAmounts += invalidAmountCount(details.income[i], details.regularizations[i], details.expenses[i]);
             contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
-                    + (cerrada ? " · Contabilidad cerrada" : " · Contabilidad no cerrada") + "</h2>"
+                    + (cerrada ? " \u00b7 Contabilidad cerrada" : " \u00b7 Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
         }
         annual.ingTickets = yearTicketCount(details, year);   // distinct over the year, not the quarterly sum
@@ -449,7 +449,7 @@ QString Contabilidad::periodSubtitle(int trimForYearConfig)
 {
     QDate start, endExclusive;
     periodRange(trimForYearConfig, start, endExclusive);
-    return "Periodo: " + start.toString("dd-MM-yyyy") + " a " + endExclusive.addDays(-1).toString("dd-MM-yyyy");
+    return "Periodo: " + dbDateText(start) + " a " + dbDateText(endExclusive.addDays(-1));
 }
 
 // The IVA of a ticket's invoices as registered: each invoice's cuota on its own (splitGross).
@@ -469,7 +469,7 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
 {
     PeriodFigures f;
     f.ingImporte = ingImporte;
-    f.ingBase    = f.ingImporte / (1.0 + ivaRate / 100.0);
+    f.ingBase    = taxBaseFromGross(f.ingImporte, ivaRate);
     f.ingIva     = f.ingImporte - f.ingBase;
 
     f.gas10Importe = gas10Importe;
@@ -548,7 +548,7 @@ int Contabilidad::netTicketCount(const QVector<IncomeTicketDetail> &income,
     }
     QSet<QString> regularized;
     for (const RegularizationDetail &r : regularizations) {
-        const QDate paid = QDate::fromString(r.fechaPago, QStringLiteral("dd-MM-yyyy"));
+        const QDate paid = parseDbDate(r.fechaPago);
         // An unreadable payment date counts as this period: its money is netted, so its ticket is too.
         if (paid.isValid() && (paid < periodStart || paid >= periodEnd))
             continue;                      // an earlier period's payment: does not offset this period's sales

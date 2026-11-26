@@ -1372,6 +1372,82 @@ private slots:
 
     // The single source of truth for the AEAT InvoiceID format (used at submit,
     // persist, cancel and reprint). seq 0 -> bare n_recibo; seq>0 -> "<n>-<seq>".
+    void test_dbDate_roundTripsTheStoredText()
+    {
+        QCOMPARE(dbDateText(QDate(2026, 3, 5)), QStringLiteral("05-03-2026"));
+        QCOMPARE(parseDbDate(QStringLiteral("05-03-2026")), QDate(2026, 3, 5));
+        QVERIFY(!parseDbDate(QString()).isValid());
+        QVERIFY(!parseDbDate(QStringLiteral("2026-03-05")).isValid());
+        QVERIFY(!parseDbDate(QStringLiteral("31-02-2026")).isValid());
+        QCOMPARE(dbDateText(QDate()), QString());
+    }
+
+    void test_parseDecimal_acceptsTheCommaAndTrims()
+    {
+        bool ok = false;
+        QCOMPARE(parseDecimal(QStringLiteral(" 2,5 "), &ok), 2.5);
+        QVERIFY(ok);
+        QCOMPARE(parseDecimal(QStringLiteral("7.25"), &ok), 7.25);
+        QVERIFY(ok);
+        QCOMPARE(parseDecimal(QStringLiteral("abc"), &ok), 0.0);
+        QVERIFY(!ok);
+        QCOMPARE(parseDecimal(QString(), &ok), 0.0);
+        QVERIFY(!ok);
+        QCOMPARE(parseDecimal(QStringLiteral("3,5")), 3.5);   // no ok pointer
+    }
+
+    void test_displayEuro_addsTheSpaceAndTheSign()
+    {
+        QCOMPARE(displayEuro(28.405), displayMoney(28.405) + QStringLiteral(" €"));
+        QCOMPARE(displayEuro(QStringLiteral("12.5")), QStringLiteral("12,50 €"));
+        QCOMPARE(displayEuro(0.0), QStringLiteral("0,00 €"));
+    }
+
+    void test_quarterArithmetic()
+    {
+        QCOMPARE(quarterOfMonth(1), 1);
+        QCOMPARE(quarterOfMonth(3), 1);
+        QCOMPARE(quarterOfMonth(4), 2);
+        QCOMPARE(quarterOfMonth(9), 3);
+        QCOMPARE(quarterOfMonth(12), 4);
+        QCOMPARE(quarterFirstDay(1, 2026), QDate(2026, 1, 1));
+        QCOMPARE(quarterFirstDay(4, 2026), QDate(2026, 10, 1));
+        QCOMPARE(quarterLastDay(1, 2026), QDate(2026, 3, 31));
+        QCOMPARE(quarterLastDay(2, 2026), QDate(2026, 6, 30));
+        QCOMPARE(quarterLastDay(4, 2024), QDate(2024, 12, 31));
+        for (int month = 1; month <= 12; ++month) {
+            const int quarter = quarterOfMonth(month);
+            QVERIFY(QDate(2026, month, 1) >= quarterFirstDay(quarter, 2026));
+            QVERIFY(QDate(2026, month, 1) <= quarterLastDay(quarter, 2026));
+        }
+    }
+
+    void test_ticketHeader_foundMissingAndUnreadable()
+    {
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, pagado, estado) "
+             "VALUES ('0', '501', 'Ana Gil', '04-05-2026', 'NO', ''), ('0', '501', 'Ana Gil', '04-05-2026', 'NO', '')");
+        bool ok = false;
+        TicketHeader header = ticketHeader(m_db, QStringLiteral("501"), &ok);
+        QVERIFY(ok);
+        QVERIFY(header.found);
+        QCOMPARE(header.client, QStringLiteral("Ana Gil"));
+        QCOMPARE(header.receptionDate, QStringLiteral("04-05-2026"));
+        header = ticketHeader(m_db, QStringLiteral("999"), &ok);
+        QVERIFY(ok);
+        QVERIFY(!header.found);
+        QVERIFY(!m_db.isOpen());
+        {
+            QTemporaryDir emptyDir;
+            QSqlDatabase bad = QSqlDatabase::addDatabase("QSQLITE", "ticket_header_bad");
+            bad.setDatabaseName(emptyDir.filePath("empty.db"));
+            header = ticketHeader(bad, QStringLiteral("501"), &ok);
+            QVERIFY(!ok);
+            QVERIFY(!header.found);
+            bad.close();
+        }
+        QSqlDatabase::removeDatabase("ticket_header_bad");
+    }
+
     void test_verifactuInvoiceId()
     {
         QCOMPARE(verifactuInvoiceId("3245", 0), QStringLiteral("3245"));

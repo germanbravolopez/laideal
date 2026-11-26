@@ -139,7 +139,7 @@ void AeatExportDialog::onExportClicked()
         return;
     }
 
-    const QString period = tr("%1 a %2").arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy"));
+    const QString period = tr("%1 a %2").arg(dbDateText(from), dbDateText(to));
     QString message = count == 0
         ? UiKit::warnHtml(tr("No hay registros enviados a AEAT del %1.").arg(period)) + "<br>" + tr("El archivo se ha creado vacío.")
         : count == 1 ? UiKit::okHtml(tr("1 registro exportado (%1).").arg(period))

@@ -106,21 +106,15 @@ void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
 
     // Header: cliente + fecha_recepcion. Constants across rows of the same
     // ticket, so MIN is fine.
-    QString client, date;
-    {
-        ConnectionScope scope(db);
-        QSqlQuery q(db);
-        q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) "
-                  "FROM ingresos WHERE n_recibo = :num");
-        q.bindValue(":num", ticketNum);
-        if (!q.exec() || !q.first() || q.value(0).isNull()) {
-            m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
-            return;
-        }
-        client = q.value(0).toString();
-        date   = q.value(1).toString();
+    bool headerOk = false;
+    const TicketHeader header = ticketHeader(db, ticketNum, &headerOk);
+    if (!headerOk || !header.found) {
+        m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
+        return;
     }
-    m_receptionDate = QDate::fromString(date, "dd-MM-yyyy");
+    const QString client = header.client;
+    const QString date   = header.receptionDate;
+    m_receptionDate = parseDbDate(date);
 
     QVector<SubmittedInvoiceEvent> submitted;
     if (!submittedInvoiceEvents(db, ticketNum, submitted)) {
@@ -134,7 +128,7 @@ void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
         e.importe     = s.importe;
         e.csv         = s.csv;
         e.estado      = s.estado;
-        e.invoiceDate = QDate::fromString(s.fechaPago, "dd-MM-yyyy");
+        e.invoiceDate = parseDbDate(s.fechaPago);
         m_events.append(e);
     }
 
@@ -196,9 +190,9 @@ void CancelInvoiceDialog::rebuildTable()
         const Event &e = m_events[row];
         m_table->setItem(row, COL_INVOICE_ID, new QTableWidgetItem(e.invoiceId));
         m_table->setItem(row, COL_DATE, new QTableWidgetItem(
-            e.invoiceDate.isValid() ? e.invoiceDate.toString("dd-MM-yyyy") : QStringLiteral("-")));
+            e.invoiceDate.isValid() ? dbDateText(e.invoiceDate) : QStringLiteral("-")));
         m_table->setItem(row, COL_IMPORTE,
-            new QTableWidgetItem(displayMoney(e.importe) + " €"));
+            new QTableWidgetItem(displayEuro(e.importe)));
         m_table->setItem(row, COL_ESTADO,
             new QTableWidgetItem(verifactuEstadoDisplay(e.estado)));
         m_table->setItem(row, COL_CSV,
@@ -315,7 +309,7 @@ void CancelInvoiceDialog::armCancellation(int row)
     const Event &e = m_events[row];
     if (m_verifactu && m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate)) {
         m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la contabilidad la factura %1 del %2 por %3 €.")
-                                                 .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
+                                                 .arg(e.invoiceId.toHtmlEscaped(), dbDateText(e.invoiceDate),
                                                       displayMoney(e.importe)))
                              + "<br>" + tr("Es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
                                            "nada. La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> "
@@ -323,7 +317,7 @@ void CancelInvoiceDialog::armCancellation(int row)
         return;
     }
     m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la AEAT la factura %1 del %2 por %3 €.")
-                                             .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
+                                             .arg(e.invoiceId.toHtmlEscaped(), dbDateText(e.invoiceDate),
                                                   displayMoney(e.importe)))
                          + "<br>" + tr("La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> para "
                                        "enviarla, o busque otro ticket para no hacer nada."));
@@ -392,10 +386,10 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     m_pendingFallbackDate = QDate();
     if (result.status == VerifactuResult::ERROR && fallback.isValid()) {
         qWarning() << "CancelInvoiceDialog: AEAT rejected the cancellation of" << e.invoiceId
-                   << "on" << e.invoiceDate.toString("dd-MM-yyyy") << "-" << result.errorDescription
-                   << "- retrying with the reception date" << fallback.toString("dd-MM-yyyy");
+                   << "on" << dbDateText(e.invoiceDate) << "-" << result.errorDescription
+                   << "- retrying with the reception date" << dbDateText(fallback);
         m_lblResult->setText(tr("Reintentando la anulación de %1 con la fecha de recepción (%2)...")
-                                 .arg(e.invoiceId.toHtmlEscaped(), fallback.toString("dd-MM-yyyy")));
+                                 .arg(e.invoiceId.toHtmlEscaped(), dbDateText(fallback)));
         m_firstRejection   = result.errorDescription;
         m_pendingCancelRow = row;
         m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback);

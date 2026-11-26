@@ -11,7 +11,6 @@ class QComboBox;
 class QDateEdit;
 class QGroupBox;
 class QLineEdit;
-class QSqlQueryModel;
 namespace UiKit { class ResultPanel; }
 
 // Tickets -> Añadir nuevas prendas: adds one garment to an existing receipt
@@ -60,7 +59,6 @@ private:
     bool saveGarment();
 
     QSqlDatabase db;
-    QSqlQueryModel *m_ticketModel = nullptr;
     bool m_ticketFound = false;
     QString m_saveError;        // set by saveGarment when it refuses with its own message
     QString m_searchedTicket;   // the number the search checked; a save must use the same one

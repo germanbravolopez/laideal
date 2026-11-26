@@ -35,7 +35,7 @@ PayloadInfo inspectPayload(const QString &payload)
         if (token == QXmlStreamReader::StartElement && info.invoiceDate.isEmpty()) {
             if (r.name().startsWith(u"FechaExpedicionFactura")) {
                 const QString text = r.readElementText();
-                if (QDate::fromString(text, "dd-MM-yyyy").isValid())
+                if (parseDbDate(text).isValid())
                     info.invoiceDate = text;
             }
         }
@@ -56,8 +56,8 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
     w.setAutoFormatting(true);
     w.writeStartDocument();
     w.writeStartElement("RegistrosFacturacionLaIdeal");
-    w.writeAttribute("fechaDesde", from.toString("dd-MM-yyyy"));
-    w.writeAttribute("fechaHasta", to.toString("dd-MM-yyyy"));
+    w.writeAttribute("fechaDesde", dbDateText(from));
+    w.writeAttribute("fechaHasta", dbDateText(to));
     w.writeAttribute("generadoEl", QDateTime::currentDateTime().toString(Qt::ISODate));
     w.writeAttribute("nif",        nif);
     w.writeAttribute("emisor",     issuerName);
@@ -66,7 +66,7 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
     static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
 
     const auto inRange = [&from, &to](const QString &ddMMyyyy) {
-        const QDate d = QDate::fromString(ddMMyyyy, "dd-MM-yyyy");
+        const QDate d = parseDbDate(ddMMyyyy);
         return d.isValid() && d >= from && d <= to;
     };
     // Writes the payload inside the open element: its raw bytes when it is a
