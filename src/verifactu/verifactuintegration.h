@@ -118,15 +118,11 @@ public:
     QDate productionStartDate() const;
     // The owner has just entered production: the period begins now.
     void markProductionStarted();
-    // The boundary is the day production began: an invoice dated before it was issued in
-    // AEAT's test environment (or by the gateway) and the real AEAT never held it. The
-    // reason such a date cannot go to the real AEAT, or empty: asked before a new invoice
-    // is stored as paid, and applied to every submission (a retry of an old ticket).
+    // Why a new invoice cannot carry this date (before the day production began: the real
+    // AEAT never held that period), or empty. Asked before a ticket is stored as paid.
     QString dateBeforeProductionReason(const QDate &invoiceDate) const;
-    // An existing invoice the real AEAT never held, so nothing about it is sent there
-    // (Anular cancels it in the books): the direct client is in production, holds no
-    // production registration of it, and it is dated before that day - or, on the day
-    // itself, AEAT's test environment accepted it before the switch.
+    // An existing invoice the real AEAT never held (dated before production, or accepted
+    // by its test environment): nothing about it is sent there; Anular cancels it in the books.
     bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate) const;
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
@@ -165,6 +161,13 @@ private:
     QDateTime m_sessionStart;             // the first initialize(): later backends are the same session
 
     void loadEmitterConfiguration();
+    // Each returns true after setting m_lastError, when the operation must not go on.
+    bool refusesChainedRecord(const char *operation);
+    bool refusesUnconfigured(const char *operation);
+    bool refusesBeforeProduction(const QString &invoiceNumber, const QDate &invoiceDate, const char *operation);
+    bool isBeforeProductionStart(const QDate &invoiceDate) const;
+    VerifactuInvoice invoiceHeader(const QString &number, const QDate &date, VerifactuInvoice::InvoiceType type,
+                                   const QString &description) const;
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,
                                        double taxRate, const QString &description) const;
 };

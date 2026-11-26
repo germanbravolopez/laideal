@@ -8,10 +8,6 @@ VerifactuInvoice::VerifactuInvoice()
 {
 }
 
-VerifactuInvoice::~VerifactuInvoice()
-{
-}
-
 void VerifactuInvoice::computeTotals(double &amount, double &taxAmount) const
 {
     qint64 baseCents = 0;
@@ -116,7 +112,7 @@ QString VerifactuInvoice::getValidationError() const
     return m_validationError;
 }
 
-QString VerifactuInvoice::invoiceTypeToString(InvoiceType type) const
+QString VerifactuInvoice::invoiceTypeToString(InvoiceType type)
 {
     switch (type) {
         case SIMPLIFIED:       return "F2";  // simplified invoice

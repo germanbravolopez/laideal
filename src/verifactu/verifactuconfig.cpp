@@ -71,6 +71,10 @@ QString VerifactuConfig::getSystemVersion() const
     return m_systemVersion;
 }
 
+// The gateway has one endpoint for both environments (the service key decides).
+static const QString kEndpoint = QStringLiteral("https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices");
+static const QString kValidationProd = QStringLiteral("https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR");
+static const QString kValidationTest = QStringLiteral("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR");
 static QString s_endpointOverride;
 
 void VerifactuConfig::setEndpointOverride(const QString &baseUrl)
@@ -82,12 +86,12 @@ QString VerifactuConfig::getEndpointUrl() const
 {
     if (!s_endpointOverride.isEmpty())
         return s_endpointOverride;
-    return (m_environment == TESTING ? TEST_ENDPOINT : PROD_ENDPOINT);
+    return kEndpoint;
 }
 
 QString VerifactuConfig::getValidationUrl() const
 {
-    return (m_environment == TESTING ? AEAT_VALIDATION_TEST : AEAT_VALIDATION_PROD);
+    return (m_environment == TESTING ? kValidationTest : kValidationProd);
 }
 
 QString VerifactuConfig::getQrUrl() const
