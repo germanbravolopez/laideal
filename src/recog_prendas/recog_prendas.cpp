@@ -17,6 +17,7 @@
 #include <QDateEdit>
 #include <QFormLayout>
 #include <QGridLayout>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QLineEdit>
 #include <QSharedPointer>
@@ -711,6 +712,8 @@ void RecogPrendas::runSearch(const QString &query)
                 [this](const QModelIndex &current) {
             if (!current.isValid() || !proxyModel)
                 return;
+            if (QGuiApplication::mouseButtons() != Qt::NoButton)
+                return;   // a click: the view's clicked signal loads the row
             if (isCellClicked && proxyModel->mapToSource(current).row() == rowClickedCell)
                 return;   // already loaded: keep what the operator typed
             on_tableView_clicked(current);
@@ -862,6 +865,7 @@ void RecogPrendas::selectSourceRow(int sourceRow)
 // read-only lock): the single source of truth for them.
 void RecogPrendas::loadRow(int sourceRow)
 {
+    ++rowLoadCount;
     rowClickedCell = sourceRow;
     updateRowClickedToFields();
     isCellClicked = true;

@@ -218,6 +218,24 @@ private slots:
             QMetaObject::invokeMethod(&pending, "accept");
             QVERIFY(s->aeatDirectProduction());
         }
+        // ... and while the real AEAT's refused invoices are still to be resent or cancelled.
+        {
+            SettingsDialog refused;
+            refused.setDirectPendingCount(0);
+            refused.setProductionRefusedCount(2);
+            refused.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&refused, "accept");
+            QVERIFY(s->aeatDirectProduction());
+
+            SettingsDialog leavingDirect;
+            leavingDirect.setProductionRefusedCount(2);
+            auto *connection = leavingDirect.findChild<QComboBox *>("cbConnection");
+            connection->setCurrentIndex(connection->findData("irenesolutions"));
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&leavingDirect, "accept");
+            QVERIFY(s->verifactuDirectAeat() && s->aeatDirectProduction());
+        }
         {
             SettingsDialog leaving;
             leaving.setDirectPendingCount(0);

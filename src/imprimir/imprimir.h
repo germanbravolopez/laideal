@@ -24,6 +24,11 @@ namespace UiKit { class ResultPanel; }
 
 // `ingresos` column indices come from sql_lite.h (INGRESOS_COL_*).
 
+// A QR received as an image, no wider than `maxWidth`: shrunk by the smallest whole factor that
+// keeps every module exact (each block of that size a single colour, one pixel kept per block);
+// else resampled to fit and cut to black and white again (logged). A fitting image is returned as is.
+QImage shrinkReceivedQr(const QImage &qr, int maxWidth);
+
 // Two roles. As a dialog (Imprimir -> Recibo / Factura / Factura completa) it is
 // built in code with the shared UiKit style: the receipt number, the full-invoice
 // details (address, DNI), the choice among several partial-payment invoices and

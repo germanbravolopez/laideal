@@ -47,6 +47,8 @@ public:
     QString rejectionHtml(const QString &invoiceId, const VerifactuResult &result) const;
     // The status bar notices: the direct client's AEAT environment, the records left to send.
     Notice aeatEnvironmentNotice() const;
+    // Its text: decided by the environment the client sends to, never by whether the start day is known.
+    static QString aeatEnvironmentText(const QString &environmentName, const QDate &productionStart);
     Notice unsentRecordsNotice() const;
 
     // Configuración's tests. Each takes the dialog as parent; none touches the ticket form.
