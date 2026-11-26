@@ -18,10 +18,9 @@ struct VerifactuResult;
 enum class VerifactuEstado;
 
 // Configured once at startup by main() via setDbPath().
-// All sql_lite functions expand DB_PATH to the runtime-configured value.
+// dbPath() returns the runtime-configured value.
 void    setDbPath(const QString &path);
 QString dbPath();
-#define DB_PATH dbPath()
 
 // Opens the connection if it is closed and closes it again on destruction only if this scope
 // opened it, so a caller's open connection survives. Declare it before any QSqlQuery.

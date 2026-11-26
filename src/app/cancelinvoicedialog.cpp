@@ -355,16 +355,11 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     m_pendingCancelId.clear();
     const int row = m_pendingCancelRow;
     m_pendingCancelRow = -1;
-    if (row < 0) {
-        setActionsEnabled(true);
-        return;
-    }
     // The invoice the request was sent for, not whatever row `row` holds now.
     Event &e = m_pendingEvent;
-    // Shows the new estado on the table row of that invoice, when the window still lists it.
+    // Shows the new estado on the table row of that invoice. The reply belongs to the loaded
+    // ticket: searching is refused while a request is pending.
     const auto showEstado = [this](const Event &sent, VerifactuEstado estado) {
-        if (m_loadedTicket != m_pendingTicket)
-            return;
         for (Event &shown : m_events)
             if (shown.seq == sent.seq)
                 shown.estado = verifactuEstadoToString(estado);

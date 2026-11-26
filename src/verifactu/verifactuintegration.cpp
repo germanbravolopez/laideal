@@ -455,7 +455,6 @@ void VerifactuIntegration::loadEmitterConfiguration()
     QString serviceKey  = settings->verifactuServiceKey();
 
     m_manager->getConfig()->setEmitterData(emitterNIF, emitterName);
-    m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION));
     m_manager->getConfig()->setServiceKey(serviceKey);
 
     VerifactuConfig::Environment env = settings->verifactuProduction()

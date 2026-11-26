@@ -66,6 +66,7 @@ target_link_libraries(test_facturas PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql       # facturas.h includes <QSqlQueryModel>
     facturas
     sql_lite                         # TestSchema (throwaway DB for the dialog tests)
+    verifactu_types                  # header-only: splitGross
 )
 add_test(NAME facturas
     COMMAND test_facturas -o ${CMAKE_BINARY_DIR}/test-results-facturas.xml,junitxml -o -,txt)

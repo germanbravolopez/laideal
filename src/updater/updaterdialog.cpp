@@ -38,11 +38,11 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
         .arg(Updater::currentVersion(), latestVersion));
     layout->addWidget(m_header);
 
-    m_notes = new QTextEdit(this);
-    m_notes->setReadOnly(true);
-    m_notes->setMarkdown(releaseNotes);
-    m_notes->setMinimumHeight(200);
-    layout->addWidget(m_notes);
+    auto *notes = new QTextEdit(this);
+    notes->setReadOnly(true);
+    notes->setMarkdown(releaseNotes);
+    notes->setMinimumHeight(200);
+    layout->addWidget(notes);
 
     m_progress = new QProgressBar(this);
     m_progress->setRange(0, 100);

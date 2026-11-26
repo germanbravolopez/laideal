@@ -30,7 +30,6 @@ class GenListado : public QDialog
 public:
     explicit GenListado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QAbstractItemModel *model = nullptr;
-    QString table_name;
     // Writes the prendas PDF; false when it could not be written (see printedFile()).
     bool print_table();
     QString printedFile() const { return m_lastPrintedFile; }

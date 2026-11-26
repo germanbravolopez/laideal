@@ -261,8 +261,8 @@ void Listado::populateTable()
         if (tableName == "ingresos") {
             setColumnDelegate(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
             setColumnDelegate(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
-            setColumnDelegate(INGRESOS_COL_PAGADO, new TextColorDelegate(table_listado, this));
-            setColumnDelegate(INGRESOS_COL_ESTADO, new TextColorDelegate(table_listado, this));
+            setColumnDelegate(INGRESOS_COL_PAGADO, new TextColorDelegate(this));
+            setColumnDelegate(INGRESOS_COL_ESTADO, new TextColorDelegate(this));
             setColumnDelegate(INGRESOS_COL_VERIFACTU_URL_QR, new LinkDelegate(this));
             table_listado->horizontalHeader()->moveSection(INGRESOS_COL_VERIFACTU_URL_QR, INGRESOS_COL_VERIFACTU_ERROR);
             placeIngresosDateColumns(table_listado->horizontalHeader());
@@ -440,7 +440,6 @@ void Listado::on_actionGenerar_pdf_con_el_listado_triggered()
     } else if (tableName == "prendas") {
         GenListado generator(db, this);
         generator.model = table_listado->model();
-        generator.table_name = tableName;
         if (generator.print_table())
             m_lblResult->setText(UiKit::okHtml("Listado de prendas generado en PDF.") + "<br>"
                                  + UiKit::fileLinkHtml(generator.printedFile()));

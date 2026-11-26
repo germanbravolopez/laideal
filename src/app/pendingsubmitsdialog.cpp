@@ -3,15 +3,12 @@
 #include "appsettings.h"
 #include "sql_lite.h"
 #include "uikit.h"
-#include "verifactutypes.h"
 
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
-#include <QSqlError>
-#include <QSqlQuery>
 #include <QTableWidget>
 #include <QVBoxLayout>
 

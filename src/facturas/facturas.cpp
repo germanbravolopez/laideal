@@ -240,11 +240,6 @@ bool Facturas::saveFactura()
                                 m_leImporte->text().trimmed());
 }
 
-double Facturas::taxAmountFromGross(double gross, double ivaRate)
-{
-    return gross * (1.0 - 1.0 / (1.0 + ivaRate / 100.0));
-}
-
 void Facturas::updateTaxSplit()
 {
     double gross = 0.0;

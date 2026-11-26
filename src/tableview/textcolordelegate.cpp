@@ -3,11 +3,9 @@
 #include "uikit.h"
 #include <QApplication>
 #include <QPainter>
-#include <QTableView>
 
-TextColorDelegate::TextColorDelegate(QTableView* tableView, QObject* parent) : QStyledItemDelegate(parent)
+TextColorDelegate::TextColorDelegate(QObject* parent) : QStyledItemDelegate(parent)
 {
-    Q_UNUSED(tableView)
 }
 
 TextColorDelegate::TextColor TextColorDelegate::classify(const QString &cellText, const QString &rowEstado,

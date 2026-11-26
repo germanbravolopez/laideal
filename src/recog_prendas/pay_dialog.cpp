@@ -258,7 +258,6 @@ void PayDialog::onCobrarClicked()
              << "rows=" << hashes.size() << "total=" << total;
 
     m_pendingSeq        = seq;
-    m_pendingHashes     = hashes;
     m_pendingAmounts    = amounts;
     m_pendingFechaPago  = fechaPago;
 

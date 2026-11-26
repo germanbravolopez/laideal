@@ -6,7 +6,6 @@
 #include <QUrl>
 
 class QLabel;
-class QTextEdit;
 class QProgressBar;
 class QPushButton;
 class Updater;
@@ -47,7 +46,6 @@ private:
 
     QLabel       *m_header;
     UiKit::ResultPanel *m_lblResult = nullptr;
-    QTextEdit    *m_notes;
     QProgressBar *m_progress;
     QPushButton  *m_btnUpdate;
     QPushButton  *m_btnLater;

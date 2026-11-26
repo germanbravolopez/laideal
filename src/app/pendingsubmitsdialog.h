@@ -9,7 +9,6 @@
 #include <QVector>
 
 class QTableWidget;
-class QPushButton;
 
 // Startup recovery for the durability gap left by the async Verifactu submit
 // path: a row stays at verifactu_estado='PENDIENTE' when the app is closed or

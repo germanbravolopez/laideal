@@ -89,7 +89,6 @@ public:
     // IVA rate (%) on ingresos: fixed at 21 by business decision, no longer
     // configurable. No settings key holds it, so a stray value in the JSON can never
     // alter tickets, AEAT submissions or past Contabilidad reports.
-    static constexpr double kIngresosIvaRate = 21.0;
     static double ivaRate() { return kIngresosIvaRate; }
 
     // --- Verifactu ---
@@ -178,6 +177,7 @@ public:
     void    setLastStartedVersion(const QString &v);
 
 private:
+    static constexpr double kIngresosIvaRate = 21.0;
     AppSettings();
     void migrateFromLegacyFiles();
     // Folds legacy {reports.contabilidad_path, reports.listados_*_path,

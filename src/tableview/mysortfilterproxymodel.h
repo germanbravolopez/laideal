@@ -2,7 +2,6 @@
 #define MYSORTFILTERPROXYMODEL_H
 
 #include <QDate>
-#include <QRegularExpression>
 #include <QSet>
 #include <functional>
 #include <QSortFilterProxyModel>

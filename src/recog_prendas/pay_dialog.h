@@ -39,7 +39,6 @@ public:
     // Why the stored payment's invoice was not sent (empty when it was): it stays
     // PENDIENTE and the start-up recovery resends it.
     QString notSentReason() const { return m_notSentReason; }
-    QDate paymentDate() const { return m_pendingFechaPago; }
 
 signals:
     // Emitted when the bounded wait expires with the request still in flight.
@@ -83,7 +82,6 @@ private:
     // In-flight submission state - non-empty only between submit and reply.
     QString     m_pendingReqId;
     int         m_pendingSeq = -1;
-    QStringList m_pendingHashes;
     QHash<QString, QString> m_pendingAmounts;   // hash -> amount charged (cents)
     QString                 m_notSentReason;
     QDate       m_pendingFechaPago;

@@ -98,10 +98,6 @@ bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QS
     if (!OpenPrinterW(const_cast<LPWSTR>(wQueue.c_str()), &hPrinter, nullptr))
         return fail(QStringLiteral("No se pudo abrir la impresora '%1': %2").arg(queue, winError()));
 
-    if (escpos.isEmpty()) {
-        ClosePrinter(hPrinter);
-        return fail(QStringLiteral("No hay nada que imprimir."));
-    }
     const QString offline = offlineReason(hPrinter);
     if (!offline.isEmpty()) {
         ClosePrinter(hPrinter);

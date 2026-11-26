@@ -11,7 +11,6 @@
 #include "voidgarmentsdialog.h"
 #include "add_garment.h"
 #include "uikit.h"
-#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateEdit>
@@ -22,7 +21,6 @@
 #include <QSharedPointer>
 #include <QSpinBox>
 #include <QTableView>
-#include <QDateTime>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -619,7 +617,6 @@ void RecogPrendas::runSearch(const QString &query)
     qDebug() << "RecogPrendas::on_pb_search_clicked: input=" << query
              << "dateMode=" << ui->cb_search_date->currentText();
     if (query != "") {
-        bool totalPriceActive = true;
         QString nameSearchFilter;
         const QString digits = normalizedSearchDigits(query);
         if (!digits.isEmpty()) {
@@ -660,14 +657,12 @@ void RecogPrendas::runSearch(const QString &query)
                     q.bindValue(":n_recibo", digits);
                     loadEveryRow(sqlQueryModel, std::move(q));
                 }
-                totalPriceActive = true;
             }
         }
         else if (query.isSimpleText()) {
             QDate dateSlash = QDate::fromString(query, "dd/MM/yyyy");
             QDate dateDash = QDate::fromString(query, "dd-MM-yyyy");
-            QDate date = (!dateSlash.isNull()) ? dateSlash :
-                         (!dateDash.isNull()) ? dateDash: QDate::currentDate();
+            QDate date = (!dateSlash.isNull()) ? dateSlash : dateDash;
             // date_type values come from a hard-coded ComboBox - not user input
             static const char *const dateColumns[] = { "fecha_recepcion", "fecha_pago", "fecha_recogida", "fecha_anulacion" };
             const int dateIndex = qBound(0, ui->cb_search_date->currentIndex(), 3);
@@ -743,8 +738,8 @@ void RecogPrendas::runSearch(const QString &query)
         ui->tableView->setColumnHidden(INGRESOS_COL_VERIFACTU_INVOICE_ID,          true);
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_IMPORTE, new NumberFormatDelegate(this));
         ui->tableView->setItemDelegateForColumn(INGRESOS_COL_SIZE, new DecimalCommaDelegate(this));
-        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(ui->tableView, this));
-        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(ui->tableView, this));
+        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_PAGADO, new TextColorDelegate(this));
+        ui->tableView->setItemDelegateForColumn(INGRESOS_COL_ESTADO, new TextColorDelegate(this));
         ui->tableView->resizeColumnsToContents();
         ui->tableView->resizeRowsToContents();
         qDebug() << "RecogPrendas::on_pb_search_clicked: result"
@@ -752,17 +747,13 @@ void RecogPrendas::runSearch(const QString &query)
         // Fill total_price from proxy rows (reflects the filtered set in all search modes).
         // Voided / cancelled / superseded rows (ANULADA, RECTIFICADA) are skipped.
         // Unpaid rows still count, so a ticket searched by number shows the amount owed.
-        if (totalPriceActive) {
-            double totalPrice = 0.0;
-            for (int row = 0; row < proxyModel->rowCount(); row++) {
-                const QString vEstado = proxyModel->data(proxyModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
-                if (!garmentExcludedFromTotals(vEstado))
-                    totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
-            }
-            ui->lbl_total->setText(tr("Importe total: %1 €").arg(displayMoney(totalPrice)));
+        double totalPrice = 0.0;
+        for (int row = 0; row < proxyModel->rowCount(); row++) {
+            const QString vEstado = proxyModel->data(proxyModel->index(row, INGRESOS_COL_VERIFACTU_ESTADO)).toString();
+            if (!garmentExcludedFromTotals(vEstado))
+                totalPrice += proxyModel->data(proxyModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
         }
-        else
-            ui->lbl_total->setText(tr("Importe total: -"));
+        ui->lbl_total->setText(tr("Importe total: %1 €").arg(displayMoney(totalPrice)));
         if (!searchProblem)
             m_result->showInfo(proxyModel->rowCount() == 0
                                    ? tr("No se ha encontrado ninguna prenda.")

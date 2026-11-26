@@ -44,10 +44,6 @@ void AeatConnectionProbe::run()
             return;
         }
         const AeatCertificate::Info cert = m_certificate.info();
-        if (cert.expiry.isValid() && cert.expiry < QDateTime::currentDateTime()) {
-            fail(tr("Certificado: %1 caducó el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
-            return;
-        }
         emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
         // AEAT accepts requests presented by the issuer, or by someone it holds as her representative.
         if (!cert.nif.isEmpty() && cert.nif.compare(m_settings.issuerNif, Qt::CaseInsensitive) != 0)

@@ -578,8 +578,7 @@ RectificativaRow RectifyInvoiceDialog::rectificativaRow() const
     row.client   = m_loadedCliente;
     row.type     = VerifactuInvoice::rectificationTypeToString(
         m_submittedIsSubstitution ? VerifactuInvoice::BY_SUBSTITUTION : VerifactuInvoice::BY_DIFFERENCES);
-    row.label    = VerifactuInvoice::isRectificationInvoiceType(invoiceTypeFromIndex(m_cbInvoiceType->currentIndex()))
-                       ? m_cbInvoiceType->currentText().left(2) : QStringLiteral("R1");
+    row.label    = m_cbInvoiceType->currentText().left(2);
     row.date     = m_newInvoiceDate;
     row.amount   = m_submittedAmount;
     return row;

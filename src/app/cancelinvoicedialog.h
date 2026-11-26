@@ -3,7 +3,6 @@
 
 #include <QDate>
 #include <QDialog>
-#include <QHash>
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
@@ -41,9 +40,6 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
-    // A sent rectificativa of the ticket (its n_recibo in *number, empty for none): cancel
-    // it first, or its amount stays in the books after the original is gone. False when
-    // the database could not be read.
     // The first press of a row's Anular says what will be cancelled; the second sends it.
     void armCancellation(int row);
     // An invoice from before production: cancelled in the books, nothing sent to AEAT.

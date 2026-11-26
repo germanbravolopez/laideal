@@ -6,7 +6,6 @@ namespace {
 // returned by BiGetStatus for the TM-T20III. Only the bits we act on are named.
 enum AsbBit : quint32 {
     Asb_NoResponse        = 0x00000001u,  // no response (open cover, powered off, unplugged)
-    Asb_DrawerKick        = 0x00000004u,  // cash-drawer connector signal level
     Asb_OffLine           = 0x00000008u,  // printer offline
     Asb_CoverOpen         = 0x00000020u,  // cover / roll-paper door open
     Asb_MechanicalErr     = 0x00000400u,  // mechanical error
@@ -29,7 +28,6 @@ PrinterStatus PrinterStatus::fromAsb(quint32 asb)
     s.cutterError        = (asb & Asb_AutoCutterErr) != 0;
     s.mechanicalError    = (asb & Asb_MechanicalErr) != 0;
     s.unrecoverableError = (asb & Asb_UnrecoverableErr) != 0;
-    s.drawerOpen         = (asb & Asb_DrawerKick) != 0;
     s.noResponse         = (asb & Asb_NoResponse) != 0;
     return s;
 }

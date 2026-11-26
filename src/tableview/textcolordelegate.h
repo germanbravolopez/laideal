@@ -3,15 +3,12 @@
 
 #include <QStyledItemDelegate>
 
-class QTableView; // Forward declaration
-
 // Ingresos columns only: it reads the row's estado columns by their ingresos position.
 class TextColorDelegate : public QStyledItemDelegate {
     Q_OBJECT
 
 public:
-    // The view argument is unused; kept for the existing call sites.
-    explicit TextColorDelegate(QTableView* tableView, QObject* parent = nullptr);
+    explicit TextColorDelegate(QObject* parent = nullptr);
 
     // Colour a "SI"/"NO"/"Recogido"/"En tienda" cell. A cancelled garment row
     // (estado "Anulado", or verifactu_estado "ANULADA") renders green everywhere,

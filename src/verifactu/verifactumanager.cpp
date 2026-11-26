@@ -1,5 +1,4 @@
 #include "verifactumanager.h"
-#include "verifacturesponse.h"
 #include "testhostguard.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
@@ -11,7 +10,6 @@
 #include <QUrlQuery>
 #include <QByteArray>
 #include <QEventLoop>
-#include <QRegularExpression>
 #include <QPointer>
 
 VerifactuManager::VerifactuManager(QObject *parent)
@@ -62,7 +60,7 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (!invoice.isValid()) {
@@ -100,7 +98,7 @@ QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber, const 
     const bool configured = validateConfiguration();
     if (!configured || invoiceNumber.isEmpty()) {
         VerifactuRemoteRecord rec;   // parsed=false: we know nothing, not "absent"
-        rec.raw = configured ? QStringLiteral("InvoiceID vacío") : getLastError();
+        rec.raw = configured ? QStringLiteral("InvoiceID vacío") : m_lastError;
         QMetaObject::invokeMethod(this, [this, reqId, rec]() {
             emit queryFinished(reqId, rec);
         }, Qt::QueuedConnection);
@@ -155,7 +153,7 @@ QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (invoiceNumber.isEmpty() || invoiceDate.isNull()) {
@@ -188,7 +186,7 @@ QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (!invoice.isValid()) {
@@ -250,7 +248,7 @@ VerifactuResult VerifactuManager::testConnection()
 
     if (!validateConfiguration()) {
         result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
+        result.errorDescription = m_lastError;
         return result;
     }
 
@@ -335,7 +333,7 @@ VerifactuResult VerifactuManager::connectionProbeResult(int httpStatus, const QB
     return result;
 }
 
-QString VerifactuManager::getConfigurationInfo() const
+QString VerifactuManager::configurationInfo() const
 {
     QString info = "=== Verifactu Configuration ===\n";
     info += "Environment: " + QString(m_config->getEnvironment() == VerifactuConfig::TESTING ? "TESTING" : "PRODUCTION") + "\n";

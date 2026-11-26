@@ -8,7 +8,6 @@
 
 class QJsonArray;
 class QNetworkAccessManager;
-class QNetworkReply;
 
 // Async GitHub-releases-based updater.
 //

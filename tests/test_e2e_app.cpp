@@ -260,7 +260,7 @@ private slots:
         AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
         ReportHtml::setOpenGeneratedReports(false);
 
-        // MainWindow opens DB_PATH as the default connection; the test reads the same file.
+        // MainWindow opens dbPath() as the default connection; the test reads the same file.
         const QString dbFile = m_dir.filePath("laideal_e2e_app.db");
         setDbPath(dbFile);
         m_db = QSqlDatabase::addDatabase("QSQLITE", "e2e_app");

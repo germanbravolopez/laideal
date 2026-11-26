@@ -29,7 +29,6 @@ public:
     QString getEmitterNIF() const;
     QString getEmitterName() const;
 
-    void setSystemData(const QString &name, const QString &version);
     QString getSystemName() const;
     QString getSystemVersion() const;
 

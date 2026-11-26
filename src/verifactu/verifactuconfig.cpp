@@ -61,12 +61,6 @@ QString VerifactuConfig::getEmitterName() const
     return m_emitterName;
 }
 
-void VerifactuConfig::setSystemData(const QString &name, const QString &version)
-{
-    m_systemName = name;
-    m_systemVersion = version;
-}
-
 QString VerifactuConfig::getSystemName() const
 {
     return m_systemName;

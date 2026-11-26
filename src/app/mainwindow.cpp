@@ -6,8 +6,6 @@
 #include <QMessageBox>
 #include "applogger.h"
 #include <QDateTime>
-#include <QSqlError>
-#include <QDesktopServices>
 #include <QFileInfo>
 #include <QUrl>
 #include <QScopeGuard>
@@ -21,7 +19,6 @@
 #include "applanguage.h"
 #include "settingsdialog.h"
 #include "verifactumanager.h"
-#include "verifactutypes.h"
 #include "verifactuconfig.h"
 #include "verifacturesponse.h"
 #include "updaterdialog.h"
@@ -52,8 +49,6 @@
 #include <QDir>
 #include <QProcess>
 #include <QFileDialog>
-#include <QDialogButtonBox>
-#include <QFormLayout>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QGridLayout>
@@ -72,7 +67,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     buildUi();
     db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName(DB_PATH);
+    db.setDatabaseName(dbPath());
     db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=15000");   // a save waits out a backup's read
     mainwindowInitialSettings();
     initializeVerifactu();
@@ -465,7 +460,7 @@ void MainWindow::mainwindowInitialSettings()
     const QString previousVersion = AppSettings::instance()->lastStartedVersion().isEmpty()
         ? AppSettings::instance()->backupLastVersion() : AppSettings::instance()->lastStartedVersion();
     bool rewriteData = true;   // false: no copy of the database as the previous version left it
-    if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(DB_PATH)) {
+    if (AppSettings::instance()->backupLastVersion() != version && QFile::exists(dbPath())) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
         m_backupManager->setSecondFolder(AppSettings::instance()->backupSecondFolder());
         const BackupManager::Result res = m_backupManager->performBackup();
@@ -900,7 +895,7 @@ void MainWindow::resizeTable()
     pbAddedRows = 0;
 }
 
-void MainWindow::setServiceToCb(int initialRow = 0)
+void MainWindow::setServiceToCb(int initialRow)
 {
     for (int row = initialRow; row < ui->table_ticket->rowCount(); row++) {
         QComboBox *comBox = new QComboBox();
@@ -913,7 +908,7 @@ void MainWindow::setServiceToCb(int initialRow = 0)
     }
 }
 
-void MainWindow::setGarmentToCbAndPopulate(int initialRow = 0)
+void MainWindow::setGarmentToCbAndPopulate(int initialRow)
 {
     QStringList garmentList = readColumnFromTable(db, "nombre", "prendas", "");
     for (int row = initialRow; row < ui->table_ticket->rowCount(); row++) {
@@ -1303,8 +1298,6 @@ bool MainWindow::printRecibo()
     auto *ui_impr = new Imprimir(db, this);
     const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = true;
-    ui_impr->isCompleteInvoice = false;
-    ui_impr->verifactuIntegration = nullptr;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());
     ui_impr->getTicketInfo();
     ui_impr->buildTicket(true, ui->pb_payment->isChecked());
@@ -1320,8 +1313,6 @@ bool MainWindow::printFra(const QPixmap &qrCode, bool verifactuIssued)
     auto *ui_impr = new Imprimir(db, this);
     const auto release = qScopeGuard([ui_impr] { ui_impr->deleteLater(); });
     ui_impr->isRecibo = false;
-    ui_impr->isCompleteInvoice = false;
-    ui_impr->verifactuIntegration = nullptr;
     ui_impr->qrCode = qrCode;
     ui_impr->verifactuIssued = verifactuIssued;
     ui_impr->le_n_ticket->setText(ui->le_nr_ticket->text());

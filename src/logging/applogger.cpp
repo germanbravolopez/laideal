@@ -5,7 +5,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QLoggingCategory>
 #include <QCoreApplication>
 #include <QMutex>
 #include <QMutexLocker>

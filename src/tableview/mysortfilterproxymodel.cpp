@@ -3,8 +3,6 @@
 #include "sql_lite.h"
 #include "uikit.h"
 #include <algorithm>
-#include <QtWidgets>
-#include <QMessageBox>
 #include <QDebug>
 
 MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)

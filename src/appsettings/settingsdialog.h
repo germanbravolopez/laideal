@@ -19,7 +19,6 @@ class SettingsDialog : public QDialog
 public:
     explicit SettingsDialog(QWidget *parent = nullptr);
 
-public:
     void browsePath(QLineEdit *target, bool directory);
     // The owner's certificates in the Windows store, as (label, thumbprint), for the
     // direct AEAT connection. Given by MainWindow: this module does not read the store.

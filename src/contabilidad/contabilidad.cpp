@@ -18,7 +18,6 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSpinBox>
-#include <QUrl>
 #include <QVBoxLayout>
 
 using UiKit::okHtml;

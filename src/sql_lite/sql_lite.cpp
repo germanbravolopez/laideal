@@ -1,14 +1,10 @@
 #include "sql_lite.h"
-#include "ingresos_schema.h"
 
 #include "verifactutypes.h"
 
-#include <QDateTime>
-#include <QHash>
 #include <QDebug>
 #include <QUuid>
 #include <QSqlError>
-#include <QSqlQuery>
 #include <QRegularExpression>
 #include <QSqlRecord>
 
@@ -1168,8 +1164,6 @@ static const QString kRegularizationWhere =
 static const QString kGastosPeriodWhere =
     "(" + kFechaGastoIso + " >= date(:start)) AND (" + kFechaGastoIso + " < date(:end))";
 
-
-
 bool quarterIsClosed(QSqlDatabase &db, int quarter, int year)
 {
     if (dbNotConfigured(db, __func__)) return false;
@@ -2299,7 +2293,6 @@ bool aeatExportRecords(QSqlDatabase &db, const QDate &from, const QDate &to,
     }
     return true;
 }
-
 
 int updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                 const VerifactuResult &result, int seq)

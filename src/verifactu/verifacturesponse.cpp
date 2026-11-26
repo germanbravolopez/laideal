@@ -96,8 +96,9 @@ QJsonObject chooseRecord(const QJsonArray &items)
     return items.isEmpty() ? QJsonObject{} : items.first().toObject();
 }
 
-} // namespace
-
+// Decode a base64-encoded image (a QR / GetQrCode payload) into a QPixmap.
+// Constructing a QPixmap needs a QGuiApplication, so tests that exercise this
+// path must use a GUI test main (offscreen platform), not a guiless one.
 QPixmap decodeVerifactuImageBase64(const QString &base64)
 {
     QByteArray bytes = QByteArray::fromBase64(base64.toLatin1());
@@ -105,6 +106,8 @@ QPixmap decodeVerifactuImageBase64(const QString &base64)
     pixmap.loadFromData(bytes);
     return pixmap;
 }
+
+} // namespace
 
 VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuReply kind)
 {
