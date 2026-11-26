@@ -17,6 +17,7 @@
 #include <QVBoxLayout>
 
 #include "appsettings.h"
+#include "ingresos_schema.h"
 #include "sql_lite.h"
 #include "uikit.h"
 #include "aeatresponse.h"
@@ -171,6 +172,7 @@ void RectifyInvoiceDialog::onSearchClicked()
     m_lblResult->clear();
     m_loadedTicket.clear();
 
+    m_lblInfo->setText("-");   // never the previous ticket's data
     const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
@@ -452,7 +454,7 @@ bool RectifyInvoiceDialog::prepareRefusedResend(const QString &refused, double a
     {
         ConnectionScope scope(db);
         QSqlQuery old(db);
-        old.prepare("SELECT MIN(fecha_pago), SUM(importe), MIN(verifactu_rectification_type) FROM ingresos "
+        old.prepare("SELECT MIN(fecha_pago), SUM(" INGRESOS_IMPORTE_VALUE "), MIN(verifactu_rectification_type) FROM ingresos "
                     "WHERE n_recibo = :n AND verifactu_rectifies_n_recibo = :o");
         old.bindValue(":n", refused);
         old.bindValue(":o", m_submittedTicket);

@@ -143,6 +143,11 @@ private:
     void runAeatConnectionTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
                                const QString &certificateFile, const QString &certificatePassword, bool production);
     QString recoveryFloorIso();
+    // The recovery dialog of PENDIENTE invoices; waits while another dialog is open.
+    void showPendingSubmits();
+    void refreshTitle();   // the business name from the settings
+    // An AEAT refusal as panel HTML (empty for any other outcome).
+    QString rejectionHtml(const QString &invoiceId, const VerifactuResult &result) const;
     void continueDirectChain();
     // A PENDIENTE rectificativa: settled from AEAT's stored answer, left to the direct
     // client while its record is pending, else an ERROR to redo.

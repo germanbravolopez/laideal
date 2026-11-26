@@ -9,6 +9,7 @@
 #include "uikit.h"
 #include "version.h"
 
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -144,10 +145,12 @@ bool SelfCheckDialog::prepareCopy(QString *error)
     AppSettings *settings = AppSettings::instance();
     const QString liveDb = settings->dbPath();
     m_liveDb = liveDb;
-    // Copies a crashed earlier run left behind hold shop data: remove them.
+    // Copies a crashed earlier run left behind hold shop data: remove them. Only the stale
+    // ones: a check running at the same time has a copy of its own.
     const QDir temp(QDir::tempPath());
+    const QDateTime staleBefore = QDateTime::currentDateTime().addDays(-1);
     for (const QString &old : temp.entryList({ QStringLiteral("laideal_comprobacion_*") }, QDir::Dirs | QDir::NoDotAndDotDot))
-        if (temp.filePath(old) != m_work.path())
+        if (temp.filePath(old) != m_work.path() && QFileInfo(temp.filePath(old)).lastModified() < staleBefore)
             QDir(temp.filePath(old)).removeRecursively();
     const QString backup = SelfCheck::newestBackup(QDir(QFileInfo(liveDb).absolutePath()).filePath("backups"));
     if (liveDb.isEmpty() || backup.isEmpty()) {

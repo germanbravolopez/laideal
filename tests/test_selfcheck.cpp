@@ -23,6 +23,14 @@
 #include "sql_lite.h"
 #include "testschema.h"
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOGDI
+#define NOUSER
+#define NOMINMAX
+#include <windows.h>   // last: only ageDirectory uses it
+#endif
+
 class TestSelfCheck : public QObject
 {
     Q_OBJECT
@@ -32,6 +40,28 @@ class TestSelfCheck : public QObject
         QFile f(file);
         return f.open(QIODevice::ReadOnly) ? QCryptographicHash::hash(f.readAll(), QCryptographicHash::Sha256)
                                            : QByteArray();
+    }
+
+    // Sets the last-write time of a folder `days` back (Qt cannot set a folder's time).
+    static bool ageDirectory(const QString &path, int days)
+    {
+#ifdef Q_OS_WIN
+        const HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16()), FILE_WRITE_ATTRIBUTES,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                                     FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        const qint64 ticks = (QDateTime::currentMSecsSinceEpoch() - qint64(days) * 86400000 + 11644473600000LL) * 10000;
+        FILETIME ft;
+        ft.dwLowDateTime = DWORD(ticks & 0xFFFFFFFF);
+        ft.dwHighDateTime = DWORD(ticks >> 32);
+        const bool ok = SetFileTime(h, nullptr, nullptr, &ft);
+        CloseHandle(h);
+        return ok;
+#else
+        Q_UNUSED(path) Q_UNUSED(days)
+        return false;
+#endif
     }
 
     // A shop database: an unpaid ticket, a paid one AEAT holds (Q1 2026), a gasto and Q1 closed.
@@ -374,6 +404,13 @@ private slots:
         QFile staleCopy(stale + "/laideal_comprobacion.db");
         QVERIFY(staleCopy.open(QIODevice::WriteOnly));
         staleCopy.close();
+        QVERIFY(ageDirectory(stale, 2));
+        // The copy of a check running at the same time is recent: it stays.
+        const QString concurrent = QDir::tempPath() + "/laideal_comprobacion_concurrent";
+        QVERIFY(QDir().mkpath(concurrent));
+        QFile concurrentCopy(concurrent + "/laideal_comprobacion.db");
+        QVERIFY(concurrentCopy.open(QIODevice::WriteOnly));
+        concurrentCopy.close();
         {
             SelfCheckDialog dialog(liveSettings);
             dialog.setReportFolder(out.path());
@@ -398,6 +435,8 @@ private slots:
         }
         QVERIFY2(!QFileInfo::exists(workDir), qPrintable(workDir));   // the copies are gone
         QVERIFY(!QFileInfo::exists(stale));
+        QVERIFY(QFileInfo::exists(concurrent + "/laideal_comprobacion.db"));
+        QDir(concurrent).removeRecursively();
         QCOMPARE(digest(liveDb), dbBefore);
         QCOMPARE(digest(liveSettings), settingsBefore);
     }

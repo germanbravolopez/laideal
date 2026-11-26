@@ -143,7 +143,7 @@ void PendingSubmitsDialog::onRetryClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
     if (!e.fechaPago.isValid()) {
-        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no tiene fecha de pago.").arg(e.ticketNum))
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no tiene fecha de pago.").arg(e.ticketNum.toHtmlEscaped()))
                              + "<br>" + tr("No se puede reenviar a AEAT: un ticket sin cobrar no tiene "
                                            "factura que recuperar."));
         return;
@@ -155,11 +155,11 @@ void PendingSubmitsDialog::onRetryClicked(int row)
     const QString notSent = retry ? retry(e.ticketNum, e.seq, e.fechaPago, e.importe)
                                   : tr("No se puede reenviar desde aquí.");
     if (!notSent.isEmpty()) {
-        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                              + "<br>" + notSent.toHtmlEscaped());
         return;                                                            // stays listed
     }
-    m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+    m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                          + "<br>" + tr("La respuesta aparece en la barra de estado de la ventana principal."));
     // Drop the row from the table; the async reply will patch the DB. If it
     // fails the row reverts to ERROR and the operator can revisit via the
@@ -173,10 +173,10 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     const Entry e = m_entries[row];
 
     if (!markPendingEventUnreconciled(db, e.ticketNum, e.seq)) {
-        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum)));
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum.toHtmlEscaped())));
         return;
     }
-    m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+    m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                          + "<br>" + tr("Revíselo en la sede electrónica de AEAT o con Consultar en AEAT en Recogida."));
     removeRowAt(row);
 }
