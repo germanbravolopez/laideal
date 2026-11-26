@@ -406,6 +406,29 @@ private slots:
         QCOMPARE(heard[0].second.status, VerifactuResult::PENDING);
     }
 
+    // Released while the first sync's query is still in flight: the held request is answered
+    // once, and when the reply arrives no record is generated or sent for it.
+    void test_releaseDuringSyncAnswersOnceAndGeneratesNothing()
+    {
+        m_server->enqueue({ QByteArray(), 200, 1500 });                   // the first sync's query, slow
+        AeatDirectBackend backend(config(), m_db);
+        QSignalSpy finished(&backend, &VerifactuBackend::requestFinished);
+        const QString held = backend.submitInvoiceAsync(ticket("710", 10));
+        bool syncDone = false;
+        backend.syncChain([&syncDone](bool, const QString &) { syncDone = true; });
+        QCOMPARE(m_server->requests().size(), 0);                         // the query is still on its way
+        backend.releaseWaiters();
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished[0][0].toString(), held);
+        QCOMPARE(finished[0][1].value<VerifactuResult>().status, VerifactuResult::NETWORK_ERROR);
+        QTRY_VERIFY_WITH_TIMEOUT(syncDone, 10000);
+        QTest::qWait(300);
+        QCOMPARE(finished.size(), 1);
+        QVERIFY(m_server->submissions().isEmpty());
+        QVERIFY(AeatStore(m_db, "pruebas").recordXmls().isEmpty());
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("711", 10))).isSuccess());   // the backend still works
+    }
+
     // A record settled while its submission was in flight (no longer pending at the reply)
     // still answers its waiters, from the store.
     void test_waiterAnsweredWhenItsRecordSettledMeanwhile()
@@ -551,6 +574,37 @@ private slots:
         const VerifactuRemoteRecord missing = answerTo(idMissing);
         QVERIFY(cancelled.found && !cancelled.hasUsableCsv());
         QVERIFY(missing.parsed && !missing.found);
+    }
+
+    // Without a date the query asks for this month, then once for the previous one; with a
+    // date, for that month only.
+    void test_queryWithoutDateTriesThePreviousMonthOnce()
+    {
+        m_server->setQueryByMonth(true);
+        AeatDirectBackend backend(config(), m_db);
+        QSignalSpy spy(&backend, &VerifactuBackend::queryFinished);
+        const auto monthsAsked = [this]() {
+            QList<QPair<int, int>> months;
+            for (const FakeAeatServer::Request &r : m_server->requests())
+                if (r.kind == QLatin1String("Consulta"))
+                    months.append({ r.year, r.month });
+            return months;
+        };
+        const QDate thisMonth = QDate::currentDate();
+        const QDate lastMonth = thisMonth.addMonths(-1);
+
+        backend.queryInvoiceAsync("99999");
+        QTRY_COMPARE_WITH_TIMEOUT(spy.size(), 1, 10000);
+        const VerifactuRemoteRecord missing = spy[0][1].value<VerifactuRemoteRecord>();
+        QVERIFY(missing.parsed && !missing.found);
+        const QList<QPair<int, int>> expected{ { thisMonth.year(), thisMonth.month() }, { lastMonth.year(), lastMonth.month() } };
+        QCOMPARE(monthsAsked(), expected);
+
+        backend.queryInvoiceAsync("99999", QDate(2026, 3, 5));
+        QTRY_COMPARE_WITH_TIMEOUT(spy.size(), 2, 10000);
+        QVERIFY(spy[1][1].value<VerifactuRemoteRecord>().parsed);
+        QCOMPARE(monthsAsked().size(), 3);
+        QCOMPARE(monthsAsked().last(), (QPair<int, int>{ 2026, 3 }));
     }
 
     // One chain per system and issuer (AEAT, 13-10-2026): what another system (the
@@ -1344,6 +1398,69 @@ private slots:
         QVERIFY(waitFor(next, next.submitInvoiceAsync(ticket("4", 40))).isSuccess());
         QCOMPARE(m_server->sentRecords().last().previousHash, firstHash);
         QCOMPARE(m_server->sentRecords().last().installationNumber, renewed);
+    }
+
+    // Registers `first` and `second` at the fake AEAT from two databases at once (two installation
+    // numbers), so that both are generated within the same moment.
+    void registerTogether(const QString &first, const QString &second)
+    {
+        {
+            QSqlDatabase dbA = QSqlDatabase::addDatabase("QSQLITE", "aeat_pair_a");
+            QSqlDatabase dbB = QSqlDatabase::addDatabase("QSQLITE", "aeat_pair_b");
+            dbA.setDatabaseName(m_dir.filePath(QString("pair_a_%1_%2.db").arg(m_dbCounter).arg(++m_otherCounter)));
+            dbB.setDatabaseName(m_dir.filePath(QString("pair_b_%1_%2.db").arg(m_dbCounter).arg(m_otherCounter)));
+            AeatDirectBackend a(config(), dbA), b(config(), dbB);
+            QSignalSpy heardA(&a, &VerifactuBackend::requestFinished), heardB(&b, &VerifactuBackend::requestFinished);
+            a.submitInvoiceAsync(ticket(first, 10));
+            b.submitInvoiceAsync(ticket(second, 10));
+            if (!QTest::qWaitFor([&] { return heardA.size() == 1 && heardB.size() == 1; }, 30000))
+                qWarning() << "registerTogether: not registered";
+            dbA.close();
+            dbB.close();
+        }
+        QSqlDatabase::removeDatabase("aeat_pair_a");
+        QSqlDatabase::removeDatabase("aeat_pair_b");
+    }
+
+    // Both numbers' records in the restart's own second, in one reply: only the new number's
+    // is the tip (the old number's sorts first, so kept by mistake it would win the tie).
+    void test_restartSecondKeepsOnlyTheNewNumbersRecordInOneReply()
+    {
+        m_server->setWaitSeconds(0);
+        const auto secondOf = [](const FakeAeatServer::SentRecord &r) {
+            return QDateTime::fromString(r.generatedAt, Qt::ISODate).toSecsSinceEpoch();
+        };
+        FakeAeatServer::SentRecord oldRecord, newRecord;
+        int attempt = 0;
+        do {
+            const QString oldNumber = QString::number(10 + 2 * attempt), newNumber = QString::number(11 + 2 * attempt);
+            registerTogether(oldNumber, newNumber);
+            for (const FakeAeatServer::SentRecord &r : m_server->sentRecords()) {
+                if (r.invoiceNumber == oldNumber)
+                    oldRecord = r;
+                if (r.invoiceNumber == newNumber)
+                    newRecord = r;
+            }
+        } while (secondOf(oldRecord) != secondOf(newRecord) && ++attempt < 4);
+        QVERIFY2(secondOf(oldRecord) == secondOf(newRecord), "the two records never fell in the same second");
+        QVERIFY(oldRecord.installationNumber != newRecord.installationNumber);
+
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(m_db.open());
+        {
+            QSqlQuery q(m_db);
+            q.prepare("INSERT INTO aeat_chain_restarts (environment, issuer_nif, installation_number, restarted_at) "
+                      "VALUES ('pruebas', :n, :i, :t)");
+            q.bindValue(":n", config().issuerNif);
+            q.bindValue(":i", newRecord.installationNumber);
+            q.bindValue(":t", QDateTime::fromString(newRecord.generatedAt, Qt::ISODate).toUTC().toString(Qt::ISODate));
+            QVERIFY(q.exec());
+        }
+        m_db.close();
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("30", 30))).isSuccess());
+        QCOMPARE(m_server->sentRecords().last().previousHash, newRecord.hash);
+        QCOMPARE(m_server->sentRecords().last().installationNumber, newRecord.installationNumber);
     }
 
     // Registers "1" and "2" at the fake AEAT from another database of our system and cancels
