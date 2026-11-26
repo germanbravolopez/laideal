@@ -60,4 +60,4 @@ One entry per CTest suite, grouped by module: the CTest name, the test file, the
 
 ---
 
-That is 31 suites here and 3 in [e2e.md](e2e.md): the 34 `add_test` entries of `tests/CMakeLists.txt`.
+That is 32 suites here and 3 in [e2e.md](e2e.md): the 35 `add_test` entries of `tests/CMakeLists.txt`.

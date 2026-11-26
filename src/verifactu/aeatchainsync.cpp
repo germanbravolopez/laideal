@@ -8,12 +8,6 @@
 
 namespace AeatChainSync {
 
-namespace {
-
-const QString kRegistration = QStringLiteral("Alta");
-
-} // namespace
-
 QList<AeatResponse::RecordSummary> candidatesAfterRestart(QList<AeatResponse::RecordSummary> candidates,
                                                           const QDateTime &restartedAt, const QString &restartNumber)
 {
@@ -134,11 +128,12 @@ QString chainInstallationNumber(const QList<AeatResponse::RecordSummary> &chain,
 
 QString continuationMessage(const AeatResponse::RecordSummary &tip, bool cancellation)
 {
-    const char *context = "AeatDirectBackend";
-    return QCoreApplication::translate(context, "La cadena continúa tras el registro %1 (%2, %3).")
+    // The literal context keeps the strings where lupdate finds them and where they were.
+    return QCoreApplication::translate("AeatDirectBackend", "La cadena continúa tras el registro %1 (%2, %3).")
         .arg(tip.invoiceNumber,
-             cancellation ? QCoreApplication::translate(context, "anulación") : QCoreApplication::translate(context, "alta"),
-             tip.generatedAt.isEmpty() ? QCoreApplication::translate(context, "generado antes") : tip.generatedAt);
+             cancellation ? QCoreApplication::translate("AeatDirectBackend", "anulación")
+                          : QCoreApplication::translate("AeatDirectBackend", "alta"),
+             tip.generatedAt.isEmpty() ? QCoreApplication::translate("AeatDirectBackend", "generado antes") : tip.generatedAt);
 }
 
 Plan plan(const Input &input)

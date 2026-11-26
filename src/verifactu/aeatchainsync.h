@@ -16,6 +16,10 @@
 
 namespace AeatChainSync {
 
+// The operation of a record summary, as the backend writes it and the rules read it.
+inline const QString kRegistration = QStringLiteral("Alta");
+inline const QString kCancellation = QStringLiteral("Anulacion");
+
 struct Input {
     QList<AeatResponse::RecordSummary> candidates;   // AEAT's records plus our local ones
     QString issuerNif;

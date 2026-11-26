@@ -16,8 +16,8 @@ namespace {
 
 const QString kProductionUrl = QStringLiteral("https://www1.agenciatributaria.gob.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
 const QString kTestUrl = QStringLiteral("https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
-const QString kRegistration = QStringLiteral("Alta");
-const QString kCancellation = QStringLiteral("Anulacion");
+using AeatChainSync::kRegistration;
+using AeatChainSync::kCancellation;
 const int kTransferTimeoutMs = 30000;
 const int kQrPixelsPerModule = 5;
 const int kMonthsBack = 24;           // how far the first sync looks for the issuer's records

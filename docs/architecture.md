@@ -22,6 +22,7 @@ MainWindow (src/app/, built in code, no .ui file)
         `- AeatDirectBackend  direct client (SOAP + certificate)
               |- AeatRecord, AeatHash, AeatQr          record XML, huella, local QR
               |- AeatStore, AeatChainCheck             aeat_* tables, stored-chain verification
+              |- AeatChainSync                         the chain rules of a sync (plain data in, a plan out)
               |- AeatCertificate, AeatTransport        certificate, WinHTTP SOAP POST
               `- AeatSelfTest, AeatConnectionProbe     test-environment rehearsal, query-only connection test
 
