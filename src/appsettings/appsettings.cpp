@@ -134,34 +134,31 @@ AppSettings::AppSettings()
 void AppSettings::applyDefaults()
 {
     // Sensible defaults so reports work even before the user configures anything.
+    // A key that is absent is written (not just defaulted on read) so a later save()
+    // keeps it across upgrades; an explicit value, even `false`, is never replaced.
+    const auto defaultIfAbsent = [this](const QStringList &path, const QJsonValue &def) {
+        if (!nested(m_data, path).contains(path.last()))
+            set(path, def);
+    };
+    const auto defaultIfEmpty = [this](const QStringList &path, const QString &def) {
+        if (str(path).isEmpty())
+            setStr(path, def);
+    };
+
     // First run: start in the language picked in the installer (default Spanish).
-    if (str({"app", "language"}).isEmpty())
-        setStr({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
-    if (businessName().isEmpty())
-        setStr({"business", "name"}, "Tintorería La Ideal");
-    if (businessAddress().isEmpty())
-        setStr({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
-    if (businessCity().isEmpty())
-        setStr({"business", "city"}, "18012 Granada");
-    if (str({"verifactu", "environment"}).isEmpty())
-        setStr({"verifactu", "environment"}, "TESTING");
-    if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
-        setBln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled);
-    if (verifactuPendingRecoveryFloorDate().isEmpty())
-        setStr({"verifactu", "pending_recovery_floor_date"}, defaultPendingRecoveryFloorDate());
-    if (reportsRoot().isEmpty())
-        setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
-    // Default: opt-in startup check. bln() has a default-fallback parameter,
-    // but the key must be persisted so future save() preserves it across upgrades.
-    if (!m_data.value("updater").toObject().contains("check_on_startup"))
-        setBln({"updater", "check_on_startup"}, kDefaultCheckUpdates);
-    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives
-    // the directory). Default opt-in.
-    if (!m_data.value("backup").toObject().contains("enabled"))
-        setBln({"backup", "enabled"}, kDefaultBackupEnabled);
-    // Thermal printer roll width (mm). Default 80; persisted so an upgrade keeps it.
-    if (!m_data.value("print").toObject().contains("paper_width_mm"))
-        setDbl({"print", "paper_width_mm"}, kDefaultPaperWidthMm);
+    defaultIfEmpty({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
+    defaultIfEmpty({"business", "name"}, "Tintorería La Ideal");
+    defaultIfEmpty({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
+    defaultIfEmpty({"business", "city"}, "18012 Granada");
+    defaultIfEmpty({"verifactu", "environment"}, "TESTING");
+    defaultIfAbsent({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled);
+    defaultIfEmpty({"verifactu", "pending_recovery_floor_date"}, defaultPendingRecoveryFloorDate());
+    defaultIfEmpty({"reports", "root"}, QDir::homePath() + "/Tintoreria");
+    defaultIfAbsent({"updater", "check_on_startup"}, kDefaultCheckUpdates);
+    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives the directory).
+    defaultIfAbsent({"backup", "enabled"}, kDefaultBackupEnabled);
+    // Thermal printer roll width (mm); an upgrade keeps what was persisted.
+    defaultIfAbsent({"print", "paper_width_mm"}, kDefaultPaperWidthMm);
 }
 
 bool AppSettings::load()
@@ -519,41 +516,35 @@ void AppSettings::removeNested(QJsonObject &root, const QStringList &path)
     root[path[0]] = child;
 }
 
+QJsonValue AppSettings::value(const QStringList &path) const
+{
+    const QJsonObject parent = nested(m_data, path);
+    return parent.isEmpty() ? QJsonValue() : parent[path.last()];
+}
+
+void AppSettings::set(const QStringList &path, const QJsonValue &value)
+{
+    setNested(m_data, path, value);
+}
+
 QString AppSettings::str(const QStringList &path, const QString &def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isString() ? v.toString() : def;
 }
 
 double AppSettings::dbl(const QStringList &path, double def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isDouble() ? v.toDouble() : def;
 }
 
 bool AppSettings::bln(const QStringList &path, bool def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isBool() ? v.toBool() : def;
 }
 
-void AppSettings::setStr(const QStringList &path, const QString &value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
-
-void AppSettings::setDbl(const QStringList &path, double value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
-
-void AppSettings::setBln(const QStringList &path, bool value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
+void AppSettings::setStr(const QStringList &path, const QString &value) { set(path, QJsonValue(value)); }
+void AppSettings::setDbl(const QStringList &path, double value) { set(path, QJsonValue(value)); }
+void AppSettings::setBln(const QStringList &path, bool value) { set(path, QJsonValue(value)); }

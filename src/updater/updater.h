@@ -122,6 +122,7 @@ signals:
 
 private:
     void handleReleaseReply(QNetworkReply *reply);
+    static QString updatesDirectory();
     void startInstallerDownload();
     void handleDownloadReply(QNetworkReply *reply, const QString &localPath, qint64 expectedSize, const QString &expectedSha256);
 

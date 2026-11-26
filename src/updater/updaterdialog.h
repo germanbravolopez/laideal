@@ -39,6 +39,7 @@ private slots:
     void onDownloadFailed(const QString &error);
 
 private:
+    void showAvailableHeader();
     Updater *m_updater;
     QUrl m_installerUrl;
     QString m_latestVersion;

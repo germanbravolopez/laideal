@@ -103,29 +103,17 @@ public:
     bool setVerifactuServiceKey(const QString &v);
     // A stored key that no longer decrypts (another Windows user or machine, corrupt blob).
     bool verifactuServiceKeyUnreadable() const;
-
-    // Secret-at-rest helpers (Windows DPAPI, per-user). The service-key and
-    // certificate-password getters/setters use these internally; exposed as statics so the encrypt->decrypt
-    // round-trip, the `dpapi:v1:` marker and the legacy-plaintext passthrough are
-    // unit-testable without the settings file. On non-Windows builds they are a
-    // passthrough. `dpapiEncrypt("")` returns "".
-    static QString dpapiEncrypt(const QString &plain, bool *ok = nullptr);
-    // Tests only: makes every encryption fail, like a broken DPAPI.
-    static void    forceEncryptionFailure(bool fail);
-    static QString dpapiDecrypt(const QString &stored);
-    static bool    dpapiIsEncrypted(const QString &stored);
     bool verifactuProduction() const;
     void setVerifactuProduction(bool v);
-    // Startup recovery for verifactu_estado=PENDIENTE rows. Disabled-by-default
-    // behaviour would silently leave durability gaps unresolved; default is on
-    // but gated by a floor date so legacy pre-Verifactu tickets do not surface.
+    // Startup recovery of verifactu_estado=PENDIENTE rows: on by default, so a
+    // durability gap is never left silently, but limited by a floor date so that
+    // tickets older than Verifactu do not surface.
     // Floor date a fresh settings file starts with (ISO yyyy-MM-dd).
     static QString defaultPendingRecoveryFloorDate();
     bool    verifactuPendingRecoveryEnabled() const;
     void    setVerifactuPendingRecoveryEnabled(bool v);
     // ISO yyyy-MM-dd. Rows with fecha_recepcion strictly before this date are
-    // ignored by the startup recovery dialog. Defaults to the planned PROD
-    // cutover (2026-09-01) so TESTING-era tickets do not get flagged.
+    // ignored by the startup recovery dialog.
     QString verifactuPendingRecoveryFloorDate() const;
     void    setVerifactuPendingRecoveryFloorDate(const QString &v);
 
@@ -150,6 +138,16 @@ public:
     QString aeatChainMarker() const;
     void    setAeatChainMarker(const QString &v);
 
+    // Secret-at-rest helpers (Windows DPAPI, per-user), used by the service-key and
+    // certificate-password accessors. Public so the round-trip, the `dpapi:v1:` marker
+    // and the legacy-plaintext passthrough can be tested without the settings file.
+    // On non-Windows builds they pass the value through. `dpapiEncrypt("")` returns "".
+    static QString dpapiEncrypt(const QString &plain, bool *ok = nullptr);
+    // Tests only: makes every encryption fail, like a broken DPAPI.
+    static void    forceEncryptionFailure(bool fail);
+    static QString dpapiDecrypt(const QString &stored);
+    static bool    dpapiIsEncrypted(const QString &stored);
+
     // --- Updater ---
     bool checkUpdatesOnStartup() const;
     void setCheckUpdatesOnStartup(bool v);
@@ -165,11 +163,11 @@ public:
     // "<ISO time> <message>" of the last failed backup; cleared by the next success.
     QString backupLastError() const;
     void    setBackupLastError(const QString &v);
-    // App version ("X.Y") whose database was backed up before migrating it.
     // Optional second folder (a USB stick, another drive) each verified backup is copied to,
     // with the same retention; empty = off.
     QString backupSecondFolder() const;
     void    setBackupSecondFolder(const QString &v);
+    // App version ("X.Y") whose database was backed up before migrating it.
     QString backupLastVersion() const;
     void    setBackupLastVersion(const QString &v);
     // The version that last started (the one-time "run the check" notice after an update).
@@ -192,6 +190,10 @@ private:
     bool setSecret(const char *key, const QString &plain);
     bool secretUnreadable(const char *key) const;
 
+    // Undefined when the path is absent; the typed getters fall back to their default
+    // on a missing key or a value of another type.
+    QJsonValue value(const QStringList &path) const;
+    void       set(const QStringList &path, const QJsonValue &value);
     QString str(const QStringList &path, const QString &def = {}) const;
     double  dbl(const QStringList &path, double def = 0.0) const;
     bool    bln(const QStringList &path, bool def = false) const;

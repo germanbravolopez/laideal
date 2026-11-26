@@ -1,4 +1,5 @@
 #include "statusapiprinter.h"
+#include "printerqueue.h"
 
 #ifdef Q_OS_WIN
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -40,19 +41,6 @@ typedef int(WINAPI *BiDirectIOEx_t)(int, int, LPBYTE, LPINT, LPBYTE, int, int, i
 typedef int(WINAPI *BiGetStatus_t)(int, LPDWORD);
 typedef int(WINAPI *BiCloseMonPrinter_t)(int);
 typedef int(WINAPI *BiGetType_t)(int, LPBYTE, LPBYTE, LPBYTE, LPBYTE);
-
-// The Windows default printer name, or empty if none is set. Mirrors the helper
-// in thermalprinter.cpp so the Status API path resolves a blank queue name to
-// the default printer (the documented "use default" setting) instead of failing.
-QString defaultPrinterName()
-{
-    DWORD len = 0;
-    GetDefaultPrinterW(nullptr, &len);
-    if (len == 0) return QString();
-    std::vector<wchar_t> buf(len);
-    if (!GetDefaultPrinterW(buf.data(), &len)) return QString();
-    return QString::fromWCharArray(buf.data());
-}
 } // namespace
 #endif
 
@@ -81,7 +69,7 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
     // Windows default printer here - same target the RAW path would use.
     QString queue = queueName.trimmed();
     if (queue.isEmpty())
-        queue = defaultPrinterName();
+        queue = PrinterQueue::defaultName();
     QByteArray name = queue.toLocal8Bit();
     if (name.isEmpty()) {
         FreeLibrary(dll);
@@ -95,21 +83,17 @@ bool StatusApiPrinter::sendAndReadStatus(const QByteArray &escpos, const QString
                         .arg(queue, QString::number(handle)));
     }
 
-    // Read the device status BEFORE sending. BiGetStatus returns the cached ASB
-    // the printer auto-sends on cover-open / paper-out and succeeds even while
-    // the printer is offline - unlike the BiDirectIOEx write, which returns
-    // ERR_ACCESS (-80) when the cover is open, so a send-first design would only
-    // ever see a bare send failure and never the real reason. (APD6 Status API
-    // manual: "confirm the printer can print before printing".)
-    // Read the ASB and (best-effort) decode it into *status. Logs the raw word so
-    // the TM-T20III's actual ASB layout can be confirmed against our ASB_* bit
-    // constants on the shop hardware.
+    // Read the device status BEFORE sending. BiGetStatus returns the cached ASB the
+    // printer auto-sends on cover-open / paper-out and succeeds even while it is
+    // offline, whereas the BiDirectIOEx write fails with ERR_ACCESS (-80) when the
+    // cover is open: a send-first design would never see the real reason. The ASB is
+    // decoded best-effort into *status; a nonzero word is logged raw so the field
+    // units' layout can be checked against the ASB_* bits (printerstatus.cpp).
     auto readStatus = [&](const char *when) {
         DWORD asb = 0;
         const int rc = stat(handle, &asb);
-        // Only log when something is off (nonzero ASB or a read error): a normal
-        // ready print stays quiet, and the raw word still identifies the offline
-        // cause in the field (this unit reports off=0x1, lid-open/no-paper=0x4).
+        // Quiet on a normal ready print; the raw word identifies the cause otherwise
+        // (this unit reports 0x1 when off).
         if (rc != 0 || asb != 0)
             qDebug().nospace() << "StatusApiPrinter: BiGetStatus(" << when << ") rc=" << rc
                                << " asb=0x" << QString::number(asb, 16)
@@ -252,7 +236,7 @@ void diagSequence(const QString &queueName, const std::function<void(const QStri
     }
 
     QString queue = queueName.trimmed();
-    if (queue.isEmpty()) queue = defaultPrinterName();
+    if (queue.isEmpty()) queue = PrinterQueue::defaultName();
     QByteArray name = queue.toLocal8Bit();
     if (name.isEmpty()) {
         log(QStringLiteral("ERROR: no hay impresora configurada ni predeterminada."));
@@ -330,14 +314,14 @@ QString StatusApiPrinter::runDiagnosticsBounded(const QString &queueName, int ti
 
     std::unique_lock<std::mutex> lk(sh->m);
     if (sh->cv.wait_for(lk, std::chrono::milliseconds(timeoutMs), [&sh] { return sh->done; }))
-        return sh->report + QStringLiteral("\nDiagnostico completado.");
+        return sh->report + QStringLiteral("\nDiagnóstico completado.");
     return sh->report + QStringLiteral(
-        "\n*** BLOQUEO: la ultima llamada mostrada arriba no respondio en %1 s.\n"
-        "Esa es la funcion de la Status API que se cuelga con este firmware. ***")
+        "\n*** BLOQUEO: la última llamada mostrada arriba no respondió en %1 s.\n"
+        "Esa es la función de la Status API que se cuelga con este firmware. ***")
         .arg(timeoutMs / 1000);
 #else
     Q_UNUSED(queueName);
     Q_UNUSED(timeoutMs);
-    return QStringLiteral("La Status API solo esta disponible en Windows.");
+    return QStringLiteral("La Status API solo está disponible en Windows.");
 #endif
 }

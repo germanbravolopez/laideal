@@ -235,7 +235,7 @@ QPixmap Imprimir::resolveQrCode()
     double total = 0.0;
     QSet<int> seqs;
     for (int row = 0; row < sqlQueryModel->rowCount(); row++) {
-        if (sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_PAGADO)).toString() != QLatin1String(INGRESOS_PAGADO_SI))
+        if (!checkTicketPaid(row))
             continue;
         total += sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_IMPORTE)).toDouble();
         seqs.insert(sqlQueryModel->data(sqlQueryModel->index(row, INGRESOS_COL_VERIFACTU_INVOICE_SEQ)).toInt());
@@ -390,10 +390,10 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         if (size != "0.00")
             garmentName.append(" - " + displayDecimal(size));
         g.name = garmentName;
-        const double importe = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toDouble();
-        g.amount = displayMoney(importe);
+        const double lineAmount = sqlQueryModel->data(sqlQueryModel->index(rowCnt, INGRESOS_COL_IMPORTE)).toDouble();
+        g.amount = displayMoney(lineAmount);
         d.garments.append(g);
-        total += importe;
+        total += lineAmount;
     }
     d.total   = total;
     d.ivaRate = settings->ivaRate();
@@ -619,7 +619,7 @@ void Imprimir::onPrintClicked()
                 continue;
             }
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
-            if (AppSettings::instance()->enablePrinting() && !printTicket()) {
+            if (printing && !printTicket()) {
                 notPrinted << labelFor(ev) + (m_lastSendUncertain ? " (puede que se imprima: compruebe la impresora)"
                                                                   : " (error de impresión)");
                 continue;

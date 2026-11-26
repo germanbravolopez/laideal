@@ -284,8 +284,7 @@ void Updater::downloadInstaller(const QUrl &installerUrl)
     // be launched from there (Windows "no se puede acceder ... permisos"). A
     // per-user app data dir grants the user full control (execute), so the
     // installer runs (and ShellExecute "runas" can then elevate it).
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-                        + QStringLiteral("/updates");
+    const QString dir = updatesDirectory();
     if (!QDir().mkpath(dir)) {
         emit downloadFailed(QStringLiteral("No se pudo acceder al directorio de actualizaciones: %1").arg(dir));
         return;
@@ -324,10 +323,15 @@ void Updater::downloadInstaller(const QUrl &installerUrl)
     });
 }
 
+QString Updater::updatesDirectory()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+           + QStringLiteral("/updates");
+}
+
 void Updater::startInstallerDownload()
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-                        + QStringLiteral("/updates");
+    const QString dir = updatesDirectory();
     const QString localPath = QDir(dir).filePath(installerFileName(m_installer.url));
 
     qDebug() << "Updater: downloading" << m_installer.url << "to" << localPath;

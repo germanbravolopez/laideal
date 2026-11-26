@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <QPair>
 #include <functional>
 
 // Settings dialog - all user-configurable options across the application.
@@ -11,6 +12,8 @@
 // should re-apply settings that take effect at runtime (Verifactu).
 // DB path changes require an application restart.
 class QLabel;
+class QFormLayout;
+class AppSettings;
 
 class SettingsDialog : public QDialog
 {
@@ -61,39 +64,47 @@ private:
     void buildReportsTab(class QTabWidget *tabs);
     void buildBusinessTab(class QTabWidget *tabs);
     void buildVerifactuTab(class QTabWidget *tabs);
+    QFormLayout *buildGatewayGroup(const AppSettings *s);
+    QFormLayout *buildDirectGroup(const AppSettings *s);
+    void addVerifactuCommonRows(QFormLayout *form, const AppSettings *s);
 
-    class QComboBox *m_language;      // "es" / "en" (Qt standard-dialog language)
-    QLineEdit *m_dbPath;
+    bool directSelected() const;
+    bool confirmConnectionChange(const AppSettings *s);
+    bool confirmDatabasePath();
+    bool storeSettings(AppSettings *s);
+
+    class QComboBox *m_language = nullptr;      // "es" / "en" (Qt standard-dialog language)
+    QLineEdit *m_dbPath = nullptr;
     QLineEdit *m_backupSecondFolder = nullptr;
-    QCheckBox *m_enablePrinting;
-    class QComboBox *m_printerName;   // editable: queue name, blank = default printer
-    class QComboBox *m_paperWidth;    // 58 / 80 mm
-    QCheckBox *m_useStatusApi;        // route via Epson Status API + read device status
-    QCheckBox *m_checkUpdatesOnStartup;
+    QCheckBox *m_enablePrinting = nullptr;
+    class QComboBox *m_printerName = nullptr;   // editable: queue name, blank = default printer
+    class QComboBox *m_paperWidth = nullptr;    // 58 / 80 mm
+    QCheckBox *m_useStatusApi = nullptr;        // route via Epson Status API + read device status
+    QCheckBox *m_checkUpdatesOnStartup = nullptr;
 
-    QLineEdit *m_reportsRoot;
+    QLineEdit *m_reportsRoot = nullptr;
 
-    QLineEdit *m_businessName;
-    QLineEdit *m_businessAddress;
-    QLineEdit *m_businessCity;
-    QLineEdit *m_businessPhone;
+    QLineEdit *m_businessName = nullptr;
+    QLineEdit *m_businessAddress = nullptr;
+    QLineEdit *m_businessCity = nullptr;
+    QLineEdit *m_businessPhone = nullptr;
 
-    QLineEdit *m_vNif;
-    QLineEdit *m_vName;
-    QLineEdit *m_vKey;
-    QCheckBox *m_vProduction;
-    QCheckBox *m_vPendingRecoveryEnabled;
-    class QDateEdit *m_vPendingRecoveryFloor;
-    class QComboBox *m_vConnection;       // gateway / direct AEAT
-    class QComboBox *m_vCertificate;      // a store thumbprint, or "" for a .pfx file
-    QLineEdit *m_vCertFile;
-    QLineEdit *m_vCertPassword;
-    QWidget   *m_vCertFileRow;
-    QWidget   *m_vGatewayGroup;         // the gateway's rows: shown only while it is the connection
-    QWidget   *m_vDirectGroup;
+    QLineEdit *m_vNif = nullptr;
+    QLineEdit *m_vName = nullptr;
+    QLineEdit *m_vKey = nullptr;
+    QCheckBox *m_vProduction = nullptr;
+    QCheckBox *m_vPendingRecoveryEnabled = nullptr;
+    class QDateEdit *m_vPendingRecoveryFloor = nullptr;
+    class QComboBox *m_vConnection = nullptr;       // gateway / direct AEAT
+    class QComboBox *m_vCertificate = nullptr;      // a store thumbprint, or "" for a .pfx file
+    QLineEdit *m_vCertFile = nullptr;
+    QLineEdit *m_vCertPassword = nullptr;
+    QWidget   *m_vCertFileRow = nullptr;
+    QWidget   *m_vGatewayGroup = nullptr;         // the gateway's rows: shown only while it is the connection
+    QWidget   *m_vDirectGroup = nullptr;
     QWidget   *m_vSelfTest = nullptr;   // the self-test button: hidden while the shop works in pre-production
     bool       m_selfTestAllowed = true;
-    QCheckBox *m_vDirectProduction;     // direct connection: production AEAT (off: pre-production)
+    QCheckBox *m_vDirectProduction = nullptr;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;
     ProductionCheck m_productionCheck;
     QLabel    *m_vKeyUnreadable = nullptr;
