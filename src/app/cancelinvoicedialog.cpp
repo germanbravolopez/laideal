@@ -280,6 +280,11 @@ void CancelInvoiceDialog::onCancelClicked(int row)
                                                  "Busque el ticket de nuevo.").arg(e.invoiceId.toHtmlEscaped())));
         return;
     }
+    if (const QString undecided = m_verifactu->cancellationUndecidedReason(e.invoiceId, e.invoiceDate, e.qrUrl);
+        !undecided.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(undecided.toHtmlEscaped()));
+        return;
+    }
     if (m_armedRow != row) {
         armCancellation(row);
         return;

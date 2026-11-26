@@ -254,6 +254,9 @@ private slots:
         QVERIFY(client->invoicePredatesProduction("8201", before, testUrl));
         QVERIFY(!client->invoicePredatesProduction("8201", before, realUrl));
         QVERIFY(!client->invoicePredatesProduction("8201", before, "https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR?x=1"));
+        // Only the URL's own host counts: not a look-alike host, nor the name inside the query.
+        QVERIFY(client->invoicePredatesProduction("8201", before, "https://www2.agenciatributaria.gob.es.example/ValidarQR"));
+        QVERIFY(client->invoicePredatesProduction("8201", before, testUrl + "&next=//www2.aeat.es/x"));
 
         QVERIFY(client->cancelInvoiceAsync("8201", before, testUrl).isEmpty());
         QVERIFY2(client->getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(client->getLastError()));
@@ -292,6 +295,13 @@ private slots:
         QVERIFY2(reason.contains("No se pudo leer el d") && reason.contains("PRODUCCI"), qPrintable(reason));
         QVERIFY(client->dateBeforeProductionReason(QDate::currentDate()).isEmpty());
         QVERIFY(!client->submitSimplifiedInvoiceAsync("9302", QDate::currentDate(), 10.0, 21.0).isEmpty());
+        // Anular of an earlier invoice is neither sent nor made in the books: which AEAT holds it is unknown.
+        QVERIFY(client->cancelInvoiceAsync("9303", yesterday).isEmpty());
+        QVERIFY2(client->getLastError().contains("no se anula"), qPrintable(client->getLastError()));
+        QVERIFY(!client->cancellationUndecidedReason("9303", yesterday).isEmpty());
+        QVERIFY(client->cancellationUndecidedReason("9303", yesterday,
+                    "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR?numserie=9303").isEmpty());
+        QVERIFY(client->cancellationUndecidedReason("9303", QDate::currentDate()).isEmpty());
     }
 
     // AEAT refuses the record: the rows are ERROR with AEAT's code.

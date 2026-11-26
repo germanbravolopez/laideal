@@ -1697,7 +1697,7 @@ QString invoiceQrUrl(QSqlDatabase &db, const QString &nRecibo, int seq, bool *ok
     if (!scope.isOpen()) return QString();
     QSqlQuery q(db);
     q.prepare("SELECT COALESCE(MAX(verifactu_url_qr), '') FROM ingresos "
-              "WHERE n_recibo = :n AND pagado = 'SI' AND verifactu_invoice_seq = :s");
+              "WHERE n_recibo = :n AND pagado = 'SI' AND COALESCE(verifactu_invoice_seq, 0) = :s");
     q.bindValue(":n", nRecibo);
     q.bindValue(":s", seq);
     if (!q.exec() || !q.next()) {

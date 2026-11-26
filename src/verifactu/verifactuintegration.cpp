@@ -6,6 +6,7 @@
 #include <QNetworkReply>
 #include <algorithm>
 #include <QSqlDatabase>
+#include <QUrl>
 
 VerifactuIntegration::VerifactuIntegration(QObject *parent)
     : QObject(parent)
@@ -158,6 +159,12 @@ QString VerifactuIntegration::cancelInvoiceAsync(
 {
     if (refusesChainedRecord(__func__))
         return QString();
+    if (const QString undecided = cancellationUndecidedReason(invoiceNumber, invoiceDate, storedQrUrl); !undecided.isEmpty()) {
+        m_lastError = undecided;
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << invoiceNumber
+                   << "- production start day unreadable";
+        return QString();
+    }
     // The real AEAT never held it: there is nothing to cancel there (Anular does it in the books).
     if (invoicePredatesProduction(invoiceNumber, invoiceDate, storedQrUrl)) {
         m_lastError = tr("La factura %1 es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
@@ -317,7 +324,8 @@ namespace {
 // The QR host tells where AEAT registered an invoice: its test site (prewww2) or the real one.
 bool isRealAeatQrUrl(const QString &qrUrl)
 {
-    return qrUrl.contains(QLatin1String("//www2.agenciatributaria.gob.es")) || qrUrl.contains(QLatin1String("//www2.aeat.es"));
+    const QString host = QUrl(qrUrl.trimmed()).host().toLower();
+    return host == QLatin1String("www2.agenciatributaria.gob.es") || host == QLatin1String("www2.aeat.es");
 }
 }
 
@@ -410,6 +418,20 @@ bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumbe
         return false;
     const QDate start = m_direct->startDate();
     return (start.isValid() && invoiceDate.isValid() && invoiceDate < start) || m_direct->acceptedInTestEnvironment(invoiceNumber);
+}
+
+QString VerifactuIntegration::cancellationUndecidedReason(const QString &invoiceNumber, const QDate &invoiceDate,
+                                                          const QString &storedQrUrl) const
+{
+    if (!m_direct || m_direct->environmentName() != QLatin1String("produccion") || m_direct->startDate().isValid())
+        return QString();
+    // What settles it without the start day: a production record, the real AEAT's QR, the
+    // test environment's acceptance, or a date that cannot be earlier than the switch.
+    if (m_direct->holdsRegistration(invoiceNumber) || isRealAeatQrUrl(storedQrUrl)
+        || m_direct->acceptedInTestEnvironment(invoiceNumber) || !invoiceDate.isValid() || invoiceDate >= QDate::currentDate())
+        return QString();
+    return tr("No se pudo leer el día del paso a PRODUCCIÓN: no se sabe si la AEAT real tiene la factura %1 del %2, "
+              "y no se anula.").arg(invoiceNumber, AeatHash::dateText(invoiceDate));
 }
 
 QString VerifactuIntegration::dateBeforeProductionReason(const QDate &invoiceDate) const

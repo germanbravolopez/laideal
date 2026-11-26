@@ -128,6 +128,10 @@ public:
     // it there in production, so it is not one. Pass it whenever the row is at hand.
     bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate,
                                    const QString &storedQrUrl = QString()) const;
+    // In production with an unreadable start day, why an earlier invoice's cancellation can be
+    // neither sent nor made in the books (which AEAT holds it is unknown), or empty.
+    QString cancellationUndecidedReason(const QString &invoiceNumber, const QDate &invoiceDate,
+                                        const QString &storedQrUrl = QString()) const;
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
     QString certificateExpiryWarning() const;
