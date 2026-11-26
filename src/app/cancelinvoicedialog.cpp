@@ -23,26 +23,6 @@ constexpr int COL_ESTADO     = 3;
 constexpr int COL_CSV        = 4;
 constexpr int COL_ACTION     = 5;
 constexpr int COL_COUNT      = 6;
-
-// The verification URL stored on the paid rows of one payment event (they share it); empty
-// when there is none or it cannot be read.
-QString storedQrUrl(QSqlDatabase &db, const QString &ticketNum, int seq)
-{
-    ConnectionScope scope(db);
-    if (!scope.isOpen())
-        return QString();
-    QSqlQuery q(db);
-    q.prepare("SELECT COALESCE(MAX(verifactu_url_qr), '') FROM ingresos "
-              "WHERE n_recibo = :n AND pagado = 'SI' AND verifactu_invoice_seq = :s");
-    q.bindValue(":n", ticketNum);
-    q.bindValue(":s", seq);
-    if (!q.exec() || !q.next()) {
-        qWarning() << "CancelInvoiceDialog: stored QR URL of ticket" << ticketNum << "seq" << seq
-                   << "unreadable -" << q.lastError().text();
-        return QString();
-    }
-    return q.value(0).toString();
-}
 } // namespace
 
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
@@ -154,7 +134,7 @@ void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
         e.csv         = s.csv;
         e.estado      = s.estado;
         e.invoiceDate = parseDbDate(s.fechaPago);
-        e.qrUrl       = storedQrUrl(db, ticketNum, s.seq);
+        e.qrUrl       = invoiceQrUrl(db, ticketNum, s.seq, &e.qrUrlRead);
         m_events.append(e);
     }
 
@@ -292,6 +272,12 @@ void CancelInvoiceDialog::onCancelClicked(int row)
         m_lblResult->setText(UiKit::errorHtml(tr("La rectificativa %1 de este ticket está registrada en la AEAT: "
                                                  "anule antes la rectificativa (busque el ticket %1) y después esta factura.")
                                                   .arg(rectificativa.toHtmlEscaped())));
+        return;
+    }
+    // Which AEAT holds it decides between a cancellation sent and one in the books only.
+    if (!e.qrUrlRead) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer la factura %1 en la base de datos: no se anula. "
+                                                 "Busque el ticket de nuevo.").arg(e.invoiceId.toHtmlEscaped())));
         return;
     }
     if (m_armedRow != row) {

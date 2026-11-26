@@ -65,7 +65,7 @@ Printed on facturas only. `resolveQrCode()` resolves it in this order:
 3. No row has a CSV (AEAT has not confirmed): only the direct client has a QR, the one printed at issue (`VerifactuIntegration::qrBeforeReply`). That sets `m_qrFromQueuedRecord`, which also turns the leyenda on.
 4. A CSV exists: the QR is drawn (`AeatQr::image`) from the stored `verifactu_url_qr`, never rebuilt from today's environment or IVA rate. A row without that URL (an old gateway row) asks the gateway (`/GetQrCode`, 5 s wait; on timeout no QR); the direct client prints no QR rather than rebuild it.
 
-`buildTicket()` redraws the QR through `TicketRenderer::printableQr` (30-40 mm, see [printing](printing.md)). A symbol it cannot read is printed as received, scaled down only when wider than the paper. The leyenda is printed only when every paid row has `verifactu_estado` `ENVIADA`, or `PENDIENTE` while the direct client has just issued the record (`verifactuIssued` or `m_qrFromQueuedRecord`); never decided by row 0. QR bytes are never stored. Legal basis: [Verifactu](verifactu/README.md).
+`buildTicket()` redraws the QR through `TicketRenderer::printableQr` (30-40 mm, see [printing](printing.md)). A symbol it cannot read is printed as received, shrunk only when wider than the paper (`shrinkReceivedQr`: by a whole factor that keeps every module exact when one exists, otherwise resampled to black and white with a warning in the log). The leyenda is printed only when every paid row has `verifactu_estado` `ENVIADA`, or `PENDIENTE` while the direct client has just issued the record (`verifactuIssued` or `m_qrFromQueuedRecord`); never decided by row 0. QR bytes are never stored. Legal basis: [Verifactu](verifactu/README.md).
 
 ## Public API
 

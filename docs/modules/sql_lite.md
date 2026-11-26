@@ -63,6 +63,7 @@ Rows that need a manual look are logged once (`migration_notes`).
 | `aeatProductionStartIso(db)` | Day (ISO) the direct client first ran in production here, or empty. |
 | `verifactuRecoveryFloorIso(db, floorIso, directProduction)` | The floor the pending / refused lists apply: the setting, or the production start when later and in production. |
 | `verifactuEventRecordXml`, `verifactuEventFor` | One payment event's stored record XML; its own total and original `fecha_pago` (paid rows only), for a resend. |
+| `invoiceQrUrl(db, nRecibo, seq, &ok)` | The verification URL stored on the paid rows of one payment event; its host says which AEAT registered the invoice. `ok` false when it could not be read. |
 
 ## Contabilidad listings and quarters
 

@@ -25,13 +25,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Open Issues
 
-From the compliance audit of the 12.7 release (26-11-2026; nothing blocking). None can happen before the shop switches to PRODUCTION.
-
-| Issue | File | Notes |
-|-------|------|-------|
-| Switch day: a ticket the test environment refused can be resent to the real AEAT | `src/verifactu/verifactuintegration.cpp` (`refusesBeforeProduction`) | The boundary is a date. A ticket charged on the switch day before the switch, refused by the test environment (estado `ERROR`), is not "before production" by date, so *Reintentar* after the switch sends it to the real AEAT. Unsent (pending) records cannot be in this state: the switch is refused while any exist. Owner's decision: it is a real sale of a production day, so registering it there may be the right outcome; otherwise refuse it as Anular does (`acceptedInTestEnvironment`-style check on what was tried in the test environment). Record the decision in `docs/modules/verifactu/README.md`, Going to production. |
-| Production left and entered again moves its start day | `src/app/mainwindow.cpp` (`markProductionStarted`), `AeatStore::markStarted` | Deliberate (the comment says so), but a production invoice of the first stint that was refused and never resent is then dated before the new start and can no longer be sent. Leaving production is already refused while production records are unsent; a refused one is the gap. Keep the first start day, or refuse to leave while refused production invoices exist. |
-| A QR printed as received is shrunk without smoothing | `src/imprimir/imprimir.cpp` (the fallback when a QR cannot be redrawn) | A received QR wider than the paper is scaled with `Qt::FastTransformation`, which can damage its modules. Fallback path only (the app redraws its QR from the URL in the normal case). Scale by whole module steps or refuse to shrink, with a ticket-preview test that reads the result. |
+None.
 
 ---
 

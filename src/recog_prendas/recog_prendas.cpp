@@ -1261,8 +1261,10 @@ void RecogPrendas::showAeatReconcileDialog(const QString &ticketNum, int seq,
 
     // A reply before the production start is the expected absence, not a lost invoice.
     const QDate paymentDate = parseDbDate(ev.fechaPago);
-    const bool predatesProduction = rec.parsed && !rec.found && m_verifactuIntegration
-        && m_verifactuIntegration->invoicePredatesProduction(invoiceId, paymentDate);
+    bool qrUrlRead = false;
+    const QString qrUrl = invoiceQrUrl(db, ticketNum, seq, &qrUrlRead);
+    const bool predatesProduction = rec.parsed && !rec.found && m_verifactuIntegration && qrUrlRead
+        && m_verifactuIntegration->invoicePredatesProduction(invoiceId, paymentDate, qrUrl);
     auto *summary = UiKit::introPanel(QString());
     summary->setObjectName("lblSummary");
     summary->setTextFormat(Qt::RichText);

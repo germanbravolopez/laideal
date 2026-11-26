@@ -116,6 +116,11 @@ int applyRectificativaResult(QSqlDatabase &db, const QString &number, const QStr
 bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const QString &original,
                                  const QString &error);
 
+// The verification URL stored on the paid rows of one payment event (they share it); its
+// host says which AEAT registered the invoice. Empty when there is none; *ok false when
+// it could not be read.
+QString invoiceQrUrl(QSqlDatabase &db, const QString &nRecibo, int seq, bool *ok = nullptr);
+
 // The ticket a rectificativa row corrects (verifactu_rectifies_n_recibo), or empty.
 QString rectifiedTicketOf(QSqlDatabase &db, const QString &nRecibo);
 // The accepted rectificativa still standing on `ticket`, following the chain (a rectificativa

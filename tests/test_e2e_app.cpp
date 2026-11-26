@@ -689,6 +689,20 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 15000);
         QCOMPARE(aeat.server.sentRecords().last().operation, QStringLiteral("Anulacion"));
         QCOMPARE(aeat.server.sentRecords().last().invoiceNumber, QStringLiteral("773"));
+
+        // An invoice from before the direct client's production that the gateway registered
+        // at the real AEAT (its QR points there) is cancelled at AEAT, not only in the books.
+        QVERIFY(E2e::seedSentGarment(m_db, "776", "h776a", "10.00", dbDateText(yesterday), "A-REAL0776"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = 'https://www2.agenciatributaria.gob.es/wlpl/"
+                                "TIKE-CONT/ValidarQR?nif=B00000000&numserie=776' WHERE hash='h776a'"));
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("776");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("anular en la AEAT"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(aeat.server.sentRecords().last().invoiceNumber == QLatin1String("776"), 15000);
+        QCOMPARE(aeat.server.sentRecords().last().operation, QStringLiteral("Anulacion"));
+        QVERIFY(!scalar("SELECT COALESCE(verifactu_cancel_xml, '') FROM ingresos WHERE hash='h776a'").startsWith("<AnulacionLocal"));
     }
 
     // While a rectificativa of a ticket waits for AEAT, the ticket can be neither rectified

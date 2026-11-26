@@ -55,6 +55,7 @@ private:
         QString estado;
         QDate   invoiceDate; // fecha_pago: the date AEAT registered the invoice under
         QString qrUrl;       // verifactu_url_qr: its host says which AEAT registered it
+        bool    qrUrlRead = false;
     };
 
     QLineEdit    *m_leTicketNum = nullptr;

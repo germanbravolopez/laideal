@@ -2408,6 +2408,9 @@ private slots:
         rectificativa("860", "850", "S");
         rectificativa("861", "851", "I");
         QCOMPARE(rectifiedTicketOf(m_db, "860"), QStringLiteral("850"));
+        bool read = false;
+        QVERIFY(invoiceQrUrl(m_db, "850", 0, &read).isEmpty());                // no URL stored, yet read
+        QVERIFY(read);
         QVERIFY(rectifiedTicketOf(m_db, "850").isEmpty());
         for (const PendingVerifactuEvent &e : pendingVerifactuEvents(m_db, "2000-01-01"))
             QVERIFY2(e.nRecibo != "860" && e.nRecibo != "861", qPrintable(e.nRecibo));

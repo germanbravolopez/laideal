@@ -20,7 +20,7 @@ Built in code with the shared [UiKit](uikit.md) style. The widgets are in the `W
 - **Estado y fechas**: reception date, read-only **Pagada** with payment date and SÍ / NO label, **Recogida** with pickup date and Recogido / En tienda label, read-only **Anulación** date. An empty payment or anulación date shows "-"; an empty pickup date shows today (what Recogida will store). A voided garment shows no NO / En tienda label and no pickup date.
 - **Ticket**: bold Importe total, Cobrar..., Recoger todo, Separar (+ how many), Añadir prendas..., Anular prendas..., Imprimir factura, Verifactu....
 - A result panel: every message goes there. AEAT replies, which arrive later, use the status bar and the refresh they trigger keeps the panel's last message.
-- The details follow the **current row**, so the arrow keys work without a click (`currentRowChanged`; the row already loaded keeps what the operator typed).
+- The details follow the **current row**, so the arrow keys work without a click (`currentRowChanged`; the row already loaded keeps what the operator typed; a mouse click loads its row once, through `clicked`).
 
 ```cpp
 RecogPrendas *ui = new RecogPrendas(db, this);
