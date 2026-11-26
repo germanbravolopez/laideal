@@ -153,12 +153,13 @@ void VerifactuIntegration::dropInFlightOf(const QObject *backend)
 
 QString VerifactuIntegration::cancelInvoiceAsync(
     const QString &invoiceNumber,
-    const QDate &invoiceDate)
+    const QDate &invoiceDate,
+    const QString &storedQrUrl)
 {
     if (refusesChainedRecord(__func__))
         return QString();
     // The real AEAT never held it: there is nothing to cancel there (Anular does it in the books).
-    if (invoicePredatesProduction(invoiceNumber, invoiceDate)) {
+    if (invoicePredatesProduction(invoiceNumber, invoiceDate, storedQrUrl)) {
         m_lastError = tr("La factura %1 es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
                          "su anulación.").arg(invoiceNumber);
         qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << invoiceNumber << "- issued before production";
@@ -283,18 +284,41 @@ bool VerifactuIntegration::refusesUnconfigured(const char *operation)
 bool VerifactuIntegration::refusesBeforeProduction(const QString &invoiceNumber, const QDate &invoiceDate,
                                                    const char *operation)
 {
-    if (!isBeforeProductionStart(invoiceDate))
+    bool startUnreadable = false;
+    if (!isBeforeProductionStart(invoiceDate, &startUnreadable))
         return false;
+    if (startUnreadable) {
+        m_lastError = tr("No se pudo leer el día del paso a PRODUCCIÓN: la factura %1 del %2 es anterior a hoy y no se "
+                         "envía a la AEAT real.").arg(invoiceNumber, AeatHash::dateText(invoiceDate));
+        qWarning() << "VerifactuIntegration:" << operation << "refused for" << invoiceNumber
+                   << "- production start day unreadable, invoice dated before today";
+        return true;
+    }
     m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
                       .arg(invoiceNumber, AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));
     qWarning() << "VerifactuIntegration:" << operation << "refused for" << invoiceNumber << "- dated before production";
     return true;
 }
 
-bool VerifactuIntegration::isBeforeProductionStart(const QDate &invoiceDate) const
+bool VerifactuIntegration::isBeforeProductionStart(const QDate &invoiceDate, bool *startUnreadable) const
 {
-    const QDate start = productionStartDate();
-    return start.isValid() && invoiceDate.isValid() && invoiceDate < start;
+    if (!m_direct || m_direct->environmentName() != QLatin1String("produccion") || !invoiceDate.isValid())
+        return false;
+    const QDate start = m_direct->startDate();
+    if (start.isValid())
+        return invoiceDate < start;
+    // Production whose start day cannot be read: fail closed, only today's date passes.
+    if (startUnreadable)
+        *startUnreadable = true;
+    return invoiceDate < QDate::currentDate();
+}
+
+namespace {
+// The QR host tells where AEAT registered an invoice: its test site (prewww2) or the real one.
+bool isRealAeatQrUrl(const QString &qrUrl)
+{
+    return qrUrl.contains(QLatin1String("//www2.agenciatributaria.gob.es")) || qrUrl.contains(QLatin1String("//www2.aeat.es"));
+}
 }
 
 VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate,
@@ -376,9 +400,13 @@ void VerifactuIntegration::markProductionStarted()
         m_direct->restartPeriod();
 }
 
-bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate) const
+bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate,
+                                                     const QString &storedQrUrl) const
 {
     if (!m_direct || m_direct->environmentName() != QLatin1String("produccion") || m_direct->holdsRegistration(invoiceNumber))
+        return false;
+    // The gateway itself registered it at the real AEAT: its QR points there.
+    if (isRealAeatQrUrl(storedQrUrl))
         return false;
     const QDate start = m_direct->startDate();
     return (start.isValid() && invoiceDate.isValid() && invoiceDate < start) || m_direct->acceptedInTestEnvironment(invoiceNumber);
@@ -386,8 +414,15 @@ bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumbe
 
 QString VerifactuIntegration::dateBeforeProductionReason(const QDate &invoiceDate) const
 {
-    if (!isBeforeProductionStart(invoiceDate))
+    bool startUnreadable = false;
+    if (!isBeforeProductionStart(invoiceDate, &startUnreadable))
         return QString();
+    if (startUnreadable) {
+        qWarning() << "VerifactuIntegration: production start day unreadable, date" << AeatHash::dateText(invoiceDate)
+                   << "refused as before today";
+        return tr("No se pudo leer el día del paso a PRODUCCIÓN: la fecha %1 es anterior a hoy y una factura nueva no "
+                  "puede llevarla.").arg(AeatHash::dateText(invoiceDate));
+    }
     return tr("La fecha %1 es anterior al paso a PRODUCCIÓN (%2): una factura nueva no puede llevarla, porque no "
               "se registraría en la AEAT real.")
         .arg(AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));

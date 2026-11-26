@@ -8,10 +8,14 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QScopeGuard>
 #include <QTableWidget>
 #include <QTemporaryDir>
 
+#include <memory>
+
 #include "aeatdirectbackend.h"
+#include "aeatstore.h"
 #include "appsettings.h"
 #include "fakeaeatserver.h"
 #include "imprimir.h"
@@ -92,6 +96,25 @@ private:
         while (dlg.result() != QDialog::Accepted && t.elapsed() < 15000)
             QTest::qWait(50);
         return dlg.result() == QDialog::Accepted;
+    }
+
+    // The direct client in PRODUCCION on this database, its chain already synced as on an
+    // installation that runs (nothing goes to a first sync). Null if that could not be set up.
+    std::unique_ptr<VerifactuIntegration> productionClient()
+    {
+        AppSettings *s = AppSettings::instance();
+        const QString nif = s->verifactuNif();
+        AeatStore store(m_db, "produccion");
+        if (!store.ensureSchema() || !store.markChainSynced(nif))
+            return nullptr;
+        const QString previousMarker = s->aeatChainMarker();
+        s->setAeatChainMarker(QStringLiteral("produccion|%1|%2").arg(nif, store.chainHead(nif).hash));
+        s->setAeatDirectProduction(true);
+        auto client = std::make_unique<VerifactuIntegration>();
+        const bool ready = client->initialize(m_db);
+        s->setAeatDirectProduction(false);
+        s->setAeatChainMarker(previousMarker);
+        return ready && client->environmentName() == QLatin1String("produccion") ? std::move(client) : nullptr;
     }
 
 private slots:
@@ -201,6 +224,74 @@ private slots:
         QVERIFY(explicitProduction.directBackend()->configurationInfo().contains("PRODUCCION"));
         s->setAeatDirectProduction(false);
         s->setVerifactuProduction(false);
+    }
+
+    // A ticket dated on the day production starts is production's: a retry on the switch
+    // day goes to the real AEAT; only an earlier date is refused as before production.
+    void test_switchDayTicketIsNotBeforeProduction()
+    {
+        const auto client = productionClient();
+        QVERIFY(client);
+        QCOMPARE(client->productionStartDate(), QDate::currentDate());
+        QVERIFY(client->submitSimplifiedInvoiceAsync("9101", QDate::currentDate().addDays(-1), 10.0, 21.0).isEmpty());
+        QVERIFY2(client->getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(client->getLastError()));
+        QVERIFY(client->dateBeforeProductionReason(QDate::currentDate()).isEmpty());
+        QVERIFY(!client->submitSimplifiedInvoiceAsync("9101", QDate::currentDate(), 10.0, 21.0).isEmpty());
+    }
+
+    // The gateway registered the invoice itself at the real AEAT when it was in PRODUCTION:
+    // its stored QR points there, so it is not one the real AEAT never held, and Anular
+    // cancels it at AEAT through the direct client.
+    void test_invoiceTheGatewayRegisteredInProductionIsCancelledAtAeat()
+    {
+        const auto client = productionClient();
+        QVERIFY(client);
+        const QDate before = QDate::currentDate().addDays(-30);
+        const QString testUrl = "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=8201";
+        const QString realUrl = "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=8201";
+        QVERIFY(client->invoicePredatesProduction("8201", before));
+        QVERIFY(client->invoicePredatesProduction("8201", before, QString()));
+        QVERIFY(client->invoicePredatesProduction("8201", before, testUrl));
+        QVERIFY(!client->invoicePredatesProduction("8201", before, realUrl));
+        QVERIFY(!client->invoicePredatesProduction("8201", before, "https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR?x=1"));
+
+        QVERIFY(client->cancelInvoiceAsync("8201", before, testUrl).isEmpty());
+        QVERIFY2(client->getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(client->getLastError()));
+        QVERIFY(client->cancelInvoiceAsync("8201", before).isEmpty());
+        const int sentBefore = m_server.sentRecords().size();
+        const QString requestId = client->cancelInvoiceAsync("8201", before, realUrl);
+        QVERIFY2(!requestId.isEmpty(), qPrintable(client->getLastError()));
+        QTRY_VERIFY_WITH_TIMEOUT(m_server.sentRecords().size() > sentBefore, 20000);
+        const FakeAeatServer::SentRecord sent = m_server.sentRecords().last();
+        QCOMPARE(sent.operation, QStringLiteral("Anulacion"));
+        QCOMPARE(sent.invoiceNumber, QStringLiteral("8201"));
+    }
+
+    // Production whose start day cannot be read (its table is gone): nothing dated before
+    // today passes, with a reason that says so; today's date still does.
+    void test_productionWithUnreadableStartDayRefusesEarlierDates()
+    {
+        const auto client = productionClient();
+        QVERIFY(client);
+        exec("DROP TABLE aeat_environment_start");
+        const auto restore = qScopeGuard([this] {
+            AeatStore store(m_db, "produccion");
+            QVERIFY(store.ensureSchema());
+            QVERIFY(store.markStarted());
+        });
+        QVERIFY(!client->productionStartDate().isValid());
+        const QDate yesterday = QDate::currentDate().addDays(-1);
+        QVERIFY(client->submitSimplifiedInvoiceAsync("9301", yesterday, 10.0, 21.0).isEmpty());
+        QVERIFY2(client->getLastError().contains("No se pudo leer el d"), qPrintable(client->getLastError()));
+        QVERIFY2(client->getLastError().contains("PRODUCCI"), qPrintable(client->getLastError()));
+        QVERIFY(client->submitRectificationAsync("R-9301", yesterday, VerifactuInvoice::RECTIFICATION_R5,
+                                                 VerifactuInvoice::BY_DIFFERENCES, -1.0, -0.21, 10.0, 2.10, 21.0,
+                                                 "x", "9301", yesterday).isEmpty());
+        QVERIFY2(client->getLastError().contains("No se pudo leer el d"), qPrintable(client->getLastError()));
+        const QString reason = client->dateBeforeProductionReason(yesterday);
+        QVERIFY2(reason.contains("No se pudo leer el d") && reason.contains("PRODUCCI"), qPrintable(reason));
+        QVERIFY(client->dateBeforeProductionReason(QDate::currentDate()).isEmpty());
+        QVERIFY(!client->submitSimplifiedInvoiceAsync("9302", QDate::currentDate(), 10.0, 21.0).isEmpty());
     }
 
     // AEAT refuses the record: the rows are ERROR with AEAT's code.

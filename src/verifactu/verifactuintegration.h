@@ -40,7 +40,8 @@ public:
 
     QString cancelInvoiceAsync(
         const QString &invoiceNumber,
-        const QDate &invoiceDate
+        const QDate &invoiceDate,
+        const QString &storedQrUrl = QString()
     );
 
     // Async submit of a rectificativa (R1-R5). Builds an F2-style simplified invoice
@@ -123,7 +124,10 @@ public:
     QString dateBeforeProductionReason(const QDate &invoiceDate) const;
     // An existing invoice the real AEAT never held (dated before production, or accepted
     // by its test environment): nothing about it is sent there; Anular cancels it in the books.
-    bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate) const;
+    // `storedQrUrl` is the row's verification URL: on the real AEAT's host the gateway registered
+    // it there in production, so it is not one. Pass it whenever the row is at hand.
+    bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate,
+                                   const QString &storedQrUrl = QString()) const;
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
     QString certificateExpiryWarning() const;
@@ -170,7 +174,9 @@ private:
     bool refusesChainedRecord(const char *operation);
     bool refusesUnconfigured(const char *operation);
     bool refusesBeforeProduction(const QString &invoiceNumber, const QDate &invoiceDate, const char *operation);
-    bool isBeforeProductionStart(const QDate &invoiceDate) const;
+    // `startUnreadable` is set when production has no readable start day: then only a date
+    // before today counts as before production.
+    bool isBeforeProductionStart(const QDate &invoiceDate, bool *startUnreadable = nullptr) const;
     VerifactuInvoice invoiceHeader(const QString &number, const QDate &date, VerifactuInvoice::InvoiceType type,
                                    const QString &description) const;
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,

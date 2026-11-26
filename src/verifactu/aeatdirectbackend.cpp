@@ -477,6 +477,10 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             if (foreign) {
                 if (s.valid)
                     m_foreignCancelled << s;
+                else
+                    qWarning() << "AeatDirectBackend: cancelled invoice" << r.invoiceNumber
+                               << "returned under another system's block has no usable huella or generation time"
+                               << "- left out of the chain check";
                 continue;
             }
             if (s.valid)

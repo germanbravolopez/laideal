@@ -23,6 +23,26 @@ constexpr int COL_ESTADO     = 3;
 constexpr int COL_CSV        = 4;
 constexpr int COL_ACTION     = 5;
 constexpr int COL_COUNT      = 6;
+
+// The verification URL stored on the paid rows of one payment event (they share it); empty
+// when there is none or it cannot be read.
+QString storedQrUrl(QSqlDatabase &db, const QString &ticketNum, int seq)
+{
+    ConnectionScope scope(db);
+    if (!scope.isOpen())
+        return QString();
+    QSqlQuery q(db);
+    q.prepare("SELECT COALESCE(MAX(verifactu_url_qr), '') FROM ingresos "
+              "WHERE n_recibo = :n AND pagado = 'SI' AND verifactu_invoice_seq = :s");
+    q.bindValue(":n", ticketNum);
+    q.bindValue(":s", seq);
+    if (!q.exec() || !q.next()) {
+        qWarning() << "CancelInvoiceDialog: stored QR URL of ticket" << ticketNum << "seq" << seq
+                   << "unreadable -" << q.lastError().text();
+        return QString();
+    }
+    return q.value(0).toString();
+}
 } // namespace
 
 CancelInvoiceDialog::CancelInvoiceDialog(const QSqlDatabase &database, QWidget *parent)
@@ -134,6 +154,7 @@ void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
         e.csv         = s.csv;
         e.estado      = s.estado;
         e.invoiceDate = parseDbDate(s.fechaPago);
+        e.qrUrl       = storedQrUrl(db, ticketNum, s.seq);
         m_events.append(e);
     }
 
@@ -278,7 +299,7 @@ void CancelInvoiceDialog::onCancelClicked(int row)
         return;
     }
     disarmCancellation();
-    if (m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate)) {
+    if (m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate, e.qrUrl)) {
         cancelLocally(row);
         return;
     }
@@ -294,7 +315,7 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     m_firstRejection.clear();
     m_pendingFallbackDate = (e.seq == 0 && m_receptionDate.isValid() && m_receptionDate != e.invoiceDate)
                             ? m_receptionDate : QDate();
-    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
+    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate, e.qrUrl);
     if (m_pendingCancelId.isEmpty()) {
         m_lblResult->setText(UiKit::errorHtml(tr("Verifactu no configurado:")) + " "
                              + m_verifactu->getLastError().toHtmlEscaped());
@@ -312,7 +333,7 @@ void CancelInvoiceDialog::armCancellation(int row)
     m_armedRow = row;
     btn->setText(tr("Confirmar anulación"));
     const Event &e = m_events[row];
-    if (m_verifactu && m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate)) {
+    if (m_verifactu && m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate, e.qrUrl)) {
         m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la contabilidad la factura %1 del %2 por %3 €.")
                                                  .arg(e.invoiceId.toHtmlEscaped(), dbDateText(e.invoiceDate),
                                                       displayMoney(e.importe)))
@@ -396,7 +417,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
                                  .arg(e.invoiceId.toHtmlEscaped(), dbDateText(fallback)));
         m_firstRejection   = result.errorDescription;
         m_pendingCancelRow = row;
-        m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback);
+        m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback, e.qrUrl);
         if (!m_pendingCancelId.isEmpty())
             return;
         m_pendingCancelRow = -1;
