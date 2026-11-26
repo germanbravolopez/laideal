@@ -29,7 +29,7 @@ private slots:
     void suggestFileName();
 
 private:
-    QSqlDatabase db;
+    QSqlDatabase m_db;
     QDateEdit *m_deFrom = nullptr;
     QDateEdit *m_deTo = nullptr;
     QLineEdit *m_leFile = nullptr;

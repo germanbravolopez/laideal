@@ -59,6 +59,7 @@ private:
     void finish();
     void cleanUp();
     int addCheck(const QString &id, const QString &title);
+    void runCheck(const QString &id, const std::function<SelfCheck::Check()> &check);
     void showCheck(int index);
 
     QString m_liveSettingsFile;

@@ -10,7 +10,7 @@
 
 RefusedInvoicesDialog::RefusedInvoicesDialog(const QSqlDatabase &database, const QString &floorIso, QWidget *parent)
     : QDialog(parent)
-    , db(database)
+    , m_db(database)
     , m_floorIso(floorIso)
 {
     UiKit::setUpDialog(this, tr("Facturas rechazadas por la AEAT"), 760);
@@ -48,7 +48,7 @@ RefusedInvoicesDialog::RefusedInvoicesDialog(const QSqlDatabase &database, const
 
 void RefusedInvoicesDialog::reload()
 {
-    m_invoices = refusedInvoices(db, m_floorIso);
+    m_invoices = refusedInvoices(m_db, m_floorIso);
     m_table->setRowCount(0);
     for (const RefusedInvoice &r : m_invoices) {
         const int row = m_table->rowCount();

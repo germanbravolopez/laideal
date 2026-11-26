@@ -44,53 +44,9 @@ public:
     QSqlDatabase db;
 
 private slots:
-    void mainwindowInitialSettings();
+    // Called by name from the tests (QMetaObject::invokeMethod).
     void initializeVerifactu();
-    void appendToResult(const QString &html);   // adds below what the panel already shows
-    void resetAllContents();
-
-    // Custom functions
-    void setNextTicketNumber();
-    void populateCbClient();
-    void resizeTable();
-    void setServiceToCb(int initialRow);
-    void setGarmentToCbAndPopulate(int initialRow);
-    void setGarmentPrice(int garmentRow, QString garmentText, QString serviceText);
-
-    void cbGarmChanged(const QString &text);
-    void cbServChanged(const QString &text);
-    // Re-prices one row from its garment, service, quantity and size.
-    void updateRowPrice(int row);
-
-    bool validateTicket();
-    void checkClientData();
-    // Returns the in-flight reqId, or empty if Verifactu is not configured /
-    // submit was rejected. seq selects the submission event: 0 = save-time /
-    // full-ticket (InvoiceID = bare n_recibo), >0 = a partial-pay event being
-    // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
-    QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
-                                   double totalAmount, int seq = 0);
-    // The status bar's count of invoices AEAT refused, until they are resent (hidden at 0).
-    void updateRefusedInvoices();
-    void showRefusedInvoices();   // the list behind the red count
-    // The status bar's notice that the direct client is in AEAT's test environment.
-    void updateAeatEnvironment();
-    // The status bar's count of records still to send to AEAT after an incident (hidden at 0).
-    void updateUnsentRecords();
-    // An AEAT refusal shown in the result panel (it can come after the factura was printed).
-    void showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result);
-    // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
-    // answers (direct client); null with the gateway.
-    QPixmap verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
-                                   int seq = 0) const;
-    // Inserts the ticket's garments; storedTotal = the sum of the stored amounts.
-    // False (stops at the first failed insert) when the ticket was not stored whole.
-    bool saveTicket(double &storedTotal);
-    // Each returns whether both copies reached the printer.
-    bool printRecibo();
-    // Paid at reception: the factura with the QR for the client, the paid recibo for the shop.
-    bool printFra(const QPixmap &qrCode, bool verifactuIssued);
-    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
+    void updateRefusedInvoices();   // the status bar's count of invoices AEAT refused, until resent (hidden at 0)
 
     // Widgets
     void on_pb_payment_toggled(bool checked);
@@ -104,9 +60,7 @@ private slots:
     void on_actionCerrar_triggered();
     void on_actionIngresos_triggered();
     void on_actionGastos_triggered();
-    void repopulatePrendas();
     void on_actionListado_de_prendas_triggered();
-    void repopulateClientes();
     void on_actionListado_de_clientes_triggered();
     void on_actionListado_de_proveedores_triggered();
     void on_actionListado_de_servicios_triggered();
@@ -128,6 +82,66 @@ private slots:
     void on_actionNotas_de_la_version_triggered();
     void on_actionHacer_copia_de_seguridad_triggered();
 
+private:
+    void mainwindowInitialSettings();
+    void appendToResult(const QString &html);   // adds below what the panel already shows
+    void resetAllContents();
+
+    void setNextTicketNumber();
+    void populateCbClient();
+    void resizeTable();
+    void setServiceToCb(int initialRow);
+    void setGarmentToCbAndPopulate(int initialRow);
+    void setGarmentPrice(int garmentRow, QString garmentText, QString serviceText);
+
+    void cbGarmChanged(const QString &text);
+    void cbServChanged(const QString &text);
+    // Re-prices one row from its garment, service, quantity and size.
+    void updateRowPrice(int row);
+
+    bool validateTicket();
+    void checkClientData();
+    // Returns the in-flight reqId, or empty if Verifactu is not configured /
+    // submit was rejected. seq selects the submission event: 0 = save-time /
+    // full-ticket (InvoiceID = bare n_recibo), >0 = a partial-pay event being
+    // recovered (InvoiceID "<ticketNum>-<seq>", that seq's amount).
+    QString verifactuSubmitInvoice(const QString &ticketNum, const QDate &invoiceDate,
+                                   double totalAmount, int seq = 0);
+    void showRefusedInvoices();   // the list behind the red count
+    // The status bar's notice that the direct client is in AEAT's test environment.
+    void updateAeatEnvironment();
+    // The status bar's count of records still to send to AEAT after an incident (hidden at 0).
+    void updateUnsentRecords();
+    // An AEAT refusal shown in the result panel (it can come after the factura was printed).
+    void showVerifactuRejection(const QString &invoiceId, const VerifactuResult &result);
+    // The QR of what verifactuSubmitInvoice sent, when it can be printed before AEAT
+    // answers (direct client); null with the gateway.
+    QPixmap verifactuQrBeforeReply(const QString &ticketNum, const QDate &invoiceDate, double totalAmount,
+                                   int seq = 0) const;
+    // Inserts the ticket's garments; storedTotal = the sum of the stored amounts, garments
+    // their count. False (stops at the first failed insert) when the ticket was not stored whole.
+    bool saveTicket(double &storedTotal, int &garments);
+    // What on_pb_save_clicked does after a stored ticket: the AEAT submission of a paid one,
+    // then the printing. Returns what was printed (empty: nothing); refusal gets an AEAT
+    // refusal that came in during the wait.
+    QString submitAndPrint(const QString &ticketNum, const QDate &invoiceDate, bool isPaid, double totalAmount,
+                           QString &refusal);
+    // Waits (up to 3 s, the window disabled) for AEAT's reply to reqId; the QR of an accepted one.
+    struct AeatReply { QPixmap qrCode; bool success = false; QString refusal; };
+    AeatReply waitForAeatReply(const QString &reqId, const QString &ticketNum);
+    // Each returns whether both copies reached the printer.
+    bool printRecibo();
+    // Paid at reception: the factura with the QR for the client, the paid recibo for the shop.
+    bool printFra(const QPixmap &qrCode, bool verifactuIssued);
+    struct SavedTicket;
+    QString savedMessage(const SavedTicket &saved) const;
+    void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
+
+    void repopulatePrendas();
+    void repopulateClientes();
+    void openListado(const QString &tableName, const QString &objectName, const QString &title);
+    void openImprimir(bool isRecibo, bool isCompleteInvoice, const QString &title);
+
     // Updater signal handlers
     void onUpdateAvailable(const QString &latestVersion,
                            const QString &releaseNotes,
@@ -135,7 +149,13 @@ private slots:
     void onUpdaterNoUpdateAvailable();
     void onUpdaterCheckFailed(const QString &error);
 
-private:
+    // Configuración, and the connection tests it offers.
+    void openSettings();
+    QString checkAeatProduction(QObject *context, const QString &nif, const QString &name, const QString &thumbprint,
+                                const QString &certificateFile, const QString &certificatePassword);
+    void testGatewayConnection(QWidget *parent, const QString &nif, const QString &name,
+                               const QString &serviceKey, bool production);
+
     // Direct AEAT connection: the self-test window from Configuración, and the sync of
     // our own chain when the connection starts.
     void runAeatSelfTest(QWidget *parent, const QString &nif, const QString &name, const QString &thumbprint,
@@ -172,6 +192,7 @@ private:
         QAction *actionConfiguracion = nullptr;   // connected once the database is migrated
     };
     void buildUi();
+    void buildStatusBar();   // its three notices, in the order they show
     int rowOfCellWidget(QObject *widget, int column) const;
 
     Widgets *ui = nullptr;
@@ -192,9 +213,9 @@ private:
     struct PendingSubmit { QString ticketNum; int seq = 0; bool printedWithoutQr = false; };
     QHash<QString, PendingSubmit> m_pendingSubmits;
     Updater *m_updater = nullptr;
-    class QLabel *m_aeatEnvironment = nullptr;   // status bar: the direct client in pre-production
-    class QLabel *m_refusedInvoices = nullptr;   // status bar: invoices AEAT refused, until resent
-    class QLabel *m_unsentRecords = nullptr;     // status bar: records waiting to be sent after an incident
+    QLabel *m_aeatEnvironment = nullptr;   // status bar: the direct client in pre-production
+    QLabel *m_refusedInvoices = nullptr;   // status bar: invoices AEAT refused, until resent
+    QLabel *m_unsentRecords = nullptr;     // status bar: records waiting to be sent after an incident
     BackupManager *m_backupManager = nullptr;
     QPointer<QThread> m_backupThread;   // the automatic backup, waited for on close
 };

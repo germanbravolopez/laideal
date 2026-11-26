@@ -75,11 +75,11 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     rowType->addWidget(new QLabel(tr("Tipo:")));
     m_cbInvoiceType = new QComboBox();
     m_cbInvoiceType->setObjectName("cbInvoiceType");
-    m_cbInvoiceType->addItem("R1 - Error fundado en derecho (art. 80.1, 80.2 y 80.6 LIVA)");
-    m_cbInvoiceType->addItem("R2 - Concurso de acreedores (art. 80.3 LIVA)");
-    m_cbInvoiceType->addItem("R3 - Créditos incobrables (art. 80.4 LIVA)");
-    m_cbInvoiceType->addItem("R4 - Resto de causas");
-    m_cbInvoiceType->addItem("R5 - Rectificación de factura simplificada");
+    m_cbInvoiceType->addItem(tr("R1 - Error fundado en derecho (art. 80.1, 80.2 y 80.6 LIVA)"));
+    m_cbInvoiceType->addItem(tr("R2 - Concurso de acreedores (art. 80.3 LIVA)"));
+    m_cbInvoiceType->addItem(tr("R3 - Créditos incobrables (art. 80.4 LIVA)"));
+    m_cbInvoiceType->addItem(tr("R4 - Resto de causas"));
+    m_cbInvoiceType->addItem(tr("R5 - Rectificación de factura simplificada"));
     m_cbInvoiceType->setCurrentIndex(4); // R5: the shop's tickets are simplified invoices, and the only type the direct connection takes
     rowType->addWidget(m_cbInvoiceType, /*stretch*/ 1);
     formLayout->addLayout(rowType);
@@ -128,7 +128,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_grpForm->setEnabled(false);
 
     // Submit + result ------------------------------------------------------
-    // Not a primaryButton: Enter in a field never sends a rectificativa (11.1).
+    // Not a primaryButton: Enter in a field never sends a rectificativa.
     m_btnRectify = UiKit::secondaryButton(tr("Enviar rectificativa a AEAT"), "btnRectify");
     m_btnRectify->setEnabled(false);
     auto *actionRow = new QHBoxLayout();
@@ -182,19 +182,15 @@ void RectifyInvoiceDialog::onSearchClicked()
         m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
         return;
     }
-    const QString cliente = header.client;
-    const QString fecha   = header.receptionDate;
+    const QString client = header.client;
+    const QString receptionDate   = header.receptionDate;
     bool hasPartialPays = false;
     {
         ConnectionScope scope(db);
 
-        // 8.5+ guard: a ticket with multiple partial-pay events (verifactu_invoice_seq
-        // > 0 on any row) was submitted to AEAT under several distinct InvoiceIDs.
-        // applyRectificationResult() below issues `UPDATE ... WHERE n_recibo = X`
-        // which would mark every payment event's rows RECTIFICADA in one shot - that
-        // both loses per-seq AEAT alignment AND silently underreports quarterly
-        // income in `contabilidad` (RECTIFICADA is excluded from totals). Block
-        // until per-seq rectification is implemented.
+        // A ticket with partial-pay events (verifactu_invoice_seq > 0) went to AEAT under several
+        // InvoiceIDs, but the result marks every row of the n_recibo RECTIFICADA (out of the
+        // quarterly totals): blocked until a rectification is per seq.
         QSqlQuery seqQ(db);
         seqQ.prepare("SELECT COUNT(*) FROM ingresos "
                      "WHERE n_recibo = :num AND verifactu_invoice_seq > 0");
@@ -209,7 +205,7 @@ void RectifyInvoiceDialog::onSearchClicked()
                "<i>Este ticket tiene varios pagos parciales. La rectificación "
                "individual de cada pago no está disponible en esta versión; "
                "rectificar desde la sede electrónica de la AEAT.</i>")
-            .arg(cliente.toHtmlEscaped(), fecha.toHtmlEscaped()));
+            .arg(client.toHtmlEscaped(), receptionDate.toHtmlEscaped()));
         return;
     }
 
@@ -224,9 +220,9 @@ void RectifyInvoiceDialog::onSearchClicked()
     for (const SubmittedInvoiceEvent &e : events)
         if (e.seq == 0)
             invoice = e;
-    const double  importe = invoice.importe;
+    const double  amount = invoice.importe;
     const QString csv     = invoice.csv;
-    const QString estado  = invoice.estado;
+    const QString state  = invoice.estado;
 
     m_lblInfo->setText(
         tr("<b>Cliente:</b> %1<br>"
@@ -234,37 +230,37 @@ void RectifyInvoiceDialog::onSearchClicked()
            "<b>Importe total:</b> %3 €<br>"
            "<b>CSV Verifactu:</b> %4<br>"
            "<b>Estado:</b> %5")
-        .arg(cliente.toHtmlEscaped(), fecha.toHtmlEscaped(),
-             displayMoney(importe),
+        .arg(client.toHtmlEscaped(), receptionDate.toHtmlEscaped(),
+             displayMoney(amount),
              csv.isEmpty() ? QStringLiteral("-") : csv.toHtmlEscaped(),
-             verifactuEstadoDisplay(estado).toHtmlEscaped()));
+             verifactuEstadoDisplay(state).toHtmlEscaped()));
 
-    const VerifactuEstado estadoEnum = verifactuEstadoFromString(estado);
+    const VerifactuEstado stateEnum = verifactuEstadoFromString(state);
     const QString pending = pendingRectificationOf(db, ticketNum);
     const bool cancellationPending = m_verifactu && m_verifactu->holdsPendingCancellation(verifactuInvoiceId(ticketNum, 0));
-    if (estadoEnum == VerifactuEstado::Enviada && cancellationPending) {
+    if (stateEnum == VerifactuEstado::Enviada && cancellationPending) {
         m_lblResult->setText(UiKit::warnHtml(tr("La anulación de este ticket está pendiente de envío a la AEAT: "
                                                 "no se puede rectificar.")));
-    } else if (estadoEnum == VerifactuEstado::Enviada && !pending.isEmpty()) {
+    } else if (stateEnum == VerifactuEstado::Enviada && !pending.isEmpty()) {
         m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
                                                 "espere a que se registre antes de rectificarlo de nuevo.")
                                                  .arg(pending.toHtmlEscaped())));
-    } else if (estadoEnum == VerifactuEstado::Enviada) {
+    } else if (stateEnum == VerifactuEstado::Enviada) {
         m_loadedTicket        = ticketNum;
-        m_loadedCliente       = cliente;
-        m_loadedImporteTotal  = importe;
+        m_loadedCliente       = client;
+        m_loadedImporteTotal  = amount;
         // Sensible default: in S mode, prefill with the original total so the user
         // adjusts down; in I mode, leave at 0.
-        m_sbAmount->setValue(m_rbDifferences->isChecked() ? 0.00 : importe);
+        m_sbAmount->setValue(m_rbDifferences->isChecked() ? 0.00 : amount);
         setFormEnabled(true);
     } else {
-        const QString reason = (estadoEnum == VerifactuEstado::Anulada)     ? tr("Este ticket está anulado en AEAT - no se puede rectificar.")
-                             : (estadoEnum == VerifactuEstado::Rectificada) ? tr("Este ticket ya fue rectificado previamente.")
-                             : (estadoEnum == VerifactuEstado::Unknown)     ? tr("El estado Verifactu de este ticket no es válido: "
+        const QString reason = (stateEnum == VerifactuEstado::Anulada)     ? tr("Este ticket está anulado en AEAT - no se puede rectificar.")
+                             : (stateEnum == VerifactuEstado::Rectificada) ? tr("Este ticket ya fue rectificado previamente.")
+                             : (stateEnum == VerifactuEstado::Unknown)     ? tr("El estado Verifactu de este ticket no es válido: "
                                                                                  "revíselo antes de rectificarlo.")
                              // AEAT, 13-10-2026: a refused record still exists in the system; it is resent
                              // corrected (same number), and a rectificativa follows if the amount or date change.
-                             : (estadoEnum == VerifactuEstado::Error)       ? tr("La AEAT rechazó esta factura. Reenvíela primero (Recogida de Prendas, "
+                             : (stateEnum == VerifactuEstado::Error)       ? tr("La AEAT rechazó esta factura. Reenvíela primero (Recogida de Prendas, "
                                                                                  "botón Verifactu\u2026, Reintentar); cuando la AEAT la acepte, si hay que "
                                                                                  "cambiar el importe o la fecha, rectifíquela aquí.")
                                                                             : tr("Este ticket no fue enviado a AEAT - no hay nada que rectificar.");
@@ -388,7 +384,7 @@ void RectifyInvoiceDialog::onRectifyClicked()
         setFormEnabled(true);
         return;
     }
-    m_newInvoiceDate   = m_deRectifyDate->date();
+    m_newInvoiceDate   = rectifyDate;
     m_submittedAmount  = amountWithIva;
     m_submittedIsSubstitution = isSubstitution;
     m_submittedTicket = m_loadedTicket;

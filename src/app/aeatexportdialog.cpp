@@ -20,7 +20,7 @@
 #include <QVBoxLayout>
 
 AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent)
-    : QDialog(parent), db(database)
+    : QDialog(parent), m_db(database)
 {
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowModality(Qt::WindowModal);
@@ -116,7 +116,7 @@ void AeatExportDialog::onExportClicked()
     // Hacienda holds cancelled and rectified invoices too.
     QVector<AeatExportRecord> records;
     int undated = 0;
-    if (!aeatExportRecords(db, from, to, records, &undated)) {
+    if (!aeatExportRecords(m_db, from, to, records, &undated)) {
         m_lblResult->setText(UiKit::errorHtml(tr("Error al consultar la base de datos."))
                              + "<br>" + tr("No se ha creado el archivo."));
         return;

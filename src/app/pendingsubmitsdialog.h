@@ -53,13 +53,15 @@ private slots:
     void onPostponeClicked(int row);
 
 private:
-    QSqlDatabase    db;
+    QSqlDatabase    m_db;
     QTableWidget   *m_table = nullptr;
     UiKit::ResultPanel *m_lblResult = nullptr;
     QVector<Entry>  m_entries;
 
     void buildUi();
     void populateRow(int row, const Entry &e);
+    QWidget *actionCell(const Entry &e);
+    int rowOf(const QString &ticketNum, int seq) const;   // -1 when no longer listed
     void removeRowAt(int row);
 };
 

@@ -2806,6 +2806,52 @@ private slots:
         QCOMPARE(unreadable.result(), static_cast<int>(QDialog::Accepted));   // last row handled
     }
 
+    // Envíos pendientes: the buttons of a row act on that row's own ticket after earlier
+    // rows were taken out (middle one first, then the last).
+    void test_pendingSubmits_buttonsActOnTheirOwnTicketAfterRemovals()
+    {
+        for (const QString &n : {QStringLiteral("730"), QStringLiteral("731"), QStringLiteral("732")}) {
+            const QString hash = QStringLiteral("h%1a").arg(n);
+            QVERIFY(E2e::seedSentGarment(m_db, n, hash, "5.00", today(), ""));
+            QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='%1'")
+                                        .arg(hash)));
+        }
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
+
+        PendingSubmitsDialog dlg(m_db);
+        QStringList retried;
+        dlg.retry = [&retried](const QString &ticket, int, const QDate &, double) { retried << ticket; return QString(); };
+        QVERIFY(dlg.loadPending());
+        QTableWidget *table = dlg.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 3);
+        const auto button = [table](int row, const QString &text) {
+            const auto buttons = table->cellWidget(row, 4)->findChildren<QPushButton *>();
+            for (QPushButton *b : buttons)
+                if (b->text() == text)
+                    return b;
+            return static_cast<QPushButton *>(nullptr);
+        };
+        const QString middle = table->item(1, 0)->text();
+        const QString last = table->item(2, 0)->text();
+        QPushButton *error = button(1, "Error");
+        QVERIFY(error);
+        error->click();
+        QCOMPARE(scalar(QStringLiteral("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '%1'").arg(middle)),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(table->rowCount(), 2);
+        QCOMPARE(table->item(1, 0)->text(), last);
+        QPushButton *retry = button(1, "Reintentar");
+        QVERIFY(retry);
+        retry->click();
+        QCOMPARE(retried, QStringList{last});
+        QCOMPARE(table->rowCount(), 1);
+        QPushButton *postpone = button(0, "Posponer");
+        QVERIFY(postpone);
+        postpone->click();
+        QCOMPARE(dlg.result(), static_cast<int>(QDialog::Accepted));
+    }
+
     // The leyenda follows the paid rows being invoiced, not row 0 of the loaded set: an
     // unscoped reprint whose first row is an unpaid garment still prints it next to the QR.
     void test_leyendaFollowsPaidRowsNotRowZero()

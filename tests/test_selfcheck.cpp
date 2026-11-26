@@ -22,6 +22,8 @@
 #include "selfcheckdialog.h"
 #include "sql_lite.h"
 #include "testschema.h"
+#include "updater.h"
+#include "version.h"
 
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
@@ -87,6 +89,14 @@ class TestSelfCheck : public QObject
 
 private slots:
     // The check is asked for once, on the first start of a newer version, never on a first install.
+    // The window's version strings come from Updater::currentVersion(): the same "major.minor"
+    // the AEAT records and the declaration used to build from the version header.
+    void test_currentVersionIsMajorDotMinor()
+    {
+        QCOMPARE(Updater::currentVersion(),
+                 QStringLiteral("%1.%2").arg(PROJECT_VERSION_MAJOR).arg(PROJECT_VERSION_MINOR));
+    }
+
     void test_isFirstStartAfterUpdate()
     {
         QVERIFY(SelfCheck::isFirstStartAfterUpdate("11.2", "12.0"));

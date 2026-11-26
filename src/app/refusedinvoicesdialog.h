@@ -29,7 +29,7 @@ signals:
 private:
     void openSelected();
 
-    QSqlDatabase db;
+    QSqlDatabase m_db;
     QString m_floorIso;
     QVector<RefusedInvoice> m_invoices;
     QTableWidget *m_table = nullptr;

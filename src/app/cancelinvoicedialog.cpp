@@ -379,9 +379,8 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         rebuildTable();
     };
 
-    // Before 10.9 a failed submission was re-sent with the reception date, so some old
-    // seq-0 invoices are registered under it. When AEAT rejects the cancellation, try
-    // that date once: only one invoice has this InvoiceID, so it cannot hit another.
+    // Some old seq-0 invoices are registered under the reception date: when AEAT rejects the
+    // cancellation, try that date once (only one invoice has this InvoiceID).
     const QDate fallback = m_pendingFallbackDate;
     m_pendingFallbackDate = QDate();
     if (result.status == VerifactuResult::ERROR && fallback.isValid()) {
@@ -422,10 +421,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         return;
     }
 
-    // Scope the local UPDATE to the seq we just cancelled so the other payment
-    // events of the same n_recibo stay ENVIADA. This is the fix the 8.5 blocker
-    // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
-    // and would have marked every event ANULADA in one shot.
+    // Only the seq just cancelled is marked: the other payment events of the n_recibo stay ENVIADA.
     qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_pendingTicket << "seq" << e.seq;
     // Stamp the date the closed-quarter guard checked, not the (later) reply time -
     // unless that quarter was closed while the request was in flight.

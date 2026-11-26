@@ -14,12 +14,11 @@ class QLabel;
 class QPushButton;
 class QTableWidget;
 
-// Cancellation dialog. 8.6+: per-event scope so a partial-pay ticket (multiple
-// rows of distinct verifactu_invoice_seq, each its own AEAT submission) shows
-// one row per (n_recibo, seq) pair with an individual "Anular" button. A
-// single-event legacy ticket (seq=0 only) renders the same uniform table with
-// one row. Each cancellation sends to AEAT under the literal invoice_id stored
-// at submit time and updates only the rows of that seq.
+// Cancellation dialog. Per-event scope: a partial-pay ticket (rows of distinct
+// verifactu_invoice_seq, each its own AEAT submission) shows one row per (n_recibo, seq)
+// pair with an individual "Anular" button; a ticket with seq=0 only shows one row. Each
+// cancellation sends to AEAT under the literal invoice_id stored at submit time and updates
+// only the rows of that seq.
 class CancelInvoiceDialog : public QDialog
 {
     Q_OBJECT

@@ -115,9 +115,8 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
             ++written;
         }
         // A cancellation is AEAT's own record, dated when it happened (a substituted
-        // invoice has none: its rectificativa is a Registro of its own). One made
-        // before 10.12 has no date (aeatExportRecords also blanks an unreadable one):
-        // it goes with its invoice, marked sinFecha.
+        // invoice has none: its rectificativa is a Registro of its own). One without a date
+        // (aeatExportRecords also blanks an unreadable one) goes with its invoice, marked sinFecha.
         const bool undatedCancel = r.fechaAnulacion.isEmpty() && inRange(r.fechaPago);
         if (r.estado == QLatin1String("ANULADA") && (inRange(r.fechaAnulacion) || undatedCancel)) {
             w.writeStartElement("Anulacion");
