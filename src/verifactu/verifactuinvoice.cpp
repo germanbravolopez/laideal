@@ -12,17 +12,28 @@ VerifactuInvoice::~VerifactuInvoice()
 {
 }
 
+void VerifactuInvoice::computeTotals(double &amount, double &taxAmount) const
+{
+    qint64 baseCents = 0;
+    qint64 taxCents = 0;
+    for (const auto &item : m_taxItems) {
+        taxCents += qRound64(item.getTaxAmount() * 100.0);
+        baseCents += qRound64(item.getTaxBase() * 100.0);
+    }
+    taxAmount = taxCents / 100.0;
+    amount = (baseCents + taxCents) / 100.0;
+}
+
 void VerifactuInvoice::calculateTotals()
 {
-    m_totalTaxAmount = 0.0;
-    m_totalAmount = 0.0;
+    computeTotals(m_totalAmount, m_totalTaxAmount);
+}
 
-    for (const auto &item : m_taxItems) {
-        m_totalTaxAmount += item.getTaxAmount();
-        m_totalAmount += item.getTaxBase();
-    }
-
-    m_totalAmount += m_totalTaxAmount;
+double VerifactuInvoice::getTotalAmount() const
+{
+    double amount = 0.0, taxAmount = 0.0;
+    computeTotals(amount, taxAmount);
+    return amount;
 }
 
 QJsonObject VerifactuInvoice::toJson() const
@@ -43,8 +54,10 @@ QJsonObject VerifactuInvoice::toJson() const
         taxItems.append(item.toJson());
     json["TaxItems"] = taxItems;
 
-    json["TotalAmount"] = m_totalAmount;
-    json["TotalTaxAmount"] = m_totalTaxAmount;
+    double totalAmount = 0.0, totalTaxAmount = 0.0;
+    computeTotals(totalAmount, totalTaxAmount);
+    json["TotalAmount"] = totalAmount;
+    json["TotalTaxAmount"] = totalTaxAmount;
 
     // Rectificativa metadata (R1-R5). RectificationType is mandatory when the
     // invoice is corrective; RectificationTaxBase/Amount only matter for the

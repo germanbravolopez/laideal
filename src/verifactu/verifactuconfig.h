@@ -52,7 +52,6 @@ private:
     QString m_emitterName;
     QString m_systemName;
     QString m_systemVersion;
-    mutable QString m_validationError;
 
     const QString PROD_ENDPOINT = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices";
     const QString TEST_ENDPOINT = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices";

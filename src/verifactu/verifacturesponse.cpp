@@ -130,8 +130,13 @@ VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuRepl
 
     if (resultCode == 0) {
         if (isQrRequest && obj.contains("Return")) {
-            result.status = VerifactuResult::SUCCESS;
             result.qrCode = decodeVerifactuImageBase64(obj.value("Return").toString());
+            if (result.qrCode.isNull()) {
+                result.status = VerifactuResult::ERROR;
+                result.errorDescription = "La respuesta no trae una imagen QR válida";
+            } else {
+                result.status = VerifactuResult::SUCCESS;
+            }
         } else if (obj.contains("Return")) {
             QJsonObject ret = obj.value("Return").toObject();
             // ResultCode 0 can still carry an invoice-level error in Return.ErrorCode

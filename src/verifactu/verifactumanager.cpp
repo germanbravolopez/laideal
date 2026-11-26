@@ -43,6 +43,15 @@ void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, Ver
         if (reply->error() != QNetworkReply::NoError) {
             result.status = VerifactuResult::NETWORK_ERROR;
             result.errorDescription = "Error de conexión: " + reply->errorString();
+            // An HTTP error still may carry the gateway's own reason; the status stays unknown-outcome.
+            const QJsonObject body = QJsonDocument::fromJson(reply->readAll()).object();
+            QString gatewayMessage = body.value("Return").toObject().value("ErrorDescription").toString();
+            if (gatewayMessage.isEmpty())
+                gatewayMessage = body.value("ResultMessage").toString();
+            if (gatewayMessage.isEmpty())
+                gatewayMessage = body.value("message").toString();
+            if (!gatewayMessage.isEmpty())
+                result.errorDescription += " - " + gatewayMessage;
             m_lastError = result.errorDescription;
             qWarning() << "Verifactu network error (" << reqId << "):" << m_lastError;
         } else {

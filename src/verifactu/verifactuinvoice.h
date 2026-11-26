@@ -71,7 +71,7 @@ public:
     void addRectifiedInvoice(const QString &number, const QDate &date) { m_rectifiedInvoices.append({ number, date }); }
     QList<QPair<QString, QDate>> getRectifiedInvoices() const { return m_rectifiedInvoices; }
 
-    double getTotalAmount() const { return m_totalAmount; }
+    double getTotalAmount() const;   // always from the tax items, rounded to cents
 
     void addTaxItem(const VerifactuTaxItem &item) { m_taxItems.append(item); }
 
@@ -81,6 +81,8 @@ public:
     void calculateTotals();
 
 private:
+    void computeTotals(double &amount, double &taxAmount) const;
+
     QString m_invoiceNumber;
     QDate m_invoiceDate;
     InvoiceType m_invoiceType;

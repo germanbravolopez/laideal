@@ -97,25 +97,16 @@ QString VerifactuConfig::getQrUrl() const
 
 bool VerifactuConfig::isValid() const
 {
-    if (m_serviceKey.isEmpty()) {
-        m_validationError = "Clave de servicio no configurada. Obténla en https://facturae.irenesolutions.com/verifactu/go";
-        return false;
-    }
-
-    if (m_emitterNIF.isEmpty()) {
-        m_validationError = "NIF del emisor no configurado";
-        return false;
-    }
-
-    if (m_emitterName.isEmpty()) {
-        m_validationError = "Nombre del emisor no configurado";
-        return false;
-    }
-
-    return true;
+    return getValidationError().isEmpty();
 }
 
 QString VerifactuConfig::getValidationError() const
 {
-    return m_validationError;
+    if (m_serviceKey.isEmpty())
+        return "Clave de servicio no configurada. Obténla en https://facturae.irenesolutions.com/verifactu/go";
+    if (m_emitterNIF.isEmpty())
+        return "NIF del emisor no configurado";
+    if (m_emitterName.isEmpty())
+        return "Nombre del emisor no configurado";
+    return QString();
 }

@@ -90,7 +90,8 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         m_backend = m_manager;
     }
 
-    m_inFlight.clear();   // a new backend: the old one answered (or released) its waiters
+    // m_inFlight stays: the old direct client released its waiters above (removing their entries) and a
+    // retired gateway manager still answers its running replies through the same handler.
     connect(m_backend, &VerifactuBackend::requestFinished, this,
             [this](const QString &requestId, const VerifactuResult &result) {
         m_inFlight.remove(requestId);
@@ -208,6 +209,12 @@ QString VerifactuIntegration::submitRectificationAsync(
         qWarning() << "VerifactuIntegration:" << __func__ << "refused with the gateway in production";
         return QString();
     }
+    if (!dateBeforeProductionReason(invoiceDate).isEmpty()) {
+        m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
+                          .arg(newInvoiceNumber, invoiceDate.toString("dd-MM-yyyy"), productionStartDate().toString("dd-MM-yyyy"));
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << newInvoiceNumber << "- dated before production";
+        return QString();
+    }
     if (!VerifactuInvoice::isRectificationInvoiceType(invoiceType)) {
         m_lastError = "Tipo de factura no rectificativo";
         qWarning() << m_lastError;
@@ -240,7 +247,10 @@ QString VerifactuIntegration::submitRectificationAsync(
     }
 
     invoice.calculateTotals();
-    return m_backend->submitInvoiceAsync(invoice);
+    const QString requestId = m_backend->submitInvoiceAsync(invoice);
+    if (!requestId.isEmpty())
+        m_inFlight.insert(requestId, newInvoiceNumber);
+    return requestId;
 }
 
 QString VerifactuIntegration::generateQRAsync(
