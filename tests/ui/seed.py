@@ -70,6 +70,10 @@ def write_settings(path: Path, db_path: Path, reports_root: Path, aeat: bool = F
 _INGRESOS = ("n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, importe, pagado, estado, "
              "cantidad, prenda, size, servicio, observaciones, edit_lock, hash, verifactu_estado, "
              "verifactu_invoice_seq, verifactu_csv, verifactu_invoice_id, fecha_anulacion")
+# Ticket 4's verification URL: a fixed text, so its QR is the same symbol on every run.
+TICKET_4_QR = ("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=4"
+               "&fecha=16-09-2026&importe=24.20")
+
 SMOKE_TICKETS = [
     ("1", "SMOKE", "15-09-2026", "", "", "12.00", "NO", "En tienda", "1", "Camisa", "", "Limp.", "", "0",
      "smokehash000001", "SIN COBRAR", 0, None, None, None),
@@ -97,8 +101,7 @@ def seed_smoke_tickets(path: Path) -> None:
         db.executemany(f"INSERT INTO ingresos ({_INGRESOS}) VALUES ({', '.join('?' * 20)})", SMOKE_TICKETS)
         # An accepted invoice keeps the verification URL of AEAT's answer; reprints draw it.
         db.execute("UPDATE ingresos SET verifactu_url_qr = ? WHERE n_recibo = '4'",
-                   ("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=4"
-                    "&fecha=16-09-2026&importe=24.20",))
+                   (TICKET_4_QR,))
         db.execute("INSERT INTO gastos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", SMOKE_GASTO)
         db.executemany("INSERT INTO clientes VALUES (?, '', '', ?)",
                        [("SMOKE", "Calle Smoke 1"), ("Señora Álvarez", "")])
