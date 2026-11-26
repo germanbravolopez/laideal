@@ -1,4 +1,5 @@
 #include "uikit.h"
+#include "textformat.h"
 
 #include <QAbstractButton>
 #include <QAbstractSpinBox>
@@ -205,7 +206,7 @@ QDateEdit *dateEdit(const QDate &date, const QString &objectName)
     QDateEdit *edit = new QDateEdit(date);
     edit->setObjectName(objectName);
     edit->setCalendarPopup(true);
-    edit->setDisplayFormat(QStringLiteral("dd-MM-yyyy"));
+    edit->setDisplayFormat(kDbDateFormat);
     edit->setMinimumWidth(kDateMinWidth);
     return edit;
 }

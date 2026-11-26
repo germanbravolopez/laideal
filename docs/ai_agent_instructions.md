@@ -24,6 +24,7 @@ Commands: [README](../README.md#build) (`.\make build`, `.\make test`, `.\make r
 | Settings, UI language | `src/appsettings/` |
 | Settings dialog | `src/settingsdialog/` |
 | Debug log (`~/.laideal.log`) | `src/logging/` |
+| Money, decimal and date text (`displayMoney`, `moneyParse`, `dbDateText`) | `src/textformat/` |
 | All database functions, schema, migrations, shared helpers | `src/sql_lite/sql_lite.*`, `ingresos_schema.h` |
 | Generic list viewer, insert dialog, list PDF | `src/listado/` |
 | Pickup panel, payment, void dialogs, AEAT query summary | `src/recog_prendas/` |

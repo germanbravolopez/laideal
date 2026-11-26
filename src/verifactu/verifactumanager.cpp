@@ -1,4 +1,5 @@
 #include "verifactumanager.h"
+#include "textformat.h"
 #include "testhostguard.h"
 #include "aeathash.h"
 #include <QNetworkRequest>
@@ -244,7 +245,7 @@ QString VerifactuManager::getValidationUrl(const VerifactuInvoice &invoice) cons
 
     query.addQueryItem("nif", invoice.getSellerNIF());
     query.addQueryItem("numserie", invoice.getInvoiceNumber());
-    query.addQueryItem("fecha", invoice.getInvoiceDate().toString(QLatin1String(AeatHash::kDateFormat)));
+    query.addQueryItem("fecha", invoice.getInvoiceDate().toString(kDbDateFormat));
     query.addQueryItem("importe", QString::number(invoice.getTotalAmount(), 'f', 2));
 
     url += "?" + query.toString();

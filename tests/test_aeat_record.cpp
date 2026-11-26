@@ -8,6 +8,7 @@
 #include <QXmlStreamReader>
 
 #include "aeathash.h"
+#include "textformat.h"
 #include "aeatrecord.h"
 #include "producerdeclaration.h"
 #include "appsettings.h"
@@ -119,7 +120,7 @@ private slots:
         AeatHash::RegistrationFields f;
         f.issuerNif = t.value("IDEmisorFactura");
         f.invoiceNumber = t.value("NumSerieFactura");
-        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), QLatin1String(AeatHash::kDateFormat));
+        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), kDbDateFormat);
         f.invoiceType = t.value("TipoFactura");
         f.totalTax = t.value("CuotaTotal");
         f.totalAmount = t.value("ImporteTotal");

@@ -1,4 +1,5 @@
 #include "aeatresponse.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 
@@ -230,7 +231,7 @@ bool carriesCancellationRecord(const QueryRecord &record)
     if (!record.state.startsWith(QLatin1String("Anulad")) || record.hash.isEmpty() || record.generatedAt.isEmpty())
         return false;
     const AeatHash::CancellationFields fields{ record.issuerNif, record.invoiceNumber,
-                                               QDate::fromString(record.issueDate, QLatin1String(AeatHash::kDateFormat)),
+                                               QDate::fromString(record.issueDate, kDbDateFormat),
                                                record.previousHash, record.generatedAt };
     return AeatHash::cancellationHash(fields).compare(record.hash, Qt::CaseInsensitive) == 0;
 }

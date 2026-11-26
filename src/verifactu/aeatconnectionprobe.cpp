@@ -1,4 +1,5 @@
 #include "aeatconnectionprobe.h"
+#include "textformat.h"
 
 #include "aeatdirectbackend.h"
 #include "aeathash.h"
@@ -44,7 +45,7 @@ void AeatConnectionProbe::run()
             return;
         }
         const AeatCertificate::Info cert = m_certificate.info();
-        emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString(QLatin1String(AeatHash::kDateFormat))));
+        emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString(kDbDateFormat)));
         const QString warning = AeatCertificate::representativeWarning(cert.nif, m_settings.issuerNif);
         if (!warning.isEmpty())
             emit progress(false, warning);

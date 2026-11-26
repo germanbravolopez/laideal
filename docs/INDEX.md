@@ -66,6 +66,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | `src/appsettings/` | `appsettings.*`, `applanguage.*` | Settings, UI language |
 | `src/settingsdialog/` | `settingsdialog.*` | Configuración dialog |
 | `src/logging/` | `applogger.*` | Debug log |
+| `src/textformat/` | `textformat.*` | Money, decimal and stored-date text (`displayMoney`, `moneyParse`, `kDbDateFormat`, ...) |
 | `src/sql_lite/` | `sql_lite.*`, `ingresos_schema.h` | Database functions, migrations, shared helpers, `ingresos` column indices |
 | `src/listado/` | `listado.*`, `insertnewitem.*`, `genlistado.*` | List viewer, insert dialog, list PDF |
 | `src/recog_prendas/` | `recog_prendas.*`, `pay_dialog.*`, `voidgarmentsdialog.*`, `aeatreconcilesummary.*`, `invoicingpolicy.cpp` | Pickup panel, partial payment, void garments, text of the "Consultar en AEAT" dialog |

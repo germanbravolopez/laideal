@@ -18,14 +18,16 @@ Source: `sql_lite.h/cpp`, and `ingresos_schema.h` (`INGRESOS_COL_*` column indic
 
 ## Dates, money, text helpers (pure)
 
+The text helpers marked (textformat) live in `src/textformat/textformat.h/cpp` (Qt Core only, also used by `verifactu` and `uikit`); `sql_lite` links it PUBLIC and `sql_lite.h` includes it.
+
 | Function | Purpose |
 |----------|---------|
-| `kDbDateFormat`, `parseDbDate(text)`, `dbDateText(date)` | The stored `dd-MM-yyyy` text and its two conversions (invalid `QDate` for other text). |
+| (textformat) `kDbDateFormat`, `parseDbDate(text)`, `dbDateText(date)` | The stored `dd-MM-yyyy` text and its two conversions (invalid `QDate` for other text). |
 | `quarterOfMonth`, `quarterFirstDay`, `quarterLastDay`, `quarterKey(q, y)` / `quarterKey(date)` | Quarter arithmetic; the key is `year * 10 + quarter`. |
-| `roundToCents`, `moneyText(double/QString)` | Round half away from zero (28.405 -> 28.41); format `"28.41"`, text may use a decimal comma. |
-| `moneyParse(text, &value)` | Strict: sign, digits, one separator. `"1.234,50"`, `"abc"`, `""` refused. |
-| `parseDecimal(text, &ok)` | Lenient typed decimal with comma (size, quantity). |
-| `displayMoney`, `displayEuro`, `displayDecimal` | Display with the decimal comma (`displayEuro` adds the euro sign); storage and AEAT keep the dot. |
+| (textformat) `roundToCents`, `moneyText(double/QString)` | Round half away from zero (28.405 -> 28.41); format `"28.41"`, text may use a decimal comma. |
+| (textformat) `moneyParse(text, &value)` | Strict: sign, digits, one separator. `"1.234,50"`, `"abc"`, `""` refused. |
+| (textformat) `parseDecimal(text, &ok)` | Lenient typed decimal with comma (size, quantity). |
+| (textformat) `displayMoney`, `displayEuro`, `displayDecimal` | Display with the decimal comma (`displayEuro` adds the euro sign); storage and AEAT keep the dot. |
 | `garmentImporte(qty, size, unitPrice)` | Line price: quantity x unit price, times a non-zero size, >= 0, rounded to cents. Shared by MainWindow, AddGarment, Recogida. |
 | `garmentUnmeasured(garment, size)` | An "m2" garment with no usable size: 0,00 and not chargeable. |
 | `expenseIvaRate(stored)` | Whole-number rate from the TEXT `gastos.iva`, else -1. |
