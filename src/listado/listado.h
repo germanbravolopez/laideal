@@ -45,6 +45,8 @@ public:
     TableView *table_listado;
 
     void populateTable();
+    // The order a table has when it is (re)loaded: newest first, or by name.
+    void sortDefault();
 
     // Only an https address is opened from the QR column (a restored DB could hold file: or other schemes).
     static bool isOpenableQrUrl(const QString &url);

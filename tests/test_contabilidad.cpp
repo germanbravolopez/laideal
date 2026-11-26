@@ -295,6 +295,34 @@ private slots:
         QCOMPARE(e.gas21Iva, 3.48);
     }
 
+    // Every field of the figures of a mixed period, each from its own invoice split.
+    void test_figuresFromDetails_everyField()
+    {
+        IncomeTicketDetail t1; t1.nRecibo = "1"; t1.importe = 121.0;
+        IncomeTicketDetail t2; t2.nRecibo = "2"; t2.importe = 60.5;
+        RegularizationDetail r; r.nRecibo = "1"; r.importe = 30.25; r.fechaPago = "10-05-2026";
+        ExpenseDetail g21; g21.iva = 21; g21.importe = 133.1;
+        ExpenseDetail g10; g10.iva = 10; g10.importe = 55.0;
+        ExpenseDetail g0;  g0.iva = 0;   g0.importe = 40.0;
+        ExpenseDetail g4;  g4.iva = 4;   g4.importe = 104.0;
+        const Contabilidad::PeriodFigures f =
+            Contabilidad::figuresFromDetails({t1, t2}, {r}, {g21, g10, g0, g4}, 21.0,
+                                             QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QCOMPARE(f.ingImporte, 151.25);
+        QCOMPARE(f.ingRegularizacion, 30.25);
+        QCOMPARE(f.ingIva, 26.25);
+        QCOMPARE(f.ingBase, 151.25 - 26.25);
+        QCOMPARE(f.gas21Importe, 133.1);
+        QCOMPARE(f.gas21Iva, 23.1);
+        QCOMPARE(f.gas21Base, 133.1 - 23.1);
+        QCOMPARE(f.gas10Importe, 55.0);
+        QCOMPARE(f.gas10Iva, 5.0);
+        QCOMPARE(f.gas10Base, 50.0);
+        QCOMPARE(f.gasNiImporte, 40.0);
+        QCOMPARE(f.ingTickets, 2);
+        QCOMPARE(f.gasFacturas, 3);
+    }
+
     void test_figuresFromDetailsNetsRegularizations()
     {
         IncomeTicketDetail t; t.nRecibo = "50"; t.importe = 242.0;

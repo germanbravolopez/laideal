@@ -7,12 +7,14 @@
 // secondary buttons and the closing row. A dialog is built in code from these
 // pieces, so a change of style is made here once.
 
+#include <QDate>
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QString>
 #include <QStringList>
 
 #include <functional>
+#include <initializer_list>
 
 class QDate;
 class QDateEdit;
@@ -41,6 +43,10 @@ void emphasize(QWidget *widget, qreal extraPoints);
 
 // Display-only date: read-only, no spin buttons (still shows the value and a tooltip, if given).
 void lockDate(QDateEdit *edit, const QString &toolTip = QString());
+
+// The date range an invoice date may take: at most `latest`, at least the latest of the valid
+// `earliest` dates that are not after `latest`. With no such date the minimum is left as it is.
+void limitDateRange(QDateEdit *edit, std::initializer_list<QDate> earliest, const QDate &latest);
 
 // Framed explanation at the top of a dialog: what it does, in one or two sentences.
 QLabel *introPanel(const QString &text);

@@ -7,6 +7,8 @@
 #include <QSortFilterProxyModel>
 
 #define GASTOS_IDX_ID          0
+#define GASTOS_IDX_NFACTURA    1
+#define GASTOS_IDX_SERVICIO    2
 #define GASTOS_IDX_CLIENT      4
 #define GASTOS_IDX_FECHA       5
 #define GASTOS_IDX_IVA         6

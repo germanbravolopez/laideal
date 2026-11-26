@@ -281,6 +281,26 @@ private slots:
         QVERIFY(heading->font().bold());
     }
 
+    void test_limitDateRange()
+    {
+        const QDate today(2026, 6, 15);
+        QDateEdit edit;
+        // The latest valid candidate not after `latest` is the minimum.
+        UiKit::limitDateRange(&edit, { QDate(2026, 3, 1), QDate(2026, 5, 2), QDate() }, today);
+        QCOMPARE(edit.maximumDate(), today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 5, 2));
+        // A candidate after `latest` is ignored.
+        UiKit::limitDateRange(&edit, { QDate(2026, 4, 1), QDate(2026, 7, 1) }, today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        // With no usable candidate the minimum stays; the maximum is still set.
+        UiKit::limitDateRange(&edit, { QDate(), QDate(2027, 1, 1) }, QDate(2026, 6, 20));
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        QCOMPARE(edit.maximumDate(), QDate(2026, 6, 20));
+        UiKit::limitDateRange(&edit, {}, today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        QCOMPARE(edit.maximumDate(), today);
+    }
+
     void test_sortedNames_spanishOrder()
     {
         const QStringList sorted = UiKit::sortedNames({ "Zurita", "Álvarez", "alvarez", "Ñandú", "Nuñez", "Zapata", "Zapata" });

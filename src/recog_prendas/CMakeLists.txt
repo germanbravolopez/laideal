@@ -1,6 +1,7 @@
 add_library(recog_prendas STATIC
     recog_prendas.h
     recog_prendas.cpp
+    aeatreconcilesummary.h
     pay_dialog.h
     pay_dialog.cpp
     voidgarmentsdialog.h

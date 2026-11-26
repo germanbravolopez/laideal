@@ -166,6 +166,16 @@ QString Listado::supportedExpenseIva(const QString &text)
     return QString::number(int(rate));
 }
 
+void Listado::sortDefault()
+{
+    if (tableName == "gastos")
+        table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
+    else if (tableName == "ingresos")
+        table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
+    else
+        table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+}
+
 void Listado::populateTable()
 {
     configureForTable();
@@ -247,13 +257,7 @@ void Listado::populateTable()
         }
         QScrollBar *verticalScrollBar = table_listado->verticalScrollBar();
         verticalScrollBar->setValue(verticalScrollBar->minimum());
-        // Perform sorting with proxy model
-        if (tableName == "gastos")
-            table_listado->sortByColumn(GASTOS_IDX_FECHA, Qt::DescendingOrder);
-        else if (tableName == "ingresos")
-            table_listado->sortByColumn(INGRESOS_COL_N_RECIBO, Qt::DescendingOrder);
-        else
-            table_listado->sortByColumn(LIST_PRENDAS_IDX_NAME, Qt::AscendingOrder);
+        sortDefault();
         // Drop the delegates of the previous refresh so they do not pile up.
         for (int col = 0; col < table_listado->model()->columnCount(); ++col)
             table_listado->setItemDelegateForColumn(col, nullptr);

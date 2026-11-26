@@ -17,6 +17,13 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+// Zebra-striped row opener: odd rows get the grey background.
+static QString zebraRowOpen(int rowIndex)
+{
+    return rowIndex % 2 == 0 ? QStringLiteral("<tr>")
+                             : QStringLiteral("<tr style='background-color: #f6f7f9;'>");
+}
+
 GenListado::GenListado(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
     db(database)
@@ -144,11 +151,7 @@ QString GenListado::generate_html_prendas_table(const QVector<int> &rows)
     // add each line of data
     int row_printed = 0;
     for (const int row : rows) {
-        // set background color for even rows
-        if (row_printed % 2 == 0)
-            html_table += "<tr>";
-        else
-            html_table += "<tr style='background-color: #f6f7f9;'>";
+        html_table += zebraRowOpen(row_printed);
         // set row content
         html_table += "<td>" + model->index(row, 0).data().toString().toHtmlEscaped() + "</td>";
         for (const int column : { 1, 2 }) {
@@ -211,18 +214,14 @@ QString GenListado::generate_html_gastos_table(const QVector<int> &rows)
     for (const int row : rows) {
         // print row based on previous analysis
         if (check_years_invoice_type_for_row(row)) {
-            const GastoAmounts amounts = splitGasto(model->index(row, 7).data().toString(),
-                                                    model->index(row, 6).data().toString());
+            const GastoAmounts amounts = splitGasto(model->index(row, GASTOS_IDX_IMPORTE).data().toString(),
+                                                    model->index(row, GASTOS_IDX_IVA).data().toString());
 
             // generate new row if group per clients
             if (m_cbGroup->currentText() == C_PROVEEDORES) {
-                client = model->index(row, 4).data().toString();
+                client = model->index(row, GASTOS_IDX_CLIENT).data().toString();
                 if (client != client_prev_row && row_printed != 0) {
-                    // set background color for even rows
-                    if (row_printed % 2 == 0)
-                        html_table += "<tr>";
-                    else
-                        html_table += "<tr style='background-color: #f6f7f9;'>";
+                    html_table += zebraRowOpen(row_printed);
                     // set total costs row
                     html_table += supplierTotalCells(importe_tot, withClosedColumn);
                     importe_tot = 0;
@@ -231,16 +230,12 @@ QString GenListado::generate_html_gastos_table(const QVector<int> &rows)
                 importe_tot += amounts.importeCents;
                 client_prev_row = client;
             }
-            // set background color for even rows
-            if (row_printed % 2 == 0)
-                html_table += "<tr>";
-            else
-                html_table += "<tr style='background-color: #f6f7f9;'>";
+            html_table += zebraRowOpen(row_printed);
             // set row content
-            html_table +="<td>" + model->index(row, 1).data().toString().toHtmlEscaped() + "</td>"
-                                "<td>" + model->index(row, 2).data().toString().toHtmlEscaped() + "</td>"
-                                "<td>" + model->index(row, 4).data().toString().toHtmlEscaped() + "</td>"
-                                "<td>" + model->index(row, 5).data().toString().toHtmlEscaped() + "</td>"
+            html_table +="<td>" + model->index(row, GASTOS_IDX_NFACTURA).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, GASTOS_IDX_SERVICIO).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, GASTOS_IDX_CLIENT).data().toString().toHtmlEscaped() + "</td>"
+                                "<td>" + model->index(row, GASTOS_IDX_FECHA).data().toString().toHtmlEscaped() + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.ivaCents / 100.0) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.baseCents / 100.0) + "</td>"
                                 "<td style='text-align:right;'>" + ReportHtml::formatEuro(amounts.importeCents / 100.0) + "</td>";
@@ -256,11 +251,7 @@ QString GenListado::generate_html_gastos_table(const QVector<int> &rows)
     }
     // generate new row for last group of clients
     if (m_cbGroup->currentText() == C_PROVEEDORES) {
-        // set background color for even rows
-        if (row_printed % 2 == 0)
-            html_table += "<tr>";
-        else
-            html_table += "<tr style='background-color: #f6f7f9;'>";
+        html_table += zebraRowOpen(row_printed);
         // set total costs row
         html_table += supplierTotalCells(importe_tot, withClosedColumn);
     }

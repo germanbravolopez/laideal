@@ -17,6 +17,7 @@
 #include <QTemporaryDir>
 
 #include "add_garment.h"
+#include "aeatreconcilesummary.h"   // Recogida's "Consultar en AEAT" text, a pure function
 #include "sql_lite.h"
 #include "support/testschema.h"
 
@@ -432,6 +433,55 @@ private slots:
         save(all);
         QCOMPARE(paidAll.count(), 1);
         QCOMPARE(paidAll.at(0).at(3).toInt(), 5);
+    }
+
+    // The text above the "Consultar en AEAT" table, one case per branch.
+    void test_aeatReconcileSummary_everyCase()
+    {
+        VerifactuRemoteRecord rec;
+        const auto summary = [&](bool matches, bool predates) {
+            return aeatReconcileSummaryHtml(rec, matches, "24417-0", "10-02-2026", predates, "01-07-2026");
+        };
+        // The answer could not be read: not evidence of absence (the other flags do not matter).
+        QCOMPARE(summary(true, true),
+                 QString("<b>No se ha podido interpretar la respuesta de AEAT.</b><br>"
+                         "Esto <i>no</i> significa que la factura no esté registrada. "
+                         "Revisa el detalle de abajo y consulta la sede electrónica."));
+        rec.parsed = true;
+        // Not found, issued before production: the expected absence.
+        QCOMPARE(summary(false, true),
+                 QString("<b>La AEAT real no tiene la factura 24417-0, y es lo esperado.</b><br>"
+                         "Es del 10-02-2026, anterior al paso a PRODUCCIÓN (01-07-2026): se registró en el entorno de "
+                         "pruebas o con IreneSolutions. No hay que reenviarla."));
+        // Not found otherwise.
+        QCOMPARE(summary(false, false),
+                 QString("<b>AEAT no ha devuelto ninguna factura con el número 24417-0.</b><br>"
+                         "Lo más probable es que no llegara a registrarse. Aun así, "
+                         "antes de reenviar conviene confirmarlo en la sede electrónica "
+                         "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
+                         "duplicado."));
+        rec.found = true;
+        rec.recordCount = 1;
+        // Found but different from the ticket.
+        QCOMPARE(summary(false, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>"
+                         "<span style='color:#b00'>Los datos NO coinciden con los del "
+                         "ticket - no se puede actualizar automáticamente.</span>"));
+        // Matches but no accepted record to take a CSV from.
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>"
+                         "<span style='color:#b00'>Ninguno de los registros fue aceptado "
+                         "por AEAT (no hay CSV que recuperar).</span>"));
+        // Matches with a CSV; several attempts are mentioned.
+        rec.csv = "ABC123";
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>Los datos coinciden con los del ticket."));
+        rec.recordCount = 3;
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>Los datos coinciden con los del ticket."
+                         "<br><i>AEAT ha devuelto 3 registros para este número (los reenvíos "
+                         "rechazados quedan guardados). Se muestran los datos del registro "
+                         "aceptado.</i>"));
     }
 };
 

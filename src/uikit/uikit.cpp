@@ -158,6 +158,17 @@ void lockDate(QDateEdit *edit, const QString &toolTip)
         edit->setToolTip(toolTip);
 }
 
+void limitDateRange(QDateEdit *edit, std::initializer_list<QDate> earliest, const QDate &latest)
+{
+    edit->setMaximumDate(latest);
+    QDate minimum;
+    for (const QDate &date : earliest)
+        if (date.isValid() && date <= latest && (!minimum.isValid() || date > minimum))
+            minimum = date;
+    if (minimum.isValid())
+        edit->setMinimumDate(minimum);
+}
+
 QLabel *introPanel(const QString &text)
 {
     QLabel *label = new QLabel(text);

@@ -108,6 +108,7 @@ target_link_libraries(test_add_garment PRIVATE
     sql_lite
     verifactu_types
 )
+target_include_directories(test_add_garment PRIVATE ${CMAKE_SOURCE_DIR}/src/recog_prendas)   # aeatreconcilesummary.h
 add_test(NAME add_garment
     COMMAND test_add_garment -o ${CMAKE_BINARY_DIR}/test-results-add_garment.xml,junitxml -o -,txt)
 set_tests_properties(add_garment PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

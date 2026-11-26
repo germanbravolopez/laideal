@@ -229,9 +229,9 @@ bool Contabilidad::revertConfirmed(const QString &quarterName)
 void Contabilidad::onGenerateClicked()
 {
     m_dataReadFailed = false;   // only this action's own read may report a failure
-    const int trim = m_sbPeriod->value();
+    const int quarter = m_sbPeriod->value();
     const int year = m_sbYear->value();
-    const QString quarterName = "del trimestre " + QString::number(trim) + " de " + QString::number(year);
+    const QString quarterName = "del trimestre " + QString::number(quarter) + " de " + QString::number(year);
     m_lblResult->setText(m_reverting ? "Revirtiendo..." : "Generando el informe...");
     QString message;
     int invalidAmounts = 0;
@@ -243,58 +243,58 @@ void Contabilidad::onGenerateClicked()
                                        + "<br>Compruebe la carpeta de Contabilidad y que el PDF anterior no esté abierto."
                                  : okHtml("Informe generado.");
     } else {
-        const bool closed = quarterIsClosed(db, trim, year);
+        const bool closed = quarterIsClosed(db, quarter, year);
         if (m_reverting) {
             if (!closed) {
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "was not closed";
+                qDebug() << "(Revertir) Contabilidad: trim" << quarter << "year" << year << "was not closed";
                 message = warnHtml("La contabilidad " + quarterName + " no estaba realizada: no hay nada que revertir.");
             } else if (!revertConfirmed(quarterName)) {
-                qDebug() << "(Revertir) Contabilidad: trim" << trim << "year" << year << "revert declined";
+                qDebug() << "(Revertir) Contabilidad: trim" << quarter << "year" << year << "revert declined";
                 message = warnHtml("No se ha revertido la contabilidad " + quarterName + ".")
                           + "<br>El trimestre sigue bloqueado.";
-            } else if (!reopenQuarter(db, trim, year)) {
+            } else if (!reopenQuarter(db, quarter, year)) {
                 message = errorHtml("No se pudo revertir la contabilidad " + quarterName + ".")
                           + "<br>El trimestre sigue bloqueado.";
             } else {
-                qWarning() << "(Revertir) Contabilidad: closed quarter" << trim << "of" << year << "reverted";
+                qWarning() << "(Revertir) Contabilidad: closed quarter" << quarter << "of" << year << "reverted";
                 message = okHtml("Contabilidad " + quarterName + " revertida.") + "<br>"
                           + "El trimestre vuelve a estar abierto.";
             }
         } else if (closed) {
             file = generateContabilidad(invalidAmounts, /*keepFiledReport=*/true);
-            qDebug() << "Contabilidad: trim" << trim << "year" << year << "already closed, report regenerated as" << file;
+            qDebug() << "Contabilidad: trim" << quarter << "year" << year << "already closed, report regenerated as" << file;
             message = okHtml("La contabilidad " + quarterName + " ya estaba realizada (trimestre bloqueado).")
                       + "<br>" + (file.isEmpty() ? errorHtml("No se pudo guardar el informe de nuevo.")
                                                  : QString("Documentación generada de nuevo; el informe ya presentado se conserva."));
-        } else if (!quarterHasMovements(db, trim, year)) {
-            qWarning() << "Contabilidad: no ingresos, gastos nor cancellations for trim" << trim << "year" << year;
+        } else if (!quarterHasMovements(db, quarter, year)) {
+            qWarning() << "Contabilidad: no ingresos, gastos nor cancellations for trim" << quarter << "year" << year;
             message = warnHtml("No hay registros de ingresos ni de gastos " + quarterName + ".");
         } else {
             file = generateContabilidad(invalidAmounts);
             if (file.isEmpty()) {
                 // Never close a quarter without its report.
-                qWarning() << "Contabilidad: trim" << trim << "year" << year << "report not written, not locked";
+                qWarning() << "Contabilidad: trim" << quarter << "year" << year << "report not written, not locked";
                 message = errorHtml("No se pudo guardar el informe " + quarterName + ".")
                           + "<br>El trimestre no se ha bloqueado. Compruebe la carpeta de Contabilidad "
                             "(Configuración) y que el PDF anterior no esté abierto.";
             } else if (!m_chkLock->isChecked()) {
-                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated, not locked";
+                qDebug() << "Contabilidad: trim" << quarter << "year" << year << "generated, not locked";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           "El trimestre no se ha bloqueado: se pueden realizar modificaciones posteriores.";
-            } else if (QDate::currentDate() < quarterLastDay(trim, year)) {
+            } else if (QDate::currentDate() < quarterLastDay(quarter, year)) {
                 // Closing an unfinished quarter would refuse every payment of today.
-                qDebug() << "Contabilidad: trim" << trim << "year" << year << "not ended, not locked";
+                qDebug() << "Contabilidad: trim" << quarter << "year" << year << "not ended, not locked";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           + warnHtml("El trimestre no se ha bloqueado: todavía no ha terminado. Se puede bloquear "
-                                     "a partir de su último día, el " + dbDateText(quarterLastDay(trim, year)) + ".");
-            } else if (!closeQuarter(db, trim, year, QFileInfo(file).fileName())) {
+                                     "a partir de su último día, el " + dbDateText(quarterLastDay(quarter, year)) + ".");
+            } else if (!closeQuarter(db, quarter, year, QFileInfo(file).fileName())) {
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           + errorHtml("No se pudo bloquear el trimestre.") + " Vuelva a intentarlo.";
             } else {
-                qDebug() << "Contabilidad: trim" << trim << "year" << year << "generated and closed";
+                qDebug() << "Contabilidad: trim" << quarter << "year" << year << "generated and closed";
                 message = okHtml("Contabilidad " + quarterName + " realizada.") + "<br>"
                           "El trimestre se ha bloqueado: sus ingresos y gastos ya no se pueden modificar.";
-                if (QDate::currentDate() == quarterLastDay(trim, year))
+                if (QDate::currentDate() == quarterLastDay(quarter, year))
                     message += "<br>" + warnHtml("Hoy es su último día: los cobros de hoy ya no se pueden registrar "
                                                  "hasta que se revierta.");
             }
@@ -382,26 +382,26 @@ QString Contabilidad::generateContabilidad(int &invalidAmounts, bool keepFiledRe
             return QString();
         }
         PeriodFigures annual;
-        for (int trim = 1; trim < 5; trim++) {
-            const int i = trim - 1;
-            const bool cerrada = quarterIsClosed(db, trim, year);
+        for (int quarter = 1; quarter < 5; quarter++) {
+            const int i = quarter - 1;
+            const bool cerrada = quarterIsClosed(db, quarter, year);
             QDate quarterStart, quarterEnd;
-            periodRangeFor(Anual, trim, year, quarterStart, quarterEnd);
+            periodRangeFor(Anual, quarter, year, quarterStart, quarterEnd);
             const PeriodFigures f = figuresFromDetails(details.income[i], details.regularizations[i],
                                                        details.expenses[i], ivaRate, quarterStart, quarterEnd);
             annual.accumulate(f);
             invalidAmounts += invalidAmountCount(details.income[i], details.regularizations[i], details.expenses[i]);
-            contabilidadHtml += "<h2>Trimestre " + QString::number(trim)
+            contabilidadHtml += "<h2>Trimestre " + QString::number(quarter)
                     + (cerrada ? " \u00b7 Contabilidad cerrada" : " \u00b7 Contabilidad no cerrada") + "</h2>"
                     + renderSection(f, "Resumen del trimestre");
         }
         annual.ingTickets = yearTicketCount(details, year);   // distinct over the year, not the quarterly sum
         contabilidadHtml += "<h2>Resumen anual consolidado</h2>"
                 + createHtmlSummary(annual, "Total a&ntilde;o " + QString::number(year));
-        for (int trim = 1; withDetail && trim < 5; trim++)
-            contabilidadHtml += renderDetailTables("Detalle del trimestre " + QString::number(trim),
-                                                   details.income[trim - 1], details.regularizations[trim - 1],
-                                                   details.expenses[trim - 1], ivaRate);
+        for (int quarter = 1; withDetail && quarter < 5; quarter++)
+            contabilidadHtml += renderDetailTables("Detalle del trimestre " + QString::number(quarter),
+                                                   details.income[quarter - 1], details.regularizations[quarter - 1],
+                                                   details.expenses[quarter - 1], ivaRate);
         contabilidadHtml += ReportHtml::documentClose();
     }
     if (invalidAmounts > 0)
@@ -463,26 +463,15 @@ static double invoicedTax(const QMap<int, double> &invoices, double gross, doubl
     return tax;
 }
 
-Contabilidad::PeriodFigures Contabilidad::figuresFromTotals(
-    double ingImporte, int ingTickets, double gas10Importe, double gas21Importe,
-    double gasNiImporte, int gasFacturas, double ivaRate)
+// The base and cuota of one supplier invoice, split on its own as registered (splitGross);
+// iva 0 (or any non-positive rate) is sin IVA: base == importe.
+struct ExpenseSplit { double base; double tax; };
+static ExpenseSplit expenseSplit(const ExpenseDetail &e)
 {
-    PeriodFigures f;
-    f.ingImporte = ingImporte;
-    f.ingBase    = taxBaseFromGross(f.ingImporte, ivaRate);
-    f.ingIva     = f.ingImporte - f.ingBase;
-
-    f.gas10Importe = gas10Importe;
-    f.gas10Base    = f.gas10Importe / 1.10;
-    f.gas10Iva     = f.gas10Importe - f.gas10Base;
-    f.gas21Importe = gas21Importe;
-    f.gas21Base    = f.gas21Importe / 1.21;
-    f.gas21Iva     = f.gas21Importe - f.gas21Base;
-    f.gasNiImporte = gasNiImporte;     // sin IVA: base == importe
-
-    f.ingTickets  = ingTickets;
-    f.gasFacturas = gasFacturas;
-    return f;
+    if (e.iva <= 0)
+        return { e.importe, 0.0 };
+    const GrossSplit split = splitGross(e.importe, e.iva);
+    return { split.base, split.tax };
 }
 
 Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<IncomeTicketDetail> &income,
@@ -504,10 +493,14 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
         if (!e.invalidAmount && expenseIvaIsSummarised(e.iva))
             ++gasSummed;
     }
-    PeriodFigures f = figuresFromTotals(ingImporte - regularizacion,
-                                        netTicketCount(income, regularizations, periodStart, periodEnd),
-                                        gas10, gas21, gasNi, gasSummed, ivaRate);
+    PeriodFigures f;
+    f.ingImporte = ingImporte - regularizacion;
     f.ingRegularizacion = regularizacion;
+    f.gas10Importe = gas10;
+    f.gas21Importe = gas21;
+    f.gasNiImporte = gasNi;     // sin IVA: base == importe
+    f.ingTickets = netTicketCount(income, regularizations, periodStart, periodEnd);
+    f.gasFacturas = gasSummed;
 
     // Modelo 303 carries the IVA as invoiced: the sum of each invoice's cuota, rounded per
     // invoice exactly as registered at AEAT (splitGross), not the IVA of the summed gross.
@@ -521,8 +514,8 @@ Contabilidad::PeriodFigures Contabilidad::figuresFromDetails(const QVector<Incom
     // A supplier invoice is one invoice too: its cuota rounded on its own.
     double gas10Iva = 0.0, gas21Iva = 0.0;
     for (const ExpenseDetail &e : expenses) {
-        if (e.iva == 10)      gas10Iva += splitGross(e.importe, 10.0).tax;
-        else if (e.iva == 21) gas21Iva += splitGross(e.importe, 21.0).tax;
+        if (e.iva == 10)      gas10Iva += expenseSplit(e).tax;
+        else if (e.iva == 21) gas21Iva += expenseSplit(e).tax;
     }
     f.gas10Iva  = roundToCents(gas10Iva);
     f.gas10Base = f.gas10Importe - f.gas10Iva;
@@ -824,7 +817,7 @@ QString Contabilidad::createHtmlDetailGastos(const QVector<ExpenseDetail> &expen
             continue;
         }
         // The summary's split (one supplier invoice); iva 0 means sin IVA (base == importe).
-        const double base = e.iva > 0 ? splitGross(e.importe, e.iva).base : e.importe;
+        const double base = expenseSplit(e).base;
         totalImporte += e.importe;
         totalBase += base;
         counted++;
