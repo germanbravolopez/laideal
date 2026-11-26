@@ -148,6 +148,7 @@ BackupManager::Result BackupManager::performBackup()
     Result res;
     if (s_running.exchange(true)) {
         res.skipped = true;
+        res.skipReason = SkipReason::AlreadyRunning;
         res.errorMessage = tr("Ya hay una copia de seguridad en curso; espere a que termine.");
         qWarning() << "BackupManager: a backup is already running";
         return res;
@@ -167,6 +168,7 @@ BackupManager::Result BackupManager::performBackup()
     if (QFile::exists(finalPath)) {
         // Same second as the previous copy: that one is kept, never overwritten.
         res.skipped = true;
+        res.skipReason = SkipReason::SameSecond;
         res.errorMessage = tr("Ya se ha hecho una copia hace un momento (%1).").arg(QFileInfo(finalPath).fileName());
         qWarning() << "BackupManager: a copy with this timestamp already exists -" << finalPath;
         return res;

@@ -121,6 +121,8 @@ private slots:
         const BackupManager::Result same = manager.performBackup();
         QVERIFY(!same.success);
         QVERIFY(same.skipped);
+        QVERIFY(same.skipReason == BackupManager::SkipReason::SameSecond);
+        QVERIFY(first.skipReason == BackupManager::SkipReason::None);
         AppSettings::instance()->setBackupLastError(QString());
         BackupManager::recordFailure(same);
         QVERIFY(AppSettings::instance()->backupLastError().isEmpty());
@@ -282,6 +284,7 @@ private slots:
         QSqlDatabase::removeDatabase("lock");
         QVERIFY(!second.success);
         QVERIFY(second.skipped);
+        QVERIFY(second.skipReason == BackupManager::SkipReason::AlreadyRunning);
         QVERIFY2(second.errorMessage.contains("en curso"), qPrintable(second.errorMessage));
     }
 

@@ -97,7 +97,7 @@ class TestE2eApp : public QObject
     ModalDriver *m_driver = nullptr;
 
     QString scalar(const QString &sql) { return E2e::scalar(m_db, sql); }
-    static QString today() { return QDate::currentDate().toString("dd-MM-yyyy"); }
+    static QString today() { return dbDateText(QDate::currentDate()); }
 
     // Contabilidad's close / Revertir of the quarter containing `date`.
     bool closeQuarterOf(const QDate &date) { return closeQuarter(m_db, (date.month() + 2) / 3, date.year(), ""); }
@@ -530,7 +530,7 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0760"));
+        QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", dbDateText(paid), "A-ORIG0760"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -586,8 +586,8 @@ private slots:
         AeatStore store(m_db, "produccion");
         QVERIFY(markChainReady(store, "produccion"));
         const QDate yesterday = QDate::currentDate().addDays(-1);
-        QVERIFY(E2e::seedSentGarment(m_db, "771", "h771a", "10.00", yesterday.toString("dd-MM-yyyy"), "A-TEST0771"));
-        QVERIFY(E2e::seedSentGarment(m_db, "772", "h772a", "12.10", yesterday.toString("dd-MM-yyyy"), ""));
+        QVERIFY(E2e::seedSentGarment(m_db, "771", "h771a", "10.00", dbDateText(yesterday), "A-TEST0771"));
+        QVERIFY(E2e::seedSentGarment(m_db, "772", "h772a", "12.10", dbDateText(yesterday), ""));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h772a'"));
         QVERIFY(E2e::seedSentGarment(m_db, "773", "h773a", "12.10", today(), ""));
         AppSettings::instance()->setVerifactuDirectAeat(true);
@@ -636,7 +636,7 @@ private slots:
         // Recogida: a ticket received yesterday can only be paid from the day production
         // began, and a payment with an earlier date is refused with nothing stored as paid
         // (it would be a paid invoice the real AEAT never gets).
-        QVERIFY(E2e::seedGarment(m_db, "775", "h775a", "9.00", yesterday.toString("dd-MM-yyyy")));
+        QVERIFY(E2e::seedGarment(m_db, "775", "h775a", "9.00", dbDateText(yesterday)));
         {
             PayDialog pay(m_db);
             pay.m_verifactu = &direct;
@@ -887,10 +887,10 @@ private slots:
     {
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
-        const QString reception = QDate::currentDate().addDays(-3).toString("dd-MM-yyyy");
+        const QString reception = dbDateText(QDate::currentDate().addDays(-3));
         QVERIFY(E2e::seedSentGarment(m_db, "781", "h781a", "10.00", today(), "A-ORIG0781"));
         AeatRecord::Registration original;
-        original.invoice = { AppSettings::instance()->verifactuNif(), QStringLiteral("781"), QDate::fromString(reception, "dd-MM-yyyy") };
+        original.invoice = { AppSettings::instance()->verifactuNif(), QStringLiteral("781"), parseDbDate(reception) };
         original.invoiceType = QStringLiteral("F2");
         original.generatedAt = QDateTime::currentDateTime().addDays(-3);
         original.taxLines = { { 21.0, 8.26, 1.74 } };
@@ -1500,6 +1500,79 @@ private slots:
         QCOMPARE(duringSave, ticket);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("SI"));
+    }
+
+    // A window close that arrives while a save waits for AEAT is refused until the save is over.
+    void test_mainWindow_closeDuringASaveWaitIsRefused()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        aeat.server.enqueue({ QByteArray(), 200, 1000 });
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        int closeDuringWait = -1;
+        connect(mw.findChild<VerifactuIntegration *>(), &VerifactuIntegration::chainChecked, &mw,
+                [&] { closeDuringWait = mw.close() ? 1 : 0; });
+        mw.show();
+        clickSave(mw);
+        QTRY_VERIFY(closeDuringWait != -1);
+        QCOMPARE(closeDuringWait, 0);
+        QVERIFY(mw.isVisible());
+        QVERIFY(mw.close());                                         // after the save it closes
+    }
+
+    // The rectificativa's stored label comes from the combo position, not from its text.
+    void test_rectifyLabelComesFromTheComboIndex()
+    {
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        QVERIFY(E2e::seedSentGarment(m_db, "776", "h776a", "10.00", today(), "A-ORIG0776"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("776");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        auto *type = dlg.findChild<QComboBox *>("cbInvoiceType");
+        type->setItemText(4, QStringLiteral("Otra rectificacion"));     // as a translation could word it
+        type->setCurrentIndex(4);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(dlg.findChild<QLabel *>("lblResult")->text().contains("Error al rectificar"), 20000);
+        QVERIFY2(scalar("SELECT observaciones FROM ingresos WHERE verifactu_rectifies_n_recibo = '776'")
+                     .startsWith("Rectificativa R5 ("),
+                 qPrintable(scalar("SELECT observaciones FROM ingresos WHERE verifactu_rectifies_n_recibo = '776'")));
+    }
+
+    // A ticket header that cannot be read is not reported as "not found".
+    void test_unreadableTicketIsNotReportedAsNotFound()
+    {
+        CancelInvoiceDialog cancel(m_db);
+        RectifyInvoiceDialog rectify(m_db);
+        const auto search = [&](const QString &ticket) {
+            cancel.findChild<QLineEdit *>("leTicketNum")->setText(ticket);
+            QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+            rectify.findChild<QLineEdit *>("leTicketNum")->setText(ticket);
+            QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        };
+        const auto texts = [&]() {
+            return cancel.findChild<QLabel *>("lblHeader")->text() + "|" + rectify.findChild<QLabel *>("lblInfo")->text();
+        };
+        search("999999");
+        QVERIFY2(texts().contains("no encontrado") && !texts().contains("No se pudo leer"), qPrintable(texts()));
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE ingresos RENAME TO ingresos_hidden"));
+        const auto restore = qScopeGuard([this] { E2e::exec(m_db, "ALTER TABLE ingresos_hidden RENAME TO ingresos"); });
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ticketHeader: query failed"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ticketHeader: query failed"));
+        search("999999");
+        QVERIFY2(texts().count("No se pudo leer") == 2 && !texts().contains("no encontrado"), qPrintable(texts()));
     }
 
     // Verifactu not configured (here the issuer's NIF is missing): every invoice is a
@@ -2136,10 +2209,10 @@ private slots:
     {
         const QDate received = QDate::currentDate().addDays(-20);
         const QDate firstPaid = QDate::currentDate().addDays(-10);
-        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", firstPaid.toString("dd-MM-yyyy"), "A-ORIG0800"));
+        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", dbDateText(firstPaid), "A-ORIG0800"));
         QVERIFY(E2e::seedSentGarment(m_db, "800", "h800b", "6.00", today(), "A-ORIG0801"));
         QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET fecha_recepcion = '%1' WHERE n_recibo = '800'")
-                                    .arg(received.toString("dd-MM-yyyy"))));
+                                    .arg(dbDateText(received))));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '800-1' "
                                 "WHERE hash = 'h800b'"));
 
@@ -2168,7 +2241,7 @@ private slots:
                  QStringLiteral("ANULADA|%1").arg(today()));
         // AEAT's cancellation record is kept for the Hacienda export.
         QVERIFY(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE hash='h800a'").contains("Huella"));
-        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), firstPaid.toString("dd-MM-yyyy"));
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), dbDateText(firstPaid));
     }
 
     // While a cancellation waits for AEAT, no other ticket can be searched, and the reply
@@ -2536,7 +2609,7 @@ private slots:
     void test_rectifySubstitution_dateRuleThenRectified()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0700"));
+        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700a", "10.00", dbDateText(paid), "A-ORIG0700"));
 
         RectifyInvoiceDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
@@ -2576,7 +2649,7 @@ private slots:
     void test_rectifyDirectOnlyR5_noRowLeft()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0710"));
+        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", dbDateText(paid), "A-ORIG0710"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -2601,7 +2674,7 @@ private slots:
     void test_rectifyDirectQueuedWithoutAnswer()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0711"));
+        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711a", "10.00", dbDateText(paid), "A-ORIG0711"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -2634,7 +2707,7 @@ private slots:
         QVERIFY(rectified > 0);
         QVERIFY(xml.indexOf("<sf:NumSerieFactura>711</sf:NumSerieFactura>", rectified) > rectified);
         QVERIFY(xml.indexOf(QStringLiteral("<sf:FechaExpedicionFactura>%1</sf:FechaExpedicionFactura>")
-                                .arg(paid.toString("dd-MM-yyyy")), rectified) > rectified);
+                                .arg(dbDateText(paid)), rectified) > rectified);
     }
 
     // Direct AEAT connection: Cobrar prints the factura at once, with the QR drawn from
@@ -3205,7 +3278,7 @@ private slots:
     // Payment dates never lie in the future nor before the reception (the AEAT invoice date).
     void test_paymentDatesBoundedByReceptionAndToday()
     {
-        const QString reception = QDate::currentDate().addDays(-5).toString("dd-MM-yyyy");
+        const QString reception = dbDateText(QDate::currentDate().addDays(-5));
         QVERIFY(E2e::seedGarment(m_db, "5320", "h5320a", "10.00", reception));
         PayDialog pay(m_db);
         QVERIFY(pay.loadTicket("5320"));
@@ -3228,7 +3301,7 @@ private slots:
         const int quarter = (today.month() + 2) / 3;
         if (today == Contabilidad::quarterLastDay(quarter, today.year()))
             return;                                                         // closing is allowed today
-        QVERIFY(E2e::seedSentGarment(m_db, "5330", "h5330a", "12.10", today.toString("dd-MM-yyyy"), "A-5330"));
+        QVERIFY(E2e::seedSentGarment(m_db, "5330", "h5330a", "12.10", dbDateText(today), "A-5330"));
         QPointer<Contabilidad> form = new Contabilidad(m_db);
         form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
         form->findChild<QSpinBox *>("sbYear")->setValue(today.year());
@@ -4978,7 +5051,7 @@ private slots:
         AeatStore store(m_db, "produccion");
         QVERIFY(markChainReady(store, "produccion"));
         const QDate yesterday = QDate::currentDate().addDays(-1);
-        QVERIFY(E2e::seedGarment(m_db, "8101", "h8101a", "9.00", yesterday.toString("dd-MM-yyyy")));
+        QVERIFY(E2e::seedGarment(m_db, "8101", "h8101a", "9.00", dbDateText(yesterday)));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         AppSettings::instance()->setAeatDirectProduction(true);
         VerifactuIntegration direct;

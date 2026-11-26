@@ -573,6 +573,21 @@ private slots:
         QCOMPARE(empty.bytes().trimmed(), QByteArray("1,00"));
     }
 
+    // A long garment name wraps onto continuation rows: none is wider than the paper.
+    void test_garmentRowLongNameStaysWithinTheColumns()
+    {
+        for (const int dots : { 576, 420 }) {
+            EscPosBuilder b(dots);
+            b.garmentRow("2", QString("Chaqueta de piel con forro extraible y capucha ").repeated(4), "12,50");
+            const QList<QByteArray> rows = b.bytes().split('\n');
+            QVERIFY(rows.size() > 2);
+            for (const QByteArray &row : rows)
+                QVERIFY2(row.size() <= b.columns(), qPrintable(QString("row of %1 > %2 columns").arg(row.size()).arg(b.columns())));
+            QVERIFY(rows.first().startsWith("2"));
+            QVERIFY(rows.first().endsWith("12,50"));
+        }
+    }
+
     // --- T13: feed / cut / line spacing bounds ---
     void test_feedCutAndSpacingBounds()
     {

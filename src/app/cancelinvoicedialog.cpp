@@ -52,6 +52,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addLayout(searchRow);
 
     m_lblHeader = new QLabel("-");
+    m_lblHeader->setObjectName("lblHeader");
     m_lblHeader->setWordWrap(true);
     m_lblHeader->setFrameShape(QFrame::StyledPanel);
     m_lblHeader->setContentsMargins(8, 8, 8, 8);
@@ -108,7 +109,11 @@ void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
     // ticket, so MIN is fine.
     bool headerOk = false;
     const TicketHeader header = ticketHeader(db, ticketNum, &headerOk);
-    if (!headerOk || !header.found) {
+    if (!headerOk) {
+        m_lblHeader->setText(tr("<i>No se pudo leer el ticket; consulte el registro.</i>"));
+        return;
+    }
+    if (!header.found) {
         m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
         return;
     }

@@ -15,9 +15,12 @@ class BackupManager : public QObject
 public:
     explicit BackupManager(QObject *parent = nullptr);
 
+    enum class SkipReason { None, AlreadyRunning, SameSecond };
+
     struct Result {
         bool    success = false;
         bool    skipped = false;   // refused, not failed: a run is already going, or one just ran (never a "last error")
+        SkipReason skipReason = SkipReason::None;   // which of the two, when skipped
         QString backupPath;     // absolute path of the created file (empty on failure)
         QString errorMessage;   // localized Spanish message suitable for QMessageBox
         qint64  bytesWritten = 0;

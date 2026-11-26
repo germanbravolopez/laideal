@@ -14,10 +14,7 @@
 #include "appsettings.h"
 #include "e2efixture.h"
 #include "escpospreview.h"
-// A test reaches the QR bookkeeping that only the direct backend sets in the app.
-#define private public
 #include "imprimir.h"
-#undef private
 #include "modalautocloser.h"
 #include "sql_lite.h"
 #include "thermalprinter.h"
@@ -254,6 +251,27 @@ private slots:
         QTRY_VERIFY(dlg.isNull());
     }
 
+    // The transport succeeds: the panel says the ticket was printed (and which copies).
+    void test_dialog_successIsSaidPlainly()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "713", "h713", "10.00"));
+        QPointer<Imprimir> dlg = openDialog(true);
+        const QString text = press(dlg, "713");
+        QCOMPARE(m_sent.size(), 2);
+        QVERIFY2(text.contains("Recibo Nº 713 impreso (copia del cliente y del establecimiento)"), qPrintable(text));
+        QVERIFY2(!text.contains("no impreso"), qPrintable(text));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+
+        QVERIFY(E2e::seedSentGarment(m_db, "714", "h714", "10.00", "10-02-2026", "A-714"));
+        QPointer<Imprimir> factura = openDialog(false);
+        const QString invoiceText = press(factura, "714");
+        QVERIFY2(invoiceText.contains("Factura 714 impresa."), qPrintable(invoiceText));
+        QVERIFY2(!invoiceText.contains("no impresa"), qPrintable(invoiceText));
+        factura->close();
+        QTRY_VERIFY(factura.isNull());
+    }
+
     // A complete invoice is never printed with a blank recipient address.
     void test_dialog_completaRefusedWithoutAnAddress()
     {
@@ -319,7 +337,7 @@ private slots:
         Imprimir engine(m_db);
         engine.isRecibo = false;
         engine.qrCode = QPixmap::fromImage(img);
-        engine.m_qrFromQueuedRecord = true;   // as resolveQrCode() sets it for a queued record's QR
+        engine.setQrFromQueuedRecord(true);   // as resolveQrCode() sets it for a queued record's QR
         engine.le_n_ticket->setText("712");
         engine.getTicketInfo();
         engine.buildTicket(true, false);

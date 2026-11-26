@@ -113,8 +113,10 @@ private slots:
             qDebug() << "filler line" << i << "padding padding padding";
         AppLogger::uninstall();
         QVERIFY(QFileInfo::exists(path + ".old/blocker") || QFileInfo::exists(path + ".old.prev/blocker"));   // never deleted
-        QVERIFY2(readAll(path).contains("filler line 0") || readAll(path + ".old").contains("filler line 0"),
-                 "the early log lines were lost");
+        const QByteArray all = readAll(path + ".old") + readAll(path);
+        for (int i = 0; i < 30; ++i)
+            QVERIFY2(all.contains(QByteArray("filler line " + QByteArray::number(i) + " padding")),
+                     qPrintable(QString("filler line %1 was lost").arg(i)));
     }
 
     // One line per message: millisecond timestamp, level tag, text (UTF-8 intact).

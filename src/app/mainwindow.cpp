@@ -542,8 +542,8 @@ void MainWindow::mainwindowInitialSettings()
         if (res.success) {
             AppSettings::instance()->setBackupLastVersion(version);
             BackupManager::recordSuccess(res);   // saves the settings
-        } else if (!res.skipped) {                    // skipped: a copy was made this very second
-            BackupManager::recordFailure(res);
+        } else if (res.skipReason != BackupManager::SkipReason::SameSecond) {   // same second: a copy of this start exists
+            BackupManager::recordFailure(res);   // records nothing for a run that is still going
             rewriteData = false;
             startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
                                                   .arg(res.errorMessage).toHtmlEscaped())
@@ -593,7 +593,7 @@ void MainWindow::openSettings()
     SettingsDialog dlg(this);
     QList<QPair<QString, QString>> certificates;
     for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
-        certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, c.expiry.toString("dd-MM-yyyy")), c.thumbprint);
+        certificates << qMakePair(tr("%1 (caduca el %2)").arg(c.subject, dbDateText(c.expiry.date())), c.thumbprint);
     dlg.setCertificateChoices(certificates);
     dlg.setDirectPendingCount(aeatPendingRecordCount(db, AppSettings::instance()->aeatDirectProduction()
                                                               ? QStringLiteral("produccion") : QStringLiteral("pruebas")));
@@ -655,7 +655,7 @@ QString MainWindow::checkAeatProduction(QObject *context, const QString &nif, co
     QApplication::setOverrideCursor(Qt::WaitCursor);
     probe.run();
     if (!done)
-        loop.exec();
+        loop.exec(QEventLoop::ExcludeUserInputEvents);
     QApplication::restoreOverrideCursor();
     return problem;
 }
@@ -1190,7 +1190,7 @@ void MainWindow::updateAeatEnvironment()
     const QDate productionStart = direct ? m_verifactuIntegration->productionStartDate() : QDate();
     // In production too: which AEAT the tickets go to is always in sight, with the day it began.
     if (productionStart.isValid())
-        m_aeatEnvironment->setText(tr("AEAT: PRODUCCIÓN desde el %1").arg(productionStart.toString("dd-MM-yyyy")));
+        m_aeatEnvironment->setText(tr("AEAT: PRODUCCIÓN desde el %1").arg(dbDateText(productionStart)));
     else
         m_aeatEnvironment->setText(UiKit::warnHtml(tr("AEAT: entorno de PRUEBAS (sin efectos tributarios)")));
     m_aeatEnvironment->setVisible(direct);
@@ -1515,11 +1515,22 @@ MainWindow::AeatReply MainWindow::waitForAeatReply(const QString &reqId, const Q
     const bool menuWasEnabled = menuBar()->isEnabled();
     centralWidget()->setEnabled(false);
     menuBar()->setEnabled(false);
+    m_waitingForAeat = true;
     loop.exec(QEventLoop::ExcludeUserInputEvents);
+    m_waitingForAeat = false;
     centralWidget()->setEnabled(true);
     menuBar()->setEnabled(menuWasEnabled);
     QObject::disconnect(conn);
     return reply;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (m_waitingForAeat) {
+        event->ignore();
+        return;
+    }
+    QMainWindow::closeEvent(event);
 }
 
 QString MainWindow::savedMessage(const SavedTicket &ticket) const

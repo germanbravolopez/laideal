@@ -62,6 +62,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
 
     // Ticket info panel ----------------------------------------------------
     m_lblInfo = new QLabel("-");
+    m_lblInfo->setObjectName("lblInfo");
     m_lblInfo->setWordWrap(true);
     m_lblInfo->setFrameShape(QFrame::StyledPanel);
     m_lblInfo->setContentsMargins(8, 8, 8, 8);
@@ -178,7 +179,11 @@ void RectifyInvoiceDialog::onSearchClicked()
 
     bool headerOk = false;
     const TicketHeader header = ticketHeader(db, ticketNum, &headerOk);
-    if (!headerOk || !header.found) {
+    if (!headerOk) {
+        m_lblInfo->setText(tr("<i>No se pudo leer el ticket; consulte el registro.</i>"));
+        return;
+    }
+    if (!header.found) {
         m_lblInfo->setText(tr("<i>Ticket no encontrado.</i>"));
         return;
     }
@@ -573,7 +578,7 @@ RectificativaRow RectifyInvoiceDialog::rectificativaRow() const
     row.client   = m_loadedCliente;
     row.type     = VerifactuInvoice::rectificationTypeToString(
         m_submittedIsSubstitution ? VerifactuInvoice::BY_SUBSTITUTION : VerifactuInvoice::BY_DIFFERENCES);
-    row.label    = m_cbInvoiceType->currentText().left(2);
+    row.label    = QStringLiteral("R%1").arg(m_cbInvoiceType->currentIndex() + 1);
     row.date     = m_newInvoiceDate;
     row.amount   = m_submittedAmount;
     return row;

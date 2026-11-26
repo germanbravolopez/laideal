@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QCloseEvent>
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QHash>
@@ -129,6 +130,8 @@ private:
     // Waits (up to 3 s, the window disabled) for AEAT's reply to reqId; the QR of an accepted one.
     struct AeatReply { QPixmap qrCode; bool success = false; QString refusal; };
     AeatReply waitForAeatReply(const QString &reqId, const QString &ticketNum);
+    // A close that arrives during that wait is refused: the save resumes on this window.
+    void closeEvent(QCloseEvent *event) override;
     // Each returns whether both copies reached the printer.
     bool printRecibo();
     // Paid at reception: the factura with the QR for the client, the paid recibo for the shop.
@@ -201,6 +204,7 @@ private:
     QString m_updateNotice;   // the first start of a new version asks for the post-update check
     QString m_clientNote;   // set by checkClientData, shown with the save result
     VerifactuIntegration *m_verifactuIntegration = nullptr;
+    bool m_waitingForAeat = false;              // inside waitForAeatReply's nested loop
     bool m_saving = false;                      // inside on_pb_save_clicked (it may wait for AEAT)
     bool m_numberingRefused = false;            // the last save was refused until the chain is checked
     // Async submit tracking: reqId -> (ticket number, verifactu_invoice_seq), so
