@@ -1048,6 +1048,149 @@ private slots:
         QCOMPARE(nextVerifactuInvoiceSeq(m_db, "T1"), 2);
     }
 
+    // --- wave 2 review fixes ------------------------------------------------------------
+
+    // An unpaid legacy sibling on the same seq 0 is not turned into ERROR.
+    void test_markPendingEventUnreconciled_leavesUnpaidSibling()
+    {
+        insertIngreso("93", "", "5.00", "NO", "", 0);
+        insertIngreso("93", "04-05-2026", "6.00", "SI", "PENDIENTE", 0);
+        QVERIFY(markPendingEventUnreconciled(m_db, "93", 0));
+        QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado || ':' || verifactu_estado) FROM (SELECT pagado, verifactu_estado "
+                        "FROM ingresos WHERE n_recibo = '93' ORDER BY pagado)"),
+                 QStringLiteral("NO:,SI:ERROR"));
+    }
+
+    // A failed read says so: no invoice number is handed out, a ticket reads as paid.
+    void test_seqAndPaidReads_failClosed()
+    {
+        insertIngreso("94", "04-05-2026", "6.00", "SI", "ENVIADA", 0);
+        bool ok = false;
+        QCOMPARE(nextVerifactuInvoiceSeq(m_db, "94", QString(), &ok), 1);
+        QVERIFY(ok);
+        QVERIFY(ticketHasPaidGarment(m_db, "94", &ok));
+        QVERIFY(ok);
+        QVERIFY(!ticketHasPaidGarment(m_db, "95", &ok));
+        QVERIFY(ok);
+        exec("ALTER TABLE ingresos RENAME COLUMN n_recibo TO n_recibo_off");
+        bool seqOk = true, paidOk = true;
+        nextVerifactuInvoiceSeq(m_db, "94", QString(), &seqOk);
+        const bool paid = ticketHasPaidGarment(m_db, "95", &paidOk);
+        exec("ALTER TABLE ingresos RENAME COLUMN n_recibo_off TO n_recibo");
+        QVERIFY(!seqOk);
+        QVERIFY(paid);
+        QVERIFY(!paidOk);
+    }
+
+    // An unreadable amount or a voided garment is never charged; nothing is stored.
+    void test_storeChargedGarments_refusesBadAmountAndVoidedRow()
+    {
+        insertRow("96", "h96a");
+        insertRow("96", "h96b");
+        QVERIFY(!storeChargedGarments(m_db, "96", { {"h96a", "5.00"}, {"h96b", "abc"} }, QDate(2026, 5, 4), 0, "96"));
+        QVERIFY(!storeChargedGarments(m_db, "96", { {"h96a", "1.234,50"} }, QDate(2026, 5, 4), 0, "96"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '96' AND pagado = 'SI'"), QStringLiteral("0"));
+        exec("UPDATE ingresos SET estado = '" INGRESOS_ESTADO_ANULADO "' WHERE hash = 'h96b'");
+        QVERIFY(!storeChargedGarments(m_db, "96", { {"h96b", "5.00"} }, QDate(2026, 5, 4), 0, "96"));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash = 'h96b'"), QStringLiteral("NO"));
+    }
+
+    // A quarter closed after the early check (here by the first garment's UPDATE) is honoured.
+    void test_storeChargedGarments_closedQuarterCheckedInTheStatement()
+    {
+        insertRow("97", "h97a");
+        insertRow("97", "h97b");
+        exec("CREATE TRIGGER test_close_q2 AFTER UPDATE OF pagado ON ingresos "
+             "WHEN NOT EXISTS (SELECT 1 FROM accounting_closures WHERE year = 2026 AND quarter = 2 AND reopened_at IS NULL) "
+             "BEGIN INSERT INTO accounting_closures (year, quarter, closed_at, origin) "
+             "VALUES (2026, 2, '2026-06-01T00:00:00', 'contabilidad'); END");
+        const bool stored = storeChargedGarments(m_db, "97", { {"h97a", "5.00"}, {"h97b", "5.00"} }, QDate(2026, 5, 4), 0, "97");
+        exec("DROP TRIGGER test_close_q2");
+        QVERIFY(!stored);
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '97' AND pagado = 'SI'"), QStringLiteral("0"));
+    }
+
+    void test_insertExpenseInvoice_refusesUnreadableAmount()
+    {
+        QVERIFY(!insertExpenseInvoice(m_db, "F98", "s", "d", "e", QDate(2026, 5, 4), "21", "abc"));
+        QVERIFY(!insertExpenseInvoice(m_db, "F98", "s", "d", "e", QDate(2026, 5, 4), "21", "1.234,50"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM gastos"), QStringLiteral("0"));
+        QVERIFY(insertExpenseInvoice(m_db, "F98", "s", "d", "e", QDate(2026, 5, 4), "21", "12.5"));
+        QCOMPARE(scalar("SELECT importe FROM gastos"), QStringLiteral("12.50"));
+    }
+
+    void test_splitGarmentRow_refusesUnreadableAmount()
+    {
+        insertRow("99", "h99a", "1.234,50");
+        exec("UPDATE ingresos SET cantidad = '3' WHERE hash = 'h99a'");
+        QVERIFY(splitGarmentRow(m_db, "99", "h99a", 1).isEmpty());
+        QCOMPARE(scalar("SELECT COUNT(*) || '|' || MAX(cantidad) || '|' || MAX(importe) FROM ingresos WHERE n_recibo = '99'"),
+                 QStringLiteral("1|3|1.234,50"));
+    }
+
+    // A paid garment is never inserted into a closed quarter, whatever the caller checked.
+    void test_insertGarmentRow_refusesPaidRowInClosedQuarter()
+    {
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        IngresoGarmentRow row;
+        row.nRecibo = "100"; row.hash = "h100a"; row.importe = "5.00"; row.pagado = "SI";
+        row.fechaPago = "10-02-2026"; row.verifactuEstado = "PENDIENTE";
+        QVERIFY(!insertGarmentRow(m_db, row));
+        QVERIFY(!insertGarmentRows(m_db, { row }));
+        row.fechaPago = "10-05-2026";                     // open quarter
+        QVERIFY(insertGarmentRow(m_db, row));
+        IngresoGarmentRow unpaid = row;
+        unpaid.hash = "h100b"; unpaid.pagado = "NO"; unpaid.fechaPago = ""; unpaid.verifactuEstado = "SIN COBRAR";
+        QVERIFY(insertGarmentRows(m_db, { unpaid }));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '100'"), QStringLiteral("2"));
+    }
+
+    // A second cancellation (a late reply) succeeds and leaves the stored record alone.
+    void test_markInvoiceSeqCancelled_keepsAnAlreadyCancelledRow()
+    {
+        insertIngreso("101", "20-04-2026", "10.00", "SI", "ENVIADA", 0);
+        QVERIFY(markInvoiceSeqCancelled(m_db, "101", 0, QDate(2026, 5, 15), "<first/>"));
+        QVERIFY(markInvoiceSeqCancelled(m_db, "101", 0, QDate(2026, 5, 20), "<second/>"));
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion || '|' || verifactu_cancel_xml "
+                        "FROM ingresos WHERE n_recibo = '101'"),
+                 QStringLiteral("ANULADA|15-05-2026|<first/>"));
+        QVERIFY(!markInvoiceSeqCancelled(m_db, "102", 0, QDate(2026, 5, 20), "<x/>"));
+    }
+
+    // The local void of an unpaid garment changes no figure: no movement.
+    void test_quarterHasMovements_ignoresLocalVoidOfUnpaid()
+    {
+        insertRow("103", "h103a");
+        exec("UPDATE ingresos SET estado = '" INGRESOS_ESTADO_ANULADO "', fecha_anulacion = '10-08-2027' WHERE hash = 'h103a'");
+        QVERIFY(!quarterHasMovements(m_db, 3, 2027));
+    }
+
+    // The 10.9 backfill also re-labels a PENDIENTE row whose pagado is NULL.
+    void test_migrateDatabase_sinCobrarBackfillMatchesNullPagado()
+    {
+        QTemporaryDir dir;
+        {
+            QSqlDatabase fresh = QSqlDatabase::addDatabase("QSQLITE", "nullpagado");
+            fresh.setDatabaseName(dir.filePath("np.db"));
+            QVERIFY(migrateDatabase(fresh));
+            QVERIFY(fresh.open());
+            QSqlQuery q(fresh);
+            QVERIFY(q.exec("INSERT INTO ingresos (n_recibo, hash, edit_lock, pagado, fecha_pago, verifactu_estado) "
+                           "VALUES ('104', 'h104', '0', NULL, '04-05-2026', 'PENDIENTE')"));
+            q.finish();
+            fresh.close();
+            QVERIFY(migrateDatabase(fresh));
+            QVERIFY(fresh.open());
+            QSqlQuery r(fresh);
+            QVERIFY(r.exec("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '104'") && r.next());
+            QCOMPARE(r.value(0).toString(), QStringLiteral("SIN COBRAR"));
+            r.finish();
+            fresh.close();
+            fresh = QSqlDatabase();
+        }
+        QSqlDatabase::removeDatabase("nullpagado");
+    }
+
     // Pure price math (no DB): comma-decimal normalisation + size factor.
     void test_garmentImporte()
     {

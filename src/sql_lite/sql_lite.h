@@ -252,7 +252,7 @@ bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QStri
 // True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
 // has been submitted to AEAT, so AddGarment refuses to append new garments to it
 // (only unpaid, not-yet-submitted receipts may be altered locally).
-bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
+bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo, bool *ok = nullptr);
 // True when EVERY garment of the ticket is pagado='SI' (and there is at least one).
 // Drives the "IMPORTE PAGADO" marker on a reprinted recibo, which shows the whole
 // ticket total - "any paid" would claim a partially-paid ticket was settled in full.
@@ -299,11 +299,11 @@ QString     removeSpecialChars(const QString &str);
 int         updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                         const VerifactuResult &result, int seq = 0);
 
-// Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
+// Next free verifactu_invoice_seq for a ticket. `ok` false: the read failed (do not charge). Counts paid rows so a local-
 // only PayDialog event (Verifactu disabled, no estado written) still
 // increments the seq for the next event.
 // `aeatEnvironment`: only the direct client's records of that environment count (empty: all).
-int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment = QString());
+int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment = QString(), bool *ok = nullptr);
 
 // AEAT InvoiceID for a ticket payment event: bare n_recibo for seq 0 (save-time
 // / first event), "<n_recibo>-<seq>" for a later partial-pay event. Single source
@@ -483,8 +483,8 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
 // already set): the payment period keeps the income and the cancellation is
 // accounted in the period it happens. Only paid rows - the ones the invoice
 // covered - are marked; unpaid garments of the ticket (which share seq 0) stay
-// chargeable and are invoiced on their own when paid. Returns false when the
-// UPDATE fails or matches no paid row.
+// chargeable and are invoiced on their own when paid. A row already ANULADA is left
+// as it is (true). Returns false when the UPDATE fails or matches no paid row.
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
                                     const QString &cancelXml = QString());
 // Marks the paid rows of a ticket RECTIFICADA after an accepted substitution
