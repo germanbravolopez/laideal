@@ -331,6 +331,18 @@ private slots:
         QVERIFY(done.contains("Calle Mayor 1, 18001 Granada"));
     }
 
+    // l) names the month in Spanish, lower case.
+    void test_declarationDateNamesTheMonth()
+    {
+        const char *const months[] = { "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                                       "agosto", "septiembre", "octubre", "noviembre", "diciembre" };
+        for (int m = 1; m <= 12; ++m) {
+            const ProducerDeclaration::Signature sig{ "Calle Mayor 1", QDate(2026, m, 3), "Granada" };
+            const QString expected = QStringLiteral("3 de %1 de 2026, Granada").arg(QLatin1String(months[m - 1]));
+            QVERIFY2(ProducerDeclaration::html("12.0", sig).contains(expected), qPrintable(expected));
+        }
+    }
+
     // j) and l) of the version being built: the shop's address from the settings (never in
     // the source), the place fixed, the date the producer signed 12.0.
     void test_currentSignatureFromTheSettings()

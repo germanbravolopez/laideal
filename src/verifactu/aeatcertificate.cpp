@@ -1,5 +1,7 @@
 #include "aeatcertificate.h"
 
+#include "aeathash.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
@@ -118,7 +120,7 @@ bool AeatCertificate::accept(const void *context, QString *error)
         return false;
     }
     if (info.expiry < QDateTime::currentDateTime()) {
-        *error = tr("El certificado electrónico caducó el %1.").arg(info.expiry.toString("dd-MM-yyyy"));
+        *error = tr("El certificado electrónico caducó el %1.").arg(info.expiry.toString(QLatin1String(AeatHash::kDateFormat)));
         return false;
     }
     return true;
@@ -127,6 +129,21 @@ bool AeatCertificate::accept(const void *context, QString *error)
     *error = tr("El certificado electrónico solo se puede usar en Windows.");
     return false;
 #endif
+}
+
+bool AeatCertificate::load(const QString &thumbprint, const QString &path, const QString &password, QString *error)
+{
+    return thumbprint.isEmpty() ? loadFromFile(path, password, error) : loadFromStore(thumbprint, error);
+}
+
+QString AeatCertificate::representativeWarning(const QString &certificateNif, const QString &issuerNif)
+{
+    // AEAT accepts requests presented by the issuer, or by someone it holds as her representative.
+    if (certificateNif.isEmpty() || certificateNif.compare(issuerNif, Qt::CaseInsensitive) == 0)
+        return QString();
+    return tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
+              "consta como representante de %2 (apoderamiento o colaboración social).")
+        .arg(certificateNif, issuerNif);
 }
 
 bool AeatCertificate::loadFromStore(const QString &thumbprint, QString *error)

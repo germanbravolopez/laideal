@@ -1,6 +1,7 @@
 #include "aeatconnectionprobe.h"
 
 #include "aeatdirectbackend.h"
+#include "aeathash.h"
 #include "aeatrecord.h"
 #include "aeatresponse.h"
 
@@ -37,20 +38,16 @@ void AeatConnectionProbe::run()
     // The tests' local server is plain http and takes no certificate.
     if (url.startsWith(QLatin1String("https"))) {
         QString error;
-        const bool loaded = m_settings.certificateThumbprint.isEmpty()
-            ? m_certificate.loadFromFile(m_settings.certificatePath, m_settings.certificatePassword, &error)
-            : m_certificate.loadFromStore(m_settings.certificateThumbprint, &error);
-        if (!loaded) {
+        if (!m_certificate.load(m_settings.certificateThumbprint, m_settings.certificatePath,
+                                m_settings.certificatePassword, &error)) {
             fail("certificate", tr("Certificado: %1").arg(error));
             return;
         }
         const AeatCertificate::Info cert = m_certificate.info();
-        emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString("dd-MM-yyyy")));
-        // AEAT accepts requests presented by the issuer, or by someone it holds as her representative.
-        if (!cert.nif.isEmpty() && cert.nif.compare(m_settings.issuerNif, Qt::CaseInsensitive) != 0)
-            emit progress(false, tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
-                                    "consta como representante de %2 (apoderamiento o colaboración social).")
-                                     .arg(cert.nif, m_settings.issuerNif));
+        emit progress(true, tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString(QLatin1String(AeatHash::kDateFormat))));
+        const QString warning = AeatCertificate::representativeWarning(cert.nif, m_settings.issuerNif);
+        if (!warning.isEmpty())
+            emit progress(false, warning);
         m_transport->setCertificate(&m_certificate);
     }
     const QDate today = QDate::currentDate();

@@ -88,10 +88,8 @@ public:
     // Moves the head to `head` (the chain tip found by a sync), whatever it was.
     bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
 
-    // When the direct client began working in this environment on this database; for
-    // "produccion", the moment the shop went to the real AEAT. markStarted() keeps the
-    // moment already stored unless `again` (the owner entered production anew);
-    // startedAt() is invalid until then.
+    // When the direct client began in this environment on this database (for "produccion",
+    // when the shop went to the real AEAT); kept unless `again`. Invalid until marked.
     bool markStarted(bool again = false);
     QDateTime startedAt();
     // A registration record of the invoice is stored for `environment`, whatever its

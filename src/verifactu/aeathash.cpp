@@ -8,7 +8,6 @@ namespace AeatHash {
 
 namespace {
 
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const QString kQrProductionUrl = QStringLiteral("https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR");
 const QString kQrTestUrl = QStringLiteral("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR");
 
@@ -22,12 +21,12 @@ QString sha256Hex(const QString &text)
     return QString::fromLatin1(QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256).toHex()).toUpper();
 }
 
+} // namespace
+
 QString dateText(const QDate &date)
 {
-    return date.isValid() ? date.toString(kDateFormat) : QString();
+    return date.isValid() ? date.toString(QLatin1String(kDateFormat)) : QString();
 }
-
-} // namespace
 
 QString registrationHashInput(const RegistrationFields &f)
 {

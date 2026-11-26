@@ -16,20 +16,125 @@ const QString kProductionUrl = QStringLiteral("https://www1.agenciatributaria.go
 const QString kTestUrl = QStringLiteral("https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
 const QString kRegistration = QStringLiteral("Alta");
 const QString kCancellation = QStringLiteral("Anulacion");
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
+const QString kDateFormat = QString::fromLatin1(AeatHash::kDateFormat);
 const int kTransferTimeoutMs = 30000;
 const int kQrPixelsPerModule = 5;
 const int kMonthsBack = 24;           // how far the first sync looks for the issuer's records
 const int kMonthsAlwaysQueried = 2;   // this month and the previous one, always
 const int kBlockingRecordsNamed = 5;  // unsent records a waiting chain restart names in its message
-
-QString s_endpointOverride;
 constexpr int kMaxUnverifiedDuplicates = 5;   // duplicate answers AEAT's query never confirms
+
+// Test hooks.
+QString s_endpointOverride;
 int s_retryDelaySeconds = 60;         // after a failed send, before trying again on its own
+
+// As the store keeps its records and the chain marker names the environment.
+QString environmentText(bool testEnvironment)
+{
+    return testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion");
+}
+
+QString validationUrlOf(const QString &issuerNif, const QString &invoiceNumber, const QDate &issueDate, double total,
+                        bool testEnvironment)
+{
+    return AeatHash::qrValidationUrl(issuerNif, invoiceNumber, issueDate, AeatHash::amountText(total), testEnvironment);
+}
+
+QPixmap qrPixmapOf(const QString &validationUrl)
+{
+    return QPixmap::fromImage(AeatQr::image(validationUrl, kQrPixelsPerModule));
+}
 
 QString operationOf(AeatStore::Kind kind)
 {
     return kind == AeatStore::Kind::Registration ? kRegistration : kCancellation;
+}
+
+// The huellas proven ours: `ours` (anchors, head, the settings' marker), every
+// registration of our system, and a returned cancellation that chains to one of them
+// (another system chains to its own).
+QSet<QString> provenOurs(const QList<AeatResponse::RecordSummary> &candidates, QSet<QString> ours)
+{
+    for (const AeatResponse::RecordSummary &c : candidates) {
+        if (!c.cancellationFromQuery && !c.foreignSystem)
+            ours.insert(c.hash.toUpper());
+    }
+    ours.remove(QString());
+    for (bool grown = true; grown;) {
+        grown = false;
+        for (const AeatResponse::RecordSummary &c : candidates) {
+            const QString hash = c.hash.toUpper();
+            if (c.cancellationFromQuery && !ours.contains(hash) && ours.contains(c.previousHash.toUpper())) {
+                ours.insert(hash);
+                grown = true;
+            }
+        }
+    }
+    return ours;
+}
+
+// The hidden cancellation that may be the chain's last record, or nullptr. `seen` is the
+// settings' marker (empty: none, or it names no record, which proves nothing). The marker
+// names the tip; not visible, it is the lost record; visible with records of ours after
+// it, the settings are older than the database. Then, or without it, AEAT's times decide.
+const AeatResponse::RecordSummary *lostRecord(const QList<AeatResponse::RecordSummary> &candidates,
+                                              const QList<AeatResponse::RecordSummary> &chain,
+                                              const AeatResponse::RecordSummary &tip, const QString &seen)
+{
+    if (seen.isEmpty())
+        return AeatResponse::lostCancellationAfter(candidates, tip);
+    bool visible = false;
+    for (const AeatResponse::RecordSummary &c : chain)
+        visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
+    if (!visible)
+        return AeatResponse::lostCancellation(candidates);
+    if (tip.hash.compare(seen, Qt::CaseInsensitive) != 0)
+        return AeatResponse::lostCancellationAfter(candidates, tip);
+    return nullptr;
+}
+
+// The chain's NumeroInstalacion: its tip's or, for a returned cancellation (which may carry
+// the block of the invoice it cancels), that of the newest registration at AEAT.
+QString chainInstallationNumber(const QList<AeatResponse::RecordSummary> &chain, const AeatResponse::RecordSummary &tip)
+{
+    if (!tip.cancellationFromQuery)
+        return tip.installationNumber;
+    QString number;
+    QDateTime newest;
+    for (const AeatResponse::RecordSummary &c : chain) {
+        const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
+        if (!c.cancellationFromQuery && !c.installationNumber.isEmpty() && (!newest.isValid() || generated > newest)) {
+            newest = generated;
+            number = c.installationNumber;
+        }
+    }
+    return number;
+}
+
+// A record the month query returned, as the chain sync reads it. An invoice AEAT holds as
+// cancelled comes back as its cancellation record (huella, time, link) or, hidden, as the
+// registration it was.
+AeatResponse::RecordSummary summaryOf(const AeatResponse::QueryRecord &r, bool foreign)
+{
+    const bool cancelled = r.state.startsWith(QLatin1String("Anulad"));
+    const bool cancellationShown = cancelled && AeatResponse::carriesCancellationRecord(r);
+    AeatResponse::RecordSummary s;
+    s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
+    s.operation = cancellationShown ? kCancellation : kRegistration;
+    s.cancellationFromQuery = cancellationShown;
+    s.issuerNif = r.issuerNif;
+    s.invoiceNumber = r.invoiceNumber;
+    s.issueDate = r.issueDate;
+    s.hash = r.hash;
+    s.generatedAt = r.generatedAt;
+    s.previousHash = r.previousHash;
+    s.installationNumber = r.installationNumber;
+    // AEAT received the cancellation when the invoice's state last changed.
+    s.presentedAt = cancellationShown ? r.stateChangedAt : r.presentedAt;
+    s.cancelledAtAeat = cancelled && !cancellationShown;
+    s.cancelledAt = r.stateChangedAt;
+    s.foreignSystem = foreign;
+    return s;
 }
 
 } // namespace
@@ -37,7 +142,7 @@ QString operationOf(AeatStore::Kind kind)
 AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &db, QObject *parent)
     : VerifactuBackend(parent),
       m_config(config),
-      m_store(db, config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion")),
+      m_store(db, environmentText(config.testEnvironment)),
       m_transport(new AeatTransport(this))
 {
     m_sendTimer.setSingleShot(true);
@@ -67,9 +172,8 @@ AeatDirectBackend::AeatDirectBackend(const Config &config, const QSqlDatabase &d
     // The certificate is only needed to send: records are generated without it.
     if (endpointUrl(m_config.testEnvironment).startsWith(QLatin1String("https"))) {
         QString error;
-        const bool loaded = m_config.certificateThumbprint.isEmpty()
-            ? m_certificate.loadFromFile(m_config.certificatePath, m_config.certificatePassword, &error)
-            : m_certificate.loadFromStore(m_config.certificateThumbprint, &error);
+        const bool loaded = m_certificate.load(m_config.certificateThumbprint, m_config.certificatePath,
+                                               m_config.certificatePassword, &error);
         if (loaded)
             m_transport->setCertificate(&m_certificate);
         else
@@ -126,13 +230,17 @@ void AeatDirectBackend::setRetryDelaySeconds(int seconds)
     s_retryDelaySeconds = seconds;
 }
 
+QString AeatDirectBackend::environmentName() const
+{
+    return environmentText(m_config.testEnvironment);
+}
+
 QString AeatDirectBackend::configurationInfo() const
 {
-    return QStringLiteral("AEAT directo - entorno: %1, emisor: %2, endpoint: %3, %4%5")
-        .arg(m_config.testEnvironment ? QStringLiteral("PRUEBAS") : QStringLiteral("PRODUCCION"),
-             m_config.issuerNif, endpointUrl(m_config.testEnvironment),
-             isConfigured() ? QStringLiteral("configurado") : QStringLiteral("NO configurado: ") + m_configError,
-             m_sendError.isEmpty() ? QString() : QStringLiteral(", sin envío: ") + m_sendError);
+    return QStringLiteral("AEAT direct - environment: %1, issuer: %2, endpoint: %3, %4%5")
+        .arg(environmentName().toUpper(), m_config.issuerNif, endpointUrl(m_config.testEnvironment),
+             isConfigured() ? QStringLiteral("configured") : QStringLiteral("NOT configured: ") + m_configError,
+             m_sendError.isEmpty() ? QString() : QStringLiteral(", not sending: ") + m_sendError);
 }
 
 QString AeatDirectBackend::nextRequestId()
@@ -173,63 +281,41 @@ QList<AeatResponse::RecordSummary> AeatDirectBackend::localCandidates()
     return out;
 }
 
-bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found, QString *message)
+QList<AeatResponse::RecordSummary> AeatDirectBackend::candidatesAfterRestart(
+    const QList<AeatResponse::RecordSummary> &found)
 {
-    bool read = false;
-    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
-    if (!read) {
-        *message = tr("No se puede leer la cadena de registros: %1").arg(m_store.lastError());
-        return false;
-    }
     QList<AeatResponse::RecordSummary> candidates = found + m_foreignCancelled;
     // Records from before a restart belong to the chain that ended there.
     QString restartNumber;
     const QDateTime restartedAt = m_store.chainRestartedAt(m_config.issuerNif, &restartNumber);
-    if (restartedAt.isValid()) {
-        // Whole seconds on both sides; in the restart's own second only a record AEAT
-        // shows under the new number belongs to the new chain.
-        const qint64 restartSecs = restartedAt.toSecsSinceEpoch();
-        int unreadable = 0;
-        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const AeatResponse::RecordSummary &c) {
-            const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
-            if (!generated.isValid()) {
-                ++unreadable;      // before or after the restart cannot be told: never a link
-                return true;
-            }
-            const qint64 secs = generated.toSecsSinceEpoch();
-            return secs < restartSecs || (secs == restartSecs && c.installationNumber != restartNumber);
-        }), candidates.end());
-        if (unreadable > 0)
-            qWarning() << "AeatDirectBackend:" << unreadable << "record(s) with an unreadable generation time left out of"
-                       << "the chain after its restart";
-    }
-    // A cancellation AEAT returned under one of our invoices is a link of our chain only
-    // when it is proven ours: this database or the settings' marker hold its huella, or it
-    // chains to a record of ours (another system chains to its own). Unproven, it counts
-    // as a cancellation the query hides: never a link, and a reason to restart below.
-    QString seen;
-    const bool markerRead = lastSeenHead(&seen) && !seen.isEmpty();
-    QSet<QString> ours = m_store.chainAnchors();
-    ours.insert(head.hash.toUpper());
-    if (markerRead)
-        ours.insert(seen.toUpper());
-    for (const AeatResponse::RecordSummary &c : candidates) {
-        if (!c.cancellationFromQuery && !c.foreignSystem)
-            ours.insert(c.hash.toUpper());
-    }
-    ours.remove(QString());
-    for (bool grown = true; grown;) {
-        grown = false;
-        for (const AeatResponse::RecordSummary &c : candidates) {
-            const QString hash = c.hash.toUpper();
-            if (c.cancellationFromQuery && !ours.contains(hash) && ours.contains(c.previousHash.toUpper())) {
-                ours.insert(hash);
-                grown = true;
-            }
+    if (!restartedAt.isValid())
+        return candidates;
+    // Whole seconds on both sides; in the restart's own second only a record AEAT
+    // shows under the new number belongs to the new chain.
+    const qint64 restartSecs = restartedAt.toSecsSinceEpoch();
+    int unreadable = 0;
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const AeatResponse::RecordSummary &c) {
+        const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
+        if (!generated.isValid()) {
+            ++unreadable;      // before or after the restart cannot be told: never a link
+            return true;
         }
-    }
+        const qint64 secs = generated.toSecsSinceEpoch();
+        return secs < restartSecs || (secs == restartSecs && c.installationNumber != restartNumber);
+    }), candidates.end());
+    if (unreadable > 0)
+        qWarning() << "AeatDirectBackend:" << unreadable << "record(s) with an unreadable generation time left out of"
+                   << "the chain after its restart";
+    return candidates;
+}
+
+QList<AeatResponse::RecordSummary> AeatDirectBackend::chainOf(QList<AeatResponse::RecordSummary> &candidates,
+                                                             const QSet<QString> &ours,
+                                                             const AeatRecord::PreviousRecord &head) const
+{
     QList<AeatResponse::RecordSummary> chain;
     for (AeatResponse::RecordSummary &c : candidates) {
+        // Unproven, a returned cancellation counts as one the query hides.
         if (c.cancellationFromQuery && !ours.contains(c.hash.toUpper())) {
             c.operation = kRegistration;
             c.cancelledAtAeat = true;
@@ -253,6 +339,55 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         h.generatedAt = head.generatedAt;
         chain << h;
     }
+    return chain;
+}
+
+bool AeatDirectBackend::adoptInstallationNumber(const QList<AeatResponse::RecordSummary> &chain,
+                                                const AeatResponse::RecordSummary &tip, QString *message)
+{
+    // The number belongs to the chain: ours becomes that of its last record at AEAT before
+    // anything is generated (and before the head moves, so a failure repeats).
+    const QString chainNumber = chainInstallationNumber(chain, tip);
+    if (!m_config.adoptInstallationNumber || chainNumber.isEmpty() || chainNumber == m_config.system.installationNumber)
+        return true;
+    if (!m_store.setInstallationNumber(chainNumber)) {
+        *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
+        return false;
+    }
+    qWarning() << "AeatDirectBackend: NumeroInstalacion" << m_config.system.installationNumber << "->"
+               << chainNumber << "(the chain's last record at AEAT)";
+    m_config.system.installationNumber = chainNumber;
+    return true;
+}
+
+QString AeatDirectBackend::continuationMessage(const AeatResponse::RecordSummary &tip)
+{
+    // A record the query returns is read as a registration and the stored head carries no
+    // operation: a tip with our cancellation's huella is named from the stored record.
+    const bool cancellation = tip.operation == kCancellation
+        || m_store.latest(AeatStore::Kind::Cancellation, tip.invoiceNumber, m_config.issuerNif)
+               .hash.compare(tip.hash, Qt::CaseInsensitive) == 0;
+    return tr("La cadena continúa tras el registro %1 (%2, %3).")
+        .arg(tip.invoiceNumber, cancellation ? tr("anulación") : tr("alta"),
+             tip.generatedAt.isEmpty() ? tr("generado antes") : tip.generatedAt);
+}
+
+bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found, QString *message)
+{
+    bool read = false;
+    const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
+    if (!read) {
+        *message = tr("No se puede leer la cadena de registros: %1").arg(m_store.lastError());
+        return false;
+    }
+    QList<AeatResponse::RecordSummary> candidates = candidatesAfterRestart(found);
+    QString seen;
+    const bool markerRead = lastSeenHead(&seen) && !seen.isEmpty();
+    QSet<QString> known = m_store.chainAnchors();
+    known.insert(head.hash.toUpper());
+    if (markerRead)
+        known.insert(seen.toUpper());
+    const QList<AeatResponse::RecordSummary> chain = chainOf(candidates, provenOurs(candidates, known), head);
     const bool mayRestart = m_firstSync && m_config.adoptInstallationNumber;
     const AeatResponse::RecordSummary *tip = AeatResponse::chainTip(chain);
     if (!tip) {
@@ -262,62 +397,14 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         *message = tr("No hay registros anteriores de este sistema para el emisor: la cadena empezará con el primer registro.");
         return true;
     }
-    // A restored database (first sync) that lacks a cancellation AEAT holds and does not
-    // return (cancelledAtAeat: the reply carried the registration, not the cancellation
-    // record): when it may be the chain's last record the chain cannot be continued and
-    // starts again as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden). A cancellation
-    // AEAT returns is a candidate like any record, and the chain continues from it.
+    // A restored database lacking a cancellation AEAT hides, which may be the chain's last
+    // record, starts a new chain as a new SIF (AEAT, 24-11-2026; art. 7.b of the Orden).
     if (mayRestart) {
-        const AeatResponse::RecordSummary *lost = nullptr;
-        // An empty marker names no record (a chain not started, or just restarted): it
-        // proves nothing about a copy restored afterwards.
-        if (markerRead) {
-            // This installation's settings name its last record. It is the chain's tip:
-            // nothing of ours came after it, whoever cancelled an invoice since. Not
-            // visible (here or at AEAT): it is the lost record. Visible with records of
-            // ours after it: the settings are older than this database (a settings file
-            // restored or copied), so they prove nothing and AEAT's own times decide.
-            bool visible = false;
-            for (const AeatResponse::RecordSummary &c : chain)
-                visible = visible || c.hash.compare(seen, Qt::CaseInsensitive) == 0;
-            if (!visible)
-                lost = AeatResponse::lostCancellation(candidates);
-            else if (tip->hash.compare(seen, Qt::CaseInsensitive) != 0)
-                lost = AeatResponse::lostCancellationAfter(candidates, *tip);
-        } else {
-            // A new PC (no settings), or no record named: only AEAT's own times can tell.
-            lost = AeatResponse::lostCancellationAfter(candidates, *tip);
-        }
-        if (lost)
+        if (const AeatResponse::RecordSummary *lost = lostRecord(candidates, chain, *tip, markerRead ? seen : QString()))
             return restartChain(lost->invoiceNumber, message);
     }
-    // The chain's last record is at AEAT under another NumeroInstalacion (a database
-    // restored from before it, or a new one): the number belongs to the chain, so ours
-    // becomes that one before anything is generated. Before the head, so a failure repeats.
-    // A cancellation AEAT returned may carry the block of the invoice it cancels (an older
-    // number of ours, or another system's): the chain's number is then the one of its
-    // newest registration at AEAT.
-    QString chainNumber = tip->installationNumber;
-    if (tip->cancellationFromQuery) {
-        chainNumber.clear();
-        QDateTime newest;
-        for (const AeatResponse::RecordSummary &c : chain) {
-            const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
-            if (!c.cancellationFromQuery && !c.installationNumber.isEmpty() && (!newest.isValid() || generated > newest)) {
-                newest = generated;
-                chainNumber = c.installationNumber;
-            }
-        }
-    }
-    if (m_config.adoptInstallationNumber && !chainNumber.isEmpty() && chainNumber != m_config.system.installationNumber) {
-        if (!m_store.setInstallationNumber(chainNumber)) {
-            *message = tr("No se pudo guardar el número de instalación de la cadena: %1").arg(m_store.lastError());
-            return false;
-        }
-        qWarning() << "AeatDirectBackend: NumeroInstalacion" << m_config.system.installationNumber << "->"
-                   << chainNumber << "(the chain's last record at AEAT)";
-        m_config.system.installationNumber = chainNumber;
-    }
+    if (!adoptInstallationNumber(chain, *tip, message))
+        return false;
     if (tip->hash.compare(head.hash, Qt::CaseInsensitive) != 0) {
         const AeatRecord::PreviousRecord moved{
             { m_config.issuerNif, tip->invoiceNumber, QDate::fromString(tip->issueDate, kDateFormat) }, tip->hash, tip->generatedAt };
@@ -327,15 +414,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
             return false;
         }
     }
-    // A record AEAT's query returns is read as a registration, and the head taken from the
-    // store carries no operation: a tip whose huella is our cancellation's is named from
-    // the stored record (the shop's first sync, 25-11-2026, called its cancellation "alta").
-    const bool cancellation = tip->operation == kCancellation
-        || m_store.latest(AeatStore::Kind::Cancellation, tip->invoiceNumber, m_config.issuerNif)
-               .hash.compare(tip->hash, Qt::CaseInsensitive) == 0;
-    *message = tr("La cadena continúa tras el registro %1 (%2, %3).")
-                   .arg(tip->invoiceNumber, cancellation ? tr("anulación") : tr("alta"),
-                        tip->generatedAt.isEmpty() ? tr("generado antes") : tip->generatedAt);
+    *message = continuationMessage(*tip);
     return true;
 }
 
@@ -451,8 +530,7 @@ QString AeatDirectBackend::chainMarker()
 {
     bool read = false;
     const AeatRecord::PreviousRecord head = m_store.chainHead(m_config.issuerNif, &read);
-    return QStringLiteral("%1|%2|%3").arg(m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"),
-                                         m_config.issuerNif, read ? head.hash : QStringLiteral("?"));
+    return QStringLiteral("%1|%2|%3").arg(environmentName(), m_config.issuerNif, read ? head.hash : QStringLiteral("?"));
 }
 
 void AeatDirectBackend::saveChainMarker()
@@ -525,25 +603,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
             const bool cancelled = r.state.startsWith(QLatin1String("Anulad"));
             if (foreign && !cancelled)
                 continue;
-            // An invoice AEAT holds as cancelled comes back as its cancellation record (its
-            // huella, time and link) or, should AEAT hide it, as the registration it was.
-            const bool cancellationShown = cancelled && AeatResponse::carriesCancellationRecord(r);
-            AeatResponse::RecordSummary s;
-            s.valid = r.hash.size() == 64 && !r.generatedAt.isEmpty();
-            s.operation = cancellationShown ? kCancellation : kRegistration;
-            s.cancellationFromQuery = cancellationShown;
-            s.issuerNif = r.issuerNif;
-            s.invoiceNumber = r.invoiceNumber;
-            s.issueDate = r.issueDate;
-            s.hash = r.hash;
-            s.generatedAt = r.generatedAt;
-            s.previousHash = r.previousHash;
-            s.installationNumber = r.installationNumber;
-            // AEAT received the cancellation when the invoice's state last changed.
-            s.presentedAt = cancellationShown ? r.stateChangedAt : r.presentedAt;
-            s.cancelledAtAeat = cancelled && !cancellationShown;
-            s.cancelledAt = r.stateChangedAt;
-            s.foreignSystem = foreign;
+            const AeatResponse::RecordSummary s = summaryOf(r, foreign);
             if (foreign) {
                 if (s.valid)
                     m_foreignCancelled << s;
@@ -553,10 +613,9 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
                 found << s;
             else
                 sawUnusable = true;
-            // Only a hidden cancellation can force a chain restart: worth a line either way.
             if (s.valid && cancelled)
                 qDebug() << "AeatDirectBackend: AEAT returns cancelled invoice" << s.invoiceNumber << "with the huella of its"
-                         << (cancellationShown ? QStringLiteral("cancellation") : QStringLiteral("registration"))
+                         << (s.cancellationFromQuery ? QStringLiteral("cancellation") : QStringLiteral("registration"))
                          << "record, generated" << s.generatedAt;
         }
         if (reply.morePages && !reply.records.isEmpty()) {
@@ -659,9 +718,9 @@ VerifactuResult AeatDirectBackend::resultFromStored(const AeatStore::Record &rec
         result.rawHash = record.hash;
     }
     if (result.isSuccess() && record.kind == AeatStore::Kind::Registration) {
-        result.validationUrl = AeatHash::qrValidationUrl(record.issuerNif, record.invoiceNumber, record.issueDate,
-                                                         AeatHash::amountText(record.total), m_config.testEnvironment);
-        result.qrCode = QPixmap::fromImage(AeatQr::image(result.validationUrl, kQrPixelsPerModule));
+        result.validationUrl = validationUrlOf(record.issuerNif, record.invoiceNumber, record.issueDate, record.total,
+                                               m_config.testEnvironment);
+        result.qrCode = qrPixmapOf(result.validationUrl);
     }
     return result;
 }
@@ -795,13 +854,13 @@ QString AeatDirectBackend::generateQRAsync(const VerifactuInvoice &invoice)
 
 QString AeatDirectBackend::qrUrlFor(const VerifactuInvoice &invoice) const
 {
-    return AeatHash::qrValidationUrl(invoice.getSellerNIF(), invoice.getInvoiceNumber(), invoice.getInvoiceDate(),
-                                     AeatHash::amountText(invoice.getTotalAmount()), m_config.testEnvironment);
+    return validationUrlOf(invoice.getSellerNIF(), invoice.getInvoiceNumber(), invoice.getInvoiceDate(),
+                           invoice.getTotalAmount(), m_config.testEnvironment);
 }
 
 QPixmap AeatDirectBackend::qrFor(const VerifactuInvoice &invoice) const
 {
-    return QPixmap::fromImage(AeatQr::image(qrUrlFor(invoice), kQrPixelsPerModule));
+    return qrPixmapOf(qrUrlFor(invoice));
 }
 
 bool AeatDirectBackend::holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber)
@@ -817,9 +876,7 @@ QPixmap AeatDirectBackend::queuedRecordQr(const VerifactuInvoice &invoice)
         || r.issueDate != invoice.getInvoiceDate()
         || AeatHash::amountText(r.total) != AeatHash::amountText(invoice.getTotalAmount()))
         return QPixmap();
-    return QPixmap::fromImage(AeatQr::image(AeatHash::qrValidationUrl(r.issuerNif, r.invoiceNumber, r.issueDate,
-                                                                     AeatHash::amountText(r.total), m_config.testEnvironment),
-                                            kQrPixelsPerModule));
+    return qrPixmapOf(validationUrlOf(r.issuerNif, r.invoiceNumber, r.issueDate, r.total, m_config.testEnvironment));
 }
 
 // ---------------------------------------------------------------------------
@@ -902,13 +959,16 @@ void AeatDirectBackend::sendPending()
         if (!m_verifying.contains(record.id))
             records << record;
     // After a fault on a batch, its records go one at a time until each has an answer.
-    for (int i = 0; !m_sendSingly.isEmpty() && i < records.size(); ++i) {
-        if (m_sendSingly.contains(records[i].id)) {
-            records = { records[i] };
-            break;
-        }
-        if (i == records.size() - 1)
+    if (!m_sendSingly.isEmpty() && !records.isEmpty()) {
+        const auto single = std::find_if(records.cbegin(), records.cend(), [this](const AeatStore::Record &r) {
+            return m_sendSingly.contains(r.id);
+        });
+        if (single == records.cend()) {
             m_sendSingly.clear();
+        } else {
+            const AeatStore::Record one = *single;
+            records = { one };
+        }
     }
     if (records.isEmpty())
         return;
@@ -984,9 +1044,9 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
     answer.rawXml = claimRecord ? record.xml : QString();
     answer.rawHash = claimRecord ? record.hash : QString();
     if (answer.isSuccess() && record.kind == AeatStore::Kind::Registration) {
-        answer.validationUrl = AeatHash::qrValidationUrl(record.issuerNif, record.invoiceNumber, record.issueDate,
-                                                         AeatHash::amountText(record.total), m_config.testEnvironment);
-        answer.qrCode = QPixmap::fromImage(AeatQr::image(answer.validationUrl, kQrPixelsPerModule));
+        answer.validationUrl = validationUrlOf(record.issuerNif, record.invoiceNumber, record.issueDate, record.total,
+                                               m_config.testEnvironment);
+        answer.qrCode = qrPixmapOf(answer.validationUrl);
     }
     const QStringList waiters = m_waiters.take(record.id);
     for (const QString &requestId : waiters)
@@ -1034,9 +1094,9 @@ QString AeatDirectBackend::expiryWarning(const QDateTime &expiry, const QDateTim
     if (!expiry.isValid() || expiry > now.addDays(days))
         return QString();
     return expiry < now ? tr("El certificado de la conexión directa con la AEAT caducó el %1: instale el nuevo y "
-                             "elíjalo en Configuración.").arg(expiry.toString("dd-MM-yyyy"))
+                             "elíjalo en Configuración.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)))
                         : tr("El certificado de la conexión directa con la AEAT caduca el %1: renuévelo antes, o los "
-                             "registros dejarán de enviarse.").arg(expiry.toString("dd-MM-yyyy"));
+                             "registros dejarán de enviarse.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)));
 }
 
 void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &response)
@@ -1069,7 +1129,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         // A certificate that expired while the app was open: say so, instead of retrying forever.
         if (m_certificate.info().expiry.isValid() && m_certificate.info().expiry < QDateTime::currentDateTime()) {
             m_sendError = tr("el certificado caducó el %1; instale el nuevo y elíjalo en Configuración")
-                              .arg(m_certificate.info().expiry.toString("dd-MM-yyyy"));
+                              .arg(m_certificate.info().expiry.toString(QLatin1String(AeatHash::kDateFormat)));
             qWarning() << "AeatDirectBackend: the certificate expired -" << m_sendError;
         }
         const QString why = parsed.fault ? parsed.faultText : (transportError.isEmpty() ? tr("respuesta no reconocida") : transportError);

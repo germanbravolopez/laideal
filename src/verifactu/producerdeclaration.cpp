@@ -2,6 +2,7 @@
 #include "aeatrecord.h"
 #include "appsettings.h"
 
+#include <QLocale>
 #include <QStringList>
 
 namespace ProducerDeclaration {
@@ -18,14 +19,12 @@ QString item(const QString &letter, const QString &description, const QString &v
     return QStringLiteral("<p><b>%1) %2:</b> %3</p>").arg(letter, description, value);
 }
 
-const char *const kMonths[] = { "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
-                                "agosto", "septiembre", "octubre", "noviembre", "diciembre" };
-
 } // namespace
 
 Signature currentSignature()
 {
-    // j) the shop's address from the settings (never in the source); the date is the day
+    // j) the shop's address from the settings on purpose: the producer's contact address is
+    // the same one (never in the source). The date is the day
     // the producer signed the version that ships (12.6), set again for each such release.
     const AppSettings *s = AppSettings::instance();
     QStringList lines;
@@ -49,7 +48,7 @@ QString html(const QString &version, const Signature &signature)
     const QString producer = system.producerName.toHtmlEscaped();
     const QString date = signature.date.isValid()
         ? QStringLiteral("%1 de %2 de %3").arg(signature.date.day())
-              .arg(QString::fromLatin1(kMonths[signature.date.month() - 1])).arg(signature.date.year())
+              .arg(QLocale(QLocale::Spanish).monthName(signature.date.month())).arg(signature.date.year())
         : pending();
     const QString place = signature.place.trimmed().isEmpty() ? pending() : signature.place.toHtmlEscaped();
 
@@ -67,11 +66,11 @@ QString html(const QString &version, const Signature &signature)
                                   "genera los registros de facturación de alta y de anulación con su huella "
                                   "encadenada, los remite directamente al servicio web de la AEAT y los conserva; "
                                   "imprime el código QR y permite exportar los registros."))
-        << item("e", QString::fromUtf8("Solo puede funcionar exclusivamente como «VERI*FACTU»"), QString::fromUtf8("Sí"))
+        << item("e", QString::fromUtf8("Solo puede funcionar exclusivamente como \u00abVERI*FACTU\u00bb"), QString::fromUtf8("Sí"))
         << item("f", QString::fromUtf8("Permite ser usado por varios obligados tributarios o por un mismo usuario para varios obligados tributarios"),
                 QStringLiteral("No"))
         << item("g", QString::fromUtf8("Tipos de firma utilizados para firmar los registros de facturación y de evento"),
-                QString::fromUtf8("No aplica: el sistema funciona exclusivamente como «VERI*FACTU»"))
+                QString::fromUtf8("No aplica: el sistema funciona exclusivamente como \u00abVERI*FACTU\u00bb"))
         << item("h", QString::fromUtf8("Nombre y apellidos de la persona productora del sistema informático"), producer)
         << item("i", QString::fromUtf8("NIF de la persona productora del sistema informático"), system.producerNif)
         << item("j", QString::fromUtf8("Dirección postal completa de contacto de la persona productora"),

@@ -18,7 +18,7 @@ const QString AeatStore::kCancelledAtAeat = QStringLiteral("ANULADA_EN_AEAT");
 
 namespace {
 
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
+const QString kDateFormat = QString::fromLatin1(AeatHash::kDateFormat);
 const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
     "state, csv, error_code, error_description, attempts, reached, delayed";
@@ -34,11 +34,11 @@ QString kindText(AeatStore::Kind kind)
     return kind == AeatStore::Kind::Registration ? QStringLiteral("alta") : QStringLiteral("anulacion");
 }
 
-} // namespace
-
 // An aeat_chain_anchors row with this issuer: anchors are kept since then (the store's
 // continuations of the day it was set up were taken as its first anchors).
-static const char kAnchorsTrackedMarker[] = "*tracked*";
+const char kAnchorsTrackedMarker[] = "*tracked*";
+
+} // namespace
 
 AeatStore::AeatStore(const QSqlDatabase &db, const QString &environment)
     : m_db(db), m_environment(environment)
@@ -665,7 +665,7 @@ AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber, con
                   .arg(QLatin1String(kRecordColumns)));
     q.bindValue(":e", m_environment);
     q.bindValue(":num", invoiceNumber);
-    q.bindValue(":n", issuerNif.isNull() ? QStringLiteral("") : issuerNif);
+    q.bindValue(":n", text(issuerNif));
     q.bindValue(":k", kindText(kind));
     if (q.exec() && q.next())
         r = readRecord(q);

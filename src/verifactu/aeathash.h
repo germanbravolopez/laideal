@@ -13,6 +13,12 @@
 
 namespace AeatHash {
 
+// Date format of every VERI*FACTU record, query and message (dd-MM-yyyy).
+inline constexpr char kDateFormat[] = "dd-MM-yyyy";
+
+// `date` as a record writes it; empty for an invalid date.
+QString dateText(const QDate &date);
+
 // Fields of a registration record (RegistroAlta) that enter its hash.
 struct RegistrationFields {
     QString issuerNif;        // IDEmisorFactura

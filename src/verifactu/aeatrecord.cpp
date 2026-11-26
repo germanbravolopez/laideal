@@ -15,16 +15,12 @@ const char *const kConsultaLRNs =
 
 namespace {
 
+using AeatHash::dateText;
+
 const char *const kSoapNs = "http://schemas.xmlsoap.org/soap/envelope/";
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const QString kVersion = QStringLiteral("1.0");
 // The XSD needs a non-empty DescripcionOperacion: kInvoiceDescription's text (verifactutypes.h).
 const QString kDefaultDescription = QStringLiteral("Servicios de lavandería");
-
-QString dateText(const QDate &date)
-{
-    return date.toString(kDateFormat);
-}
 
 QString rateText(double rate)
 {
@@ -112,14 +108,14 @@ QString issuerNameText(const QString &name)
     return name.trimmed().left(120);
 }
 
-} // namespace
-
 // The totals add up the line amounts as written (in cents), which is what AEAT checks
 // CuotaTotal and ImporteTotal against.
-static double written(double amount)
+double written(double amount)
 {
     return AeatHash::amountText(amount).toDouble();
 }
+
+} // namespace
 
 double Registration::totalTax() const
 {
