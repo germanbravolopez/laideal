@@ -103,7 +103,7 @@ python -m venv .venv
 
 | Kind | Run | Details |
 |------|-----|---------|
-| Unit and end-to-end suites (`tests/test_*.cpp`, 33 CTest tests: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | `ctest --test-dir build --output-on-failure`; `-R <regex>` runs some. `aeat_xsd` is skipped unless Python has `lxml` | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
+| Unit and end-to-end suites (`tests/test_*.cpp`, 34 CTest tests: logic, DB functions, the app's windows against a fake Verifactu / AEAT server) | `ctest --test-dir build --output-on-failure`; `-R <regex>` runs some. `aeat_xsd` is skipped unless Python has `lxml` | [docs/testing/README.md](docs/testing/README.md#running-the-tests) |
 | UI smoke test, CI (the installed app driven like a person, blocks A-E, against a fake AEAT) | `gh workflow run ci.yml --ref <branch>`, then `gh run watch`; also runs on every PR to `develop` and `master` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#where-it-runs) |
 | UI smoke test, local (about 4 min, takes the mouse and keyboard) | `.\make ui-smoke` | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#smoke-test-against-the-fake-aeat) |
 | AEAT pre-production run (needs the issuer's FNMT certificate; locally only) | `.\make aeat-real -Settings <file>`; `.\make aeat-dry` runs it against the fake AEAT | [docs/testing/ui_smoke.md](docs/testing/ui_smoke.md#aeat-pre-production-run) |

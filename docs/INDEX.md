@@ -58,6 +58,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 |--------|-------|------|
 | `src/app/` | `main.cpp`, `commandline.h` | Entry point, `--settings`, `--self-check`, `--fake-aeat` (UI-test build only) |
 | | `mainwindow.*` | Main window, built in code; ticket entry and save |
+| | `verifactucoordinator.*` | The window's Verifactu side without widgets: the integration, pending submits, the bounded wait, the connection tests |
 | | `cancelinvoicedialog.*`, `rectifyinvoicedialog.*` | Anular / Rectificar factura (R1-R5) |
 | | `pendingsubmitsdialog.*`, `refusedinvoicesdialog.*` | Start-up recovery of PENDIENTE rows; the list behind the red status-bar count |
 | | `aeatexport.*`, `aeatexportdialog.*` | Exportar registros AEAT (XML) |
@@ -106,7 +107,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | `mkdocs.yml`, `pyproject.toml` | Documentation site configuration and its tooling |
 | `releases/` | `package.ps1` (packaging recipe), `release.ps1` / `release.bat` (local fallback), `laideal.iss` (installer) |
 | `resources/` | `laideal.qrc` (icon, release notes, Qt translation), `laideal.rc.in`, `i18n/` |
-| `tests/CMakeLists.txt` | 33 CTest tests (`grep -c "add_test(NAME" tests/CMakeLists.txt`): Qt Test suites plus the `aeat_xsd` schema check. `updater_dialog` is the exe of `test_versiondialog.cpp`, `version_compare` the exe of `test_updater.cpp`. Each suite: [testing/unit_suites.md](testing/unit_suites.md) |
+| `tests/CMakeLists.txt` | 34 CTest tests (`grep -c "add_test(NAME" tests/CMakeLists.txt`): Qt Test suites plus the `aeat_xsd` schema check. `updater_dialog` is the exe of `test_versiondialog.cpp`, `version_compare` the exe of `test_updater.cpp`. Each suite: [testing/unit_suites.md](testing/unit_suites.md) |
 | `tests/support/` | Fake Verifactu and AEAT servers, `modalautocloser.h`, `modaldriver.h`, `testschema.h`, `e2efixture.h`, `escpospreview.h` |
 | `tests/tools/` | `fake_aeat_server`, `escpos_preview`, `aeat_query_dump` (saves AEAT's raw reply to a query; test environment, local use); built with the tests, not CTest suites |
 | `tests/ui/` | Python UI smoke test (`smoke.py`, `block_a.py` to `block_e.py`, `actions.py`, `laideal_ui.py`, `seed.py`, `printer.py`, `aeat_preproduction.py`) |
@@ -139,7 +140,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | Report folders | `AppSettings::reportsRoot`, `contabilidadPath`, `listadosPrendasPath`, `listadosGastosPath` |
 | Printer queue and paper width | `AppSettings::printerName`, `paperWidthMm`; Configuración -> General |
 | Database path | `AppSettings::dbPath`, set in `main.cpp` |
-| Verifactu submit during save | `MainWindow::verifactuSubmitInvoice`; [verifactu/README.md](modules/verifactu/README.md) (Integration points) |
+| Verifactu submit during save | `VerifactuCoordinator::submitInvoice` (`src/app/verifactucoordinator.*`); [verifactu/README.md](modules/verifactu/README.md) (Integration points) |
 | QR on the printed ticket | `src/imprimir/imprimir.cpp` (`resolveQrCode`, `buildTicket`); `EscPosBuilder::rasterImage`; the legal leyenda prints below it when `verifactu_estado` is `ENVIADA` |
 | Quarter lock | `quarterIsClosed`, `closeQuarter`, `reopenQuarter`, `quarterClosures` in `sql_lite.h` |
 | Accounting with cancelled invoices | `kIngresosIncomeWhere`, `incomeTicketsBetweenDates` in `sql_lite.cpp`; [modules/contabilidad.md](modules/contabilidad.md) |

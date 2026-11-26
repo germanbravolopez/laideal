@@ -98,14 +98,14 @@ on_pb_save_clicked()                      ignored while a save is running
   |- checkClientData()                    add or update the client
   |- submitAndPrint()
   |    |- not paid: printRecibo()
-  |    `- paid:  verifactuSubmitInvoice()      async submit, tracked in m_pendingSubmits
+  |    `- paid:  VerifactuCoordinator::submitInvoice()   async submit, tracked in its pending map
   |         |- direct client: QR computed locally (qrBeforeReply) -> printFra() at once
   |         `- gateway: wait up to 3 s for requestFinished (menus and form disabled)
   |              success with QR -> printFra(); otherwise printRecibo() (paid stamp)
   `- resetAllContents()
 
 Later replies (after the 3 s, or a payment made later in Recogida):
-  onVerifactuRequestFinished()   updateTicketVerifactuFields(ticket, seq) on the paid rows of that event
+  VerifactuCoordinator::onRequestFinished()   updateTicketVerifactuFields(ticket, seq) on the paid rows of that event
   onRecordSettled()              direct client: a record settled outside the save flow
                                  (applySettledVerifactuResult / applySettledVerifactuCancellation)
 ```
