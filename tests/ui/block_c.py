@@ -10,22 +10,25 @@ import time
 from actions import print_ticket, save_ticket
 from laideal_ui import find, text, wait_for
 from printer import JobCapture, decode
+from seed import TICKET_4_QR
 
 TITLES = {"C1": "Unpaid ticket: recibo, client and shop copies",
           "C2": "Paid ticket: factura with QR and leyenda, recibo with IMPORTE PAGADO",
           "C3": "Imprimir → Factura of ticket 4, then Factura completa with a DNI"}
 
 
-def qr_text(png) -> str:
-    """The text of the QR in a rendered ticket, or None without OpenCV."""
+def qr_text(png, scales=(1, 2, 3, 0.5)) -> str:
+    """The text of the QR in a rendered ticket, or None without OpenCV.
+    scales=(1,) reads it at the printed size only."""
     try:
         import cv2
     except ImportError:
         return None
     image = cv2.imread(str(png))
-    # OpenCV's detector misses some symbols at one size and reads them at another
-    # (the content, so the modules, changes with the date): try a few sizes.
-    for scale in (1, 2, 3, 0.5):
+    # OpenCV's detector misses some symbols at one size and reads them at another. C2's QR
+    # carries the day's date, so its symbol changes daily: a few sizes are tried for its
+    # content. The printed size itself is proved in C3 on ticket 4's fixed symbol.
+    for scale in scales:
         sized = image if scale == 1 else cv2.resize(image, None, fx=scale, fy=scale,
                                                     interpolation=cv2.INTER_NEAREST)
         found, _, _ = cv2.QRCodeDetector().detectAndDecode(sized)
@@ -35,6 +38,13 @@ def qr_text(png) -> str:
                 print(f"  WARNING: QR of {png.name} not read at the printed size, read at x{scale}")
             return found
     return ""
+
+
+def check_printed_qr(run, before: int) -> None:
+    """Ticket 4's QR in the jobs printed since `before`: read at the printed size, with its stored text."""
+    codes = [qr_text(job.with_suffix(".png"), scales=(1,)) for job in run.printer.jobs[before:]]
+    if None not in codes:
+        run.check(TICKET_4_QR in codes, f"ticket 4's QR not read at the printed size: {codes}")
 
 
 def new_jobs(run, before: int, minimum: int, timeout: float = 30.0) -> str:
@@ -97,8 +107,10 @@ def run(run):
         printed = new_jobs(run, before, 1)
         run.check("FACTURA SIMPLIFICADA" in printed and "[QR" in printed, "ticket 4's factura misprinted")
         run.check("24.20" in printed or "24,20" in printed, "ticket 4's total not on its factura")
+        check_printed_qr(run, before)
         before = run.printer.count()
         print_ticket(app, "Factura completa", "4", dni="12345678Z", address="Calle Smoke 1")
         printed = new_jobs(run, before, 1)
         run.check("12345678Z" in printed, "the typed DNI is not on the factura completa")
         run.check("Calle Smoke 1" in printed, "the address is not on the factura completa")
+        check_printed_qr(run, before)
