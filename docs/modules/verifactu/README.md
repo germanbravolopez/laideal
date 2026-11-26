@@ -135,7 +135,7 @@ Selected in Configuración → Verifactu → *Conexión con la AEAT* → *Direct
 
 #### When does the chain continue, and when does it restart?
 
-AEAT's query returns a cancelled invoice with its **cancellation record** (huella, time, chain link; `AeatResponse::carriesCancellationRecord` recomputes the cancellation huella from the reply to prove it; seen on the test environment 25-11-2026, production not yet). `adoptTip` (`AeatDirectBackend`) decides, per sync:
+AEAT's query returns a cancelled invoice with its **cancellation record** (huella, time, chain link; `AeatResponse::carriesCancellationRecord` recomputes the cancellation huella from the reply to prove it; seen on the test environment 25-11-2026, production not yet). `adoptTip` (`AeatDirectBackend`) gathers the inputs and applies the result; the rules are `AeatChainSync::plan` (`aeatchainsync.h`, pure, tested by `aeat_chain_sync`). Per sync:
 
 | Situation | Result |
 |---|---|
