@@ -2935,7 +2935,7 @@ private slots:
         QCOMPARE(events->count(), 3);                                       // 651, 651-1, all
         events->setCurrentIndex(1);
         text = press(factura, "651");
-        QVERIFY2(text.contains("Facturas impresas: 651-1."), qPrintable(text));
+        QVERIFY2(text.contains("Facturas preparadas, no impresas: 651-1."), qPrintable(text));
         QVERIFY(factura->ticketBytes().contains("651-1"));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         factura->close();
