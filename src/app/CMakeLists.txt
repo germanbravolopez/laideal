@@ -18,6 +18,8 @@ endif()
 add_library(laideal_app STATIC
     mainwindow.h
     mainwindow.cpp
+    verifactucoordinator.h
+    verifactucoordinator.cpp
     cancelinvoicedialog.h
     cancelinvoicedialog.cpp
     rectifyinvoicedialog.h

@@ -41,6 +41,7 @@ One entry per CTest suite, grouped by module: the CTest name, the test file, the
 | `settingsdialog` (offscreen) | `test_settingsdialog.cpp` | `settingsdialog` | The real Configuración dialog: only the chosen connection's rows show, *Probar conexión* and *Ensayo en el entorno de pruebas de la AEAT*, the masked service key, production confirmations |
 | `uikit` (offscreen) | `test_uikit.cpp` | `uikit` | `AmountSpinBox` input and display, the Enter rules of `setUpDialog` and `onEnter` |
 | `instancelock` (offscreen) | `test_instancelock.cpp` | `laideal_app` | One copy per database: the lock path ignores case and separators, a second lock is refused, a crashed copy's lock is taken over |
+| `verifactu_coordinator` (offscreen) | `test_verifactu_coordinator.cpp` | `laideal_app` | `VerifactuCoordinator` without the window, on the fake gateway: a reply settles its pending submit (row, status text, refusal signal), the bounded wait and its late reply after a QR-less print, the gateway connection test |
 | `selfcheck` (offscreen) | `test_selfcheck.cpp` | `laideal_app` | The post-update self-check: each check on good and bad data, the settings copy, the report, and one whole run leaving the live DB and settings byte for byte unchanged with no shop data in the report ([smoke_test.md](smoke_test.md)) |
 | `version_compare` | `test_updater.cpp` (executable `test_versioncompare`) | `updater` | Version comparison, release parsing, the update check and installer download against a loopback fake (hash mismatch, truncated, 404, cancel) |
 | `updater_dialog` (offscreen) | `test_versiondialog.cpp` | `updater`, `uikit` | `UpdaterDialog`: the error of a failed download is hidden when the download is retried |
@@ -59,4 +60,4 @@ One entry per CTest suite, grouped by module: the CTest name, the test file, the
 
 ---
 
-That is 30 suites here and 3 in [e2e.md](e2e.md): the 33 `add_test` entries of `tests/CMakeLists.txt`.
+That is 31 suites here and 3 in [e2e.md](e2e.md): the 34 `add_test` entries of `tests/CMakeLists.txt`.

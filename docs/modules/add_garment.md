@@ -29,7 +29,7 @@ connect(ui, &AddGarment::paidGarmentSaved, this, /* submit to AEAT */);
 | `invoicing.productionStartDate` | Day production began: the payment date's minimum. |
 | `invoicing.aeatEnvironment` | Direct client's environment, whose used numbers a new invoice skips. Unset: all count. |
 | `garmentSaved(ticket)` | Emitted for every saved garment. |
-| `paidGarmentSaved(ticket, paymentDate, amount, seq)` | Emitted for a garment saved as paid: the opener submits it to AEAT at once (MainWindow with `verifactuSubmitInvoice`, Recogida with `retryVerifactuSubmit(ticket, seq)`). |
+| `paidGarmentSaved(ticket, paymentDate, amount, seq)` | Emitted for a garment saved as paid: the opener submits it to AEAT at once (MainWindow through `VerifactuCoordinator::submitInvoice`, Recogida with `retryVerifactuSubmit(ticket, seq)`). |
 
 ## Rules
 

@@ -18,6 +18,7 @@ Commands: [README](../README.md#build) (`.\make build`, `.\make test`, `.\make r
 |------|-------|
 | Entry point, command-line switches (`--settings`, `--self-check`) | `src/app/main.cpp`, `commandline.h` |
 | Main window (built in code, no `.ui` file), ticket save flow | `src/app/mainwindow.*` (`on_pb_save_clicked`, `saveTicket`, `submitAndPrint`) |
+| The window's Verifactu side (submit, pending replies, the wait, connection tests) | `src/app/verifactucoordinator.*` |
 | Facturas menu: cancel, rectify (R1-R5), export AEAT XML | `src/app/cancelinvoicedialog.*`, `rectifyinvoicedialog.*`, `aeatexport.*`, `aeatexportdialog.*` |
 | Start-up recovery: PENDIENTE rows, refused invoices | `src/app/pendingsubmitsdialog.*`, `refusedinvoicesdialog.*` |
 | Post-update check, one copy per database | `src/app/selfcheck*`, `src/app/instancelock.*` |
