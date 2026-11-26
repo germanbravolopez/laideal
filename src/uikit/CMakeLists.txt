@@ -7,5 +7,7 @@ add_library(uikit STATIC
 target_link_libraries(uikit
     PUBLIC
     Qt${QT_VERSION_MAJOR}::Widgets
+    PRIVATE
+    textformat
 )
 target_include_directories(uikit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,4 +1,5 @@
 #include "aeatdirectbackend.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 #include "aeatqr.h"
@@ -16,7 +17,6 @@ const QString kProductionUrl = QStringLiteral("https://www1.agenciatributaria.go
 const QString kTestUrl = QStringLiteral("https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
 const QString kRegistration = QStringLiteral("Alta");
 const QString kCancellation = QStringLiteral("Anulacion");
-const QString kDateFormat = QString::fromLatin1(AeatHash::kDateFormat);
 const int kTransferTimeoutMs = 30000;
 const int kQrPixelsPerModule = 5;
 const int kMonthsBack = 24;           // how far the first sync looks for the issuer's records
@@ -334,7 +334,7 @@ QList<AeatResponse::RecordSummary> AeatDirectBackend::chainOf(QList<AeatResponse
         h.valid = true;
         h.issuerNif = m_config.issuerNif;
         h.invoiceNumber = head.invoice.invoiceNumber;
-        h.issueDate = head.invoice.issueDate.toString(kDateFormat);
+        h.issueDate = head.invoice.issueDate.toString(kDbDateFormat);
         h.hash = head.hash;
         h.generatedAt = head.generatedAt;
         chain << h;
@@ -407,7 +407,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         return false;
     if (tip->hash.compare(head.hash, Qt::CaseInsensitive) != 0) {
         const AeatRecord::PreviousRecord moved{
-            { m_config.issuerNif, tip->invoiceNumber, QDate::fromString(tip->issueDate, kDateFormat) }, tip->hash, tip->generatedAt };
+            { m_config.issuerNif, tip->invoiceNumber, QDate::fromString(tip->issueDate, kDbDateFormat) }, tip->hash, tip->generatedAt };
         // The next record links to this huella: an anchor the chain verifier accepts.
         if (!m_store.addChainAnchor(m_config.issuerNif, tip->hash) || !m_store.setChainHead(m_config.issuerNif, moved)) {
             *message = tr("No se pudo guardar el punto de la cadena.");
@@ -621,7 +621,7 @@ void AeatDirectBackend::queryMonth(QDate month, int monthsLeft, int mustQuery, A
         if (reply.morePages && !reply.records.isEmpty()) {
             const AeatResponse::QueryRecord &last = reply.records.last();
             queryMonth(month, monthsLeft, mustQuery,
-                       { last.issuerNif, last.invoiceNumber, QDate::fromString(last.issueDate, kDateFormat) },
+                       { last.issuerNif, last.invoiceNumber, QDate::fromString(last.issueDate, kDbDateFormat) },
                        found, sawUnusable);
             return;
         }
@@ -1120,9 +1120,9 @@ QString AeatDirectBackend::expiryWarning(const QDateTime &expiry, const QDateTim
     if (!expiry.isValid() || expiry > now.addDays(days))
         return QString();
     return expiry < now ? tr("El certificado de la conexión directa con la AEAT caducó el %1: instale el nuevo y "
-                             "elíjalo en Configuración.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)))
+                             "elíjalo en Configuración.").arg(expiry.toString(kDbDateFormat))
                         : tr("El certificado de la conexión directa con la AEAT caduca el %1: renuévelo antes, o los "
-                             "registros dejarán de enviarse.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)));
+                             "registros dejarán de enviarse.").arg(expiry.toString(kDbDateFormat));
 }
 
 void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &response)
@@ -1155,7 +1155,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         // A certificate that expired while the app was open: say so, instead of retrying forever.
         if (m_certificate.info().expiry.isValid() && m_certificate.info().expiry < QDateTime::currentDateTime()) {
             m_sendError = tr("el certificado caducó el %1; instale el nuevo y elíjalo en Configuración")
-                              .arg(m_certificate.info().expiry.toString(QLatin1String(AeatHash::kDateFormat)));
+                              .arg(m_certificate.info().expiry.toString(kDbDateFormat));
             qWarning() << "AeatDirectBackend: the certificate expired -" << m_sendError;
         }
         const QString why = parsed.fault ? parsed.faultText : (transportError.isEmpty() ? tr("respuesta no reconocida") : transportError);
@@ -1268,7 +1268,7 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
                       [this, record, result, reachedBefore](const AeatTransport::Response &response) {
         m_verifying.remove(record.id);
         const AeatResponse::Query query = AeatResponse::parseQuery(response.body);
-        const QString date = record.issueDate.toString(kDateFormat);
+        const QString date = record.issueDate.toString(kDbDateFormat);
         const AeatResponse::QueryRecord *held = nullptr;
         for (const AeatResponse::QueryRecord &q : query.records)
             if (q.invoiceNumber == record.invoiceNumber && q.issueDate == date)

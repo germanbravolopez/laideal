@@ -1,4 +1,5 @@
 #include "verifacturesponse.h"
+#include "textformat.h"
 #include "aeathash.h"
 
 #include <QDateTime>
@@ -48,9 +49,9 @@ double firstDouble(const QJsonObject &o, std::initializer_list<const char *> key
 QString normaliseDate(const QString &s)
 {
     if (s.isEmpty()) return s;
-    static const char *formats[] = { AeatHash::kDateFormat, "yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd" };
-    for (const char *f : formats) {
-        const QDate d = QDate::fromString(s, QLatin1String(f));
+    static const QStringList formats = { kDbDateFormat, QStringLiteral("yyyy-MM-dd"), QStringLiteral("dd/MM/yyyy"), QStringLiteral("yyyy/MM/dd") };
+    for (const QString &f : formats) {
+        const QDate d = QDate::fromString(s, f);
         if (d.isValid()) return AeatHash::dateText(d);
     }
     const QDateTime dt = QDateTime::fromString(s, Qt::ISODate);

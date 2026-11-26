@@ -1,4 +1,5 @@
 #include "aeatcertificate.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 
@@ -117,7 +118,7 @@ QString AeatCertificate::expiryProblem(const QDateTime &expiry, const QDateTime 
     if (!expiry.isValid())
         return tr("No se puede leer la fecha de caducidad del certificado electrónico.");
     if (expiry < now)
-        return tr("El certificado electrónico caducó el %1.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)));
+        return tr("El certificado electrónico caducó el %1.").arg(expiry.toString(kDbDateFormat));
     return QString();
 }
 

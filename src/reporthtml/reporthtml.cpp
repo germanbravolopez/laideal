@@ -1,5 +1,6 @@
 #include "reporthtml.h"
 #include "appsettings.h"
+#include "textformat.h"
 
 #include <QDate>
 #include <QDateTime>
@@ -55,7 +56,7 @@ QString documentOpen(const QString &title, const QString &subtitle)
                     + (identity.isEmpty() ? QString() : "<br><span>" + identity + "</span>") +
                 "</td>"
                 "<td style='border:0; text-align:right; vertical-align:top; color:#566573;'>"
-                    "Fecha de emisi&oacute;n:<br>" + QDate::currentDate().toString("dd-MM-yyyy") +
+                    "Fecha de emisi&oacute;n:<br>" + dbDateText(QDate::currentDate()) +
                 "</td>"
             "</tr>"
         "</table>"

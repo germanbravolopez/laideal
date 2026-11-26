@@ -1,4 +1,5 @@
 #include "aeatstore.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 
@@ -18,7 +19,6 @@ const QString AeatStore::kCancelledAtAeat = QStringLiteral("ANULADA_EN_AEAT");
 
 namespace {
 
-const QString kDateFormat = QString::fromLatin1(AeatHash::kDateFormat);
 const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
     "state, csv, error_code, error_description, attempts, reached, delayed";
@@ -257,7 +257,7 @@ AeatRecord::PreviousRecord AeatStore::chainHead(const QString &issuerNif, bool *
     q.bindValue(":n", issuerNif);
     const bool read = q.exec();
     if (read && q.next()) {
-        head.invoice = { issuerNif, q.value(0).toString(), QDate::fromString(q.value(1).toString(), kDateFormat) };
+        head.invoice = { issuerNif, q.value(0).toString(), QDate::fromString(q.value(1).toString(), kDbDateFormat) };
         head.hash = q.value(2).toString();
         head.generatedAt = q.value(3).toString();
     }
@@ -284,7 +284,7 @@ bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::Previou
         q.prepare("INSERT OR REPLACE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
                   "VALUES (:e, :n, :num, :d, :h, :g)");
         q.bindValue(":num", head.invoice.invoiceNumber);
-        q.bindValue(":d", head.invoice.issueDate.toString(kDateFormat));
+        q.bindValue(":d", head.invoice.issueDate.toString(kDbDateFormat));
         q.bindValue(":h", head.hash);
         q.bindValue(":g", text(head.generatedAt));
     }
@@ -590,7 +590,7 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":k", kindText(kind));
         q.bindValue(":n", issuerNif);
         q.bindValue(":num", text(built.invoiceNumber));
-        q.bindValue(":d", built.issueDate.toString(kDateFormat));
+        q.bindValue(":d", built.issueDate.toString(kDbDateFormat));
         q.bindValue(":t", built.total);
         q.bindValue(":h", built.hash);
         q.bindValue(":x", text(built.xml));
@@ -605,7 +605,7 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":e", m_environment);
         q.bindValue(":n", issuerNif);
         q.bindValue(":num", built.invoiceNumber);
-        q.bindValue(":d", built.issueDate.toString(kDateFormat));
+        q.bindValue(":d", built.issueDate.toString(kDbDateFormat));
         q.bindValue(":h", built.hash);
         q.bindValue(":g", AeatHash::timestampText(built.generatedAt));
         ok = q.exec();
@@ -639,7 +639,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     r.kind             = q.value(1).toString() == QLatin1String("alta") ? Kind::Registration : Kind::Cancellation;
     r.issuerNif        = q.value(2).toString();
     r.invoiceNumber    = q.value(3).toString();
-    r.issueDate        = QDate::fromString(q.value(4).toString(), kDateFormat);
+    r.issueDate        = QDate::fromString(q.value(4).toString(), kDbDateFormat);
     r.total            = q.value(5).toDouble();
     r.hash             = q.value(6).toString();
     r.xml              = q.value(7).toString();

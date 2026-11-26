@@ -1,6 +1,7 @@
 #include "aeatchaincheck.h"
 
 #include "aeathash.h"
+#include "textformat.h"
 
 #include <QCoreApplication>
 #include <QHash>
@@ -10,8 +11,6 @@
 namespace AeatChainCheck {
 
 namespace {
-
-using AeatHash::kDateFormat;
 
 QString tr(const char *text)
 {
@@ -69,7 +68,7 @@ QString recomputedHash(const ParsedRecord &r)
         f.issuerNif     = r.get(QStringLiteral("IDFactura/IDEmisorFacturaAnulada"));
         f.invoiceNumber = r.get(QStringLiteral("IDFactura/NumSerieFacturaAnulada"));
         f.issueDate     = QDate::fromString(r.get(QStringLiteral("IDFactura/FechaExpedicionFacturaAnulada")),
-                                            QLatin1String(kDateFormat));
+                                            kDbDateFormat);
         f.previousHash  = previous;
         f.generatedAt   = generatedAt;
         return AeatHash::cancellationHash(f);
@@ -78,7 +77,7 @@ QString recomputedHash(const ParsedRecord &r)
     f.issuerNif     = r.get(QStringLiteral("IDFactura/IDEmisorFactura"));
     f.invoiceNumber = r.get(QStringLiteral("IDFactura/NumSerieFactura"));
     f.issueDate     = QDate::fromString(r.get(QStringLiteral("IDFactura/FechaExpedicionFactura")),
-                                        QLatin1String(kDateFormat));
+                                        kDbDateFormat);
     f.invoiceType   = r.get(root + QStringLiteral("/TipoFactura"));
     f.totalTax      = r.get(root + QStringLiteral("/CuotaTotal"));
     f.totalAmount   = r.get(root + QStringLiteral("/ImporteTotal"));

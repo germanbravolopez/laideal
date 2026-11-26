@@ -17,6 +17,7 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql PrintSupport 
 
 add_subdirectory(src/logging)
 add_subdirectory(src/appsettings)
+add_subdirectory(src/textformat)
 add_subdirectory(src/reporthtml)
 add_subdirectory(src/uikit)
 add_subdirectory(src/settingsdialog)

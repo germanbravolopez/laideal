@@ -29,6 +29,7 @@ Shared:
   src/logging/      AppLogger: persistent debug log
   src/appsettings/  AppSettings singleton, AppLanguage (leaf: links only Qt Core)
   src/settingsdialog/  SettingsDialog (links appsettings, uikit, printing)
+  src/textformat/   money, decimal and stored-date text (leaf: links only Qt Core)
   src/sql_lite/     stateless database functions, schema, migrations, shared helpers
   src/reporthtml/   A4 PDF report scaffolding and the one PDF writer (Contabilidad, GenListado)
   src/uikit/        shared dialog style
@@ -41,6 +42,7 @@ Module references: [mainwindow](modules/mainwindow.md), [sql_lite](modules/sql_l
 
 - Each `src/<module>/` is a static library; `src/app/` builds `laideal_app` (everything but `main.cpp`) and the `laideal` executable, so the end-to-end bench can link and drive the windows.
 - `verifactu_types` is a header-only INTERFACE target (`verifactutypes.h`: estados, `VerifactuResult`, `splitGross`). `sql_lite`, `add_garment`, `facturas`, `contabilidad` and `printing` link only it, so the base layer never links the Verifactu library or Qt Network.
+- `textformat` (money, decimal and date text; `kDbDateFormat` is the one `dd-MM-yyyy` constant) is linked by `sql_lite` (PUBLIC, so `sql_lite.h` gives it to the windows), `verifactu`, `uikit`, `tableview` and `reporthtml`: formatting needs no data layer.
 - `printing` is also linked by `settingsdialog` (the "Probar Status API" button). `listado` links `contabilidad` (the IVA rates a gasto may have) and `tableview`.
 - The app reaches the direct client through `VerifactuIntegration` only (`isDirect`, `holdsPendingRegistration`, `storedRegistrationOutcome`, `environmentName`, `sendingError`, `certificateExpiryWarning`, `verifyStoredChain`, `syncDirectChain`). `directBackend()` remains for the Configuración self-test, the AEAT export, the self-check and the tests.
 

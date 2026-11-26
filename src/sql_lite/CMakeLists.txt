@@ -4,6 +4,8 @@ add_library(sql_lite STATIC
     ingresos_schema.h
 )
 target_link_libraries(sql_lite
+    PUBLIC
+    textformat
     PRIVATE
     verifactu_types   # header-only; no Widgets: the data layer shows nothing
     Qt${QT_VERSION_MAJOR}::Sql

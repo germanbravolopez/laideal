@@ -75,6 +75,7 @@ target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Sql
     appsettings
+    textformat
 )
 
 if(WIN32)

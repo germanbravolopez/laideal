@@ -1,4 +1,5 @@
 #include "aeatselftest.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 
@@ -42,7 +43,7 @@ void AeatSelfTest::run()
     const AeatCertificate::Info cert = m_backend->certificateInfo();
     emit progress(true, cert.subject.isEmpty()
                             ? tr("Configuración correcta (servidor de pruebas local).")
-                            : tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString(QLatin1String(AeatHash::kDateFormat))));
+                            : tr("Certificado: %1, válido hasta el %2.").arg(cert.subject, cert.expiry.toString(kDbDateFormat)));
     const QString warning = AeatCertificate::representativeWarning(cert.nif, m_backend->issuerNif());
     if (!warning.isEmpty())
         emit progress(false, warning);

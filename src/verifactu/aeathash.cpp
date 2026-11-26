@@ -1,4 +1,5 @@
 #include "aeathash.h"
+#include "textformat.h"
 
 #include <QCryptographicHash>
 #include <QStringList>
@@ -25,7 +26,7 @@ QString sha256Hex(const QString &text)
 
 QString dateText(const QDate &date)
 {
-    return date.isValid() ? date.toString(QLatin1String(kDateFormat)) : QString();
+    return date.isValid() ? date.toString(kDbDateFormat) : QString();
 }
 
 QString registrationHashInput(const RegistrationFields &f)
