@@ -17,7 +17,7 @@
 #include <QTemporaryDir>
 
 #include "add_garment.h"
-#include "aeatreconcilesummary.cpp"   // Recogida's "Consultar en AEAT" text, a pure function: compiled in, this test does not link recog_prendas
+#include "aeatreconcilesummary.h"   // Recogida's "Consultar en AEAT" text, a pure function
 #include "sql_lite.h"
 #include "support/testschema.h"
 

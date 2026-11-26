@@ -1360,7 +1360,7 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
         QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");   // nor paid garments added
         QPointer<AddGarment> add = mw.findChild<AddGarment *>();
-        QVERIFY(add && add->invoicingBlocked && add->invoicingBlocked().contains("comprobando"));
+        QVERIFY(add && add->invoicing.invoicingBlocked && add->invoicing.invoicingBlocked().contains("comprobando"));
         delete add;
         QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 20000);
         clickSave(mw);
@@ -5100,7 +5100,7 @@ private slots:
     }
 
     // The status bar names the invoice (a partial payment "N-1") and shows AEAT's text as text.
-    void test_recogida_statusBarEscapesAeatTextAndNamesTheInvoice()
+    void test_recogida_statusBarShowsAeatTextAsTypedAndNamesTheInvoice()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "8150", "h8150a", "10.00", today(), ""));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR', verifactu_invoice_seq = 1, "
@@ -5117,7 +5117,7 @@ private slots:
         rp.findChild<QPushButton *>("pb_verifactu")->click();
         QTRY_VERIFY_WITH_TIMEOUT(rp.statusBar()->currentMessage().contains("Error al enviar"), 10000);
         const QString bar = rp.statusBar()->currentMessage();
-        QVERIFY2(bar.contains("8150-1") && bar.contains("&lt;b&gt;mal&lt;/b&gt;") && !bar.contains("<b>mal"), qPrintable(bar));
+        QVERIFY2(bar.contains("8150-1") && bar.contains("<b>mal</b>") && !bar.contains("&lt;") && !bar.contains("<span>"), qPrintable(bar));
     }
 
     // Changing "Fecha de" with nothing typed searches nothing: the table and its message stay.
