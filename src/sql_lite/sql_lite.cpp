@@ -273,7 +273,9 @@ static void migrateSchema(MigrationRun &run)
 }
 
 // 10.9: saveTicket stamped unpaid rows PENDIENTE; they become SIN COBRAR. Only the literal
-// 'PENDIENTE': NULL / '' rows are legacy split-offs that queries detect by `verifactu_estado != ''`.
+// 'PENDIENTE' (NULL / '' estado rows are legacy split-offs that queries detect by
+// `verifactu_estado != ''`). A NULL pagado counts as unpaid: a row that is not paid has no
+// invoice, so it cannot be a sent one.
 static void relabelUnpaidPending(MigrationRun &run)
 {
     QSqlQuery q(run.db);
@@ -500,6 +502,8 @@ static void roundOpenAmounts(MigrationRun &run)
             rows.append({ sel.value(0).toString(), sel.value(1).toString() });
             values << moneyText(sel.value(2).toString());
         }
+    } else {
+        run.fail() << "migrateDatabase: rounding search failed -" << sel.lastError().text();
     }
     sel.finish();
     QSqlQuery upd(run.db);
@@ -922,8 +926,10 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     // The split-off part in cents; the original keeps the exact remainder (in 1/10000),
     // so the two rows add up to the stored importe and an older paid amount stored
     // with more decimals is never re-rounded.
+    // A stored importe that is empty or NULL is 0 (stored data, not user input).
     double total = 0.0;
-    if (!acceptAmount(oldImporte, __func__, rowSubject(nRecibo, hash), false, &total))
+    if (!oldImporte.trimmed().isEmpty()
+            && !acceptAmount(oldImporte, __func__, rowSubject(nRecibo, hash), false, &total))
         return rollbackAndFail();
     const qint64 total4 = qRound64(total * 10000.0);
     const qint64 split4 = qRound64(roundToCents(total * nGarm / qty) * 100.0) * 100;
@@ -939,13 +945,13 @@ QString splitGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QString 
     QSqlQuery u(db);
     // Same row as read above: still unlocked, with the same quantity and importe.
     u.prepare("UPDATE ingresos SET cantidad = :cant, importe = :imp WHERE n_recibo = :n AND hash = :h "
-              "AND cantidad = :oldCant AND importe = :oldImp" + kUnlockedWhere);
+              "AND cantidad = :oldCant AND COALESCE(importe, '') = :oldImp" + kUnlockedWhere);
     u.bindValue(":cant", QString::number(qty - nGarm));
     u.bindValue(":imp",  money(total4 - split4));
     u.bindValue(":n",    nRecibo);
     u.bindValue(":h",    hash);
     u.bindValue(":oldCant", QString::number(qty));
-    u.bindValue(":oldImp",  oldImporte);
+    u.bindValue(":oldImp",  notNull(oldImporte));   // NULL reads as ''
     bool ok = u.exec() && u.numRowsAffected() == 1;
     // Every other column is copied, verifactu_* included: the split-off garments stay
     // in the invoice (and the estado) of the row they come from. edit_lock: always '0' (see kUnlockedWhere).
@@ -1109,6 +1115,11 @@ TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok)
 static bool execGarmentInsert(QSqlDatabase &db, const IngresoGarmentRow &row)
 {
     if (!acceptAmount(row.importe, "insertGarmentRow", rowSubject(row.nRecibo, row.hash))) return false;
+    if (row.pagado == QLatin1String("SI") && !parseDbDate(row.fechaPago).isValid()) {
+        qWarning() << "insertGarmentRow: refused a paid row without a valid payment date for"
+                   << row.nRecibo << row.hash << "- fecha_pago" << row.fechaPago;
+        return false;
+    }
     QSqlQuery q(db);
     // A paid row is never inserted into a closed quarter.
     q.prepare("INSERT INTO ingresos (n_recibo, cliente, fecha_recepcion, fecha_pago, "
@@ -1699,6 +1710,10 @@ bool storeChargedGarments(QSqlDatabase &db, const QString &nRecibo, const QHash<
     for (auto it = amountByHash.cbegin(); it != amountByHash.cend(); ++it) {
         if (!acceptAmount(it.value(), __func__, "garment " + it.key() + " of ticket " + nRecibo)) return false;
     }
+    if (!paymentDate.isValid()) {
+        qWarning() << "storeChargedGarments: refused an invalid payment date for" << invoiceId;
+        return false;
+    }
     if (quarterIsClosed(db, paymentDate)) {
         qWarning() << "storeChargedGarments: the payment date of" << invoiceId << "is in a closed quarter";
         return false;
@@ -1884,6 +1899,25 @@ bool markRectificativaUnanswered(QSqlDatabase &db, const QString &number, const 
     return ok;
 }
 
+// Gives the paid rows of the invoice that have no cancellation record the AEAT reply `cancelXml`;
+// a stored one (AEAT's, or a local <AnulacionLocal> note) is kept. An empty cancelXml does nothing.
+static bool backfillCancelXml(QSqlDatabase &db, const QString &nRecibo, int seq, const QString &cancelXml)
+{
+    if (cancelXml.isEmpty()) return true;
+    QSqlQuery x(db);
+    x.prepare("UPDATE ingresos SET verifactu_cancel_xml = :cxml "
+              "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
+              "  AND COALESCE(verifactu_cancel_xml, '') = ''");
+    x.bindValue(":cxml", cancelXml);
+    x.bindValue(":num",  nRecibo);
+    x.bindValue(":seq",  seq);
+    if (x.exec())
+        return true;
+    qWarning() << "backfillCancelXml: storing the cancellation record failed for ticket" << nRecibo
+               << "seq" << seq << "-" << x.lastError().text();
+    return false;
+}
+
 int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId, const QDate &cancelDate,
                                       const VerifactuResult &result)
 {
@@ -1920,8 +1954,12 @@ int applySettledVerifactuCancellation(QSqlDatabase &db, const QString &invoiceId
         return -1;
     if (!result.isSuccess())
         return 0;
-    if (uncancelledRows == 0)
-        return 2;   // already marked (its dialog did)
+    if (uncancelledRows == 0) {
+        // Already marked (its dialog did); a row marked without AEAT's record gets it now.
+        if (!backfillCancelXml(db, nRecibo, seq, result.rawXml))
+            return 0;
+        return 2;
+    }
     return markInvoiceSeqCancelled(db, nRecibo, seq, stampDate, result.rawXml) ? 1 : 0;
 }
 
@@ -2236,7 +2274,8 @@ QVector<PendingVerifactuEvent> pendingVerifactuEvents(QSqlDatabase &db, const QS
 
     // One entry per payment event (n_recibo, seq) still pending, with its own total.
     // Grouping by seq lets a partial payment left pending be resent alone under its own
-    // InvoiceID. The pagado gate also covers the legacy NULL / '' rows (issue #43).
+    // InvoiceID. Only pagado = 'SI' rows qualify (also the legacy NULL / '' estado ones, issue #43):
+    // a NULL / '' pagado row is unpaid, has no invoice, and never reaches AEAT.
     // fechaPago is the date the invoice was submitted under: AEAT keys an invoice on
     // (emisor, InvoiceID, FechaExpedicionFactura), so a retry must reuse it.
     // The floor gates on the invoice's own date (its earliest fecha_pago), like
@@ -2692,6 +2731,12 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     if (dbNotConfigured(db, __func__)) return false;
 
     ConnectionScope scope(db);
+    // The marking, the record backfill and the count are all or none: a half-done
+    // cancellation would leave the rows ANULADA while the caller reports a failure.
+    if (!db.transaction()) {
+        qWarning() << "markInvoiceSeqCancelled: no transaction -" << db.lastError().text();
+        return false;
+    }
     QSqlQuery q(db);
     q.prepare("UPDATE ingresos SET verifactu_estado = :estado, "
               "fecha_anulacion = COALESCE(NULLIF(fecha_anulacion, ''), :fecha), "
@@ -2705,21 +2750,8 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
     q.bindValue(":num",    nRecibo);
     q.bindValue(":seq",    seq);
     bool ok = q.exec();
-    if (ok && !cancelXml.isEmpty()) {
-        // Rows marked earlier without AEAT's record still get it; a stored one is kept.
-        QSqlQuery x(db);
-        x.prepare("UPDATE ingresos SET verifactu_cancel_xml = :cxml "
-                  "WHERE n_recibo = :num AND verifactu_invoice_seq = :seq AND pagado = 'SI' "
-                  "  AND COALESCE(verifactu_cancel_xml, '') = ''");
-        x.bindValue(":cxml", cancelXml);
-        x.bindValue(":num",  nRecibo);
-        x.bindValue(":seq",  seq);
-        if (!x.exec()) {
-            qWarning() << "markInvoiceSeqCancelled: storing the cancellation record failed for ticket" << nRecibo
-                       << "seq" << seq << "-" << x.lastError().text();
-            return false;
-        }
-    }
+    // Rows marked earlier without AEAT's record still get it; a stored one is kept.
+    ok = ok && backfillCancelXml(db, nRecibo, seq, cancelXml);
     if (ok && q.numRowsAffected() == 0) {
         // Rows already ANULADA keep their stamp; that is still a success (a late reply).
         QSqlQuery c(db);
@@ -2729,9 +2761,15 @@ bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, 
         c.bindValue(":seq", seq);
         ok = c.exec() && c.first() && c.value(0).toInt() > 0;   // no paid row matched = nothing marked
     }
-    if (!ok)
-        qWarning() << "markInvoiceSeqCancelled: UPDATE failed or matched no paid row for ticket" << nRecibo
-                   << "seq" << seq << "-" << q.lastError().text();
+    if (ok && !db.commit()) {
+        qWarning() << "markInvoiceSeqCancelled: commit failed for ticket" << nRecibo << "-" << db.lastError().text();
+        ok = false;
+    }
+    if (!ok) {
+        db.rollback();
+        qWarning() << "markInvoiceSeqCancelled: nothing marked for ticket" << nRecibo
+                   << "seq" << seq << "- failed or matched no paid row," << q.lastError().text();
+    }
     return ok;
 }
 

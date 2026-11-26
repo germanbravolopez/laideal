@@ -204,6 +204,9 @@ bool        addNewClient(QSqlDatabase &db, const QString &client, const QString 
                          const QString &direccion, const QString &movil);
 // A supplier invoice into gastos with the next id; false when its date lies in a closed quarter
 // or the insert fails. importe is stored through moneyText.
+// True for the gastos IVA rates the accounting summary sums (sin IVA, 10 %, 21 %); an expense
+// with any other rate is flagged in the detail and kept out of its totals.
+inline bool expenseIvaIsSummarised(int rate) { return rate == 0 || rate == 10 || rate == 21; }
 bool        insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QString &servicio,
                                  const QString &descripcion, const QString &empresa, const QDate &date,
                                  const QString &iva, const QString &importe);

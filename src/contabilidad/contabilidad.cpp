@@ -180,10 +180,10 @@ QString Contabilidad::lockStatusMessage(QSqlDatabase &db, ConfigMode mode, int u
         const QuarterClosure last = closures.value(closures.size() - 1);
         if (!closures.isEmpty() && !last.reopenedAt.isValid())
             return name + " está bloqueado (contabilidad realizada"
-                   + (last.migrated ? QString() : " el " + last.closedAt.toString("dd-MM-yyyy 'a las' hh:mm")) + ").";
+                   + (last.migrated ? QString() : " el " + last.closedAt.toString(kDbDateFormat + " 'a las' hh:mm")) + ").";
         if (!closures.isEmpty())
             return name + " no está bloqueado (contabilidad revertida el "
-                   + last.reopenedAt.toString("dd-MM-yyyy 'a las' hh:mm") + ").";
+                   + last.reopenedAt.toString(kDbDateFormat + " 'a las' hh:mm") + ").";
         if (quarterIsClosed(db, q, year))   // no history yet it reads closed: the read failed
             return name + " se considera bloqueado: no se pudo leer su estado.";
         return name + (quarterHasMovements(db, q, year) ? " no está bloqueado."
@@ -731,11 +731,6 @@ QString Contabilidad::createHtmlDetailIngresos(const QVector<IncomeTicketDetail>
         html += "<p>* " + QString::number(flaggedTickets) + " ticket(s) con alguna prenda cuyo importe est&aacute; "
                 "guardado con ',' decimal u otro formato no válido: esa prenda no se suma en el importe ni en el total.</p>";
     return html + kRoundingNote;
-}
-
-bool Contabilidad::expenseIvaIsSummarised(int iva)
-{
-    return iva == 0 || iva == 10 || iva == 21;
 }
 
 QString Contabilidad::createHtmlDetailRegularizaciones(const QVector<RegularizationDetail> &regularizations,

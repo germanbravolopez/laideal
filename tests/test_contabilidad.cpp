@@ -245,10 +245,10 @@ private slots:
         QVERIFY(html.contains(ReportHtml::formatEuro(121.0)));
         QVERIFY(!html.contains(ReportHtml::formatEuro(275.0)));         // the flagged rows stay out of the total
         QVERIFY(html.contains("2 factura(s) con un tipo de IVA no reconocido"));
-        QVERIFY(Contabilidad::expenseIvaIsSummarised(0));
-        QVERIFY(Contabilidad::expenseIvaIsSummarised(10));
-        QVERIFY(!Contabilidad::expenseIvaIsSummarised(4));
-        QVERIFY(!Contabilidad::expenseIvaIsSummarised(-1));
+        QVERIFY(expenseIvaIsSummarised(0));
+        QVERIFY(expenseIvaIsSummarised(10));
+        QVERIFY(!expenseIvaIsSummarised(4));
+        QVERIFY(!expenseIvaIsSummarised(-1));
     }
 
     void test_figuresFromDetails()

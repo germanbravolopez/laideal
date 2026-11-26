@@ -6,7 +6,6 @@
 #include "textcolordelegate.h"
 #include "ingresoscolumns.h"
 #include "uikit.h"
-#include "contabilidad.h"
 
 #include <cmath>
 
@@ -161,9 +160,15 @@ QString Listado::supportedExpenseIva(const QString &text)
 {
     double rate = 0.0;
     if (!moneyParse(text, &rate) || rate != std::floor(rate) || rate > 100.0
-            || !Contabilidad::expenseIvaIsSummarised(int(rate)))
+            || !expenseIvaIsSummarised(int(rate)))
         return QString();
     return QString::number(int(rate));
+}
+
+bool Listado::isExpenseAmount(const QString &text)
+{
+    double amount = 0.0;
+    return moneyParse(text, &amount);
 }
 
 void Listado::sortDefault()
@@ -211,8 +216,7 @@ void Listado::populateTable()
                     return UiKit::errorHtml("Tipo de IVA no admitido.")
                            + "<br>Escriba 0, 10 o 21: la contabilidad solo suma esos tipos. No se ha cambiado.";
                 if (index.column() == GASTOS_IDX_IMPORTE) {
-                    double number = 0.0;
-                    if (!moneyParse(value.toString(), &number) || number < 0.0)
+                    if (!isExpenseAmount(value.toString()))
                         return UiKit::errorHtml("Número no válido.")
                                + "<br>Escriba una cantidad, por ejemplo 121,00: no se ha cambiado.";
                     return QString();

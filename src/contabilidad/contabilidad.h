@@ -53,9 +53,6 @@ public:
     // the matching summary figure.
     static QString createHtmlDetailIngresos(const QVector<IncomeTicketDetail> &tickets, double ivaRate);
     static QString createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses);
-    // True for the gastos IVA rates the summary sums (sin IVA, 10 %, 21 %). Rows
-    // with any other rate are flagged in the detail and kept out of its total.
-    static bool expenseIvaIsSummarised(int iva);
 
     // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
     // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";

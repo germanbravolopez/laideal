@@ -126,6 +126,16 @@ private slots:
             QVERIFY2(Listado::supportedExpenseIva(bad).isEmpty(), qPrintable(bad));
     }
 
+    // The importe of a gasto is edited under the rule insertExpenseInvoice applies: a credit
+    // note (negative) is accepted, an unreadable amount is not.
+    void test_isExpenseAmount_acceptsNegative()
+    {
+        for (const QString &good : { "121,00", "5.5", "-12,50", "0" })
+            QVERIFY2(Listado::isExpenseAmount(good), qPrintable(good));
+        for (const QString &bad : { "abc", "", "1,2,3" })
+            QVERIFY2(!Listado::isExpenseAmount(bad), qPrintable(bad));
+    }
+
     void test_shouldPrintGastoRow()
     {
         // All years + all types -> always printed.

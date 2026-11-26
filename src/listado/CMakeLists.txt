@@ -12,7 +12,6 @@ target_link_libraries(listado
     Qt${QT_VERSION_MAJOR}::Sql
     sql_lite
     appsettings
-    contabilidad                    # expenseIvaIsSummarised: the rates a gasto may have
     reporthtml
     uikit
     verifactu_types

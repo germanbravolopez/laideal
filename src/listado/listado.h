@@ -52,8 +52,11 @@ public:
     static bool isOpenableQrUrl(const QString &url);
 
     // A gastos IVA cell as the integer text it is stored as ("21,0" -> "21"), or empty when
-    // it is not a rate the accounting sums (Contabilidad::expenseIvaIsSummarised).
+    // it is not a rate the accounting sums (expenseIvaIsSummarised).
     static QString supportedExpenseIva(const QString &text);
+    // An importe typed into a gastos cell: any readable amount, a negative one included
+    // (a credit note), exactly as insertExpenseInvoice accepts it.
+    static bool isExpenseAmount(const QString &text);
 
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;
