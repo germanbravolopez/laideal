@@ -272,22 +272,35 @@ private slots:
         QTRY_VERIFY(dlg.isNull());
     }
 
-    // A QR that cannot be redrawn at the required size prints as an invoice without one: no
-    // raster, no leyenda promising it.
-    void test_factura_unreadableQrPrintsWithoutQrAndLeyenda()
+    // The raster width in bytes of the first image of a ticket (GS v 0 m xL xH yL yH), or -1.
+    static int rasterWidthBytes(const QByteArray &ticket)
+    {
+        const int at = ticket.indexOf("v0");
+        if (at < 0 || ticket.size() < at + 6)
+            return -1;
+        return uchar(ticket[at + 4]) | (uchar(ticket[at + 5]) << 8);
+    }
+
+    // A QR that cannot be redrawn is printed as received, never wider than the paper.
+    void test_factura_unparseableQrPrintedAsReceivedAndFitsThePaper()
     {
         QVERIFY(E2e::seedSentGarment(m_db, "711", "h711", "10.00", "10-02-2026", "A-711"));
-        QPixmap garbled(300, 100);
-        garbled.fill(Qt::black);
-        Imprimir engine(m_db);
-        engine.isRecibo = false;
-        engine.qrCode = garbled;
-        engine.le_n_ticket->setText("711");
-        engine.getTicketInfo();
-        engine.buildTicket(true, false);
-        QVERIFY(!engine.ticketBytes().isEmpty());
-        QVERIFY(!engine.ticketBytes().contains("v0"));
-        QVERIFY(!engine.ticketBytes().contains("Factura verificable"));
+        for (const int side : { 300, 700 }) {      // narrower / wider than the 576 dots of 80 mm
+            QPixmap garbled(side, side);
+            garbled.fill(Qt::black);                // no finder pattern: not a parseable symbol
+            Imprimir engine(m_db);
+            engine.isRecibo = false;
+            engine.qrCode = garbled;
+            engine.le_n_ticket->setText("711");
+            engine.getTicketInfo();
+            engine.buildTicket(true, false);
+            const int widthBytes = rasterWidthBytes(engine.ticketBytes());
+            QVERIFY2(widthBytes > 0, "no raster printed");
+            if (side == 300)
+                QCOMPARE(widthBytes, (300 + 7) / 8);
+            else
+                QVERIFY2(widthBytes <= 576 / 8, qPrintable(QString::number(widthBytes)));
+        }
     }
 
     // A QR that came from the direct client's queued record keeps its leyenda when the same

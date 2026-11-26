@@ -75,8 +75,6 @@ private slots:
 private:
     // The last resolveQrCode() drew the QR of the direct client's queued record.
     bool m_qrFromQueuedRecord = false;
-    // The last buildTicket() could not redraw the QR to the required size: it printed without it.
-    bool m_qrUnprintable = false;
     // The address a complete invoice carries: the typed one, else the client's stored one; may be empty.
     QString recipientAddress();
     void buildUi();

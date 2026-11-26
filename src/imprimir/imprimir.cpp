@@ -405,15 +405,16 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     // they carry no Verifactu metadata, so a QR would mislead the customer into
     // thinking the receipt was submitted to AEAT. The symbol is the one issued (the
     // same modules), redrawn at the size the Orden requires.
-    m_qrUnprintable = false;
     const QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
         d.qr = TicketRenderer::printableQr(qr.toImage(), paperDots());
-        if (d.qr.isNull())   // no size guarantee: the invoice prints as one without a QR (and without its leyenda)
-            qWarning() << "Imprimir: QR not readable, printed without it";
-        m_qrUnprintable = d.qr.isNull();
-    }
-    if (!d.qr.isNull()) {
+        if (d.qr.isNull()) {
+            qWarning() << "Imprimir: QR not readable, printed as received";
+            d.qr = qr.toImage();
+            // Never wider than the paper (modules stay crisp); one that fits is untouched.
+            if (d.qr.width() > paperDots())
+                d.qr = d.qr.scaled(paperDots(), paperDots(), Qt::KeepAspectRatio, Qt::FastTransformation);
+        }
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
@@ -691,8 +692,6 @@ void Imprimir::onPrintClicked()
     const QString noQr = !m_lastVoidedMarker.isEmpty()
         ? "<br>" + UiKit::warnHtml("La factura está " + m_lastVoidedMarker.toLower()
                                    + ": la copia lo indica y no lleva código QR.")
-        : m_qrUnprintable
-            ? "<br>" + UiKit::warnHtml("Sin código QR: no se pudo dibujar con el tamaño que exige la normativa.")
         : !qrCode.isNull() ? QString()
         : (!verifactuIntegration || !verifactuIntegration->isConfigured())
             ? "<br>Sin código QR: Verifactu no está activado."
