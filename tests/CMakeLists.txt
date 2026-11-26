@@ -134,6 +134,19 @@ target_link_libraries(test_versioncompare PRIVATE
 add_test(NAME version_compare
     COMMAND test_versioncompare -o ${CMAKE_BINARY_DIR}/test-results-versioncompare.xml,junitxml -o -,txt)
 
+# UpdaterDialog: the error of a failed download is hidden when the download is retried.
+add_executable(test_versiondialog test_versiondialog.cpp)
+target_link_libraries(test_versiondialog PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Network
+    updater
+    uikit
+)
+add_test(NAME updater_dialog
+    COMMAND test_versiondialog -o ${CMAKE_BINARY_DIR}/test-results-versiondialog.xml,junitxml -o -,txt)
+set_tests_properties(updater_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # verifactu: the pure JSON response parser (parseVerifactuResponse). Uses
 # QTEST_MAIN (QApplication for QPixmap) under the offscreen platform so the QR
 # decode path runs headless.

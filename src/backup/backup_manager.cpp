@@ -110,7 +110,7 @@ void BackupManager::recordSuccess(const Result &result)
 
 void BackupManager::recordFailure(const Result &result)
 {
-    if (result.success)
+    if (result.success || result.skipped)
         return;
     AppSettings::instance()->setBackupLastError(
         QDateTime::currentDateTime().toString(Qt::ISODate) + QLatin1Char(' ') + result.errorMessage);
@@ -147,6 +147,7 @@ BackupManager::Result BackupManager::performBackup()
 {
     Result res;
     if (s_running.exchange(true)) {
+        res.skipped = true;
         res.errorMessage = tr("Ya hay una copia de seguridad en curso; espere a que termine.");
         qWarning() << "BackupManager: a backup is already running";
         return res;
@@ -165,6 +166,7 @@ BackupManager::Result BackupManager::performBackup()
     const QString finalPath = QDir(dir).filePath(timestampedFileName());
     if (QFile::exists(finalPath)) {
         // Same second as the previous copy: that one is kept, never overwritten.
+        res.skipped = true;
         res.errorMessage = tr("Ya se ha hecho una copia hace un momento (%1).").arg(QFileInfo(finalPath).fileName());
         qWarning() << "BackupManager: a copy with this timestamp already exists -" << finalPath;
         return res;
@@ -272,8 +274,11 @@ void BackupManager::copyToSecondFolder(Result &res) const
     const QDir dir(m_secondFolder.trimmed());
     const QString name = QFileInfo(res.backupPath).fileName();
     const QString part = dir.filePath(name + kPartSuffix);
+    const QString mainDir = QFileInfo(res.backupPath).canonicalPath();
     if (!QDir().mkpath(dir.absolutePath())) {
         res.secondCopyError = tr("No se pudo usar la segunda carpeta de copias %1.").arg(dir.absolutePath());
+    } else if (!mainDir.isEmpty() && QFileInfo(dir.absolutePath()).canonicalFilePath() == mainDir) {
+        res.secondCopyError = tr("La segunda carpeta de copias es la misma carpeta de las copias (%1); elija otra.").arg(dir.absolutePath());
     } else {
         removeStalePartFiles(dir.absolutePath());
         QFile::remove(part);

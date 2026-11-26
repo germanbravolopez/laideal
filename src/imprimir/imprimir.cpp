@@ -175,9 +175,9 @@ bool Imprimir::checkAnyItemPaid()
 
 QPixmap Imprimir::resolveQrCode()
 {
-    m_qrFromQueuedRecord = false;
     if (!qrCode.isNull())
-        return qrCode;
+        return qrCode;   // cached: m_qrFromQueuedRecord still says where it came from
+    m_qrFromQueuedRecord = false;
 
     if (!verifactuIntegration || !verifactuIntegration->isConfigured())
         return QPixmap();
@@ -317,6 +317,15 @@ int Imprimir::paperDots() const
     return AppSettings::instance()->paperWidthMm() == 58 ? 420 : 576;
 }
 
+QString Imprimir::recipientAddress()
+{
+    const QString typed = m_leAddress->text().trimmed();
+    if (!typed.isEmpty() || !sqlQueryModel || sqlQueryModel->rowCount() == 0)
+        return typed;
+    const QString client = sqlQueryModel->data(sqlQueryModel->index(0, INGRESOS_COL_CLIENTE)).toString();
+    return searchItemFromClient(db, "direccion", client, false).trimmed();
+}
+
 void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 {
     // Nothing to print (unknown number, every garment voided): never a blank ticket.
@@ -364,8 +373,7 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
 
     // Complete invoice: billing address (typed, else the client's) + DNI / NIF (typed).
     if (isCompleteInvoice) {
-        const QString typed = m_leAddress->text().trimmed();
-        d.clientAddress = typed.isEmpty() ? searchItemFromClient(db, "direccion", client, false) : typed;
+        d.clientAddress = recipientAddress();
         d.clientDni     = m_leDni->text().trimmed();
     }
 
@@ -397,13 +405,15 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
     // they carry no Verifactu metadata, so a QR would mislead the customer into
     // thinking the receipt was submitted to AEAT. The symbol is the one issued (the
     // same modules), redrawn at the size the Orden requires.
+    m_qrUnprintable = false;
     const QPixmap qr = !isRecibo ? resolveQrCode() : QPixmap();
     if (!qr.isNull()) {
         d.qr = TicketRenderer::printableQr(qr.toImage(), paperDots());
-        if (d.qr.isNull()) {
-            qWarning() << "Imprimir: QR not readable, printed as received";
-            d.qr = qr.toImage();
-        }
+        if (d.qr.isNull())   // no size guarantee: the invoice prints as one without a QR (and without its leyenda)
+            qWarning() << "Imprimir: QR not readable, printed without it";
+        m_qrUnprintable = d.qr.isNull();
+    }
+    if (!d.qr.isNull()) {
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets
         // still PENDIENTE, in ERROR, or ANULADA - except the print at issue of a
@@ -603,6 +613,10 @@ void Imprimir::onPrintClicked()
                 notPrinted << labelFor(ev) + " (sin prendas pagadas)";
                 continue;
             }
+            if (isCompleteInvoice && recipientAddress().isEmpty()) {
+                notPrinted << labelFor(ev) + " (falta la dirección del cliente)";
+                continue;
+            }
             buildTicket(/*copyForClient=*/true, /*addPayedInfo=*/false);
             if (AppSettings::instance()->enablePrinting() && !printTicket()) {
                 notPrinted << labelFor(ev) + (m_lastSendUncertain ? " (puede que se imprima: compruebe la impresora)"
@@ -614,8 +628,9 @@ void Imprimir::onPrintClicked()
         }
         QString summary;
         if (!printed.isEmpty()) {
-            const QString text = "Facturas impresas: " + printed.join(", ").toHtmlEscaped() + ".";
-            summary = notPrinted.isEmpty() ? UiKit::okHtml(text) : UiKit::warnHtml(text);
+            const QString text = (printing ? "Facturas impresas: " : "Facturas preparadas, no impresas: ")
+                                 + printed.join(", ").toHtmlEscaped() + ".";
+            summary = notPrinted.isEmpty() && printing ? UiKit::okHtml(text) : UiKit::warnHtml(text);
         }
         if (!notPrinted.isEmpty())
             summary += (summary.isEmpty() ? QString() : "<br>")
@@ -640,6 +655,12 @@ void Imprimir::onPrintClicked()
                              + "<br>Una factura solo se emite por lo cobrado; imprima el recibo.");
         return;
     }
+    if (isCompleteInvoice && recipientAddress().isEmpty()) {
+        m_lblResult->setText(UiKit::warnHtml("Escriba la dirección del cliente: la factura completa no se ha impreso.")
+                             + "<br>Lleva el domicilio de quien la pide (art. 6 RD 1619/2012) y el cliente no tiene "
+                               "ninguno guardado.");
+        return;
+    }
     // A reprinted recibo shows the WHOLE ticket, so it may only claim IMPORTE
     // PAGADO when every garment is paid - "any paid" would mark a partially-paid
     // ticket as settled in full. Facturas never carry the marker (payment is
@@ -649,13 +670,19 @@ void Imprimir::onPrintClicked()
     const bool clientCopyFailed = printing && !printTicket();
     if (isRecibo) {
         const bool shopCopy = m_chkShopCopy->isChecked();
+        bool shopCopyFailed = false;
         if (shopCopy && !clientCopyFailed) {   // no second failure on top of the first
             buildTicket(false, paidMarker);
             if (printing)
-                printTicket();
+                shopCopyFailed = !printTicket();
         }
         const QString result = clientCopyFailed
             ? UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + " no se ha impreso.")
+            : shopCopyFailed
+            ? UiKit::warnHtml("El recibo Nº " + ticket.toHtmlEscaped() + ": la copia del cliente se ha impreso, "
+                              "la copia del establecimiento no.")
+            : !printing
+            ? UiKit::warnHtml("Recibo Nº " + ticket.toHtmlEscaped() + " preparado, no impreso.")
             : UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " impreso"
                             + (shopCopy ? " (copia del cliente y del establecimiento)." : " (copia del cliente)."));
         m_lblResult->setText(result + printingOff + problems());
@@ -664,12 +691,15 @@ void Imprimir::onPrintClicked()
     const QString noQr = !m_lastVoidedMarker.isEmpty()
         ? "<br>" + UiKit::warnHtml("La factura está " + m_lastVoidedMarker.toLower()
                                    + ": la copia lo indica y no lleva código QR.")
+        : m_qrUnprintable
+            ? "<br>" + UiKit::warnHtml("Sin código QR: no se pudo dibujar con el tamaño que exige la normativa.")
         : !qrCode.isNull() ? QString()
         : (!verifactuIntegration || !verifactuIntegration->isConfigured())
             ? "<br>Sin código QR: Verifactu no está activado."
             : "<br>Sin código QR: la factura no está confirmada por AEAT o AEAT no respondió a tiempo.";
     const QString invoiceName = (isCompleteInvoice ? "Factura completa " : "Factura ") + displayInvoiceId().toHtmlEscaped();
     m_lblResult->setText((clientCopyFailed ? UiKit::warnHtml(invoiceName + " no se ha impreso.")
+                          : !printing      ? UiKit::warnHtml(invoiceName + " preparada, no impresa.")
                                            : UiKit::okHtml(invoiceName + " impresa."))
                          + noQr + printingOff + problems());
 }

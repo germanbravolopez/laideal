@@ -123,7 +123,7 @@ signals:
 private:
     void handleReleaseReply(QNetworkReply *reply);
     void startInstallerDownload();
-    void handleDownloadReply(QNetworkReply *reply, const QString &localPath);
+    void handleDownloadReply(QNetworkReply *reply, const QString &localPath, qint64 expectedSize, const QString &expectedSha256);
 
     QNetworkAccessManager *m_nam;
     QUrl m_apiUrl;

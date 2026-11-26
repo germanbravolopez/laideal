@@ -102,6 +102,7 @@ void UpdaterDialog::onLaterClicked()
 void UpdaterDialog::onUpdateClicked()
 {
     m_downloading = true;
+    m_lblResult->setVisible(false);   // the error of the previous attempt
     m_btnUpdate->setEnabled(false);
     m_btnLater->setText(tr("Cancelar"));
     m_progress->setVisible(true);

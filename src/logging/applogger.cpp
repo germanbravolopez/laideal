@@ -47,9 +47,19 @@ void rotateLocked()
     const QString moved = path + ".rotating";
     QFile::remove(moved);   // leftover of an interrupted rotation
     if (QFile::rename(path, moved)) {
-        QFile::remove(path + ".old");
-        if (!QFile::rename(moved, path + ".old"))
-            QFile::remove(moved);
+        // The previous ".old" is set aside, not deleted, until the new one is in place.
+        const QString oldPath = path + ".old";
+        const QString aside = path + ".old.prev";
+        QFile::remove(aside);
+        const bool hadOld = QFileInfo::exists(oldPath);
+        const bool asideOk = !hadOld || QFile::rename(oldPath, aside);
+        if (asideOk && QFile::rename(moved, oldPath)) {
+            QFile::remove(aside);
+        } else {
+            if (asideOk && hadOld)
+                QFile::rename(aside, oldPath);   // put the previous generation back
+            QFile::rename(moved, path);          // the current log carries on, nothing is lost
+        }
     }
     if (!openLog(path))
         s_logStream.setDevice(nullptr);
@@ -61,7 +71,7 @@ void rotateLocked()
 QString scrubbed(const QString &msg)
 {
     static const QRegularExpression secret(
-        R"((ServiceKey|password|passwd|clave|secret|token)(["']?\s*[:=]\s*["']?)[^"'\s,;}&]+)",
+        R"((service[_-]?key|password|passwd|contrase(?:ñ|n)a|clave|secret|token|authorization)(["']?\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^"'\s,;}&]+)",
         QRegularExpression::CaseInsensitiveOption);
     QString out = msg;
     return out.replace(secret, QStringLiteral("\\1\\2***"));

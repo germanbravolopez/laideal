@@ -93,6 +93,39 @@ private slots:
         QVERIFY(!blocked.secondCopyError.isEmpty());
     }
 
+    // The second folder being the backups folder itself is said plainly, and the backup stands.
+    void test_secondFolderSameAsBackupsFolder()
+    {
+        BackupManager manager;
+        manager.setSecondFolder(backupDir() + "/../backups");
+        const BackupManager::Result res = manager.performBackup();
+        QVERIFY2(res.success, qPrintable(res.errorMessage));
+        QVERIFY(res.secondCopyPath.isEmpty());
+        QVERIFY2(res.secondCopyError.contains("misma carpeta"), qPrintable(res.secondCopyError));
+        QCOMPARE(backupFiles().size(), 1);
+    }
+
+    // A refusal is flagged skipped (not a failure to record); a real failure is not.
+    void test_refusalsAreSkippedNotFailures()
+    {
+        BackupManager manager;
+        const BackupManager::Result first = manager.performBackup();
+        QVERIFY(first.success);
+        QVERIFY(!first.skipped);
+        QDir().mkpath(backupDir());
+        const QDateTime now = QDateTime::currentDateTime();
+        for (int s = 0; s < 5; ++s) {
+            QFile f(QDir(backupDir()).filePath(now.addSecs(s).toString("'laideal_'yyyy-MM-dd_HHmmss'.db'")));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        }
+        const BackupManager::Result same = manager.performBackup();
+        QVERIFY(!same.success);
+        QVERIFY(same.skipped);
+        AppSettings::instance()->setBackupLastError(QString());
+        BackupManager::recordFailure(same);
+        QVERIFY(AppSettings::instance()->backupLastError().isEmpty());
+    }
+
     // An unfinished copy left by a crash is removed by the next run and never counts.
     void test_stalePartFileRemoved()
     {
@@ -248,6 +281,7 @@ private slots:
         lock.close();
         QSqlDatabase::removeDatabase("lock");
         QVERIFY(!second.success);
+        QVERIFY(second.skipped);
         QVERIFY2(second.errorMessage.contains("en curso"), qPrintable(second.errorMessage));
     }
 

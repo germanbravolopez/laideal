@@ -94,7 +94,10 @@ QStringList EscPosBuilder::wrapText(const QString &s, int width)
 {
     if (width < 1) width = 1;
     QStringList out;
-    const QStringList words = s.split(' ', Qt::KeepEmptyParts);
+    // The ellipsis prints as three dots (toCp858): measure what is printed.
+    QString printed = s;
+    printed.replace(QChar(0x2026), QStringLiteral("..."));
+    const QStringList words = printed.split(' ', Qt::KeepEmptyParts);
     QString cur;
     auto flush = [&]() { out << cur; cur.clear(); };
     for (const QString &word : words) {
@@ -228,14 +231,18 @@ EscPosBuilder &EscPosBuilder::garmentRow(const QString &qty, const QString &name
     int nameWidth = m_cols - qtyWidth - amountWidth;
     if (nameWidth < 1) nameWidth = 1;
     const QStringList nameRows = wrapText(name, nameWidth);
+    // An amount wider than its column is never cut (a wrong number on paper): it gets its own line.
+    const bool amountFits = amount.size() <= amountWidth;
     for (int i = 0; i < nameRows.size(); ++i) {
         const QString q = (i == 0) ? qty.left(qtyWidth) : QString();
-        const QString a = (i == 0) ? amount.right(amountWidth) : QString();
+        const QString a = (i == 0 && amountFits) ? amount : QString();
         QString qField = q.leftJustified(qtyWidth, ' ', true);
         QString nField = nameRows[i].leftJustified(nameWidth, ' ', true);
         QString aField = a.rightJustified(amountWidth, ' ', true);
         line(qField + nField + aField);
     }
+    if (!amountFits)
+        line(amount.rightJustified(m_cols));
     return *this;
 }
 

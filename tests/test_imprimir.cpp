@@ -7,13 +7,17 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
 #include <QPushButton>
 #include <QTemporaryDir>
 
 #include "appsettings.h"
 #include "e2efixture.h"
 #include "escpospreview.h"
+// A test reaches the QR bookkeeping that only the direct backend sets in the app.
+#define private public
 #include "imprimir.h"
+#undef private
 #include "modalautocloser.h"
 #include "sql_lite.h"
 #include "thermalprinter.h"
@@ -28,6 +32,7 @@ class TestImprimir : public QObject
     QList<QByteArray> m_sent;       // every payload the fake transport received
     QStringList m_queues;           // and the queue it was addressed to
     bool m_transportOk = true;
+    int m_failOnCall = -1;          // the transport call (1-based) that fails; -1 = none
     QString m_transportError;
 
     // Presses the dialog's Imprimir button for a ticket; returns the result panel text.
@@ -84,9 +89,10 @@ private slots:
         ThermalPrinter::setTransport([this](const QByteArray &bytes, const QString &queue, QString *err) {
             m_sent << bytes;
             m_queues << queue;
-            if (!m_transportOk && err)
+            const bool ok = m_transportOk && m_sent.size() != m_failOnCall;
+            if (!ok && err)
                 *err = m_transportError;
-            return m_transportOk;
+            return ok;
         });
     }
 
@@ -102,6 +108,7 @@ private slots:
         m_queues.clear();
         m_popups->clear();
         m_transportOk = true;
+        m_failOnCall = -1;
         m_transportError.clear();
         AppSettings *s = AppSettings::instance();
         s->setEnablePrinting(true);
@@ -216,10 +223,97 @@ private slots:
         QPointer<Imprimir> dlg = openDialog(true);
         const QString text = press(dlg, "704");
         QVERIFY2(text.contains(QString::fromUtf8("impresión está desactivada")), qPrintable(text));
+        QVERIFY2(text.contains("preparado, no impreso"), qPrintable(text));
+        QVERIFY2(!text.contains("704 impreso"), qPrintable(text));
         QVERIFY(m_sent.isEmpty());
         QVERIFY(!dlg->ticketBytes().isEmpty());
         dlg->close();
         QTRY_VERIFY(dlg.isNull());
+
+        QVERIFY(E2e::seedSentGarment(m_db, "704", "h704f", "10.00", "10-02-2026", "A-704"));
+        QPointer<Imprimir> factura = openDialog(false);
+        const QString invoiceText = press(factura, "704");
+        QVERIFY2(invoiceText.contains("preparada, no impresa"), qPrintable(invoiceText));
+        QVERIFY2(!invoiceText.contains("704 impresa"), qPrintable(invoiceText));
+        factura->close();
+        QTRY_VERIFY(factura.isNull());
+    }
+
+    // The shop copy of a recibo reprint fails: the panel does not claim both copies printed.
+    void test_dialog_shopCopyFailureIsSaidHonestly()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "709", "h709", "10.00"));
+        m_failOnCall = 2;
+        m_transportError = "queue gone";
+        QPointer<Imprimir> dlg = openDialog(true);
+        const QString text = press(dlg, "709");
+        QCOMPARE(m_sent.size(), 2);
+        QVERIFY2(!text.contains("copia del cliente y del establecimiento"), qPrintable(text));
+        QVERIFY2(text.contains("copia del establecimiento no"), qPrintable(text));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
+    // A complete invoice is never printed with a blank recipient address.
+    void test_dialog_completaRefusedWithoutAnAddress()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710", "10.00", "10-02-2026", "A-710"));
+        QPointer<Imprimir> dlg = openDialog(false, true);
+        dlg->findChild<QLineEdit *>("leDni")->setText("12345678Z");
+        const QString text = press(dlg, "710");
+        QVERIFY2(text.contains(QString::fromUtf8("dirección del cliente")), qPrintable(text));
+        QVERIFY(m_sent.isEmpty());
+        // The client's stored address is enough.
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes (nombre, direccion) VALUES ('Cliente E2E', 'Calle Stored 3')"));
+        press(dlg, "710");
+        QCOMPARE(m_sent.size(), 1);
+        QVERIFY(textRows(m_sent[0]).contains(QString::fromUtf8("Dirección: Calle Stored 3")));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
+    // A QR that cannot be redrawn at the required size prints as an invoice without one: no
+    // raster, no leyenda promising it.
+    void test_factura_unreadableQrPrintsWithoutQrAndLeyenda()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711", "10.00", "10-02-2026", "A-711"));
+        QPixmap garbled(300, 100);
+        garbled.fill(Qt::black);
+        Imprimir engine(m_db);
+        engine.isRecibo = false;
+        engine.qrCode = garbled;
+        engine.le_n_ticket->setText("711");
+        engine.getTicketInfo();
+        engine.buildTicket(true, false);
+        QVERIFY(!engine.ticketBytes().isEmpty());
+        QVERIFY(!engine.ticketBytes().contains("v0"));
+        QVERIFY(!engine.ticketBytes().contains("Factura verificable"));
+    }
+
+    // A QR that came from the direct client's queued record keeps its leyenda when the same
+    // object builds the ticket again (the cached QR must not lose where it came from).
+    void test_factura_queuedQrLeyendaSurvivesASecondBuild()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "712", "h712", "10.00", "10-02-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado='PENDIENTE', verifactu_csv='' WHERE n_recibo='712'"));
+        const int module = 6, modules = 21, quiet = 4;
+        QImage img((modules + 2 * quiet) * module, (modules + 2 * quiet) * module, QImage::Format_RGB32);
+        img.fill(Qt::white);
+        QPainter painter(&img);
+        for (const QPoint &corner : { QPoint(0, 0), QPoint(modules - 7, 0), QPoint(0, modules - 7) })
+            painter.fillRect((corner.x() + quiet) * module, (corner.y() + quiet) * module, 7 * module, 7 * module, Qt::black);
+        painter.end();
+        Imprimir engine(m_db);
+        engine.isRecibo = false;
+        engine.qrCode = QPixmap::fromImage(img);
+        engine.m_qrFromQueuedRecord = true;   // as resolveQrCode() sets it for a queued record's QR
+        engine.le_n_ticket->setText("712");
+        engine.getTicketInfo();
+        engine.buildTicket(true, false);
+        QVERIFY(engine.ticketBytes().contains("v0"));
+        QVERIFY(engine.ticketBytes().contains("Factura verificable"));
+        engine.buildTicket(true, false);
+        QVERIFY2(engine.ticketBytes().contains("Factura verificable"), "the second build lost the leyenda");
     }
 
     // Art. 7 RD 1619/2012: the factura shows the expedition date (payment date, 10/02),

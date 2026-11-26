@@ -2,6 +2,7 @@
 #include "appsettings.h"
 #include "applanguage.h"
 #include "statusapiprinter.h"
+#include "uikit.h"
 #include <QApplication>
 #include <QTabWidget>
 #include <QFormLayout>
@@ -73,8 +74,7 @@ static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
 SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("Configuración"));
-    setMinimumWidth(560);
+    UiKit::setUpDialog(this, tr("Configuración"), 560);
 
     auto *mainLayout = new QVBoxLayout(this);
     auto *tabs       = new QTabWidget(this);
@@ -86,6 +86,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     mainLayout->addWidget(tabs);
 
+    // No primary button on purpose: Enter in a field must not run accept() and its confirmations.
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
@@ -146,7 +147,10 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_paperWidth = new QComboBox;
     m_paperWidth->addItem(tr("58 mm"), 58);
     m_paperWidth->addItem(tr("80 mm"), 80);
-    m_paperWidth->setCurrentIndex(s->paperWidthMm() == 58 ? 0 : 1);
+    const int storedWidth = s->paperWidthMm();
+    if (storedWidth != 58 && storedWidth != 80)   // hand-edited value: keep it, do not turn it into 80
+        m_paperWidth->addItem(tr("%1 mm").arg(storedWidth), storedWidth);
+    m_paperWidth->setCurrentIndex(m_paperWidth->findData(storedWidth) >= 0 ? m_paperWidth->findData(storedWidth) : 1);
     fl->addRow(tr("Ancho de papel:"), m_paperWidth);
 
     m_useStatusApi = new QCheckBox(tr("Usar la Status API de Epson (estado de la impresora)"));
@@ -266,12 +270,10 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
         "Avisar al arrancar de envíos AEAT pendientes (verifactu_estado=PENDIENTE)"));
     m_vPendingRecoveryEnabled->setChecked(s->verifactuPendingRecoveryEnabled());
 
-    m_vPendingRecoveryFloor = new QDateEdit;
-    m_vPendingRecoveryFloor->setDisplayFormat("dd-MM-yyyy");
-    m_vPendingRecoveryFloor->setCalendarPopup(true);
     const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
-    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor
-                                                     : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
+    m_vPendingRecoveryFloor = UiKit::dateEdit(
+        floor.isValid() ? floor : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate),
+        "dePendingRecoveryFloor");
     m_vPendingRecoveryFloor->setToolTip(tr("Los tickets anteriores no se avisan como pendientes al arrancar, "
                                            "ni cuentan como facturas rechazadas en la barra de estado."));
 
@@ -508,6 +510,7 @@ void SettingsDialog::accept()
         qWarning() << "SettingsDialog: failed to save settings to" << s->filePath();
         QMessageBox::warning(this, tr("Error"),
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
+        return;   // stay open: closing would look like the changes were kept
     }
 
     if (!secretsEncrypted) {

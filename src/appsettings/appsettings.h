@@ -209,6 +209,7 @@ private:
     QString     m_legacyKeyFile;   // ~/.verifactu_key, when the key was migrated from it
     mutable QString m_lastSaveError;
     bool        m_readOnly = false;   // loadReadOnly(): nothing is written
+    bool        m_unreadable = false; // the file exists but could not be opened: save() refuses
 
     static AppSettings *s_instance;
 };

@@ -24,8 +24,9 @@ Updater::InstallerAsset Updater::findInstallerAsset(const QJsonArray &assets, co
     InstallerAsset found;
     QString installerName;
     QJsonObject chosen;
-    const QString exactName = tag.isEmpty() ? QString()
-        : QString::fromLatin1(kInstallerAssetPrefix) + tag + QStringLiteral(".exe");
+    const QString version = tag.startsWith(QLatin1Char('v')) ? tag.mid(1) : tag;   // isValidVersion accepts "v12.0"
+    const QString exactName = version.isEmpty() ? QString()
+        : QString::fromLatin1(kInstallerAssetPrefix) + version + QStringLiteral(".exe");
     for (const QJsonValue &v : assets) {
         const QJsonObject a = v.toObject();
         const QString name  = a.value("name").toString();
@@ -342,12 +343,14 @@ void Updater::startInstallerDownload()
     m_downloadReply = reply;
     connect(reply, &QNetworkReply::downloadProgress,
             this, &Updater::downloadProgress);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, localPath]() {
-        handleDownloadReply(reply, localPath);
+    // A check finishing mid-download replaces m_installer: judge this file by what it started with.
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, localPath, size = m_installer.size, sha256 = m_installer.sha256]() {
+        handleDownloadReply(reply, localPath, size, sha256);
     });
 }
 
-void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath)
+void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath, qint64 expectedSize, const QString &expectedSha256)
 {
     reply->deleteLater();
     m_downloadReply = nullptr;
@@ -362,7 +365,7 @@ void Updater::handleDownloadReply(QNetworkReply *reply, const QString &localPath
         return;
     }
     const QByteArray bytes = reply->readAll();
-    if (const QString mismatch = installerMismatch(bytes, m_installer.size, m_installer.sha256); !mismatch.isEmpty()) {
+    if (const QString mismatch = installerMismatch(bytes, expectedSize, expectedSha256); !mismatch.isEmpty()) {
         qWarning() << "Updater: installer rejected -" << mismatch;
         emit downloadFailed(mismatch);
         return;

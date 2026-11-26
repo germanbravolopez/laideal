@@ -167,6 +167,7 @@ void AppSettings::applyDefaults()
 bool AppSettings::load()
 {
     QFile file(m_filePath);
+    m_unreadable = false;
 
     if (!file.exists()) {
         if (!m_readOnly)
@@ -183,6 +184,7 @@ bool AppSettings::load()
 
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "AppSettings: cannot open" << m_filePath;
+        m_unreadable = true;   // save() must not replace the real file with defaults
         applyDefaults();
         return false;
     }
@@ -191,12 +193,12 @@ bool AppSettings::load()
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
     file.close();
 
-    if (err.error != QJsonParseError::NoError) {
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
         // Kept aside: the next save would otherwise overwrite the only copy of the
         // database path and the credentials with defaults.
         const QString aside = m_filePath + ".corrupt-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
         const bool kept = !m_readOnly && QFile::rename(m_filePath, aside);
-        qCritical() << "AppSettings: JSON parse error:" << err.errorString() << "- the file is"
+        qCritical() << "AppSettings: JSON parse error:" << (err.error != QJsonParseError::NoError ? err.errorString() : QStringLiteral("not a JSON object")) << "- the file is"
                     << (kept ? "kept as " + aside : QStringLiteral("NOT kept aside"));
         applyDefaults();
         return false;
@@ -234,6 +236,11 @@ bool AppSettings::save() const
 {
     if (m_readOnly) {
         m_lastSaveError = QStringLiteral("settings loaded read-only");
+        return false;
+    }
+    if (m_unreadable) {
+        m_lastSaveError = QStringLiteral("the settings file could not be read, so it is not overwritten");
+        qCritical() << "AppSettings:" << m_lastSaveError << "-" << m_filePath;
         return false;
     }
     // QSaveFile writes a temporary file and replaces the target in one step on commit:
