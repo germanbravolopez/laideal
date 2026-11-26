@@ -110,10 +110,8 @@ struct RecordSummary {
 const RecordSummary *chainTip(const QList<RecordSummary> &records);
 
 // Whether the record the query returned for an invoice in state Anulado is its
-// cancellation record: AEAT's test environment gives the invoice's data with the huella,
-// generation time and chain link of the cancellation (seen 25-11-2026), while its written
-// answer of 24-11-2026 said the query shows no cancellation. Proven from the reply alone:
-// the huella is the one a RegistroAnulacion of those fields has. False for any other state.
+// cancellation record (AEAT may return either): its huella is the one a RegistroAnulacion
+// of those fields has. False for any other state.
 bool carriesCancellationRecord(const QueryRecord &record);
 
 // A registration AEAT holds as cancelled, returned with its own huella (cancelledAtAeat)

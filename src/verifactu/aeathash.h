@@ -13,6 +13,12 @@
 
 namespace AeatHash {
 
+// Date format of every VERI*FACTU record, query and message (dd-MM-yyyy).
+inline constexpr char kDateFormat[] = "dd-MM-yyyy";
+
+// `date` as a record writes it; empty for an invalid date.
+QString dateText(const QDate &date);
+
 // Fields of a registration record (RegistroAlta) that enter its hash.
 struct RegistrationFields {
     QString issuerNif;        // IDEmisorFactura
@@ -45,6 +51,8 @@ QString cancellationHash(const CancellationFields &fields);
 
 // Amount as the record writes it: two decimals, '.' separator ("123.40", never "123.4").
 QString amountText(double amount);
+// The same rounding, in cents.
+qint64 amountCents(double amount);
 
 // Generation time with its UTC offset, "yyyy-MM-ddTHH:mm:ss+hh:mm" (never "Z").
 QString timestampText(const QDateTime &moment);

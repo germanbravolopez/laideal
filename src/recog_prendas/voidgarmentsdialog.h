@@ -30,6 +30,8 @@ public:
     void loadTicket(const QString &ticketNum);
     // Garments voided while the dialog was open.
     int voidedCount() const { return m_voidedTotal; }
+    // The ticket those garments belong to (the operator may search another one in the dialog).
+    QString voidedTicket() const { return m_voidedTicket; }
 
 private slots:
     void onSearchClicked();
@@ -47,16 +49,17 @@ private:
         bool    voidable = false;
     };
 
-    QLineEdit    *m_leTicketNum;
-    QLabel       *m_lblHeader;
-    QTableWidget *m_table;
-    UiKit::ResultPanel *m_lblResult;
-    QPushButton  *m_btnVoid;
+    QLineEdit    *m_leTicketNum = nullptr;
+    QLabel       *m_lblHeader = nullptr;
+    QTableWidget *m_table = nullptr;
+    UiKit::ResultPanel *m_lblResult = nullptr;
+    QPushButton  *m_btnVoid = nullptr;
 
     QString           m_loadedTicket;
     QVector<Garment>  m_garments;
     QSqlDatabase      db;
     int               m_voidedTotal = 0;
+    QString           m_voidedTicket;
 
     void buildUi();
     void rebuildTable();

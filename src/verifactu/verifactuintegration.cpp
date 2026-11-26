@@ -1,5 +1,6 @@
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
+#include "aeathash.h"
 #include "appsettings.h"
 #include <QDebug>
 #include <QNetworkReply>
@@ -18,17 +19,18 @@ VerifactuIntegration::~VerifactuIntegration()
 namespace {
 // An old gateway client keeps its signals until the replies it is still waiting for are
 // in, then goes: deleting it at once would drop a submit whose outcome is unknown.
-void retireManager(VerifactuManager *manager)
+// True when it was deleted now.
+bool retireManager(VerifactuManager *manager)
 {
     if (!manager)
-        return;
+        return true;
     auto running = [manager] {
         const auto replies = manager->findChildren<QNetworkReply *>();
         return std::any_of(replies.cbegin(), replies.cend(), [](QNetworkReply *r) { return r->isRunning(); });
     };
     if (!running()) {
         delete manager;
-        return;
+        return true;
     }
     // Deleted after the last in-flight reply has finished (and been handled); the
     // manager is gone by the time a later reply would ask again.
@@ -41,6 +43,7 @@ void retireManager(VerifactuManager *manager)
                 manager->deleteLater();
         }, Qt::QueuedConnection);
     }
+    return false;
 }
 } // namespace
 
@@ -50,8 +53,13 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     // send the outbox and ignore each other's AEAT wait time).
     if (m_direct)
         m_direct->releaseWaiters();         // the windows still waiting hear an answer
+    const QObject *oldDirect = m_direct;
+    const QObject *oldManager = m_manager;
     delete m_direct;
-    retireManager(m_manager);
+    // A queued answer dies with its backend: what is still in flight for a deleted one never ends.
+    dropInFlightOf(oldDirect);
+    if (retireManager(m_manager))
+        dropInFlightOf(oldManager);
     m_direct = nullptr;
     m_manager = nullptr;
     m_backend = nullptr;
@@ -62,7 +70,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     m_emitterNif  = settings->verifactuNif();
     m_emitterName = settings->verifactuName();
     if (m_emitterNif.isEmpty() || m_emitterName.isEmpty()) {
-        m_lastError = "No se pudo cargar la configuración del emisor";
+        m_lastError = tr("No se pudo cargar la configuración del emisor");
         qCritical() << "Emitter NIF or name not configured in AppSettings";
         return false;
     }
@@ -90,7 +98,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         m_backend = m_manager;
     }
 
-    m_inFlight.clear();   // a new backend: the old one answered (or released) its waiters
+    // The entries of a retired gateway manager stay: its running replies end through the same handler.
     connect(m_backend, &VerifactuBackend::requestFinished, this,
             [this](const QString &requestId, const VerifactuResult &result) {
         m_inFlight.remove(requestId);
@@ -116,55 +124,39 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
     double taxRate,
     const QString &description)
 {
-    // A chained record needs the checked chain, whichever window asks for it.
-    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
-        m_lastError = blocked;
-        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+    if (refusesChainedRecord(__func__))
         return QString();
-    }
-    if (!isConfigured()) {
-        m_lastError = "Verifactu no está configurado correctamente";
-        qWarning() << m_lastError;
-        return QString();
-    }
     // Dated before production (the test environment, or the gateway): a retry must not
     // register it at the real AEAT now. A new invoice is asked this before it is stored.
-    if (!dateBeforeProductionReason(invoiceDate).isEmpty()) {
-        m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
-                          .arg(invoiceNumber, invoiceDate.toString("dd-MM-yyyy"), productionStartDate().toString("dd-MM-yyyy"));
-        qWarning() << "VerifactuIntegration:" << __func__ << "refused for" << invoiceNumber << "- dated before production";
+    if (refusesBeforeProduction(invoiceNumber, invoiceDate, __func__))
         return QString();
-    }
 
     const QString requestId = m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
     if (!requestId.isEmpty())
-        m_inFlight.insert(requestId, invoiceNumber);
+        m_inFlight.insert(requestId, { invoiceNumber, m_backend });
     return requestId;
 }
 
 bool VerifactuIntegration::isInFlight(const QString &invoiceId) const
 {
     for (auto it = m_inFlight.cbegin(); it != m_inFlight.cend(); ++it)
-        if (it.value() == invoiceId)
+        if (it.value().invoiceId == invoiceId)
             return true;
     return false;
+}
+
+void VerifactuIntegration::dropInFlightOf(const QObject *backend)
+{
+    for (auto it = m_inFlight.begin(); it != m_inFlight.end();)
+        it = it.value().backend == backend ? m_inFlight.erase(it) : std::next(it);
 }
 
 QString VerifactuIntegration::cancelInvoiceAsync(
     const QString &invoiceNumber,
     const QDate &invoiceDate)
 {
-    // A chained record needs the checked chain, whichever window asks for it.
-    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
-        m_lastError = blocked;
-        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+    if (refusesChainedRecord(__func__))
         return QString();
-    }
-    if (!isConfigured()) {
-        m_lastError = "Verifactu no está configurado correctamente";
-        qWarning() << m_lastError;
-        return QString();
-    }
     // The real AEAT never held it: there is nothing to cancel there (Anular does it in the books).
     if (invoicePredatesProduction(invoiceNumber, invoiceDate)) {
         m_lastError = tr("La factura %1 es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
@@ -189,17 +181,8 @@ QString VerifactuIntegration::submitRectificationAsync(
     const QString &rectifiedInvoiceNumber,
     const QDate &rectifiedInvoiceDate)
 {
-    // A chained record needs the checked chain, whichever window asks for it.
-    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
-        m_lastError = blocked;
-        qWarning() << "VerifactuIntegration:" << __func__ << "refused while the chain is unchecked";
+    if (refusesChainedRecord(__func__))
         return QString();
-    }
-    if (!isConfigured()) {
-        m_lastError = "Verifactu no está configurado correctamente";
-        qWarning() << m_lastError;
-        return QString();
-    }
     // The gateway's rectificativas carry no FacturasRectificadas (RectificationItems): fine in
     // AEAT's pre-production, never as a real invoice. The direct client sends them.
     if (m_manager && m_manager->getConfig()->getEnvironment() == VerifactuConfig::PRODUCTION) {
@@ -208,21 +191,16 @@ QString VerifactuIntegration::submitRectificationAsync(
         qWarning() << "VerifactuIntegration:" << __func__ << "refused with the gateway in production";
         return QString();
     }
+    if (refusesBeforeProduction(newInvoiceNumber, invoiceDate, __func__))
+        return QString();
     if (!VerifactuInvoice::isRectificationInvoiceType(invoiceType)) {
-        m_lastError = "Tipo de factura no rectificativo";
-        qWarning() << m_lastError;
+        m_lastError = tr("Tipo de factura no rectificativo");
+        qWarning() << "VerifactuIntegration:" << __func__ << "refused: not a rectification type";
         return QString();
     }
 
-    VerifactuInvoice invoice;
-    invoice.setInvoiceNumber(newInvoiceNumber);
-    invoice.setInvoiceDate(invoiceDate);
-    invoice.setInvoiceType(invoiceType);
-    invoice.setSellerNIF(m_emitterNif);
-    invoice.setSellerName(m_emitterName);
-    invoice.setDescription(description.isEmpty()
-        ? kRectificationDescription
-        : description);
+    VerifactuInvoice invoice = invoiceHeader(newInvoiceNumber, invoiceDate, invoiceType,
+                                             description.isEmpty() ? kRectificationDescription : description);
 
     // TaxItems hold the corrected values (substitution: new totals; differences: delta).
     VerifactuTaxItem taxItem;
@@ -240,7 +218,10 @@ QString VerifactuIntegration::submitRectificationAsync(
     }
 
     invoice.calculateTotals();
-    return m_backend->submitInvoiceAsync(invoice);
+    const QString requestId = m_backend->submitInvoiceAsync(invoice);
+    if (!requestId.isEmpty())
+        m_inFlight.insert(requestId, { newInvoiceNumber, m_backend });
+    return requestId;
 }
 
 QString VerifactuIntegration::generateQRAsync(
@@ -250,11 +231,8 @@ QString VerifactuIntegration::generateQRAsync(
     double taxRate,
     const QString &description)
 {
-    if (!isConfigured()) {
-        m_lastError = "Verifactu no está configurado correctamente";
-        qWarning() << m_lastError;
+    if (refusesUnconfigured(__func__))
         return QString();
-    }
 
     return m_backend->generateQRAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
 }
@@ -268,17 +246,63 @@ QPixmap VerifactuIntegration::qrBeforeReply(const QString &invoiceNumber, const 
     return m_direct->queuedRecordQr(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, QString()));
 }
 
+VerifactuInvoice VerifactuIntegration::invoiceHeader(const QString &number, const QDate &date,
+                                                     VerifactuInvoice::InvoiceType type,
+                                                     const QString &description) const
+{
+    VerifactuInvoice invoice;
+    invoice.setInvoiceNumber(number);
+    invoice.setInvoiceDate(date);
+    invoice.setInvoiceType(type);
+    invoice.setSellerNIF(m_emitterNif);
+    invoice.setSellerName(m_emitterName);
+    invoice.setDescription(description);
+    return invoice;
+}
+
+bool VerifactuIntegration::refusesChainedRecord(const char *operation)
+{
+    // A chained record needs the checked chain, whichever window asks for it.
+    if (const QString blocked = numberingBlockedReason(); !blocked.isEmpty()) {
+        m_lastError = blocked;
+        qWarning() << "VerifactuIntegration:" << operation << "refused while the chain is unchecked";
+        return true;
+    }
+    return refusesUnconfigured(operation);
+}
+
+bool VerifactuIntegration::refusesUnconfigured(const char *operation)
+{
+    if (isConfigured())
+        return false;
+    m_lastError = tr("Verifactu no está configurado correctamente");
+    qWarning() << "VerifactuIntegration:" << operation << "refused: Verifactu is not configured";
+    return true;
+}
+
+bool VerifactuIntegration::refusesBeforeProduction(const QString &invoiceNumber, const QDate &invoiceDate,
+                                                   const char *operation)
+{
+    if (!isBeforeProductionStart(invoiceDate))
+        return false;
+    m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
+                      .arg(invoiceNumber, AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));
+    qWarning() << "VerifactuIntegration:" << operation << "refused for" << invoiceNumber << "- dated before production";
+    return true;
+}
+
+bool VerifactuIntegration::isBeforeProductionStart(const QDate &invoiceDate) const
+{
+    const QDate start = productionStartDate();
+    return start.isValid() && invoiceDate.isValid() && invoiceDate < start;
+}
+
 VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate,
                                                          double taxBase, double taxRate,
                                                          const QString &description) const
 {
-    VerifactuInvoice invoice;
-    invoice.setInvoiceNumber(invoiceNumber);
-    invoice.setInvoiceDate(invoiceDate);
-    invoice.setInvoiceType(VerifactuInvoice::SIMPLIFIED);
-    invoice.setSellerNIF(m_emitterNif);
-    invoice.setSellerName(m_emitterName);
-    invoice.setDescription(description.isEmpty() ? kInvoiceDescription : description);
+    VerifactuInvoice invoice = invoiceHeader(invoiceNumber, invoiceDate, VerifactuInvoice::SIMPLIFIED,
+                                             description.isEmpty() ? kInvoiceDescription : description);
 
     // The callers pass the gross over (1 + rate): split back from the gross in cents, so the
     // record's base + cuota equal the amount charged and printed.
@@ -295,11 +319,8 @@ VerifactuInvoice VerifactuIntegration::simplifiedInvoice(const QString &invoiceN
 
 QString VerifactuIntegration::queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate)
 {
-    if (!isConfigured()) {
-        m_lastError = "Verifactu no está configurado correctamente";
-        qWarning() << m_lastError;
+    if (refusesUnconfigured(__func__))
         return QString();
-    }
     return m_backend->queryInvoiceAsync(invoiceNumber, invoiceDate);
 }
 
@@ -365,11 +386,11 @@ bool VerifactuIntegration::invoicePredatesProduction(const QString &invoiceNumbe
 
 QString VerifactuIntegration::dateBeforeProductionReason(const QDate &invoiceDate) const
 {
-    const QDate start = productionStartDate();
-    if (!start.isValid() || !invoiceDate.isValid() || invoiceDate >= start)
+    if (!isBeforeProductionStart(invoiceDate))
         return QString();
     return tr("La fecha %1 es anterior al paso a PRODUCCIÓN (%2): una factura nueva no puede llevarla, porque no "
-              "se registraría en la AEAT real.").arg(invoiceDate.toString("dd-MM-yyyy"), start.toString("dd-MM-yyyy"));
+              "se registraría en la AEAT real.")
+        .arg(AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));
 }
 
 QString VerifactuIntegration::sendingError() const
@@ -436,7 +457,7 @@ QString VerifactuIntegration::invoicingBlockedReason()
     else if (m_manager)
         missing = m_manager->getConfig()->getValidationError();
     return tr("Verifactu no está configurado (%1): no se puede cobrar ni emitir facturas. Configúrelo en "
-              "Archivo → Configuración.")
+              "Archivo \u2192 Configuración.")
         .arg(missing.isEmpty() ? tr("falta la configuración") : missing);
 }
 
@@ -455,7 +476,6 @@ void VerifactuIntegration::loadEmitterConfiguration()
     QString serviceKey  = settings->verifactuServiceKey();
 
     m_manager->getConfig()->setEmitterData(emitterNIF, emitterName);
-    m_manager->getConfig()->setSystemData("LAIDEAL", QString(PROJECT_VERSION));
     m_manager->getConfig()->setServiceKey(serviceKey);
 
     VerifactuConfig::Environment env = settings->verifactuProduction()

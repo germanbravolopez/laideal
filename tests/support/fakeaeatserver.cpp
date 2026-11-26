@@ -193,6 +193,11 @@ void FakeAeatServer::handle(QTcpSocket *socket)
     m_buffers.remove(socket);
     m_requests << request;
 
+    if (m_dropNextSubmission && request.kind == QLatin1String("RegFactu")) {
+        m_dropNextSubmission = false;
+        socket->abort();
+        return;
+    }
     Reply reply;
     if (!m_scripted.isEmpty())
         reply = m_scripted.dequeue();
@@ -214,9 +219,19 @@ void FakeAeatServer::handle(QTcpSocket *socket)
                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
         guard->disconnectFromHost();
     };
-    if (reply.delayMs > 0)
+    if (reply.gated)
+        m_gated.append(send);
+    else if (reply.delayMs > 0)
         QTimer::singleShot(reply.delayMs, this, send);
     else
+        send();
+}
+
+void FakeAeatServer::releaseGated()
+{
+    const auto held = m_gated;
+    m_gated.clear();
+    for (const auto &send : held)
         send();
 }
 
@@ -285,7 +300,8 @@ QByteArray FakeAeatServer::answer(const Request &request)
                 "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
                 .arg(h.invoiceNumber, h.issueDate, h.total,
                      (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
-                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>").arg(shown.hash),
+                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>")
+                                                .arg(m_queryHashesLowerCase ? shown.hash.toLower() : shown.hash),
                      m_registeredRequestId.value(keyOf(h.issuerNif, QStringLiteral("Alta"), h.invoiceNumber)),
                      cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), shown.generatedAt,
                      (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()

@@ -15,6 +15,7 @@
 #include <QIntValidator>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -110,11 +111,15 @@ private slots:
         auto *check = new QCheckBox("x");
         auto *fixedCombo = new QComboBox;
         fixedCombo->addItem("a");
-        for (QWidget *w : QList<QWidget *>{list, check, fixedCombo}) {
+        auto *radio = new QRadioButton("y");
+        for (QWidget *w : QList<QWidget *>{list, check, radio, fixedCombo}) {
             f.dialog.layout()->addWidget(w);
             w->show();
             press(w);
+            QCOMPARE(f.dialog.focusWidget(), w);        // it really has the focus
         }
+        QVERIFY(!check->isChecked());                   // Enter did not toggle them
+        QVERIFY(!radio->isChecked());
         QCOMPARE(f.primaryClicks, 0);
         QCOMPARE(f.otherClicks, 0);
         auto *editable = new QComboBox;
@@ -274,6 +279,26 @@ private slots:
         QApplication::setFont(original);
         QCOMPARE(heading->font().pixelSize(), 14);
         QVERIFY(heading->font().bold());
+    }
+
+    void test_limitDateRange()
+    {
+        const QDate today(2026, 6, 15);
+        QDateEdit edit;
+        // The latest valid candidate not after `latest` is the minimum.
+        UiKit::limitDateRange(&edit, { QDate(2026, 3, 1), QDate(2026, 5, 2), QDate() }, today);
+        QCOMPARE(edit.maximumDate(), today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 5, 2));
+        // A candidate after `latest` is ignored.
+        UiKit::limitDateRange(&edit, { QDate(2026, 4, 1), QDate(2026, 7, 1) }, today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        // With no usable candidate the minimum stays; the maximum is still set.
+        UiKit::limitDateRange(&edit, { QDate(), QDate(2027, 1, 1) }, QDate(2026, 6, 20));
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        QCOMPARE(edit.maximumDate(), QDate(2026, 6, 20));
+        UiKit::limitDateRange(&edit, {}, today);
+        QCOMPARE(edit.minimumDate(), QDate(2026, 4, 1));
+        QCOMPARE(edit.maximumDate(), today);
     }
 
     void test_sortedNames_spanishOrder()

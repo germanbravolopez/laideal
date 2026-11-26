@@ -57,6 +57,8 @@ target_link_libraries(test_genlistado PRIVATE
 )
 add_test(NAME genlistado
     COMMAND test_genlistado -o ${CMAKE_BINARY_DIR}/test-results-genlistado.xml,junitxml -o -,txt)
+# QTEST_MAIN (QApplication): the generator is a QDialog.
+set_tests_properties(genlistado PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # facturas: pure IVA split, amount parsing and the dialog save on a throwaway DB.
 add_executable(test_facturas test_facturas.cpp)
@@ -66,6 +68,7 @@ target_link_libraries(test_facturas PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql       # facturas.h includes <QSqlQueryModel>
     facturas
     sql_lite                         # TestSchema (throwaway DB for the dialog tests)
+    verifactu_types                  # header-only: splitGross
 )
 add_test(NAME facturas
     COMMAND test_facturas -o ${CMAKE_BINARY_DIR}/test-results-facturas.xml,junitxml -o -,txt)
@@ -88,7 +91,7 @@ add_executable(test_settingsdialog test_settingsdialog.cpp)
 target_link_libraries(test_settingsdialog PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Widgets
-    appsettings
+    settingsdialog
 )
 add_test(NAME settingsdialog
     COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
@@ -102,6 +105,7 @@ target_link_libraries(test_add_garment PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     add_garment
+    recog_prendas                   # aeatReconcileSummaryHtml
     sql_lite
     verifactu_types
 )
@@ -132,6 +136,19 @@ target_link_libraries(test_versioncompare PRIVATE
 )
 add_test(NAME version_compare
     COMMAND test_versioncompare -o ${CMAKE_BINARY_DIR}/test-results-versioncompare.xml,junitxml -o -,txt)
+
+# UpdaterDialog: the error of a failed download is hidden when the download is retried.
+add_executable(test_versiondialog test_versiondialog.cpp)
+target_link_libraries(test_versiondialog PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Network
+    updater
+    uikit
+)
+add_test(NAME updater_dialog
+    COMMAND test_versiondialog -o ${CMAKE_BINARY_DIR}/test-results-versiondialog.xml,junitxml -o -,txt)
+set_tests_properties(updater_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # verifactu: the pure JSON response parser (parseVerifactuResponse). Uses
 # QTEST_MAIN (QApplication for QPixmap) under the offscreen platform so the QR
@@ -473,7 +490,7 @@ set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 600)
 set_tests_properties(e2e_app PROPERTIES TIMEOUT 600)
 
 # Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
-# the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port
+# the fake AEAT as its own process, and the reader of the ESC/POS bytes the TCP/IP (RAW) port
 # printer captures.
 add_executable(fake_aeat_server tools/fake_aeat_server.cpp
     support/fakeaeatserver.h
@@ -498,6 +515,7 @@ target_link_libraries(test_applogger PRIVATE
 )
 add_test(NAME applogger
     COMMAND test_applogger -o ${CMAKE_BINARY_DIR}/test-results-applogger.xml,junitxml -o -,txt)
-# The sql_lite suite (migration fixtures on throwaway databases) takes ~65 s on a CI
-# runner and passed 120 s on a slow one.
-set_tests_properties(sql_lite PROPERTIES TIMEOUT 300)
+# The sql_lite suite (about 150 cases, many migrating a throwaway database) takes 35-70 s
+# locally and a CI runner timed out at 300 s: like the other long suites, twice that, still
+# short of a real hang.
+set_tests_properties(sql_lite PROPERTIES TIMEOUT 600)

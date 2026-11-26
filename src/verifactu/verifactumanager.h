@@ -1,6 +1,7 @@
 #ifndef VERIFACTUMANAGER_H
 #define VERIFACTUMANAGER_H
 
+#include <functional>
 #include <memory>
 #include <QString>
 #include <QObject>
@@ -37,9 +38,8 @@ public:
     // mistaken for a submission reply by the existing handlers.
     QString queryInvoiceAsync(const QString &invoiceNumber, const QDate &invoiceDate = QDate()) override;
 
-    QString getConfigurationInfo() const;
     bool isConfigured() const override { return m_config->isValid(); }
-    QString configurationInfo() const override { return getConfigurationInfo(); }
+    QString configurationInfo() const override;
 
     // Synchronous diagnostic (interactive button in SettingsDialog). POSTs a stub to
     // /Create with a 10s setTransferTimeout - bounded wait, never blocks indefinitely.
@@ -50,7 +50,6 @@ public:
 
 private:
     QString getValidationUrl(const VerifactuInvoice &invoice) const;
-    QString getLastError() const { return m_lastError; }
 
     std::unique_ptr<VerifactuConfig> m_config;
     QNetworkAccessManager *m_networkManager;
@@ -63,8 +62,13 @@ private:
 
     // Queues an error so callers see it via requestFinished, same as a real reply.
     void emitErrorAsync(const QString &reqId, VerifactuResult::Status status, const QString &description);
-    // Connects reply finished to a lambda that processes the response and emits requestFinished.
-    void wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind);
+    // Connects reply finished to a handler that parses the response and emits requestFinished;
+    // `stamp` may adjust a parsed result before it goes out.
+    void wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind,
+                   std::function<void(VerifactuResult &)> stamp = nullptr);
+    // The unknown-outcome result of a failed reply; `gatewayReason` appends the reason the
+    // gateway gave in an HTTP error body.
+    static VerifactuResult networkErrorResult(QNetworkReply *reply, bool gatewayReason);
 };
 
 #endif // VERIFACTUMANAGER_H

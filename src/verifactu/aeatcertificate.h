@@ -37,6 +37,15 @@ public:
 
     bool loadFromStore(const QString &thumbprint, QString *error);
     bool loadFromFile(const QString &path, const QString &password, QString *error);
+    // From the Windows store when a thumbprint is given, else from the file.
+    bool load(const QString &thumbprint, const QString &path, const QString &password, QString *error);
+
+    // The warning shown when the certificate's NIF is not the issuer's; empty when it is
+    // (or the certificate names no NIF).
+    static QString representativeWarning(const QString &certificateNif, const QString &issuerNif);
+
+    // Why a certificate expiring at `expiry` cannot be used at `now` (also when the date is unreadable); empty when it can.
+    static QString expiryProblem(const QDateTime &expiry, const QDateTime &now);
 
     bool  isLoaded() const { return m_context != nullptr; }
     Info  info() const;

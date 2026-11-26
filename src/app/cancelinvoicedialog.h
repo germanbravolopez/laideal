@@ -3,7 +3,6 @@
 
 #include <QDate>
 #include <QDialog>
-#include <QHash>
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
@@ -15,12 +14,11 @@ class QLabel;
 class QPushButton;
 class QTableWidget;
 
-// Cancellation dialog. 8.6+: per-event scope so a partial-pay ticket (multiple
-// rows of distinct verifactu_invoice_seq, each its own AEAT submission) shows
-// one row per (n_recibo, seq) pair with an individual "Anular" button. A
-// single-event legacy ticket (seq=0 only) renders the same uniform table with
-// one row. Each cancellation sends to AEAT under the literal invoice_id stored
-// at submit time and updates only the rows of that seq.
+// Cancellation dialog. Per-event scope: a partial-pay ticket (rows of distinct
+// verifactu_invoice_seq, each its own AEAT submission) shows one row per (n_recibo, seq)
+// pair with an individual "Anular" button; a ticket with seq=0 only shows one row. Each
+// cancellation sends to AEAT under the literal invoice_id stored at submit time and updates
+// only the rows of that seq.
 class CancelInvoiceDialog : public QDialog
 {
     Q_OBJECT
@@ -41,11 +39,10 @@ private slots:
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
 
 private:
-    // A sent rectificativa of the ticket (its n_recibo in *number, empty for none): cancel
-    // it first, or its amount stays in the books after the original is gone. False when
-    // the database could not be read.
     // The first press of a row's Anular says what will be cancelled; the second sends it.
     void armCancellation(int row);
+    // Shows `ticketNum` as the search of its number does.
+    void loadTicket(const QString &ticketNum);
     // An invoice from before production: cancelled in the books, nothing sent to AEAT.
     void cancelLocally(int row);
     void disarmCancellation();
@@ -85,6 +82,7 @@ private:
     int actionColumnWidth() const;
     void fitTableWidth();
     void setActionsEnabled(bool enabled);
+    bool canCancel(const Event &e) const;
 };
 
 #endif // CANCELINVOICEDIALOG_H

@@ -6,7 +6,6 @@
 #include <QUrl>
 
 class QLabel;
-class QTextEdit;
 class QProgressBar;
 class QPushButton;
 class Updater;
@@ -40,6 +39,7 @@ private slots:
     void onDownloadFailed(const QString &error);
 
 private:
+    void showAvailableHeader();
     Updater *m_updater;
     QUrl m_installerUrl;
     QString m_latestVersion;
@@ -47,7 +47,6 @@ private:
 
     QLabel       *m_header;
     UiKit::ResultPanel *m_lblResult = nullptr;
-    QTextEdit    *m_notes;
     QProgressBar *m_progress;
     QPushButton  *m_btnUpdate;
     QPushButton  *m_btnLater;

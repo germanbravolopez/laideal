@@ -59,6 +59,8 @@ public:
     // The ESC/POS bytes of the last buildTicket() (tests read the rendered text).
     QByteArray ticketBytes() const { return m_ticketBytes; }
     QPixmap resolveQrCode();
+    // Test seam: the QR in qrCode is the one of a queued record (resolveQrCode() sets it).
+    void setQrFromQueuedRecord(bool fromQueued) { m_qrFromQueuedRecord = fromQueued; }
     // Literal AEAT InvoiceID for the loaded rows: first non-empty
     // verifactu_invoice_id, else bare n_recibo (legacy / never submitted).
     QString displayInvoiceId() const;
@@ -75,6 +77,8 @@ private slots:
 private:
     // The last resolveQrCode() drew the QR of the direct client's queued record.
     bool m_qrFromQueuedRecord = false;
+    // The address a complete invoice carries: the typed one, else the client's stored one; may be empty.
+    QString recipientAddress();
     void buildUi();
     bool checkTicketPaid(int row);
     bool checkAnyItemPaid();

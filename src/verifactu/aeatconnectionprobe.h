@@ -45,7 +45,7 @@ private:
     AeatCertificate m_certificate;
     AeatTransport  *m_transport;
 
-    void fail(const QString &text);
+    void fail(const char *step, const QString &text);
 };
 
 #endif // AEATCONNECTIONPROBE_H

@@ -17,11 +17,16 @@
 struct VerifactuResult;
 enum class VerifactuEstado;
 
+// Dates are stored as text in this format ("05-03-2026"); parseDbDate gives an invalid
+// QDate for anything else.
+inline const QString kDbDateFormat = QStringLiteral("dd-MM-yyyy");
+inline QDate parseDbDate(const QString &text) { return QDate::fromString(text, kDbDateFormat); }
+inline QString dbDateText(const QDate &date) { return date.toString(kDbDateFormat); }
+
 // Configured once at startup by main() via setDbPath().
-// All sql_lite functions expand DB_PATH to the runtime-configured value.
+// dbPath() returns the runtime-configured value.
 void    setDbPath(const QString &path);
 QString dbPath();
-#define DB_PATH dbPath()
 
 // Opens the connection if it is closed and closes it again on destruction only if this scope
 // opened it, so a caller's open connection survives. Declare it before any QSqlQuery.
@@ -75,6 +80,12 @@ bool        moneyParse(const QString &text, double *value);
 // ("28,41"), no thousands separator. Storage, the maths and AEAT keep the dot.
 QString     displayMoney(double value);
 QString     displayMoney(const QString &stored);
+// displayMoney followed by a space and the euro sign.
+QString     displayEuro(double value);
+QString     displayEuro(const QString &stored);
+// Reads a typed decimal that may use a comma ("2,5"): trimmed, comma read as the dot.
+// Lenient like QString::toDouble (0 and *ok false when unreadable); moneyParse is the strict one.
+double      parseDecimal(const QString &text, bool *ok = nullptr);
 // A stored decimal such as a size ("2.5") shown with the comma ("2,5"); other text unchanged.
 QString     displayDecimal(const QString &stored);
 QString     selectFromWhereLike(QSqlDatabase &db, const QString &itemToGet, const QString &table,
@@ -166,16 +177,16 @@ int nextTicketNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
 // "R-<n>", n one above the highest R- number stored or at AEAT. Empty with *ok false when
 // it cannot be read. Earlier rectificativas keep their ticket-series numbers.
 QString nextRectificationNumber(QSqlDatabase &db, int highestAtAeat, bool *ok = nullptr);
-// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
-// paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
-// any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
-// never be resent and must not keep the warning up.
 // The day (ISO) the direct AEAT client first ran in PRODUCTION on this database, or empty.
 QString aeatProductionStartIso(QSqlDatabase &db);
 // The floor the pending / refused lists apply: `floorIso` (the setting), or the production
 // start when it is later and the direct client works in production - a ticket paid before
 // that day was never invoiced at the real AEAT and must not be sent there.
 QString verifactuRecoveryFloorIso(QSqlDatabase &db, const QString &floorIso, bool directProduction);
+// Invoices (payment events) AEAT refused that are still to be resent: paid rows in ERROR,
+// paid on or after `floorIso` (yyyy-MM-dd, the recovery floor; empty = all). AEAT refuses
+// any invoice dated in an earlier year, so a pre-Verifactu ticket sent by mistake can
+// never be resent and must not keep the warning up.
 int refusedInvoiceCount(QSqlDatabase &db, const QString &floorIso = QString());
 // The same invoices, one per payment event, newest payment first: what the operator
 // needs to find and resend each one.
@@ -193,6 +204,9 @@ bool        addNewClient(QSqlDatabase &db, const QString &client, const QString 
                          const QString &direccion, const QString &movil);
 // A supplier invoice into gastos with the next id; false when its date lies in a closed quarter
 // or the insert fails. importe is stored through moneyText.
+// True for the gastos IVA rates the accounting summary sums (sin IVA, 10 %, 21 %); an expense
+// with any other rate is flagged in the detail and kept out of its totals.
+inline bool expenseIvaIsSummarised(int rate) { return rate == 0 || rate == 10 || rate == 21; }
 bool        insertExpenseInvoice(QSqlDatabase &db, const QString &nFactura, const QString &servicio,
                                  const QString &descripcion, const QString &empresa, const QDate &date,
                                  const QString &iva, const QString &importe);
@@ -253,7 +267,7 @@ bool        voidGarmentRow(QSqlDatabase &db, const QString &nRecibo, const QStri
 // True if the ticket has at least one paid garment (pagado = 'SI'). A paid ticket
 // has been submitted to AEAT, so AddGarment refuses to append new garments to it
 // (only unpaid, not-yet-submitted receipts may be altered locally).
-bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo);
+bool        ticketHasPaidGarment(QSqlDatabase &db, const QString &nRecibo, bool *ok = nullptr);
 // True when EVERY garment of the ticket is pagado='SI' (and there is at least one).
 // Drives the "IMPORTE PAGADO" marker on a reprinted recibo, which shows the whole
 // ticket total - "any paid" would claim a partially-paid ticket was settled in full.
@@ -300,11 +314,11 @@ QString     removeSpecialChars(const QString &str);
 int         updateTicketVerifactuFields(QSqlDatabase &db, const QString &ticketNum,
                                         const VerifactuResult &result, int seq = 0);
 
-// Next free verifactu_invoice_seq for a ticket. Counts paid rows so a local-
+// Next free verifactu_invoice_seq for a ticket. `ok` false: the read failed (do not charge). Counts paid rows so a local-
 // only PayDialog event (Verifactu disabled, no estado written) still
 // increments the seq for the next event.
 // `aeatEnvironment`: only the direct client's records of that environment count (empty: all).
-int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment = QString());
+int         nextVerifactuInvoiceSeq(QSqlDatabase &db, const QString &ticketNum, const QString &aeatEnvironment = QString(), bool *ok = nullptr);
 
 // AEAT InvoiceID for a ticket payment event: bare n_recibo for seq 0 (save-time
 // / first event), "<n_recibo>-<seq>" for a later partial-pay event. Single source
@@ -404,7 +418,7 @@ struct IncomeTicketDetail {
     QString nRecibo, cliente, fechaPago;
     double  importe  = 0.0;
     int     garments = 0;
-    int     invalidAmounts = 0;   // garment rows whose importe uses a comma decimal: listed, not summed
+    int     invalidAmounts = 0;   // garment rows whose importe is unreadable: listed, not summed
     QMap<int, double> invoices;   // verifactu_invoice_seq -> its gross: one AEAT invoice each
 };
 // One gastos row behind the Contabilidad gastos summary. iva is the stored rate
@@ -413,7 +427,7 @@ struct ExpenseDetail {
     QString nFactura, empresa, servicio, fecha;
     int     iva     = 0;
     double  importe = 0.0;
-    bool    invalidAmount = false;  // importe uses a comma decimal: listed, not summed (importe = 0)
+    bool    invalidAmount = false;  // importe unreadable (a comma decimal or any text): listed, not summed (importe = 0)
 };
 
 // A paid ticket later cancelled at AEAT (ANULADA) or superseded by a substitution
@@ -433,8 +447,8 @@ struct RegularizationDetail {
 // the single source of every Contabilidad figure: the report sums these same rows,
 // so a summary and its detail table cannot disagree. Income: one entry per paid
 // n_recibo (kIngresosIncomeWhere: pagado = 'SI', not ANULADA / RECTIFICADA);
-// expenses: every gastos row. Ordered by date, then ticket number / id. A
-// comma-decimal importe is never summed: it is counted in invalidAmounts /
+// expenses: every gastos row. Ordered by date, then ticket number / id. An
+// unreadable importe (a comma decimal included) is never summed: it is counted in invalidAmounts /
 // invalidAmount so the report can flag it. A paid row cancelled / rectified with a
 // fecha_anulacion still counts as income in its payment period, and is listed by
 // regularizationsBetweenDates in the period of its fecha_anulacion. (Pre-10.12
@@ -467,13 +481,27 @@ bool reopenQuarter(QSqlDatabase &db, int quarter, int year);
 QVector<QuarterClosure> quarterClosures(QSqlDatabase &db, int quarter, int year);
 // quarterKey() of every closed quarter, for views that check many rows at once.
 QSet<int> closedQuarterKeys(QSqlDatabase &db);
+// The quarter (1-4) of a month (1-12), and its first / last day.
+inline int quarterOfMonth(int month) { return (month + 2) / 3; }
+inline QDate quarterFirstDay(int quarter, int year) { return QDate(year, (quarter - 1) * 3 + 1, 1); }
+inline QDate quarterLastDay(int quarter, int year) { return QDate(year, quarter * 3, 1).addMonths(1).addDays(-1); }
 inline int quarterKey(int quarter, int year) { return year * 10 + quarter; }
-inline int quarterKey(QDate date) { return date.isValid() ? quarterKey((date.month() + 2) / 3, date.year()) : 0; }
+inline int quarterKey(QDate date) { return date.isValid() ? quarterKey(quarterOfMonth(date.month()), date.year()) : 0; }
 // Any payment, cancellation (fecha_anulacion) or gasto dated in the quarter: something to report.
 bool quarterHasMovements(QSqlDatabase &db, int quarter, int year);
 // `preferred` when its quarter is open, else today, else the first day of the next
 // open quarter: where a late change (a subtraction) may still be counted.
 QDate openPeriodDate(QSqlDatabase &db, QDate preferred);
+
+// The client and reception date shared by the rows of a ticket (receptionDate as
+// stored). found is false when no row has a client; *ok is false when the read failed
+// (found is false too).
+struct TicketHeader {
+    bool    found = false;
+    QString client;
+    QString receptionDate;
+};
+TicketHeader ticketHeader(QSqlDatabase &db, const QString &nRecibo, bool *ok = nullptr);
 
 // Latest fecha_pago among the paid rows of a ticket; invalid QDate when none.
 // A rectificativa may not be dated before it.
@@ -484,8 +512,8 @@ QDate ticketLastPaymentDate(QSqlDatabase &db, const QString &nRecibo);
 // already set): the payment period keeps the income and the cancellation is
 // accounted in the period it happens. Only paid rows - the ones the invoice
 // covered - are marked; unpaid garments of the ticket (which share seq 0) stay
-// chargeable and are invoiced on their own when paid. Returns false when the
-// UPDATE fails or matches no paid row.
+// chargeable and are invoiced on their own when paid. A row already ANULADA is left
+// as it is (true). Returns false when the UPDATE fails or matches no paid row.
 bool markInvoiceSeqCancelled(QSqlDatabase &db, const QString &nRecibo, int seq, QDate cancelDate,
                                     const QString &cancelXml = QString());
 // Marks the paid rows of a ticket RECTIFICADA after an accepted substitution

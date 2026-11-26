@@ -1,107 +1,61 @@
 # Unit and integration suites
 
-What each `tests/test_*.cpp` suite covers, grouped by the module it tests. Conventions, patterns and how to run them are in [README.md](README.md); the end-to-end bench is in [e2e.md](e2e.md).
+One entry per CTest suite, grouped by module: the CTest name, the test file, the library under test and what it covers. The test files hold the exact assertions. Conventions, seams and timeouts are in [README.md](README.md); the suites that drive whole windows against a fake server (`e2e_verifactu`, `e2e_app`, `e2e_aeat_direct`) are in [e2e.md](e2e.md).
 
-| Suite | Links | Application | Area |
-|-------|-------|-------------|------|
-| `test_sql_lite` | `sql_lite` | guiless | DB functions, accounting listings, Verifactu row state, migrations |
-| `test_contabilidad` | `contabilidad`, `reporthtml` | guiless | Accounting periods, figures, ticket counts, report tables |
-| `test_verifactu_models` | `verifactu` | guiless | Invoice / tax-item / config models |
-| `test_verifactu_response` | `verifactu` | offscreen | AEAT reply parsing, query records, QR decode |
-| `test_aeat_hash` | `verifactu` | - | Direct-client huella and QR URL against the official AEAT vectors |
-| `test_aeat_chaincheck` | `verifactu` | - | `AeatChainCheck`: recomputed huellas, links per issuer, a restart (and a recorded one), a restored copy's continuation |
-| `test_aeat_record` | `verifactu` | - | Records and SOAP envelopes; writes samples for `aeat_xsd` |
-| `aeat_xsd` | Python + lxml | - | The samples and reply fixtures against the official AEAT XSDs (skipped without lxml) |
-| `test_aeat_response` | `verifactu` | - | AEAT replies / faults and their mapping; record summary; chain tip; a lost cancellation |
-| `test_aeat_store` | `verifactu` | - | Chain head and record outbox on a throwaway SQLite DB |
-| `test_aeat_qr` | `verifactu` | offscreen | The locally drawn QR (structure; a sample PNG) |
-| `test_aeat_direct_backend` | `verifactu` | offscreen | The direct backend against the fake AEAT SOAP service; certificates; self-test; the connection probe (*Probar conexión*) |
-| `test_appsettings` | `appsettings` | guiless | DPAPI secret, settings getters, language, fixed IVA |
-| `test_settingsdialog` | `appsettings` | offscreen | Configuración dialog behaviour |
-| `test_mysortfilterproxymodel` | `tableview` | guiless | Search and sort in the grids |
-| `test_textcolordelegate` | `tableview` | offscreen | Cell colours, ingresos column placement |
-| `test_escpos` | `printing` | guiless | ESC/POS bytes and ticket rendering |
-| `test_imprimir` | `laideal_app` | offscreen | Imprimir through the `ThermalPrinter::setTransport` seam: offline warning in the panel, two copies, printing disabled, factura dates, completa DNI / address, 58 mm width |
-| `test_ticket_preview` | `printing` | GUI (native platform on Windows for real fonts, offscreen elsewhere) | Rendered recibo / factura preview |
-| `test_facturas` | `facturas` | guiless | IVA split, `parseGross`, the dialog's save validation, duplicates and refusals on a throwaway DB |
-| `test_genlistado` | `listado` | guiless | Listado helpers, `splitGasto` (IVA for any typed rate, sums in cents) |
-| `test_add_garment` | `laideal_app` | offscreen | Añadir prendas: validation order, incomplete form, closed quarter on the payment and the reception date, m2 without size, comma size, unpaid / paid row shape, invoicing blocked, the paid garment's invoice seq (0, or past a number already used at AEAT) |
-| `test_backup_manager` | `backup` | guiless | Backup copies (rename once verified, second folder, stale `.part`, same second, concurrent run), retention, failure warning |
-| `test_applogger` | `logging` | guiless | Log rotation (in the session and at start), a failed rename keeps the old log, an unopenable file |
-| `test_reporthtml` | `reporthtml` | guiless | Report HTML scaffolding |
-| `test_uikit` | `uikit` | offscreen | `AmountSpinBox` (shows "12,50", takes "7.25" and "7,25"); Enter rules: `setUpDialog` presses the enabled primary button (nothing without one, no repeat), `onEnter` runs its own action (once, only for acceptable input) |
-| `test_instancelock` | `laideal_app` | offscreen | One copy per database: the lock path ignores case and separators, a second lock on the same database is refused until the first is released, another database is free, and a crashed copy's lock is taken over |
-| `test_selfcheck` | `laideal_app` | offscreen | The post-update self-check (checks M1a settings, M1b backup age, M1 / M1d migrations once and twice, M1e money counts, M1c chain, M2 data, M3 print, M5 installer): newest backup, the settings copy (database copy, direct client in pre-production, no gateway key), M1 passes and fails on a failed migration, M2's facts (ticket, invoice to print, closed quarter's figures, filed PDF), the report; one whole run of the window leaves the live DB and settings byte for byte unchanged, deletes the copies and reports no shop data |
-| `test_versioncompare` | `updater` | guiless | Version comparison, `parseRelease`, update check and installer download against a local fake server (hash mismatch, truncated, 404, cancel, unknown URL) |
+"Offscreen" means the suite sets `QT_QPA_PLATFORM=offscreen` (it needs a widget or `QPixmap`); the others are guiless. Every suite is registered in `tests/CMakeLists.txt` with a 120 s timeout, except the three long ones (`sql_lite`, `aeat_direct_backend`, `e2e_app`): their limits are in [README.md](README.md#running-the-tests).
 
 ---
 
-## Database — `test_sql_lite`
+## Database and accounting
 
-Links the `sql_lite` static lib and exercises its free functions against a throwaway SQLite DB in a `QTemporaryDir` (schema created in `initTestCase`, tables cleared in `init()` before each test). Fixtures stay on success paths with dot-decimal amounts so the functions' modal `QMessageBox` error paths never fire under the guiless main.
+| CTest | File | Library | Covers |
+|-------|------|---------|--------|
+| `sql_lite` | `test_sql_lite.cpp` | `sql_lite` | The DB functions on a throwaway SQLite file (fixtures on success paths, dot-decimal amounts, so no modal error box fires). Groups: the Contabilidad detail listings every report figure comes from; cancellations and regularisations; `migrateDatabase` step by step on old-shape data; the `accounting_closures` table, triggers and row lock; the Verifactu row state (invoice seq, estado updates, reconcile, pending events, AEAT export records); garment writes (pickup, size and price in cents, split, insert, void) |
+| `contabilidad` | `test_contabilidad.cpp` | `contabilidad`, `reporthtml` | Period ranges (year roll-over), the lock options and status messages, income / IVA / gastos figures, net ticket counts (cancellations and credit notes), the summary and detail report tables |
+| `genlistado` | `test_genlistado.cpp` | `listado` | Listado helpers: filename suffix, which gasto rows print, the IVA split of a gasto |
+| `facturas` | `test_facturas.cpp` | `facturas` | The supplier-invoice IVA split, `parseGross` refusals, the dialog's save validation, duplicates and failures on a throwaway DB |
+| `add_garment` | `test_add_garment.cpp` | `add_garment` | The Añadir prendas window: validation order, closed quarters, date limits, m2 size rules, unpaid and paid row shape, invoicing blocked, the invoice seq of a paid garment; Recogida's AEAT reconcile summary (`aeatReconcileSummaryHtml`) |
+| `reporthtml` | `test_reporthtml.cpp` | `reporthtml` | Euro formatting and the report HTML scaffolding |
 
-- **Contabilidad detail listings** (the single source of every report figure): `incomeTicketsBetweenDates` filters (paid, not `ANULADA`/`RECTIFICADA`, legacy blank included, half-open range) and grouping by ticket; `expensesBetweenDates`; NULL IVA kept as `-1`; comma-decimal amounts flagged, never summed; `annualDetailsByQuarter` equal to the four per-quarter listings.
-- **Cancellations and regularisations**: `markInvoiceSeqCancelled` / `markTicketRectified` stamp `fecha_anulacion` on the paid rows of the event only (unpaid garments stay chargeable), never overwrite it, and fail when no paid row matches; `regularizationsBetweenDates` (income stays in the payment period, subtracted where cancelled; local voids never appear); `ticketLastPaymentDate`; `quarterIsClosed` (an empty month inside a closed quarter reads closed; gastos-only).
-- **Migrations** (`migrateDatabase`): unpaid `PENDIENTE` → `SIN COBRAR`; estado casing normalised; old void dates moved into `fecha_anulacion`; unpaid remainder wrongly marked `ANULADA` by a pre-10.12 cancellation repaired (local voids and `RECTIFICADA` rows left alone); garments split off a paid row relinked to their `ENVIADA` invoice (legacy payments, cancelled and ambiguous matches left alone); open three/four-decimal amounts rounded to cents, paid ones left as stored; rows of one ticket sharing a hash, or with an empty one, get a new one (the row kept is one with a CSV; a second row AEAT holds is only logged; the same hash on two tickets left alone; idempotent); the decimal comma replaced in `gastos` (not in a closed quarter, not when a dot is there too) and `prendas`, never in `ingresos`. The suite's schema itself is built by `migrateDatabase` (`tests/support/testschema.h`) and checked against `INGRESOS_COL_*`.
-- **Accounting closures** (`accounting_closures`): the one-time migration carries over exactly the quarters the old `edit_lock` flags closed (blank / garbage dates and `'0'` / NULL flags ignored), runs once, and never re-closes a quarter reopened later; `closeQuarter` refuses a second close and `reopenQuarter` an open quarter; `quarterClosures` keeps the close / reopen history in order with the report files; the triggers refuse a `DELETE`, a rewrite and a second reopen, the unique index a second open closure, the `CHECK` a quarter 5; `quarterIsClosed` by date (year roll-over, invalid date) and `quarterKey`; `quarterHasMovements` (payment, gasto or cancellation); the row lock follows the closed quarter of `fecha_pago` (`updateTicketSizeAndPrice`, `splitGarmentRow`), and a stale `edit_lock` value is ignored.
-- **Verifactu row state**: `nextVerifactuInvoiceSeq`, `verifactuInvoiceId` / display id, `updateTicketVerifactuFields` (unpaid siblings untouched, transport failure stays PENDIENTE, AEAT rejection is final, settled rows never rewritten and the call returns 0), `verifactuEventFor` (earliest payment date by date, not text), `reconcileVerifactuFromAeat` (adopt CSV, refusals), `pendingVerifactuEvents` (excludes unpaid / SIN COBRAR, returns the payment date), `aeatExportRecords` (one record per payment event with its total and literal id; CSV-only invoices, cancellations in the period and the rectificativa link included; undated invoices counted), `submittedInvoiceEvents` (one per seq over paid rows, earliest date by date), `ticketAllGarmentsPaid`, `ticketHasPaidGarment`.
-- **Garment writes** behind Recogida de Prendas and MainWindow (no suite covers the Recogida window itself: the e2e bench and the UI smoke test do) (all scoped by `(n_recibo, hash)` so siblings stay untouched): `updateTicketPickup` / `Observations` / `SizeAndPrice`, `updateGarmentQtyAndImporte` / `ServiceAndImporte` (stored in cents; a paid, pending, legacy-paid, voided or locked row refused), `splitGarmentRow` (a paid row's split stays in its invoice, split-off part in cents and the exact remainder kept - an older 22.515 gives 7.51 + 15.005 -, refuses a split leaving no garment or a locked row), `insertGarmentRow` (`saveTicket` and AddGarment shapes; the all-or-none `insertGarmentRows` is covered end to end by `test_mainWindow_failedInsertStopsTheSave`), `markTicketPickedUp` (never revives a void), `voidGarmentRow` (refuses a paid, sent, voided or locked garment in SQL), `garmentImporte` (rounded to cents, also from a float list price), `garmentUnmeasured` (m2 name with an empty / 0 size), `moneyText` / `roundToCents` (half away from zero despite binary error).
-- **Voids and totals**: `garmentIsLocallyVoidable`, `voidGarmentRow` (estado `Anulado`, `ANULADA`, `fecha_anulacion` = today, payment / pickup dates empty), `garmentExcludedFromTotals` (the Recogida total rule).
-- **Misc**: `genHash16`, `readMaxValueInColumnFromTable`, `readClientPhones`, `removeSpecialChars`. Not tested on their own: `readColumnFromTable`, `readMaxNMinYearInColumnFromTable`, `readGarmentPrice`, `insertNewItemToTable`.
+## Verifactu and the direct AEAT client
 
----
+| CTest | File | Library | Covers |
+|-------|------|---------|--------|
+| `verifactu_models` | `test_verifactu_models.cpp` | `verifactu` | Config validation and environment URLs, tax-item and invoice JSON and totals, the estado string round trip |
+| `verifactu_response` (offscreen) | `test_verifactu_response.cpp` | `verifactu` | Gateway reply parsing (error and success shapes, huella, QR decode), query replies from captured real answers, matching a remote record, duplicate detection |
+| `aeat_hash` | `test_aeat_hash.cpp` | `verifactu` | The huella and QR URL against the official AEAT vectors; value trimming, two-decimal amounts, timestamps with a `+hh:mm` offset |
+| `aeat_chaincheck` | `test_aeat_chaincheck.cpp` | `verifactu` | `AeatChainCheck`: recomputed huellas, links per issuer, a chain restart, a restored copy's continuation |
+| `aeat_record` | `test_aeat_record.cpp` | `verifactu` | Element order and values of the alta, anulación and SOAP envelopes; writes the samples `aeat_xsd` validates |
+| `aeat_xsd` | `tests/aeat/validate_aeat_xml.py` | Python + lxml | The samples and the reply fixtures against AEAT's own XSDs (`tests/fixtures/aeat-xsd`); skipped without lxml |
+| `aeat_response` | `test_aeat_response.cpp` | `verifactu` | AEAT replies and faults and their mapping, query results, record summaries, the chain tip, a lost cancellation, picking the record of an invoice number |
+| `aeat_store` | `test_aeat_store.cpp` | `verifactu`, `sql_lite` | The chain head and record outbox on a throwaway DB: installation number, environments kept apart, the `reached` state machine, older tables completed, a chain restart |
+| `aeat_qr` (offscreen) | `test_aeat_qr.cpp` | `verifactu` | The locally drawn QR: size, quiet zone, finder patterns |
+| `aeat_direct_backend` (offscreen) | `test_aeat_direct_backend.cpp` | `verifactu`, `sql_lite` | The direct backend against the fake AEAT over plain HTTP, with throwaway certificates (`tests/fixtures/aeat-cert`): submit, wait time and batching, rejection and resend, incident flags, the outbox, queries, the first sync and restoring from a backup, a cancelled invoice AEAT returns with or without its cancellation record, certificate loading and expiry, self-test and connection probe |
 
-## Accounting — `test_contabilidad`
+## Settings, app shell and updater
 
-Links `contabilidad` (and `reporthtml` for amount formatting). Mostly pure statics; the lock tests build a throwaway DB (`TestSchema`) and call `closeQuarter` / `reopenQuarter` / `migrateDatabase`. The dialog flow itself is covered by the e2e bench.
+| CTest | File | Library | Covers |
+|-------|------|---------|--------|
+| `appsettings` | `test_appsettings.cpp` | `appsettings` | DPAPI secret helpers and the on-load migration, getters through `loadFrom`, the fixed IVA, language and release-notes parity |
+| `settingsdialog` (offscreen) | `test_settingsdialog.cpp` | `settingsdialog` | The real Configuración dialog: only the chosen connection's rows show, *Probar conexión* and *Ensayo en el entorno de pruebas de la AEAT*, the masked service key, production confirmations |
+| `uikit` (offscreen) | `test_uikit.cpp` | `uikit` | `AmountSpinBox` input and display, the Enter rules of `setUpDialog` and `onEnter` |
+| `instancelock` (offscreen) | `test_instancelock.cpp` | `laideal_app` | One copy per database: the lock path ignores case and separators, a second lock is refused, a crashed copy's lock is taken over |
+| `selfcheck` (offscreen) | `test_selfcheck.cpp` | `laideal_app` | The post-update self-check: each check on good and bad data, the settings copy, the report, and one whole run leaving the live DB and settings byte for byte unchanged with no shop data in the report ([smoke_test.md](smoke_test.md)) |
+| `version_compare` | `test_updater.cpp` (executable `test_versioncompare`) | `updater` | Version comparison, release parsing, the update check and installer download against a loopback fake (hash mismatch, truncated, 404, cancel) |
+| `updater_dialog` (offscreen) | `test_versiondialog.cpp` | `updater`, `uikit` | `UpdaterDialog`: the error of a failed download is hidden when the download is retried |
+| `backup_manager` | `test_backup_manager.cpp` | `backup` | Copies (renamed once verified, second folder, stale `.part`, concurrent run), retention rules, the failure warning |
+| `applogger` | `test_applogger.cpp` | `logging` | Log rotation in a session and at start, a failed rename, an unopenable file (through `AppLogger::installAt`) |
 
-- **Periods**: `periodRangeFor` — half-open quarter / month ranges incl. the year roll-over; annual uses quarter units.
-- **Locks**: `lockOptionAvailable` ("Bloquear el trimestre" only in Trimestral, never while reverting); `lockStatusMessage` follows the closure history (closed with its date, reverted with its date, a migrated closure without a date).
-- **Figures**: `figuresFromDetails` (income, IVA split at 21 %, gastos by rate, unrecognised / NULL rates counted not summed, regularisations netted out of income).
-- **Ticket counts**: `netTicketCount` (paid and cancelled in the same period not counted; partial cancellation still counts; credit notes not counted; an earlier period's cancelled payment does not offset a new sale), `yearTicketCount` (distinct over the year, netted).
-- **Report tables**: the gastos summary (columns IVA 21 % / IVA 10 % / Subtotal con IVA / Sin IVA / Total, each row adding up), `reportRelativePath` (summary and `_detalle` files per mode), detail ingresos / gastos / regularisation tables (rows, HTML escaping, base / IVA by rate, flagged comma amounts and odd rates, NULL rate shown as `?`, totals, rounding note, empty period).
+## Grids, printing and listings
 
----
-
-## Verifactu — `test_verifactu_models`, `test_verifactu_response`, `test_aeat_hash`
-
-- **`test_verifactu_models`**: `VerifactuConfig` validation, environment URLs and the legacy INI removed only by `removeLegacyIni()` (never by the constructor); `VerifactuTaxItem` JSON and operation type; `VerifactuInvoice` JSON, totals, validation and rectificativa fields; the `verifactu_estado` string round-trip.
-- **`test_verifactu_response`** (offscreen, because `QPixmap` needs a `QGuiApplication`): `parseVerifactuResponse` error and success shapes, `Huella` extraction, base64 → `QPixmap` QR decode; `parseVerifactuQueryResponse` against captured real replies (empty list, a populated record, several stored attempts where the accepted one must win, a numeric `InvoiceID`); `verifactuRemoteMatches`; `verifactuErrorIsDuplicate`.
-- **`test_aeat_hash`** (pure; the direct AEAT client, the connection 12.0 offers next to the gateway): `AeatHash` against the three official huella vectors (first alta with an empty `Huella=`, chained alta, chained anulación) and the official QR URLs; value trimming, two-decimal amounts, the timestamp always with its `+hh:mm` offset (never `Z`), percent-encoded QR values. Each rule fails the suite when broken.
-- **`test_aeat_record`** / **`aeat_xsd`**: element order and values of `RegistroAlta` (F2, R5 S / I, after a rejection), `RegistroAnulacion`, the envelopes (escaping, query paging, the incident header); every sample and the reply fixtures (`tests/fixtures/aeat-responses`) validated against AEAT's own XSDs (`tests/fixtures/aeat-xsd`, unchanged).
-- **`test_aeat_response`**: accepted, accepted with errors, partly correct, duplicate of an accepted / cancelled record, cancellation, SOAP fault, garbage; query found / cancelled / empty; `summarizeRecord`; `chainTip` (links first, whatever the list order; time as tie-break); `lostCancellation` / `lostCancellationAfter` (held here, cancelled before AEAT received the tip, a fast PC clock, the same second, unreadable time); `remoteRecordFor` with several records of one number (the asked date wins).
-- **`test_aeat_store`**: the day each environment's client began and the recovery floor it gives in production (`aeat_environment_start`, `verifactuRecoveryFloorIso`), `generated_at` stored with its UTC offset; the installation number (created once per database, the same in both environments, taken from the newest stored record, an empty one repaired, replaced by the chain's at AEAT, never returned when it cannot be stored), chain progression, failed build stores nothing, environments apart, moving the head and the sync flag, a chain restart (`test_restartChain`), an unreadable chain refused, outcomes / pending / latest, null texts, an older `aeat_chain` / `aeat_records` table completed (the `reached` column), the `reached` state machine, connection state kept.
-- **`test_aeat_qr`**: size, quiet zone and finder patterns of the QR of a verification URL (a sample was decoded back with zxing-cpp).
-- **`test_aeat_direct_backend`** (fake AEAT over plain HTTP, throwaway certificates in `tests/fixtures/aeat-cert`): accepted submit, wait time and batching, a restored database that lost a cancellation, in both shapes of AEAT's reply (returned with its cancellation record: the chain continues from it when proven ours by the marker or its link, also under another system's block; hidden or unproven: the chain restarts under a new installation number, or continues when the tip follows it; decided by the settings' marker on the same PC, unless it is older than the database; the restart's own second split by installation number; never for a cancellation by another system; the old chain's unsent records sent first), lost reply resent unchanged, rejection then a flagged new record (`RechazoPrevio = X`), late sends flagged `Incidencia`, the count of records still to send after an incident (`test_unsentRecordCount` and its companions: across backends of one run, a backend replaced mid-send, while a duplicate is checked), a backend beside the shop's keeping the installation number, the database's installation number on every record (a copied database keeps it, an empty one takes the number of its chain at AEAT, none: not configured), already accepted answered locally, cancellation, server / client faults, outbox sent at the next start, query (and an unconfigured backend's query saying why), a lost cancellation reply resent and accepted, a client fault on a batch isolating the bad record, a duplicate with another amount not adopted, waiters answered when the backend is released, chain of our own records only (other systems' records ignored), first sync from AEAT (reads every month and the query pages, fails on a record without its huella or its system block, restore from a backup, chain marker outside the database), self-test, R5 mapping, certificate unusable (no record before the first sync; afterwards generated and kept pending), requests held until the first sync, duplicate of another system's record / of a cancelled invoice, automatic retry and `recordSettled`, certificate loaded from a .pfx via the Windows crypto API (wrong password, expired, unknown thumbprint) and its expiry warning.
-
----
-
-## Settings — `test_appsettings`, `test_settingsdialog`
-
-- **`test_appsettings`**: DPAPI helpers (marker, encrypt ↔ decrypt round-trip, legacy plaintext passthrough, empty input); getters through `loadFrom(path)` against a throwaway file (derived report paths); `encryptSecretsAtRest` on-load migration and no re-encryption; fixed IVA (`ivaRate()` = 21 whatever the JSON says); language — `initialLanguage` from the installer choice, `releaseNotesResource`, and a parity check that `releases_notes.txt` and `releases_notes_es.txt` list the same versions in the same order.
-- **`test_settingsdialog`** (offscreen): drives the real `SettingsDialog` on a throwaway settings file. Only the chosen connection's rows show (gateway: key, PRODUCCIÓN box, *Probar conexión*; direct: its group), the common rows stay; the self-test is hidden while the shop works in pre-production and shows before the switch and in production; the direct connection's *Probar conexión* sends the form's values and environment. Service key masked by default; `Mostrar` reveals it without changing the text; a second click hides it; a new dialog starts masked. The direct-AEAT group: connection choice and certificate controls, the production confirmations (direct and gateway) in and out, leaving the direct connection never keeps its production flag and is refused with pending records, the self-test button state while the shop is in pre-production. Some tests accept the dialog.
-
----
-
-## Grids — `test_mysortfilterproxymodel`, `test_textcolordelegate`
-
-- **`test_mysortfilterproxymodel`**: `removeDiacritics`, accent-insensitive `filterAcceptsRow`, and the `lessThan` comparators (chronological dates, numeric importe, locale-string fallback).
-- **`test_textcolordelegate`** (offscreen): `TextColorDelegate::classify` (Anulado or `ANULADA` green, SI / Recogido green, NO / En tienda red), `placeIngresosDateColumns` on a real `QTableView` header (Anulación right after the other three dates, idempotent), `NumberFormatDelegate` storing an edit with a dot (`storedNumber`, `setModelData`), and both decimal delegates showing the comma under an English locale (an empty amount stays empty, the editor opens on "4,5").
+| CTest | File | Library | Covers |
+|-------|------|---------|--------|
+| `mysortfilterproxymodel` | `test_mysortfilterproxymodel.cpp` | `tableview` | Accent-insensitive search; date, numeric and string ordering |
+| `textcolordelegate` (offscreen) | `test_textcolordelegate.cpp` | `tableview` | Cell colours by estado, the date-column placement, the decimal-comma delegates |
+| `escpos` | `test_escpos.cpp` | `printing` | ESC/POS bytes and the PC858 transcoding, column maths, recibo and factura rendering, the QR raster |
+| `ticket_preview` | `test_ticket_preview.cpp` | `printing` | Renders a recibo and a factura, reads the bytes back into a PNG and an ASCII mock and asserts their blocks. Native platform on Windows (real fonts), offscreen elsewhere. The reader is `tests/support/escpospreview.h`, shared with the `escpos_preview` tool |
+| `imprimir` (offscreen) | `test_imprimir.cpp` | `imprimir`, `printing` | The Imprimir dialog through `ThermalPrinter::setTransport`: bytes sent to the queue, offline and disabled printing, two copies, factura dates, completa with DNI and address, QR handling, decimal comma, 58 mm width |
 
 ---
 
-## Printing — `test_escpos`, `test_ticket_preview`
-
-- **`test_escpos`** (guiless; `QImage` works without a platform plugin): `EscPosBuilder` exact control bytes (init, align, bold, font, size, cut), the PC858 transcode incl. unmapped → `?`, the dots / character-width column math; `TicketRenderer` recibo and factura fragments, the IVA split, and that a QR is rastered.
-- **`test_ticket_preview`**: renders a sample recibo and factura through the real `TicketRenderer`, then interprets the ESC/POS bytes back into a **PNG** simulation of the thermal paper and an **ASCII** mock (written next to the test exe), asserting the expected blocks (totals, copy marker, QR on the factura but not the recibo). The ESC/POS reader lives in `tests/support/escpospreview.h`, shared with the `escpos_preview` tool that decodes the UI smoke test's captured print jobs. On Windows it uses the native platform so system fonts render real glyphs; elsewhere offscreen. A committed PNG pair lives in `docs/modules/printer/`.
-
----
-
-## Other modules
-
-- **`test_facturas`**: the pure IVA split (21 / 10 / 0 %, base + cuota reconstruct the gross), `Facturas::parseGross` (refuses zero, negative, `inf`, `nan`, exponents, signs) and, on a throwaway DB, the dialog: the combos filled by the constructor, incomplete / bad-amount / duplicate refusals writing nothing, a saved row with hostile text kept literal, an insert failure reported, the form reset, and the saved invoice showing in Contabilidad's gastos listing.
-- **`test_genlistado`**: `GenListado::filenameSuffix` and `shouldPrintGastoRow`.
-- **`test_backup_manager`**: real copies of a throwaway DB (renamed to its final `.db` name only once verified, the second folder gets the copy, a stale `.part` is removed, the same second keeps the existing copy, a second concurrent run is refused, a last time in the future needs a backup); `BackupManager::backupsToPrune` (recent kept, one per month, the 30-day and 4-year boundaries, a clock jump prunes nothing, the newest three kept, non-matching names ignored); `backupWarning` and `recordFailure` / `recordSuccess`.
-- **`test_applogger`** (through the `AppLogger::installAt` seam): the log rotates inside a session once it passes the limit, an oversized log is rotated at start, a failed rename keeps the previous `.old`, an unopenable file does not crash.
-- **`test_reporthtml`**: `ReportHtml::formatEuro`, `tableOpen`, `documentClose`.
-- **`test_versioncompare`** (suite `TestUpdater`): `Updater::compareVersions` (incl. 10.10 > 10.9) and `currentVersion`; release parsing, the update check and `downloadInstaller` against a loopback fake (`setApiUrl`, `setAllowLoopbackForTests`; test mode keeps the shop's updates folder untouched).
+That is 30 suites here and 3 in [e2e.md](e2e.md): the 33 `add_test` entries of `tests/CMakeLists.txt`.

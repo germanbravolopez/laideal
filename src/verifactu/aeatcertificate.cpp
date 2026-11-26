@@ -1,5 +1,7 @@
 #include "aeatcertificate.h"
 
+#include "aeathash.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
@@ -19,8 +21,9 @@ QString tr(const char *text)
 #ifdef Q_OS_WIN
 QDateTime fromFileTime(const FILETIME &ft)
 {
-    SYSTEMTIME st;
-    FileTimeToSystemTime(&ft, &st);
+    SYSTEMTIME st = {};
+    if (!FileTimeToSystemTime(&ft, &st))
+        return QDateTime();
     return QDateTime(QDate(st.wYear, st.wMonth, st.wDay), QTime(st.wHour, st.wMinute, st.wSecond), Qt::UTC).toLocalTime();
 }
 
@@ -108,6 +111,16 @@ QList<AeatCertificate::Info> AeatCertificate::personalCertificates()
     return out;
 }
 
+QString AeatCertificate::expiryProblem(const QDateTime &expiry, const QDateTime &now)
+{
+    // An unreadable date fails closed, with its own message.
+    if (!expiry.isValid())
+        return tr("No se puede leer la fecha de caducidad del certificado electrónico.");
+    if (expiry < now)
+        return tr("El certificado electrónico caducó el %1.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)));
+    return QString();
+}
+
 bool AeatCertificate::accept(const void *context, QString *error)
 {
 #ifdef Q_OS_WIN
@@ -116,16 +129,28 @@ bool AeatCertificate::accept(const void *context, QString *error)
         *error = tr("El certificado %1 no tiene su clave privada disponible.").arg(info.subject);
         return false;
     }
-    if (info.expiry < QDateTime::currentDateTime()) {
-        *error = tr("El certificado electrónico caducó el %1.").arg(info.expiry.toString("dd-MM-yyyy"));
-        return false;
-    }
-    return true;
+    *error = expiryProblem(info.expiry, QDateTime::currentDateTime());
+    return error->isEmpty();
 #else
     Q_UNUSED(context)
     *error = tr("El certificado electrónico solo se puede usar en Windows.");
     return false;
 #endif
+}
+
+bool AeatCertificate::load(const QString &thumbprint, const QString &path, const QString &password, QString *error)
+{
+    return thumbprint.isEmpty() ? loadFromFile(path, password, error) : loadFromStore(thumbprint, error);
+}
+
+QString AeatCertificate::representativeWarning(const QString &certificateNif, const QString &issuerNif)
+{
+    // AEAT accepts requests presented by the issuer, or by someone it holds as her representative.
+    if (certificateNif.isEmpty() || certificateNif.compare(issuerNif, Qt::CaseInsensitive) == 0)
+        return QString();
+    return tr("Aviso: el certificado es de %1 y el emisor es %2. La AEAT solo lo aceptará si %1 "
+              "consta como representante de %2 (apoderamiento o colaboración social).")
+        .arg(certificateNif, issuerNif);
 }
 
 bool AeatCertificate::loadFromStore(const QString &thumbprint, QString *error)

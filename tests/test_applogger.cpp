@@ -101,6 +101,24 @@ private slots:
         QVERIFY(readAll(path).contains("filler line 29"));   // logging carried on
     }
 
+    // A previous ".old" that cannot be replaced is never lost together with the current log.
+    void test_failedRotationLosesNothing()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath("app.log");
+        // A non-empty folder on the ".old" name: it cannot be deleted, and nothing can be renamed over it.
+        QVERIFY(QDir().mkpath(path + ".old/blocker"));
+        QVERIFY(AppLogger::installAt(path, 500));
+        for (int i = 0; i < 30; ++i)
+            qDebug() << "filler line" << i << "padding padding padding";
+        AppLogger::uninstall();
+        QVERIFY(QFileInfo::exists(path + ".old/blocker") || QFileInfo::exists(path + ".old.prev/blocker"));   // never deleted
+        const QByteArray all = readAll(path + ".old") + readAll(path);
+        for (int i = 0; i < 30; ++i)
+            QVERIFY2(all.contains(QByteArray("filler line " + QByteArray::number(i) + " padding")),
+                     qPrintable(QString("filler line %1 was lost").arg(i)));
+    }
+
     // One line per message: millisecond timestamp, level tag, text (UTF-8 intact).
     void test_lineFormatAndEncoding()
     {
@@ -135,10 +153,15 @@ private slots:
         qDebug() << "payload {\"ServiceKey\":\"abc123SECRET\",\"nif\":\"B123\"}";
         qDebug() << "certificate password=hunter2 loaded";
         qDebug() << "ticket 30634 total 12.50";
+        qDebug() << "config service_key=underscoreSECRET and contraseña: ñandúSECRET";
+        qDebug() << "Authorization: Bearer bearerSECRET123";
         AppLogger::uninstall();
         const QByteArray log = readAll(path);
         QVERIFY(!log.contains("abc123SECRET"));
         QVERIFY(!log.contains("hunter2"));
+        QVERIFY(!log.contains("underscoreSECRET"));
+        QVERIFY(!QString::fromUtf8(log).contains("ñandúSECRET"));
+        QVERIFY(!log.contains("bearerSECRET123"));
         QVERIFY(log.contains("\"nif\":\"B123\""));
         QVERIFY(log.contains("ticket 30634 total 12.50"));
     }

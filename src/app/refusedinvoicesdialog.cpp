@@ -10,15 +10,15 @@
 
 RefusedInvoicesDialog::RefusedInvoicesDialog(const QSqlDatabase &database, const QString &floorIso, QWidget *parent)
     : QDialog(parent)
-    , db(database)
+    , m_db(database)
     , m_floorIso(floorIso)
 {
     UiKit::setUpDialog(this, tr("Facturas rechazadas por la AEAT"), 760);
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(UiKit::introPanel(tr(
         "Facturas cobradas que la AEAT ha rechazado y siguen sin reenviar. Seleccione una y pulse \"Abrir en "
-        "Recogida\": allí, Verifactu… → Reintentar después de corregir la causa, o Consultar en AEAT si el "
-        "motivo dice que ya existe. Una rectificativa se rehace en Facturas → Rectificar factura.")));
+        "Recogida\": allí, Verifactu\u2026 \u2192 Reintentar después de corregir la causa, o Consultar en AEAT si el "
+        "motivo dice que ya existe. Una rectificativa se rehace en Facturas \u2192 Rectificar factura.")));
 
     m_table = new QTableWidget(0, 4);
     m_table->setObjectName("tableRefused");
@@ -48,15 +48,15 @@ RefusedInvoicesDialog::RefusedInvoicesDialog(const QSqlDatabase &database, const
 
 void RefusedInvoicesDialog::reload()
 {
-    m_invoices = refusedInvoices(db, m_floorIso);
+    m_invoices = refusedInvoices(m_db, m_floorIso);
     m_table->setRowCount(0);
     for (const RefusedInvoice &r : m_invoices) {
         const int row = m_table->rowCount();
         m_table->insertRow(row);
-        const QString ticket = r.seq > 0 ? QStringLiteral("%1-%2").arg(r.nRecibo).arg(r.seq) : r.nRecibo;
+        const QString ticket = verifactuInvoiceId(r.nRecibo, r.seq);
         m_table->setItem(row, 0, new QTableWidgetItem(r.rectificativa ? tr("%1 (rectificativa)").arg(ticket) : ticket));
         m_table->setItem(row, 1, new QTableWidgetItem(r.fechaPago));
-        auto *amount = new QTableWidgetItem(displayMoney(r.importe) + " €");
+        auto *amount = new QTableWidgetItem(displayEuro(r.importe));
         amount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_table->setItem(row, 2, amount);
         auto *reason = new QTableWidgetItem(r.error);

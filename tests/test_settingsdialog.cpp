@@ -316,6 +316,60 @@ private slots:
                  QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
     }
 
+    // A failed save keeps the dialog open: closing would look like the changes were kept.
+    void test_failedSaveKeepsDialogOpen()
+    {
+        AppSettings *s = AppSettings::instance();
+        const QString path = s->filePath();
+        const auto restore = qScopeGuard([this, s, path] {
+            QDir(path).removeRecursively();
+            s->loadFrom(path);
+            s->setVerifactuServiceKey("secret-key-123");
+            s->setDbPath(m_dbFile);
+        });
+        QVERIFY(QFile::remove(path));
+        QVERIFY(QDir().mkpath(path));                         // a folder where the file goes: save() fails
+        SettingsDialog dlg;
+        dlg.show();
+        int seen = 0;
+        answerBoxes(QMessageBox::Ok, &seen);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QCOMPARE(seen, 1);
+        QVERIFY(dlg.isVisible());
+        QVERIFY(dlg.result() != QDialog::Accepted);
+    }
+
+    // Enter in a field must not press OK and run accept() with its confirmations.
+    void test_enterInAFieldDoesNotAccept()
+    {
+        SettingsDialog dlg;
+        dlg.show();
+        auto *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
+        QVERIFY(key);
+        key->setFocus();
+        QTest::keyClick(key, Qt::Key_Return);
+        QTest::keyClick(key, Qt::Key_Enter);
+        QVERIFY(dlg.isVisible());
+        QVERIFY(dlg.result() != QDialog::Accepted);
+    }
+
+    // A hand-edited paper width stays selected and is saved unchanged.
+    void test_oddPaperWidthIsKept()
+    {
+        AppSettings *s = AppSettings::instance();
+        const int before = s->paperWidthMm();
+        const auto restore = qScopeGuard([s, before] { s->setPaperWidthMm(before); });
+        s->setPaperWidthMm(72);
+        SettingsDialog dlg;
+        QComboBox *paper = nullptr;
+        for (auto *box : dlg.findChildren<QComboBox *>())
+            if (box->findData(58) >= 0) paper = box;
+        QVERIFY(paper);
+        QCOMPARE(paper->currentData().toInt(), 72);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QCOMPARE(s->paperWidthMm(), 72);
+    }
+
     // "Probar conexión" sends the form's values trimmed.
     void test_testConnectionSignalCarriesTrimmedValues()
     {

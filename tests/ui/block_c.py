@@ -23,8 +23,18 @@ def qr_text(png) -> str:
     except ImportError:
         return None
     image = cv2.imread(str(png))
-    found, _, _ = cv2.QRCodeDetector().detectAndDecode(image)
-    return found
+    # OpenCV's detector misses some symbols at one size and reads them at another
+    # (the content, so the modules, changes with the date): try a few sizes.
+    for scale in (1, 2, 3, 0.5):
+        sized = image if scale == 1 else cv2.resize(image, None, fx=scale, fy=scale,
+                                                    interpolation=cv2.INTER_NEAREST)
+        found, _, _ = cv2.QRCodeDetector().detectAndDecode(sized)
+        if found:
+            if scale != 1:
+                # Said in the run's output: a QR only ever read resized deserves a look.
+                print(f"  WARNING: QR of {png.name} not read at the printed size, read at x{scale}")
+            return found
+    return ""
 
 
 def new_jobs(run, before: int, minimum: int, timeout: float = 30.0) -> str:

@@ -8,7 +8,6 @@ namespace AeatHash {
 
 namespace {
 
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const QString kQrProductionUrl = QStringLiteral("https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR");
 const QString kQrTestUrl = QStringLiteral("https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR");
 
@@ -22,12 +21,12 @@ QString sha256Hex(const QString &text)
     return QString::fromLatin1(QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256).toHex()).toUpper();
 }
 
+} // namespace
+
 QString dateText(const QDate &date)
 {
-    return date.isValid() ? date.toString(kDateFormat) : QString();
+    return date.isValid() ? date.toString(QLatin1String(kDateFormat)) : QString();
 }
-
-} // namespace
 
 QString registrationHashInput(const RegistrationFields &f)
 {
@@ -64,11 +63,15 @@ QString cancellationHash(const CancellationFields &fields)
     return sha256Hex(cancellationHashInput(fields));
 }
 
-QString amountText(double amount)
+qint64 amountCents(double amount)
 {
     // Rounded half away from zero like every stored amount (sql_lite::roundToCents).
-    const double cents = amount < 0 ? -qRound64(-amount * 100.0 + 1e-6) : qRound64(amount * 100.0 + 1e-6);
-    return QString::number(cents / 100.0, 'f', 2);
+    return amount < 0 ? -qRound64(-amount * 100.0 + 1e-6) : qRound64(amount * 100.0 + 1e-6);
+}
+
+QString amountText(double amount)
+{
+    return QString::number(amountCents(amount) / 100.0, 'f', 2);
 }
 
 QString timestampText(const QDateTime &moment)

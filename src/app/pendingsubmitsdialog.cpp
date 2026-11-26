@@ -3,15 +3,12 @@
 #include "appsettings.h"
 #include "sql_lite.h"
 #include "uikit.h"
-#include "verifactutypes.h"
 
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
-#include <QSqlError>
-#include <QSqlQuery>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -25,7 +22,7 @@ constexpr int COL_COUNT    = 5;
 } // namespace
 
 PendingSubmitsDialog::PendingSubmitsDialog(const QSqlDatabase &database, QWidget *parent)
-    : QDialog(parent), db(database)
+    : QDialog(parent), m_db(database)
 {
     UiKit::setUpDialog(this, tr("Envíos Verifactu pendientes"), 720);
     setMinimumHeight(400);
@@ -79,7 +76,7 @@ bool PendingSubmitsDialog::loadPending()
     AppSettings *s = AppSettings::instance();
     if (!s->verifactuPendingRecoveryEnabled())
         return false;
-    const QString floorIso = verifactuRecoveryFloorIso(db, s->verifactuPendingRecoveryFloorDate(),
+    const QString floorIso = verifactuRecoveryFloorIso(m_db, s->verifactuPendingRecoveryFloorDate(),
                                                        s->verifactuDirectAeat() && s->aeatDirectProduction());
 
     // One entry per (n_recibo, verifactu_invoice_seq) whose any row is still
@@ -88,14 +85,14 @@ bool PendingSubmitsDialog::loadPending()
     // (seq=0), each with its own SUM(importe) - so a retry re-submits the right
     // amount under the right InvoiceID. The duplicate-InvoiceID warning still
     // covers a slow-but-already-registered AEAT submission.
-    const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(db, floorIso);
+    const QVector<PendingVerifactuEvent> events = pendingVerifactuEvents(m_db, floorIso);
     for (const PendingVerifactuEvent &ev : events) {
         if (inFlight && inFlight(verifactuInvoiceId(ev.nRecibo, ev.seq)))
             continue;                                                   // being sent right now
         Entry e;
         e.ticketNum  = ev.nRecibo;
         e.seq        = ev.seq;
-        e.fechaPago  = QDate::fromString(ev.fechaPago, "dd-MM-yyyy");
+        e.fechaPago  = parseDbDate(ev.fechaPago);
         e.client     = ev.cliente;
         e.importe    = ev.importe;
         m_entries.append(e);
@@ -118,11 +115,16 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
     m_table->setItem(row, COL_N_RECIBO,
         new QTableWidgetItem(verifactuInvoiceId(e.ticketNum, e.seq)));
     m_table->setItem(row, COL_FECHA,
-        new QTableWidgetItem(e.fechaPago.toString("dd-MM-yyyy")));
+        new QTableWidgetItem(dbDateText(e.fechaPago)));
     m_table->setItem(row, COL_CLIENT, new QTableWidgetItem(e.client));
     m_table->setItem(row, COL_IMPORTE,
-        new QTableWidgetItem(displayMoney(e.importe) + " €"));
+        new QTableWidgetItem(displayEuro(e.importe)));
 
+    m_table->setCellWidget(row, COL_ACTIONS, actionCell(e));
+}
+
+QWidget *PendingSubmitsDialog::actionCell(const Entry &e)
+{
     auto *cell = new QWidget(m_table);
     auto *h = new QHBoxLayout(cell);
     h->setContentsMargins(2, 0, 2, 0);
@@ -134,11 +136,22 @@ void PendingSubmitsDialog::populateRow(int row, const Entry &e)
     h->addWidget(btnRetry);
     h->addWidget(btnError);
     h->addWidget(btnPost);
-    m_table->setCellWidget(row, COL_ACTIONS, cell);
 
-    connect(btnRetry, &QPushButton::clicked, this, [this, row]() { onRetryClicked(row); });
-    connect(btnError, &QPushButton::clicked, this, [this, row]() { onMarkErrorClicked(row); });
-    connect(btnPost,  &QPushButton::clicked, this, [this, row]() { onPostponeClicked(row); });
+    // Rows move up when an earlier one is removed: a button finds its row at click time.
+    const QString ticketNum = e.ticketNum;
+    const int seq = e.seq;
+    connect(btnRetry, &QPushButton::clicked, this, [this, ticketNum, seq]() { onRetryClicked(rowOf(ticketNum, seq)); });
+    connect(btnError, &QPushButton::clicked, this, [this, ticketNum, seq]() { onMarkErrorClicked(rowOf(ticketNum, seq)); });
+    connect(btnPost,  &QPushButton::clicked, this, [this, ticketNum, seq]() { onPostponeClicked(rowOf(ticketNum, seq)); });
+    return cell;
+}
+
+int PendingSubmitsDialog::rowOf(const QString &ticketNum, int seq) const
+{
+    for (int r = 0; r < m_entries.size(); ++r)
+        if (m_entries[r].ticketNum == ticketNum && m_entries[r].seq == seq)
+            return r;
+    return -1;
 }
 
 void PendingSubmitsDialog::onRetryClicked(int row)
@@ -146,7 +159,7 @@ void PendingSubmitsDialog::onRetryClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
     if (!e.fechaPago.isValid()) {
-        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no tiene fecha de pago.").arg(e.ticketNum))
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no tiene fecha de pago.").arg(e.ticketNum.toHtmlEscaped()))
                              + "<br>" + tr("No se puede reenviar a AEAT: un ticket sin cobrar no tiene "
                                            "factura que recuperar."));
         return;
@@ -158,11 +171,11 @@ void PendingSubmitsDialog::onRetryClicked(int row)
     const QString notSent = retry ? retry(e.ticketNum, e.seq, e.fechaPago, e.importe)
                                   : tr("No se puede reenviar desde aquí.");
     if (!notSent.isEmpty()) {
-        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+        m_lblResult->setText(UiKit::errorHtml(tr("El ticket %1 no se ha reenviado.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                              + "<br>" + notSent.toHtmlEscaped());
         return;                                                            // stays listed
     }
-    m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+    m_lblResult->setText(UiKit::okHtml(tr("Ticket %1 reenviado a AEAT.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                          + "<br>" + tr("La respuesta aparece en la barra de estado de la ventana principal."));
     // Drop the row from the table; the async reply will patch the DB. If it
     // fails the row reverts to ERROR and the operator can revisit via the
@@ -175,11 +188,11 @@ void PendingSubmitsDialog::onMarkErrorClicked(int row)
     if (row < 0 || row >= m_entries.size()) return;
     const Entry e = m_entries[row];
 
-    if (!markPendingEventUnreconciled(db, e.ticketNum, e.seq)) {
-        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum)));
+    if (!markPendingEventUnreconciled(m_db, e.ticketNum, e.seq)) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo actualizar el ticket %1.").arg(e.ticketNum.toHtmlEscaped())));
         return;
     }
-    m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq)))
+    m_lblResult->setText(UiKit::warnHtml(tr("Ticket %1 marcado como ERROR.").arg(verifactuInvoiceId(e.ticketNum, e.seq).toHtmlEscaped()))
                          + "<br>" + tr("Revíselo en la sede electrónica de AEAT o con Consultar en AEAT en Recogida."));
     removeRowAt(row);
 }
@@ -197,25 +210,6 @@ void PendingSubmitsDialog::removeRowAt(int row)
     if (row < 0 || row >= m_table->rowCount()) return;
     m_table->removeRow(row);
     m_entries.remove(row);
-    // Re-wire the lambda captures: every surviving row now has a different
-    // visual position, so its buttons must point at the new index. The
-    // simplest reliable way is to rebuild the action widgets in place.
-    for (int r = row; r < m_entries.size(); ++r) {
-        auto *cell = new QWidget(m_table);
-        auto *h = new QHBoxLayout(cell);
-        h->setContentsMargins(2, 0, 2, 0);
-        h->setSpacing(4);
-        auto *btnRetry = new QPushButton(tr("Reintentar"), cell);
-        auto *btnError = new QPushButton(tr("Error"), cell);
-        auto *btnPost  = new QPushButton(tr("Posponer"), cell);
-        h->addWidget(btnRetry);
-        h->addWidget(btnError);
-        h->addWidget(btnPost);
-        m_table->setCellWidget(r, COL_ACTIONS, cell);
-        connect(btnRetry, &QPushButton::clicked, this, [this, r]() { onRetryClicked(r); });
-        connect(btnError, &QPushButton::clicked, this, [this, r]() { onMarkErrorClicked(r); });
-        connect(btnPost,  &QPushButton::clicked, this, [this, r]() { onPostponeClicked(r); });
-    }
     if (m_entries.isEmpty())
         accept();
 }

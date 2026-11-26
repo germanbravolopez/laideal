@@ -14,6 +14,8 @@ add_library(printing STATIC
     printerstatus.cpp
     statusapiprinter.h
     statusapiprinter.cpp
+    printerqueue.h
+    printerqueue.cpp
 )
 # Qt::Gui (QImage) is exposed by the public headers (TicketData::qr / rasterImage).
 target_link_libraries(printing PUBLIC

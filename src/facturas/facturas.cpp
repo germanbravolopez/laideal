@@ -177,9 +177,8 @@ bool Facturas::parseGross(const QString &text, double *value)
     const QString trimmed = text.trimmed();
     if (!rx.match(trimmed).hasMatch())
         return false;
-    QString dotted = trimmed;
     bool ok = false;
-    const double gross = dotted.replace(',', '.').toDouble(&ok);
+    const double gross = parseDecimal(trimmed, &ok);
     if (!ok || !std::isfinite(gross) || gross <= 0.0)
         return false;
     if (value)
@@ -219,7 +218,7 @@ void Facturas::onSaveClicked()
                                      m_cbIva->currentData().toString());
     if (!saveFactura()) {
         m_lblResult->setText(UiKit::errorHtml("No se pudo guardar la factura.")
-                             + "<br>Consulte el log (Ayuda → Log de depuración).");
+                             + "<br>Consulte el log (Ayuda \u2192 Log de depuración).");
         return;
     }
     resetAllContents();
@@ -232,17 +231,12 @@ bool Facturas::saveFactura()
     const QString empresa = m_cbEmpresa->currentText().trimmed();
     qDebug() << "saveFactura: INSERT INTO gastos n_factura=" << nFactura
              << "empresa=" << empresa
-             << "fecha=" << m_deFecha->date().toString("dd-MM-yyyy")
+             << "fecha=" << dbDateText(m_deFecha->date())
              << "iva=" << m_cbIva->currentData().toString()
              << "importe=" << m_leImporte->text();
     return insertExpenseInvoice(db, nFactura, m_cbServicio->currentText().trimmed(), m_leDescripcion->text().trimmed(),
                                 empresa, m_deFecha->date(), m_cbIva->currentData().toString(),
                                 m_leImporte->text().trimmed());
-}
-
-double Facturas::taxAmountFromGross(double gross, double ivaRate)
-{
-    return gross * (1.0 - 1.0 / (1.0 + ivaRate / 100.0));
 }
 
 void Facturas::updateTaxSplit()

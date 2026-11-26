@@ -87,7 +87,7 @@ protected:
             return true;
         // A focused button that ignored Enter (secondary buttons are not auto-default)
         // presses itself: Enter on Cerrar must never fire the primary action.
-        if (auto *focused = qobject_cast<QAbstractButton *>(m_dialog->focusWidget());
+        if (auto *focused = qobject_cast<QPushButton *>(m_dialog->focusWidget());
                 focused && focused->isEnabled()) {
             focused->click();
             return true;
@@ -156,6 +156,17 @@ void lockDate(QDateEdit *edit, const QString &toolTip)
     edit->setButtonSymbols(QAbstractSpinBox::NoButtons);
     if (!toolTip.isEmpty())
         edit->setToolTip(toolTip);
+}
+
+void limitDateRange(QDateEdit *edit, std::initializer_list<QDate> earliest, const QDate &latest)
+{
+    edit->setMaximumDate(latest);
+    QDate minimum;
+    for (const QDate &date : earliest)
+        if (date.isValid() && date <= latest && (!minimum.isValid() || date > minimum))
+            minimum = date;
+    if (minimum.isValid())
+        edit->setMinimumDate(minimum);
 }
 
 QLabel *introPanel(const QString &text)

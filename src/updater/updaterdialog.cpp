@@ -30,19 +30,14 @@ UpdaterDialog::UpdaterDialog(Updater *updater,
 
     m_header = UiKit::introPanel(QString());
     m_header->setTextFormat(Qt::RichText);
-    m_header->setText(tr(
-        "<p>Hay una nueva versión disponible:</p>"
-        "<p>&nbsp;&nbsp;Versión actual: <b>%1</b><br/>"
-        "&nbsp;&nbsp;Nueva versión: <b>%2</b></p>"
-        "<p><b>Cambios:</b></p>")
-        .arg(Updater::currentVersion(), latestVersion));
+    showAvailableHeader();
     layout->addWidget(m_header);
 
-    m_notes = new QTextEdit(this);
-    m_notes->setReadOnly(true);
-    m_notes->setMarkdown(releaseNotes);
-    m_notes->setMinimumHeight(200);
-    layout->addWidget(m_notes);
+    auto *notes = new QTextEdit(this);
+    notes->setReadOnly(true);
+    notes->setMarkdown(releaseNotes);
+    notes->setMinimumHeight(200);
+    layout->addWidget(notes);
 
     m_progress = new QProgressBar(this);
     m_progress->setRange(0, 100);
@@ -91,6 +86,11 @@ void UpdaterDialog::onLaterClicked()
     m_progress->setVisible(false);
     m_btnUpdate->setEnabled(true);
     m_btnLater->setText(tr("Más tarde"));
+    showAvailableHeader();
+}
+
+void UpdaterDialog::showAvailableHeader()
+{
     m_header->setText(tr(
         "<p>Hay una nueva versión disponible:</p>"
         "<p>&nbsp;&nbsp;Versión actual: <b>%1</b><br/>"
@@ -102,6 +102,7 @@ void UpdaterDialog::onLaterClicked()
 void UpdaterDialog::onUpdateClicked()
 {
     m_downloading = true;
+    m_lblResult->setVisible(false);   // the error of the previous attempt
     m_btnUpdate->setEnabled(false);
     m_btnLater->setText(tr("Cancelar"));
     m_progress->setVisible(true);
@@ -170,10 +171,5 @@ void UpdaterDialog::onDownloadFailed(const QString &error)
     m_progress->setVisible(false);
     m_btnUpdate->setEnabled(true);
     m_btnLater->setEnabled(true);
-    m_header->setText(tr(
-        "<p>Hay una nueva versión disponible:</p>"
-        "<p>&nbsp;&nbsp;Versión actual: <b>%1</b><br/>"
-        "&nbsp;&nbsp;Nueva versión: <b>%2</b></p>"
-        "<p><b>Cambios:</b></p>")
-        .arg(Updater::currentVersion(), m_latestVersion));
+    showAvailableHeader();
 }

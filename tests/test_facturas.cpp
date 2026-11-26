@@ -12,6 +12,7 @@
 
 #include "facturas.h"
 #include "sql_lite.h"
+#include "verifactutypes.h"
 #include "support/testschema.h"
 
 class TestFacturas : public QObject
@@ -266,24 +267,24 @@ private slots:
 
     void test_ivaSplit21()
     {
-        QVERIFY(near(Facturas::taxAmountFromGross(121.0, 21.0), 21.0));
+        QVERIFY(near(splitGross(121.0, 21.0).tax, 21.0) && near(splitGross(121.0, 21.0).base, 100.0));
     }
 
     void test_ivaSplit10()
     {
-        QVERIFY(near(Facturas::taxAmountFromGross(110.0, 10.0), 10.0));
+        QVERIFY(near(splitGross(110.0, 10.0).tax, 10.0) && near(splitGross(110.0, 10.0).base, 100.0));
     }
 
     void test_ivaZero()
     {
-        QVERIFY(near(Facturas::taxAmountFromGross(50.0, 0.0), 0.0));
+        QVERIFY(near(splitGross(50.0, 0.0).tax, 0.0) && near(splitGross(50.0, 0.0).base, 50.0));
     }
 
     void test_basePlusCuotaReconstructsGross()
     {
         const double gross = 100.0, rate = 21.0; // non-round split
-        QVERIFY(near(gross / (1.0 + rate / 100.0)
-                     + Facturas::taxAmountFromGross(gross, rate), gross));
+        const GrossSplit split = splitGross(gross, rate);
+        QVERIFY(near(split.base + split.tax, gross));
     }
 };
 

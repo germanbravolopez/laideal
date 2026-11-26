@@ -53,17 +53,14 @@ public:
     // the matching summary figure.
     static QString createHtmlDetailIngresos(const QVector<IncomeTicketDetail> &tickets, double ivaRate);
     static QString createHtmlDetailGastos(const QVector<ExpenseDetail> &expenses);
-    // True for the gastos IVA rates the summary sums (sin IVA, 10 %, 21 %). Rows
-    // with any other rate are flagged in the detail and kept out of its total.
-    static bool expenseIvaIsSummarised(int iva);
 
     // Report file under contabilidadPath(): "/contabilidad_trimestral_<year>_<q>.pdf",
     // "/Mensual/reporte_mensual_<year>_<m>.pdf" or "/Anual/reporte_anual_<year>.pdf";
     // the version with the detail tables gets "_detalle" before ".pdf", so both are kept.
+    static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
     // Where a regenerated report of a closed period goes: file itself when absent, else
     // "<name>_regenerado_YYYYMMDD[_N].pdf" next to it, so the filed PDF is kept.
     static QString regeneratedPath(const QString &file, const QDate &date);
-    static QString reportRelativePath(ConfigMode mode, int unit, int year, bool withDetail);
 
     // "Comprobar bloqueo": whether the period is closed (locked by a quarterly
     // contabilidad), with the date of its last close or revert. A month reads its
@@ -81,7 +78,8 @@ public:
         double gas10Importe = 0.0, gas10Base = 0.0, gas10Iva = 0.0;
         double gas21Importe = 0.0, gas21Base = 0.0, gas21Iva = 0.0;
         double gasNiImporte = 0.0;                 // gastos without IVA (base == importe)
-        int ingTickets = 0, gasFacturas = 0;       // operation counts
+        int ingTickets = 0, gasFacturas = 0;       // operation counts (gastos: the summed ones)
+        int gasNoSumadas = 0;                      // gastos left out: unreadable amount or IVA rate not 0 / 10 / 21
 
         // Gastos with IVA (10 % + 21 %), the subtotal the gastos table shows before sin IVA.
         double gastosConIvaImporte() const { return gas10Importe + gas21Importe; }
@@ -98,7 +96,7 @@ public:
             gas10Importe += o.gas10Importe; gas10Base += o.gas10Base; gas10Iva += o.gas10Iva;
             gas21Importe += o.gas21Importe; gas21Base += o.gas21Base; gas21Iva += o.gas21Iva;
             gasNiImporte += o.gasNiImporte;
-            ingTickets += o.ingTickets; gasFacturas += o.gasFacturas;
+            ingTickets += o.ingTickets; gasFacturas += o.gasFacturas; gasNoSumadas += o.gasNoSumadas;
         }
     };
 
@@ -106,8 +104,8 @@ public:
     // summary can never disagree with its detail tables. Sums the valid amounts
     // (comma-decimal rows are flagged, not summed), subtracts the regularisations
     // of earlier closed periods from income, buckets gastos by rate (10 / 21 /
-    // sin IVA; other or NULL rates are only counted), then applies
-    // figuresFromTotals' IVA base/cuota math.
+    // sin IVA; other or NULL rates are only counted), then takes the IVA of each
+    // invoice as registered (splitGross).
     // [periodStart, periodEnd) is the report period, used by netTicketCount.
     static PeriodFigures figuresFromDetails(const QVector<IncomeTicketDetail> &income,
                                             const QVector<RegularizationDetail> &regularizations,
@@ -128,9 +126,9 @@ public:
     // The same over the whole calendar year: a ticket paid across two quarters is
     // one ticket, and one paid and cancelled within the year is none.
     static int yearTicketCount(const QuarterlyDetails &details, int year);
-    // Comma-decimal amounts in a period's rows (listed but not summed).
     // A quarter can be closed from its last day on (closing it earlier refuses today's payments).
     static QDate quarterLastDay(int quarter, int year);
+    // Comma-decimal amounts in a period's rows (listed but not summed).
     static int invalidAmountCount(const QVector<IncomeTicketDetail> &income,
                                   const QVector<RegularizationDetail> &regularizations,
                                   const QVector<ExpenseDetail> &expenses);
@@ -173,12 +171,6 @@ private:
 
     void periodRange(int trimForYearConfig, QDate &start, QDate &endExclusive);
     QString periodSubtitle(int trimForYearConfig);
-    // Pure IVA base/cuota derivation from a period's raw totals (used by
-    // figuresFromDetails).
-    static PeriodFigures figuresFromTotals(double ingImporte, int ingTickets,
-                                           double gas10Importe, double gas21Importe,
-                                           double gasNiImporte, int gasFacturas,
-                                           double ivaRate);
     QString renderSection(const PeriodFigures &f, const QString &summaryHeading);
     static QString renderDetailTables(const QString &heading,
                                       const QVector<IncomeTicketDetail> &income,

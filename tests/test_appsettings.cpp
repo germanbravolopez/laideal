@@ -190,6 +190,30 @@ private slots:
         QCOMPARE(kept.readAll(), QByteArray("{ this is not json"));
     }
 
+    // A file that exists but cannot be opened must never be replaced by defaults.
+    void test_unreadableFileIsNeverOverwritten()
+    {
+        const QString dir = m_dir.filePath("unreadable_as_file");
+        QVERIFY(QDir().mkpath(dir));                                         // a folder cannot be opened as a file
+        AppSettings::instance()->loadFrom(dir);
+        QVERIFY(!AppSettings::instance()->save());
+        QVERIFY(AppSettings::instance()->lastSaveError().contains("could not be read"));
+        QVERIFY(QFileInfo(dir).isDir());
+        QVERIFY(QDir(dir).isEmpty());
+    }
+
+    // Valid JSON that is not an object is the corrupt case: kept aside, not silently replaced.
+    void test_nonObjectJsonKeptAside()
+    {
+        const QString path = loadJson("[1,2]");
+        QVERIFY(!QFile::exists(path) || rawRoot(path).contains("database"));
+        const QStringList aside = QDir(m_dir.path()).entryList({ QFileInfo(path).fileName() + ".corrupt-*" });
+        QCOMPARE(aside.size(), 1);
+        QFile kept(m_dir.filePath(aside.first()));
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QCOMPARE(kept.readAll(), QByteArray("[1,2]"));
+    }
+
     // A failed save is remembered for the start-up message, and cleared by the next good one.
     void test_lastSaveErrorReported()
     {

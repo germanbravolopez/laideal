@@ -30,7 +30,8 @@ class GenListado : public QDialog
 public:
     explicit GenListado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QAbstractItemModel *model = nullptr;
-    QString table_name;
+    // Rich text added to the result when the PDF is written (e.g. that the model is filtered).
+    QString filterNote;
     // Writes the prendas PDF; false when it could not be written (see printedFile()).
     bool print_table();
     QString printedFile() const { return m_lastPrintedFile; }
@@ -59,13 +60,15 @@ public:
     struct GastoAmounts { qint64 importeCents; qint64 baseCents; qint64 ivaCents; };
     static GastoAmounts splitGasto(const QString &importe, const QString &iva);
 
+    // The prendas price list for the model's `rows`; exposed for unit testing.
+    QString generate_html_prendas_table(const QVector<int> &rows);
+
 private slots:
     void onGenerateClicked();
 
 private:
     void buildUi();
     void set_cb_fechas();
-    QString generate_html_prendas_table(const QVector<int> &rows);
     QString generate_html_gastos_table_with_specific_conditions();
     // Empty when no row passes the filters.
     QString generate_html_gastos_table(const QVector<int> &rows);

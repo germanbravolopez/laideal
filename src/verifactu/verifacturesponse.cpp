@@ -1,4 +1,5 @@
 #include "verifacturesponse.h"
+#include "aeathash.h"
 
 #include <QDateTime>
 #include <cmath>
@@ -47,13 +48,13 @@ double firstDouble(const QJsonObject &o, std::initializer_list<const char *> key
 QString normaliseDate(const QString &s)
 {
     if (s.isEmpty()) return s;
-    static const char *formats[] = { "dd-MM-yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd" };
+    static const char *formats[] = { AeatHash::kDateFormat, "yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd" };
     for (const char *f : formats) {
         const QDate d = QDate::fromString(s, QLatin1String(f));
-        if (d.isValid()) return d.toString(QStringLiteral("dd-MM-yyyy"));
+        if (d.isValid()) return AeatHash::dateText(d);
     }
     const QDateTime dt = QDateTime::fromString(s, Qt::ISODate);
-    if (dt.isValid()) return dt.date().toString(QStringLiteral("dd-MM-yyyy"));
+    if (dt.isValid()) return AeatHash::dateText(dt.date());
     return s;
 }
 
@@ -96,8 +97,9 @@ QJsonObject chooseRecord(const QJsonArray &items)
     return items.isEmpty() ? QJsonObject{} : items.first().toObject();
 }
 
-} // namespace
-
+// Decode a base64-encoded image (a QR / GetQrCode payload) into a QPixmap.
+// Constructing a QPixmap needs a QGuiApplication, so tests that exercise this
+// path must use a GUI test main (offscreen platform), not a guiless one.
 QPixmap decodeVerifactuImageBase64(const QString &base64)
 {
     QByteArray bytes = QByteArray::fromBase64(base64.toLatin1());
@@ -106,76 +108,94 @@ QPixmap decodeVerifactuImageBase64(const QString &base64)
     return pixmap;
 }
 
-VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuReply kind)
+// GetQrCode: Return is the base64 image itself.
+VerifactuResult qrResult(const QJsonObject &obj)
 {
     VerifactuResult result;
-    const bool isQrRequest = kind == VerifactuReply::Qr;
+    result.qrCode = decodeVerifactuImageBase64(obj.value("Return").toString());
+    if (result.qrCode.isNull()) {
+        result.status = VerifactuResult::ERROR;
+        result.errorDescription = "La respuesta no trae una imagen QR válida";
+    } else {
+        result.status = VerifactuResult::SUCCESS;
+    }
+    return result;
+}
 
-    QJsonDocument doc = QJsonDocument::fromJson(response);
+// /Create and /Cancel: Return is an object that can still carry an invoice-level error
+// although ResultCode is 0.
+VerifactuResult returnObjectResult(const QJsonObject &ret)
+{
+    VerifactuResult result;
+    const QString invoiceError = ret.value("ErrorCode").toString();
+    if (!invoiceError.isEmpty()) {
+        result.status = VerifactuResult::ERROR;
+        result.errorCode = invoiceError;
+        result.errorDescription = ret.value("ErrorDescription").toString("Error desconocido");
+        return result;
+    }
+    result.status = VerifactuResult::SUCCESS;
+    result.csv           = ret.value("CSV").toString();
+    result.validationUrl = ret.value("ValidationUrl").toString();
+    result.rawXml        = ret.value("Xml").toString();
+    // The hash AEAT chained (art. 12 RD 1007/2023), kept to detect tampering. The element is
+    // exactly Huella with an optional namespace prefix, not HuellaPrevia.
+    static const QRegularExpression hashRx(
+        QStringLiteral("<(?:\\w+:)?Huella(?:\\s[^>]*)?>\\s*([0-9A-Fa-f]+)\\s*</(?:\\w+:)?Huella>"));
+    const QRegularExpressionMatch m = hashRx.match(result.rawXml);
+    if (m.hasMatch())
+        result.rawHash = m.captured(1).trimmed().toUpper();
+    const QString qrBase64 = ret.value("QrCode").toString();
+    if (!qrBase64.isEmpty())
+        result.qrCode = decodeVerifactuImageBase64(qrBase64);
+    return result;
+}
+
+VerifactuResult refusalResult(const QJsonObject &obj, int resultCode)
+{
+    VerifactuResult result;
+    result.status = VerifactuResult::ERROR;
+    result.errorCode = QString::number(resultCode);
+    result.errorDescription = obj.value("ResultMessage").toString("Error desconocido");
+    if (obj.contains("Return"))
+        result.errorDescription = obj.value("Return").toObject()
+            .value("ErrorDescription").toString(result.errorDescription);
+    return result;
+}
+
+} // namespace
+
+VerifactuResult parseVerifactuResponse(const QByteArray &response, VerifactuReply kind)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(response);
 
     // A proxy page, a truncated body or a reply without ResultCode says nothing about
     // AEAT: unknown outcome (the row stays pending and is checked), not a refusal.
     if (!doc.isObject() || !doc.object().value("ResultCode").isDouble()) {
+        VerifactuResult result;
         result.status = VerifactuResult::NETWORK_ERROR;
         result.errorDescription = "Respuesta no válida del servidor: no se sabe si la AEAT la registró";
         return result;
     }
 
-    QJsonObject obj = doc.object();
+    const QJsonObject obj = doc.object();
+    const int resultCode = obj.value("ResultCode").toInt(-1);
+    if (resultCode != 0)
+        return refusalResult(obj, resultCode);
 
-    int resultCode = obj.value("ResultCode").toInt(-1);
+    VerifactuResult result;
+    if (kind == VerifactuReply::Qr && obj.contains("Return"))
+        return qrResult(obj);
+    if (obj.contains("Return"))
+        result = returnObjectResult(obj.value("Return").toObject());
+    else
+        result.status = VerifactuResult::SUCCESS;
 
-    if (resultCode == 0) {
-        if (isQrRequest && obj.contains("Return")) {
-            result.status = VerifactuResult::SUCCESS;
-            result.qrCode = decodeVerifactuImageBase64(obj.value("Return").toString());
-        } else if (obj.contains("Return")) {
-            QJsonObject ret = obj.value("Return").toObject();
-            // ResultCode 0 can still carry an invoice-level error in Return.ErrorCode
-            QString invoiceError = ret.value("ErrorCode").toString();
-            if (!invoiceError.isEmpty()) {
-                result.status = VerifactuResult::ERROR;
-                result.errorCode = invoiceError;
-                result.errorDescription = ret.value("ErrorDescription").toString("Error desconocido");
-            } else {
-                result.status = VerifactuResult::SUCCESS;
-                result.csv           = ret.value("CSV").toString();
-                result.validationUrl = ret.value("ValidationUrl").toString();
-                result.rawXml        = ret.value("Xml").toString();
-                // Extract <sum1:Huella> (or any prefix) from the AEAT XML so we
-                // can persist it for local tamper-detection - Art. 12 RD 1007/2023.
-                // "Huella" is the regulatory term for the chained SHA-256 hash.
-                // The element name must be exactly Huella (optional namespace prefix);
-                // not a substring like HuellaPrevia which would also have matched a
-                // looser pattern.
-                static const QRegularExpression hashRx(
-                    QStringLiteral("<(?:\\w+:)?Huella(?:\\s[^>]*)?>\\s*([0-9A-Fa-f]+)\\s*</(?:\\w+:)?Huella>"));
-                QRegularExpressionMatch m = hashRx.match(result.rawXml);
-                if (m.hasMatch())
-                    result.rawHash = m.captured(1).trimmed().toUpper();
-                QString qrBase64     = ret.value("QrCode").toString();
-                if (!qrBase64.isEmpty())
-                    result.qrCode = decodeVerifactuImageBase64(qrBase64);
-            }
-        } else {
-            result.status = VerifactuResult::SUCCESS;
-        }
-        // A sent invoice always has AEAT's CSV: without it the outcome is unknown.
-        if (kind == VerifactuReply::Submit && result.status == VerifactuResult::SUCCESS && result.csv.isEmpty()) {
-            result.status = VerifactuResult::PENDING;
-            result.errorDescription = "La respuesta no trae el CSV de la AEAT: se comprobará más tarde";
-        }
-    } else {
-        result.status = VerifactuResult::ERROR;
-        result.errorCode = QString::number(resultCode);
-        result.errorDescription = obj.value("ResultMessage").toString("Error desconocido");
-
-        if (obj.contains("Return")) {
-            result.errorDescription = obj.value("Return").toObject()
-                .value("ErrorDescription").toString(result.errorDescription);
-        }
+    // A sent invoice always has AEAT's CSV: without it the outcome is unknown.
+    if (kind == VerifactuReply::Submit && result.status == VerifactuResult::SUCCESS && result.csv.isEmpty()) {
+        result.status = VerifactuResult::PENDING;
+        result.errorDescription = "La respuesta no trae el CSV de la AEAT: se comprobará más tarde";
     }
-
     return result;
 }
 

@@ -2,12 +2,13 @@
 #define MYSORTFILTERPROXYMODEL_H
 
 #include <QDate>
-#include <QRegularExpression>
 #include <QSet>
 #include <functional>
 #include <QSortFilterProxyModel>
 
 #define GASTOS_IDX_ID          0
+#define GASTOS_IDX_NFACTURA    1
+#define GASTOS_IDX_SERVICIO    2
 #define GASTOS_IDX_CLIENT      4
 #define GASTOS_IDX_FECHA       5
 #define GASTOS_IDX_IVA         6
@@ -62,6 +63,8 @@ public:
     // Checked before an edit is written: a non-empty message refuses it (editRefused).
     std::function<QString(const QModelIndex &index, const QVariant &value)> editValidator;
     bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+    // Refuses a locked row, like setData.
+    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
 
 signals:
     void editRefused(const QString &message);

@@ -161,6 +161,106 @@ private slots:
         QCOMPARE(finished.first().first().toString(), id);
     }
 
+    // A retired gateway manager still owns its running reply: the facade keeps reporting the
+    // invoice in flight after initialize() until that reply arrives.
+    void test_reinitialiseKeepsInFlightFlag()
+    {
+        VerifactuIntegration integration;
+        QVERIFY(integration.initialize());
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 800;
+        m_server.enqueue("Create", slow);
+        const QString id = integration.submitSimplifiedInvoiceAsync("1951", QDate::currentDate(), 10.0, 21.0, "x");
+        QVERIFY(!id.isEmpty());
+        QVERIFY(integration.isInFlight("1951"));
+        QVERIFY(integration.initialize());
+        QVERIFY(integration.isInFlight("1951"));
+        QTRY_VERIFY_WITH_TIMEOUT(!integration.isInFlight("1951"), 5000);
+    }
+
+    // A rectificativa is in flight like any other submit, until its reply arrives.
+    void test_rectificationIsInFlightUntilReply()
+    {
+        VerifactuIntegration integration;
+        QVERIFY(integration.initialize());
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 500;
+        m_server.enqueue("Create", slow);
+        const QString id = integration.submitRectificationAsync(
+            "1952", QDate::currentDate(), VerifactuInvoice::RECTIFICATION_R5, VerifactuInvoice::BY_DIFFERENCES,
+            -1.0, -0.21, 10.0, 2.10, 21.0, "x", "1899", QDate::currentDate());
+        QVERIFY(!id.isEmpty());
+        QVERIFY(integration.isInFlight("1952"));
+        QTRY_VERIFY_WITH_TIMEOUT(!integration.isInFlight("1952"), 5000);
+    }
+
+    // An HTTP error stays an unknown outcome, but the gateway's own reason reaches the operator.
+    void test_httpErrorBodyMessageIsKept()
+    {
+        VerifactuManager mgr;
+        mgr.getConfig()->setEmitterData("B00000000", "Tintoreria E2E");
+        mgr.getConfig()->setServiceKey("e2e-service-key");
+        FakeVerifactuServer::Reply bad;
+        bad.status = 400;
+        bad.body = FakeVerifactuServer::rejectedReply("4102", "Falta el campo InvoiceID");
+        m_server.enqueue("Create", bad);
+        int answers = 0;
+        VerifactuResult result;
+        connect(&mgr, &VerifactuBackend::requestFinished, this, [&](const QString &, const VerifactuResult &r) {
+            result = r;
+            ++answers;
+        });
+        VerifactuInvoice inv;
+        inv.setInvoiceNumber("1953");
+        inv.setInvoiceDate(QDate::currentDate());
+        inv.setSellerNIF("B00000000");
+        inv.setSellerName("Tintoreria E2E");
+        VerifactuTaxItem item;
+        item.setTaxBase(10.0);
+        item.setTaxRate(21.0);
+        item.setTaxAmount(2.10);
+        inv.addTaxItem(item);
+        inv.calculateTotals();
+        QVERIFY(!mgr.submitInvoiceAsync(inv).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(answers, 1, 5000);
+        QCOMPARE(result.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY2(result.errorDescription.contains("Falta el campo InvoiceID"), qPrintable(result.errorDescription));
+    }
+
+    // The gateway's text is theirs and unbounded: only its first 300 characters reach the message.
+    void test_gatewayErrorTextIsCapped()
+    {
+        VerifactuManager mgr;
+        mgr.getConfig()->setEmitterData("B00000000", "Tintoreria E2E");
+        mgr.getConfig()->setServiceKey("e2e-service-key");
+        FakeVerifactuServer::Reply bad;
+        bad.status = 400;
+        bad.body = FakeVerifactuServer::rejectedReply("4102", QString(1000, 'x'));
+        m_server.enqueue("Create", bad);
+        int answers = 0;
+        VerifactuResult result;
+        connect(&mgr, &VerifactuBackend::requestFinished, this, [&](const QString &, const VerifactuResult &r) {
+            result = r;
+            ++answers;
+        });
+        VerifactuInvoice inv;
+        inv.setInvoiceNumber("1954");
+        inv.setInvoiceDate(QDate::currentDate());
+        inv.setSellerNIF("B00000000");
+        inv.setSellerName("Tintoreria E2E");
+        VerifactuTaxItem item;
+        item.setTaxBase(10.0);
+        item.setTaxRate(21.0);
+        item.setTaxAmount(2.10);
+        inv.addTaxItem(item);
+        inv.calculateTotals();
+        QVERIFY(!mgr.submitInvoiceAsync(inv).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(answers, 1, 5000);
+        QCOMPARE(result.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY2(result.errorDescription.endsWith(QString(300, 'x') + "..."), qPrintable(result.errorDescription));
+        QVERIFY(!result.errorDescription.contains(QString(301, 'x')));
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());

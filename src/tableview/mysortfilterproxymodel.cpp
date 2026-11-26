@@ -3,8 +3,7 @@
 #include "sql_lite.h"
 #include "uikit.h"
 #include <algorithm>
-#include <QtWidgets>
-#include <QMessageBox>
+#include <cmath>
 #include <QDebug>
 
 MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
@@ -94,11 +93,28 @@ bool MySortFilterProxyModel::setData(const QModelIndex &index, const QVariant &v
     // A padded date would be locked correctly but fail the year filter and the sort.
     if (role == Qt::EditRole && schema == Schema::Gastos && index.column() == GASTOS_IDX_FECHA)
         stored = value.toString().trimmed();
+    // "21,0" is stored as "21": the accounting reads the rate as an integer.
+    if (role == Qt::EditRole && schema == Schema::Gastos && index.column() == GASTOS_IDX_IVA) {
+        double rate = 0.0;
+        if (moneyParse(value.toString(), &rate) && rate == std::floor(rate))
+            stored = QString::number(qint64(rate));
+    }
     if (QSortFilterProxyModel::setData(index, stored, role))
         return true;
     if (role == Qt::EditRole && schema == Schema::Gastos)
         emit editRefused(UiKit::errorHtml("No se pudo guardar el cambio."));
     return false;
+}
+
+bool MySortFilterProxyModel::removeRows(int row, int count, const QModelIndex &parent)
+{
+    // A closed quarter's expense is never deleted, whatever path asks for it.
+    for (int r = row; r < row + count; ++r)
+        if (rowLocked(r)) {
+            qWarning() << "MySortFilterProxyModel: removal of a locked row refused (row" << r << ")";
+            return false;
+        }
+    return QSortFilterProxyModel::removeRows(row, count, parent);
 }
 
 QString MySortFilterProxyModel::searchKey(const QString &text)
@@ -118,13 +134,18 @@ int MySortFilterProxyModel::searchColumnCount() const
     const int columns = sourceModel() ? sourceModel()->columnCount() : 0;
     // ingresos: up to Observaciones; the columns after it hold Verifactu metadata
     // (csv / hash / url / ...) that is not user-facing and must not be searched.
-    const int limit = schema == Schema::Ingresos ? INGRESOS_COL_OBSERVACIONES + 1 : 10;
+    // gastos: not the hidden edit_lock column. Other tables show every column.
+    int limit = columns;
+    if (schema == Schema::Ingresos)
+        limit = INGRESOS_COL_OBSERVACIONES + 1;
+    else if (schema == Schema::Gastos)
+        limit = GASTOS_IDX_CONTAB;
     return qMin(columns, limit);
 }
 
 double MySortFilterProxyModel::numericValue(const QString &text, bool *ok)
 {
-    return QString(text).trimmed().replace(',', '.').toDouble(ok);
+    return parseDecimal(text, ok);
 }
 
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,

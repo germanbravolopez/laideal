@@ -119,7 +119,7 @@ private slots:
         AeatHash::RegistrationFields f;
         f.issuerNif = t.value("IDEmisorFactura");
         f.invoiceNumber = t.value("NumSerieFactura");
-        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), "dd-MM-yyyy");
+        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), QLatin1String(AeatHash::kDateFormat));
         f.invoiceType = t.value("TipoFactura");
         f.totalTax = t.value("CuotaTotal");
         f.totalAmount = t.value("ImporteTotal");
@@ -267,6 +267,23 @@ private slots:
         writeSample("alta_long_issuer_name.xml", envelope);
     }
 
+    // DescripcionOperacion is trimmed before the 500-character cut, and an empty one
+    // falls back to the shop's description (the XSD needs content). Not in the huella.
+    void test_descriptionTrimmedCutAndNeverEmpty()
+    {
+        Registration r = ticket("30951", 8.26);
+        const QString hash = hashOf(r);
+        r.description = QString(10, QLatin1Char(' ')) + QString(495, QLatin1Char('D')) + QStringLiteral("xyz");
+        QHash<QString, QString> t;
+        names(registrationXml(r, system()), &t);
+        QCOMPARE(t.value("DescripcionOperacion"), QString(495, QLatin1Char('D')) + QStringLiteral("xyz"));
+        QCOMPARE(t.value("Huella"), hash);
+        r.description = QStringLiteral("   ");
+        t.clear();
+        names(registrationXml(r, system()), &t);
+        QCOMPARE(t.value("DescripcionOperacion"), QStringLiteral("Servicios de lavandería"));
+    }
+
     // The query asks for one month of the issuer, optionally one invoice.
     void test_queryEnvelope()
     {
@@ -312,6 +329,18 @@ private slots:
         QVERIFY(!done.contains("(pendiente)"));
         QVERIFY(done.contains(QString::fromUtf8("14 de octubre de 2026, Granada, España")));
         QVERIFY(done.contains("Calle Mayor 1, 18001 Granada"));
+    }
+
+    // l) names the month in Spanish, lower case.
+    void test_declarationDateNamesTheMonth()
+    {
+        const char *const months[] = { "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                                       "agosto", "septiembre", "octubre", "noviembre", "diciembre" };
+        for (int m = 1; m <= 12; ++m) {
+            const ProducerDeclaration::Signature sig{ "Calle Mayor 1", QDate(2026, m, 3), "Granada" };
+            const QString expected = QStringLiteral("3 de %1 de 2026, Granada").arg(QLatin1String(months[m - 1]));
+            QVERIFY2(ProducerDeclaration::html("12.0", sig).contains(expected), qPrintable(expected));
+        }
     }
 
     // j) and l) of the version being built: the shop's address from the settings (never in

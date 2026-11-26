@@ -25,7 +25,20 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Open Issues
 
-None open.
+Three refactors asked for by the architect's review of pull request #73 (26-11-2026), filed by the owner for later. None changes behaviour; none gates a release.
+
+| Issue | File | Notes |
+|-------|------|-------|
+| Verifactu coordinator out of `MainWindow` | `src/app/mainwindow.*` (1,968 lines) | `MainWindow` still owns the ticket form and the Verifactu orchestration: submit / wait / pending-submit bookkeeping (`m_pendingSubmits`, `submitAndPrint`, `waitForAeatReply`), the AEAT status labels, the direct chain's continuation, the connection tests (`checkAeatProduction`, `testGatewayConnection`, `runAeatSelfTest`, `runAeatConnectionTest`, which use no form state). Extract an app-level class that holds the integration, the pending map and the AEAT status, with `MainWindow` connected to its signals. Touches the save flow: the end-to-end suite is the safety net. |
+| Chain sync out of `AeatDirectBackend` | `src/verifactu/aeatdirectbackend.*` (1,317 lines) | `adoptTip` is split into named steps (`candidatesAfterRestart`, `provenOurs`, `chainOf`, `lostRecord`, `adoptInstallationNumber`, `continuationMessage`) but they are private members of the backend. Move the chain rules into a class of their own (inputs: AEAT's candidates, the local head, the records that are ours; output: tip and message, as a result struct instead of `bool` + `QString *`), testable without store, transport or certificate. Hash-chain code: run `verifactu-compliance-auditor` on the change. |
+| Text helpers out of the data layer | `src/sql_lite/sql_lite.h` (`displayEuro`, `displayMoney`, `displayDecimal`, `parseDecimal`, `kDbDateFormat`), `src/verifactu/aeathash.h` (`kDateFormat`) | Formatting and input parsing live in `sql_lite`, and the date format has two constants because `verifactu` sits below `sql_lite`. A small header-only library for money, decimal and date text, linked by `sql_lite`, `verifactu`, `uikit` and the windows, gives one constant and stops modules including the data layer to format. Many includes, no behaviour change. |
+
+Test gaps left by the same review (26-11-2026). Tests only, no change under `src/`.
+
+| Issue | File | Notes |
+|-------|------|-------|
+| Smoke check reads its QR at the printed size | `tests/ui/block_c.py` (`qr_text`), `docs/testing/ui_smoke.md` | Step C2 passes when OpenCV reads the printed QR at any of four sizes and prints a WARNING when the printed size is not one of them; in CI it was read only at x0.5. The QR's content depends on the day's date, so the symbol changes daily and some days OpenCV misses it at x1. Give the smoke ticket a fixed date so the symbol is the same on every run, choose one that reads at x1, and make the printed size the pass condition again. |
+| Two window fixes without a test | `tests/test_e2e_app.cpp` | From the deep review of `src/`: the main window's title follows a change saved in Configuración, and Archivo > Cerrar closes the window. Neither has a test of its own. One end-to-end case each. |
 
 ---
 

@@ -120,14 +120,14 @@ bool PayDialog::loadTicket(const QString &ticketNum)
         while (q.next()) {
             if (m_cliente.isEmpty()) {
                 m_cliente        = q.value(0).toString();
-                m_fechaRecepcion = QDate::fromString(q.value(1).toString(), "dd-MM-yyyy");
+                m_fechaRecepcion = parseDbDate(q.value(1).toString());
             }
-            const QString pagado   = q.value(8).toString();
-            const QString estado   = q.value(10).toString();
-            if (pagado == "SI") continue;
+            const QString paidFlag = q.value(8).toString();
+            const QString status   = q.value(10).toString();
+            if (paidFlag == INGRESOS_PAGADO_SI) continue;
             // A locally voided garment (estado "Anulado") is never chargeable - it
             // must not enter the payable set or it could be submitted to AEAT.
-            if (estado == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
+            if (status == QLatin1String(INGRESOS_ESTADO_ANULADO)) continue;
 
             const int r = m_table->rowCount();
             m_table->insertRow(r);
@@ -157,18 +157,14 @@ bool PayDialog::loadTicket(const QString &ticketNum)
     }
 
     QString headerText = tr("Ticket %1 - %2 - Recepción %3")
-                         .arg(ticketNum, m_cliente,
-                              m_fechaRecepcion.toString("dd-MM-yyyy"));
+                         .arg(ticketNum.toHtmlEscaped(), m_cliente.toHtmlEscaped(),
+                              dbDateText(m_fechaRecepcion));
     m_lblHeader->setText(headerText);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
-    m_dePago->setMaximumDate(QDate::currentDate());
-    QDate earliest = m_fechaRecepcion.isValid() && m_fechaRecepcion <= QDate::currentDate() ? m_fechaRecepcion : QDate();
     // Nor before the day production began: such an invoice would never reach the real AEAT.
-    if (const QDate start = m_verifactu ? m_verifactu->productionStartDate() : QDate();
-        start.isValid() && start <= QDate::currentDate() && (!earliest.isValid() || start > earliest))
-        earliest = start;
-    if (earliest.isValid())
-        m_dePago->setMinimumDate(earliest);
+    UiKit::limitDateRange(m_dePago,
+                          { m_fechaRecepcion, m_verifactu ? m_verifactu->productionStartDate() : QDate() },
+                          QDate::currentDate());
     recomputeTotal();
     return true;
 }
@@ -238,19 +234,26 @@ void PayDialog::onCobrarClicked()
         return;
     }
 
-    const QDate fechaPago = m_dePago->date();
-    if (const QString early = m_verifactu->dateBeforeProductionReason(fechaPago); !early.isEmpty()) {
+    const QDate paymentDate = m_dePago->date();
+    if (const QString early = m_verifactu->dateBeforeProductionReason(paymentDate); !early.isEmpty()) {
         m_lblStatus->setText(UiKit::errorHtml(early));
         return;
     }
     // The whole quarter: a month without rows inside a closed quarter is closed too.
-    if (quarterIsClosed(db, fechaPago)) {
+    if (quarterIsClosed(db, paymentDate)) {
         m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
                              + "<br>" + tr("La fecha de pago pertenece a un trimestre cerrado por la contabilidad."));
         return;
     }
 
-    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName());
+    bool seqOk = false;
+    const int seq = nextVerifactuInvoiceSeq(db, m_ticketNum, m_verifactu->environmentName(), &seqOk);
+    if (!seqOk) {
+        qWarning() << "PayDialog: invoice number unreadable for ticket" << m_ticketNum << "- nothing charged";
+        m_lblStatus->setText(UiKit::errorHtml(tr("No se ha podido leer la numeración de facturas del ticket."))
+                             + "<br>" + tr("No se ha cobrado ni enviado nada. Consulte el log (Ayuda \u2192 Log de depuración)."));
+        return;
+    }
     const QString invoiceId = verifactuInvoiceId(m_ticketNum, seq);
 
     qDebug() << "PayDialog::onCobrarClicked: ticket=" << m_ticketNum
@@ -258,15 +261,14 @@ void PayDialog::onCobrarClicked()
              << "rows=" << hashes.size() << "total=" << total;
 
     m_pendingSeq        = seq;
-    m_pendingHashes     = hashes;
     m_pendingAmounts    = amounts;
-    m_pendingFechaPago  = fechaPago;
+    m_pendingFechaPago  = paymentDate;
 
     // Stored as paid + PENDIENTE before anything is sent, like MainWindow::saveTicket: a
     // crash during the AEAT round trip leaves a payment the start-up recovery resends,
     // never an invoice at AEAT for a ticket the database shows unpaid.
     if (!storePayment(seq)) {
-        if (quarterIsClosed(db, fechaPago)) {
+        if (quarterIsClosed(db, paymentDate)) {
             m_lblStatus->setText(UiKit::errorHtml(tr("Trimestre bloqueado."))
                                  + "<br>" + tr("La contabilidad ha cerrado el trimestre de la fecha de pago: no se ha "
                                                "guardado ni enviado nada."));
@@ -279,12 +281,12 @@ void PayDialog::onCobrarClicked()
     }
 
     const double ivaRate = AppSettings::instance()->ivaRate();
-    const double taxBase = total / (1.0 + ivaRate / 100.0);
+    const double taxBase = taxBaseFromGross(total, ivaRate);
 
     connect(m_verifactu, &VerifactuIntegration::requestFinished,
             this, &PayDialog::onVerifactuRequestFinished, Qt::UniqueConnection);
     m_pendingReqId = m_verifactu->submitSimplifiedInvoiceAsync(
-        invoiceId, fechaPago, taxBase, ivaRate, kInvoiceDescription);
+        invoiceId, paymentDate, taxBase, ivaRate, kInvoiceDescription);
 
     if (m_pendingReqId.isEmpty()) {
         // Nothing left: the payment stays PENDIENTE and the start-up recovery resends it.
@@ -298,7 +300,7 @@ void PayDialog::onCobrarClicked()
     // The direct client's QR needs no answer from AEAT (which may make the next
     // submission wait up to TiempoEsperaEnvio): book the payment as pending, print
     // the factura now and leave the answer to RecogPrendas, as after the timeout.
-    const QPixmap qrNow = m_verifactu->qrBeforeReply(invoiceId, fechaPago, taxBase, ivaRate);
+    const QPixmap qrNow = m_verifactu->qrBeforeReply(invoiceId, paymentDate, taxBase, ivaRate);
     if (!qrNow.isNull()) {
         qDebug() << "PayDialog: factura printed before AEAT answers" << m_pendingReqId;
         emit submitAdopted(m_pendingReqId, m_ticketNum, m_pendingSeq, true);

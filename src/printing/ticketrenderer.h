@@ -26,7 +26,7 @@ struct TicketData {
     QString phone;
 
     // Document identity
-    bool    isRecibo = true;            // false => FACTURA SIMPLIFICADA
+    bool    isRecibo = true;            // false => a factura (FACTURA SIMPLIFICADA, or complete: same heading)
     bool    isCompleteInvoice = false;  // adds Direccion / DNI lines
     QString invoiceId;                  // displayInvoiceId()
     QString clientName;

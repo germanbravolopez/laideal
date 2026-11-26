@@ -106,19 +106,19 @@ AeatTransport::Response AeatTransport::postBlocking(const QString &url, const QB
     }
     if (secure && !WinHttpSetOption(request.h, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
                                     const_cast<void *>(certificateContext), sizeof(CERT_CONTEXT))) {
-        response.error = lastErrorText(QStringLiteral("certificado"));
+        response.error = lastErrorText(QCoreApplication::translate("AeatTransport", "certificado"));
         return response;
     }
     const wchar_t *headers = L"Content-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\n";
     if (!WinHttpSendRequest(request.h, headers, DWORD(-1L), const_cast<char *>(body.constData()), DWORD(body.size()),
                             DWORD(body.size()), 0)) {
         // No connection, DNS or TLS: the request never reached AEAT.
-        response.error = lastErrorText(QStringLiteral("envío"));
+        response.error = lastErrorText(QCoreApplication::translate("AeatTransport", "envío"));
         return response;
     }
     response.requestSent = true;
     if (!WinHttpReceiveResponse(request.h, nullptr)) {
-        response.error = lastErrorText(QStringLiteral("envío"));
+        response.error = lastErrorText(QCoreApplication::translate("AeatTransport", "envío"));
         return response;
     }
     DWORD status = 0;
