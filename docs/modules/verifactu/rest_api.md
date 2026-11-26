@@ -1,592 +1,131 @@
-# REST API Field Reference — Verifactu
+# IreneSolutions Gateway — REST API as the App Uses It
 
-> **Historical / may be outdated.** This page describes the Irene Solutions gateway's REST API as it was researched, not a guaranteed contract. The code (`src/verifactu/verifactumanager.cpp`, `verifacturesponse.cpp`) is authoritative for what is actually sent and parsed. The direct AEAT client (`aeat*.cpp`) does not use this API.
+The gateway is the app's default Verifactu connection (`VerifactuManager`; how it fits in: [README.md](./README.md)). This page covers only what the app sends and reads. The vendor's own reference (https://facturae.irenesolutions.com/, provided with the ServiceKey) is the contract; the code (`verifactumanager.cpp`, `verifacturesponse.cpp`, `verifactuinvoice.cpp`, `verifactutaxitem.cpp`) is authoritative for what is actually sent and parsed. The direct AEAT client does not use this API.
 
-## Overview
+## Endpoints
 
-This document maps the official Verifactu REST API fields (Irene Solutions) to the LAIDEAL implementation.
+Base URL (both environments; the ServiceKey decides where invoices go): `https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices` (`VerifactuConfig`).
 
----
+| Call | Method | Used for |
+|------|--------|----------|
+| `/Create` | POST | Submit one invoice (F2 or R1-R5) |
+| `/Cancel` | POST | Cancel an invoice |
+| `/GetQrCode` | POST | QR of an already submitted invoice (a gateway reprint with no stored URL only) |
+| `/GetFilteredList` | POST | Which invoices AEAT holds (Consultar en AEAT, [README §Reconciling](./README.md#reconciling-with-aeat-consultar-en-aeat)) |
 
-## Invoice Object
+- JSON body; the `ServiceKey` goes in the body of every call and is logged only as `[redacted, N chars]`.
+- Transfer timeout 30 s; the connection test (`/Create` with a stub payload, since a GET never answers) 10 s. It reports a refused key (HTTP 401 / 403, or error `8001` in the body) apart from a network failure.
+- Validation URL (QR host): TESTING `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR`, PRODUCTION `https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR` (`VerifactuConfig::getValidationUrl()`); the box `verifactu.environment` changes only this URL.
 
-The `Invoice` object is the main input parameter for all operations (submit, cancel, generate QR). The number of required fields varies by operation.
+## Invoice object (`/Create`, `/GetQrCode`)
 
-### Status
-- **Description**: Indicates the document state
-- **Values**:
-  - Any value other than `'DRAFT'` → definitive submission to AEAT
-  - `'DRAFT'` → draft with XML and QR, no AEAT validation
-- **Type**: Alphanumeric (20)
-- **Required**: No (defaults to definitive submission)
-- **In LAIDEAL**: never sent (every invoice is a definitive submission)
+Built by `VerifactuInvoice::toJson()`:
 
-### InvoiceType (REQUIRED)
-- **Description**: Invoice type key (list L2)
-- **Values**:
-  - **F1**: Invoice (art. 6, 7.2 and 7.3 RD 1619/2012) — most common
-  - **F2**: Simplified invoice / without buyer identification (art. 6.1.d)
-  - **F3**: Invoice substituting simplified invoices
-  - **R1**: Corrective invoice (legal error, Art. 80.1.2.6 LIVA)
-  - **R2**: Corrective (Art. 80.3) — buyer insolvency
-  - **R3**: Corrective (Art. 80.4) — bad debts
-  - **R4**: Corrective (other)
-  - **R5**: Corrective on simplified invoices
-- **Type**: Alphanumeric
-- **Default**: F1
-- **In LAIDEAL**: Set in `VerifactuInvoice::invoiceTypeToString()`
+| Field | Sent value |
+|-------|-----------|
+| `InvoiceID` | NumSerieFactura: `n_recibo`, or `<n_recibo>-<seq>` for a later payment event, `R-<n>` for a rectificativa. Unique per issuer (not per day); AEAT answers a repeat as a duplicate |
+| `InvoiceDate` | ISO `YYYY-MM-DD` |
+| `InvoiceType` | `F2` (simplified, no buyer) or `R1`-`R5`. F1 / F3 do not exist in the app (rejected locally) |
+| `SellerID` | Issuer NIF (`verifactu.nif`) |
+| `CompanyName` | Issuer name (`verifactu.company_name`). **Required**: omitting it gives `8002` "El campo CompanyName es obligatorio." |
+| `Text` | Description (optional) |
+| `TaxItems` | Array of tax lines (below), at least one |
+| `TotalAmount`, `TotalTaxAmount` | Computed from the tax items |
+| `RectificationType` | `S` (substitution) or `I` (differences); only on R1-R5 |
+| `RectificationTaxBase`, `RectificationTaxAmount` | Only for `S`: the original base and amount being replaced; the tax item then carries the corrected total |
 
-### RectificationType
-- **Description**: Identifies the corrective invoice type (if applicable)
-- **Values**:
-  - **S**: By substitution (replaces the original invoice)
-  - **I**: By differences (adjusts the difference)
-- **Type**: Alphanumeric (1)
-- **Default**: I
-- **Required if**: InvoiceType is R1, R2, R3, R4, or R5
-- **In LAIDEAL**: `m_rectificationType` of `VerifactuInvoice`. Set by `RectifyInvoiceDialog` via `setRectificationType()`. Serialized only when invoice type is R1-R5.
+Not sent: `Status` (so every call is a definitive submission, never `DRAFT`), `IsInvoiceFix`, `IsRejected`, `RelatedPartyID` / `Name` / `IDType` and `CountryID` (the app issues only F2 and R-types, which carry no buyer), `RectificationItems` (the local link is `ingresos.verifactu_rectifies_n_recibo`; because of this the facade refuses a gateway rectificativa in PRODUCTION), `RectificationTaxAmountSurcharge`.
 
-### IsInvoiceFix
-- **Description**: Correction of a previously rejected invoice
-- **Values**: `false` = normal submission, `true` = correction of a prior submission
-- **Type**: Boolean
-- **Default**: false
-- **In LAIDEAL**: Not implemented (reserved for future)
+### Tax item (`VerifactuTaxItem::toJson()`)
 
-### IsRejected
-- **Description**: Correction with prior rejection
-- **Values**: `false` = normal, `true` = correction with prior rejection
-- **Type**: Boolean
-- **Default**: false
-- **In LAIDEAL**: Not implemented (reserved for future)
+| Field | Sent value |
+|-------|-----------|
+| `TaxType` | Always `S1` (taxable, not exempt, no reverse charge) |
+| `TaxBase` | Base; a negative one is allowed (a differences rectificativa going down) |
+| `TaxRate` | Percentage, must be >= 0 |
+| `TaxAmount` | Cuota; `splitGross` makes base + cuota the amount charged. A difference from `TaxBase * TaxRate / 100` of 0.01 or more only logs a warning |
 
-### InvoiceID (REQUIRED)
-- **Description**: Unique invoice identifier (NumSerieFactura)
-- **Composition**: Series number + invoice number
-- **Example**: `"24417"` or `"SERIE-2026-001"`
-- **Type**: Alphanumeric (60)
-- **In LAIDEAL**: `m_invoiceNumber` of `VerifactuInvoice`
-- **Note**: MUST be unique per issuer (NumSerieFactura) - AEAT answers a repeat as a duplicate
+`Tax`, `TaxScheme`, `TaxException`, `TaxRateSurcharge` and `TaxAmountSurcharge` are not sent: the gateway assumes IVA (`01`) and the general regime (`01`).
 
-### InvoiceDate (REQUIRED)
-- **Description**: Invoice issue date
-- **Format**: ISO 8601 (YYYY-MM-DD)
-- **Example**: `"2026-05-17"`
-- **Type**: Date
-- **In LAIDEAL**: `m_invoiceDate` of `VerifactuInvoice`
+### Example (F2)
 
-### SellerID (REQUIRED)
-- **Description**: Tax identification number of the issuer
-- **Format**: 9-character NIF (FormatoNIF)
-- **Example**: `"B12345678"`
-- **Type**: Alphanumeric (9)
-- **In LAIDEAL**: `m_sellerNIF` of `VerifactuInvoice`
-- **Note**: Set in `VerifactuIntegration::loadEmitterConfiguration()`
-
-### CompanyName (REQUIRED)
-- **Description**: Seller company name
-- **Type**: Alphanumeric (120)
-- **Example**: `"LAIDEAL Laundry SL"`
-- **In LAIDEAL**: `m_sellerName` of `VerifactuInvoice`
-- **CRITICAL**: Omitting this field causes `"El campo CompanyName es obligatorio."`
-
-### RelatedPartyID (CONDITIONAL)
-- **Description**: Buyer identifier
-- **Required if**: InvoiceType is F1
-- **Optional if**: InvoiceType is F2 (end consumer)
-- **Valid values**: NIF, VAT number, passport, official document
-- **Type**: Alphanumeric (20)
-- **Example**: `"12345678A"`
-- **In LAIDEAL**: not sent - the app only issues F2 (simplified) invoices and their rectificativas, which carry no buyer
-
-### RelatedPartyName (CONDITIONAL)
-- **Description**: Buyer company name
-- **Required if**: RelatedPartyID is present
-- **Type**: Alphanumeric (120)
-- **Example**: `"Juan García López"` or `"Cliente SL"`
-- **In LAIDEAL**: not sent - the app only issues F2 (simplified) invoices and their rectificativas, which carry no buyer
-
-### RelatedPartyIDType
-- **Description**: Buyer identification type key (list L7)
-- **Values**:
-  - **02**: NIF-IVA (default)
-  - **03**: Passport
-  - **04**: Official identification document
-  - **05**: Residence certificate
-  - **06**: Other supporting document
-  - **07**: Not registered
-- **Type**: Alphanumeric (2)
-- **Default**: 02
-- **In LAIDEAL**: Not implemented (assumes 02)
-
-### CountryID
-- **Description**: Buyer country (ISO-3166)
-- **Example**: `"ES"` (Spain), `"FR"` (France)
-- **Type**: Alphanumeric (2)
-- **In LAIDEAL**: Not implemented (reserved for future)
-
-### Text (OPTIONAL)
-- **Description**: Invoice description (DescripcionOperacion)
-- **Type**: Alphanumeric (500)
-- **Example**: `"Lavado y planchado de trajes"`
-- **In LAIDEAL**: `m_description` of `VerifactuInvoice`
-
-### TaxItems (REQUIRED)
-- **Description**: Array of invoice tax detail lines
-- **Type**: Array of TaxItem
-- **Minimum**: At least 1 item
-- **In LAIDEAL**: Array of `VerifactuTaxItem`
-- **See**: TaxItem Object section below
-
-### RectificationItems
-- **Description**: Array of corrected invoices (corrective invoices only)
-- **Type**: Array of InvoiceRectification
-- **In LAIDEAL**: Not implemented. The local link is kept instead in `ingresos.verifactu_rectifies_n_recibo`; AEAT identifies the rectificativa standalone by `InvoiceID` + `RectificationType`.
-
-### RectificationTaxBase
-- **Description**: Corrected tax base for substitution correctives (`'S'`)
-- **Type**: Decimal (3,2)
-- **In LAIDEAL**: `m_rectificationTaxBase` of `VerifactuInvoice`. For substitution mode it carries the ORIGINAL tax base being replaced; `TaxItems[0].TaxBase` carries the new (corrected) total.
-
-### RectificationTaxAmount
-- **Description**: Corrected tax amount (substitution correctives `'S'`)
-- **Type**: Decimal (3,2)
-- **In LAIDEAL**: `m_rectificationTaxAmount` of `VerifactuInvoice`. Mirrors RectificationTaxBase: original tax amount being replaced.
-
-### RectificationTaxAmountSurcharge
-- **Description**: Corrected equivalence surcharge amount (substitution correctives `'S'`)
-- **Type**: Decimal (3,2)
-- **In LAIDEAL**: Not implemented
-
----
-
-## TaxItem Object
-
-Element containing tax line information for an invoice.
-
-### Tax
-- **Description**: Tax type (list L1)
-- **Values**:
-  - **01**: VAT (IVA) — most common
-  - **02**: IPSI (Ceuta and Melilla)
-  - **03**: IGIC (Canary Islands)
-  - **05**: Other
-- **Type**: Alphanumeric (1)
-- **Default**: 01 (VAT)
-- **In LAIDEAL**: not sent (`Tax` is never in the payload; the gateway assumes VAT)
-
-### TaxScheme (REQUIRED)
-- **Description**: Tax scheme / regime key (list L8A/L8B)
-- **Main values**:
-  - **01**: General regime (most common)
-  - **02**: Export
-  - **03**: Used goods, art, antiques
-  - **04**: Investment gold
-  - **05**: Travel agencies
-  - **07**: Cash accounting
-  - **17**: OSS/IOSS
-  - **18**: Equivalence surcharge / small business
-- **Type**: Alphanumeric (2)
-- **Default**: 01
-- **In LAIDEAL**: Not implemented (assumes 01 — general regime)
-
-### TaxType (REQUIRED — CRITICAL)
-- **Description**: Taxable/exempt operation key (list L9)
-- **Values**:
-  - **S1**: Taxable and non-exempt — without reverse charge (most common)
-  - **S2**: Taxable and non-exempt — with reverse charge
-  - **N1**: Not taxable (art. 7, 14, others)
-  - **N2**: Not taxable (location rules)
-- **Type**: Alphanumeric (2)
-- **Default**: S1
-- **In LAIDEAL**: always `"S1"` (`VerifactuTaxItem::toJson()`); the other keys have no setter
-
-### TaxException
-- **Description**: Exemption reason (list L10) — for exempt operations
-- **Values**: E1–E6 (art. 20–25 LIVA)
-- **Type**: Alphanumeric (2)
-- **In LAIDEAL**: Not implemented (reserved for future)
-
-### TaxBase (REQUIRED)
-- **Description**: Tax base / non-taxable amount
-- **Type**: Decimal (12,2)
-- **Example**: `100.00`
-- **In LAIDEAL**: `m_taxBase` of `VerifactuTaxItem`
-- **Validation**: none; a negative base is allowed (a rectificativa by differences going down)
-
-### TaxRate (REQUIRED)
-- **Description**: Tax rate (percentage)
-- **Type**: Decimal (3,2)
-- **Example**: `21.00` (21%)
-- **In LAIDEAL**: `m_taxRate` of `VerifactuTaxItem`
-- **Validation**: Must be >= 0 (if not exempt)
-
-### TaxAmount (REQUIRED)
-- **Description**: Tax amount (CuotaRepercutida)
-- **Calculation**: `TaxBase * TaxRate / 100.0`
-- **Type**: Decimal (12,2)
-- **Example**: `21.00`
-- **In LAIDEAL**: `m_taxAmount` of `VerifactuTaxItem`
-- **Validation**: a mismatch with `TaxBase * TaxRate / 100` only logs a `qWarning`
-
-### TaxRateSurcharge
-- **Description**: Equivalence surcharge rate (if applicable)
-- **Type**: Decimal (3,2)
-- **In LAIDEAL**: Not implemented
-
-### TaxAmountSurcharge
-- **Description**: Equivalence surcharge amount
-- **Type**: Decimal (12,2)
-- **In LAIDEAL**: Not implemented
-
----
-
-## Result Object (Response)
-
-Object returned by the server for any operation.
-
-### ResultCode
-- **Description**: Operation result code
-- **Values**: `0` = success; other values = error code
-- **Type**: Integer
-- **In LAIDEAL**: `result.status` of `VerifactuResult`
-
-### ResultMessage
-- **Description**: Descriptive result message
-- **Example**: `"Factura procesada correctamente"` or an error message
-- **Type**: String
-- **In LAIDEAL**: the fallback description when `Return.ErrorDescription` is empty
-
-### Return
-- **Description**: Object with detailed result properties (see Return Object below)
-- **In LAIDEAL**: Processed in `parseVerifactuResponse()` (`verifacturesponse.cpp`)
-
----
-
-## Return Object (Response Detail)
-
-Contains the same Invoice properties plus processing results.
-
-### ExternKey
-- **Description**: Blockchain identifier for the invoice
-- **Type**: Alphanumeric (20)
-- **In LAIDEAL**: Not captured (reserved for future)
-
-### StatusResponse
-- **Description**: Status assigned by AEAT
-- **Values**: `"Correcto"` = success; others indicate an error
-- **Type**: Alphanumeric (20)
-- **In LAIDEAL**: Not captured (ResultCode is used instead)
-
-### ErrorCode
-- **Description**: AEAT error code (if any)
-- **Values**:
-  - `null`: No error
-  - `9999`: Internal library error
-  - Other: Specific AEAT error code
-- **Type**: Alphanumeric (100)
-- **In LAIDEAL**: `result.errorCode` of `VerifactuResult`
-
-### ErrorDescription
-- **Description**: AEAT error description
-- **Example**: `"El campo CompanyName es obligatorio."`
-- **Type**: Alphanumeric (1000)
-- **In LAIDEAL**: `result.errorDescription` of `VerifactuResult`
-
-### CSV (CRITICAL ON SUCCESS)
-- **Description**: Security verification code (Código Seguro de Verificación) issued by AEAT
-- **Importance**: MUST be captured and shown to the client
-- **Type**: Alphanumeric (100)
-- **Example**: `"ABCD1234EF"`
-- **In LAIDEAL**: `result.csv` of `VerifactuResult` — persisted to `ingresos.verifactu_csv`
-
-### QrCode
-- **Description**: QR image in BMP format encoded as base64
-- **Usage**: Show to client, print on receipt
-- **Type**: Bytes (Base64)
-- **In LAIDEAL**: `result.qrCode` of `VerifactuResult` (decoded to `QPixmap`)
-- **Method**: `decodeVerifactuImageBase64()` (`verifacturesponse.cpp`)
-
-### Xml
-- **Description**: XML file sent to AEAT
-- **Type**: String (XML)
-- **In LAIDEAL**: the raw reply is logged (`Server response:`); the AEAT XML is kept in `result.rawXml`
-
-### Response
-- **Description**: XML response file from AEAT
-- **Type**: String (XML)
-- **In LAIDEAL**: Not captured
-
-### QrCodeUrl
-- **Description**: URL to the QR bitmap image
-- **Type**: String (URL)
-- **In LAIDEAL**: Not captured
-
-### ValidationUrl
-- **Description**: Validation URL embedded in the QR code
-- **Usage**: Show to client to verify on the AEAT portal
-- **Example**: `"https://www.agenciatributaria.es/verifactu?nif=B12345678&..."`
-- **Type**: String (URL)
-- **In LAIDEAL**: `result.validationUrl` of `VerifactuResult`. Read from `Return.ValidationUrl` on a submit; the QR path stamps a locally assembled URL (`VerifactuManager::getValidationUrl()`)
-
----
-
-## FilterSet Object (For Queries)
-
-Input parameter for the submitted-invoices query endpoint `<base>/GetFilteredList`, used by `VerifactuManager::queryInvoiceAsync()` to reconcile an "already exists" rejection. **Implemented since 10.9**: the app sends one `InvoiceID = <number>` filter with `Count` 10 and `Offset` -1.
-
-### Count
-- **Description**: Maximum number of records to return
-- **Type**: Integer
-- **Default**: 5,000
-- **In LAIDEAL**: sent as 10
-
-### Offset
-- **Description**: Start position for pagination
-- **Type**: Integer
-- **Default**: 0
-- **Example**: Offset=5000, Count=1000 → records 5001–6000
-- **In LAIDEAL**: sent as -1
-
-### OrderClause
-- **Description**: SQL ordering clause
-- **Example**: `"ORDER BY Created ASC"`
-- **Type**: Alphanumeric (200)
-- **In LAIDEAL**: Not implemented
-
-### Filters
-- **Description**: Array of filter conditions to apply
-- **Type**: Array of Filter
-- **In LAIDEAL**: one filter, `InvoiceID` `=` the ticket number
-
----
-
-## Filter Object (Query Conditions)
-
-### FieldName
-- **Description**: Name of the field to filter on
-- **Example**: `"InvoiceID"`, `"InvoiceDate"`, `"StatusResponse"`
-- **Type**: Alphanumeric (64)
-
-### Operator
-- **Description**: Comparison operator
-- **Examples**: `=`, `LIKE`, `IN`, `>`, `<`, `>=`, `<=`
-- **Type**: Alphanumeric (50)
-
-### Value
-- **Description**: Value to compare against
-- **Type**: Any (String, Number, etc.)
-
----
-
-## Required Fields by Operation
-
-### Standard submission (submitInvoice)
-```
-REQUIRED:
-  InvoiceType     (F1, F2, etc.)
-  InvoiceID       (unique number)
-  InvoiceDate     (date)
-  SellerID        (emitter NIF)
-  CompanyName     (emitter name)
-  TaxItems        (array, at least 1 item)
-
-CONDITIONAL (for F1):
-  RelatedPartyID  (buyer NIF)
-  RelatedPartyName (buyer name)
-
-OPTIONAL:
-  Status          (omit or any value other than DRAFT)
-  Text            (description)
-  CountryID       (buyer country)
-  RelatedPartyIDType (default 02)
-  TaxScheme       (default 01)
-  Tax             (default 01)
-```
-
-### QR generation (generateQRCode)
-```
-REQUIRED: Same as standard submission
-OPTIONAL:
-  Status = "DRAFT"  (QR without AEAT validation)
-```
-
-### Cancellation (cancelInvoice)
-```
-REQUIRED:
-  InvoiceID       (invoice to cancel)
-  InvoiceDate     (date)
-  SellerID        (NIF)
-  CompanyName     (emitter name; the app always sends it)
-```
-
----
-
-## Common Error Codes
-
-| Code | Message | Solution |
-|------|---------|----------|
-| 8002 | CompanyName required | Check `setEmitterData()` |
-| 8002 | SellerID required | Check NIF is configured |
-| 8001 | ServiceKey invalid | Obtain a new key |
-| 8003 | Duplicate invoice | Generate a unique InvoiceID |
-| 9999 | Internal error | Retry; contact support |
-
----
-
-## Implementation Status in LAIDEAL
-
-| Field | Status | Notes |
-|-------|--------|-------|
-| Status | Not sent | Every invoice is a definitive submission |
-| InvoiceType | Complete | F2 and R1-R5 (F1 / F3 are rejected locally by `isValid`) |
-| RectificationType | Complete | S (substitution) and I (differences) |
-| IsInvoiceFix | Pending | For corrections |
-| IsRejected | Pending | For corrections with rejection |
-| InvoiceID | Complete | |
-| InvoiceDate | Complete | |
-| SellerID | Complete | |
-| CompanyName | Complete | |
-| RelatedPartyID | Not sent | The app issues F2 / R5 only, which carry no buyer |
-| RelatedPartyName | Not sent | As above |
-| RelatedPartyIDType | Partial | Assumes 02 (default) |
-| CountryID | Pending | Future |
-| Text | Complete | |
-| TaxItems | Complete | |
-| TaxScheme | Partial | Assumes 01 (general regime) |
-| TaxType | Partial | Always S1 |
-| TaxException | Pending | For exempt operations |
-| TaxBase | Complete | |
-| TaxRate | Complete | |
-| TaxAmount | Complete | |
-| CSV (Return) | Complete | Captured in `result.csv` |
-| ErrorDescription | Complete | Shown to user |
-| ValidationUrl | Complete | Calculated and shown |
-
----
-
-## JSON Structure Sent to the API
-
-### CompanyName (REQUIRED)
-- **Source**: `m_sellerName` of `VerifactuInvoice`
-- **Set in**: `VerifactuIntegration::loadEmitterConfiguration()`
-- **Format**: String
-- **Example**: `"Mi Empresa SL"`
-- **Error if missing**: `"El campo CompanyName es obligatorio."`
-
-### SellerID (REQUIRED)
-- **Source**: `m_sellerNIF` of `VerifactuInvoice`
-- **Set in**: `VerifactuIntegration::loadEmitterConfiguration()`
-- **Format**: String (9-character NIF)
-- **Example**: `"B12345678"`
-
-### ServiceKey (REQUIRED — sent separately)
-- **Source**: `AppSettings::verifactuServiceKey()` (`verifactu.service_key`, DPAPI-encrypted in `~/.laideal_settings.json`)
-- **Location**: Added to the JSON in `VerifactuManager::submitInvoiceAsync()`; logged only as `[redacted, N chars]`
-
-```cpp
-QJsonObject invoiceJson = invoice.toJson();
-invoiceJson["ServiceKey"] = m_config->getServiceKey();
-```
-
----
-
-## Data Flow
-
-```
-User saves a paid ticket in MainWindow
-    ↓
-VerifactuIntegration::submitSimplifiedInvoiceAsync()  (F2)
-    ↓
-Builds VerifactuInvoice with seller data from AppSettings + single VerifactuTaxItem
-    ↓
-calculateTotals() + isValid()
-    ↓
-VerifactuManager::submitInvoiceAsync() — adds ServiceKey, POSTs JSON to /Create
-    ↓
-parseVerifactuResponse() — captures CSV, QrCode, ValidationUrl from Return
-    ↓
-requestFinished(reqId, VerifactuResult) → the caller writes the verifactu_* columns to ingresos
-    ↓
-Imprimir::buildTicket() — rasters the QR pixmap into the ESC/POS receipt (GS v 0)
-```
-
-There is no F1 (full invoice with buyer NIF) flow. For the gateway reprint path the QR is fetched via `generateQRAsync()` → `/GetQrCode` because the pixmap is not persisted.
-
----
-
-## Internal Validations
-
-### VerifactuTaxItem::isValid()
-```cpp
-TaxRate >= 0
-(a TaxAmount that differs from TaxBase * TaxRate / 100 by 0.01 or more only logs a warning;
- a negative TaxBase is allowed)
-```
-
-### VerifactuInvoice::isValid()
-```cpp
-invoiceNumber not empty
-invoiceDate valid
-sellerNIF not empty
-sellerName not empty
-at least one valid TaxItem
-(no total check; F1 / F3 do not exist as types any more)
-```
-
----
-
-## Invoice Type Examples
-
-### F1 — Full Invoice (most common)
 ```json
 {
-  "InvoiceType": "F1",
-  "SellerID": "B12345678",
-  "CompanyName": "Mi Empresa",
-  "BuyerID": "12345678A",
-  "BuyerName": "Cliente",
-  "InvoiceID": "24417",
-  "InvoiceDate": "2026-05-17",
-  "TaxItems": [...]
+  "InvoiceType": "F2", "InvoiceID": "24417", "InvoiceDate": "2026-05-17",
+  "SellerID": "B12345678", "CompanyName": "Mi Empresa",
+  "TaxItems": [{ "TaxType": "S1", "TaxBase": 100.00, "TaxRate": 21.0, "TaxAmount": 21.00 }],
+  "TotalAmount": 121.00, "TotalTaxAmount": 21.00, "ServiceKey": "…"
 }
 ```
 
-### F2 — Simplified Invoice (no buyer identification)
+## `/Cancel`
+
+Body: `InvoiceID`, `InvoiceDate`, `SellerID`, `CompanyName` (always sent), `ServiceKey`. The date is the one the invoice was registered with.
+
+## `/GetFilteredList`
+
+Request (`VerifactuManager::queryInvoiceAsync`, vendor `FilterSet`): one filter on the ticket number.
+
 ```json
-{
-  "InvoiceType": "F2",
-  "SellerID": "B12345678",
-  "CompanyName": "Mi Empresa",
-  "InvoiceID": "24417",
-  "InvoiceDate": "2026-05-17",
-  "TaxItems": [...]
-}
+{"ServiceKey":"…","Filters":[{"FieldName":"InvoiceID","Operator":"=","Value":"30877"}],"Count":10,"Offset":-1}
 ```
 
----
+Reply: the schema is not published (the vendor's client parses it untyped). `Items` is confirmed against real replies (`test_parseQuery_realPopulatedReply`) with the fields `InvoiceID`, `InvoiceDate`, `TotalAmount`, `CSV`, `StatusResponse`, `ErrorCode`, `IsRejected`, `ValidationUrl`. `parseVerifactuQueryResponse()` also probes the envelopes `Return` / `Records` / `List` / `Result` / `Invoices` and a bare array, normalises dates to `dd-MM-yyyy`, keeps the whole payload in `raw` and always logs it.
 
-## Common Errors and Solutions
+- **The service stores every submission attempt**, not one record per invoice. A ticket sent once and retried four times comes back as five records under one `InvoiceID`: four duplicate rejections (`ErrorCode 9999`, `CSV: null`) and the acceptance, which is not necessarily first. The parser picks the accepted record (a CSV, no `ErrorCode`, not `IsRejected`), else the first, and reports `recordCount`.
+- A non-zero `ResultCode`, a body that is not JSON, or an envelope it does not understand leaves `parsed = false` (a failed query, never "AEAT does not have it"). Only a well-formed empty result means absent.
 
-### "El campo CompanyName es obligatorio"
-Verify that `VerifactuIntegration::loadEmitterConfiguration()` calls:
-```cpp
-m_manager->getConfig()->setEmitterData("B12345678", "Mi Empresa SL");
+## Reply handling (`parseVerifactuResponse`, told whether it answers a submit, cancel or QR)
+
+| Reply | `VerifactuResult` |
+|-------|-------------------|
+| Not JSON, or no numeric `ResultCode` | `NETWORK_ERROR`: unknown outcome, never a refusal |
+| Transport error / timeout | `NETWORK_ERROR` (with the gateway's own message when the HTTP error body carries one) |
+| `ResultCode != 0` | `ERROR`: `errorCode` = the code, `errorDescription` = `Return.ErrorDescription`, else `ResultMessage` |
+| `ResultCode == 0`, `Return.ErrorCode` set | `ERROR` with that code and `Return.ErrorDescription` |
+| `ResultCode == 0`, submit, no CSV | `PENDING` (never `ENVIADA`): checked later |
+| `ResultCode == 0`, otherwise | `SUCCESS` |
+| `/GetQrCode` with `Return` = base64 image | `SUCCESS` with `qrCode`; an unreadable image is `ERROR` |
+
+What is read from `Return` on success, and where it goes:
+
+| Field | Captured as | Stored in |
+|-------|-------------|-----------|
+| `CSV` | `csv` | `verifactu_csv` |
+| `ValidationUrl` | `validationUrl` (a QR reply gets a locally assembled URL) | `verifactu_url_qr` |
+| `Xml` (the record AEAT registered) | `rawXml` | `verifactu_xml` |
+| `<Huella>` inside `Xml` (any namespace prefix, upper-case hex; not `HuellaPrevia`) | `rawHash` | `verifactu_hash` |
+| `QrCode` (base64 BMP) | `qrCode` (`QPixmap`, `decodeVerifactuImageBase64`) | not stored: a reprint draws the QR locally from the stored URL |
+| `ErrorCode`, `ErrorDescription` | `errorCode`, `errorDescription` | `verifactu_error` (only when `ERROR`) |
+
+Not captured: `ExternKey`, `StatusResponse` (the `ResultCode` is used), `Response`, `QrCodeUrl`.
+
+## Error codes
+
+| Code | Meaning | What to do |
+|------|---------|-----------|
+| `8001` | ServiceKey invalid | Obtain a new key |
+| `8002` | A required field is missing (`CompanyName`, `SellerID`) | Configure the issuer's name and NIF |
+| `8003` | Duplicate `InvoiceID` | Never re-submit a number; reconcile with Consultar en AEAT |
+| `9999` | Internal library error (also the code of a duplicate-rejection record in the list) | Retry; contact support |
+| `3002` on cancel | No record to cancel: TESTING purges its records periodically, so submit a fresh invoice first. In production AEAT holds no invoice with that id and date | [README §Common error scenarios](./README.md#common-error-scenarios) |
+
+## Local validation before sending
+
+- `VerifactuTaxItem::isValid()`: `TaxRate >= 0`.
+- `VerifactuInvoice::isValid()`: number, date, seller NIF and name not empty; at least one valid tax item. There is no total check.
+- Not configured: `INVALID_CONFIG` ("Clave de servicio no configurada. Obténla en https://facturae.irenesolutions.com/verifactu/go" when the key is missing).
+
+## Data flow
+
+```
+paid ticket saved (MainWindow)
+  -> VerifactuIntegration::submitSimplifiedInvoiceAsync()   (F2)
+  -> VerifactuInvoice with the seller from AppSettings + one VerifactuTaxItem; calculateTotals(), isValid()
+  -> VerifactuManager::submitInvoiceAsync(): adds ServiceKey, POST /Create
+  -> parseVerifactuResponse(): CSV, QrCode, ValidationUrl, Xml, Huella
+  -> requestFinished(reqId, VerifactuResult): the caller writes the verifactu_* columns
+  -> Imprimir::buildTicket(): QR rastered into the ESC/POS receipt
 ```
 
-### "InvoiceID duplicado"
-Generate a unique invoice ID for each submission (unique per issuer, not per day). Do not re-submit the same number.
-
-### "BuyerID es obligatorio para tipo F1"
-Either provide BuyerID + BuyerName, or change to invoice type F2.
-
-### "TaxBase o TaxAmount inválidos"
-Verify: `TaxAmount = TaxBase * TaxRate / 100.0`
-
----
-
-## References
-
-- **Official specification**: https://facturae.irenesolutions.com/
-- **API documentation**: Provided with the ServiceKey
-- **Regulation**: Real Decreto 1007/2023 and Orden HAC/1177/2024 (Verifactu); Real Decreto 1619/2012 is the general invoicing regulation
+Wait times, adoption of a late reply and the QR on reprint: [README §Waits and in-flight requests](./README.md#waits-and-in-flight-requests).

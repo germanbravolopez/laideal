@@ -52,6 +52,7 @@ void CancelInvoiceDialog::buildUi()
     layout->addLayout(searchRow);
 
     m_lblHeader = new QLabel("-");
+    m_lblHeader->setObjectName("lblHeader");
     m_lblHeader->setWordWrap(true);
     m_lblHeader->setFrameShape(QFrame::StyledPanel);
     m_lblHeader->setContentsMargins(8, 8, 8, 8);
@@ -83,6 +84,18 @@ void CancelInvoiceDialog::onSearchClicked()
 {
     if (!m_pendingCancelId.isEmpty())   // the reply belongs to the ticket shown
         return;
+    loadTicket(m_leTicketNum->text().trimmed());
+}
+
+bool CancelInvoiceDialog::canCancel(const Event &e) const
+{
+    // A cancellation the direct client holds is not repeated.
+    return verifactuEstadoFromString(e.estado) == VerifactuEstado::Enviada
+           && !(m_verifactu && m_verifactu->holdsPendingCancellation(e.invoiceId));
+}
+
+void CancelInvoiceDialog::loadTicket(const QString &ticketNum)
+{
     m_lblResult->clear();
     m_armedRow = -1;
     m_loadedTicket.clear();
@@ -90,26 +103,23 @@ void CancelInvoiceDialog::onSearchClicked()
     m_table->setRowCount(0);
     m_lblHeader->setText("-");
 
-    const QString ticketNum = m_leTicketNum->text().trimmed();
     if (ticketNum.isEmpty()) return;
 
     // Header: cliente + fecha_recepcion. Constants across rows of the same
     // ticket, so MIN is fine.
-    QString client, date;
-    {
-        ConnectionScope scope(db);
-        QSqlQuery q(db);
-        q.prepare("SELECT MIN(cliente), MIN(fecha_recepcion) "
-                  "FROM ingresos WHERE n_recibo = :num");
-        q.bindValue(":num", ticketNum);
-        if (!q.exec() || !q.first() || q.value(0).isNull()) {
-            m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
-            return;
-        }
-        client = q.value(0).toString();
-        date   = q.value(1).toString();
+    bool headerOk = false;
+    const TicketHeader header = ticketHeader(db, ticketNum, &headerOk);
+    if (!headerOk) {
+        m_lblHeader->setText(tr("<i>No se pudo leer el ticket; consulte el registro.</i>"));
+        return;
     }
-    m_receptionDate = QDate::fromString(date, "dd-MM-yyyy");
+    if (!header.found) {
+        m_lblHeader->setText(tr("<i>Ticket no encontrado.</i>"));
+        return;
+    }
+    const QString client = header.client;
+    const QString date   = header.receptionDate;
+    m_receptionDate = parseDbDate(date);
 
     QVector<SubmittedInvoiceEvent> submitted;
     if (!submittedInvoiceEvents(db, ticketNum, submitted)) {
@@ -123,7 +133,8 @@ void CancelInvoiceDialog::onSearchClicked()
         e.importe     = s.importe;
         e.csv         = s.csv;
         e.estado      = s.estado;
-        e.invoiceDate = QDate::fromString(s.fechaPago, "dd-MM-yyyy");
+        e.invoiceDate = parseDbDate(s.fechaPago);
+        e.qrUrl       = invoiceQrUrl(db, ticketNum, s.seq, &e.qrUrlRead);
         m_events.append(e);
     }
 
@@ -142,6 +153,15 @@ void CancelInvoiceDialog::onSearchClicked()
         setActionsEnabled(false);
         m_lblResult->setText(UiKit::warnHtml(tr("La rectificativa %1 de este ticket está pendiente de envío a la AEAT: "
                                                 "espere a que se registre antes de anularlo.").arg(pending.toHtmlEscaped())));
+        return;
+    }
+    for (const Event &e : m_events) {
+        if (verifactuEstadoFromString(e.estado) == VerifactuEstado::Enviada && !canCancel(e)) {
+            m_lblResult->setText(UiKit::warnHtml(tr("La anulación de %1 está guardada, pendiente de envío a la AEAT.")
+                                                     .arg(e.invoiceId.toHtmlEscaped()))
+                                 + "<br>" + tr("Se enviará sola y la factura quedará anulada; no la repita."));
+            break;
+        }
     }
 }
 
@@ -176,19 +196,18 @@ void CancelInvoiceDialog::rebuildTable()
         const Event &e = m_events[row];
         m_table->setItem(row, COL_INVOICE_ID, new QTableWidgetItem(e.invoiceId));
         m_table->setItem(row, COL_DATE, new QTableWidgetItem(
-            e.invoiceDate.isValid() ? e.invoiceDate.toString("dd-MM-yyyy") : QStringLiteral("-")));
+            e.invoiceDate.isValid() ? dbDateText(e.invoiceDate) : QStringLiteral("-")));
         m_table->setItem(row, COL_IMPORTE,
-            new QTableWidgetItem(displayMoney(e.importe) + " €"));
+            new QTableWidgetItem(displayEuro(e.importe)));
         m_table->setItem(row, COL_ESTADO,
             new QTableWidgetItem(verifactuEstadoDisplay(e.estado)));
         m_table->setItem(row, COL_CSV,
             new QTableWidgetItem(e.csv.isEmpty() ? QStringLiteral("-") : e.csv));
 
-        const VerifactuEstado st = verifactuEstadoFromString(e.estado);
         auto *btn = UiKit::secondaryButton(tr("Anular"), QStringLiteral("btnCancel%1").arg(row));
         // Only ENVIADA events are AEAT-cancellable. ANULADA / RECTIFICADA /
         // ERROR / PENDIENTE all have no AEAT-side cancel to issue.
-        btn->setEnabled(st == VerifactuEstado::Enviada);
+        btn->setEnabled(canCancel(e));
         connect(btn, &QPushButton::clicked, this, [this, row]() { onCancelClicked(row); });
         m_table->setCellWidget(row, COL_ACTION, btn);
     }
@@ -203,8 +222,7 @@ void CancelInvoiceDialog::setActionsEnabled(bool enabled)
         m_btnSearch->setEnabled(enabled);
     for (int row = 0; row < m_events.size(); ++row) {
         if (auto *btn = qobject_cast<QPushButton *>(m_table->cellWidget(row, COL_ACTION))) {
-            const VerifactuEstado st = verifactuEstadoFromString(m_events[row].estado);
-            btn->setEnabled(enabled && st == VerifactuEstado::Enviada);
+            btn->setEnabled(enabled && canCancel(m_events[row]));
         }
     }
 }
@@ -256,11 +274,26 @@ void CancelInvoiceDialog::onCancelClicked(int row)
                                                   .arg(rectificativa.toHtmlEscaped())));
         return;
     }
+    // Which AEAT holds it decides between a cancellation sent and one in the books only.
+    if (!e.qrUrlRead) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo leer la factura %1 en la base de datos: no se anula. "
+                                                 "Busque el ticket de nuevo.").arg(e.invoiceId.toHtmlEscaped())));
+        return;
+    }
+    if (const QString undecided = m_verifactu->cancellationUndecidedReason(e.invoiceId, e.invoiceDate, e.qrUrl);
+        !undecided.isEmpty()) {
+        m_lblResult->setText(UiKit::errorHtml(undecided.toHtmlEscaped()));
+        return;
+    }
     if (m_armedRow != row) {
         armCancellation(row);
         return;
     }
     disarmCancellation();
+    if (m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate, e.qrUrl)) {
+        cancelLocally(row);
+        return;
+    }
     setActionsEnabled(false);
     m_lblResult->setText(tr("Enviando anulación de %1 a AEAT...").arg(e.invoiceId.toHtmlEscaped()));
 
@@ -273,7 +306,7 @@ void CancelInvoiceDialog::onCancelClicked(int row)
     m_firstRejection.clear();
     m_pendingFallbackDate = (e.seq == 0 && m_receptionDate.isValid() && m_receptionDate != e.invoiceDate)
                             ? m_receptionDate : QDate();
-    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate);
+    m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, e.invoiceDate, e.qrUrl);
     if (m_pendingCancelId.isEmpty()) {
         m_lblResult->setText(UiKit::errorHtml(tr("Verifactu no configurado:")) + " "
                              + m_verifactu->getLastError().toHtmlEscaped());
@@ -291,11 +324,42 @@ void CancelInvoiceDialog::armCancellation(int row)
     m_armedRow = row;
     btn->setText(tr("Confirmar anulación"));
     const Event &e = m_events[row];
+    if (m_verifactu && m_verifactu->invoicePredatesProduction(e.invoiceId, e.invoiceDate, e.qrUrl)) {
+        m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la contabilidad la factura %1 del %2 por %3 €.")
+                                                 .arg(e.invoiceId.toHtmlEscaped(), dbDateText(e.invoiceDate),
+                                                      displayMoney(e.importe)))
+                             + "<br>" + tr("Es anterior al paso a PRODUCCIÓN: la AEAT real no la tiene y no se le envía "
+                                           "nada. La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> "
+                                           "para hacerla, o busque otro ticket para no hacer nada."));
+        return;
+    }
     m_lblResult->setText(UiKit::warnHtml(tr("Se va a anular en la AEAT la factura %1 del %2 por %3 €.")
-                                             .arg(e.invoiceId.toHtmlEscaped(), e.invoiceDate.toString("dd-MM-yyyy"),
+                                             .arg(e.invoiceId.toHtmlEscaped(), dbDateText(e.invoiceDate),
                                                   displayMoney(e.importe)))
                          + "<br>" + tr("La anulación no se puede deshacer. Pulse <b>Confirmar anulación</b> para "
                                        "enviarla, o busque otro ticket para no hacer nada."));
+}
+
+void CancelInvoiceDialog::cancelLocally(int row)
+{
+    const Event e = m_events[row];
+    // A warning on purpose: the one cancellation AEAT is not told about must be found in the log.
+    qWarning() << "CancelInvoiceDialog: invoice" << e.invoiceId << "of" << e.invoiceDate.toString(Qt::ISODate) << "(ticket"
+               << m_loadedTicket << "seq" << e.seq << ") predates production - cancelled in the books on"
+               << m_pendingCancelDate.toString(Qt::ISODate) << ", nothing sent to AEAT";
+    // In place of AEAT's cancellation record, so the AEAT export says what this one is.
+    const QString note = QStringLiteral("<AnulacionLocal motivo=\"Factura anterior al paso a PRODUCCION: la AEAT real "
+                                        "no la tiene y no se le envia registro de anulacion\"/>");
+    if (!markInvoiceSeqCancelled(db, m_loadedTicket, e.seq, m_pendingCancelDate, note)) {
+        m_lblResult->setText(UiKit::errorHtml(tr("No se pudo guardar la anulación de %1 en la base de datos. Revise el "
+                                                 "log de depuración.").arg(e.invoiceId.toHtmlEscaped())));
+        return;
+    }
+    const QString cancelled = m_loadedTicket;   // not the search box, which may have been edited since
+    loadTicket(cancelled);                      // the table, from what is stored now
+    m_lblResult->setText(UiKit::okHtml(tr("Factura %1 anulada en la contabilidad.").arg(e.invoiceId.toHtmlEscaped()))
+                         + "<br>" + tr("No se ha enviado nada a la AEAT: la factura es anterior al paso a PRODUCCIÓN "
+                                       "y la AEAT real no la tiene."));
 }
 
 void CancelInvoiceDialog::disarmCancellation()
@@ -321,36 +385,30 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
     m_pendingCancelId.clear();
     const int row = m_pendingCancelRow;
     m_pendingCancelRow = -1;
-    if (row < 0) {
-        setActionsEnabled(true);
-        return;
-    }
     // The invoice the request was sent for, not whatever row `row` holds now.
     Event &e = m_pendingEvent;
-    // Shows the new estado on the table row of that invoice, when the window still lists it.
+    // Shows the new estado on the table row of that invoice. The reply belongs to the loaded
+    // ticket: searching is refused while a request is pending.
     const auto showEstado = [this](const Event &sent, VerifactuEstado estado) {
-        if (m_loadedTicket != m_pendingTicket)
-            return;
         for (Event &shown : m_events)
             if (shown.seq == sent.seq)
                 shown.estado = verifactuEstadoToString(estado);
         rebuildTable();
     };
 
-    // Before 10.9 a failed submission was re-sent with the reception date, so some old
-    // seq-0 invoices are registered under it. When AEAT rejects the cancellation, try
-    // that date once: only one invoice has this InvoiceID, so it cannot hit another.
+    // Some old seq-0 invoices are registered under the reception date: when AEAT rejects the
+    // cancellation, try that date once (only one invoice has this InvoiceID).
     const QDate fallback = m_pendingFallbackDate;
     m_pendingFallbackDate = QDate();
     if (result.status == VerifactuResult::ERROR && fallback.isValid()) {
         qWarning() << "CancelInvoiceDialog: AEAT rejected the cancellation of" << e.invoiceId
-                   << "on" << e.invoiceDate.toString("dd-MM-yyyy") << "-" << result.errorDescription
-                   << "- retrying with the reception date" << fallback.toString("dd-MM-yyyy");
+                   << "on" << dbDateText(e.invoiceDate) << "-" << result.errorDescription
+                   << "- retrying with the reception date" << dbDateText(fallback);
         m_lblResult->setText(tr("Reintentando la anulación de %1 con la fecha de recepción (%2)...")
-                                 .arg(e.invoiceId.toHtmlEscaped(), fallback.toString("dd-MM-yyyy")));
+                                 .arg(e.invoiceId.toHtmlEscaped(), dbDateText(fallback)));
         m_firstRejection   = result.errorDescription;
         m_pendingCancelRow = row;
-        m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback);
+        m_pendingCancelId  = m_verifactu->cancelInvoiceAsync(e.invoiceId, fallback, e.qrUrl);
         if (!m_pendingCancelId.isEmpty())
             return;
         m_pendingCancelRow = -1;
@@ -380,10 +438,7 @@ void CancelInvoiceDialog::onVerifactuRequestFinished(const QString &requestId, c
         return;
     }
 
-    // Scope the local UPDATE to the seq we just cancelled so the other payment
-    // events of the same n_recibo stay ENVIADA. This is the fix the 8.5 blocker
-    // pointed at: the legacy single-event flow updated WHERE n_recibo=X alone
-    // and would have marked every event ANULADA in one shot.
+    // Only the seq just cancelled is marked: the other payment events of the n_recibo stay ENVIADA.
     qDebug() << "CancelInvoiceDialog: marking ANULADA ticket" << m_pendingTicket << "seq" << e.seq;
     // Stamp the date the closed-quarter guard checked, not the (later) reply time -
     // unless that quarter was closed while the request was in flight.

@@ -76,6 +76,14 @@
 #include "ticketrenderer.h"
 #include "voidgarmentsdialog.h"
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOGDI
+#define NOUSER
+#define NOMINMAX
+#include <windows.h>   // last: only the file-sharing helpers below use it
+#endif
+
 class TestE2eApp : public QObject
 {
     Q_OBJECT
@@ -89,7 +97,7 @@ class TestE2eApp : public QObject
     ModalDriver *m_driver = nullptr;
 
     QString scalar(const QString &sql) { return E2e::scalar(m_db, sql); }
-    static QString today() { return QDate::currentDate().toString("dd-MM-yyyy"); }
+    static QString today() { return dbDateText(QDate::currentDate()); }
 
     // Contabilidad's close / Revertir of the quarter containing `date`.
     bool closeQuarterOf(const QDate &date) { return closeQuarter(m_db, (date.month() + 2) / 3, date.year(), ""); }
@@ -234,6 +242,17 @@ class TestE2eApp : public QObject
         return E2e::exec(m_db, "DELETE FROM aeat_records WHERE invoice_number = '" + number + "'");
     }
 
+#ifdef Q_OS_WIN
+    // The file open for reading and writing but not for replacing: a QSaveFile cannot take its place.
+    static void *holdFileAgainstReplacing(const QString &path)
+    {
+        const HANDLE h = CreateFileW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16()), GENERIC_READ,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        return h == INVALID_HANDLE_VALUE ? nullptr : h;
+    }
+    static void releaseHeldFile(void *handle) { CloseHandle(handle); }
+#endif
+
 private slots:
     void initTestCase()
     {
@@ -260,7 +279,7 @@ private slots:
         AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
         ReportHtml::setOpenGeneratedReports(false);
 
-        // MainWindow opens DB_PATH as the default connection; the test reads the same file.
+        // MainWindow opens dbPath() as the default connection; the test reads the same file.
         const QString dbFile = m_dir.filePath("laideal_e2e_app.db");
         setDbPath(dbFile);
         m_db = QSqlDatabase::addDatabase("QSQLITE", "e2e_app");
@@ -511,7 +530,7 @@ private slots:
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0760"));
+        QVERIFY(E2e::seedSentGarment(m_db, "760", "h760a", "10.00", dbDateText(paid), "A-ORIG0760"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -527,7 +546,9 @@ private slots:
             dlg.m_verifactu = &direct;
             dlg.findChild<QLineEdit *>("leTicketNum")->setText("760");
             QMetaObject::invokeMethod(&dlg, "onSearchClicked");
-            dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);      // R5
+            // R5 is the type offered: the shop's tickets are simplified invoices.
+            if (dlg.findChild<QComboBox *>("cbInvoiceType")->currentIndex() != 4)
+                return QStringLiteral("the dialog does not open on R5");
             dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(amount);
             QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
             QTest::qWaitFor([&dlg] { return !dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"); }, 15000);
@@ -553,6 +574,135 @@ private slots:
         QVERIFY(aeat.server.sentRecords().last().afterRejection);              // Subsanacion + RechazoPrevio
         QCOMPARE(aeat.server.sentRecords().last().invoiceNumber, number);
         QCOMPARE(refusedInvoiceCount(m_db), 0);
+    }
+
+    // The direct client in PRODUCTION and tickets invoiced before it (AEAT's test
+    // environment, or the gateway): the real AEAT never held them, so nothing about them
+    // goes there - a retry is refused, the pending list leaves them out, and Anular cancels
+    // them in the books only. An invoice registered in production is cancelled at AEAT.
+    void test_production_invoicesFromBeforeItStayLocal()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
+        const QDate yesterday = QDate::currentDate().addDays(-1);
+        QVERIFY(E2e::seedSentGarment(m_db, "771", "h771a", "10.00", dbDateText(yesterday), "A-TEST0771"));
+        QVERIFY(E2e::seedSentGarment(m_db, "772", "h772a", "12.10", dbDateText(yesterday), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h772a'"));
+        QVERIFY(E2e::seedSentGarment(m_db, "773", "h773a", "12.10", today(), ""));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AppSettings::instance()->setAeatDirectProduction(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        AppSettings::instance()->setAeatDirectProduction(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        QCOMPARE(direct.environmentName(), QStringLiteral("produccion"));
+        QCOMPARE(direct.productionStartDate(), QDate::currentDate());
+
+        // A retry of yesterday's pending ticket is refused; the lists leave it out.
+        QVERIFY(direct.submitSimplifiedInvoiceAsync("772", yesterday, 10.0, 21.0).isEmpty());
+        QVERIFY2(direct.getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(direct.getLastError()));
+        QCOMPARE(pendingVerifactuEvents(m_db, verifactuRecoveryFloorIso(m_db, "2026-01-01", false)).size(), 1);
+        QCOMPARE(pendingVerifactuEvents(m_db, verifactuRecoveryFloorIso(m_db, "2026-01-01", true)).size(), 0);
+        QVERIFY(aeat.server.sentRecords().isEmpty());
+
+        // Today's invoice is registered in production.
+        QVERIFY(!direct.submitSimplifiedInvoiceAsync("773", QDate::currentDate(), 10.0, 21.0).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "773").state, AeatStore::kAccepted, 10000);
+        QVERIFY(direct.invoicePredatesProduction("771", yesterday));
+        QVERIFY(!direct.invoicePredatesProduction("773", QDate::currentDate()));
+        // On the day itself: a ticket never registered anywhere is production's (it is sent);
+        // one the test environment accepted this morning is not (Anular stays local).
+        QVERIFY(!direct.invoicePredatesProduction("774", QDate::currentDate()));
+        {
+            AeatStore testStore(m_db, "pruebas");
+            QVERIFY(testStore.ensureSchema());
+            QVERIFY(E2e::exec(m_db, "INSERT INTO aeat_records (environment, kind, issuer_nif, invoice_number, issue_date, "
+                                    "total, hash, xml, generated_at, state) VALUES ('pruebas', 'alta', 'B00000000', '774', "
+                                    "'01-01-2026', 1, 'H774', '<x/>', '2026-01-01T10:00:00+01:00', 'ACEPTADO')"));
+        }
+        QVERIFY(direct.invoicePredatesProduction("774", QDate::currentDate()));
+        // A rectificativa dated before production is refused like any invoice.
+        QVERIFY(direct.submitRectificationAsync("R-771", yesterday, VerifactuInvoice::RECTIFICATION_R5,
+                                                VerifactuInvoice::BY_DIFFERENCES, -1.0, -0.21, 10.0, 2.10, 21.0,
+                                                "x", "771", yesterday).isEmpty());
+        QVERIFY2(direct.getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(direct.getLastError()));
+        // A new invoice is refused its date before anything is stored as paid.
+        QVERIFY(direct.dateBeforeProductionReason(QDate::currentDate()).isEmpty());
+        QVERIFY(direct.dateBeforeProductionReason(yesterday).contains("anterior al paso a PRODUCCI"));
+        // Recogida: a ticket received yesterday can only be paid from the day production
+        // began, and a payment with an earlier date is refused with nothing stored as paid
+        // (it would be a paid invoice the real AEAT never gets).
+        QVERIFY(E2e::seedGarment(m_db, "775", "h775a", "9.00", dbDateText(yesterday)));
+        {
+            PayDialog pay(m_db);
+            pay.m_verifactu = &direct;
+            QVERIFY(pay.loadTicket("775"));
+            auto *payDate = pay.findChild<QDateEdit *>();
+            QVERIFY(payDate);
+            QCOMPARE(payDate->minimumDate(), QDate::currentDate());
+            payDate->setMinimumDate(yesterday);                       // as if the limit were not there
+            payDate->setDate(yesterday);
+            QMetaObject::invokeMethod(&pay, "onCobrarClicked");
+            QVERIFY2(pay.findChild<QLabel *>("lblResult")->text().contains("anterior al paso a PRODUCCI"),
+                     qPrintable(pay.findChild<QLabel *>("lblResult")->text()));
+            QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h775a'"), QStringLiteral("NO"));
+        }
+        // The owner enters production anew: the period begins again (today, here).
+        direct.markProductionStarted();
+        QCOMPARE(direct.productionStartDate(), QDate::currentDate());
+        QVERIFY(direct.cancelInvoiceAsync("771", yesterday).isEmpty());        // the facade refuses it too
+        QCOMPARE(aeat.server.sentRecords().size(), 1);
+
+        CancelInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        auto *result = dlg.findChild<QLabel *>("lblResult");
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("771");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("en la contabilidad") && result->text().contains("no se le env"), qPrintable(result->text()));
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("773");              // edited before confirming
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));     // Confirmar anulación
+        QVERIFY2(result->text().contains("anulada en la contabilidad"), qPrintable(result->text()));
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 0)->text(), QStringLiteral("771"));   // the ticket cancelled
+        QCOMPARE(scalar("SELECT verifactu_estado || '|' || fecha_anulacion FROM ingresos WHERE hash='h771a'"),
+                 QStringLiteral("ANULADA|%1").arg(today()));
+        QCOMPARE(aeat.server.sentRecords().size(), 1);                         // nothing sent for it
+        QVERIFY(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE hash='h771a'").startsWith("<AnulacionLocal"));
+        {
+            QVector<AeatExportRecord> records;
+            QVERIFY(aeatExportRecords(m_db, yesterday, QDate::currentDate(), records));
+            QBuffer buffer;
+            QVERIFY(buffer.open(QIODevice::WriteOnly));
+            writeAeatExportXml(&buffer, records, yesterday, QDate::currentDate(), "B00000000", "Tintoreria E2E");
+            QCOMPARE(buffer.data().count("local=\"1\""), 1);              // the export says it never went to AEAT
+        }
+
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("773");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("anular en la AEAT"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(result->text().contains("Anulación confirmada"), 15000);
+        QCOMPARE(aeat.server.sentRecords().last().operation, QStringLiteral("Anulacion"));
+        QCOMPARE(aeat.server.sentRecords().last().invoiceNumber, QStringLiteral("773"));
+
+        // An invoice from before the direct client's production that the gateway registered
+        // at the real AEAT (its QR points there) is cancelled at AEAT, not only in the books.
+        QVERIFY(E2e::seedSentGarment(m_db, "776", "h776a", "10.00", dbDateText(yesterday), "A-REAL0776"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = 'https://www2.agenciatributaria.gob.es/wlpl/"
+                                "TIKE-CONT/ValidarQR?nif=B00000000&numserie=776' WHERE hash='h776a'"));
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("776");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QVERIFY2(result->text().contains("anular en la AEAT"), qPrintable(result->text()));
+        QMetaObject::invokeMethod(&dlg, "onCancelClicked", Q_ARG(int, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(aeat.server.sentRecords().last().invoiceNumber == QLatin1String("776"), 15000);
+        QCOMPARE(aeat.server.sentRecords().last().operation, QStringLiteral("Anulacion"));
+        QVERIFY(!scalar("SELECT COALESCE(verifactu_cancel_xml, '') FROM ingresos WHERE hash='h776a'").startsWith("<AnulacionLocal"));
     }
 
     // While a rectificativa of a ticket waits for AEAT, the ticket can be neither rectified
@@ -630,6 +780,12 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"), 20000);
         QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "778").state, AeatStore::kPending);
+        // Searching the ticket again does not offer Anular again: its cancellation is held.
+        cancel.findChild<QLineEdit *>("leTicketNum")->setText("778");
+        QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+        QVERIFY(!qobject_cast<QPushButton *>(table->cellWidget(0, 5))->isEnabled());
+        QVERIFY2(cancel.findChild<QLabel *>("lblResult")->text().contains("pendiente de env"),
+                 qPrintable(cancel.findChild<QLabel *>("lblResult")->text()));
         // While its cancellation is pending, the ticket is not rectified either.
         RectifyInvoiceDialog rectify(m_db);
         rectify.m_verifactu = &direct;
@@ -714,6 +870,7 @@ private slots:
     void test_mainWindow_showsAChainRestart()
     {
         LiveAeat aeat(suiteAeatEndpoint());
+        aeat.server.setQueryHidesCancellationRecord(true);       // the case that restarts a chain
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
         AppSettings::instance()->setVerifactuDirectAeat(true);
@@ -744,10 +901,10 @@ private slots:
     {
         AeatStore store(m_db, "pruebas");
         QVERIFY(markChainReady(store));
-        const QString reception = QDate::currentDate().addDays(-3).toString("dd-MM-yyyy");
+        const QString reception = dbDateText(QDate::currentDate().addDays(-3));
         QVERIFY(E2e::seedSentGarment(m_db, "781", "h781a", "10.00", today(), "A-ORIG0781"));
         AeatRecord::Registration original;
-        original.invoice = { AppSettings::instance()->verifactuNif(), QStringLiteral("781"), QDate::fromString(reception, "dd-MM-yyyy") };
+        original.invoice = { AppSettings::instance()->verifactuNif(), QStringLiteral("781"), parseDbDate(reception) };
         original.invoiceType = QStringLiteral("F2");
         original.generatedAt = QDateTime::currentDateTime().addDays(-3);
         original.taxLines = { { 21.0, 8.26, 1.74 } };
@@ -1013,8 +1170,9 @@ private slots:
                  QStringLiteral("SI"));
     }
 
-    // The status bar says when the direct client registers in AEAT's test environment
-    // (its default): real sales must never go there unnoticed.
+    // The status bar says which AEAT the direct client registers in: the test environment
+    // (its default: real sales must never go there unnoticed), or production with the day
+    // it began on this database.
     void test_mainWindow_showsThePreProductionEnvironment()
     {
         {
@@ -1027,14 +1185,16 @@ private slots:
         auto *environment = mw.findChild<QLabel *>("lblAeatEnvironment");
         QVERIFY(environment->isVisibleTo(&mw));
         QVERIFY(environment->text().contains("PRUEBAS"));
-        // After Configuración: production hides it, the gateway too.
+        // After Configuración: production says so, the gateway hides it.
         AppSettings::instance()->setVerifactuDirectAeat(true);
         AppSettings::instance()->setAeatDirectProduction(true);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
-        QVERIFY(!environment->isVisibleTo(&mw));
+        QVERIFY(environment->isVisibleTo(&mw));
+        QVERIFY2(environment->text().contains("PRODUCCIÓN desde el " + today()), qPrintable(environment->text()));
         AppSettings::instance()->setAeatDirectProduction(false);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
         QVERIFY(environment->isVisibleTo(&mw));
+        QVERIFY(environment->text().contains("PRUEBAS"));
         AppSettings::instance()->setVerifactuDirectAeat(false);
         QMetaObject::invokeMethod(&mw, "initializeVerifactu");
         QVERIFY(!environment->isVisibleTo(&mw));
@@ -1214,7 +1374,7 @@ private slots:
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
         QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");   // nor paid garments added
         QPointer<AddGarment> add = mw.findChild<AddGarment *>();
-        QVERIFY(add && add->invoicingBlocked && add->invoicingBlocked().contains("comprobando"));
+        QVERIFY(add && add->invoicing.invoicingBlocked && add->invoicing.invoicingBlocked().contains("comprobando"));
         delete add;
         QTRY_VERIFY_WITH_TIMEOUT(direct->chainReady(), 20000);
         clickSave(mw);
@@ -1354,6 +1514,79 @@ private slots:
         QCOMPARE(duringSave, ticket);
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("1"));
         QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("SI"));
+    }
+
+    // A window close that arrives while a save waits for AEAT is refused until the save is over.
+    void test_mainWindow_closeDuringASaveWaitIsRefused()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(markChainReady(store));
+        aeat.server.enqueue({ QByteArray(), 200, 1000 });
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Cadena");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        int closeDuringWait = -1;
+        connect(mw.findChild<VerifactuIntegration *>(), &VerifactuIntegration::chainChecked, &mw,
+                [&] { closeDuringWait = mw.close() ? 1 : 0; });
+        mw.show();
+        clickSave(mw);
+        QTRY_VERIFY(closeDuringWait != -1);
+        QCOMPARE(closeDuringWait, 0);
+        QVERIFY(mw.isVisible());
+        QVERIFY(mw.close());                                         // after the save it closes
+    }
+
+    // The rectificativa's stored label comes from the combo position, not from its text.
+    void test_rectifyLabelComesFromTheComboIndex()
+    {
+        QVERIFY(AeatStore(m_db, "pruebas").ensureSchema());
+        QVERIFY(E2e::exec(m_db, "DELETE FROM aeat_chain_sync"));
+        QVERIFY(E2e::seedSentGarment(m_db, "776", "h776a", "10.00", today(), "A-ORIG0776"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = &direct;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("776");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        auto *type = dlg.findChild<QComboBox *>("cbInvoiceType");
+        type->setItemText(4, QStringLiteral("Otra rectificacion"));     // as a translation could word it
+        type->setCurrentIndex(4);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(8.00);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(dlg.findChild<QLabel *>("lblResult")->text().contains("Error al rectificar"), 20000);
+        QVERIFY2(scalar("SELECT observaciones FROM ingresos WHERE verifactu_rectifies_n_recibo = '776'")
+                     .startsWith("Rectificativa R5 ("),
+                 qPrintable(scalar("SELECT observaciones FROM ingresos WHERE verifactu_rectifies_n_recibo = '776'")));
+    }
+
+    // A ticket header that cannot be read is not reported as "not found".
+    void test_unreadableTicketIsNotReportedAsNotFound()
+    {
+        CancelInvoiceDialog cancel(m_db);
+        RectifyInvoiceDialog rectify(m_db);
+        const auto search = [&](const QString &ticket) {
+            cancel.findChild<QLineEdit *>("leTicketNum")->setText(ticket);
+            QMetaObject::invokeMethod(&cancel, "onSearchClicked");
+            rectify.findChild<QLineEdit *>("leTicketNum")->setText(ticket);
+            QMetaObject::invokeMethod(&rectify, "onSearchClicked");
+        };
+        const auto texts = [&]() {
+            return cancel.findChild<QLabel *>("lblHeader")->text() + "|" + rectify.findChild<QLabel *>("lblInfo")->text();
+        };
+        search("999999");
+        QVERIFY2(texts().contains("no encontrado") && !texts().contains("No se pudo leer"), qPrintable(texts()));
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE ingresos RENAME TO ingresos_hidden"));
+        const auto restore = qScopeGuard([this] { E2e::exec(m_db, "ALTER TABLE ingresos_hidden RENAME TO ingresos"); });
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ticketHeader: query failed"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ticketHeader: query failed"));
+        search("999999");
+        QVERIFY2(texts().count("No se pudo leer") == 2 && !texts().contains("no encontrado"), qPrintable(texts()));
     }
 
     // Verifactu not configured (here the issuer's NIF is missing): every invoice is a
@@ -1552,6 +1785,202 @@ private slots:
         const QString shown = mw.findChild<QLabel *>("lblResult")->text();
         QVERIFY2(shown.contains("La prenda de la fila 2 no tiene precio"), qPrintable(shown));
         QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '" + ticket + "'"), QStringLiteral("0"));
+    }
+
+    // Closing Listado de clientes / de prendas refills the choices of the ticket being
+    // filled: the client typed, its phone and every garment row stay as they were.
+    void test_mainWindow_listingsKeepWhatIsBeingTyped()
+    {
+        QVERIFY(addNewClient(m_db, "Cliente Uno", "", "", ""));
+        MainWindow mw;
+        auto *client = mw.findChild<QComboBox *>("cb_client");
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        QCOMPARE(client->count(), 1);
+        client->setCurrentText("Cliente Nuevo");
+        mw.findChild<QLineEdit *>("le_phone")->setText("600111222");
+        enterGarment(mw, "Camisa", "2");
+        table->setItem(1, 0, new QTableWidgetItem("1"));
+        qobject_cast<QComboBox *>(table->cellWidget(1, 1))->setCurrentText("Camisa");
+        const QString total = mw.findChild<QLineEdit *>("le_cost_total")->text();
+
+        const auto closeListing = [&mw](const QString &table) {
+            for (Listado *l : mw.findChildren<Listado *>())
+                if (l->tableName == table) {
+                    l->close();
+                    return true;
+                }
+            return false;
+        };
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_clientes_triggered");
+        QVERIFY(closeListing("clientes"));
+        QCOMPARE(client->count(), 1);
+        QCOMPARE(client->currentText(), QStringLiteral("Cliente Nuevo"));
+        QCOMPARE(mw.findChild<QLineEdit *>("le_phone")->text(), QStringLiteral("600111222"));
+
+        QVERIFY(E2e::exec(m_db, "INSERT INTO prendas VALUES ('Falda E2E', '2.00', '1.00')"));
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_prendas_triggered");
+        QVERIFY(closeListing("prendas"));
+        for (int row : { 0, 1 }) {
+            auto *garment = qobject_cast<QComboBox *>(table->cellWidget(row, 1));
+            QCOMPARE(garment->currentText(), QStringLiteral("Camisa"));
+            QVERIFY(garment->findText("Falda E2E") >= 0);                // the new choice is offered
+        }
+        QCOMPARE(mw.findChild<QLineEdit *>("le_cost_total")->text(), total);
+        QVERIFY(table->item(0, 5) && !table->item(0, 5)->text().isEmpty());
+        E2e::exec(m_db, "DELETE FROM prendas WHERE nombre = 'Falda E2E'");
+    }
+
+    // A save that fails stores nothing, so it adds no client either: the retry does not
+    // leave the client twice in clientes.
+    void test_mainWindow_failedSaveThenRetryAddsTheClientOnce()
+    {
+        MainWindow mw;
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Reintento");
+        enterGarment(mw, "Camisa", "1");
+        QVERIFY(E2e::exec(m_db, "CREATE TRIGGER e2e_block BEFORE INSERT ON ingresos "
+                                "BEGIN SELECT RAISE(ABORT, 'blocked by test'); END"));
+        clickSave(mw);
+        E2e::exec(m_db, "DROP TRIGGER e2e_block");
+        QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("No se pudo guardar el ticket"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes WHERE nombre = 'Cliente Reintento'"), QStringLiteral("0"));
+        clickSave(mw);
+        QVERIFY(mw.findChild<QLabel *>("lblResult")->text().contains("guardado:"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM clientes WHERE nombre = 'Cliente Reintento'"), QStringLiteral("1"));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos"), QStringLiteral("1"));
+    }
+
+    // A refusal that arrives inside the wait for AEAT stays in the panel beside the
+    // "guardado" message, not covered by it.
+    void test_mainWindow_refusalInsideTheWaitStaysVisible()
+    {
+        MainWindow mw;
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Rechazo");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        FakeVerifactuServer::Reply refused;
+        refused.body = FakeVerifactuServer::rejectedReply("1100", "Valor o tipo incorrecto");
+        m_server.enqueue("Create", refused);
+        clickSave(mw);
+        const QString shown = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains(QStringLiteral("Ticket %1 guardado").arg(ticket)), qPrintable(shown));
+        QVERIFY2(shown.contains("AEAT ha rechazado la factura") && shown.contains("Valor o tipo incorrecto"),
+                 qPrintable(shown));
+        QCOMPARE(scalar(QStringLiteral("SELECT verifactu_estado FROM ingresos WHERE n_recibo='%1'").arg(ticket)),
+                 QStringLiteral("ERROR"));
+    }
+
+    // Añadir prendas: a payment whose submission the integration refuses is said in the
+    // main window's panel, not dropped in silence (here: dated before production).
+    void test_mainWindow_refusedSubmitOfAddedGarmentIsShown()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AppSettings::instance()->setAeatDirectProduction(true);
+        MainWindow mw;
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        AppSettings::instance()->setAeatDirectProduction(false);
+        auto *direct = mw.findChild<VerifactuIntegration *>();
+        QVERIFY(direct && direct->directBackend());
+        QTRY_VERIFY_WITH_TIMEOUT(direct->directBackend()->chainReady(), 15000);
+        QMetaObject::invokeMethod(&mw, "on_actionAnadir_nuevas_prendas_triggered");
+        auto *add = mw.findChild<AddGarment *>();
+        QVERIFY(add);
+        mw.findChild<QLabel *>("lblResult")->clear();
+        emit add->paidGarmentSaved("9001", QDate::currentDate().addDays(-1), 5.0, 0);
+        const QString shown = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains("no se ha enviado a AEAT") && shown.contains("anterior al paso a PRODUCCI"),
+                 qPrintable(shown));
+        QVERIFY(aeat.server.sentRecords().isEmpty());
+    }
+
+    // Archivo -> Cerrar closes the window (its close event), it does not quit the application.
+    void test_mainWindow_cerrarClosesTheWindow()
+    {
+        MainWindow mw;
+        mw.show();
+        QVERIFY(mw.isVisible());
+        mw.findChild<QAction *>("actionCerrar")->trigger();
+        QVERIFY(!mw.isVisible());
+    }
+
+    // Accepting Configuración with another business name changes the window's title.
+    void test_mainWindow_titleFollowsTheBusinessName()
+    {
+        AppSettings::instance()->setBusinessName("Tintoreria Uno");
+        auto restore = qScopeGuard([] { AppSettings::instance()->setBusinessName(QString()); });
+        MainWindow mw;
+        auto *title = mw.findChild<QLabel *>("lblHeading");
+        QVERIFY(title);
+        QCOMPARE(title->text(), QStringLiteral("Tintoreria Uno"));
+        m_driver->expect([](QWidget *w) { return w->inherits("SettingsDialog"); }, [](QWidget *w) {
+            for (QLineEdit *edit : w->findChildren<QLineEdit *>())
+                if (edit->text() == QLatin1String("Tintoreria Uno"))
+                    edit->setText("Tintoreria Dos");
+            qobject_cast<QDialog *>(w)->accept();
+        });
+        mw.findChild<QAction *>("actionConfiguracion")->trigger();
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(title->text(), QStringLiteral("Tintoreria Dos"));
+    }
+
+    // After a save whose next ticket number cannot be read, the red message is kept beside
+    // the "guardado" one (here the table goes away while the save waits for AEAT).
+    void test_mainWindow_unreadableNextNumberStaysInThePanel()
+    {
+        MainWindow mw;
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Sin Numero");
+        enterGarment(mw, "Camisa", "1");
+        mw.findChild<QCheckBox *>("pb_payment")->setChecked(true);
+        FakeVerifactuServer::Reply slow;
+        slow.delayMs = 1200;
+        m_server.enqueue("Create", slow);
+        QTimer::singleShot(300, &mw, [this] { E2e::exec(m_db, "ALTER TABLE ingresos RENAME TO ingresos_away"); });
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression("highest ticket number could not be read"));
+        clickSave(mw);
+        E2e::exec(m_db, "ALTER TABLE ingresos_away RENAME TO ingresos");
+        const QString shown = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains("guardado:") && shown.contains("No se pudo leer el último número de ticket"),
+                 qPrintable(shown));
+    }
+
+    // A quantity of zero or below is refused, whatever price was typed.
+    void test_mainWindow_negativeQuantityRefused()
+    {
+        MainWindow mw;
+        const QString ticket = mw.findChild<QLineEdit *>("le_nr_ticket")->text();
+        mw.findChild<QComboBox *>("cb_client")->setCurrentText("Cliente Cantidad");
+        enterGarment(mw, "Camisa", "1");
+        auto *table = mw.findChild<QTableWidget *>("table_ticket");
+        table->item(0, 0)->setText("-1");
+        table->item(0, 5)->setText("3,50");
+        clickSave(mw);
+        const QString shown = mw.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains("no tiene cantidad"), qPrintable(shown));
+        QCOMPARE(scalar(QStringLiteral("SELECT COUNT(*) FROM ingresos WHERE n_recibo='%1'").arg(ticket)), QStringLiteral("0"));
+    }
+
+    // The start-up recovery dialog waits while another dialog is open instead of opening
+    // over it, and appears once that one is closed.
+    void test_mainWindow_recoveryWaitsForAnOpenDialog()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "9200", "h9200a", "9.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='h9200a'"));
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        MainWindow mw;
+        QDialog other(&mw);
+        bool recoveryOver = false;
+        QTimer::singleShot(4800, &other, [&] {
+            recoveryOver = mw.findChild<PendingSubmitsDialog *>() != nullptr;
+            other.accept();
+        });
+        other.exec();
+        QVERIFY(!recoveryOver);
+        QPointer<PendingSubmitsDialog> dlg;
+        QTRY_VERIFY_WITH_TIMEOUT((dlg = mw.findChild<PendingSubmitsDialog *>()) && dlg->isVisible(), 8000);
+        dlg->close();
     }
 
     // MainWindow: Save without a client is refused in the result panel and stores nothing.
@@ -1794,10 +2223,10 @@ private slots:
     {
         const QDate received = QDate::currentDate().addDays(-20);
         const QDate firstPaid = QDate::currentDate().addDays(-10);
-        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", firstPaid.toString("dd-MM-yyyy"), "A-ORIG0800"));
+        QVERIFY(E2e::seedSentGarment(m_db, "800", "h800a", "12.00", dbDateText(firstPaid), "A-ORIG0800"));
         QVERIFY(E2e::seedSentGarment(m_db, "800", "h800b", "6.00", today(), "A-ORIG0801"));
         QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET fecha_recepcion = '%1' WHERE n_recibo = '800'")
-                                    .arg(received.toString("dd-MM-yyyy"))));
+                                    .arg(dbDateText(received))));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_invoice_seq = 1, verifactu_invoice_id = '800-1' "
                                 "WHERE hash = 'h800b'"));
 
@@ -1826,7 +2255,7 @@ private slots:
                  QStringLiteral("ANULADA|%1").arg(today()));
         // AEAT's cancellation record is kept for the Hacienda export.
         QVERIFY(scalar("SELECT verifactu_cancel_xml FROM ingresos WHERE hash='h800a'").contains("Huella"));
-        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), firstPaid.toString("dd-MM-yyyy"));
+        QCOMPARE(dlg.findChild<QTableWidget *>("table")->item(0, 1)->text(), dbDateText(firstPaid));
     }
 
     // While a cancellation waits for AEAT, no other ticket can be searched, and the reply
@@ -2194,7 +2623,7 @@ private slots:
     void test_rectifySubstitution_dateRuleThenRectified()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0700"));
+        QVERIFY(E2e::seedSentGarment(m_db, "700", "h700a", "10.00", dbDateText(paid), "A-ORIG0700"));
 
         RectifyInvoiceDialog dlg(m_db);
         dlg.m_verifactu = m_verifactu;
@@ -2234,7 +2663,7 @@ private slots:
     void test_rectifyDirectOnlyR5_noRowLeft()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0710"));
+        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710a", "10.00", dbDateText(paid), "A-ORIG0710"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -2259,7 +2688,7 @@ private slots:
     void test_rectifyDirectQueuedWithoutAnswer()
     {
         const QDate paid = QDate::currentDate();
-        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711a", "10.00", paid.toString("dd-MM-yyyy"), "A-ORIG0711"));
+        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711a", "10.00", dbDateText(paid), "A-ORIG0711"));
         AppSettings::instance()->setVerifactuDirectAeat(true);
         VerifactuIntegration direct;
         QVERIFY(direct.initialize(m_db));
@@ -2292,7 +2721,7 @@ private slots:
         QVERIFY(rectified > 0);
         QVERIFY(xml.indexOf("<sf:NumSerieFactura>711</sf:NumSerieFactura>", rectified) > rectified);
         QVERIFY(xml.indexOf(QStringLiteral("<sf:FechaExpedicionFactura>%1</sf:FechaExpedicionFactura>")
-                                .arg(paid.toString("dd-MM-yyyy")), rectified) > rectified);
+                                .arg(dbDateText(paid)), rectified) > rectified);
     }
 
     // Direct AEAT connection: Cobrar prints the factura at once, with the QR drawn from
@@ -2464,6 +2893,52 @@ private slots:
         QCOMPARE(unreadable.result(), static_cast<int>(QDialog::Accepted));   // last row handled
     }
 
+    // Envíos pendientes: the buttons of a row act on that row's own ticket after earlier
+    // rows were taken out (middle one first, then the last).
+    void test_pendingSubmits_buttonsActOnTheirOwnTicketAfterRemovals()
+    {
+        for (const QString &n : {QStringLiteral("730"), QStringLiteral("731"), QStringLiteral("732")}) {
+            const QString hash = QStringLiteral("h%1a").arg(n);
+            QVERIFY(E2e::seedSentGarment(m_db, n, hash, "5.00", today(), ""));
+            QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash='%1'")
+                                        .arg(hash)));
+        }
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        AppSettings::instance()->setVerifactuPendingRecoveryFloorDate("2000-01-01");
+
+        PendingSubmitsDialog dlg(m_db);
+        QStringList retried;
+        dlg.retry = [&retried](const QString &ticket, int, const QDate &, double) { retried << ticket; return QString(); };
+        QVERIFY(dlg.loadPending());
+        QTableWidget *table = dlg.findChild<QTableWidget *>("table");
+        QCOMPARE(table->rowCount(), 3);
+        const auto button = [table](int row, const QString &text) {
+            const auto buttons = table->cellWidget(row, 4)->findChildren<QPushButton *>();
+            for (QPushButton *b : buttons)
+                if (b->text() == text)
+                    return b;
+            return static_cast<QPushButton *>(nullptr);
+        };
+        const QString middle = table->item(1, 0)->text();
+        const QString last = table->item(2, 0)->text();
+        QPushButton *error = button(1, "Error");
+        QVERIFY(error);
+        error->click();
+        QCOMPARE(scalar(QStringLiteral("SELECT verifactu_estado FROM ingresos WHERE n_recibo = '%1'").arg(middle)),
+                 QStringLiteral("ERROR"));
+        QCOMPARE(table->rowCount(), 2);
+        QCOMPARE(table->item(1, 0)->text(), last);
+        QPushButton *retry = button(1, "Reintentar");
+        QVERIFY(retry);
+        retry->click();
+        QCOMPARE(retried, QStringList{last});
+        QCOMPARE(table->rowCount(), 1);
+        QPushButton *postpone = button(0, "Posponer");
+        QVERIFY(postpone);
+        postpone->click();
+        QCOMPARE(dlg.result(), static_cast<int>(QDialog::Accepted));
+    }
+
     // The leyenda follows the paid rows being invoiced, not row 0 of the loaded set: an
     // unscoped reprint whose first row is an unpaid garment still prints it next to the QR.
     void test_leyendaFollowsPaidRowsNotRowZero()
@@ -2567,7 +3042,7 @@ private slots:
         QPointer<Imprimir> recibo = open(true, false);
         QVERIFY(press(recibo, "999").contains("No se ha encontrado el recibo"));
         QString text = press(recibo, "650");
-        QVERIFY2(text.contains("Recibo Nº 650 impreso (copia del cliente y del establecimiento)")
+        QVERIFY2(text.contains("Recibo Nº 650 preparado, no impreso")
                  && text.contains("impresión está desactivada"), qPrintable(text));
         recibo->close();
 
@@ -2579,7 +3054,7 @@ private slots:
         complete->findChild<QLineEdit *>("leDni")->setText("12345678Z");
         complete->findChild<QLineEdit *>("leAddress")->setText("Calle Mayor 1");
         text = press(complete, "650");
-        QVERIFY2(text.contains("Factura completa 650 impresa"), qPrintable(text));
+        QVERIFY2(text.contains("Factura completa 650 preparada, no impresa"), qPrintable(text));
         QVERIFY(complete->ticketBytes().contains("DNI: 12345678Z"));
         QVERIFY(complete->ticketBytes().contains("Calle Mayor 1"));
         complete->close();
@@ -2593,7 +3068,7 @@ private slots:
         QCOMPARE(events->count(), 3);                                       // 651, 651-1, all
         events->setCurrentIndex(1);
         text = press(factura, "651");
-        QVERIFY2(text.contains("Facturas impresas: 651-1."), qPrintable(text));
+        QVERIFY2(text.contains("Facturas preparadas, no impresas: 651-1."), qPrintable(text));
         QVERIFY(factura->ticketBytes().contains("651-1"));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         factura->close();
@@ -2643,7 +3118,7 @@ private slots:
         auto *events = dlg.findChild<QComboBox *>("cbEvent");
         events->setCurrentIndex(events->count() - 1);
         QString text = press();
-        QVERIFY2(text.contains("Facturas impresas: 671.") && text.contains("No se han impreso: 671-1 (sin prendas pagadas)"),
+        QVERIFY2(text.contains("Facturas preparadas, no impresas: 671.") && text.contains("No se han impreso: 671-1 (sin prendas pagadas)"),
                  qPrintable(text));
 
         AppSettings *settings = AppSettings::instance();
@@ -2738,7 +3213,7 @@ private slots:
         QString text = press("860");
         QVERIFY2(text.contains("no tiene prendas que imprimir") && !text.contains("impreso"), qPrintable(text));
         text = press("861 ");
-        QVERIFY2(text.contains("Recibo Nº 861 impreso"), qPrintable(text));
+        QVERIFY2(text.contains("Recibo Nº 861 preparado, no impreso"), qPrintable(text));
         dlg->close();
 
         // The engine alone: rows of two payment events give no QR.
@@ -2817,7 +3292,7 @@ private slots:
     // Payment dates never lie in the future nor before the reception (the AEAT invoice date).
     void test_paymentDatesBoundedByReceptionAndToday()
     {
-        const QString reception = QDate::currentDate().addDays(-5).toString("dd-MM-yyyy");
+        const QString reception = dbDateText(QDate::currentDate().addDays(-5));
         QVERIFY(E2e::seedGarment(m_db, "5320", "h5320a", "10.00", reception));
         PayDialog pay(m_db);
         QVERIFY(pay.loadTicket("5320"));
@@ -2840,7 +3315,7 @@ private slots:
         const int quarter = (today.month() + 2) / 3;
         if (today == Contabilidad::quarterLastDay(quarter, today.year()))
             return;                                                         // closing is allowed today
-        QVERIFY(E2e::seedSentGarment(m_db, "5330", "h5330a", "12.10", today.toString("dd-MM-yyyy"), "A-5330"));
+        QVERIFY(E2e::seedSentGarment(m_db, "5330", "h5330a", "12.10", dbDateText(today), "A-5330"));
         QPointer<Contabilidad> form = new Contabilidad(m_db);
         form->findChild<QComboBox *>("cbConfig")->setCurrentIndex(1);    // Trimestral
         form->findChild<QSpinBox *>("sbYear")->setValue(today.year());
@@ -2914,7 +3389,7 @@ private slots:
         print.le_n_ticket->setText("670");
         QTest::keyClick(print.le_n_ticket, Qt::Key_Return);
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);               // one factura, one QR request
-        QVERIFY2(print.findChild<QLabel *>("lblResult")->text().contains("Factura 670 impresa"),
+        QVERIFY2(print.findChild<QLabel *>("lblResult")->text().contains("Factura 670 preparada, no impresa"),
                  qPrintable(print.findChild<QLabel *>("lblResult")->text()));
 
         QVERIFY(E2e::seedGarment(m_db, "2300", "h2300a", "10.00", today()));
@@ -3469,6 +3944,9 @@ private slots:
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = "
                                 "'<RegistroAlta><IDFactura>1900</IDFactura></RegistroAlta>', "
                                 "verifactu_estado = 'ANULADA', fecha_anulacion = '02-04-2026' WHERE hash='h1900a'"));
+        // The QR link says where it was registered: the export marks a test-environment record.
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = "
+                                "'https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000' WHERE hash='h1900a'"));
 
         QVector<AeatExportRecord> records;
         QVERIFY(aeatExportRecords(m_db, QDate(2026, 3, 1), QDate(2026, 3, 31), records));
@@ -3478,6 +3956,8 @@ private slots:
                                                "B00000000", "Tintoreria E2E");
         buffer.close();
         QCOMPARE(written, 5);
+        QCOMPARE(buffer.data().count("entorno=\"pruebas\""), 1);          // 1900 only: the others tell nothing
+        QVERIFY(!buffer.data().contains("entorno=\"produccion\""));
 
         QXmlStreamReader xml(buffer.data());
         QStringList registros, anulaciones, payloadIds;
@@ -3529,9 +4009,14 @@ private slots:
         QVERIFY2(file.endsWith("AEAT/aeat_registros_20260301_20260331.xml"), qPrintable(file));
         QFile::remove(file);
         dlg->findChild<QPushButton *>("btnExport")->click();
-        QVERIFY2(result().contains("1 registros exportados"), qPrintable(result()));
+        QVERIFY2(result().contains("1 registro exportado") && !result().contains("1 registros"), qPrintable(result()));
         QVERIFY(result().contains("aeat_registros_20260301_20260331.xml"));
         QVERIFY(QFile::exists(file));
+        // Several records keep the plural (tests/ui/aeat_preproduction.py looks for it).
+        QVERIFY(E2e::seedSentGarment(m_db, "2801", "h2801a", "11.00", "06-03-2026", "CSV-2801"));
+        dlg->confirmOverwrite = [](const QString &) { return true; };
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        QVERIFY2(result().contains("2 registros exportados"), qPrintable(result()));
         QVERIFY2(m_popups->messages().isEmpty(), qPrintable(m_popups->messages().join(" | ")));
         dlg->findChild<QPushButton *>("btnClose")->click();
         QTRY_VERIFY(dlg.isNull());
@@ -3566,7 +4051,7 @@ private slots:
         answer = true;
         dlg->findChild<QPushButton *>("btnExport")->click();
         QCOMPARE(asked.size(), 2);
-        QVERIFY2(result().contains("1 registros exportados"), qPrintable(result()));
+        QVERIFY2(result().contains("1 registro exportado"), qPrintable(result()));
         QVERIFY(kept.open(QIODevice::ReadOnly));
         QVERIFY(kept.readAll() != QByteArray("previous"));
         kept.close();
@@ -3635,6 +4120,12 @@ private slots:
         QVERIFY(E2e::seedSentGarment(m_db, "2450", "h2450a", "4.00", "08-03-2026", "CSV-2450"));
         QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_xml = '<sum1:Huella>AB</sum1:Huella>' "
                                 "WHERE hash='h2450a'"));
+        // Control characters XML forbids, in a payload written as text and in an attribute.
+        QVERIFY(E2e::seedSentGarment(m_db, "2460", "h2460a", "5.00", "09-03-2026", QStringLiteral("CSV") + QChar(2) + "2460"));
+        QVERIFY(E2e::exec(m_db, QStringLiteral("UPDATE ingresos SET verifactu_xml = '<!DOCTYPE x><Alta>24") + QChar(1) + "60"
+                                + QChar(0x1F) + QStringLiteral("</Alta>' WHERE hash='h2460a'")));
+        QCOMPARE(scalar("SELECT length(verifactu_xml) || '|' || length(verifactu_csv) FROM ingresos WHERE hash='h2460a'"),
+                 QStringLiteral("31|8"));   // the control characters are stored
 
         QVector<AeatExportRecord> records;
         int undated = 0;
@@ -3643,8 +4134,9 @@ private slots:
         QBuffer buffer;
         QVERIFY(buffer.open(QIODevice::WriteOnly));
         QCOMPARE(writeAeatExportXml(&buffer, records, QDate(2026, 3, 1), QDate(2026, 3, 31),
-                                    "B00000000", "Tintoreria E2E"), 8);
+                                    "B00000000", "Tintoreria E2E"), 9);
         buffer.close();
+        QVERIFY(!buffer.data().contains('\x01') &&!buffer.data().contains('\x02') && !buffer.data().contains('\x1f'));
 
         QXmlStreamReader xml(buffer.data());
         QStringList found;
@@ -3669,7 +4161,103 @@ private slots:
             "Anulacion:2300|||1|",
             "Registro:2350||||",
             "Anulacion:2350|||1|",
-            "Registro:2450||||<sum1:Huella>AB</sum1:Huella>" }));
+            "Registro:2450||||<sum1:Huella>AB</sum1:Huella>",
+            "Registro:2460||||<!DOCTYPE x><Alta>2460</Alta>" }));
+    }
+
+    // Facturas -> Exportar registros AEAT: a write that fails (here the file cannot be put
+    // in place) leaves the previous export as it was and says so.
+    void test_aeatExportDialog_failedWriteKeepsThePreviousFile()
+    {
+#ifndef Q_OS_WIN
+        QSKIP("the failure is forced with a share mode of Windows");
+#else
+        QVERIFY(E2e::seedSentGarment(m_db, "2820", "h2820a", "10.00", "05-03-2026", "CSV-2820"));
+        QPointer<AeatExportDialog> dlg = new AeatExportDialog(m_db);
+        const auto result = [&dlg]() { return dlg->findChild<QLabel *>("lblResult")->text(); };
+        dlg->findChild<QDateEdit *>("deFrom")->setDate(QDate(2026, 3, 1));
+        dlg->findChild<QDateEdit *>("deTo")->setDate(QDate(2026, 3, 31));
+        const QString file = dlg->findChild<QLineEdit *>("leFile")->text();
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        {
+            QFile old(file);
+            QVERIFY(old.open(QIODevice::WriteOnly));
+            old.write("previous");
+        }
+        dlg->confirmOverwrite = [](const QString &) { return true; };
+        // Open for reading and writing but not for replacing: the new file cannot take its place.
+        void *holder = holdFileAgainstReplacing(file);
+        QVERIFY(holder);
+        dlg->findChild<QPushButton *>("btnExport")->click();
+        releaseHeldFile(holder);
+        QVERIFY2(result().contains("Error al escribir"), qPrintable(result()));
+        QFile kept(file);
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        QCOMPARE(kept.readAll(), QByteArray("previous"));
+        kept.close();
+        dlg->findChild<QPushButton *>("btnClose")->click();
+        QTRY_VERIFY(dlg.isNull());
+#endif
+    }
+
+    // Rectificar factura: searching with an empty number clears the previous ticket's data.
+    void test_rectify_emptyNumberClearsTheTicketInfo()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "9300", "h9300a", "10.00", today(), "A-ORIG9300"));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        const auto infoShown = [&dlg]() {
+            for (QLabel *label : dlg.findChildren<QLabel *>())
+                if (label->text().contains("<b>Cliente:</b>"))
+                    return true;
+            return false;
+        };
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("9300");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QVERIFY(infoShown());
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        QVERIFY(!infoShown());
+    }
+
+    // A refused rectificativa whose amount is stored with a comma ("5,50") is compared by
+    // its value: resent as filed, not refused as if it had been filed for 5.
+    void test_refusedRectificativaWithACommaAmountIsResentAsFiled()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "9400", "h9400a", "10.00", today(), "A-ORIG9400"));
+        QVERIFY(E2e::exec(m_db, "INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, fecha_pago, fecha_recogida, "
+                                "importe, pagado, estado, cantidad, prenda, size, servicio, observaciones, hash, "
+                                "verifactu_estado, verifactu_invoice_seq, verifactu_rectifies_n_recibo, "
+                                "verifactu_rectification_type) VALUES ('0', '9401', 'Cliente E2E', '15-01-2026', '15-01-2026', '', "
+                                "'5,50', 'SI', 'Rectificativa', '1', 'Rectificativa', '', '', '', 'h9401a', "
+                                "'ERROR', 0, '9400', 'S')"));
+        QVERIFY(closeQuarter(m_db, 1, 2026, ""));
+        RectifyInvoiceDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        dlg.findChild<QLineEdit *>("leTicketNum")->setText("9400");
+        QMetaObject::invokeMethod(&dlg, "onSearchClicked");
+        dlg.findChild<QRadioButton *>("rbSubstitution")->setChecked(true);
+        dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(5.50);
+        QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
+        QTRY_VERIFY_WITH_TIMEOUT(!dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"), 15000);
+        const QString shown = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(!shown.contains("como se registró"), qPrintable(shown));
+        const auto creates = m_server.requestsTo("Create");
+        QCOMPARE(creates.size(), 1);
+        QCOMPARE(creates[0].json.value("InvoiceID").toString(), QStringLiteral("9401"));
+    }
+
+    // Envíos pendientes puts the ticket number into HTML escaped.
+    void test_pendingSubmits_ticketNumberIsEscaped()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "<i>9500</i>", "h9500a", "9.00", "31-31-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'PENDIENTE' WHERE hash = 'h9500a'"));
+        AppSettings::instance()->setVerifactuPendingRecoveryEnabled(true);
+        PendingSubmitsDialog dlg(m_db);
+        QVERIFY(dlg.loadPending());
+        QMetaObject::invokeMethod(&dlg, "onRetryClicked", Q_ARG(int, 0));
+        const QString shown = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(shown.contains("&lt;i&gt;9500&lt;/i&gt;") && !shown.contains("<i>9500"), qPrintable(shown));
     }
 
     // Recogida -> Separar prendas on a paid garment of a sent invoice: the split-off
@@ -4464,6 +5052,326 @@ private slots:
         QCOMPARE(m_server.requestsTo("Create").size(), 1);
         QCOMPARE(scalar("SELECT GROUP_CONCAT(pagado || '|' || verifactu_estado || '|' || verifactu_invoice_seq) "
                         "FROM ingresos WHERE n_recibo='6010'"), QStringLiteral("SI|ENVIADA|0,SI|ENVIADA|0"));
+    }
+
+    // ---- Review wave 2 (E): Recogida, Cobrar, Listado ------------------------------------
+
+    // Añadir prendas opened from Recogida checks the payment date against the production
+    // start like the main window does: a ticket received before it can be paid from the
+    // start on, and an earlier payment date is refused with nothing stored as paid.
+    void test_recogida_addPaidGarment_paymentBeforeProductionRefused()
+    {
+        LiveAeat aeat(suiteAeatEndpoint());
+        AeatStore store(m_db, "produccion");
+        QVERIFY(markChainReady(store, "produccion"));
+        const QDate yesterday = QDate::currentDate().addDays(-1);
+        QVERIFY(E2e::seedGarment(m_db, "8101", "h8101a", "9.00", dbDateText(yesterday)));
+        AppSettings::instance()->setVerifactuDirectAeat(true);
+        AppSettings::instance()->setAeatDirectProduction(true);
+        VerifactuIntegration direct;
+        QVERIFY(direct.initialize(m_db));
+        AppSettings::instance()->setVerifactuDirectAeat(false);
+        AppSettings::instance()->setAeatDirectProduction(false);
+        bool synced = false;
+        direct.directBackend()->syncChain([&synced](bool ok, const QString &) { synced = ok; });
+        QTRY_VERIFY(synced);
+        QCOMPARE(direct.productionStartDate(), QDate::currentDate());
+
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = &direct;
+        QVERIFY(selectRow(rp, "8101", "h8101a"));
+        rp.findChild<QPushButton *>("pb_add")->click();
+        QPointer<AddGarment> add = rp.findChild<AddGarment *>();
+        QVERIFY(add);
+        auto *payDate = add->findChild<QDateEdit *>("deFechaPago");
+        QCOMPARE(payDate->minimumDate(), QDate::currentDate());   // not offered before production
+        payDate->setMinimumDate(yesterday);                       // as if the limit were not there
+        payDate->setDate(yesterday);
+        const QString refused = addPaidGarment(add);
+        QVERIFY2(refused.contains("anterior al paso a PRODUCCI"), qPrintable(refused));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '8101'"), QStringLiteral("1"));
+        delete add;
+    }
+
+    // Cobrar cannot read the ticket's invoice numbers: it says so and charges and sends nothing.
+    void test_payDialog_unreadableInvoiceNumber_chargesNothing()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8110", "h8110a", "5.00", today()));
+        PayDialog dlg(m_db);
+        dlg.m_verifactu = m_verifactu;
+        QVERIFY(dlg.loadTicket("8110"));
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq TO verifactu_invoice_seq_off"));
+        QMetaObject::invokeMethod(&dlg, "onCobrarClicked");
+        const QString text = dlg.findChild<QLabel *>("lblResult")->text();
+        QVERIFY(E2e::exec(m_db, "ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq_off TO verifactu_invoice_seq"));
+        QVERIFY2(text.contains("numeración"), qPrintable(text));
+        QCOMPARE(scalar("SELECT pagado FROM ingresos WHERE hash='h8110a'"), QStringLiteral("NO"));
+        QVERIFY(m_server.requestsTo("Create").isEmpty());
+    }
+
+    // The client's name is text in the header, never markup.
+    void test_payDialog_headerEscapesTheClientName()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8120", "h8120a", "5.00", today()));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET cliente = '<b>Ana</b>' WHERE hash='h8120a'"));
+        PayDialog dlg(m_db);
+        QVERIFY(dlg.loadTicket("8120"));
+        QString header;
+        for (QLabel *label : dlg.findChildren<QLabel *>())
+            if (label->text().contains("Ticket 8120"))
+                header = label->text();
+        QVERIFY2(header.contains("&lt;b&gt;Ana&lt;/b&gt;") && !header.contains("<b>Ana"), qPrintable(header));
+    }
+
+    // Moving through the results with the arrow keys loads the garment under the highlight:
+    // Cobrar, Anular and the rest act on what is shown.
+    void test_recogida_arrowKeysSelectTheTicket()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8130", "h8130a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8131", "h8131a", "5.00", today()));
+        RecogPrendas rp(m_db);
+        rp.findChild<QLineEdit *>("le_search")->setText("cliente e2e");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        auto *view = rp.findChild<QTableView *>("tableView");
+        QCOMPARE(view->model()->rowCount(), 2);
+        QMetaObject::invokeMethod(&rp, "on_tableView_clicked", Q_ARG(QModelIndex, view->model()->index(0, 0)));
+        view->setCurrentIndex(view->model()->index(0, 0));
+        auto *ticket = rp.findChild<QLineEdit *>("le_nr_ticket");
+        const QString first = ticket->text();
+        QVERIFY(first == "8130" || first == "8131");
+        QTest::keyClick(view, Qt::Key_Down);
+        const QString second = ticket->text();
+        QVERIFY2(second != first && (second == "8130" || second == "8131"), qPrintable(first + " -> " + second));
+        QTest::keyClick(view, Qt::Key_Up);
+        QCOMPARE(ticket->text(), first);
+    }
+
+    // One click loads the row once (the highlight's change and the click are one gesture); one
+    // arrow key loads the next row once; a click on the row already loaded still reloads it.
+    void test_recogida_aClickLoadsTheRowOnce()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8135", "h8135a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8136", "h8136a", "5.00", today()));
+        RecogPrendas rp(m_db);
+        rp.show();
+        rp.findChild<QLineEdit *>("le_search")->setText("cliente e2e");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        auto *view = rp.findChild<QTableView *>("tableView");
+        QCOMPARE(view->model()->rowCount(), 2);
+        const auto clickRow = [&](int row) {
+            QTest::mouseClick(view->viewport(), Qt::LeftButton, Qt::NoModifier,
+                              view->visualRect(view->model()->index(row, 0)).center());
+        };
+        rp.rowLoadCount = 0;
+        clickRow(0);
+        QCOMPARE(rp.rowLoadCount, 1);
+        clickRow(0);
+        QCOMPARE(rp.rowLoadCount, 2);
+        clickRow(1);
+        QCOMPARE(rp.rowLoadCount, 3);
+        QTest::keyClick(view, Qt::Key_Up);
+        QCOMPARE(rp.rowLoadCount, 4);
+    }
+
+    // After Anular prendas the message names the ticket the dialog voided in, not the one
+    // Recogida opened it on, when the operator searched another one there.
+    void test_recogida_voidMessageNamesTheDialogsTicket()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8140", "h8140a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8141", "h8141a", "5.00", today()));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "8140", "h8140a"));
+        m_driver->expect(ModalDriver::ofType<VoidGarmentsDialog>(), [](QWidget *w) {
+            w->findChild<QLineEdit *>("leTicketNum")->setText("8141");
+            w->findChild<QPushButton *>("btnSearch")->click();
+            w->findChild<QTableWidget *>("table")->item(0, 0)->setCheckState(Qt::Checked);
+            w->findChild<QPushButton *>("btnVoid")->click();               // confirmation answered Yes
+            qobject_cast<QDialog *>(w)->accept();
+        });
+        rp.findChild<QPushButton *>("pb_void")->click();
+        QCOMPARE(m_driver->handled(), 1);
+        QCOMPARE(scalar("SELECT estado FROM ingresos WHERE hash='h8141a'"), QStringLiteral("Anulado"));
+        const QString text = rp.findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("del ticket 8141 anuladas") && !text.contains("8140"), qPrintable(text));
+    }
+
+    // A stored AEAT URL with a quote cannot leave its link attribute.
+    void test_recogida_verifactuDialogQuotesTheUrl()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "8160", "h8160a", "10.00", today(), "A-8160"));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_url_qr = 'https://sede.example/x?a=''1''&b=2' WHERE hash='h8160a'"));
+        RecogPrendas rp(m_db);
+        QVERIFY(selectRow(rp, "8160", "h8160a"));
+        QString link;
+        m_driver->expect(ModalDriver::named("verifactuDialog"), [&link](QWidget *w) {
+            for (QLabel *label : w->findChildren<QLabel *>())
+                if (label->text().contains("<a "))
+                    link = label->text();
+            qobject_cast<QDialog *>(w)->reject();
+        });
+        rp.findChild<QPushButton *>("pb_verifactu")->click();
+        QVERIFY2(link.contains("href=\"https://sede.example/x?a='1'&amp;b=2\""), qPrintable(link));
+    }
+
+    // The status bar names the invoice (a partial payment "N-1") and shows AEAT's text as text.
+    void test_recogida_statusBarShowsAeatTextAsTypedAndNamesTheInvoice()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "8150", "h8150a", "10.00", today(), ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado = 'ERROR', verifactu_invoice_seq = 1, "
+                                "verifactu_invoice_id = '8150-1', verifactu_error = 'x' WHERE hash='h8150a'"));
+        FakeVerifactuServer::Reply refused;
+        refused.body = FakeVerifactuServer::rejectedReply("1100", "<b>mal</b> & <i>x</i>");
+        m_server.enqueue("Create", refused);
+        RecogPrendas rp(m_db);
+        rp.m_verifactuIntegration = m_verifactu;
+        QVERIFY(selectRow(rp, "8150", "h8150a"));
+        m_driver->expect(ModalDriver::named("verifactuDialog"), [](QWidget *w) {
+            w->findChild<QPushButton *>("btnRetry")->click();
+        });
+        rp.findChild<QPushButton *>("pb_verifactu")->click();
+        QTRY_VERIFY_WITH_TIMEOUT(rp.statusBar()->currentMessage().contains("Error al enviar"), 10000);
+        const QString bar = rp.statusBar()->currentMessage();
+        QVERIFY2(bar.contains("8150-1") && bar.contains("<b>mal</b>") && !bar.contains("&lt;") && !bar.contains("<span>"), qPrintable(bar));
+    }
+
+    // Changing "Fecha de" with nothing typed searches nothing: the table and its message stay.
+    void test_recogida_dateComboWithEmptySearchKeepsTheResult()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8170", "h8170a", "10.00", today()));
+        RecogPrendas rp(m_db);
+        rp.findChild<QLineEdit *>("le_search")->setText("8170");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        auto *view = rp.findChild<QTableView *>("tableView");
+        QCOMPARE(view->model()->rowCount(), 1);
+        rp.findChild<QLineEdit *>("le_search")->clear();
+        auto *combo = rp.findChild<QComboBox *>("cb_search_date");
+        combo->setCurrentIndex((combo->currentIndex() + 1) % combo->count());
+        QCOMPARE(view->model()->rowCount(), 1);
+        QVERIFY2(rp.findChild<QLabel *>("lblResult")->text().contains("encontrada"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+    }
+
+    // A client name is searched whatever its characters (the old rich-text guard refused
+    // Arabic, Hebrew, Thai or Indic scripts), and % or _ are plain text, never a pattern.
+    void test_recogida_nameSearchWorksForAnyName()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8180", "h8180a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8181", "h8181a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8182", "h8182a", "10.00", today()));
+        QVERIFY(E2e::exec(m_db, QString::fromUtf8("UPDATE ingresos SET cliente = 'Maria O''Brien' WHERE hash='h8180a'")));
+        QVERIFY(E2e::exec(m_db, QString::fromUtf8("UPDATE ingresos SET cliente = 'محمد' WHERE hash='h8181a'")));
+        RecogPrendas rp(m_db);
+        auto *view = rp.findChild<QTableView *>("tableView");
+        const auto search = [&](const QString &text) {
+            rp.findChild<QLineEdit *>("le_search")->setText(text);
+            QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+            return view->model()->rowCount();
+        };
+        QCOMPARE(search("O'Brien"), 1);
+        QCOMPARE(search(QString::fromUtf8("محمد")), 1);
+        QVERIFY2(!rp.findChild<QLabel *>("lblResult")->text().contains("No se reconoce"),
+                 qPrintable(rp.findChild<QLabel *>("lblResult")->text()));
+        QCOMPARE(search("%"), 0);
+        QCOMPARE(search("_"), 0);
+    }
+
+    // Actualizar (F5) re-reads the table: a row added elsewhere shows up.
+    void test_listado_actualizarReloadsTheData()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe) VALUES (1, 'R-1', 'Luz', '', 'Beta', '10-05-2026', '21', '121.00')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
+        Listado *gastos = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->objectName() == "Gastos")
+                gastos = l;
+        QVERIFY(gastos);
+        QCOMPARE(gastos->table_listado->model()->rowCount(), 1);
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe) VALUES (2, 'R-2', 'Agua', '', 'Beta', '11-05-2026', '10', '22.00')"));
+        gastos->actionActualizar->trigger();
+        QCOMPARE(gastos->table_listado->model()->rowCount(), 2);
+    }
+
+    // The IVA of a gasto is one of the rates the accounting sums, stored as an integer.
+    void test_listado_gastosIvaAcceptsOnlySupportedRates()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe) VALUES (1, 'I-1', 'Luz', '', 'Beta', '10-05-2026', '10', '121.00')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionGastos_triggered");
+        Listado *gastos = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->objectName() == "Gastos")
+                gastos = l;
+        QVERIFY(gastos);
+        QAbstractItemModel *model = gastos->table_listado->model();
+        const QModelIndex iva = model->index(0, GASTOS_IDX_IVA);
+        const auto result = [gastos]() { return gastos->findChild<QLabel *>("lblResult")->text(); };
+        QVERIFY(!model->setData(iva, "4"));
+        QVERIFY2(result().contains("IVA no admitido"), qPrintable(result()));
+        QVERIFY(!model->setData(iva, "21,5"));
+        QCOMPARE(scalar("SELECT iva FROM gastos WHERE id = 1"), QStringLiteral("10"));
+        QVERIFY(model->setData(iva, "21,0"));
+        QCOMPARE(scalar("SELECT iva FROM gastos WHERE id = 1"), QStringLiteral("21"));
+    }
+
+    // The ingresos listing never deletes a row (a locked gasto is refused in a test above).
+    void test_listado_ingresosRowIsNotDeleted()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8190", "h8190a", "10.00", today()));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionIngresos_triggered");
+        Listado *ingresos = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "ingresos")
+                ingresos = l;
+        QVERIFY(ingresos);
+        ingresos->table_listado->setCurrentIndex(ingresos->table_listado->model()->index(0, 0));
+        ingresos->actionEliminar_fila->trigger();
+        const QString text = ingresos->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("no se eliminan desde el listado"), qPrintable(text));
+        QCOMPARE(scalar("SELECT COUNT(*) FROM ingresos WHERE hash='h8190a'"), QStringLiteral("1"));
+    }
+
+    // A search typed in the listing shortens the PDF: the result panel says so (and does not
+    // when nothing is typed).
+    void test_listado_pdfSaysWhenASearchShortensIt()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO prendas (nombre, precio_limpieza, precio_plancha) VALUES ('Falda', '2,5', '1.5')"));
+        MainWindow mw;
+        QMetaObject::invokeMethod(&mw, "on_actionListado_de_prendas_triggered");
+        Listado *prendas = nullptr;
+        for (Listado *l : mw.findChildren<Listado *>())
+            if (l->tableName == "prendas")
+                prendas = l;
+        QVERIFY(prendas);
+        const auto result = [prendas]() { return prendas->findChild<QLabel *>("lblResult")->text(); };
+        prendas->actionGenerar_pdf_con_el_listado->trigger();
+        QVERIFY2(result().contains("Listado de prendas generado") && !result().contains("cumplen la búsqueda"), qPrintable(result()));
+        prendas->filter_widget->setText("falda");
+        prendas->actionGenerar_pdf_con_el_listado->trigger();
+        QVERIFY2(result().contains("Listado de prendas generado") && result().contains("cumplen la búsqueda actual"),
+                 qPrintable(result()));
+    }
+
+    void test_genListadoGastos_filterNoteShownWhenWritten()
+    {
+        QVERIFY(E2e::exec(m_db, "INSERT INTO gastos (id, n_factura, servicio, descripcion, empresa, fecha, "
+                                "iva, importe) VALUES (1, 'N-1', 'Luz', '', 'Beta', '10-02-2026', '21', '121.00')"));
+        QPointer<GenListado> dlg = new GenListado(m_db);
+        QVERIFY(m_db.open());
+        QSqlTableModel model(nullptr, m_db);
+        model.setTable("gastos");
+        QVERIFY2(model.select(), qPrintable(model.lastError().text()));
+        dlg->model = &model;
+        dlg->filterNote = "NOTA-FILTRO";
+        dlg->findChild<QComboBox *>("cbYear")->setCurrentText("2026");
+        dlg->findChild<QPushButton *>("btnGenerate")->click();
+        const QString text = dlg->findChild<QLabel *>("lblResult")->text();
+        QVERIFY2(text.contains("Listado de gastos generado") && text.contains("NOTA-FILTRO"), qPrintable(text));
+        delete dlg;
     }
 };
 

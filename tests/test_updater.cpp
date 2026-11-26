@@ -53,7 +53,7 @@ public:
 class PathServer : public QObject
 {
 public:
-    struct Answer { QByteArray body; qint64 claimedLength = -1; bool hang = false; QString redirectTo; };
+    struct Answer { QByteArray body; qint64 claimedLength = -1; bool hang = false; QString redirectTo; int delayMs = 0; };
     QTcpServer server;
     QMap<QString, Answer> answers;
     QMap<QString, int> hits;
@@ -80,8 +80,16 @@ public:
                     } else {
                         const Answer a = answers.value(path);
                         const qint64 len = a.claimedLength >= 0 ? a.claimedLength : a.body.size();
-                        socket->write("HTTP/1.1 200 X\r\nContent-Length: " + QByteArray::number(len)
-                                      + "\r\nConnection: close\r\n\r\n" + a.body);
+                        const QByteArray reply = "HTTP/1.1 200 X\r\nContent-Length: " + QByteArray::number(len)
+                                                 + "\r\nConnection: close\r\n\r\n" + a.body;
+                        if (a.delayMs > 0) {
+                            QTimer::singleShot(a.delayMs, socket, [socket, reply] {
+                                socket->write(reply);
+                                socket->disconnectFromHost();
+                            });
+                            return;
+                        }
+                        socket->write(reply);
                     }
                     socket->disconnectFromHost();
                 });
@@ -226,6 +234,8 @@ private slots:
         QCOMPARE(Updater::findInstallerAsset(assets).url.fileName(), QStringLiteral("laideal_setup_11.9.exe"));
         // No exact match: the first installer-looking asset still has to pass the SHA-256 check.
         QCOMPARE(Updater::findInstallerAsset(assets, "13.0").url.fileName(), QStringLiteral("laideal_setup_11.9.exe"));
+        // A tag with a leading "v" (isValidVersion accepts it) still names the exact asset.
+        QCOMPARE(Updater::findInstallerAsset(assets, "v12.0").url.fileName(), QStringLiteral("laideal_setup_12.0.exe"));
     }
 
     // The local file name comes from the release, so anything odd gets a fixed name.
@@ -490,6 +500,33 @@ private slots:
         QVERIFY(failed.wait(5000));
         QCOMPARE(failed.count(), 1);
         QVERIFY(!rig.updater.isDownloading());
+    }
+
+    // A check that completes while a download runs must not change what that download is judged by.
+    void test_downloadInstaller_checkDuringDownloadKeepsExpectedHash()
+    {
+        const QByteArray installer = "MZ payload kept";
+        Rig rig;
+        QVERIFY(primeUpdate(rig, installer, true));
+        rig.server.answers["/laideal_setup_99.0.exe"].body = installer;
+        rig.server.answers["/laideal_setup_99.0.exe"].delayMs = 600;
+        QSignalSpy done(&rig.updater, &Updater::downloadFinished);
+        QSignalSpy failed(&rig.updater, &Updater::downloadFailed);
+        rig.updater.downloadInstaller(rig.installerUrl);
+        QVERIFY(rig.updater.isDownloading());
+        // The next check reports another release with another installer.
+        const QByteArray other = "a different, longer installer";
+        const QString exe = QStringLiteral("laideal_setup_99.1.exe");
+        const QJsonObject a{ { "name", exe }, { "size", other.size() }, { "digest", "sha256:" + shaOf(other) },
+                             { "browser_download_url", rig.server.base() + "/" + exe } };
+        rig.server.answers["/releases/latest"].body = QJsonDocument(QJsonObject{
+            { "tag_name", "99.1" }, { "assets", QJsonArray{ a } } }).toJson();
+        QSignalSpy available(&rig.updater, &Updater::updateAvailable);
+        rig.updater.checkForUpdates(false);
+        QVERIFY(available.wait(5000));
+        QVERIFY(done.wait(5000) || done.count() == 1);
+        QCOMPARE(failed.count(), 0);
+        QCOMPARE(done.count(), 1);
     }
 
     void test_downloadInstaller_cancel_silent()

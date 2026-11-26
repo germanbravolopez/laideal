@@ -40,7 +40,8 @@ public:
 
     QString cancelInvoiceAsync(
         const QString &invoiceNumber,
-        const QDate &invoiceDate
+        const QDate &invoiceDate,
+        const QString &storedQrUrl = QString()
     );
 
     // Async submit of a rectificativa (R1-R5). Builds an F2-style simplified invoice
@@ -114,6 +115,23 @@ public:
     bool storedRegistrationOutcome(const QString &invoiceNumber, VerifactuResult *result) const;
     // "pruebas" / "produccion" for the direct client, empty with the gateway.
     QString environmentName() const;
+    // The direct client in production: the day it began on this database. Invalid otherwise.
+    QDate productionStartDate() const;
+    // The owner has just entered production: the period begins now.
+    void markProductionStarted();
+    // Why a new invoice cannot carry this date (before the day production began: the real
+    // AEAT never held that period), or empty. Asked before a ticket is stored as paid.
+    QString dateBeforeProductionReason(const QDate &invoiceDate) const;
+    // An existing invoice the real AEAT never held (dated before production, or accepted
+    // by its test environment): nothing about it is sent there; Anular cancels it in the books.
+    // `storedQrUrl` is the row's verification URL: on the real AEAT's host the gateway registered
+    // it there in production, so it is not one. Pass it whenever the row is at hand.
+    bool invoicePredatesProduction(const QString &invoiceNumber, const QDate &invoiceDate,
+                                   const QString &storedQrUrl = QString()) const;
+    // In production with an unreadable start day, why an earlier invoice's cancellation can be
+    // neither sent nor made in the books (which AEAT holds it is unknown), or empty.
+    QString cancellationUndecidedReason(const QString &invoiceNumber, const QDate &invoiceDate,
+                                        const QString &storedQrUrl = QString()) const;
     // Why the direct client cannot send now (its certificate), or empty.
     QString sendingError() const;
     QString certificateExpiryWarning() const;
@@ -147,10 +165,24 @@ private:
     QString m_emitterNif;
     QString m_emitterName;
     QString m_lastError;
-    QHash<QString, QString> m_inFlight;   // request id -> invoice id, until its answer
+    struct InFlight {
+        QString        invoiceId;
+        const QObject *backend;           // the backend that owes the answer
+    };
+    QHash<QString, InFlight> m_inFlight;  // request id -> its invoice and backend, until its answer
     QDateTime m_sessionStart;             // the first initialize(): later backends are the same session
 
     void loadEmitterConfiguration();
+    void dropInFlightOf(const QObject *backend);
+    // Each returns true after setting m_lastError, when the operation must not go on.
+    bool refusesChainedRecord(const char *operation);
+    bool refusesUnconfigured(const char *operation);
+    bool refusesBeforeProduction(const QString &invoiceNumber, const QDate &invoiceDate, const char *operation);
+    // `startUnreadable` is set when production has no readable start day: then only a date
+    // before today counts as before production.
+    bool isBeforeProductionStart(const QDate &invoiceDate, bool *startUnreadable = nullptr) const;
+    VerifactuInvoice invoiceHeader(const QString &number, const QDate &date, VerifactuInvoice::InvoiceType type,
+                                   const QString &description) const;
     VerifactuInvoice simplifiedInvoice(const QString &invoiceNumber, const QDate &invoiceDate, double taxBase,
                                        double taxRate, const QString &description) const;
 };

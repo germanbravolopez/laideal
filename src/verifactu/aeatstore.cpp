@@ -1,4 +1,5 @@
 #include "aeatstore.h"
+#include "textformat.h"
 
 #include "aeathash.h"
 
@@ -18,7 +19,6 @@ const QString AeatStore::kCancelledAtAeat = QStringLiteral("ANULADA_EN_AEAT");
 
 namespace {
 
-const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const char *const kRecordColumns =
     "id, kind, issuer_nif, invoice_number, issue_date, total, hash, xml, generated_at, "
     "state, csv, error_code, error_description, attempts, reached, delayed";
@@ -34,11 +34,11 @@ QString kindText(AeatStore::Kind kind)
     return kind == AeatStore::Kind::Registration ? QStringLiteral("alta") : QStringLiteral("anulacion");
 }
 
-} // namespace
-
 // An aeat_chain_anchors row with this issuer: anchors are kept since then (the store's
 // continuations of the day it was set up were taken as its first anchors).
-static const char kAnchorsTrackedMarker[] = "*tracked*";
+const char kAnchorsTrackedMarker[] = "*tracked*";
+
+} // namespace
 
 AeatStore::AeatStore(const QSqlDatabase &db, const QString &environment)
     : m_db(db), m_environment(environment)
@@ -112,7 +112,9 @@ bool AeatStore::ensureSchema()
                   " cancelled_invoice TEXT NOT NULL DEFAULT '', PRIMARY KEY (environment, issuer_nif, installation_number))")
         // One row per database, whatever the environment or issuer: the number belongs to the chain.
         && q.exec("CREATE TABLE IF NOT EXISTS aeat_installation ("
-                  " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)");
+                  " id INTEGER PRIMARY KEY CHECK (id = 1), number TEXT NOT NULL, created_at TEXT NOT NULL)")
+        && q.exec("CREATE TABLE IF NOT EXISTS aeat_environment_start ("
+                  " environment TEXT PRIMARY KEY, started_at TEXT NOT NULL)");
     if (!ok) {
         m_lastError = q.lastError().text();
         qWarning() << "AeatStore::ensureSchema failed -" << m_lastError;
@@ -255,7 +257,7 @@ AeatRecord::PreviousRecord AeatStore::chainHead(const QString &issuerNif, bool *
     q.bindValue(":n", issuerNif);
     const bool read = q.exec();
     if (read && q.next()) {
-        head.invoice = { issuerNif, q.value(0).toString(), QDate::fromString(q.value(1).toString(), kDateFormat) };
+        head.invoice = { issuerNif, q.value(0).toString(), QDate::fromString(q.value(1).toString(), kDbDateFormat) };
         head.hash = q.value(2).toString();
         head.generatedAt = q.value(3).toString();
     }
@@ -282,7 +284,7 @@ bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::Previou
         q.prepare("INSERT OR REPLACE INTO aeat_chain (environment, issuer_nif, invoice_number, issue_date, hash, generated_at) "
                   "VALUES (:e, :n, :num, :d, :h, :g)");
         q.bindValue(":num", head.invoice.invoiceNumber);
-        q.bindValue(":d", head.invoice.issueDate.toString(kDateFormat));
+        q.bindValue(":d", head.invoice.issueDate.toString(kDbDateFormat));
         q.bindValue(":h", head.hash);
         q.bindValue(":g", text(head.generatedAt));
     }
@@ -292,10 +294,66 @@ bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::Previou
     if (ok)
         qDebug() << "AeatStore: chain of" << issuerNif << "(" << m_environment << ") now continues after"
                  << head.invoice.invoiceNumber << head.hash;
-    else
-        qWarning() << "AeatStore::setChainHead failed -" << q.lastError().text();
+    else {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::setChainHead failed -" << m_lastError;
+    }
+    q.finish();
     close(wasOpen);
     return ok;
+}
+
+bool AeatStore::holdsRegistrationIn(const QString &environment, const QString &invoiceNumber, bool acceptedOnly)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT 1 FROM aeat_records WHERE environment = :e AND invoice_number = :num AND kind = :k"
+              " AND (:any = 1 OR state = :s) LIMIT 1");
+    q.bindValue(":e", environment);
+    q.bindValue(":num", invoiceNumber);
+    q.bindValue(":k", kindText(Kind::Registration));
+    q.bindValue(":any", acceptedOnly ? 0 : 1);
+    q.bindValue(":s", kAccepted);
+    const bool held = q.exec() && q.next();
+    q.finish();
+    close(wasOpen);
+    return held;
+}
+
+bool AeatStore::markStarted(bool again)
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return false;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("INSERT OR %1 INTO aeat_environment_start (environment, started_at) VALUES (:e, :t)")
+                  .arg(again ? QStringLiteral("REPLACE") : QStringLiteral("IGNORE")));
+    q.bindValue(":e", m_environment);
+    q.bindValue(":t", AeatHash::timestampText(QDateTime::currentDateTime()));
+    const bool ok = q.exec();
+    if (!ok) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::markStarted failed -" << m_lastError;
+    }
+    q.finish();
+    close(wasOpen);
+    return ok;
+}
+
+QDateTime AeatStore::startedAt()
+{
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return QDateTime();
+    QSqlQuery q(m_db);
+    q.prepare("SELECT started_at FROM aeat_environment_start WHERE environment = :e");
+    q.bindValue(":e", m_environment);
+    const QDateTime started = q.exec() && q.next() ? QDateTime::fromString(q.value(0).toString(), Qt::ISODate) : QDateTime();
+    q.finish();
+    close(wasOpen);
+    return started;
 }
 
 bool AeatStore::chainSynced(const QString &issuerNif)
@@ -324,6 +382,9 @@ bool AeatStore::markChainSynced(const QString &issuerNif)
     q.bindValue(":n", issuerNif);
     q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
     const bool ok = q.exec();
+    if (!ok)
+        m_lastError = q.lastError().text();
+    q.finish();
     close(wasOpen);
     return ok;
 }
@@ -529,11 +590,11 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":k", kindText(kind));
         q.bindValue(":n", issuerNif);
         q.bindValue(":num", text(built.invoiceNumber));
-        q.bindValue(":d", built.issueDate.toString(kDateFormat));
+        q.bindValue(":d", built.issueDate.toString(kDbDateFormat));
         q.bindValue(":t", built.total);
         q.bindValue(":h", built.hash);
         q.bindValue(":x", text(built.xml));
-        q.bindValue(":g", built.generatedAt.toString(Qt::ISODate));
+        q.bindValue(":g", AeatHash::timestampText(built.generatedAt));    // with its UTC offset, as the record says it
         q.bindValue(":s", kPending);
         ok = q.exec();
     }
@@ -544,10 +605,19 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":e", m_environment);
         q.bindValue(":n", issuerNif);
         q.bindValue(":num", built.invoiceNumber);
-        q.bindValue(":d", built.issueDate.toString(kDateFormat));
+        q.bindValue(":d", built.issueDate.toString(kDbDateFormat));
         q.bindValue(":h", built.hash);
         q.bindValue(":g", AeatHash::timestampText(built.generatedAt));
         ok = q.exec();
+    }
+    // The row just inserted, read before the commit: a failed read then rolls back, never "stored but unknown".
+    if (ok) {
+        q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
+        q.bindValue(":id", id);
+        ok = q.exec() && q.next();
+        if (ok)
+            stored = readRecord(q);
+        q.finish();
     }
     if (ok)
         ok = m_db.commit();
@@ -556,11 +626,9 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         qWarning() << "AeatStore::append: record not stored -" << m_lastError;
         m_db.rollback();
         close(wasOpen);
-        return stored;
+        return Record();
     }
     close(wasOpen);
-    stored = latest(kind, built.invoiceNumber);
-    Q_ASSERT(stored.id == id);
     return stored;
 }
 
@@ -571,7 +639,7 @@ AeatStore::Record AeatStore::readRecord(QSqlQuery &q) const
     r.kind             = q.value(1).toString() == QLatin1String("alta") ? Kind::Registration : Kind::Cancellation;
     r.issuerNif        = q.value(2).toString();
     r.invoiceNumber    = q.value(3).toString();
-    r.issueDate        = QDate::fromString(q.value(4).toString(), kDateFormat);
+    r.issueDate        = QDate::fromString(q.value(4).toString(), kDbDateFormat);
     r.total            = q.value(5).toDouble();
     r.hash             = q.value(6).toString();
     r.xml              = q.value(7).toString();
@@ -598,10 +666,28 @@ AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber, con
                   .arg(QLatin1String(kRecordColumns)));
     q.bindValue(":e", m_environment);
     q.bindValue(":num", invoiceNumber);
-    q.bindValue(":n", issuerNif.isNull() ? QStringLiteral("") : issuerNif);
+    q.bindValue(":n", text(issuerNif));
     q.bindValue(":k", kindText(kind));
     if (q.exec() && q.next())
         r = readRecord(q);
+    q.finish();
+    close(wasOpen);
+    return r;
+}
+
+AeatStore::Record AeatStore::byId(qint64 id)
+{
+    Record r;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return r;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
+    q.bindValue(":id", id);
+    if (q.exec() && q.next())
+        r = readRecord(q);
+    else
+        m_lastError = q.lastError().text();
     q.finish();
     close(wasOpen);
     return r;
@@ -722,15 +808,22 @@ bool AeatStore::markOutcome(qint64 id, const QString &state, const QString &csv,
     if (!open(&wasOpen))
         return false;
     QSqlQuery q(m_db);
-    q.prepare("UPDATE aeat_records SET state = :s, csv = :c, error_code = :ec, error_description = :ed WHERE id = :id");
+    // A settled row is never rewritten.
+    q.prepare("UPDATE aeat_records SET state = :s, csv = :c, error_code = :ec, error_description = :ed "
+              "WHERE id = :id AND state = :pending");
+    q.bindValue(":pending", kPending);
     q.bindValue(":s", state);
     q.bindValue(":c", text(csv));
     q.bindValue(":ec", text(errorCode));
     q.bindValue(":ed", text(errorDescription));
     q.bindValue(":id", id);
-    const bool ok = q.exec() && q.numRowsAffected() == 1;
-    if (!ok)
-        qWarning() << "AeatStore::markOutcome failed for record" << id << "-" << q.lastError().text();
+    const bool executed = q.exec();
+    const bool ok = executed && q.numRowsAffected() == 1;
+    // A statement error sets lastError; a row no longer pending leaves it alone (the caller tells them apart).
+    if (!executed) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::markOutcome failed for record" << id << "-" << m_lastError;
+    }
     close(wasOpen);
     return ok;
 }

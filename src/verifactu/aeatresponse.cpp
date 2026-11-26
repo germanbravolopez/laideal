@@ -1,4 +1,9 @@
 #include "aeatresponse.h"
+#include "textformat.h"
+
+#include "aeathash.h"
+
+#include <QCoreApplication>
 
 #include <QDateTime>
 #include <QSet>
@@ -221,6 +226,16 @@ const RecordSummary *chainTip(const QList<RecordSummary> &records)
     return tip;
 }
 
+bool carriesCancellationRecord(const QueryRecord &record)
+{
+    if (!record.state.startsWith(QLatin1String("Anulad")) || record.hash.isEmpty() || record.generatedAt.isEmpty())
+        return false;
+    const AeatHash::CancellationFields fields{ record.issuerNif, record.invoiceNumber,
+                                               QDate::fromString(record.issueDate, kDbDateFormat),
+                                               record.previousHash, record.generatedAt };
+    return AeatHash::cancellationHash(fields).compare(record.hash, Qt::CaseInsensitive) == 0;
+}
+
 namespace {
 
 // `tip` null: any lost cancellation; else only those not proven older than it.
@@ -228,7 +243,7 @@ const RecordSummary *findLostCancellation(const QList<RecordSummary> &records, c
 {
     const QDateTime tipAt = tip ? QDateTime::fromString(tip->presentedAt, Qt::ISODate) : QDateTime();
     for (const RecordSummary &r : records) {
-        if (!r.cancelledAtAeat)
+        if (!r.cancelledAtAeat || (!tip && r.foreignSystem))
             continue;
         bool held = false;
         for (const RecordSummary &other : records)
@@ -260,7 +275,7 @@ VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber,
     VerifactuResult result;
     result.status = VerifactuResult::ERROR;
     if (!reply.parsed) {
-        result.errorDescription = QStringLiteral("Respuesta de la AEAT no reconocida");
+        result.errorDescription = QCoreApplication::translate("AeatResponse", "Respuesta de la AEAT no reconocida");
         return result;
     }
     if (reply.fault) {
@@ -270,7 +285,8 @@ VerifactuResult resultFor(const Submission &reply, const QString &invoiceNumber,
     }
     const Line *line = reply.lineFor(invoiceNumber, operation);
     if (!line) {
-        result.errorDescription = QStringLiteral("La respuesta de la AEAT no incluye el registro %1").arg(invoiceNumber);
+        result.errorDescription = QCoreApplication::translate("AeatResponse", "La respuesta de la AEAT no incluye el registro %1")
+                                      .arg(invoiceNumber);
         return result;
     }
     result.errorCode = line->errorCode;
@@ -295,7 +311,7 @@ VerifactuRemoteRecord remoteRecordFor(const Query &reply, const QString &invoice
         remote.errorCode = reply.faultText;
         return remote;
     }
-    const QString wantedDate = invoiceDate.isValid() ? invoiceDate.toString(QStringLiteral("dd-MM-yyyy")) : QString();
+    const QString wantedDate = AeatHash::dateText(invoiceDate);
     bool dateMatches = false;
     for (const QueryRecord &record : reply.records)
         if (record.invoiceNumber == invoiceNumber.trimmed() && record.issueDate == wantedDate && !wantedDate.isEmpty())

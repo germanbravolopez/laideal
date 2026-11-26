@@ -1,5 +1,5 @@
 #include "numberformatdelegate.h"
-#include "sql_lite.h"
+#include "textformat.h"
 
 #include <QLineEdit>
 

@@ -1,4 +1,5 @@
 #include "thermalprinter.h"
+#include "printerqueue.h"
 
 #ifdef Q_OS_WIN
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -30,17 +31,6 @@ QString winError()
                     : QStringLiteral("error %1").arg(code);
     if (buf) LocalFree(buf);
     return msg;
-}
-
-// The Windows default printer name, or empty if none is set.
-QString defaultPrinterName()
-{
-    DWORD len = 0;
-    GetDefaultPrinterW(nullptr, &len);   // first call asks for the buffer size
-    if (len == 0) return QString();
-    std::vector<wchar_t> buf(len);
-    if (!GetDefaultPrinterW(buf.data(), &len)) return QString();
-    return QString::fromWCharArray(buf.data());
 }
 
 // Spanish reason when the spooler holds the queue (offline, worked offline, not available),
@@ -89,7 +79,7 @@ bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QS
 #ifdef Q_OS_WIN
     QString queue = queueName.trimmed();
     if (queue.isEmpty())
-        queue = defaultPrinterName();
+        queue = PrinterQueue::defaultName();
     if (queue.isEmpty())
         return fail(QStringLiteral("No hay impresora configurada ni impresora predeterminada."));
 
@@ -98,10 +88,6 @@ bool ThermalPrinter::send(const QByteArray &escpos, const QString &queueName, QS
     if (!OpenPrinterW(const_cast<LPWSTR>(wQueue.c_str()), &hPrinter, nullptr))
         return fail(QStringLiteral("No se pudo abrir la impresora '%1': %2").arg(queue, winError()));
 
-    if (escpos.isEmpty()) {
-        ClosePrinter(hPrinter);
-        return fail(QStringLiteral("No hay nada que imprimir."));
-    }
     const QString offline = offlineReason(hPrinter);
     if (!offline.isEmpty()) {
         ClosePrinter(hPrinter);

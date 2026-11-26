@@ -1,5 +1,17 @@
 ﻿Versiones:
 
+12.7
+- Conexión directa con la AEAT: lista para producción. Cuando llegue el día, la tienda solo marca "Entorno de PRODUCCIÓN" en Configuración; no hace falta una versión nueva. El programa anota el día en que empieza producción y no envía a la AEAT real nada anterior a ese día (ni facturas, ni anulaciones, ni reenvíos del periodo de pruebas).
+- Configuración → Verifactu muestra solo los campos de la conexión elegida (pasarela o directa). La conexión directa tiene su propio "Probar conexión", que comprueba el certificado y la conexión sin enviar ningún registro.
+- El ensayo con la AEAT se llama ahora "Ensayo en el entorno de pruebas de la AEAT". Queda oculto mientras el programa trabaja en el entorno de pruebas, donde basta con "Probar conexión".
+- Tras restaurar una copia de seguridad, si falta una anulación y la respuesta de la AEAT demuestra que es nuestra, ya no se empieza una nueva cadena de registros: la cadena continúa. El reinicio de la 12.6 se mantiene para los casos que la respuesta de la AEAT no puede demostrar.
+- Rectificar factura se abre en el tipo R5, el de los tickets de la tienda (facturas simplificadas).
+- Recogida de Prendas: el mensaje de la AEAT en la barra de estado se muestra como texto normal, y los detalles del ticket siguen a las flechas del teclado.
+- Guardado más seguro: un importe o una fecha de pago que no se pueden leer se rechazan en lugar de guardarse, el cliente se guarda solo después de su ticket y la ventana no se puede cerrar mientras un ticket espera la respuesta de la AEAT.
+- Una factura completa necesita la dirección del destinatario. Un gasto solo admite IVA del 0, 10 o 21 %, y el resumen de contabilidad nombra las facturas de proveedor que deja fuera.
+- Con la impresión desactivada, la ventana dice "preparado, no impreso" en lugar de "impreso".
+- Muchas correcciones menores tras una revisión completa del programa, y más pruebas automáticas.
+
 12.6
 - Conexión directa con la AEAT (en preparación; la tienda sigue usando la pasarela): adaptada a la respuesta de la AEAT del 24 de noviembre de 2026 sobre copias de seguridad restauradas.
 - Si se restaura una copia y falta una anulación posterior que pudo ser el último registro enviado, el programa empieza una nueva cadena de registros con un nuevo número de instalación, como indica la AEAT. El reinicio queda anotado en la base de datos y en el registro del programa.

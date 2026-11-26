@@ -170,6 +170,50 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "1").state, AeatStore::kAccepted);
     }
 
+    // A settled row is never rewritten: markOutcome refuses it and changes nothing.
+    void test_settledOutcomeNotRewritten()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(store.markOutcome(a.id, AeatStore::kAccepted, "A-CSV", "", ""));
+        QVERIFY(!store.markOutcome(a.id, AeatStore::kRejected, "", "1100", "ImporteTotal"));
+        QVERIFY(store.lastError().isEmpty());                 // refused, not a failed statement
+        const AeatStore::Record after = store.latest(AeatStore::Kind::Registration, "1");
+        QCOMPARE(after.state, AeatStore::kAccepted);
+        QCOMPARE(after.csv, QStringLiteral("A-CSV"));
+        QVERIFY(after.errorCode.isEmpty());
+    }
+
+    // append returns the row it inserted, also when another issuer holds the same number.
+    void test_appendReturnsItsOwnRowUnderASharedNumber()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("7", "AAA"));
+        const auto b = store.append(AeatStore::Kind::Registration, "B11111111", builder("7", "BBB"));
+        QVERIFY(a.isValid() && b.isValid() && a.id != b.id);
+        QCOMPARE(a.issuerNif, QStringLiteral("89890001K"));
+        QCOMPARE(a.hash, QStringLiteral("AAA"));
+        QCOMPARE(b.issuerNif, QStringLiteral("B11111111"));
+        QCOMPARE(b.hash, QStringLiteral("BBB"));
+    }
+
+    // One "R-" series per database: the highest number of any issuer, a corrective's
+    // suffix ("R-10-1") read as its number.
+    void test_highestRectificationNumber()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QCOMPARE(store.highestRectificationNumber(), 0);
+        for (const QString &n : { QStringLiteral("R-9"), QStringLiteral("R-10"), QStringLiteral("R-10-1"), QStringLiteral("31277") })
+            store.append(AeatStore::Kind::Registration, "89890001K", builder(n, "H" + n));
+        QCOMPARE(store.highestRectificationNumber(), 10);
+        store.append(AeatStore::Kind::Registration, "B11111111", builder("R-50", "HR50"));
+        QCOMPARE(store.highestRectificationNumber(), 50);
+        QCOMPARE(AeatStore(m_db, "produccion").highestRectificationNumber(), 0);
+    }
+
     // An unreadable chain is an error, never "no chain": nothing is appended.
     void test_unreadableChainRefused()
     {
@@ -187,6 +231,58 @@ private slots:
         QVERIFY(!r.isValid());
         QVERIFY(!built);
         m_db.close();
+    }
+
+    // The day an environment's client first ran on the database is kept (the first one, per
+    // environment), and the pending / refused lists take the production day as their floor
+    // when it is later than the setting's and the direct client is in production.
+    void test_environmentStartAndRecoveryFloor()
+    {
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2026-09-01"));   // no table yet
+        AeatStore test(m_db, "pruebas"), production(m_db, "produccion");
+        QVERIFY(test.ensureSchema());
+        QVERIFY(!production.startedAt().isValid());
+        QVERIFY(test.markStarted());
+        QVERIFY(test.startedAt().isValid());
+        QVERIFY(!production.startedAt().isValid());                   // each environment its own
+        QVERIFY(aeatProductionStartIso(m_db).isEmpty());
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2026-09-01"));
+
+        QVERIFY(m_db.open());
+        QVERIFY(QSqlQuery(m_db).exec("INSERT INTO aeat_environment_start (environment, started_at) "
+                                     "VALUES ('produccion', '2027-01-15T09:30:00+01:00')"));
+        m_db.close();
+        QVERIFY(production.markStarted());                            // the stored moment stays
+        QCOMPARE(production.startedAt().date(), QDate(2027, 1, 15));
+        QVERIFY(!production.holdsRegistrationIn("produccion", "1"));
+        test.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(production.holdsRegistrationIn("pruebas", "1"));     // by environment, whoever asks
+        QVERIFY(!production.holdsRegistrationIn("pruebas", "1", true));                 // not accepted yet
+        QVERIFY(!production.holdsRegistrationIn("produccion", "1"));
+        QCOMPARE(aeatProductionStartIso(m_db), QStringLiteral("2027-01-15"));
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", true), QStringLiteral("2027-01-15"));
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2026-09-01", false), QStringLiteral("2026-09-01"));  // not in production
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "2027-03-01", true), QStringLiteral("2027-03-01"));   // a later setting wins
+        QCOMPARE(verifactuRecoveryFloorIso(m_db, "", true), QStringLiteral("2027-01-15"));
+    }
+
+    // A record's generation time is stored with its UTC offset, as the record itself says
+    // it: read back, it is the same instant whatever the clock's offset is by then.
+    void test_generatedAtKeepsItsOffset()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const AeatStore::Record stored = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(stored.isValid());
+        QVERIFY(m_db.open());
+        QSqlQuery q(m_db);
+        QVERIFY(q.exec("SELECT generated_at FROM aeat_records") && q.next());
+        const QString text = q.value(0).toString();
+        q.finish();
+        m_db.close();
+        QVERIFY2(QRegularExpression("T\\d\\d:\\d\\d:\\d\\d[+-]\\d\\d:\\d\\d$").match(text).hasMatch(), qPrintable(text));
+        const AeatStore::Record read = store.latest(AeatStore::Kind::Registration, "1");
+        QCOMPARE(read.generatedAt.toSecsSinceEpoch(), QDateTime::fromString(text, Qt::ISODate).toSecsSinceEpoch());
     }
 
     // The head can be moved (a sync); the sync flag and the records' XML are kept per environment.

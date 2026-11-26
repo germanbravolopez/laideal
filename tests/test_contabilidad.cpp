@@ -245,10 +245,10 @@ private slots:
         QVERIFY(html.contains(ReportHtml::formatEuro(121.0)));
         QVERIFY(!html.contains(ReportHtml::formatEuro(275.0)));         // the flagged rows stay out of the total
         QVERIFY(html.contains("2 factura(s) con un tipo de IVA no reconocido"));
-        QVERIFY(Contabilidad::expenseIvaIsSummarised(0));
-        QVERIFY(Contabilidad::expenseIvaIsSummarised(10));
-        QVERIFY(!Contabilidad::expenseIvaIsSummarised(4));
-        QVERIFY(!Contabilidad::expenseIvaIsSummarised(-1));
+        QVERIFY(expenseIvaIsSummarised(0));
+        QVERIFY(expenseIvaIsSummarised(10));
+        QVERIFY(!expenseIvaIsSummarised(4));
+        QVERIFY(!expenseIvaIsSummarised(-1));
     }
 
     void test_figuresFromDetails()
@@ -259,9 +259,10 @@ private slots:
         ExpenseDetail g10;  g10.iva = 10;  g10.importe = 110.0;
         ExpenseDetail g0;   g0.iva = 0;    g0.importe = 40.0;
         ExpenseDetail g4;   g4.iva = 4;    g4.importe = 104.0;    // unrecognised rate: counted only
-        ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: counted only
+        ExpenseDetail gNul; gNul.iva = -1; gNul.importe = 50.0;   // NULL rate: left out
+        ExpenseDetail gBad; gBad.iva = 21; gBad.invalidAmount = true;   // unreadable amount: left out
         const Contabilidad::PeriodFigures f =
-            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul}, 21.0,
+            Contabilidad::figuresFromDetails({t1, t2}, {}, {g21, g10, g0, g4, gNul, gBad}, 21.0,
                                              QDate(2026, 4, 1), QDate(2026, 7, 1));
         QVERIFY(qAbs(f.ingImporte - 145.2) < 1e-9);
         QVERIFY(qAbs(f.ingBase - 120.0) < 1e-9);
@@ -270,7 +271,9 @@ private slots:
         QVERIFY(qAbs(f.gas10Base - 100.0) < 1e-9);
         QVERIFY(qAbs(f.gasNiImporte - 40.0) < 1e-9);
         QVERIFY(qAbs(f.gastosImporteTotal() - 271.0) < 1e-9);       // 4 % and NULL rows not summed
-        QCOMPARE(f.gasFacturas, 5);                                  // but every row is counted
+        // The summary counts only the invoices it sums, as the detail table does.
+        QCOMPARE(f.gasFacturas, 3);
+        QVERIFY(Contabilidad::createHtmlDetailGastos({g21, g10, g0, g4, gNul, gBad}).contains("Total (3 facturas)"));
     }
 
     // A regularisation (cancellation of an earlier closed quarter's ticket) nets the
@@ -290,6 +293,34 @@ private slots:
         const Contabilidad::PeriodFigures e = Contabilidad::figuresFromDetails({}, {}, { g, g }, 21.0,
                                                                                QDate(2026, 1, 1), QDate(2026, 4, 1));
         QCOMPARE(e.gas21Iva, 3.48);
+    }
+
+    // Every field of the figures of a mixed period, each from its own invoice split.
+    void test_figuresFromDetails_everyField()
+    {
+        IncomeTicketDetail t1; t1.nRecibo = "1"; t1.importe = 121.0;
+        IncomeTicketDetail t2; t2.nRecibo = "2"; t2.importe = 60.5;
+        RegularizationDetail r; r.nRecibo = "1"; r.importe = 30.25; r.fechaPago = "10-05-2026";
+        ExpenseDetail g21; g21.iva = 21; g21.importe = 133.1;
+        ExpenseDetail g10; g10.iva = 10; g10.importe = 55.0;
+        ExpenseDetail g0;  g0.iva = 0;   g0.importe = 40.0;
+        ExpenseDetail g4;  g4.iva = 4;   g4.importe = 104.0;
+        const Contabilidad::PeriodFigures f =
+            Contabilidad::figuresFromDetails({t1, t2}, {r}, {g21, g10, g0, g4}, 21.0,
+                                             QDate(2026, 4, 1), QDate(2026, 7, 1));
+        QCOMPARE(f.ingImporte, 151.25);
+        QCOMPARE(f.ingRegularizacion, 30.25);
+        QCOMPARE(f.ingIva, 26.25);
+        QCOMPARE(f.ingBase, 151.25 - 26.25);
+        QCOMPARE(f.gas21Importe, 133.1);
+        QCOMPARE(f.gas21Iva, 23.1);
+        QCOMPARE(f.gas21Base, 133.1 - 23.1);
+        QCOMPARE(f.gas10Importe, 55.0);
+        QCOMPARE(f.gas10Iva, 5.0);
+        QCOMPARE(f.gas10Base, 50.0);
+        QCOMPARE(f.gasNiImporte, 40.0);
+        QCOMPARE(f.ingTickets, 2);
+        QCOMPARE(f.gasFacturas, 3);
     }
 
     void test_figuresFromDetailsNetsRegularizations()
@@ -450,6 +481,14 @@ private slots:
         ExpenseDetail bad; bad.nFactura = "F-8"; bad.iva = -1; bad.importe = 50.0;
         ExpenseDetail ok;  ok.nFactura = "F-1"; ok.iva = 21;  ok.importe = 121.0;
         QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, ok}), 1);
+        // A positive rate the accounting does not sum (4 %) is left out too: it must be
+        // counted, and the summary itself says how many invoices it does not include.
+        ExpenseDetail four; four.nFactura = "F-4"; four.iva = 4; four.importe = 104.0;
+        QCOMPARE(Contabilidad::invalidAmountCount({}, {}, {bad, four, ok}), 2);
+        const Contabilidad::PeriodFigures f = Contabilidad::figuresFromDetails({}, {}, {bad, four, ok}, 21.0,
+                                                                              QDate(2026, 1, 1), QDate(2026, 4, 1));
+        QCOMPARE(f.gasFacturas, 1);
+        QCOMPARE(f.gasNoSumadas, 2);
     }
 
     void test_invalidAmountsFlagged()

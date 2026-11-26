@@ -11,7 +11,6 @@ class QComboBox;
 class QDateEdit;
 class QGroupBox;
 class QLineEdit;
-class QSqlQueryModel;
 namespace UiKit { class ResultPanel; }
 
 // Tickets -> Añadir nuevas prendas: adds one garment to an existing receipt
@@ -28,11 +27,19 @@ public:
     // Types the receipt number and searches it, as the operator would.
     void loadTicket(const QString &ticketNum);
     bool ticketFound() const { return m_ticketFound; }
-    // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
-    // Unset: paid garments are refused.
-    std::function<QString()> invoicingBlocked;
-    // The AEAT environment of the direct client, whose used numbers a new invoice skips; unset: all.
-    std::function<QString()> aeatEnvironment;
+    // What Verifactu allows for a paid garment; each function unset means "no restriction"
+    // except `invoicingBlocked`, whose absence refuses paid garments.
+    struct InvoicingPolicy {
+        // Why a paid garment cannot be invoiced now (Verifactu), or empty; checked at save.
+        std::function<QString()> invoicingBlocked;
+        // Why a paid garment cannot be invoiced under this date (before production began), or empty.
+        std::function<QString(const QDate &)> invoiceDateRefused;
+        // The day Verifactu production began (the payment date's minimum), or an invalid date.
+        std::function<QDate()> productionStartDate;
+        // The AEAT environment of the direct client, whose used numbers a new invoice skips; unset: all.
+        std::function<QString()> aeatEnvironment;
+    };
+    InvoicingPolicy invoicing;
 
 signals:
     // A garment saved as paid: an invoice to submit to AEAT now (MainWindow does), as InvoiceID
@@ -56,8 +63,8 @@ private:
     bool saveGarment();
 
     QSqlDatabase db;
-    QSqlQueryModel *m_ticketModel = nullptr;
     bool m_ticketFound = false;
+    QString m_saveError;        // set by saveGarment when it refuses with its own message
     QString m_searchedTicket;   // the number the search checked; a save must use the same one
 
     QLineEdit *m_leNRecibo = nullptr;

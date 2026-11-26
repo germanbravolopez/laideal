@@ -45,9 +45,18 @@ public:
     TableView *table_listado;
 
     void populateTable();
+    // The order a table has when it is (re)loaded: newest first, or by name.
+    void sortDefault();
 
     // Only an https address is opened from the QR column (a restored DB could hold file: or other schemes).
     static bool isOpenableQrUrl(const QString &url);
+
+    // A gastos IVA cell as the integer text it is stored as ("21,0" -> "21"), or empty when
+    // it is not a rate the accounting sums (expenseIvaIsSummarised).
+    static QString supportedExpenseIva(const QString &text);
+    // An importe typed into a gastos cell: any readable amount, a negative one included
+    // (a credit note), exactly as insertExpenseInvoice accepts it.
+    static bool isExpenseAmount(const QString &text);
 
     explicit Listado(const QSqlDatabase &database, QWidget *parent = nullptr);
     QString tableName;

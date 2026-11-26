@@ -25,6 +25,8 @@ set(PROJECT_SOURCES
     aeatstore.cpp
     aeatchaincheck.h
     aeatchaincheck.cpp
+    aeatchainsync.h
+    aeatchainsync.cpp
     aeatqr.h
     aeatqr.cpp
     aeatcertificate.h
@@ -36,6 +38,8 @@ set(PROJECT_SOURCES
     aeatdirectbackend.cpp
     aeatselftest.h
     aeatselftest.cpp
+    aeatconnectionprobe.h
+    aeatconnectionprobe.cpp
     producerdeclaration.h
     producerdeclaration.cpp
     ../third_party/qrcodegen/qrcodegen.hpp
@@ -65,9 +69,7 @@ target_link_libraries(verifactu_types INTERFACE Qt${QT_VERSION_MAJOR}::Gui)   # 
 add_library(verifactu STATIC ${PROJECT_SOURCES})
 
 # Qt: the public headers expose QString, QPixmap and QSqlDatabase. appsettings is PUBLIC: the
-# tests include appsettings.h through verifactu. It links printing (StatusApiPrinter, the
-# "Probar Status API" diagnostic button in SettingsDialog), so anything linking verifactu
-# also links appsettings -> printing, although printing is otherwise used only by imprimir.
+# tests include appsettings.h through verifactu.
 target_link_libraries(verifactu
     PUBLIC
     Qt${QT_VERSION_MAJOR}::Core
@@ -75,6 +77,7 @@ target_link_libraries(verifactu
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::Sql
     appsettings
+    textformat
 )
 
 if(WIN32)

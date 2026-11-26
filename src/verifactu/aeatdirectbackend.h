@@ -15,8 +15,8 @@
 //    (records of our system, this month and the previous; up to two years the first
 //    time), so a database restored from an older backup continues where AEAT is (or
 //    starts a new chain under a new NumeroInstalacion when a cancellation it lost may
-//    be the chain's last record: AEAT's query does not return cancellations. The
-//    settings' chain marker tells whether the last record is visible; without it, on
+//    be the chain's last record: AEAT's query may return a cancellation, which then
+//    continues the chain like any record proven ours, or hide it. The settings' chain marker tells whether the last record is visible; without it, on
 //    a new PC, AEAT's own times do. Unsent records of the old chain go first); no
 //    record is generated before that and requests made meanwhile wait. The first sync
 //    needs AEAT; later ones fall back to the local chain when AEAT cannot be reached;
@@ -91,6 +91,14 @@ public:
     // The QR of the pending registration stored for `invoice` (this issuer, same date and
     // amount), drawn from that record; null when there is none.
     QPixmap queuedRecordQr(const VerifactuInvoice &invoice);
+    // The day this environment's client began on this database (AeatStore::markStarted);
+    // restartPeriod() moves it to now: the owner entered the environment anew.
+    QDate startDate();
+    void restartPeriod();
+    // A registration record of the invoice is stored for this environment (whatever its
+    // outcome) / AEAT's test environment accepted one. Whatever the issuer.
+    bool holdsRegistration(const QString &invoiceNumber);
+    bool acceptedInTestEnvironment(const QString &invoiceNumber);
     // A record of this kind for the invoice is pending at AEAT (generated, not answered:
     // it goes out on its own). A refused or settled one is not.
     bool holdsPendingRecord(AeatStore::Kind kind, const QString &invoiceNumber);
@@ -120,7 +128,7 @@ public:
     AeatChainCheck::Result verifyStoredChain();
     QString issuerNif() const { return m_config.issuerNif; }
     // "pruebas" / "produccion", as the store keeps its records.
-    QString environmentName() const { return m_config.testEnvironment ? QStringLiteral("pruebas") : QStringLiteral("produccion"); }
+    QString environmentName() const;
     QString issuerName() const { return m_config.issuerName; }
     bool chainReady() const { return m_chainReady; }
     // The last chain sync failed and none has succeeded since: no record can be generated
@@ -206,6 +214,8 @@ private:
     bool                       m_firstSync = false;      // no sync with AEAT stored yet
     int                        m_highestNumberAtAeat = 0;
     int                        m_highestRectificationAtAeat = 0;
+    // Cancelled invoices the running sync was given under another system's block.
+    QList<AeatResponse::RecordSummary> m_foreignCancelled;
     bool                       m_lastSyncFailed = false;
     bool                       m_restartDeferred = false;   // a restart waits for the outbox to empty
     QString                    m_restartNotice;
@@ -232,9 +242,14 @@ private:
     void verifyDuplicate(const AeatStore::Record &record, const VerifactuResult &result, bool reachedBefore);
     void answerWaiters(qint64 recordId, const VerifactuResult &result);
     void finishRecord(const AeatStore::Record &record, const VerifactuResult &result, bool claimRecord = true);
+    // Stores AEAT's answer and finishes the record; a row settled meanwhile keeps its answer.
+    void settleRecord(const AeatStore::Record &record, const QString &state, const VerifactuResult &result,
+                      bool claimRecord = true);
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
+    // Stores the chain's installation number (empty: nothing to adopt) and makes it ours.
+    bool adoptInstallationNumber(const QString &chainNumber, QString *message);
     // Starts the issuer's chain again under a new NumeroInstalacion (a new SIF). Not while
     // records of the old chain are still to send: they go first, then the sync runs again.
     bool restartChain(const QString &cancelledInvoice, QString *message);

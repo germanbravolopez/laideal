@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -19,7 +20,7 @@
 #include <QVBoxLayout>
 
 AeatExportDialog::AeatExportDialog(const QSqlDatabase &database, QWidget *parent)
-    : QDialog(parent), db(database)
+    : QDialog(parent), m_db(database)
 {
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowModality(Qt::WindowModal);
@@ -115,14 +116,15 @@ void AeatExportDialog::onExportClicked()
     // Hacienda holds cancelled and rectified invoices too.
     QVector<AeatExportRecord> records;
     int undated = 0;
-    if (!aeatExportRecords(db, from, to, records, &undated)) {
+    if (!aeatExportRecords(m_db, from, to, records, &undated)) {
         m_lblResult->setText(UiKit::errorHtml(tr("Error al consultar la base de datos."))
                              + "<br>" + tr("No se ha creado el archivo."));
         return;
     }
     QDir().mkpath(QFileInfo(file).absolutePath());
-    QFile out(file);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    // Written aside and put in place whole: a failure leaves the previous export as it was.
+    QSaveFile out(file);
+    if (!out.open(QIODevice::WriteOnly)) {
         m_lblResult->setText(UiKit::errorHtml(tr("No se pudo abrir el archivo para escribir."))
                              + "<br>" + file.toHtmlEscaped());
         return;
@@ -130,18 +132,18 @@ void AeatExportDialog::onExportClicked()
     const int count = writeAeatExportXml(&out, records, from, to,
                                          AppSettings::instance()->verifactuNif(),
                                          AppSettings::instance()->verifactuName());
-    out.close();
-    if (out.error() != QFileDevice::NoError) {
+    if (!out.commit()) {
         qWarning() << "Exportar registros AEAT: write failed -" << out.errorString();
         m_lblResult->setText(UiKit::errorHtml(tr("Error al escribir el archivo.")) + "<br>"
                              + out.errorString().toHtmlEscaped());
         return;
     }
 
-    const QString period = tr("%1 a %2").arg(from.toString("dd-MM-yyyy"), to.toString("dd-MM-yyyy"));
+    const QString period = tr("%1 a %2").arg(dbDateText(from), dbDateText(to));
     QString message = count == 0
         ? UiKit::warnHtml(tr("No hay registros enviados a AEAT del %1.").arg(period)) + "<br>" + tr("El archivo se ha creado vacío.")
-        : UiKit::okHtml(tr("%1 registros exportados (%2).").arg(count).arg(period));
+        : count == 1 ? UiKit::okHtml(tr("1 registro exportado (%1).").arg(period))
+                     : UiKit::okHtml(tr("%1 registros exportados (%2).").arg(count).arg(period));
     message += "<br>" + UiKit::fileLinkHtml(file, tr("Archivo"));
     if (undated > 0)
         message += "<br>" + UiKit::errorHtml(tr("Atención: %1 factura(s) enviadas a AEAT no tienen una fecha "

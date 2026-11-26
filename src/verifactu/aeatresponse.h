@@ -93,7 +93,15 @@ struct RecordSummary {
     QString previousHash;         // Huella of the record it chains to
     QString installationNumber;   // NumeroInstalacion, only for a record AEAT reported
     QString presentedAt;          // TimestampPresentacion (AEAT's clock), same
-    bool    cancelledAtAeat = false;   // AEAT reported this registration as Anulado ...
+    // The cancellation record AEAT's query returned under the invoice it cancelled. Whose
+    // it is the reply does not say: another system may have cancelled the invoice.
+    bool    cancellationFromQuery = false;
+    // A cancelled invoice AEAT returned under another system's SistemaInformatico. The
+    // block may be the registration's or the cancellation's, so either may be ours.
+    bool    foreignSystem = false;
+    // AEAT holds the invoice as Anulado and its reply carries the registration's own
+    // huella: the cancellation record is hidden (see carriesCancellationRecord) ...
+    bool    cancelledAtAeat = false;
     QString cancelledAt;               // ... since then (TimestampUltimaModificacion, AEAT's clock)
 };
 
@@ -101,11 +109,18 @@ struct RecordSummary {
 // such (or a broken chain), the latest generated. nullptr for an empty list.
 const RecordSummary *chainTip(const QList<RecordSummary> &records);
 
-// The query never returns cancellation records. A registration AEAT holds as cancelled
-// whose cancellation record is not among `records` (lost with a restored backup) hides
-// a record of the chain, whose huella cannot be recovered. Returns such a registration
-// (the invoice to name), or nullptr.
+// Whether the record the query returned for an invoice in state Anulado is its
+// cancellation record (AEAT may return either): its huella is the one a RegistroAnulacion
+// of those fields has. False for any other state.
+bool carriesCancellationRecord(const QueryRecord &record);
+
+// A registration AEAT holds as cancelled, returned with its own huella (cancelledAtAeat)
+// and whose cancellation record is not among `records` (lost with a restored backup),
+// hides a record of the chain whose huella cannot be recovered. Returns such a
+// registration (the invoice to name), or nullptr.
 const RecordSummary *lostCancellation(const QList<RecordSummary> &records);
+// One returned under another system's block (foreignSystem) only counts in the second
+// form: without a tip to compare with, another system's own history would restart ours.
 // The same, leaving out those AEAT cancelled before it received `tip`: records reach
 // AEAT in the order they were generated, so the tip follows them. Both times are
 // AEAT's clock; a time that cannot be read, or the same second, proves nothing.

@@ -4,6 +4,7 @@
 #include "verifactutypes.h"
 
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDebug>
@@ -14,18 +15,20 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QSqlError>
-#include <QSqlQuery>
-#include <QSqlQueryModel>
 #include <QVBoxLayout>
+
+// For the helpers outside the class: the same translation context as tr() inside it.
+static QString trText(const char *text)
+{
+    return QCoreApplication::translate("AddGarment", text);
+}
 
 AddGarment::AddGarment(const QSqlDatabase &database, QWidget *parent) :
     QDialog(parent),
     db(database)
 {
     setAttribute(Qt::WA_DeleteOnClose);
-    UiKit::setUpDialog(this, "Añadir nuevas prendas");
-    m_ticketModel = new QSqlQueryModel(this);
+    UiKit::setUpDialog(this, tr("Añadir nuevas prendas"));
     buildUi();
     resetAllContents();
 }
@@ -34,79 +37,79 @@ void AddGarment::buildUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(UiKit::introPanel(
-        "Añade una prenda a un recibo que todavía no tiene prendas pagadas. Busque primero el "
-        "recibo; si la prenda se añade como pagada, se envía a AEAT como la factura del recibo."));
+        tr("Añade una prenda a un recibo que todavía no tiene prendas pagadas. Busque primero el "
+           "recibo; si la prenda se añade como pagada, se envía a AEAT como la factura del recibo.")));
 
     // Search ---------------------------------------------------------------
     QHBoxLayout *searchRow = new QHBoxLayout();
-    searchRow->addWidget(new QLabel("Nº recibo:"));
+    searchRow->addWidget(new QLabel(tr("Nº recibo:")));
     m_leNRecibo = new QLineEdit();
     m_leNRecibo->setObjectName("leNRecibo");   // stable names for the e2e test bench
-    m_leNRecibo->setPlaceholderText("Ej: 24417");
+    m_leNRecibo->setPlaceholderText(tr("Ej: 24417"));
     searchRow->addWidget(m_leNRecibo, 1);
-    QPushButton *btnSearch = UiKit::secondaryButton("Buscar", "btnSearch");
+    QPushButton *btnSearch = UiKit::secondaryButton(tr("Buscar"), "btnSearch");
     searchRow->addWidget(btnSearch);
     layout->addLayout(searchRow);
 
     // Receipt found ----------------------------------------------------------
-    m_grpTicket = new QGroupBox("Recibo");
+    m_grpTicket = new QGroupBox(tr("Recibo"));
     QFormLayout *ticketForm = new QFormLayout(m_grpTicket);
     m_leCliente = new QLineEdit();
     m_leCliente->setObjectName("leCliente");
     m_leCliente->setReadOnly(true);
-    ticketForm->addRow("Cliente:", m_leCliente);
+    ticketForm->addRow(tr("Cliente:"), m_leCliente);
     m_deFechaRecepcion = UiKit::dateEdit(QDate::currentDate(), "deFechaRecepcion");
     UiKit::lockDate(m_deFechaRecepcion);
-    ticketForm->addRow("Fecha recepción:", m_deFechaRecepcion);
+    ticketForm->addRow(tr("Fecha recepción:"), m_deFechaRecepcion);
     layout->addWidget(m_grpTicket);
 
     // Garment ----------------------------------------------------------------
-    m_grpGarment = new QGroupBox("Prenda");
+    m_grpGarment = new QGroupBox(tr("Prenda"));
     QFormLayout *garmentForm = new QFormLayout(m_grpGarment);
     m_cbPrenda = new QComboBox();
     m_cbPrenda->setObjectName("cbPrenda");
     m_cbPrenda->setEditable(true);
-    garmentForm->addRow("Prenda:", m_cbPrenda);
+    garmentForm->addRow(tr("Prenda:"), m_cbPrenda);
     m_cbServicio = new QComboBox();
     m_cbServicio->setObjectName("cbServicio");
     m_cbServicio->addItems({ "Limp.", "Plan." });
-    garmentForm->addRow("Servicio:", m_cbServicio);
+    garmentForm->addRow(tr("Servicio:"), m_cbServicio);
     m_leCantidad = new QLineEdit();
     m_leCantidad->setObjectName("leCantidad");
     m_leCantidad->setValidator(new QIntValidator(1, 9999, m_leCantidad));
-    garmentForm->addRow("Cantidad:", m_leCantidad);
+    garmentForm->addRow(tr("Cantidad:"), m_leCantidad);
     m_leSize = new QLineEdit();
     m_leSize->setObjectName("leSize");
-    m_leSize->setPlaceholderText("Solo prendas por m2");
-    garmentForm->addRow("Tamaño (m2):", m_leSize);
+    m_leSize->setPlaceholderText(tr("Solo prendas por m2"));
+    garmentForm->addRow(tr("Tamaño (m2):"), m_leSize);
     m_leImporte = new QLineEdit();
     m_leImporte->setObjectName("leImporte");
     m_leImporte->setReadOnly(true);
-    garmentForm->addRow("Importe:", m_leImporte);
+    garmentForm->addRow(tr("Importe:"), m_leImporte);
     m_leObservaciones = new QLineEdit();
     m_leObservaciones->setObjectName("leObservaciones");
-    m_leObservaciones->setPlaceholderText("Opcional");
-    garmentForm->addRow("Observaciones:", m_leObservaciones);
+    m_leObservaciones->setPlaceholderText(tr("Opcional"));
+    garmentForm->addRow(tr("Observaciones:"), m_leObservaciones);
     layout->addWidget(m_grpGarment);
 
     // Payment and pickup -----------------------------------------------------
-    m_grpState = new QGroupBox("Estado");
+    m_grpState = new QGroupBox(tr("Estado"));
     QFormLayout *stateForm = new QFormLayout(m_grpState);
-    m_chkPagado = new QCheckBox("Pagada");
+    m_chkPagado = new QCheckBox(tr("Pagada"));
     m_chkPagado->setObjectName("chkPagado");
     m_deFechaPago = UiKit::dateEdit(QDate::currentDate(), "deFechaPago");
     QHBoxLayout *payRow = new QHBoxLayout();
     payRow->addWidget(m_chkPagado);
-    payRow->addWidget(new QLabel("el"));
+    payRow->addWidget(new QLabel(tr("el")));
     payRow->addWidget(m_deFechaPago);
     payRow->addStretch();
     stateForm->addRow(payRow);
-    m_chkRecogido = new QCheckBox("Recogida");
+    m_chkRecogido = new QCheckBox(tr("Recogida"));
     m_chkRecogido->setObjectName("chkRecogido");
     m_deFechaRecogida = UiKit::dateEdit(QDate::currentDate(), "deFechaRecogida");
     QHBoxLayout *pickupRow = new QHBoxLayout();
     pickupRow->addWidget(m_chkRecogido);
-    pickupRow->addWidget(new QLabel("el"));
+    pickupRow->addWidget(new QLabel(tr("el")));
     pickupRow->addWidget(m_deFechaRecogida);
     pickupRow->addStretch();
     stateForm->addRow(pickupRow);
@@ -114,10 +117,10 @@ void AddGarment::buildUi()
 
     // Actions + result -------------------------------------------------------
     QHBoxLayout *actions = new QHBoxLayout();
-    QPushButton *btnReset = UiKit::secondaryButton("Limpiar formulario", "btnReset");
+    QPushButton *btnReset = UiKit::secondaryButton(tr("Limpiar formulario"), "btnReset");
     actions->addWidget(btnReset);
     actions->addStretch();
-    QPushButton *btnSave = UiKit::primaryButton("Añadir prenda", "btnSave");
+    QPushButton *btnSave = UiKit::primaryButton(tr("Añadir prenda"), "btnSave");
     actions->addWidget(btnSave);
     layout->addLayout(actions);
     m_lblResult = new UiKit::ResultPanel();
@@ -129,7 +132,7 @@ void AddGarment::buildUi()
     connect(btnSave,     &QPushButton::clicked, this, &AddGarment::onSaveClicked);
     connect(btnReset,    &QPushButton::clicked, this, [this]() {
         resetAllContents();
-        m_lblResult->showInfo("Formulario limpio. Busque un recibo.");
+        m_lblResult->showInfo(tr("Formulario limpio. Busque un recibo."));
     });
     connect(m_leCantidad, &QLineEdit::textChanged, this, &AddGarment::setGarmentPrice);
     connect(m_leSize,     &QLineEdit::textChanged, this, &AddGarment::setGarmentPrice);
@@ -170,29 +173,26 @@ void AddGarment::resetAllContents()
     m_leNRecibo->clear();
     m_leCliente->clear();
     m_deFechaRecepcion->setDate(QDate::currentDate());
-    m_cbPrenda->setCurrentText("");
-    m_cbServicio->setCurrentIndex(0);
-    m_leCantidad->clear();
-    m_leSize->clear();
-    m_leImporte->setText(displayMoney(0.0));
-    m_leObservaciones->clear();
-    m_chkPagado->setChecked(false);
-    m_deFechaPago->setDate(QDate::currentDate());
+    clearGarmentFields();
     m_deFechaPago->setEnabled(false);
-    m_chkRecogido->setChecked(false);
-    m_deFechaRecogida->setDate(QDate::currentDate());
     m_deFechaRecogida->setEnabled(false);
     m_grpTicket->setEnabled(false);
     m_grpGarment->setEnabled(false);
     m_grpState->setEnabled(false);
-    m_lblResult->showInfo("Introduzca el Nº de recibo y pulse \"Buscar\".");
+    m_lblResult->showInfo(tr("Introduzca el Nº de recibo y pulse \"Buscar\"."));
     m_leNRecibo->setFocus();
+}
+
+static QString unreadableTicketRefusal()
+{
+    return UiKit::errorHtml(trText("No se pudo comprobar el recibo."))
+           + "<br>" + trText("Consulte el log (Ayuda \u2192 Log de depuración).");
 }
 
 static QString paidTicketRefusal(const QString &ticket)
 {
-    return UiKit::errorHtml("El recibo Nº " + ticket.toHtmlEscaped() + " ya tiene prendas pagadas.")
-           + "<br>Está enviado a AEAT y no se le pueden añadir prendas: utilice un recibo nuevo.";
+    return UiKit::errorHtml(trText("El recibo Nº %1 ya tiene prendas pagadas.").arg(ticket.toHtmlEscaped()))
+           + "<br>" + trText("Está enviado a AEAT y no se le pueden añadir prendas: utilice un recibo nuevo.");
 }
 
 void AddGarment::onSearchClicked()
@@ -205,45 +205,53 @@ void AddGarment::onSearchClicked()
     m_grpState->setEnabled(false);
 
     if (ticket.isEmpty()) {
-        m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
+        m_lblResult->setText(UiKit::warnHtml(tr("Falta el Nº de recibo: introduzca el número y pulse \"Buscar\".")));
         return;
     }
-    {
-        ConnectionScope scope(db);
-        QSqlQuery q(db);
-        q.prepare("SELECT cliente, fecha_recepcion FROM ingresos WHERE n_recibo = :n_recibo LIMIT 1");
-        q.bindValue(":n_recibo", ticket);
-        if (!q.exec())
-            qWarning() << "AddGarment: ticket lookup failed:" << q.lastError().text();
-        m_ticketModel->setQuery(std::move(q));
+    bool headerOk = false;
+    const TicketHeader header = ticketHeader(db, ticket, &headerOk);
+    if (!headerOk) {
+        m_lblResult->setText(unreadableTicketRefusal());
+        return;
     }
-    if (m_ticketModel->rowCount() == 0) {
-        m_lblResult->setText(UiKit::warnHtml("No se ha encontrado el recibo Nº " + ticket.toHtmlEscaped() + "."));
+    if (!header.found) {
+        m_lblResult->setText(UiKit::warnHtml(tr("No se ha encontrado el recibo Nº %1.").arg(ticket.toHtmlEscaped())));
         return;
     }
     // A paid ticket has already been submitted to AEAT; only unpaid receipts
     // (not yet submitted) may be altered locally by adding garments.
-    if (ticketHasPaidGarment(db, ticket)) {
+    bool paidReadOk = false;
+    const bool hasPaid = ticketHasPaidGarment(db, ticket, &paidReadOk);
+    if (!paidReadOk) {
+        m_lblResult->setText(unreadableTicketRefusal());
+        return;
+    }
+    if (hasPaid) {
         m_lblResult->setText(paidTicketRefusal(ticket));
         return;
     }
     m_ticketFound = true;
     m_searchedTicket = ticket;
-    m_leCliente->setText(m_ticketModel->data(m_ticketModel->index(0, 0)).toString());
-    m_deFechaRecepcion->setDate(QDate::fromString(
-        m_ticketModel->data(m_ticketModel->index(0, 1)).toString(), "dd-MM-yyyy"));
+    m_leCliente->setText(header.client);
+    const QDate receptionDate = parseDbDate(header.receptionDate);
+    m_deFechaRecepcion->setDate(receptionDate);
     // The payment date is the invoice date AEAT gets: not in the future, not before reception.
+    // A previous search's minimum never carries over.
     for (QDateEdit *edit : { m_deFechaPago, m_deFechaRecogida }) {
-        edit->setMaximumDate(QDate::currentDate());
-        if (m_deFechaRecepcion->date() <= QDate::currentDate())
-            edit->setMinimumDate(m_deFechaRecepcion->date());
+        edit->clearMinimumDate();
+        UiKit::limitDateRange(edit, { receptionDate }, QDate::currentDate());
     }
+    // Nor before the day production began: such an invoice would never reach the real AEAT.
+    // The current minimum is a candidate too, so the reception date is never lowered.
+    UiKit::limitDateRange(m_deFechaPago,
+                          { m_deFechaPago->minimumDate(), invoicing.productionStartDate ? invoicing.productionStartDate() : QDate() },
+                          QDate::currentDate());
     populateGarments();
     m_grpTicket->setEnabled(true);
     m_grpGarment->setEnabled(true);
     m_grpState->setEnabled(true);
-    m_lblResult->setText(UiKit::okHtml("Recibo Nº " + ticket.toHtmlEscaped() + " encontrado.")
-                         + "<br>Rellene la prenda y pulse \"Añadir prenda\".");
+    m_lblResult->setText(UiKit::okHtml(tr("Recibo Nº %1 encontrado.").arg(ticket.toHtmlEscaped()))
+                         + "<br>" + tr("Rellene la prenda y pulse \"Añadir prenda\"."));
     m_cbPrenda->setFocus();
 }
 
@@ -262,10 +270,10 @@ void AddGarment::setGarmentPrice()
     }
     // Comma-decimal normalisation + size factor live in sql_lite::garmentImporte
     // (unit-tested); see its comment for why the comma matters (m2 garments).
-    const double importe = garmentImporte(
+    const double amount = garmentImporte(
         m_leCantidad->text(), m_leSize->text(),
         readGarmentPrice(db, m_cbPrenda->currentText(), m_cbServicio->currentText()));
-    m_leImporte->setText(displayMoney(importe));
+    m_leImporte->setText(displayMoney(amount));
 }
 
 QString AddGarment::validationError()
@@ -273,39 +281,47 @@ QString AddGarment::validationError()
     // The number may have been retyped after the search: that ticket was never checked.
     if (!m_ticketFound || m_leNRecibo->text().trimmed() != m_searchedTicket) {
         qWarning() << "AddGarment: save without a search for receipt number" << m_leNRecibo->text();
-        return UiKit::errorHtml("No se ha buscado ningún Nº recibo previo a guardar los datos actuales.")
-               + "<br>Pulse \"Buscar\" con el número del recibo al que se añade la prenda.";
+        return UiKit::errorHtml(tr("No se ha buscado ningún Nº recibo previo a guardar los datos actuales."))
+               + "<br>" + tr("Pulse \"Buscar\" con el número del recibo al que se añade la prenda.");
     }
     // Re-checked at save: a ticket paid meanwhile has an invoice at AEAT and cannot grow.
-    if (ticketHasPaidGarment(db, m_searchedTicket)) {
+    bool paidReadOk = false;
+    const bool hasPaid = ticketHasPaidGarment(db, m_searchedTicket, &paidReadOk);
+    if (!paidReadOk)
+        return unreadableTicketRefusal();
+    if (hasPaid) {
         qWarning() << "AddGarment: ticket" << m_searchedTicket << "has a paid garment - refused";
         return paidTicketRefusal(m_searchedTicket);
     }
     if (m_leCliente->text().isEmpty() || m_cbPrenda->currentText().isEmpty() || m_leCantidad->text().isEmpty())
-        return UiKit::errorHtml("Formulario incompleto.")
-               + "<br>Rellene al menos la prenda y la cantidad.";
+        return UiKit::errorHtml(tr("Formulario incompleto."))
+               + "<br>" + tr("Rellene al menos la prenda y la cantidad.");
     if (m_cbPrenda->findText(m_cbPrenda->currentText(), Qt::MatchExactly) == -1)
-        return UiKit::errorHtml("La prenda \"" + m_cbPrenda->currentText().toHtmlEscaped() + "\" no está en la lista de prendas.")
-               + "<br>Elíjala de la lista (o añádala antes a la lista de prendas).";
+        return UiKit::errorHtml(tr("La prenda \"%1\" no está en la lista de prendas.")
+                                    .arg(m_cbPrenda->currentText().toHtmlEscaped()))
+               + "<br>" + tr("Elíjala de la lista (o añádala antes a la lista de prendas).");
     if (m_leCantidad->text().toInt() <= 0)
-        return UiKit::errorHtml("La cantidad tiene que ser al menos 1.");
+        return UiKit::errorHtml(tr("La cantidad tiene que ser al menos 1."));
     if (garmentUnmeasured(m_cbPrenda->currentText(), m_leSize->text()))
-        return UiKit::errorHtml("La prenda se cobra por m2: introduzca su tamaño.");
+        return UiKit::errorHtml(tr("La prenda se cobra por m2: introduzca su tamaño."));
     if (moneyText(m_leImporte->text()).toDouble() <= 0.0)
-        return UiKit::errorHtml("El importe de la prenda es 0,00.")
-               + "<br>Compruebe la prenda, el servicio, la cantidad y el tamaño.";
+        return UiKit::errorHtml(tr("El importe de la prenda es 0,00."))
+               + "<br>" + tr("Compruebe la prenda, el servicio, la cantidad y el tamaño.");
     if (m_chkPagado->isChecked()) {                                 // a paid garment is an invoice
-        const QString blocked = invoicingBlocked ? invoicingBlocked()
+        const QString blocked = invoicing.invoicingBlocked ? invoicing.invoicingBlocked()
                                                  : tr("Verifactu no está disponible: no se puede cobrar.");
         if (!blocked.isEmpty())
             return UiKit::errorHtml(blocked);
+        const QString early = invoicing.invoiceDateRefused ? invoicing.invoiceDateRefused(m_deFechaPago->date()) : QString();
+        if (!early.isEmpty())
+            return UiKit::errorHtml(early);
     }
     if (quarterIsClosed(db, m_deFechaRecepcion->date()))
-        return UiKit::errorHtml("Trimestre bloqueado.")
-               + "<br>La fecha de recepción del ticket pertenece a un trimestre cerrado por la contabilidad.";
+        return UiKit::errorHtml(tr("Trimestre bloqueado."))
+               + "<br>" + tr("La fecha de recepción del ticket pertenece a un trimestre cerrado por la contabilidad.");
     if (m_chkPagado->isChecked() && quarterIsClosed(db, m_deFechaPago->date()))
-        return UiKit::errorHtml("Trimestre bloqueado.")
-               + "<br>La fecha de pago pertenece a un trimestre cerrado por la contabilidad.";
+        return UiKit::errorHtml(tr("Trimestre bloqueado."))
+               + "<br>" + tr("La fecha de pago pertenece a un trimestre cerrado por la contabilidad.");
     return QString();
 }
 
@@ -320,9 +336,11 @@ void AddGarment::onSaveClicked()
     const QString garment = m_cbPrenda->currentText();
     const QString amount = displayMoney(m_leImporte->text());
     const bool paid = m_chkPagado->isChecked();
+    m_saveError.clear();
     if (!saveGarment()) {
-        m_lblResult->setText(UiKit::errorHtml("No se pudo añadir la prenda.")
-                             + "<br>Consulte el log (Ayuda → Log de depuración).");
+        m_lblResult->setText(!m_saveError.isEmpty() ? m_saveError
+                             : UiKit::errorHtml(tr("No se pudo añadir la prenda."))
+                               + "<br>" + tr("Consulte el log (Ayuda \u2192 Log de depuración)."));
         return;
     }
     // A paid ticket is refused from now on; an unpaid one stays loaded for the next garment.
@@ -330,10 +348,10 @@ void AddGarment::onSaveClicked()
         resetAllContents();
     else
         clearGarmentFields();
-    m_lblResult->setText(UiKit::okHtml("Prenda añadida al recibo Nº " + ticket.toHtmlEscaped() + ": "
-                                       + garment.toHtmlEscaped() + ", " + amount + " €.")
-                         + (paid ? "<br>Pagada: se envía a AEAT como la factura " + ticket.toHtmlEscaped()
-                                   + "; la confirmación aparece en la barra de estado."
+    m_lblResult->setText(UiKit::okHtml(tr("Prenda añadida al recibo Nº %1: %2, %3 €.")
+                                           .arg(ticket.toHtmlEscaped(), garment.toHtmlEscaped(), amount))
+                         + (paid ? "<br>" + tr("Pagada: se envía a AEAT como la factura %1; la confirmación "
+                                               "aparece en la barra de estado.").arg(ticket.toHtmlEscaped())
                                  : QString()));
 }
 
@@ -343,12 +361,12 @@ bool AddGarment::saveGarment()
     IngresoGarmentRow row;
     row.nRecibo        = m_searchedTicket;
     row.cliente        = m_leCliente->text();
-    row.fechaRecepcion = m_deFechaRecepcion->date().toString("dd-MM-yyyy");
-    row.fechaPago      = m_chkPagado->isChecked() ? m_deFechaPago->date().toString("dd-MM-yyyy") : QString();
-    row.fechaRecogida  = m_chkRecogido->isChecked() ? m_deFechaRecogida->date().toString("dd-MM-yyyy") : QString();
+    row.fechaRecepcion = dbDateText(m_deFechaRecepcion->date());
+    row.fechaPago      = m_chkPagado->isChecked() ? dbDateText(m_deFechaPago->date()) : QString();
+    row.fechaRecogida  = m_chkRecogido->isChecked() ? dbDateText(m_deFechaRecogida->date()) : QString();
     row.importe        = m_leImporte->text();
-    row.pagado         = m_chkPagado->isChecked() ? "SI" : "NO";
-    row.estado         = m_chkRecogido->isChecked() ? "Recogido" : "En tienda";
+    row.pagado         = m_chkPagado->isChecked() ? INGRESOS_PAGADO_SI : INGRESOS_PAGADO_NO;
+    row.estado         = m_chkRecogido->isChecked() ? INGRESOS_ESTADO_RECOGIDO : INGRESOS_ESTADO_EN_TIENDA;
     row.cantidad       = m_leCantidad->text();
     row.prenda         = m_cbPrenda->currentText();
     row.size           = m_leSize->text().replace(',', '.');
@@ -359,20 +377,28 @@ bool AddGarment::saveGarment()
     // freshly saved row, so it follows the same rule - SIN COBRAR while unpaid,
     // PENDIENTE once it is paid and an AEAT submit is due.
     row.verifactuEstado = verifactuEstadoToString(
-        row.pagado == QLatin1String("SI") ? VerifactuEstado::NotSubmitted
+        row.pagado == QLatin1String(INGRESOS_PAGADO_SI) ? VerifactuEstado::NotSubmitted
                                           : VerifactuEstado::Unpaid);
     qDebug() << "AddGarment: INSERT INTO ingresos ticket=" << row.nRecibo
              << "prenda=" << row.prenda << "cantidad=" << row.cantidad << "importe=" << row.importe
              << "pagado=" << row.pagado << "hash=" << hash;
     // A ticket with a paid garment is refused above, but a number the direct client already
     // used for an invoice of it (a payment never stored as paid) is not reused.
-    if (row.pagado == QLatin1String("SI"))
-        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, aeatEnvironment ? aeatEnvironment() : QString());
+    if (row.pagado == QLatin1String(INGRESOS_PAGADO_SI)) {
+        bool seqOk = false;
+        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, invoicing.aeatEnvironment ? invoicing.aeatEnvironment() : QString(), &seqOk);
+        if (!seqOk) {
+            qWarning() << "AddGarment: invoice number unreadable for ticket" << row.nRecibo << "- nothing stored";
+            m_saveError = UiKit::errorHtml(tr("No se pudo leer la numeración de facturas del recibo."))
+                          + "<br>" + tr("No se ha guardado nada. Consulte el log (Ayuda \u2192 Log de depuración).");
+            return false;
+        }
+    }
     if (!insertGarmentRow(db, row))
         return false;
     emit garmentSaved(row.nRecibo);
-    if (row.pagado == QLatin1String("SI"))
-        emit paidGarmentSaved(row.nRecibo, QDate::fromString(row.fechaPago, "dd-MM-yyyy"),
+    if (row.pagado == QLatin1String(INGRESOS_PAGADO_SI))
+        emit paidGarmentSaved(row.nRecibo, parseDbDate(row.fechaPago),
                               moneyText(row.importe).toDouble(), row.verifactuInvoiceSeq);
     return true;
 }

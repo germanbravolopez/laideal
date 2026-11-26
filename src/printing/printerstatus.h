@@ -23,7 +23,6 @@ struct PrinterStatus
     bool cutterError = false;       // auto-cutter error
     bool mechanicalError = false;   // mechanical error
     bool unrecoverableError = false;// unrecoverable error (needs power cycle)
-    bool drawerOpen = false;        // cash-drawer kick signal level (diagnostic only, nothing acts on it)
     bool noResponse = false;        // ASB_NO_RESPONSE: what the shop's unit reports for an open cover, off or unplugged
     quint32 raw = 0;                // the original ASB word, for logging
 

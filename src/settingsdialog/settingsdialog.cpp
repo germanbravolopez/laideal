@@ -2,6 +2,7 @@
 #include "appsettings.h"
 #include "applanguage.h"
 #include "statusapiprinter.h"
+#include "uikit.h"
 #include <QApplication>
 #include <QTabWidget>
 #include <QFormLayout>
@@ -23,14 +24,35 @@
 namespace {
 SettingsDialog::MissingDbConfirm g_missingDbConfirm;
 
+void styleAsError(QLabel *label) { label->setStyleSheet("color: #b00020;"); }
+void styleAsHint(QLabel *label) { label->setStyleSheet("color: gray;"); }
+
 QLabel *warningLabel(const char *objectName, const QString &text)
 {
     auto *label = new QLabel(text);
     label->setObjectName(objectName);
     label->setWordWrap(true);
-    label->setStyleSheet("color: #b00020;");
+    styleAsError(label);
     label->setHidden(true);
     return label;
+}
+
+// One label column for forms stacked one under another.
+void alignLabelColumns(const QList<QFormLayout *> &forms)
+{
+    int width = 0;
+    QList<QWidget *> labels;
+    for (QFormLayout *form : forms) {
+        for (int row = 0; row < form->rowCount(); ++row) {
+            QLayoutItem *item = form->itemAt(row, QFormLayout::LabelRole);
+            if (!item || !item->widget())
+                continue;
+            labels << item->widget();
+            width = qMax(width, item->widget()->sizeHint().width());
+        }
+    }
+    for (QWidget *label : labels)
+        label->setMinimumWidth(width);
 }
 } // namespace
 
@@ -55,8 +77,7 @@ static QWidget *browseRow(QLineEdit *le, bool directory, SettingsDialog *dlg)
 SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("Configuración"));
-    setMinimumWidth(560);
+    UiKit::setUpDialog(this, tr("Configuración"), 560);
 
     auto *mainLayout = new QVBoxLayout(this);
     auto *tabs       = new QTabWidget(this);
@@ -68,6 +89,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     mainLayout->addWidget(tabs);
 
+    // No primary button on purpose: Enter in a field must not run accept() and its confirmations.
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
@@ -84,7 +106,7 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_dbPath = new QLineEdit(s->dbPath());
     auto *dbRow = browseRow(m_dbPath, false, this);
     auto *dbNote = new QLabel(tr("<i>El cambio de base de datos requiere reiniciar la aplicación.</i>"));
-    dbNote->setStyleSheet("color: gray;");
+    styleAsHint(dbNote);
     auto *dbLayout = new QVBoxLayout;
     dbLayout->setContentsMargins(0, 0, 0, 0);
     dbLayout->addWidget(dbRow);
@@ -128,7 +150,10 @@ void SettingsDialog::buildGeneralTab(QTabWidget *tabs)
     m_paperWidth = new QComboBox;
     m_paperWidth->addItem(tr("58 mm"), 58);
     m_paperWidth->addItem(tr("80 mm"), 80);
-    m_paperWidth->setCurrentIndex(s->paperWidthMm() == 58 ? 0 : 1);
+    const int storedWidth = s->paperWidthMm();
+    if (storedWidth != 58 && storedWidth != 80)   // hand-edited value: keep it, do not turn it into 80
+        m_paperWidth->addItem(tr("%1 mm").arg(storedWidth), storedWidth);
+    m_paperWidth->setCurrentIndex(m_paperWidth->findData(storedWidth) >= 0 ? m_paperWidth->findData(storedWidth) : 1);
     fl->addRow(tr("Ancho de papel:"), m_paperWidth);
 
     m_useStatusApi = new QCheckBox(tr("Usar la Status API de Epson (estado de la impresora)"));
@@ -188,7 +213,7 @@ void SettingsDialog::buildReportsTab(QTabWidget *tabs)
         "<br>&nbsp;&nbsp;&bull; Listados/Prendas"
         "<br>&nbsp;&nbsp;&bull; Listados/Gastos</i>"));
     note->setWordWrap(true);
-    note->setStyleSheet("color: gray;");
+    styleAsHint(note);
     fl->addRow(note);
 
     tabs->addTab(w, tr("Rutas de salida"));
@@ -221,7 +246,33 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
 
     m_vNif  = new QLineEdit(s->verifactuNif());
     m_vName = new QLineEdit(s->verifactuName());
+    fl->addRow(tr("NIF del emisor:"),     m_vNif);
+    fl->addRow(tr("Nombre empresa:"),     m_vName);
 
+    m_vConnection = new QComboBox;
+    m_vConnection->setObjectName("cbConnection");
+    m_vConnection->addItem(tr("IreneSolutions (pasarela)"), QStringLiteral("irenesolutions"));
+    m_vConnection->addItem(tr("Directa con la AEAT"), QStringLiteral("aeat"));
+    m_vConnection->setCurrentIndex(s->verifactuDirectAeat() ? 1 : 0);
+    fl->addRow(tr("Conexión con la AEAT:"), m_vConnection);
+
+    // Only the chosen connection's group shows: each has its own credential, PRODUCCIÓN switch and test.
+    QFormLayout *gateway = buildGatewayGroup(s);
+    fl->addRow(m_vGatewayGroup);
+    QFormLayout *direct = buildDirectGroup(s);
+    fl->addRow(m_vDirectGroup);
+    connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
+    connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
+    updateDirectRows();
+
+    addVerifactuCommonRows(fl, s);
+    alignLabelColumns({ fl, gateway, direct });
+
+    tabs->addTab(w, tr("Verifactu"));
+}
+
+QFormLayout *SettingsDialog::buildGatewayGroup(const AppSettings *s)
+{
     m_vKey  = new QLineEdit(s->verifactuServiceKey());
     m_vKey->setObjectName("serviceKeyEdit");
     m_vKey->setEchoMode(QLineEdit::Password);
@@ -244,53 +295,40 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vProduction->setObjectName("chkProduction");
     m_vProduction->setChecked(s->verifactuProduction());
 
-    m_vPendingRecoveryEnabled = new QCheckBox(tr(
-        "Avisar al arrancar de envíos AEAT pendientes (verifactu_estado=PENDIENTE)"));
-    m_vPendingRecoveryEnabled->setChecked(s->verifactuPendingRecoveryEnabled());
-
-    m_vPendingRecoveryFloor = new QDateEdit;
-    m_vPendingRecoveryFloor->setDisplayFormat("dd-MM-yyyy");
-    m_vPendingRecoveryFloor->setCalendarPopup(true);
-    const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
-    m_vPendingRecoveryFloor->setDate(floor.isValid() ? floor
-                                                     : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
-    m_vPendingRecoveryFloor->setToolTip(tr("Los tickets anteriores no se avisan como pendientes al arrancar, "
-                                           "ni cuentan como facturas rechazadas en la barra de estado."));
-
-    fl->addRow(tr("NIF del emisor:"),     m_vNif);
-    fl->addRow(tr("Nombre empresa:"),     m_vName);
-    fl->addRow(tr("Clave de servicio:"),  keyRow);
-    m_vKeyUnreadable = warningLabel("lblKeyUnreadable",
-        tr("Clave ilegible: la clave guardada no se puede descifrar (otro usuario o equipo de Windows). "
-           "Vuelva a introducirla."));
-    m_vKeyUnreadable->setVisible(s->verifactuServiceKeyUnreadable());
-    fl->addRow(m_vKeyUnreadable);
-    fl->addRow(m_vProduction);
-    fl->addRow(m_vPendingRecoveryEnabled);
-    fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
-    m_vFloorFuture = warningLabel("lblFloorFuture",
-        tr("Esta fecha es posterior a hoy: hasta entonces no se avisará de ningún envío pendiente ni "
-           "factura rechazada."));
-    fl->addRow(m_vFloorFuture);
-    connect(m_vPendingRecoveryFloor, &QDateEdit::dateChanged, this, &SettingsDialog::updateFloorWarning);
-    updateFloorWarning();
-
     auto *note = new QLabel(tr(
         "<i>La clave de servicio se obtiene en "
         "<a href='https://facturae.irenesolutions.com/verifactu/go'>"
         "facturae.irenesolutions.com</a>.</i>"));
     note->setOpenExternalLinks(true);
     note->setWordWrap(true);
-    fl->addRow(note);
 
-    // Direct connection with AEAT (research, docs/modules/verifactu/aeat-direct-investigation.md).
-    m_vConnection = new QComboBox;
-    m_vConnection->setObjectName("cbConnection");
-    m_vConnection->addItem(tr("IreneSolutions (pasarela)"), QStringLiteral("irenesolutions"));
-    m_vConnection->addItem(tr("Directa con la AEAT"), QStringLiteral("aeat"));
-    m_vConnection->setCurrentIndex(s->verifactuDirectAeat() ? 1 : 0);
-    fl->addRow(tr("Conexión con la AEAT:"), m_vConnection);
+    m_vGatewayGroup = new QWidget;
+    m_vGatewayGroup->setObjectName("gatewayGroup");
+    auto *gateway = new QFormLayout(m_vGatewayGroup);
+    gateway->setContentsMargins(0, 0, 0, 0);
+    gateway->addRow(tr("Clave de servicio:"), keyRow);
+    m_vKeyUnreadable = warningLabel("lblKeyUnreadable",
+        tr("Clave ilegible: la clave guardada no se puede descifrar (otro usuario o equipo de Windows). "
+           "Vuelva a introducirla."));
+    m_vKeyUnreadable->setVisible(s->verifactuServiceKeyUnreadable());
+    gateway->addRow(m_vKeyUnreadable);
+    gateway->addRow(m_vProduction);
+    gateway->addRow(note);
+    auto *btnTest = new QPushButton(tr("Probar conexión"));
+    btnTest->setObjectName("btnTestConnection");
+    btnTest->setToolTip(tr("Comprueba que el servidor de IreneSolutions es accesible con los valores actuales del formulario"));
+    connect(btnTest, &QPushButton::clicked, this, [this]() {
+        emit testConnectionRequested(m_vNif->text().trimmed(),
+                                     m_vName->text().trimmed(),
+                                     m_vKey->text().trimmed(),
+                                     m_vProduction->isChecked());
+    });
+    gateway->addRow(btnTest);
+    return gateway;
+}
 
+QFormLayout *SettingsDialog::buildDirectGroup(const AppSettings *s)
+{
     m_vDirectGroup = new QWidget;
     auto *direct = new QFormLayout(m_vDirectGroup);
     direct->setContentsMargins(0, 0, 0, 0);
@@ -310,16 +348,12 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertPassword = new QLineEdit(s->aeatCertificatePassword());
     m_vCertPassword->setObjectName("leCertificatePassword");
     m_vCertPassword->setEchoMode(QLineEdit::Password);
-    auto *btnSelfTest = new QPushButton(tr("Prueba con la AEAT (entorno de pruebas)"));
+    auto *btnSelfTest = new QPushButton(tr("Ensayo en el entorno de pruebas de la AEAT"));
     btnSelfTest->setObjectName("btnAeatSelfTest");
     btnSelfTest->setToolTip(tr("Registra, consulta y anula una factura de prueba en el entorno de pruebas de la AEAT, sin efectos tributarios"));
-    // The shop's own direct client in pre-production already is the test, and both would
-    // send the same pre-production outbox at once.
-    if (AppSettings::instance()->verifactuDirectAeat() && !AppSettings::instance()->aeatDirectProduction()) {
-        btnSelfTest->setEnabled(false);
-        btnSelfTest->setToolTip(tr("La conexión directa ya trabaja en el entorno de pruebas de la AEAT: los propios "
-                                   "tickets son la prueba."));
-    }
+    // Hidden by updateDirectRows while the direct client works in pre-production (the tickets are the test).
+    m_vSelfTest = btnSelfTest;
+    m_selfTestAllowed = !(s->verifactuDirectAeat() && !s->aeatDirectProduction());
     connect(btnSelfTest, &QPushButton::clicked, this, [this]() {
         emit aeatSelfTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
                                    m_vCertFile->text().trimmed(), m_vCertPassword->text());
@@ -338,84 +372,135 @@ void SettingsDialog::buildVerifactuTab(QTabWidget *tabs)
     m_vCertPasswordUnreadable->setVisible(s->aeatCertificatePasswordUnreadable());
     direct->addRow(m_vCertPasswordUnreadable);
     direct->addRow(btnSelfTest);
-    fl->addRow(m_vDirectGroup);
-    connect(m_vConnection, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
-    connect(m_vCertificate, qOverload<int>(&QComboBox::currentIndexChanged), this, &SettingsDialog::updateDirectRows);
-    updateDirectRows();
-
-    auto *btnTest = new QPushButton(tr("Probar conexión"));
-    btnTest->setToolTip(tr("Comprueba que el servidor Verifactu es accesible con los valores actuales del formulario"));
-    connect(btnTest, &QPushButton::clicked, this, [this]() {
-        emit testConnectionRequested(m_vNif->text().trimmed(),
-                                     m_vName->text().trimmed(),
-                                     m_vKey->text().trimmed(),
-                                     m_vProduction->isChecked());
+    // Always available: a query only, in the environment ticked above.
+    auto *btnDirectTest = new QPushButton(tr("Probar conexión"));
+    btnDirectTest->setObjectName("btnAeatTestConnection");
+    btnDirectTest->setToolTip(tr("Comprueba el certificado y consulta a la AEAT las facturas del mes, sin enviar nada"));
+    connect(btnDirectTest, &QPushButton::clicked, this, [this]() {
+        emit aeatConnectionTestRequested(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
+                                         m_vCertFile->text().trimmed(), m_vCertPassword->text(),
+                                         m_vDirectProduction->isChecked());
     });
-    fl->addRow(btnTest);
-
-    tabs->addTab(w, tr("Verifactu"));
+    direct->addRow(btnDirectTest);
+    return direct;
 }
 
-void SettingsDialog::accept()
+// Rows common to both connections.
+void SettingsDialog::addVerifactuCommonRows(QFormLayout *fl, const AppSettings *s)
+{
+    m_vPendingRecoveryEnabled = new QCheckBox(tr(
+        "Avisar al arrancar de envíos AEAT pendientes (verifactu_estado=PENDIENTE)"));
+    m_vPendingRecoveryEnabled->setChecked(s->verifactuPendingRecoveryEnabled());
+
+    const QDate floor = QDate::fromString(s->verifactuPendingRecoveryFloorDate(), Qt::ISODate);
+    m_vPendingRecoveryFloor = UiKit::dateEdit(
+        floor.isValid() ? floor : QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate),
+        "dePendingRecoveryFloor");
+    m_vPendingRecoveryFloor->setToolTip(tr("Los tickets anteriores no se avisan como pendientes al arrancar, "
+                                           "ni cuentan como facturas rechazadas en la barra de estado."));
+
+    fl->addRow(m_vPendingRecoveryEnabled);
+    fl->addRow(tr("Solo tickets desde:"), m_vPendingRecoveryFloor);
+    m_vFloorFuture = warningLabel("lblFloorFuture",
+        tr("Esta fecha es posterior a hoy: hasta entonces no se avisará de ningún envío pendiente ni "
+           "factura rechazada."));
+    fl->addRow(m_vFloorFuture);
+    connect(m_vPendingRecoveryFloor, &QDateEdit::dateChanged, this, &SettingsDialog::updateFloorWarning);
+    updateFloorWarning();
+}
+
+bool SettingsDialog::directSelected() const
+{
+    return m_vConnection->currentData().toString() == QLatin1String("aeat");
+}
+
+// Every refusal and question of the direct connection and the gateway; false = stay open.
+bool SettingsDialog::confirmConnectionChange(const AppSettings *s)
 {
     // The gateway keeps its own chain and would neither send nor follow these records.
-    const bool leavingDirect = AppSettings::instance()->verifactuDirectAeat()
-                               && m_vConnection->currentData().toString() != QLatin1String("aeat");
+    const bool leavingDirect = s->verifactuDirectAeat() && !directSelected();
     if (leavingDirect && m_directPending > 0) {
         QMessageBox::warning(this, tr("Conexión con la AEAT"),
                              tr("Hay %1 registro(s) de la conexión directa sin confirmar por la AEAT. "
                                 "Espere a que se envíen antes de volver a IreneSolutions.").arg(m_directPending));
-        return;
+        return false;
     }
-    const bool directProduction = m_vConnection->currentData().toString() == QLatin1String("aeat")
-                                  && m_vDirectProduction->isChecked();
-    if (directProduction && !AppSettings::instance()->aeatDirectProduction()
+    const bool directProduction = directSelected() && m_vDirectProduction->isChecked();
+    const bool enteringProduction = directProduction && !s->aeatDirectProduction();
+    // The test environment's unsent records would stay behind for good (an outbox per environment).
+    if (enteringProduction && s->verifactuDirectAeat() && m_directPending > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 registro(s) del entorno de pruebas sin confirmar por la AEAT. Espere a que se "
+                                "envíen antes de pasar a PRODUCCIÓN.").arg(m_directPending));
+        return false;
+    }
+    if (enteringProduction && m_productionCheck) {
+        const QString problem = m_productionCheck(m_vNif->text().trimmed(), m_vName->text().trimmed(), selectedThumbprint(),
+                                                  m_vCertFile->text().trimmed(), m_vCertPassword->text());
+        if (!problem.isEmpty()) {
+            QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                                 tr("No se puede pasar a PRODUCCIÓN: %1").arg(problem));
+            return false;
+        }
+    }
+    if (enteringProduction
         && QMessageBox::question(this, tr("Conexión con la AEAT"),
                                  tr("Las facturas se registrarán en la AEAT real, con efectos tributarios, "
-                                    "con el certificado elegido. ¿Pasar a PRODUCCIÓN?"),
+                                    "con el certificado elegido. Las facturas anteriores a hoy no se enviarán: "
+                                    "quedan como están. ¿Pasar a PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-        return;
+        return false;
     // Leaving production: its unsent records would stay behind (the outbox is per
     // environment) and the rows be resent to pre-production.
-    const bool leavingProduction = AppSettings::instance()->verifactuDirectAeat() && AppSettings::instance()->aeatDirectProduction()
-                                   && !directProduction;
+    const bool leavingProduction = s->verifactuDirectAeat() && s->aeatDirectProduction() && !directProduction;
     if (leavingProduction && m_directPending > 0) {
         QMessageBox::warning(this, tr("Conexión con la AEAT"),
                              tr("Hay %1 registro(s) de PRODUCCIÓN sin confirmar por la AEAT. Espere a que se envíen "
                                 "antes de dejar la AEAT real.").arg(m_directPending));
-        return;
+        return false;
+    }
+    // A refused production invoice would fall before the next start day and never be resendable.
+    if (leavingProduction && m_productionRefused > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 factura(s) rechazada(s) por la AEAT real. Reenvíelas o anúlelas "
+                                "(aviso rojo de la barra de estado) antes de dejar la AEAT real.").arg(m_productionRefused));
+        return false;
     }
     if (leavingProduction
         && QMessageBox::question(this, tr("Conexión con la AEAT"),
                                  tr("Las facturas dejarán de registrarse en la AEAT real. ¿Salir de PRODUCCIÓN?"),
                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-        return;
+        return false;
     // The gateway's environment is a production switch too: confirmed both ways.
     const bool gatewayProduction = m_vProduction->isChecked();
-    if (gatewayProduction != AppSettings::instance()->verifactuProduction()
-        && QMessageBox::question(this, tr("Conexión con la AEAT"),
+    return gatewayProduction == s->verifactuProduction()
+        || QMessageBox::question(this, tr("Conexión con la AEAT"),
                                  gatewayProduction
                                      ? tr("Con IreneSolutions las facturas se registrarán en la AEAT real, con efectos "
                                           "tributarios. ¿Pasar a PRODUCCIÓN?")
                                      : tr("Con IreneSolutions las facturas dejarán de registrarse en la AEAT real. "
                                           "¿Salir de PRODUCCIÓN?"),
-                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-        return;
-    const QString dbPath = m_dbPath->text().trimmed();
-    if (!QFileInfo(dbPath).isFile()) {
-        const bool keep = g_missingDbConfirm
-            ? g_missingDbConfirm(dbPath)
-            : QMessageBox::question(this, tr("Base de datos"),
-                  tr("La ruta de la base de datos no es un archivo existente:\n%1\n\n"
-                     "¿Guardarla de todas formas? La aplicación no podrá abrirla al reiniciar.").arg(dbPath),
-                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
-        if (!keep)
-            return;
-    }
-    AppSettings *s = AppSettings::instance();
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+}
 
+bool SettingsDialog::confirmDatabasePath()
+{
+    const QString dbPath = m_dbPath->text().trimmed();
+    if (QFileInfo(dbPath).isFile())
+        return true;
+    return g_missingDbConfirm
+        ? g_missingDbConfirm(dbPath)
+        : QMessageBox::question(this, tr("Base de datos"),
+              tr("La ruta de la base de datos no es un archivo existente:\n%1\n\n"
+                 "¿Guardarla de todas formas? La aplicación no podrá abrirla al reiniciar.").arg(dbPath),
+              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+}
+
+// Copies the form into the settings and saves; false = the save failed, stay open.
+bool SettingsDialog::storeSettings(AppSettings *s)
+{
     s->setLanguage(m_language->currentData().toString());
-    s->setDbPath(dbPath);
+    s->setDbPath(m_dbPath->text().trimmed());
     s->setBackupSecondFolder(m_backupSecondFolder->text().trimmed());
     s->setEnablePrinting(m_enablePrinting->isChecked());
     s->setPrinterName(m_printerName->currentText().trimmed());
@@ -438,8 +523,8 @@ void SettingsDialog::accept()
     if (!(s->verifactuServiceKeyUnreadable() && m_vKey->text().trimmed().isEmpty()))
         secretsEncrypted = s->setVerifactuServiceKey(m_vKey->text().trimmed());
     s->setVerifactuProduction(m_vProduction->isChecked());
-    s->setVerifactuDirectAeat(m_vConnection->currentData().toString() == QLatin1String("aeat"));
-    s->setAeatDirectProduction(directProduction);
+    s->setVerifactuDirectAeat(directSelected());
+    s->setAeatDirectProduction(directSelected() && m_vDirectProduction->isChecked());
     s->setAeatCertificateThumbprint(selectedThumbprint());
     s->setAeatCertificateFile(m_vCertFile->text().trimmed());
     if (!(s->aeatCertificatePasswordUnreadable() && m_vCertPassword->text().isEmpty()))
@@ -452,6 +537,7 @@ void SettingsDialog::accept()
         qWarning() << "SettingsDialog: failed to save settings to" << s->filePath();
         QMessageBox::warning(this, tr("Error"),
             tr("No se pudo guardar la configuración en:\n%1").arg(s->filePath()));
+        return false;   // stay open: closing would look like the changes were kept
     }
 
     if (!secretsEncrypted) {
@@ -459,7 +545,14 @@ void SettingsDialog::accept()
             tr("No se pudo cifrar la clave de servicio o la contraseña del certificado con Windows: "
                "se han guardado sin cifrar. Se cifrarán al abrir la aplicación si Windows lo permite."));
     }
+    return true;
+}
 
+void SettingsDialog::accept()
+{
+    AppSettings *s = AppSettings::instance();
+    if (!confirmConnectionChange(s) || !confirmDatabasePath() || !storeSettings(s))
+        return;
     AppLanguage::applyQtTranslations(s->language());   // live, for every caller
     QDialog::accept();
 }
@@ -476,8 +569,10 @@ void SettingsDialog::updateFloorWarning()
 
 void SettingsDialog::updateDirectRows()
 {
-    const bool directAeat = m_vConnection->currentData().toString() == QLatin1String("aeat");
+    const bool directAeat = directSelected();
     m_vDirectGroup->setVisible(directAeat);
+    m_vGatewayGroup->setVisible(!directAeat);
+    m_vSelfTest->setVisible(m_selfTestAllowed);
     const bool file = selectedThumbprint().isEmpty();
     m_vCertFileRow->setEnabled(file);
     m_vCertPassword->setEnabled(file);

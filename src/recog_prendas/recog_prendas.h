@@ -6,12 +6,11 @@
 #include <QSqlQueryModel>
 #include <QHash>
 
+#include "add_garment.h"
 #include "mysortfilterproxymodel.h"
 #include "sql_lite.h"
 
-// Defined in verifactutypes.h; only ever passed by const reference here, so the
-// forward declaration keeps QPixmap out of this header (same as VerifactuResult,
-// which sql_lite.h forward-declares).
+// Forward-declared (like VerifactuResult) to keep QPixmap out of this header.
 struct VerifactuRemoteRecord;
 
 class VerifactuIntegration;
@@ -46,9 +45,9 @@ public:
     MySortFilterProxyModel *proxyModel = nullptr;
     bool isCellClicked = false;
     int rowClickedCell = -1;
+    int rowLoadCount = 0;               // loadRow calls; only tests read it
 
-    // Searches the ticket and selects its refused row of payment `seq` (any seq when -1;
-    // else its first row), ready for Verifactu...
+    // Searches the ticket and selects its refused row of payment `seq` (any when -1, else its first row).
     void showTicket(const QString &nRecibo, int seq = -1);
 
     enum UpdateDBop {
@@ -63,12 +62,6 @@ public:
     };
 
 private slots:
-    void initialSettings();
-    void resetAllContents();
-    void updateDb(UpdateDBop op, int nGarm = 0);
-    void updateRowClickedToFields();
-    double calculatePrice();
-
     void on_le_search_returnPressed();
     void on_cb_search_date_currentTextChanged(const QString &arg1);
     void on_pb_search_clicked();
@@ -85,30 +78,34 @@ private slots:
     void on_pb_pku_all_clicked();
     void on_pb_print_clicked();
     void on_pb_separ_garm_clicked();
-    void showPickupBadge(bool pickedUp);
     void on_pb_void_clicked();
     void on_pb_add_clicked();
     void on_pb_verifactu_clicked();
-    // Re-submits ONE payment event: its own InvoiceID, total and fecha_pago are
-    // read from the DB via sql_lite::verifactuEventFor(ticketNum, seq).
+    // Re-submits ONE payment event; its InvoiceID, total and fecha_pago come from the DB.
     void retryVerifactuSubmit(const QString &ticketNum, int seq);
-    // Asks AEAT what it holds for this payment event and, only if the returned
-    // record is provably the same invoice AND carries a CSV, offers to adopt it.
-    // Read-only against AEAT; the DB write needs an explicit operator confirmation.
-    // localAlreadySettled: the row is ENVIADA/ANULADA/RECTIFICADA, so the query is
-    // informative only and no adoption is offered.
+
+private:
+    void initialSettings();
+    void resetAllContents();
+    void updateDb(UpdateDBop op, int nGarm = 0);
+    void updateRowClickedToFields();
+    void showPickupBadge(bool pickedUp);
+    // Asks AEAT what it holds for this payment event and, only when the record is provably
+    // the same invoice and carries a CSV, offers to adopt it (the DB write needs the
+    // operator's confirmation). localAlreadySettled: the row is ENVIADA / ANULADA /
+    // RECTIFICADA, so the query is informative only.
     void queryAeatAndOfferReconcile(const QString &ticketNum, int seq,
                                     bool localAlreadySettled = false);
-    // Shows AEAT's record beside the local one. Only offers the DB write when the
-    // two provably match and AEAT returned a CSV; always exposes the raw payload,
-    // since the query response schema is unpublished.
+    // Shows AEAT's record beside the local one and the raw payload (its schema is unpublished).
     void showAeatReconcileDialog(const QString &ticketNum, int seq, const QString &invoiceId,
                                  const PendingVerifactuEvent &ev,
                                  const VerifactuRemoteRecord &rec,
                                  bool localAlreadySettled);
+    // Writes AEAT's CSV into the ticket's rows and says so in the result panel.
+    void adoptAeatRecord(const QString &ticketNum, int seq, const QString &invoiceId,
+                         const VerifactuRemoteRecord &rec);
     void onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result);
-
-private:
+    void onVerifactuQueryFinished(const QString &requestId, const VerifactuRemoteRecord &rec);
     // The clicked row's payment date is in a quarter Contabilidad closed.
     bool rowClickedLocked();
     // The window's widgets, named as in the former .ui form (the on_<name>_<signal>
@@ -144,6 +141,13 @@ private:
     void runSearch(const QString &query);
     // Re-runs the submitted search and reselects the clicked garment by hash.
     void refreshSearch(bool keepTyped);
+    // refreshSearch, leaving the result panel as it was.
+    void refreshSearchKeepingResult(bool keepTyped);
+    // Makes `sourceRow` (sqlQueryModel row) the clicked one and loads it into the fields.
+    void loadRow(int sourceRow);
+    // The importe of the garment in the fields: its quantity and size at `unitPrice`, or at
+    // the price list's for its service when `unitPrice` is negative; 0 when it is by m2 without a size.
+    double fieldsImporte(double unitPrice = -1.0);
     // The clicked row's unit price when its importe was typed by hand (it is not what the
     // price list gives for its saved quantity / service / size), else -1.
     double manualUnitPrice();
@@ -160,6 +164,15 @@ private:
         bool    adopted = false;
     };
     QHash<QString, PendingSubmit> m_pendingSubmits;
+    // "Consultar en AEAT" in flight: reqId -> what the answer is shown against.
+    struct PendingQuery {
+        QString ticketNum;
+        int     seq = 0;
+        PendingVerifactuEvent ev;
+        QString invoiceId;
+        bool    localAlreadySettled = false;
+    };
+    QHash<QString, PendingQuery> m_pendingQueries;
 
     void ensureVerifactuConnected();
     // invoiceSeq forwarded to Imprimir so the reprint loads only the rows of
@@ -169,5 +182,9 @@ private:
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
     void selectSourceRow(int sourceRow);
 };
+
+// What the Tickets -> Añadir nuevas prendas window asks Verifactu, from the integration
+// (null: nothing restricted except that a paid garment is refused).
+AddGarment::InvoicingPolicy invoicingPolicyOf(VerifactuIntegration *integration);
 
 #endif // RECOGPRENDAS_H

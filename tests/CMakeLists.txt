@@ -57,6 +57,8 @@ target_link_libraries(test_genlistado PRIVATE
 )
 add_test(NAME genlistado
     COMMAND test_genlistado -o ${CMAKE_BINARY_DIR}/test-results-genlistado.xml,junitxml -o -,txt)
+# QTEST_MAIN (QApplication): the generator is a QDialog.
+set_tests_properties(genlistado PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # facturas: pure IVA split, amount parsing and the dialog save on a throwaway DB.
 add_executable(test_facturas test_facturas.cpp)
@@ -66,6 +68,7 @@ target_link_libraries(test_facturas PRIVATE
     Qt${QT_VERSION_MAJOR}::Sql       # facturas.h includes <QSqlQueryModel>
     facturas
     sql_lite                         # TestSchema (throwaway DB for the dialog tests)
+    verifactu_types                  # header-only: splitGross
 )
 add_test(NAME facturas
     COMMAND test_facturas -o ${CMAKE_BINARY_DIR}/test-results-facturas.xml,junitxml -o -,txt)
@@ -88,7 +91,7 @@ add_executable(test_settingsdialog test_settingsdialog.cpp)
 target_link_libraries(test_settingsdialog PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Widgets
-    appsettings
+    settingsdialog
 )
 add_test(NAME settingsdialog
     COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)
@@ -102,6 +105,7 @@ target_link_libraries(test_add_garment PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
     add_garment
+    recog_prendas                   # aeatReconcileSummaryHtml
     sql_lite
     verifactu_types
 )
@@ -132,6 +136,19 @@ target_link_libraries(test_versioncompare PRIVATE
 )
 add_test(NAME version_compare
     COMMAND test_versioncompare -o ${CMAKE_BINARY_DIR}/test-results-versioncompare.xml,junitxml -o -,txt)
+
+# UpdaterDialog: the error of a failed download is hidden when the download is retried.
+add_executable(test_versiondialog test_versiondialog.cpp)
+target_link_libraries(test_versiondialog PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Network
+    updater
+    uikit
+)
+add_test(NAME updater_dialog
+    COMMAND test_versiondialog -o ${CMAKE_BINARY_DIR}/test-results-versiondialog.xml,junitxml -o -,txt)
+set_tests_properties(updater_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # verifactu: the pure JSON response parser (parseVerifactuResponse). Uses
 # QTEST_MAIN (QApplication for QPixmap) under the offscreen platform so the QR
@@ -165,6 +182,15 @@ target_link_libraries(test_aeat_chaincheck PRIVATE
 )
 add_test(NAME aeat_chaincheck
     COMMAND test_aeat_chaincheck -o ${CMAKE_BINARY_DIR}/test-results-aeat_chaincheck.xml,junitxml -o -,txt)
+
+# AeatChainSync: which record is the chain's tip, from plain data. Pure.
+add_executable(test_aeat_chain_sync test_aeat_chain_sync.cpp)
+target_link_libraries(test_aeat_chain_sync PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME aeat_chain_sync
+    COMMAND test_aeat_chain_sync -o ${CMAKE_BINARY_DIR}/test-results-aeat_chain_sync.xml,junitxml -o -,txt)
 
 # AeatRecord: the direct client's records and SOAP envelopes. It also writes sample
 # envelopes into build/aeat-xml, which aeat_xsd validates against the official AEAT
@@ -410,6 +436,28 @@ add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# VerifactuCoordinator (src/app) without the window: pending-submit bookkeeping,
+# the bounded wait for AEAT and the gateway connection test, against the fake
+# Verifactu server and a throwaway DB / settings.
+add_executable(test_verifactu_coordinator
+    test_verifactu_coordinator.cpp
+    support/fakeverifactuserver.h
+    support/fakeverifactuserver.cpp
+    support/modalautocloser.h
+    support/testschema.h
+)
+target_include_directories(test_verifactu_coordinator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/support
+)
+target_link_libraries(test_verifactu_coordinator PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Network
+    laideal_app
+)
+add_test(NAME verifactu_coordinator
+    COMMAND test_verifactu_coordinator -o ${CMAKE_BINARY_DIR}/test-results-verifactu_coordinator.xml,junitxml -o -,txt)
+set_tests_properties(verifactu_coordinator PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # imprimir: the print dialog / engine with the printer transport replaced
 # (ThermalPrinter::setTransport) - printer offline, copies sent, factura / completa
 # content, 58 mm - on a throwaway DB and settings. Never a real printer or AEAT.
@@ -464,16 +512,16 @@ get_property(_laideal_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_laideal_tests} PROPERTIES TIMEOUT 120)
 # Tripwire (src/verifactu/testhostguard.h): no test may reach a host but this machine.
 set_property(TEST ${_laideal_tests} APPEND PROPERTY ENVIRONMENT "LAIDEAL_TEST=1")
-# The direct client's suite drives the fake AEAT server through ~75 scenarios: about 185 s
-# locally and 245-300 s on a CI runner (20-11-2026: a slow runner passed 300 s with every
-# case still running). A limit of twice that, still short of a real hang.
-set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 600)
+# The direct client's suite drives the fake AEAT server through 95 scenarios: about 290 s
+# locally, bound by its own waits, and 450-480 s with the processor saturated (26-11-2026).
+# A limit of three times the usual run, still short of a real hang.
+set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 900)
 # The app bench waits on many fixed AEAT delays (5 s waits, slow fake replies): 85 s
 # locally, 170-245 s on a CI runner.
 set_tests_properties(e2e_app PROPERTIES TIMEOUT 600)
 
 # Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
-# the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port
+# the fake AEAT as its own process, and the reader of the ESC/POS bytes the TCP/IP (RAW) port
 # printer captures.
 add_executable(fake_aeat_server tools/fake_aeat_server.cpp
     support/fakeaeatserver.h
@@ -481,6 +529,10 @@ add_executable(fake_aeat_server tools/fake_aeat_server.cpp
 )
 target_include_directories(fake_aeat_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
 target_link_libraries(fake_aeat_server PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network)
+
+# Saves AEAT's raw reply to a query (TEST environment only, local use: see the file's header).
+add_executable(aeat_query_dump tools/aeat_query_dump.cpp)
+target_link_libraries(aeat_query_dump PRIVATE Qt${QT_VERSION_MAJOR}::Core verifactu)
 
 add_executable(escpos_preview tools/escpos_preview.cpp support/escpospreview.h)
 target_include_directories(escpos_preview PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
@@ -494,6 +546,7 @@ target_link_libraries(test_applogger PRIVATE
 )
 add_test(NAME applogger
     COMMAND test_applogger -o ${CMAKE_BINARY_DIR}/test-results-applogger.xml,junitxml -o -,txt)
-# The sql_lite suite (migration fixtures on throwaway databases) takes ~65 s on a CI
-# runner and passed 120 s on a slow one.
-set_tests_properties(sql_lite PROPERTIES TIMEOUT 300)
+# The sql_lite suite (about 150 cases, many migrating a throwaway database) takes 35-70 s
+# locally and a CI runner timed out at 300 s: like the other long suites, twice that, still
+# short of a real hang.
+set_tests_properties(sql_lite PROPERTIES TIMEOUT 600)

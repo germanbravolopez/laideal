@@ -1,179 +1,82 @@
 # Imprimir (`src/imprimir/`)
 
-Orchestrates printing of receipts (recibos) and simplified invoices (facturas
-simplificadas). Reads the ticket rows from `ingresos`, assembles a `TicketData`,
-and renders it to an **ESC/POS** byte stream via the [`printing`](printing.md)
-library, then sends those bytes **RAW** to the thermal printer queue.
+Prints receipts (recibos) and invoices (facturas simplificadas and completas). It reads the ticket's rows from `ingresos`, assembles a `TicketData`, renders it to an ESC/POS byte stream with the [`printing`](printing.md) library and sends the bytes RAW to the thermal printer queue. Source: `src/imprimir/imprimir.h/cpp`. Tests: `tests/test_imprimir.cpp` (`TestImprimir`, offscreen dialog and engine cases) and `tests/test_ticket_preview.cpp` (rendered sample), see [unit suites](../testing/unit_suites.md). Hardware research: [`printer/`](printer/README.md).
 
-> Since 9.x this no longer generates an Excel file or drives Excel COM. The old
-> QXlsx + `.xlsx` + VBScript + `cscript` path was replaced by direct ESC/POS to
-> the Epson TM-T20III — see the research dossier in
-> [`printer/`](printer/README.md) and the runtime lib in [`printing.md`](printing.md).
+## Two roles
 
-## Dialog (Imprimir → Recibo / Factura / Factura completa)
-
-Built in code with the shared [UiKit](uikit.md) style (no hand-copied form code, app font): an explanation panel worded for the mode; a **Ticket** group (Nº recibo, Enter prints - once, through `UiKit::onEnter`; a **Factura** list that appears when the ticket has several partial-payment invoices; for a recibo, **Imprimir también la copia del establecimiento**, ticked by default); for a full invoice a **Datos del cliente** group (Dirección - empty uses the client's saved address - and DNI / NIF); the primary **Imprimir recibo** / **Imprimir factura**; the result panel; Cerrar. The window stays open. Every outcome is written in the result panel: not found, no paid garment for a factura, printed (which copies, which invoices), no QR because AEAT has not confirmed it, printing disabled in Configuración, and printer problems. The three former pop-ups are gone: the address / DNI input boxes, the choice among partial payments (first press lists them, second prints the chosen one or all) and the shop-copy question.
-
-When the class is used as a **print engine** (MainWindow save, Cobrar, Recogida), nothing is shown: `printTicket()` returns whether the ticket reached the printer and printer problems still pop up, since there is no panel (`reportPrinterProblem`).
-
-**Factura events.** A factura is one payment event, never several merged. The dialog lists the `(verifactu_invoice_seq, invoice id)` pairs that have a `verifactu_estado` for the ticket: with one it scopes to that seq (so unpaid siblings and the printed Nº match what AEAT has); with several the first press fills the **Factura** list (one entry per invoice plus *Todas las facturas*) and the second prints the chosen one or each, listing in the panel the invoices printed and those not (no paid garments, printer error). An invoice cancelled or rectified since prints marked `ANULADA` / `RECTIFICADA`, without QR. The panel says why a factura has no QR: Verifactu not active, not confirmed by AEAT, or cancelled. A recibo prints `IMPORTE PAGADO` only when every garment of the ticket is paid (`ticketAllGarmentsPaid`, voided garments ignored) and its Nº is the ticket number, never a payment event's invoice id. If the client copy fails to print the shop copy is not attempted. Engine callers set the flags themselves: `PayDialog` prints the partial factura with `invoiceSeq` and, when AEAT did not reply (no QR), a *recibo* with `IMPORTE PAGADO` instead; Recogida reprints with the clicked row's seq; MainWindow's save-time print passes the QR it already holds.
-
-## Source files
-
-- `src/imprimir/imprimir.h/cpp`
-
-## Key interface
+- **Dialog** (Imprimir → Recibo / Factura / Factura completa), built in code with [UiKit](uikit.md). Explanation panel, **Ticket** group (Nº recibo, Enter prints once through `UiKit::onEnter`; a **Factura** list when the ticket has several payment invoices; for a recibo, **Imprimir también la copia del establecimiento**, ticked), for a completa a **Datos del cliente** group (Dirección, DNI / NIF), the primary button, the result panel, Cerrar. The window stays open and every outcome is written in the result panel.
+- **Print engine** (MainWindow save, Cobrar, Recogida): callers set the public fields and call `getTicketInfo` / `buildTicket` / `printTicket` without showing it. `printTicket()` returns whether the ticket reached the printer; problems pop up (`reportPrinterProblem`) since there is no panel.
 
 ```cpp
-Imprimir *ui = new Imprimir(db, this);  // db injected via constructor
-ui->isRecibo = true;            // receipt layout
-ui->isCompleteInvoice = false;  // true adds billing address + DNI (dialog fields)
-ui->verifactuIntegration = m_verifactuIntegration; // resolves the QR of a reprint
-ui->qrCode = result.qrCode;     // optional: pixmap from a fresh /Create response
-ui->verifactuIssued = true;     // optional: the direct client just issued the record (legend with a PENDIENTE row)
-ui->invoiceSeq = seq;           // -1 (default): every row of the ticket; >= 0: only the paid rows of that payment event
+Imprimir *ui = new Imprimir(db, this);
+ui->isRecibo = true;             // receipt layout
+ui->isCompleteInvoice = false;   // true: billing address + DNI
+ui->verifactuIntegration = m_verifactuIntegration;  // resolves the QR of a reprint
+ui->qrCode = result.qrCode;      // optional: pixmap of a fresh /Create response
+ui->verifactuIssued = true;      // optional: the direct client just issued the record
+ui->invoiceSeq = seq;            // -1: every row of the ticket; >= 0: paid rows of that payment event
 ui->le_n_ticket->setText(ticketNumber);
-ui->getTicketInfo();            // fetches matching rows from ingresos
-ui->buildTicket(copyForClient, addPayedInfo);  // builds ESC/POS bytes (m_ticketBytes)
-ui->printTicket();              // sends m_ticketBytes RAW to the printer queue
-ui->ticketBytes();              // the ESC/POS bytes of the last buildTicket() (tests read them)
+ui->getTicketInfo();             // loads the ingresos rows
+ui->buildTicket(copyForClient, addPayedInfo);   // fills m_ticketBytes
+ui->printTicket();               // sends them; a second call without a build re-sends the same bytes
+ui->ticketBytes();               // the last built bytes (tests read them)
 ```
 
-`buildTicket()` / `printTicket()` keep the historical two-step shape: callers
-build a copy, optionally print it, then build + print the next copy. A second
-`printTicket()` without an intervening `buildTicket()` re-sends the same bytes.
+Engine callers: `PayDialog` prints the partial factura with `invoiceSeq` (and, when AEAT did not reply, a recibo with `IMPORTE PAGADO` instead); Recogida reprints with the clicked row's seq; MainWindow's save-time print passes the QR it already holds.
 
-## Layout modes
+## Rules
 
 | `isRecibo` | `isCompleteInvoice` | Layout |
-|------------|---------------------|--------|
-| `true` | `false` | Standard customer receipt (recibo) |
-| `false` | `false` | Simplified invoice (factura simplificada) |
-| `false` | `true` | Full invoice with billing address + DNI (typed in the dialog) |
+|-----------|---------------------|--------|
+| true | false | Recibo (claim ticket, no QR) |
+| false | false | Factura simplificada |
+| false | true | Factura completa: same `FACTURA SIMPLIFICADA` heading (its AEAT record is F2) plus the recipient's address and DNI / NIF |
 
-## Process
-
-1. Caller sets the flags and the ticket number, then `getTicketInfo()` loads all
-   matching `ingresos` rows into `sqlQueryModel` (the number is trimmed; the
-   model is drained before the connection closes). Both queries carry
-   `AND (estado IS NULL OR estado != 'Anulado')` so a locally voided garment never prints
-   on a recibo or factura while legacy NULL-estado rows still do. With `invoiceSeq >= 0`
-   the query also forces `verifactu_invoice_seq = :seq AND pagado = 'SI'`: the seq column
-   DEFAULTs to 0 on every row, so a seq-0 payment event would otherwise pull in the
-   still-unpaid siblings. A factura prints only rows whose `pagado` is exactly `SI`.
-2. `buildTicket(copyForClient, addPayedInfo)` reads the model + `AppSettings` +
-   the resolved QR into a `TicketData` and calls `TicketRenderer::render(data,
-   paperDots())`. The result is cached in `m_ticketBytes`. `paperDots()` derives
-   the printable width from `AppSettings::paperWidthMm()` (80 mm → 576 dots,
-   58 mm → 420).
-3. `printTicket()` hands `m_ticketBytes` to `ThermalPrinter::send(bytes,
-   AppSettings::printerName())`. An empty printer name uses the Windows default
-   printer and returns whether it was sent (an empty payload is refused). On failure it reports the problem -
-   in the dialog's result panel when it is shown, else a `QMessageBox`. Callers still gate the call on `AppSettings::enablePrinting()`.
-   When `AppSettings::useStatusApi()` is on, the bytes go through
-   `StatusApiPrinter::sendAndReadStatusBounded()` first (Epson Status API on a worker
-   with a 10 s watchdog) and a device problem (paper out / cover open / cutter) is
-   reported the same way (result panel or `QMessageBox`); a fatal fault (cutter /
-   mechanical / unrecoverable) stops there. If the Status API is unavailable or times out
-   before sending, it falls back to the RAW `send()` above; a hang inside the send is
-   not resent (it may still print).
-
-The column layout is computed from the real paper width (dots / char width per
-font) instead of empirically-tuned spreadsheet cell widths.
+- **Loading** (`getTicketInfo`): the ticket number is trimmed and both queries exclude `estado = 'Anulado'` rows (NULL estado still prints). With `invoiceSeq >= 0` the query also forces `verifactu_invoice_seq = :seq AND pagado = 'SI'` (the seq column defaults to 0, so a seq-0 event would otherwise pull in unpaid siblings). A factura prints only rows whose `pagado` is exactly `SI`. `buildTicket` builds nothing when no row is printable, and the dialog says so instead of "impreso".
+- **Facturas are one payment event, never merged.** The dialog lists the `(verifactu_invoice_seq, invoice id)` pairs that have a `verifactu_estado`. With one, it scopes to that seq. With several, the first press fills the **Factura** list (one entry per invoice plus *Todas las facturas*) and the second prints the chosen one or each, naming in the panel the ones printed and the ones not (no paid garments, missing address, printer error). An invoice cancelled or rectified since prints marked `ANULADA` / `RECTIFICADA`, without QR.
+- **Complete invoice**: refused until there is a DNI / NIF and a recipient address (typed, else the client's saved one: `recipientAddress()`); the panel says what is missing and nothing prints.
+- **Recibo**: prints `IMPORTE PAGADO` only when every garment of the ticket is paid (`ticketAllGarmentsPaid`, voided garments ignored). Its Nº is the ticket number, never a payment event's invoice id.
+- **Copies**: if the client copy fails the shop copy is not attempted. A failing shop copy is reported on its own ("la copia del cliente se ha impreso, la del establecimiento no").
+- **Printing disabled** (`AppSettings::enablePrinting()` false, gated by the callers): the ticket is built but not sent and the panel says "preparado, no impreso".
+- **Result panel** also states: not found, no paid garment, no QR (Verifactu not active, not confirmed by AEAT, or cancelled), and printer problems.
+- **Printing** (`printTicket`): bytes go to `ThermalPrinter::send(bytes, AppSettings::printerName())` (empty name: default printer, see [printing](printing.md)). With `useStatusApi()` on they go through `StatusApiPrinter::sendAndReadStatusBounded()` first: a device problem is reported (panel or message box), a fatal fault stops there, an unavailable or timed-out API falls back to RAW, and a hang inside the send is not resent.
+- `paperDots()` comes from `AppSettings::paperWidthMm()` (80 mm: 576 dots, 58 mm: 420); header and identity fields are read from `AppSettings` at build time.
 
 ## Ticket layout
 
-The renderer reproduces the historical content and ordering (see
-[`printer/04_current_printing_flow.md`](printer/04_current_printing_flow.md)),
-top to bottom:
-
 | Block | Content |
 |-------|---------|
-| Header (centered) | `business.name` double-size; then `verifactu.company_name`, `NIF`, `business.address`, `business.city`, `Tlf:` (bold), closed by a `=` rule |
-| Document type | `Recibo` or `FACTURA SIMPLIFICADA`. A reprint of a cancelled or rectified invoice adds `*** FACTURA ANULADA ***` / `*** FACTURA RECTIFICADA ***` and, under the identity block, "Factura anulada el <fecha_anulacion>. Esta copia no es una factura en vigor."; it never carries a QR or leyenda |
-| Identity | `Nº:` (bold, right), `Fecha de expedición:` (facturas: the paid rows' `fecha_pago`, the date in the QR and at AEAT; art. 7 RD 1619/2012), `Cliente:`, `Recepción:`, optional `Dirección:` / `DNI:` (complete invoice; the window refuses a completa without a typed DNI / NIF). A completa keeps the `FACTURA SIMPLIFICADA` heading: its AEAT record is F2, and art. 7.2 RD 1619/2012 lets a simplificada carry the recipient's NIF and address |
-| Garment table | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura); long names word-wrap |
-| Totals (bold) | recibo: `TOTAL (IVA incl.)`; factura: `Base Imponible` + `IVA (rate%)` + `TOTAL` |
-| Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker (`Copia para el cliente` / `... establecimiento`) |
-| Verifactu QR | facturas only — the QR redrawn at 30-40 mm + the verification legend when estado = ENVIADA (or PENDIENTE just issued by the direct client) |
-| Legal policy | client copy only — RD 1453/1987 clauses + RGPD notice (Font B) |
-| Timestamp + cut | `dd/MM/yyyy - hh:mm:ss`, then feed + partial cut |
-
-Header/identity fields are read from `AppSettings::instance()` at build time.
-
-## General conditions block
-
-Rendered only when `copyForClient == true` (the establishment copy omits it).
-All clauses are grounded in RD 1453/1987 (BOE-A-1987-26716) and verified against
-Consumo Responde (Junta de Andalucía):
-
-| # | Topic | Key text | Legal basis |
-|---|-------|----------|-------------|
-| 1 | Receipt / identity | Receipt required to collect; loss does not prevent it — client identifies themselves | Custom clause, industry standard |
-| 2 | Storage obligation | Storage fees may accrue after 3 months from delivery; custody obligation ends at 6 months | Art. 6 RD 1453/1987 (custody, not documentation) |
-| 3 | Accessories | No liability for buttons/ornaments/accessories unless noted on *this receipt*; removal recommended | Art. 3 RD 1453/1987; disclaimer must be per-garment |
-| 4 | Pre-cleaning advisory | If garment state implies risk of damage or uncertain outcome, client will be informed before treatment | Art. 6 RD 1453/1987 (information obligation) |
-| 5 | RGPD notice | Data processed by `businessName()` to manage the service; rights under Arts.15-22 RGPD via `businessPhone()` (falls back to "ver cartel en tienda") | LOPDGDD Art. 11 / RGPD Art. 13 layered-notice |
-
-## `ingresos` column indices
-
-Defined once in `sql_lite/ingresos_schema.h` as `INGRESOS_COL_<UPPER_DB_COLUMN_NAME>`
-(`INGRESOS_COL_N_RECIBO=0` … `INGRESOS_COL_VERIFACTU_CANCEL_XML=27`). Used here
-for every `sqlQueryModel->index(row, col)` lookup in `imprimir.cpp`, and shared
-with `recog_prendas`, `listado`, `mainwindow`, `mysortfilterproxymodel` and
-`add_garment`.
+| Header | `business.name` double-size, `verifactu.company_name`, NIF, address, city, `Tlf:`, `=` rule |
+| Document type | `Recibo` or `FACTURA SIMPLIFICADA`. A cancelled or rectified invoice adds `*** FACTURA ANULADA ***` / `*** FACTURA RECTIFICADA ***` and "Factura anulada el <fecha>. Esta copia no es una factura en vigor."; no QR or leyenda |
+| Identity | `Nº:`, `Fecha de expedición:` (facturas: the paid rows' `fecha_pago`, the date in the QR and at AEAT), `Cliente:`, `Recepción:`, `Dirección:` / `DNI:` (completa) |
+| Garments | `Uds. \| Prendas \| Importe`, one row per garment (paid rows only on a factura), long names wrap |
+| Totals | recibo `TOTAL (IVA incl.)`; factura `Base Imponible`, `IVA (rate%)`, `TOTAL` |
+| Payment / copy | `IMPORTE PAGADO` when `addPayedInfo`; recibo copy marker |
+| QR | facturas only, see below |
+| Legal policy | client copy only: RD 1453/1987 clauses (receipt needed to collect, custody fees after 3 months and end of custody at 6, accessories, pre-cleaning risk) and the RGPD notice (`businessName()`, `businessPhone()`), Font B |
+| Footer | `dd/MM/yyyy - hh:mm:ss`, feed, partial cut |
 
 ## Verifactu QR
 
-Never blank, never merged: the ticket number is trimmed before loading; `buildTicket` builds nothing when no row is printable (unknown number, every garment voided) and the dialog says so instead of "impreso"; `resolveQrCode` sums only the paid rows and draws no QR when the loaded paid rows belong to more than one payment event (`invoiceSeq` -1 over a partially paid ticket), so a QR always describes an invoice AEAT received.
+Printed on facturas only. `resolveQrCode()` resolves it in this order:
 
-A QR is printed on **facturas only** (recibos are claim tickets, not tax
-documents). `resolveQrCode()` resolves it in this order:
+1. The caller's `qrCode` (a fresh `/Create` response, or `PayDialog`'s `qrBeforeReply`).
+2. No QR when Verifactu is not configured, when any loaded row is `ANULADA` / `RECTIFICADA` / `ERROR` / unrecognised, or when the paid rows belong to more than one payment event (`invoiceSeq` -1 over a partially paid ticket): a QR always describes one invoice AEAT received. The amount sums only the paid rows; InvoiceID is `displayInvoiceId()`, `FechaExpedicion` the first paid row's `fecha_pago`.
+3. No row has a CSV (AEAT has not confirmed): only the direct client has a QR, the one printed at issue (`VerifactuIntegration::qrBeforeReply`). That sets `m_qrFromQueuedRecord`, which also turns the leyenda on.
+4. A CSV exists: the QR is drawn (`AeatQr::image`) from the stored `verifactu_url_qr`, never rebuilt from today's environment or IVA rate. A row without that URL (an old gateway row) asks the gateway (`/GetQrCode`, 5 s wait; on timeout no QR); the direct client prints no QR rather than rebuild it.
 
-1. If the caller pre-populated `qrCode` (the pixmap from a fresh `/Create`
-   response in the save flow, or `PayDialog`'s `qrBeforeReply`), use it.
-2. Without a configured Verifactu, or when any loaded row is `ANULADA` /
-   `RECTIFICADA` / `ERROR` / unrecognised, or the paid rows span more than one payment
-   event, there is no QR. The InvoiceID is `displayInvoiceId()` and the
-   `FechaExpedicion` is the first paid row's `fecha_pago` (the date submitted to
-   AEAT). `displayInvoiceId()` gathers the `verifactu_invoice_id` column and
-   delegates the selection (first non-empty literal, else bare `n_recibo`) to the
-   pure, unit-tested `sql_lite::verifactuDisplayInvoiceId` seam.
-3. **No row has a CSV** (not confirmed by AEAT yet): only the direct client, whose
-   record is generated, chained and queued, has a QR - the one printed at issue,
-   `VerifactuIntegration::qrBeforeReply`. It sets `m_qrFromQueuedRecord`, which
-   also turns the leyenda on. The gateway prints no QR here.
-4. **A CSV exists** (accepted invoice): the QR is drawn (`AeatQr::image`) from the
-   verification URL stored with AEAT's answer (`verifactu_url_qr` of its paid rows,
-   gateway and direct client alike). It is never rebuilt from today's environment:
-   after the production switch an older test invoice would otherwise get a
-   production QR. Nor is it rebuilt from today's IVA rate. Only an older row without
-   that URL (an old gateway row) asks the backend, and only the gateway (REST
-   `/GetQrCode`, 5 s bounded wait; on timeout the ticket prints without a QR); the
-   direct client prints it without QR rather than rebuild a URL that may not be the
-   invoice's.
+`buildTicket()` redraws the QR through `TicketRenderer::printableQr` (30-40 mm, see [printing](printing.md)). A symbol it cannot read is printed as received, shrunk only when wider than the paper (`shrinkReceivedQr`: by a whole factor that keeps every module exact when one exists, otherwise resampled to black and white with a warning in the log). The leyenda is printed only when every paid row has `verifactu_estado` `ENVIADA`, or `PENDIENTE` while the direct client has just issued the record (`verifactuIssued` or `m_qrFromQueuedRecord`); never decided by row 0. QR bytes are never stored. Legal basis: [Verifactu](verifactu/README.md).
 
-`buildTicket()` redraws the resolved `QPixmap` through `TicketRenderer::printableQr`
-(the same modules at whole dots per module, 30-40 mm, plus the 4-module quiet zone,
-never wider than the paper) and rasters it into the ESC/POS stream
-(`EscPosBuilder::rasterImage()`, `GS v 0`); a symbol it cannot read is printed as
-received. No local re-encoding. The verification legend `Factura verificable en la
-sede electrónica de la AEAT` is emitted below the QR only when every paid row of the
-loaded set (`pagado = 'SI'`, the rows being invoiced, as for the QR amount) has `verifactu_estado`
-`ENVIADA`, or `PENDIENTE` while the direct client has just issued the record (`verifactuIssued`,
-or the QR came from the queued record); never decided by row 0, which may be unpaid in an unscoped reprint - required by
-Disposición Final Primera RD 1007/2023. QR image bytes are never persisted in the DB.
+## Public API
+
+| Group | Members |
+|-------|---------|
+| Inputs | `isRecibo`, `isCompleteInvoice`, `verifactuIntegration`, `qrCode`, `verifactuIssued`, `invoiceSeq`, `le_n_ticket` |
+| Flow | `getTicketInfo`, `buildTicket`, `printTicket`, `ticketBytes` |
+| QR / ids | `resolveQrCode`, `displayInvoiceId` (the pure seam `sql_lite::verifactuDisplayInvoiceId`: first non-empty `verifactu_invoice_id`, else bare `n_recibo`) |
+
+`ingresos` column indices are the `INGRESOS_COL_*` macros in `sql_lite/ingresos_schema.h`, used for every `sqlQueryModel->index(row, col)` lookup.
 
 ## Dependencies
 
-- [`printing`](printing.md) — `EscPosBuilder`, `TicketRenderer`, `ThermalPrinter`
-  (the ESC/POS byte builder + RAW Windows-spooler transport). No QXlsx, no Excel,
-  no `cscript`.
-- `verifactu` — `VerifactuIntegration::qrBeforeReply()` (the direct client's queued
-  record) and `generateQRAsync()` for the old gateway `/GetQrCode` path; `AeatQr::image`
-  draws the stored URL.
-- `uikit` — the dialog style and result panel.
-- `appsettings` — business identity, IVA rate, `printerName()`, `paperWidthMm()`,
-  `enablePrinting()`, `useStatusApi()`.
-- `sql_lite` — `searchItemFromClient()`, the `verifactuInvoiceId()`/estado helpers,
-  and the `INGRESOS_COL_*` indices.
+[`printing`](printing.md) (`TicketRenderer`, `ThermalPrinter`, `StatusApiPrinter`), `verifactu` (`qrBeforeReply`, `generateQRAsync`, `AeatQr::image`), [`uikit`](uikit.md), `appsettings` (business identity, IVA rate, `printerName()`, `paperWidthMm()`, `enablePrinting()`, `useStatusApi()`), `sql_lite` (`ticketAllGarmentsPaid`, estado helpers, `INGRESOS_COL_*`).

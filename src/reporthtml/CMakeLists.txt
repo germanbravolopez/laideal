@@ -8,5 +8,6 @@ target_link_libraries(reporthtml
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::PrintSupport
     appsettings
+    textformat
 )
 target_include_directories(reporthtml PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

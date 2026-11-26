@@ -1,6 +1,7 @@
 #include "verifactumanager.h"
-#include "verifacturesponse.h"
+#include "textformat.h"
 #include "testhostguard.h"
+#include "aeathash.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
 #include <QJsonDocument>
@@ -11,7 +12,6 @@
 #include <QUrlQuery>
 #include <QByteArray>
 #include <QEventLoop>
-#include <QRegularExpression>
 #include <QPointer>
 
 VerifactuManager::VerifactuManager(QObject *parent)
@@ -38,19 +38,44 @@ void VerifactuManager::emitErrorAsync(const QString &reqId, VerifactuResult::Sta
     }, Qt::QueuedConnection);
 }
 
-void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind)
+VerifactuResult VerifactuManager::networkErrorResult(QNetworkReply *reply, bool gatewayReason)
 {
-    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, kind]() {
+    VerifactuResult result;
+    result.status = VerifactuResult::NETWORK_ERROR;
+    result.errorDescription = "Error de conexión: " + reply->errorString();
+    if (!gatewayReason)
+        return result;
+    // An HTTP error still may carry the gateway's own reason; the status stays unknown-outcome.
+    const QJsonObject body = QJsonDocument::fromJson(reply->readAll()).object();
+    QString gatewayMessage = body.value("Return").toObject().value("ErrorDescription").toString();
+    if (gatewayMessage.isEmpty())
+        gatewayMessage = body.value("ResultMessage").toString();
+    if (gatewayMessage.isEmpty())
+        gatewayMessage = body.value("message").toString();
+    if (!gatewayMessage.isEmpty()) {
+        constexpr int kMaxGatewayMessage = 300;
+        if (gatewayMessage.size() > kMaxGatewayMessage)
+            gatewayMessage = gatewayMessage.left(kMaxGatewayMessage) + "...";
+        result.errorDescription += " - " + gatewayMessage;
+    }
+    return result;
+}
+
+void VerifactuManager::wireReply(const QString &reqId, QNetworkReply *reply, VerifactuReply kind,
+                                 std::function<void(VerifactuResult &)> stamp)
+{
+    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, kind, stamp]() {
         VerifactuResult result;
         if (reply->error() != QNetworkReply::NoError) {
-            result.status = VerifactuResult::NETWORK_ERROR;
-            result.errorDescription = "Error de conexión: " + reply->errorString();
+            result = networkErrorResult(reply, kind != VerifactuReply::Qr);
             m_lastError = result.errorDescription;
             qWarning() << "Verifactu network error (" << reqId << "):" << m_lastError;
         } else {
-            QByteArray responseData = reply->readAll();
+            const QByteArray responseData = reply->readAll();
             logResponse(responseData);
             result = parseVerifactuResponse(responseData, kind);
+            if (stamp)
+                stamp(result);
         }
         reply->deleteLater();
         emit requestFinished(reqId, result);
@@ -62,7 +87,7 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (!invoice.isValid()) {
@@ -78,14 +103,14 @@ QString VerifactuManager::submitInvoiceAsync(const VerifactuInvoice &invoice)
     QNetworkRequest request = createNetworkRequest(m_config->getEndpointUrl() + "/Create");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    qDebug() << "Submitting invoice" << invoice.getInvoiceNumber() << "(" << reqId << ")";
+    qDebug() << "Submitting invoice" << invoice.getInvoiceNumber() << "(" << reqId << ") to"
+             << (m_config->getEndpointUrl() + "/Create");
     // Redact ServiceKey before logging - the JSON ends up in ~/.laideal.log and the key
     // is the AEAT API credential.
     QJsonObject loggable = invoiceJson;
     loggable["ServiceKey"] = QStringLiteral("[redacted, %1 chars]")
         .arg(invoiceJson.value("ServiceKey").toString().length());
     qDebug().noquote() << "Payload:" << QString::fromUtf8(QJsonDocument(loggable).toJson(QJsonDocument::Indented));
-    qDebug() << "Endpoint:" << (m_config->getEndpointUrl() + "/Create");
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
     wireReply(reqId, reply, VerifactuReply::Submit);
@@ -100,7 +125,7 @@ QString VerifactuManager::queryInvoiceAsync(const QString &invoiceNumber, const 
     const bool configured = validateConfiguration();
     if (!configured || invoiceNumber.isEmpty()) {
         VerifactuRemoteRecord rec;   // parsed=false: we know nothing, not "absent"
-        rec.raw = configured ? QStringLiteral("InvoiceID vacío") : getLastError();
+        rec.raw = configured ? QStringLiteral("InvoiceID vacío") : m_lastError;
         QMetaObject::invokeMethod(this, [this, reqId, rec]() {
             emit queryFinished(reqId, rec);
         }, Qt::QueuedConnection);
@@ -155,7 +180,7 @@ QString VerifactuManager::cancelInvoiceAsync(const QString &invoiceNumber, const
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (invoiceNumber.isEmpty() || invoiceDate.isNull()) {
@@ -188,7 +213,7 @@ QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
     const QString reqId = nextRequestId();
 
     if (!validateConfiguration()) {
-        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, getLastError());
+        emitErrorAsync(reqId, VerifactuResult::INVALID_CONFIG, m_lastError);
         return reqId;
     }
     if (!invoice.isValid()) {
@@ -207,26 +232,9 @@ QString VerifactuManager::generateQRAsync(const VerifactuInvoice &invoice)
     qDebug() << "Generating QR for invoice" << invoice.getInvoiceNumber() << "(" << reqId << ")";
 
     QNetworkReply *reply = m_networkManager->post(request, payload);
-
-    // QR path also needs validationUrl assembled locally - use a dedicated lambda
-    // instead of wireReply so we can stamp it before emitting.
+    // The validation URL is assembled locally, not read from the reply.
     const QString validationUrl = getValidationUrl(invoice);
-    connect(reply, &QNetworkReply::finished, this, [this, reqId, reply, validationUrl]() {
-        VerifactuResult result;
-        if (reply->error() != QNetworkReply::NoError) {
-            result.status = VerifactuResult::NETWORK_ERROR;
-            result.errorDescription = "Error de conexión: " + reply->errorString();
-            m_lastError = result.errorDescription;
-            qWarning() << "Verifactu QR network error (" << reqId << "):" << m_lastError;
-        } else {
-            QByteArray responseData = reply->readAll();
-            logResponse(responseData);
-            result = parseVerifactuResponse(responseData, VerifactuReply::Qr);
-            result.validationUrl = validationUrl;
-        }
-        reply->deleteLater();
-        emit requestFinished(reqId, result);
-    });
+    wireReply(reqId, reply, VerifactuReply::Qr, [validationUrl](VerifactuResult &r) { r.validationUrl = validationUrl; });
     return reqId;
 }
 
@@ -237,7 +245,7 @@ QString VerifactuManager::getValidationUrl(const VerifactuInvoice &invoice) cons
 
     query.addQueryItem("nif", invoice.getSellerNIF());
     query.addQueryItem("numserie", invoice.getInvoiceNumber());
-    query.addQueryItem("fecha", invoice.getInvoiceDate().toString("dd-MM-yyyy"));
+    query.addQueryItem("fecha", invoice.getInvoiceDate().toString(kDbDateFormat));
     query.addQueryItem("importe", QString::number(invoice.getTotalAmount(), 'f', 2));
 
     url += "?" + query.toString();
@@ -250,7 +258,7 @@ VerifactuResult VerifactuManager::testConnection()
 
     if (!validateConfiguration()) {
         result.status = VerifactuResult::INVALID_CONFIG;
-        result.errorDescription = getLastError();
+        result.errorDescription = m_lastError;
         return result;
     }
 
@@ -335,7 +343,7 @@ VerifactuResult VerifactuManager::connectionProbeResult(int httpStatus, const QB
     return result;
 }
 
-QString VerifactuManager::getConfigurationInfo() const
+QString VerifactuManager::configurationInfo() const
 {
     QString info = "=== Verifactu Configuration ===\n";
     info += "Environment: " + QString(m_config->getEnvironment() == VerifactuConfig::TESTING ? "TESTING" : "PRODUCTION") + "\n";

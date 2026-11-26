@@ -9,6 +9,8 @@
 // before the next submission, and answers queries from what it registered.
 // Replies follow the official response schemas (see tests/fixtures/aeat-responses).
 
+#include <functional>
+
 #include <QByteArray>
 #include <QDateTime>
 #include <QHash>
@@ -61,6 +63,7 @@ public:
         int  delayMs = 0;
         bool drop = false;        // close the connection without answering
         bool dropAfterRegistering = false;   // register the records, then lose the answer
+        bool gated = false;       // hold the reply until releaseGated(), instead of a time
     };
 
     explicit FakeAeatServer(QObject *parent = nullptr);
@@ -69,6 +72,8 @@ public:
     bool start();
     QString url() const;
 
+    // Sends the replies held by a `gated` Reply.
+    void releaseGated();
     void setWaitSeconds(int seconds) { m_waitSeconds = seconds; }
     // Query replies without the records' Huella / chain block (both optional in the schema).
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
@@ -78,6 +83,14 @@ public:
     void hideFromQuery(const QString &invoiceNumber) { m_hidden.insert(invoiceNumber); }
     // Answers a query without the SistemaInformatico block even when it was asked for.
     void setQueryWithoutSystemBlock(bool on) { m_queryWithoutSystem = on; }
+    // By default a cancelled invoice is returned like AEAT's test environment does
+    // (25-11-2026): the invoice's data with the huella, time and link of its cancellation
+    // record. On: with those of its registration, the cancellation hidden (AEAT's written
+    // answer of 24-11-2026, the case that restarts a chain).
+    void setQueryHidesCancellationRecord(bool on) { m_queryHidesCancellation = on; }
+    // A cancelled invoice's SistemaInformatico block is the registration's by default; on:
+    // the cancellation's (which of the two AEAT sends is not known).
+    void setQueryShowsCancellersSystem(bool on) { m_queryShowsCancellersSystem = on; }
     // Every query is answered with a server SOAP fault (AEAT's service failing).
     void setQueriesUnavailable(bool on) { m_queriesUnavailable = on; }
     // The next record of `invoiceNumber` is rejected with this code (once).
@@ -92,6 +105,13 @@ public:
     // Queries return only the records whose invoice date is in the asked month, as AEAT
     // does (off by default: most tests use fixed dates).
     void setQueryByMonth(bool on) { m_queryByMonth = on; }
+    // The next submission (queries are answered) is dropped without registering its records.
+    void dropNextSubmission() { m_dropNextSubmission = true; }
+    // While on, every submission is dropped like that (queries are answered): a test decides
+    // when sending works again, whatever the number of retries meanwhile.
+    void setSubmissionsUnavailable(bool on) { m_submissionsUnavailable = on; }
+    // Query replies give the records' huellas in lower case.
+    void setQueryHashesLowerCase(bool on) { m_queryHashesLowerCase = on; }
     // The next request gets `reply` instead of the default answer.
     void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
 
@@ -123,9 +143,15 @@ private:
     QSet<QString> m_noHashFor;
     QSet<QString> m_hidden;
     int m_waitSeconds = 0;
+    QList<std::function<void()>> m_gated;
     bool m_queryWithoutHashes = false;
     bool m_queryWithoutSystem = false;
+    bool m_queryHidesCancellation = false;
+    bool m_queryShowsCancellersSystem = false;
     bool m_queriesUnavailable = false;
+    bool m_dropNextSubmission = false;
+    bool m_submissionsUnavailable = false;
+    bool m_queryHashesLowerCase = false;
     int m_counter = 0;
 };
 

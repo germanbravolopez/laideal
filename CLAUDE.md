@@ -6,7 +6,7 @@ Quick links:
 - `docs/ai_agent_instructions.md` — start here (file map, critical issues, business logic)
 - `docs/INDEX.md` — find any file, concept, or topic
 - `docs/architecture.md` — module details, DB schema, data flow
-- `docs/progress_tracker.md` — current status and open / blocking issues
+- `docs/progress_tracker.md` — current status, open issues and backlog
 - `docs/completed_milestones.md` — finished work history (newest first)
 - `.claude/skills/<name>/SKILL.md` — project skills (`/tackle-issue`, `/debugging`, `/update-docs`, `/update-skills`, `/coding-guidelines`, `/release`); Claude auto-invokes them from their `description` frontmatter, except `/release` (manual only)
 - `.claude/agents/` — project subagents (`test-engineer`, `verifactu-compliance-auditor`, `guidelines-auditor`, `dead-code-finder`)

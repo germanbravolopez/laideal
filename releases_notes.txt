@@ -1,5 +1,17 @@
 ﻿Releases:
 
+12.7
+- Direct connection with AEAT: ready for production. When the day comes, the shop only ticks "Entorno de PRODUCCIÓN" in Configuración; no new version is needed. The program records the day production starts and sends nothing from before that day to the real AEAT (no invoice, cancellation or resend from the test period).
+- Configuración → Verifactu shows only the fields of the chosen connection (gateway or direct). The direct connection has its own "Probar conexión", which checks the certificate and the connection without sending any record.
+- The rehearsal with AEAT is now called "Ensayo en el entorno de pruebas de la AEAT". It is hidden while the program works in the test environment, where "Probar conexión" is enough.
+- After restoring a backup, a missing cancellation that AEAT's answer proves to be ours no longer starts a new chain of records: the chain continues. The restart of 12.6 is kept for the cases AEAT's answer cannot prove.
+- Rectificar factura opens on type R5, the one for the shop's tickets (simplified invoices).
+- Recogida de Prendas: AEAT's message in the status bar is shown as plain text, and the ticket details follow the arrow keys.
+- Safer saving: an amount or a payment date that cannot be read is refused instead of stored, the client is saved only after its ticket, and the window cannot be closed while a ticket waits for AEAT's answer.
+- A complete invoice (factura completa) needs the recipient's address. An expense accepts only 0, 10 or 21 % IVA, and the accounting summary names the supplier invoices it leaves out.
+- With printing switched off, the window says "preparado, no impreso" instead of "impreso".
+- Many smaller fixes after a full review of the program, and more automatic tests.
+
 12.6
 - Direct connection with AEAT (in preparation; the shop keeps using the gateway): adapted to AEAT's answer of 24 November 2026 about restored backups.
 - When a backup is restored and a cancellation made after it is missing and may have been the last record sent, the program starts a new chain of records with a new installation number, as AEAT indicates. The restart is recorded in the database and in the program's log.

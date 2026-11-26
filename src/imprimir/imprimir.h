@@ -24,6 +24,11 @@ namespace UiKit { class ResultPanel; }
 
 // `ingresos` column indices come from sql_lite.h (INGRESOS_COL_*).
 
+// A QR received as an image, no wider than `maxWidth`: shrunk by the smallest whole factor that
+// keeps every module exact (each block of that size a single colour, one pixel kept per block);
+// else resampled to fit and cut to black and white again (logged). A fitting image is returned as is.
+QImage shrinkReceivedQr(const QImage &qr, int maxWidth);
+
 // Two roles. As a dialog (Imprimir -> Recibo / Factura / Factura completa) it is
 // built in code with the shared UiKit style: the receipt number, the full-invoice
 // details (address, DNI), the choice among several partial-payment invoices and
@@ -59,6 +64,8 @@ public:
     // The ESC/POS bytes of the last buildTicket() (tests read the rendered text).
     QByteArray ticketBytes() const { return m_ticketBytes; }
     QPixmap resolveQrCode();
+    // Test seam: the QR in qrCode is the one of a queued record (resolveQrCode() sets it).
+    void setQrFromQueuedRecord(bool fromQueued) { m_qrFromQueuedRecord = fromQueued; }
     // Literal AEAT InvoiceID for the loaded rows: first non-empty
     // verifactu_invoice_id, else bare n_recibo (legacy / never submitted).
     QString displayInvoiceId() const;
@@ -75,6 +82,8 @@ private slots:
 private:
     // The last resolveQrCode() drew the QR of the direct client's queued record.
     bool m_qrFromQueuedRecord = false;
+    // The address a complete invoice carries: the typed one, else the client's stored one; may be empty.
+    QString recipientAddress();
     void buildUi();
     bool checkTicketPaid(int row);
     bool checkAnyItemPaid();

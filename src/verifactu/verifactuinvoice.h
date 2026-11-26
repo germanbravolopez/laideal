@@ -31,7 +31,6 @@ public:
     };
 
     VerifactuInvoice();
-    ~VerifactuInvoice();
 
     void setInvoiceNumber(const QString &number) { m_invoiceNumber = number; }
     void setInvoiceDate(const QDate &date) { m_invoiceDate = date; }
@@ -58,7 +57,7 @@ public:
     QString getSellerName() const { return m_sellerName; }
     InvoiceType getInvoiceType() const { return m_invoiceType; }
     QString getDescription() const { return m_description; }
-    QList<VerifactuTaxItem> getTaxItems() const { return m_taxItems; }
+    const QList<VerifactuTaxItem> &getTaxItems() const { return m_taxItems; }
     bool hasRectification() const { return m_hasRectification; }
     RectificationType getRectificationType() const { return m_rectificationType; }
     double getRectificationTaxBase() const { return m_rectificationTaxBase; }
@@ -69,9 +68,9 @@ public:
     // The invoices a rectificativa corrects (FacturasRectificadas). The gateway
     // does not send them; the direct AEAT client does.
     void addRectifiedInvoice(const QString &number, const QDate &date) { m_rectifiedInvoices.append({ number, date }); }
-    QList<QPair<QString, QDate>> getRectifiedInvoices() const { return m_rectifiedInvoices; }
+    const QList<QPair<QString, QDate>> &getRectifiedInvoices() const { return m_rectifiedInvoices; }
 
-    double getTotalAmount() const { return m_totalAmount; }
+    double getTotalAmount() const;   // always from the tax items, rounded to cents
 
     void addTaxItem(const VerifactuTaxItem &item) { m_taxItems.append(item); }
 
@@ -81,6 +80,8 @@ public:
     void calculateTotals();
 
 private:
+    void computeTotals(double &amount, double &taxAmount) const;
+
     QString m_invoiceNumber;
     QDate m_invoiceDate;
     InvoiceType m_invoiceType;
@@ -102,7 +103,7 @@ private:
 
     mutable QString m_validationError;
 
-    QString invoiceTypeToString(InvoiceType type) const;
+    static QString invoiceTypeToString(InvoiceType type);
 };
 
 #endif // VERIFACTUINVOICE_H

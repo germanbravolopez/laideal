@@ -1,6 +1,6 @@
 ---
 name: tackle-issue
-description: End-to-end workflow to resolve an item from docs/progress_tracker.md (Blocking or Open Non-Blocking Issues) - read the issue, plan, implement, add/update tests, update docs, build, run ctest, commit on develop. Use when the user says "tackle X", "let's fix Y", "move on to Z" and X/Y/Z is a tracker item.
+description: End-to-end workflow to resolve an item from docs/progress_tracker.md (Open Issues) - read the issue, plan, implement, add/update tests, update docs, build, run ctest, commit on develop. Use when the user says "tackle X", "let's fix Y", "move on to Z" and X/Y/Z is a tracker item.
 argument-hint: "<issue title or description>"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "<issue title or description>"
 
 End-to-end workflow for picking up an open item from `docs/progress_tracker.md` and shipping it. Encapsulates the loop we run for every fix: read → plan (if non-trivial) → implement → update docs → commit.
 
-Use when the user says things like "tackle X", "let's fix Y", "move on to Z" where X/Y/Z is an item in the Blocking Issues or Open Non-Blocking Issues section of `docs/progress_tracker.md`.
+Use when the user says things like "tackle X", "let's fix Y", "move on to Z" where X/Y/Z is an item in the Open Issues section of `docs/progress_tracker.md`.
 
 ---
 
@@ -16,7 +16,7 @@ Use when the user says things like "tackle X", "let's fix Y", "move on to Z" whe
 
 ### 1. Locate the issue
 
-- Read `docs/progress_tracker.md` and find the item the user named. It should be in **Blocking Issues** or **Open Non-Blocking Issues** — anything else is already done.
+- Read `docs/progress_tracker.md` and find the item the user named. It should be in **Open Issues** — anything else is already done.
 - The full issue text contains the problem statement, sometimes a proposed fix, and the affected files. **Read it in full before touching code** — the description usually answers the design questions you would otherwise ask.
 
 ### 2. Decide on the approach
@@ -43,7 +43,7 @@ If the issue lists two approaches (e.g. "short option" vs "architectural option"
 Always update these, in order:
 
 - **`docs/progress_tracker.md`** + **`docs/completed_milestones.md`** —
-  - Remove the entry from the tracker's Blocking / Open Non-Blocking.
+  - Remove the entry from the tracker's Open Issues.
   - Add a milestone entry at the top of `docs/completed_milestones.md`. **Pick the section by the latest *released* version**, per the `/update-docs` §1 rule: if a release has shipped since the top `### Post-<X.Y> development` section was created (compare against "Latest release" in Current Status), start a new `### Post-<latest-release> development — <Month Year>` section rather than appending to the stale one. Format: `- [x] **Title**: what was done, why, key files. Include rationale that wasn't obvious from the diff.`
   - Don't paste the original issue text — write fresh prose that reflects the actual fix.
 - **`docs/architecture.md`** if the structure or data model changed (new module, removed module, signal/slot wiring, DB schema).

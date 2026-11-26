@@ -175,6 +175,39 @@ private slots:
             QMetaObject::invokeMethod(&dlg, "accept");
             QVERIFY(s->aeatDirectProduction());
         }
+        // Entering production again is refused while test records are unsent, and when the
+        // check MainWindow gives (certificate, the real AEAT's answer) finds a problem.
+        {
+            s->setAeatDirectProduction(false);
+            SettingsDialog unsent;
+            unsent.setDirectPendingCount(1);
+            unsent.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&unsent, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+
+            SettingsDialog unreachable;
+            QString checkedNif;
+            unreachable.setProductionCheck([&checkedNif](const QString &nif, const QString &, const QString &, const QString &,
+                                                         const QString &) {
+                checkedNif = nif;
+                return QStringLiteral("No se pudo conectar con la AEAT");
+            });
+            unreachable.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Ok);
+            QMetaObject::invokeMethod(&unreachable, "accept");
+            QVERIFY(!s->aeatDirectProduction());
+            QCOMPARE(checkedNif, s->verifactuNif());
+
+            SettingsDialog reachable;
+            reachable.setProductionCheck([](const QString &, const QString &, const QString &, const QString &, const QString &) {
+                return QString();
+            });
+            reachable.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&reachable, "accept");
+            QVERIFY(s->aeatDirectProduction());
+        }
         // Leaving production: refused while production records are unsent, then confirmed.
         {
             SettingsDialog pending;
@@ -184,6 +217,24 @@ private slots:
             answer(QMessageBox::Ok);
             QMetaObject::invokeMethod(&pending, "accept");
             QVERIFY(s->aeatDirectProduction());
+        }
+        // ... and while the real AEAT's refused invoices are still to be resent or cancelled.
+        {
+            SettingsDialog refused;
+            refused.setDirectPendingCount(0);
+            refused.setProductionRefusedCount(2);
+            refused.findChild<QCheckBox *>("chkDirectProduction")->setChecked(false);
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&refused, "accept");
+            QVERIFY(s->aeatDirectProduction());
+
+            SettingsDialog leavingDirect;
+            leavingDirect.setProductionRefusedCount(2);
+            auto *connection = leavingDirect.findChild<QComboBox *>("cbConnection");
+            connection->setCurrentIndex(connection->findData("irenesolutions"));
+            answer(QMessageBox::Yes);
+            QMetaObject::invokeMethod(&leavingDirect, "accept");
+            QVERIFY(s->verifactuDirectAeat() && s->aeatDirectProduction());
         }
         {
             SettingsDialog leaving;
@@ -283,6 +334,60 @@ private slots:
                  QDate::fromString(AppSettings::defaultPendingRecoveryFloorDate(), Qt::ISODate));
     }
 
+    // A failed save keeps the dialog open: closing would look like the changes were kept.
+    void test_failedSaveKeepsDialogOpen()
+    {
+        AppSettings *s = AppSettings::instance();
+        const QString path = s->filePath();
+        const auto restore = qScopeGuard([this, s, path] {
+            QDir(path).removeRecursively();
+            s->loadFrom(path);
+            s->setVerifactuServiceKey("secret-key-123");
+            s->setDbPath(m_dbFile);
+        });
+        QVERIFY(QFile::remove(path));
+        QVERIFY(QDir().mkpath(path));                         // a folder where the file goes: save() fails
+        SettingsDialog dlg;
+        dlg.show();
+        int seen = 0;
+        answerBoxes(QMessageBox::Ok, &seen);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QCOMPARE(seen, 1);
+        QVERIFY(dlg.isVisible());
+        QVERIFY(dlg.result() != QDialog::Accepted);
+    }
+
+    // Enter in a field must not press OK and run accept() with its confirmations.
+    void test_enterInAFieldDoesNotAccept()
+    {
+        SettingsDialog dlg;
+        dlg.show();
+        auto *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
+        QVERIFY(key);
+        key->setFocus();
+        QTest::keyClick(key, Qt::Key_Return);
+        QTest::keyClick(key, Qt::Key_Enter);
+        QVERIFY(dlg.isVisible());
+        QVERIFY(dlg.result() != QDialog::Accepted);
+    }
+
+    // A hand-edited paper width stays selected and is saved unchanged.
+    void test_oddPaperWidthIsKept()
+    {
+        AppSettings *s = AppSettings::instance();
+        const int before = s->paperWidthMm();
+        const auto restore = qScopeGuard([s, before] { s->setPaperWidthMm(before); });
+        s->setPaperWidthMm(72);
+        SettingsDialog dlg;
+        QComboBox *paper = nullptr;
+        for (auto *box : dlg.findChildren<QComboBox *>())
+            if (box->findData(58) >= 0) paper = box;
+        QVERIFY(paper);
+        QCOMPARE(paper->currentData().toInt(), 72);
+        QMetaObject::invokeMethod(&dlg, "accept");
+        QCOMPARE(s->paperWidthMm(), 72);
+    }
+
     // "Probar conexión" sends the form's values trimmed.
     void test_testConnectionSignalCarriesTrimmedValues()
     {
@@ -290,10 +395,7 @@ private slots:
         QLineEdit *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
         QVERIFY(key);
         key->setText("  spaced-key  ");
-        QPushButton *test = nullptr;
-        for (QPushButton *b : dlg.findChildren<QPushButton *>())
-            if (b->text().startsWith(QLatin1String("Probar conex")))
-                test = b;
+        auto *test = dlg.findChild<QPushButton *>("btnTestConnection");    // the gateway's
         QVERIFY(test);
         QSignalSpy spy(&dlg, &SettingsDialog::testConnectionRequested);
         test->click();
@@ -301,9 +403,61 @@ private slots:
         QCOMPARE(spy[0][2].toString(), QStringLiteral("spaced-key"));
     }
 
-    // While the shop's own direct client works in pre-production the self-test is off: the
-    // tickets are the test, and both would send the same pre-production outbox at once.
-    void test_selfTestOffWhileTheShopIsInPreProduction()
+    // Each connection shows only its own fields: the gateway's key, PRODUCCIÓN box and
+    // "Probar conexión" are hidden on the direct connection, whose rows are hidden on the
+    // gateway (the shop saw both PRODUCCIÓN boxes and both tests at once, 25-11-2026).
+    void test_onlyTheChosenConnectionsRowsShow()
+    {
+        SettingsDialog dlg;
+        dlg.show();
+        auto *tabs = dlg.findChild<QTabWidget *>();
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabText(i) == QLatin1String("Verifactu"))
+                tabs->setCurrentIndex(i);
+        auto *connection = dlg.findChild<QComboBox *>("cbConnection");
+        auto *key = dlg.findChild<QLineEdit *>("serviceKeyEdit");
+        auto *gatewayProduction = dlg.findChild<QCheckBox *>("chkProduction");
+        auto *gatewayTest = dlg.findChild<QPushButton *>("btnTestConnection");
+        auto *directProduction = dlg.findChild<QCheckBox *>("chkDirectProduction");
+        auto *selfTest = dlg.findChild<QPushButton *>("btnAeatSelfTest");
+        QVERIFY(connection && key && gatewayProduction && gatewayTest && directProduction && selfTest);
+        QCOMPARE(connection->currentData().toString(), QStringLiteral("irenesolutions"));
+        QVERIFY(key->isVisible() && gatewayProduction->isVisible() && gatewayTest->isVisible());
+        QVERIFY(!directProduction->isVisible() && !selfTest->isVisible());
+        connection->setCurrentIndex(connection->findData("aeat"));
+        QVERIFY(!key->isVisible() && !gatewayProduction->isVisible() && !gatewayTest->isVisible());
+        QVERIFY(directProduction->isVisible() && selfTest->isVisible());
+        QVERIFY(dlg.findChild<QDateEdit *>()->isVisible());            // the common rows stay
+        connection->setCurrentIndex(connection->findData("irenesolutions"));
+        QVERIFY(key->isVisible() && !directProduction->isVisible());
+    }
+
+    // The direct connection's "Probar conexión" sends the form's values, with the
+    // environment ticked in the form, and stays enabled in pre-production (it only queries).
+    void test_directConnectionTestSignal()
+    {
+        AppSettings *s = AppSettings::instance();
+        const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
+        s->setVerifactuDirectAeat(true);
+        s->setAeatDirectProduction(false);
+        SettingsDialog dlg;
+        auto *test = dlg.findChild<QPushButton *>("btnAeatTestConnection");
+        QVERIFY(test && test->isEnabled());
+        dlg.findChild<QLineEdit *>("leCertificateFile")->setText("  C:/cert.pfx ");
+        QSignalSpy spy(&dlg, &SettingsDialog::aeatConnectionTestRequested);
+        test->click();
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy[0][3].toString(), QStringLiteral("C:/cert.pfx"));
+        QCOMPARE(spy[0][5].toBool(), false);
+        dlg.findChild<QCheckBox *>("chkDirectProduction")->setChecked(true);
+        test->click();
+        QCOMPARE(spy[1][5].toBool(), true);
+    }
+
+    // The self-test is hidden while the shop's own direct client works in pre-production
+    // (the tickets are the test, and both would send the same pre-production outbox at
+    // once); before the switch and in production it shows, named after where it runs.
+    void test_selfTestHiddenWhileTheShopIsInPreProduction()
     {
         AppSettings *s = AppSettings::instance();
         const auto restore = qScopeGuard([s] { s->setVerifactuDirectAeat(false); s->setAeatDirectProduction(false); });
@@ -311,16 +465,20 @@ private slots:
         s->setAeatDirectProduction(false);
         {
             SettingsDialog dlg;
-            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
+            QVERIFY(!dlg.findChild<QPushButton *>("btnAeatTestConnection")->isHidden());   // always there
         }
         s->setAeatDirectProduction(true);
         {
             SettingsDialog dlg;
-            QVERIFY(dlg.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+            auto *selfTest = dlg.findChild<QPushButton *>("btnAeatSelfTest");
+            QVERIFY(!selfTest->isHidden());
+            QVERIFY2(selfTest->text().contains("entorno de pruebas"), qPrintable(selfTest->text()));
         }
         s->setVerifactuDirectAeat(false);
-        SettingsDialog gateway;
-        QVERIFY(gateway.findChild<QPushButton *>("btnAeatSelfTest")->isEnabled());
+        s->setAeatDirectProduction(false);
+        SettingsDialog gateway;                  // before the switch: the rehearsal
+        QVERIFY(!gateway.findChild<QPushButton *>("btnAeatSelfTest")->isHidden());
     }
 
     // Leaving the direct connection is refused while it has unsent records.

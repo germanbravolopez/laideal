@@ -29,7 +29,6 @@ public:
     QString getEmitterNIF() const;
     QString getEmitterName() const;
 
-    void setSystemData(const QString &name, const QString &version);
     QString getSystemName() const;
     QString getSystemVersion() const;
 
@@ -53,12 +52,6 @@ private:
     QString m_emitterName;
     QString m_systemName;
     QString m_systemVersion;
-    mutable QString m_validationError;
-
-    const QString PROD_ENDPOINT = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices";
-    const QString TEST_ENDPOINT = "https://facturae.irenesolutions.com:8050/Kivu/Taxes/Verifactu/Invoices";
-    const QString AEAT_VALIDATION_PROD = "https://www2.aeat.es/wlpl/TIKE-CONT/ValidarQR";
-    const QString AEAT_VALIDATION_TEST = "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR";
 };
 
 #endif // VERIFACTUCONFIG_H

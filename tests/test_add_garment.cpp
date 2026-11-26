@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDate>
+#include <QDateEdit>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -16,6 +17,7 @@
 #include <QTemporaryDir>
 
 #include "add_garment.h"
+#include "aeatreconcilesummary.h"   // Recogida's "Consultar en AEAT" text, a pure function
 #include "sql_lite.h"
 #include "support/testschema.h"
 
@@ -77,7 +79,7 @@ private:
     void pay(AddGarment &dlg, bool paid = true) { dlg.findChild<QCheckBox *>("chkPagado")->setChecked(paid); }
     void save(AddGarment &dlg) { dlg.findChild<QPushButton *>("btnSave")->click(); }
     QString panel(AddGarment &dlg) { return dlg.findChild<QLabel *>("lblResult")->text(); }
-    static void allowInvoicing(AddGarment &dlg) { dlg.invoicingBlocked = [] { return QString(); }; }
+    static void allowInvoicing(AddGarment &dlg) { dlg.invoicing.invoicingBlocked = [] { return QString(); }; }
     int garmentRows() { return scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '100'").toInt(); }
 
 private slots:
@@ -276,13 +278,13 @@ private slots:
     void test_save_paidWithoutInvoicingCheck_refused()
     {
         seedTicket();
-        AddGarment dlg(m_db);                                       // invoicingBlocked unset
+        AddGarment dlg(m_db);                                       // invoicing.invoicingBlocked unset
         searchTicket(dlg);
         fillGarment(dlg);
         pay(dlg);
         save(dlg);
         QVERIFY2(panel(dlg).contains("Verifactu no está disponible"), qPrintable(panel(dlg)));
-        dlg.invoicingBlocked = [] { return QStringLiteral("Motivo de bloqueo"); };
+        dlg.invoicing.invoicingBlocked = [] { return QStringLiteral("Motivo de bloqueo"); };
         save(dlg);
         QVERIFY2(panel(dlg).contains("Motivo de bloqueo"), qPrintable(panel(dlg)));
         QCOMPARE(garmentRows(), 1);
@@ -309,6 +311,130 @@ private slots:
                  "SI|" + day(QDate::currentDate()) + "|PENDIENTE|0");
     }
 
+    // The invoice is dated by the payment, not the reception: a ticket received before
+    // production and paid after it is accepted; a payment dated before it is refused.
+    void test_save_paid_receivedBeforeProduction_paidAfter_accepted()
+    {
+        const QDate start = QDate::currentDate().addDays(-2);
+        seedTicket(QDate::currentDate().addDays(-5));
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        dlg.invoicing.invoiceDateRefused = [start](const QDate &date) {
+            return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
+        };
+        dlg.invoicing.productionStartDate = [start] { return start; };
+        searchTicket(dlg);
+        fillGarment(dlg);
+        pay(dlg);                                                   // paid today
+        save(dlg);
+        QVERIFY2(panel(dlg).contains("Prenda añadida"), qPrintable(panel(dlg)));
+        QCOMPARE(garmentRows(), 2);
+    }
+
+    void test_save_paymentDateBeforeProduction_refusedAndNothingStored()
+    {
+        const QDate start = QDate::currentDate().addDays(-2);
+        seedTicket(QDate::currentDate().addDays(-5));
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        dlg.invoicing.invoiceDateRefused = [start](const QDate &date) {
+            return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
+        };
+        dlg.invoicing.productionStartDate = [start] { return start; };
+        searchTicket(dlg);
+        auto *payDate = dlg.findChild<QDateEdit *>("deFechaPago");
+        QCOMPARE(payDate->minimumDate(), start);                    // not offered earlier
+        payDate->setMinimumDate(QDate::currentDate().addDays(-5));  // as if the limit were not there
+        payDate->setDate(start.addDays(-1));
+        fillGarment(dlg);
+        pay(dlg);
+        save(dlg);
+        QVERIFY2(panel(dlg).contains("PRODUCCION"), qPrintable(panel(dlg)));
+        QCOMPARE(garmentRows(), 1);
+    }
+
+    // A ticket without a readable reception date never keeps the previous search's minimum.
+    void test_search_invalidReceptionDate_dropsThePreviousMinimum()
+    {
+        const QDate reception = QDate::currentDate().addDays(-5);
+        seedTicket(reception);
+        exec("INSERT INTO ingresos (edit_lock, n_recibo, cliente, fecha_recepcion, importe, pagado, estado, "
+             "cantidad, prenda, servicio, hash, verifactu_estado) VALUES ('0', '101', 'Eva', 'nunca', '4.00', 'NO', "
+             "'En tienda', '1', 'Camisa', 'Limp.', 'seedhash101', 'SIN COBRAR')");
+        AddGarment dlg(m_db);
+        searchTicket(dlg);
+        auto *payDate = dlg.findChild<QDateEdit *>("deFechaPago");
+        auto *pickupDate = dlg.findChild<QDateEdit *>("deFechaRecogida");
+        QCOMPARE(payDate->minimumDate(), reception);
+        searchTicket(dlg, "101");
+        QVERIFY2(dlg.ticketFound(), qPrintable(panel(dlg)));
+        QVERIFY(payDate->minimumDate() < reception);
+        QVERIFY(pickupDate->minimumDate() < reception);
+    }
+
+    // The invoice number or the paid check cannot be read: refused, with its own message, nothing stored.
+    void test_save_unreadableInvoiceNumber_refusedNothingStored()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        QSignalSpy paid(&dlg, &AddGarment::paidGarmentSaved);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        pay(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq TO verifactu_invoice_seq_off");
+        save(dlg);
+        const QString text = panel(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN verifactu_invoice_seq_off TO verifactu_invoice_seq");
+        QVERIFY2(text.contains("numeración"), qPrintable(text));
+        QCOMPARE(garmentRows(), 1);
+        QCOMPARE(paid.count(), 0);
+    }
+
+    void test_unreadablePaidCheck_isNotReportedAsPaid()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        allowInvoicing(dlg);
+        searchTicket(dlg);
+        fillGarment(dlg);
+        exec("ALTER TABLE ingresos RENAME COLUMN pagado TO pagado_off");
+        save(dlg);
+        const QString atSave = panel(dlg);
+        searchTicket(dlg);
+        const QString atSearch = panel(dlg);
+        const bool found = dlg.ticketFound();
+        exec("ALTER TABLE ingresos RENAME COLUMN pagado_off TO pagado");
+        QVERIFY2(atSave.contains("No se pudo comprobar el recibo") && !atSave.contains("ya tiene prendas pagadas"),
+                 qPrintable(atSave));
+        QVERIFY2(atSearch.contains("No se pudo comprobar el recibo") && !atSearch.contains("ya tiene prendas pagadas"),
+                 qPrintable(atSearch));
+        QVERIFY(!found);
+        QCOMPARE(garmentRows(), 1);
+    }
+
+    void test_search_unreadableHeader_isNotReportedAsNotFound()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        exec("ALTER TABLE ingresos RENAME COLUMN cliente TO cliente_off");
+        searchTicket(dlg);
+        const QString text = panel(dlg);
+        const bool found = dlg.ticketFound();
+        exec("ALTER TABLE ingresos RENAME COLUMN cliente_off TO cliente");
+        QVERIFY2(text.contains("No se pudo comprobar el recibo") && !text.contains("No se ha encontrado"),
+                 qPrintable(text));
+        QVERIFY(!found);
+    }
+
+    void test_search_emptyNumber_saysItIsMissing()
+    {
+        AddGarment dlg(m_db);
+        searchTicket(dlg, "  ");
+        QVERIFY2(panel(dlg).contains("Falta el Nº de recibo") && !panel(dlg).contains("No se ha encontrado"),
+                 qPrintable(panel(dlg)));
+    }
+
     // A number the direct client already used for an invoice of the ticket is skipped, and
     // the same seq is on the row and in the signal (the receivers submit "<n>-<seq>").
     void test_save_paid_skipsNumbersUsedAtAeat()
@@ -319,7 +445,7 @@ private slots:
              "('pruebas', 'alta', '100'), ('produccion', 'alta', '100-4')");
         AddGarment dlg(m_db);
         allowInvoicing(dlg);
-        dlg.aeatEnvironment = [] { return QStringLiteral("pruebas"); };
+        dlg.invoicing.aeatEnvironment = [] { return QStringLiteral("pruebas"); };
         QSignalSpy paid(&dlg, &AddGarment::paidGarmentSaved);
         searchTicket(dlg);
         fillGarment(dlg);
@@ -340,6 +466,55 @@ private slots:
         save(all);
         QCOMPARE(paidAll.count(), 1);
         QCOMPARE(paidAll.at(0).at(3).toInt(), 5);
+    }
+
+    // The text above the "Consultar en AEAT" table, one case per branch.
+    void test_aeatReconcileSummary_everyCase()
+    {
+        VerifactuRemoteRecord rec;
+        const auto summary = [&](bool matches, bool predates) {
+            return aeatReconcileSummaryHtml(rec, matches, "24417-0", "10-02-2026", predates, "01-07-2026");
+        };
+        // The answer could not be read: not evidence of absence (the other flags do not matter).
+        QCOMPARE(summary(true, true),
+                 QString("<b>No se ha podido interpretar la respuesta de AEAT.</b><br>"
+                         "Esto <i>no</i> significa que la factura no esté registrada. "
+                         "Revisa el detalle de abajo y consulta la sede electrónica."));
+        rec.parsed = true;
+        // Not found, issued before production: the expected absence.
+        QCOMPARE(summary(false, true),
+                 QString("<b>La AEAT real no tiene la factura 24417-0, y es lo esperado.</b><br>"
+                         "Es del 10-02-2026, anterior al paso a PRODUCCIÓN (01-07-2026): se registró en el entorno de "
+                         "pruebas o con IreneSolutions. No hay que reenviarla."));
+        // Not found otherwise.
+        QCOMPARE(summary(false, false),
+                 QString("<b>AEAT no ha devuelto ninguna factura con el número 24417-0.</b><br>"
+                         "Lo más probable es que no llegara a registrarse. Aun así, "
+                         "antes de reenviar conviene confirmarlo en la sede electrónica "
+                         "de la AEAT: si ya constara allí, el reenvío se rechazaría por "
+                         "duplicado."));
+        rec.found = true;
+        rec.recordCount = 1;
+        // Found but different from the ticket.
+        QCOMPARE(summary(false, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>"
+                         "<span style='color:#b00'>Los datos NO coinciden con los del "
+                         "ticket - no se puede actualizar automáticamente.</span>"));
+        // Matches but no accepted record to take a CSV from.
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>"
+                         "<span style='color:#b00'>Ninguno de los registros fue aceptado "
+                         "por AEAT (no hay CSV que recuperar).</span>"));
+        // Matches with a CSV; several attempts are mentioned.
+        rec.csv = "ABC123";
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>Los datos coinciden con los del ticket."));
+        rec.recordCount = 3;
+        QCOMPARE(summary(true, false),
+                 QString("<b>AEAT tiene registrada esta factura.</b><br>Los datos coinciden con los del ticket."
+                         "<br><i>AEAT ha devuelto 3 registros para este número (los reenvíos "
+                         "rechazados quedan guardados). Se muestran los datos del registro "
+                         "aceptado.</i>"));
     }
 };
 

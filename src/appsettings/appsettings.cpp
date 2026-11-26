@@ -134,39 +134,37 @@ AppSettings::AppSettings()
 void AppSettings::applyDefaults()
 {
     // Sensible defaults so reports work even before the user configures anything.
+    // A key that is absent is written (not just defaulted on read) so a later save()
+    // keeps it across upgrades; an explicit value, even `false`, is never replaced.
+    const auto defaultIfAbsent = [this](const QStringList &path, const QJsonValue &def) {
+        if (!nested(m_data, path).contains(path.last()))
+            set(path, def);
+    };
+    const auto defaultIfEmpty = [this](const QStringList &path, const QString &def) {
+        if (str(path).isEmpty())
+            setStr(path, def);
+    };
+
     // First run: start in the language picked in the installer (default Spanish).
-    if (str({"app", "language"}).isEmpty())
-        setStr({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
-    if (businessName().isEmpty())
-        setStr({"business", "name"}, "Tintorería La Ideal");
-    if (businessAddress().isEmpty())
-        setStr({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
-    if (businessCity().isEmpty())
-        setStr({"business", "city"}, "18012 Granada");
-    if (str({"verifactu", "environment"}).isEmpty())
-        setStr({"verifactu", "environment"}, "TESTING");
-    if (!m_data.value("verifactu").toObject().contains("pending_recovery_enabled"))
-        setBln({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled);
-    if (verifactuPendingRecoveryFloorDate().isEmpty())
-        setStr({"verifactu", "pending_recovery_floor_date"}, defaultPendingRecoveryFloorDate());
-    if (reportsRoot().isEmpty())
-        setStr({"reports", "root"}, QDir::homePath() + "/Tintoreria");
-    // Default: opt-in startup check. bln() has a default-fallback parameter,
-    // but the key must be persisted so future save() preserves it across upgrades.
-    if (!m_data.value("updater").toObject().contains("check_on_startup"))
-        setBln({"updater", "check_on_startup"}, kDefaultCheckUpdates);
-    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives
-    // the directory). Default opt-in.
-    if (!m_data.value("backup").toObject().contains("enabled"))
-        setBln({"backup", "enabled"}, kDefaultBackupEnabled);
-    // Thermal printer roll width (mm). Default 80; persisted so an upgrade keeps it.
-    if (!m_data.value("print").toObject().contains("paper_width_mm"))
-        setDbl({"print", "paper_width_mm"}, kDefaultPaperWidthMm);
+    defaultIfEmpty({"app", "language"}, AppLanguage::initialLanguage(AppLanguage::installerChoice()));
+    defaultIfEmpty({"business", "name"}, "Tintorería La Ideal");
+    defaultIfEmpty({"business", "address"}, "Plaza San Pantaleón 1, bajo 2");
+    defaultIfEmpty({"business", "city"}, "18012 Granada");
+    defaultIfEmpty({"verifactu", "environment"}, "TESTING");
+    defaultIfAbsent({"verifactu", "pending_recovery_enabled"}, kDefaultPendingRecoveryEnabled);
+    defaultIfEmpty({"verifactu", "pending_recovery_floor_date"}, defaultPendingRecoveryFloorDate());
+    defaultIfEmpty({"reports", "root"}, QDir::homePath() + "/Tintoreria");
+    defaultIfAbsent({"updater", "check_on_startup"}, kDefaultCheckUpdates);
+    // Verifactu Req. 4: backups live next to dbPath() (BackupManager derives the directory).
+    defaultIfAbsent({"backup", "enabled"}, kDefaultBackupEnabled);
+    // Thermal printer roll width (mm); an upgrade keeps what was persisted.
+    defaultIfAbsent({"print", "paper_width_mm"}, kDefaultPaperWidthMm);
 }
 
 bool AppSettings::load()
 {
     QFile file(m_filePath);
+    m_unreadable = false;
 
     if (!file.exists()) {
         if (!m_readOnly)
@@ -183,6 +181,7 @@ bool AppSettings::load()
 
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "AppSettings: cannot open" << m_filePath;
+        m_unreadable = true;   // save() must not replace the real file with defaults
         applyDefaults();
         return false;
     }
@@ -191,12 +190,12 @@ bool AppSettings::load()
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
     file.close();
 
-    if (err.error != QJsonParseError::NoError) {
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
         // Kept aside: the next save would otherwise overwrite the only copy of the
         // database path and the credentials with defaults.
         const QString aside = m_filePath + ".corrupt-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
         const bool kept = !m_readOnly && QFile::rename(m_filePath, aside);
-        qCritical() << "AppSettings: JSON parse error:" << err.errorString() << "- the file is"
+        qCritical() << "AppSettings: JSON parse error:" << (err.error != QJsonParseError::NoError ? err.errorString() : QStringLiteral("not a JSON object")) << "- the file is"
                     << (kept ? "kept as " + aside : QStringLiteral("NOT kept aside"));
         applyDefaults();
         return false;
@@ -234,6 +233,11 @@ bool AppSettings::save() const
 {
     if (m_readOnly) {
         m_lastSaveError = QStringLiteral("settings loaded read-only");
+        return false;
+    }
+    if (m_unreadable) {
+        m_lastSaveError = QStringLiteral("the settings file could not be read, so it is not overwritten");
+        qCritical() << "AppSettings:" << m_lastSaveError << "-" << m_filePath;
         return false;
     }
     // QSaveFile writes a temporary file and replaces the target in one step on commit:
@@ -302,7 +306,7 @@ void AppSettings::migrateLegacyKeys()
 
 void AppSettings::migrateFromLegacyFiles()
 {
-    // ~/.laideal_cfg  →  verifactu.nif / verifactu.company_name
+    // ~/.laideal_cfg  ->  verifactu.nif / verifactu.company_name
     QFile cfgFile(QDir::homePath() + "/.laideal_cfg");
     if (cfgFile.exists() && cfgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&cfgFile);
@@ -317,7 +321,7 @@ void AppSettings::migrateFromLegacyFiles()
         qDebug() << "AppSettings: migrated emitter config from ~/.laideal_cfg";
     }
 
-    // ~/.verifactu_key  →  verifactu.service_key
+    // ~/.verifactu_key  ->  verifactu.service_key
     QFile keyFile(QDir::homePath() + "/.verifactu_key");
     if (keyFile.exists() && keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&keyFile);
@@ -512,41 +516,35 @@ void AppSettings::removeNested(QJsonObject &root, const QStringList &path)
     root[path[0]] = child;
 }
 
+QJsonValue AppSettings::value(const QStringList &path) const
+{
+    const QJsonObject parent = nested(m_data, path);
+    return parent.isEmpty() ? QJsonValue() : parent[path.last()];
+}
+
+void AppSettings::set(const QStringList &path, const QJsonValue &value)
+{
+    setNested(m_data, path, value);
+}
+
 QString AppSettings::str(const QStringList &path, const QString &def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isString() ? v.toString() : def;
 }
 
 double AppSettings::dbl(const QStringList &path, double def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isDouble() ? v.toDouble() : def;
 }
 
 bool AppSettings::bln(const QStringList &path, bool def) const
 {
-    QJsonObject parent = nested(m_data, path);
-    if (parent.isEmpty()) return def;
-    QJsonValue v = parent[path.last()];
+    const QJsonValue v = value(path);
     return v.isBool() ? v.toBool() : def;
 }
 
-void AppSettings::setStr(const QStringList &path, const QString &value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
-
-void AppSettings::setDbl(const QStringList &path, double value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
-
-void AppSettings::setBln(const QStringList &path, bool value)
-{
-    setNested(m_data, path, QJsonValue(value));
-}
+void AppSettings::setStr(const QStringList &path, const QString &value) { set(path, QJsonValue(value)); }
+void AppSettings::setDbl(const QStringList &path, double value) { set(path, QJsonValue(value)); }
+void AppSettings::setBln(const QStringList &path, bool value) { set(path, QJsonValue(value)); }

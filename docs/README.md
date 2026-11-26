@@ -1,97 +1,55 @@
-# Documentation — La Ideal
+# Documentation - La Ideal
 
-Navigation index for the `docs/` folder. For the project-wide quick-find reference see `docs/INDEX.md`.
+Map of the `docs/` folder. To find a file, class or concept use [INDEX.md](./INDEX.md); the repository entry points are the root [README](../README.md) and [CONTRIBUTING](../CONTRIBUTING.md).
 
----
+## Project documents
 
-## Structure
+| Document | Content |
+|----------|---------|
+| [ai_agent_instructions.md](./ai_agent_instructions.md) | Agent briefing: file map, doc map, skills, obligations |
+| [architecture.md](./architecture.md) | Modules and dependencies, data flows, database schema |
+| [INDEX.md](./INDEX.md) | Where to find any file, concept or topic |
+| [progress_tracker.md](./progress_tracker.md) | Current status, open issues, backlog |
+| [completed_milestones.md](./completed_milestones.md) | Finished work, newest first |
+| [completed_milestones_archive.md](./completed_milestones_archive.md) | Milestones of 10.13 and before |
+| [reviews/](./reviews/) | Review reports and plans, kept for reference |
 
-```
-docs/
-├── README.md                          (this file — docs folder navigation)
-├── INDEX.md                           (project-wide quick-find: files, concepts, topics)
-├── ai_agent_instructions.md           (agent onboarding — start here)
-├── architecture.md                    (modules, DB schema, data flow, known issues)
-├── progress_tracker.md                (current status, blocking / open issues)
-├── completed_milestones.md            (finished work history since 11.0)
-├── completed_milestones_archive.md    (10.13 and before)
-├── reviews/2026-10-19-pre-12.0/      (pre-12.0 review: module reports + integration backlog)
-├── testing/
-│   ├── README.md                      (how to run the tests, conventions, patterns)
-│   ├── unit_suites.md                 (what each unit / integration suite covers)
-│   ├── e2e.md                         (end-to-end bench, fake Verifactu and fake AEAT servers)
-│   ├── smoke_test.md                  (what still needs a person: before the release, and the shop's self-check after installing)
-│   └── ui_smoke.md                    (automated UI smoke test — installed app over UI Automation)
-└── modules/
-    ├── mainwindow.md                  (MainWindow — central controller)
-    ├── sql_lite.md                    (database free-function API)
-    ├── listado.md                     (generic list viewer + PDF export)
-    ├── recog_prendas.md               (garment pickup panel)
-    ├── facturas.md                    (formal supplier invoice form)
-    ├── uikit.md                       (shared dialog style)
-    ├── backup.md                      (automatic and manual SQLite backups)
-    ├── contabilidad.md                (accounting reports and period locking)
-    ├── imprimir.md                    (receipt/invoice print orchestration — ESC/POS)
-    ├── printing.md                    (ESC/POS core: builder, renderer, RAW spooler)
-    ├── add_garment.md                 (add garments to existing ticket)
-    ├── printer/                       (printer research dossier — ESC/POS design background)
-    │   ├── README.md                  (start here — 5 files + index)
-    │   └── 01..05 + command reference (model/specs, control methods, command subset, plan)
-    └── verifactu/                     (AEAT digital invoicing module)
-        ├── README.md                  (module reference — start here)
-        ├── rest_api.md                (gateway REST API as researched; may be outdated)
-        ├── aeat-direct-investigation.md  (research: direct AEAT client vs IreneSolutions)
-        └── verifactu-requirements.md  (RD 1007/2023 + Orden HAC/1177/2024 audit vs code)
-```
+## Testing
 
----
+| Document | Content |
+|----------|---------|
+| [testing/README.md](./testing/README.md) | Running the suites, conventions, patterns, adding a suite, CI toolchain |
+| [testing/unit_suites.md](./testing/unit_suites.md) | What each unit and integration suite covers |
+| [testing/e2e.md](./testing/e2e.md) | End-to-end bench with the fake Verifactu and fake AEAT servers |
+| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test and the AEAT pre-production run |
+| [testing/smoke_test.md](./testing/smoke_test.md) | Manual checklist: part 1 before a release, part 2 the shop's post-update check |
 
-## Core Documentation
+## Modules
 
-| Document | Purpose | Read time |
-|----------|---------|-----------|
-| [ai_agent_instructions.md](./ai_agent_instructions.md) | Agent onboarding, critical issues, file map, rules | 5 min |
-| [architecture.md](./architecture.md) | Full module reference, DB schema, data flow | 15 min |
-| [progress_tracker.md](./progress_tracker.md) | Current status, blocking / open issues, backlog | 2 min |
-| [completed_milestones.md](./completed_milestones.md) | Finished work history since 11.0, newest first | As needed |
-| [completed_milestones_archive.md](./completed_milestones_archive.md) | Milestones of 10.13 and before | Never (history) |
-| [reviews/2026-10-19-pre-12.0/](./reviews/2026-10-19-pre-12.0/README.md) | Pre-12.0 deep review: per-module findings, doc drift, test gaps; integration report §6 is the prioritised backlog | Read when picking up a tracker item that cites it |
-| [testing/README.md](./testing/README.md) | Testing overview: running the suites, conventions, patterns | When writing tests |
-| [testing/unit_suites.md](./testing/unit_suites.md) | What each unit / integration suite covers | When touching a module |
-| [testing/e2e.md](./testing/e2e.md) | End-to-end bench and fake Verifactu / AEAT servers | When testing a flow |
-| [testing/smoke_test.md](./testing/smoke_test.md) | What still needs a person — part 1 before the release (look, AEAT pre-production), part 2 the shop user's *Comprobar tras actualizar* (real schema, data, printer, installer pages) | Part 1 before each release, after the UI smoke test |
-| [testing/ui_smoke.md](./testing/ui_smoke.md) | Automated UI smoke test (CI) and the local AEAT pre-production run | Before each release; when changing a window or flow it covers |
-| [INDEX.md](./INDEX.md) | Quick-find: every file, concept, topic | As needed |
+| Document | Content |
+|----------|---------|
+| [modules/mainwindow.md](./modules/mainwindow.md) | Main window, menus, save flow, the `src/app/` dialogs |
+| [modules/sql_lite.md](./modules/sql_lite.md) | Database function reference |
+| [modules/listado.md](./modules/listado.md) | List viewer, insert dialog, list PDF |
+| [modules/recog_prendas.md](./modules/recog_prendas.md) | Pickup panel, payment and void dialogs |
+| [modules/add_garment.md](./modules/add_garment.md) | Adding garments to a ticket |
+| [modules/facturas.md](./modules/facturas.md) | Supplier-invoice form |
+| [modules/contabilidad.md](./modules/contabilidad.md) | Accounting reports and quarter close |
+| [modules/imprimir.md](./modules/imprimir.md) | Print orchestration and layouts |
+| [modules/printing.md](./modules/printing.md) | ESC/POS core: builder, renderer, RAW spooler, Status API |
+| [modules/printer/README.md](./modules/printer/README.md) | Printer research dossier (design background) |
+| [modules/backup.md](./modules/backup.md) | Automatic and manual SQLite backups |
+| [modules/uikit.md](./modules/uikit.md) | Shared dialog style |
 
-## Module Documentation
+### Verifactu
 
-| Document | Description |
-|----------|-------------|
-| [modules/mainwindow.md](./modules/mainwindow.md) | MainWindow methods, save flow, column indices |
-| [modules/sql_lite.md](./modules/sql_lite.md) | DB API function reference and usage patterns |
-| [modules/listado.md](./modules/listado.md) | List viewer, InsertNewItem, GenListado |
-| [modules/recog_prendas.md](./modules/recog_prendas.md) | Garment pickup operations and table indices |
-| [modules/facturas.md](./modules/facturas.md) | Supplier invoice form fields and validation |
-| [modules/contabilidad.md](./modules/contabilidad.md) | Accounting report modes and period locking |
-| [modules/imprimir.md](./modules/imprimir.md) | Receipt/invoice print orchestration (ESC/POS) and layout modes |
-| [modules/printing.md](./modules/printing.md) | ESC/POS core: EscPosBuilder, TicketRenderer, ThermalPrinter (RAW spooler) |
-| [modules/add_garment.md](./modules/add_garment.md) | Add-garment workflow and validation |
-| [modules/uikit.md](./modules/uikit.md) | Shared dialog style: window setup, explanation / result panels, buttons, date field |
-| [modules/backup.md](./modules/backup.md) | Automated DB snapshots (Verifactu Req. 4): VACUUM INTO + integrity check + retention contract |
+| Document | Content |
+|----------|---------|
+| [modules/verifactu/README.md](./modules/verifactu/README.md) | Module reference: architecture, API, configuration, schema, integration points, errors |
+| [modules/verifactu/verifactu-requirements.md](./modules/verifactu/verifactu-requirements.md) | RD 1007/2023 and Orden HAC/1177/2024 requirements against the code |
+| [modules/verifactu/rest_api.md](./modules/verifactu/rest_api.md) | The gateway's REST API as researched (the code is authoritative) |
+| [modules/verifactu/aeat-direct-investigation.md](./modules/verifactu/aeat-direct-investigation.md) | Research: direct AEAT client versus the gateway |
 
-### Verifactu — AEAT digital invoicing
+## Adding a module document
 
-| Document | Description | Read time |
-|----------|-------------|-----------|
-| [README.md](./modules/verifactu/README.md) | Module reference: architecture, public API, configuration, DB schema, integration points, environments, errors | 10 min |
-| [rest_api.md](./modules/verifactu/rest_api.md) | The gateway's REST API as researched (may be outdated; the code is authoritative) | 15 min |
-| [aeat-direct-investigation.md](./modules/verifactu/aeat-direct-investigation.md) | Research: talking to AEAT directly instead of through IreneSolutions, with a phased recommendation | 10 min |
-| [verifactu-requirements.md](./modules/verifactu/verifactu-requirements.md) | Legal-compliance audit: RD 1007/2023 + Orden HAC/1177/2024 requirements vs La Ideal coverage | 10 min |
-
----
-
-## Adding documentation for a new module
-
-1. Create `docs/modules/<module-name>.md` (or a subfolder for complex modules)
-2. Add at minimum: description, source file list, key interface, integration notes
-3. Register the new doc in the tables above and in `docs/INDEX.md`
+Create `docs/modules/<name>.md` (a folder for a complex module) with a description, the source files, the key interface and integration notes. Register it in the tables above and in [INDEX.md](./INDEX.md).

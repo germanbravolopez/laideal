@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QString>
+#include <QTimer>
 
 #include "aeatdirectbackend.h"
 
@@ -34,11 +35,16 @@ private:
     QString m_invoiceNumber;
     QDate   m_issueDate;
     QString m_pendingRequest;
+    QTimer  m_settleTimer;
+    QMetaObject::Connection m_settled;
 
-    void fail(const QString &text);
+    void fail(const char *step, const QString &text);
+    bool awaitSettlement(bool cancellation, const VerifactuResult &result);
     void submit();
+    void registrationAnswered(const VerifactuResult &r);
     void query();
     void cancel();
+    void cancellationAnswered(const VerifactuResult &r);
 };
 
 #endif // AEATSELFTEST_H

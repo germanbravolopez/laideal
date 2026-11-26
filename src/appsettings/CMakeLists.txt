@@ -1,16 +1,12 @@
 add_library(appsettings STATIC
     appsettings.h
     appsettings.cpp
-    settingsdialog.h
-    settingsdialog.cpp
     applanguage.h
     applanguage.cpp
 )
 target_link_libraries(appsettings
     PRIVATE
-    Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::PrintSupport   # QPrinterInfo: list installed printers in SettingsDialog
-    printing                              # StatusApiPrinter: "Probar Status API" diagnostic button
+    Qt${QT_VERSION_MAJOR}::Core
 )
 # Windows DPAPI (CryptProtectData/CryptUnprotectData) for encrypting the Verifactu
 # service key at rest in ~/.laideal_settings.json.

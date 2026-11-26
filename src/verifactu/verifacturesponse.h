@@ -44,9 +44,4 @@ bool verifactuRemoteMatches(const VerifactuRemoteRecord &remote,
 // Matched on wording because the vendor does not publish a stable code for it.
 bool verifactuErrorIsDuplicate(const QString &errorCode, const QString &errorDescription);
 
-// Decode a base64-encoded image (a QR / GetQrCode payload) into a QPixmap.
-// Constructing a QPixmap needs a QGuiApplication, so tests that exercise this
-// path must use a GUI test main (offscreen platform), not a guiless one.
-QPixmap decodeVerifactuImageBase64(const QString &base64);
-
 #endif // VERIFACTURESPONSE_H

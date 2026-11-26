@@ -94,7 +94,7 @@ Start all of these at once and wait for all:
 **What to do with the findings**:
 - **Genuine bugs / regressions / release-blockers**: fix on `develop`, push (the PR updates and CI reruns). Re-run the review if the fixes are non-trivial. Do **not** merge until they are addressed.
 - **Low-confidence or nitpick findings**: surface them to the user with a one-line summary and let the user decide per-item. Don't silently dismiss anything that touches Verifactu, AEAT submission, accounting totals, or DB writes.
-- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them in `docs/progress_tracker.md` Open Non-Blocking Issues; do not block the release on them.
+- **Findings outside the release scope** (pre-existing issues, unrelated modules): file them in `docs/progress_tracker.md` Open Issues; do not block the release on them.
 
 Proceed to step 6 only once the user has confirmed the review is clean (or that remaining findings are intentionally deferred), and the smoke test part 1 is done.
 

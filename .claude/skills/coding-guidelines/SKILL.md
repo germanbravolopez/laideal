@@ -33,7 +33,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
 | Private member variables | `m_` + camelCase | `m_verifactuIntegration`, `m_lastError`, `m_config` |
 | Local variables | camelCase | `ticketNumber`, `totalPrice`, `invoiceDate` |
 | Parameters | camelCase | `const QString &invoiceNumber` |
-| Constants (`#define`, `const`) | `UPPER_SNAKE_CASE` | `DB_PATH`, `TABLE_TICKET_QNTY`, `INGRESOS_COL_N_RECIBO` |
+| Constants (`#define`, `const`) | `UPPER_SNAKE_CASE` | `TABLE_TICKET_QNTY`, `INGRESOS_COL_N_RECIBO` |
 | Qt auto-connect slots | `on_<objectName>_<signal>` | `on_pb_payment_toggled`, `on_le_search_returnPressed` |
 | Files | lowercase, match class name | `verifactumanager.h`, `mainwindow.cpp` |
 | Boolean variables / methods | `is`/`has`/`can` prefix | `isConfigured()`, `isPaid`, `hasError` |
@@ -97,7 +97,7 @@ User-facing means: text in `QMessageBox`, `QLabel`, window titles, `QAction` nam
   q.exec();
   ```
 - **Never** build SQL by string concatenation — always use `:named_params` with `bindValue()`.
-- No hardcoded paths. The database path is the runtime setting (`dbPath()`, which the `DB_PATH` macro expands to); report folders come from `AppSettings`.
+- No hardcoded paths. The database path is the runtime setting (`dbPath()`); report folders come from `AppSettings`.
 
 ---
 

@@ -88,6 +88,14 @@ public:
     // Moves the head to `head` (the chain tip found by a sync), whatever it was.
     bool setChainHead(const QString &issuerNif, const AeatRecord::PreviousRecord &head);
 
+    // When the direct client began in this environment on this database (for "produccion",
+    // when the shop went to the real AEAT); kept unless `again`. Invalid until marked.
+    bool markStarted(bool again = false);
+    QDateTime startedAt();
+    // A registration record of the invoice is stored for `environment`, whatever its
+    // issuer; with `acceptedOnly`, one AEAT accepted.
+    bool holdsRegistrationIn(const QString &environment, const QString &invoiceNumber, bool acceptedOnly = false);
+
     // Whether the chain of this issuer and environment was synced with AEAT once (the
     // first sync, which must reach AEAT). Until then no record may be generated.
     bool chainSynced(const QString &issuerNif);
@@ -125,6 +133,8 @@ public:
     // The newest record of an invoice and kind, or an invalid Record.
     // `issuerNif` empty: any issuer (an invoice number is only unique per issuer).
     Record latest(Kind kind, const QString &invoiceNumber, const QString &issuerNif = QString());
+    // The record with this id, or an invalid Record (not found, or the table cannot be read: see lastError).
+    Record byId(qint64 id);
     // Records AEAT has not confirmed yet, oldest first; only `issuerNif`'s when given
     // (a submission carries one issuer in its header).
     QList<Record> pending(int limit = 1000, const QString &issuerNif = QString());
@@ -141,6 +151,7 @@ public:
     // new backend then counts as reached); after it, cleared if the request never left.
     bool markSending(qint64 id);
     bool markNotSent(qint64 id);
+    // False when the record is no longer pending or the statement failed (only then lastError is set).
     bool markOutcome(qint64 id, const QString &state, const QString &csv,
                      const QString &errorCode, const QString &errorDescription);
 

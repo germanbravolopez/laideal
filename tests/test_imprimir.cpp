@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
 #include <QPushButton>
 #include <QTemporaryDir>
 
@@ -28,7 +29,29 @@ class TestImprimir : public QObject
     QList<QByteArray> m_sent;       // every payload the fake transport received
     QStringList m_queues;           // and the queue it was addressed to
     bool m_transportOk = true;
+    int m_failOnCall = -1;          // the transport call (1-based) that fails; -1 = none
     QString m_transportError;
+
+    // Presses the dialog's Imprimir button for a ticket; returns the result panel text.
+    // A symbol-like image: `modules` x `modules` pseudo-random modules of `scale` px, in a 4-module quiet zone.
+    static QImage blockImage(int modules, int scale, QVector<QVector<bool>> *matrix = nullptr)
+    {
+        const int total = modules + 8;
+        QImage img(total * scale, total * scale, QImage::Format_RGB32);
+        img.fill(Qt::white);
+        QVector<QVector<bool>> dark(modules, QVector<bool>(modules, false));
+        for (int y = 0; y < modules; ++y)
+            for (int x = 0; x < modules; ++x) {
+                dark[y][x] = ((x * 7 + y * 13 + x * y) % 5) < 2;
+                if (dark[y][x])
+                    for (int dy = 0; dy < scale; ++dy)
+                        for (int dx = 0; dx < scale; ++dx)
+                            img.setPixel((x + 4) * scale + dx, (y + 4) * scale + dy, qRgb(0, 0, 0));
+            }
+        if (matrix)
+            *matrix = dark;
+        return img;
+    }
 
     // Presses the dialog's Imprimir button for a ticket; returns the result panel text.
     static QString press(Imprimir *dlg, const QString &ticket)
@@ -84,9 +107,10 @@ private slots:
         ThermalPrinter::setTransport([this](const QByteArray &bytes, const QString &queue, QString *err) {
             m_sent << bytes;
             m_queues << queue;
-            if (!m_transportOk && err)
+            const bool ok = m_transportOk && m_sent.size() != m_failOnCall;
+            if (!ok && err)
                 *err = m_transportError;
-            return m_transportOk;
+            return ok;
         });
     }
 
@@ -102,6 +126,7 @@ private slots:
         m_queues.clear();
         m_popups->clear();
         m_transportOk = true;
+        m_failOnCall = -1;
         m_transportError.clear();
         AppSettings *s = AppSettings::instance();
         s->setEnablePrinting(true);
@@ -216,10 +241,131 @@ private slots:
         QPointer<Imprimir> dlg = openDialog(true);
         const QString text = press(dlg, "704");
         QVERIFY2(text.contains(QString::fromUtf8("impresión está desactivada")), qPrintable(text));
+        QVERIFY2(text.contains("preparado, no impreso"), qPrintable(text));
+        QVERIFY2(!text.contains("704 impreso"), qPrintable(text));
         QVERIFY(m_sent.isEmpty());
         QVERIFY(!dlg->ticketBytes().isEmpty());
         dlg->close();
         QTRY_VERIFY(dlg.isNull());
+
+        QVERIFY(E2e::seedSentGarment(m_db, "704", "h704f", "10.00", "10-02-2026", "A-704"));
+        QPointer<Imprimir> factura = openDialog(false);
+        const QString invoiceText = press(factura, "704");
+        QVERIFY2(invoiceText.contains("preparada, no impresa"), qPrintable(invoiceText));
+        QVERIFY2(!invoiceText.contains("704 impresa"), qPrintable(invoiceText));
+        factura->close();
+        QTRY_VERIFY(factura.isNull());
+    }
+
+    // The shop copy of a recibo reprint fails: the panel does not claim both copies printed.
+    void test_dialog_shopCopyFailureIsSaidHonestly()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "709", "h709", "10.00"));
+        m_failOnCall = 2;
+        m_transportError = "queue gone";
+        QPointer<Imprimir> dlg = openDialog(true);
+        const QString text = press(dlg, "709");
+        QCOMPARE(m_sent.size(), 2);
+        QVERIFY2(!text.contains("copia del cliente y del establecimiento"), qPrintable(text));
+        QVERIFY2(text.contains("copia del establecimiento no"), qPrintable(text));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
+    // The transport succeeds: the panel says the ticket was printed (and which copies).
+    void test_dialog_successIsSaidPlainly()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "713", "h713", "10.00"));
+        QPointer<Imprimir> dlg = openDialog(true);
+        const QString text = press(dlg, "713");
+        QCOMPARE(m_sent.size(), 2);
+        QVERIFY2(text.contains("Recibo Nº 713 impreso (copia del cliente y del establecimiento)"), qPrintable(text));
+        QVERIFY2(!text.contains("no impreso"), qPrintable(text));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+
+        QVERIFY(E2e::seedSentGarment(m_db, "714", "h714", "10.00", "10-02-2026", "A-714"));
+        QPointer<Imprimir> factura = openDialog(false);
+        const QString invoiceText = press(factura, "714");
+        QVERIFY2(invoiceText.contains("Factura 714 impresa."), qPrintable(invoiceText));
+        QVERIFY2(!invoiceText.contains("no impresa"), qPrintable(invoiceText));
+        factura->close();
+        QTRY_VERIFY(factura.isNull());
+    }
+
+    // A complete invoice is never printed with a blank recipient address.
+    void test_dialog_completaRefusedWithoutAnAddress()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "710", "h710", "10.00", "10-02-2026", "A-710"));
+        QPointer<Imprimir> dlg = openDialog(false, true);
+        dlg->findChild<QLineEdit *>("leDni")->setText("12345678Z");
+        const QString text = press(dlg, "710");
+        QVERIFY2(text.contains(QString::fromUtf8("dirección del cliente")), qPrintable(text));
+        QVERIFY(m_sent.isEmpty());
+        // The client's stored address is enough.
+        QVERIFY(E2e::exec(m_db, "INSERT INTO clientes (nombre, direccion) VALUES ('Cliente E2E', 'Calle Stored 3')"));
+        press(dlg, "710");
+        QCOMPARE(m_sent.size(), 1);
+        QVERIFY(textRows(m_sent[0]).contains(QString::fromUtf8("Dirección: Calle Stored 3")));
+        dlg->close();
+        QTRY_VERIFY(dlg.isNull());
+    }
+
+    // The raster width in bytes of the first image of a ticket (GS v 0 m xL xH yL yH), or -1.
+    static int rasterWidthBytes(const QByteArray &ticket)
+    {
+        const int at = ticket.indexOf("v0");
+        if (at < 0 || ticket.size() < at + 6)
+            return -1;
+        return uchar(ticket[at + 4]) | (uchar(ticket[at + 5]) << 8);
+    }
+
+    // A QR that cannot be redrawn is printed as received, never wider than the paper.
+    void test_factura_unparseableQrPrintedAsReceivedAndFitsThePaper()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "711", "h711", "10.00", "10-02-2026", "A-711"));
+        for (const int side : { 300, 700 }) {      // narrower / wider than the 576 dots of 80 mm
+            QPixmap garbled(side, side);
+            garbled.fill(Qt::black);                // no finder pattern: not a parseable symbol
+            Imprimir engine(m_db);
+            engine.isRecibo = false;
+            engine.qrCode = garbled;
+            engine.le_n_ticket->setText("711");
+            engine.getTicketInfo();
+            engine.buildTicket(true, false);
+            const int widthBytes = rasterWidthBytes(engine.ticketBytes());
+            QVERIFY2(widthBytes > 0, "no raster printed");
+            if (side == 300)
+                QCOMPARE(widthBytes, (300 + 7) / 8);
+            else
+                QVERIFY2(widthBytes <= 576 / 8, qPrintable(QString::number(widthBytes)));
+        }
+    }
+
+    // A QR that came from the direct client's queued record keeps its leyenda when the same
+    // object builds the ticket again (the cached QR must not lose where it came from).
+    void test_factura_queuedQrLeyendaSurvivesASecondBuild()
+    {
+        QVERIFY(E2e::seedSentGarment(m_db, "712", "h712", "10.00", "10-02-2026", ""));
+        QVERIFY(E2e::exec(m_db, "UPDATE ingresos SET verifactu_estado='PENDIENTE', verifactu_csv='' WHERE n_recibo='712'"));
+        const int module = 6, modules = 21, quiet = 4;
+        QImage img((modules + 2 * quiet) * module, (modules + 2 * quiet) * module, QImage::Format_RGB32);
+        img.fill(Qt::white);
+        QPainter painter(&img);
+        for (const QPoint &corner : { QPoint(0, 0), QPoint(modules - 7, 0), QPoint(0, modules - 7) })
+            painter.fillRect((corner.x() + quiet) * module, (corner.y() + quiet) * module, 7 * module, 7 * module, Qt::black);
+        painter.end();
+        Imprimir engine(m_db);
+        engine.isRecibo = false;
+        engine.qrCode = QPixmap::fromImage(img);
+        engine.setQrFromQueuedRecord(true);   // as resolveQrCode() sets it for a queued record's QR
+        engine.le_n_ticket->setText("712");
+        engine.getTicketInfo();
+        engine.buildTicket(true, false);
+        QVERIFY(engine.ticketBytes().contains("v0"));
+        QVERIFY(engine.ticketBytes().contains("Factura verificable"));
+        engine.buildTicket(true, false);
+        QVERIFY2(engine.ticketBytes().contains("Factura verificable"), "the second build lost the leyenda");
     }
 
     // Art. 7 RD 1619/2012: the factura shows the expedition date (payment date, 10/02),
@@ -310,6 +456,38 @@ private slots:
         QVERIFY(m_popups->messages().isEmpty());
         dlg->close();
         QTRY_VERIFY(dlg.isNull());
+    }
+
+    // A symbol wider than the paper loses whole pixels per module: the same modules, smaller.
+    void test_receivedQrShrinksByAWholeFactor()
+    {
+        QVector<QVector<bool>> dark;
+        const QImage wide = blockImage(29, 24, &dark);               // 37 modules x 24 px = 888 px
+        QVERIFY(wide.width() > 576);
+        const QImage out = shrinkReceivedQr(wide, 576);
+        QVERIFY(out.width() <= 576 && out.width() < wide.width());
+        QCOMPARE(out.width() % 37, 0);
+        const int scale = out.width() / 37;
+        for (int y = 0; y < 29; ++y)
+            for (int x = 0; x < 29; ++x)
+                QCOMPARE(qGray(out.pixel((x + 4) * scale + scale / 2, (y + 4) * scale + scale / 2)) < 128, dark[y][x]);
+        QCOMPARE(shrinkReceivedQr(out, 576), out);                    // one that fits is untouched
+    }
+
+    // No exact factor (601 px is prime, so no block size tiles it): resampled, still black and white.
+    void test_receivedQrWithoutAWholeFactorStillFitsInBlackAndWhite()
+    {
+        QImage wide(601, 601, QImage::Format_RGB32);
+        for (int y = 0; y < wide.height(); ++y)
+            for (int x = 0; x < wide.width(); ++x)
+                wide.setPixel(x, y, ((x / 7 + y / 7) % 2) ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+        const QImage out = shrinkReceivedQr(wide, 576);
+        QVERIFY(!out.isNull() && out.width() <= 576 && out.width() > 0);
+        for (int y = 0; y < out.height(); ++y)
+            for (int x = 0; x < out.width(); ++x) {
+                const QRgb p = out.pixel(x, y);
+                QVERIFY(p == qRgb(0, 0, 0) || p == qRgb(255, 255, 255));
+            }
     }
 };
 

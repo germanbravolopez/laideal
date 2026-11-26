@@ -22,11 +22,6 @@ public:
     void populateEmpresas();
     void populateServicios();
 
-    // Pure IVA amount of a gross amount (importe IVA incluido) at the given rate
-    // (percentage, e.g. 21); the base is taxBaseFromGross (verifactutypes.h).
-    // Exposed as a static for unit testing.
-    static double taxAmountFromGross(double gross, double ivaRate);
-
     // Parses the typed importe (comma or point decimals). False for empty text,
     // signs, exponents, inf / nan, zero and anything over 999999999.
     static bool parseGross(const QString &text, double *value = nullptr);

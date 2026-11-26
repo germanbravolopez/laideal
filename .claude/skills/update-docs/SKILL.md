@@ -10,13 +10,13 @@ Run this after every feature implementation, bug fix, refactor, or whenever you 
 ## What to update (checklist, in order of importance)
 
 ### 1. `docs/progress_tracker.md` + `docs/completed_milestones.md` — always update these
-The tracker holds only **Current Status** and the open lists (Blocking / Open Non-Blocking / Backlog). Finished work goes to `docs/completed_milestones.md`.
+The tracker holds only **Current Status** and the two lists (Open Issues / Backlog). Finished work goes to `docs/completed_milestones.md`.
 - Add a milestone entry at the **top** of `docs/completed_milestones.md`
 - Format: `- [x] **Title**: what was done, why, key files.`
 - **Milestone section header must track the latest *released* version.** `completed_milestones.md` is grouped into `### Post-<X.Y> development — <Month Year>` sections, where `X.Y` is the release that had **already shipped** when that batch of work was done (the work becomes the *next* release). Before adding your entry, read the "Latest release" version in **Current Status**: if it is newer than the version in the top milestone section's header, **create a new `### Post-<latest-release> development — <Month Year>` section** at the top of `completed_milestones.md` and add your entry there — do **not** append to the now-stale section. Only append to the existing top section when no release has shipped since it was created (i.e. its `X.Y` already equals the latest release). This prevents post-9.2 and post-9.3 work from piling up under a stale "Post-9.1 development" heading.
-- If a blocking issue was fixed, remove it from the tracker's "Blocking Issues" (the milestone entry records it)
+- If an open issue was fixed, remove it from the tracker's "Open Issues" (the milestone entry records it)
 - If a task is newly discovered, add it to the appropriate section
-- **Keep "Open Non-Blocking Issues" a real to-do list.** If an item is consciously parked because the effort outweighs the value (or it waits on an external trigger), put it in the **Backlog (deferred — low value / not currently planned)** table, not in Open. Don't delete it — parking ≠ done.
+- **Keep "Open Issues" a real to-do list.** If an item is consciously parked because the effort outweighs the value (or it waits on an external trigger), put it in the **Backlog (deferred — low value / not currently planned)** table, not in Open. Don't delete it — parking ≠ done.
 - Milestones older than ~6 months with no further action: move to the Archive section of `completed_milestones.md`
 - **Current Status → "Latest release" paragraph**: describe **only the latest release** — what it ships, its headline changes, and its tag link. Do **not** summarise or link prior releases in this paragraph (no "Previous: X.Y — …" trailer). The full release history already lives in `releases_notes.txt` (and `docs/completed_milestones.md`); the reader can consult it for anything before the current version. Keep this paragraph a single-release snapshot so it does not grow every cycle.
 

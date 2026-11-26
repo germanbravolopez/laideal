@@ -106,6 +106,26 @@ private slots:
         QVERIFY(!r.qrCode.isNull());
     }
 
+    // A Return that is not an image is a failed QR request, not a successful empty one.
+    void test_qrRequestWithUndecodableImageIsAnError()
+    {
+        const VerifactuResult r = parseVerifactuResponse(R"({"ResultCode":0,"Return":"!!not-an-image!!"})", VerifactuReply::Qr);
+        QVERIFY(r.qrCode.isNull());
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+        QVERIFY(!r.errorDescription.isEmpty());
+    }
+
+    // A QR request answers with the bare image: no Return at all is a plain success, and an
+    // object Return (the /Create shape) carries no image, so it is not a usable QR.
+    void test_qrRequestWithoutImageReturn()
+    {
+        VerifactuResult r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0})"), VerifactuReply::Qr);
+        QCOMPARE(r.status, VerifactuResult::SUCCESS);
+        QVERIFY(r.qrCode.isNull());
+        r = parseVerifactuResponse(QByteArray(R"({"ResultCode":0,"Return":{"CSV":"A-1"}})"), VerifactuReply::Qr);
+        QCOMPARE(r.status, VerifactuResult::ERROR);
+    }
+
     // ---- GetFilteredList (invoice query) --------------------------------
     // The vendor does not publish this response schema, so the parser probes
     // several plausible envelopes and field spellings. These fixtures are

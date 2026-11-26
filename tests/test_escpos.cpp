@@ -219,6 +219,16 @@ private slots:
                  (QStringList{ "abcd", "efgh", "ijk" }));
     }
 
+    // The ellipsis prints as three dots: a wrapped line must not exceed the width once printed.
+    void test_wrapTextMeasuresTheFoldedEllipsis()
+    {
+        const QString text = QString(8, 'a') + QChar(0x2026) + QStringLiteral(" bb");   // prints as 8+3 = 11 chars
+        const QStringList rows = EscPosBuilder::wrapText(text, 10);
+        for (const QString &row : rows)
+            QVERIFY2(EscPosBuilder::toCp858(row).size() <= 10, qPrintable(row));
+        QCOMPARE(rows.size(), 2);
+    }
+
     // --- TicketRenderer: a recibo ---
     void test_renderReciboFragments()
     {
@@ -539,11 +549,13 @@ private slots:
         b.garmentRow("1", QString(33, 'x'), "1,00");                        // exactly nameWidth: one row
         b.garmentRow("1234567", "x", "123456789,00");                       // qty and amount too wide
         const QList<QByteArray> rows = b.bytes().split('\n');
-        QCOMPARE(rows.size(), 4);                                           // 3 rows + the empty tail
-        for (int i = 0; i < 3; ++i)
+        QCOMPARE(rows.size(), 5);                                           // 4 rows + the empty tail
+        for (int i = 0; i < 4; ++i)
             QCOMPARE(rows[i].size(), 48);
         QVERIFY(rows[2].startsWith("123456x"));                             // qty cut to its width
-        QVERIFY(rows[2].endsWith("456789,00"));                             // amount keeps its right end
+        QCOMPARE(rows[2].trimmed(), QByteArray("123456x"));                 // no truncated amount on the row
+        QCOMPARE(rows[3].trimmed(), QByteArray("123456789,00"));            // the whole amount on its own line
+        QVERIFY(rows[3].endsWith("123456789,00"));
 
         EscPosBuilder w(576);
         w.garmentRow("1", QString(34, 'y'), "2,00");                        // one char over: wraps, continuation blank
@@ -559,6 +571,21 @@ private slots:
         empty.leftRight("", "1,00");
         QCOMPARE(empty.bytes().size(), 49);
         QCOMPARE(empty.bytes().trimmed(), QByteArray("1,00"));
+    }
+
+    // A long garment name wraps onto continuation rows: none is wider than the paper.
+    void test_garmentRowLongNameStaysWithinTheColumns()
+    {
+        for (const int dots : { 576, 420 }) {
+            EscPosBuilder b(dots);
+            b.garmentRow("2", QString("Chaqueta de piel con forro extraible y capucha ").repeated(4), "12,50");
+            const QList<QByteArray> rows = b.bytes().split('\n');
+            QVERIFY(rows.size() > 2);
+            for (const QByteArray &row : rows)
+                QVERIFY2(row.size() <= b.columns(), qPrintable(QString("row of %1 > %2 columns").arg(row.size()).arg(b.columns())));
+            QVERIFY(rows.first().startsWith("2"));
+            QVERIFY(rows.first().endsWith("12,50"));
+        }
     }
 
     // --- T13: feed / cut / line spacing bounds ---

@@ -193,6 +193,11 @@ void FakeAeatServer::handle(QTcpSocket *socket)
     m_buffers.remove(socket);
     m_requests << request;
 
+    if ((m_dropNextSubmission || m_submissionsUnavailable) && request.kind == QLatin1String("RegFactu")) {
+        m_dropNextSubmission = false;
+        socket->abort();
+        return;
+    }
     Reply reply;
     if (!m_scripted.isEmpty())
         reply = m_scripted.dequeue();
@@ -214,9 +219,19 @@ void FakeAeatServer::handle(QTcpSocket *socket)
                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
         guard->disconnectFromHost();
     };
-    if (reply.delayMs > 0)
+    if (reply.gated)
+        m_gated.append(send);
+    else if (reply.delayMs > 0)
         QTimer::singleShot(reply.delayMs, this, send);
     else
+        send();
+}
+
+void FakeAeatServer::releaseGated()
+{
+    const auto held = m_gated;
+    m_gated.clear();
+    for (const auto &send : held)
         send();
 }
 
@@ -262,6 +277,17 @@ QByteArray FakeAeatServer::answer(const Request &request)
             const bool cancelled = m_registered.contains(cancellationKey);
             // Both on this server's clock: the state last changed when the cancellation arrived.
             const QString changedAt = cancelled ? m_registered.value(cancellationKey).receivedAt : h.receivedAt;
+            // The huella, its time and its link: the cancellation's, or (on request) the registration's.
+            SentRecord shown = h;
+            if (cancelled && !m_queryHidesCancellation) {
+                const SentRecord cancellation = m_registered.value(cancellationKey);
+                shown.hash = cancellation.hash;
+                shown.generatedAt = cancellation.generatedAt;
+                shown.previousHash = cancellation.previousHash;
+            }
+            SentRecord system = h;
+            if (cancelled && m_queryShowsCancellersSystem)
+                system = m_registered.value(cancellationKey);
             records += QStringLiteral(
                 "<tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion><tikLRRC:IDFactura><tik:IDEmisorFactura>%10</tik:IDEmisorFactura>"
                 "<tik:NumSerieFactura>%1</tik:NumSerieFactura><tik:FechaExpedicionFactura>%2</tik:FechaExpedicionFactura></tikLRRC:IDFactura>"
@@ -274,20 +300,21 @@ QByteArray FakeAeatServer::answer(const Request &request)
                 "</tikLRRC:RegistroRespuestaConsultaFactuSistemaFacturacion>")
                 .arg(h.invoiceNumber, h.issueDate, h.total,
                      (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
-                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>").arg(h.hash),
+                                          : QStringLiteral("<tikLRRC:TipoHuella>01</tikLRRC:TipoHuella><tikLRRC:Huella>%1</tikLRRC:Huella>")
+                                                .arg(m_queryHashesLowerCase ? shown.hash.toLower() : shown.hash),
                      m_registeredRequestId.value(keyOf(h.issuerNif, QStringLiteral("Alta"), h.invoiceNumber)),
-                     cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), h.generatedAt,
+                     cancelled ? QStringLiteral("Anulado") : QStringLiteral("Correcto"), shown.generatedAt,
                      (m_queryWithoutHashes || m_noHashFor.contains(h.invoiceNumber)) ? QString()
-                     : h.previousHash.isEmpty()
+                     : shown.previousHash.isEmpty()
                          ? QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:PrimerRegistro>S</tikLRRC:PrimerRegistro></tikLRRC:Encadenamiento>")
                          : QStringLiteral("<tikLRRC:Encadenamiento><tikLRRC:RegistroAnterior><tik:Huella>%1</tik:Huella>"
-                                          "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(h.previousHash),
+                                          "</tikLRRC:RegistroAnterior></tikLRRC:Encadenamiento>").arg(shown.previousHash),
                      !request.showSystem || m_queryWithoutSystem ? QString()
                      : QStringLiteral("<tikLRRC:SistemaInformatico><tik:NombreRazon>Productor</tik:NombreRazon><tik:NIF>%1</tik:NIF>"
                                       "<tik:NombreSistemaInformatico>SIF</tik:NombreSistemaInformatico><tik:IdSistemaInformatico>%2"
                                       "</tik:IdSistemaInformatico><tik:Version>1</tik:Version><tik:NumeroInstalacion>%3</tik:NumeroInstalacion>"
                                       "</tikLRRC:SistemaInformatico>")
-                           .arg(h.producerNif, h.systemId, h.installationNumber.isEmpty() ? QStringLiteral("1") : h.installationNumber))
+                           .arg(system.producerNif, system.systemId, system.installationNumber.isEmpty() ? QStringLiteral("1") : system.installationNumber))
                 .arg(h.issuerNif.isEmpty() ? kDefaultIssuer : h.issuerNif, changedAt, h.receivedAt);
         }
         return envelope(QStringLiteral(

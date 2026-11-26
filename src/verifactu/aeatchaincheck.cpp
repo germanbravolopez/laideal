@@ -1,7 +1,9 @@
 #include "aeatchaincheck.h"
 
 #include "aeathash.h"
+#include "textformat.h"
 
+#include <QCoreApplication>
 #include <QHash>
 #include <QSet>
 #include <QXmlStreamReader>
@@ -10,7 +12,10 @@ namespace AeatChainCheck {
 
 namespace {
 
-const char kDateFormat[] = "dd-MM-yyyy";
+QString tr(const char *text)
+{
+    return QCoreApplication::translate("AeatChainCheck", text);
+}
 
 struct ParsedRecord {
     bool valid = false;
@@ -63,7 +68,7 @@ QString recomputedHash(const ParsedRecord &r)
         f.issuerNif     = r.get(QStringLiteral("IDFactura/IDEmisorFacturaAnulada"));
         f.invoiceNumber = r.get(QStringLiteral("IDFactura/NumSerieFacturaAnulada"));
         f.issueDate     = QDate::fromString(r.get(QStringLiteral("IDFactura/FechaExpedicionFacturaAnulada")),
-                                            QLatin1String(kDateFormat));
+                                            kDbDateFormat);
         f.previousHash  = previous;
         f.generatedAt   = generatedAt;
         return AeatHash::cancellationHash(f);
@@ -72,7 +77,7 @@ QString recomputedHash(const ParsedRecord &r)
     f.issuerNif     = r.get(QStringLiteral("IDFactura/IDEmisorFactura"));
     f.invoiceNumber = r.get(QStringLiteral("IDFactura/NumSerieFactura"));
     f.issueDate     = QDate::fromString(r.get(QStringLiteral("IDFactura/FechaExpedicionFactura")),
-                                        QLatin1String(kDateFormat));
+                                        kDbDateFormat);
     f.invoiceType   = r.get(root + QStringLiteral("/TipoFactura"));
     f.totalTax      = r.get(root + QStringLiteral("/CuotaTotal"));
     f.totalAmount   = r.get(root + QStringLiteral("/ImporteTotal"));
@@ -121,13 +126,13 @@ Result verify(const QStringList &recordXmls, const QSet<QString> *anchors, const
         const ParsedRecord &r = records.at(i);
         const int checked = i + 1;
         if (!r.valid)
-            return fail(i, checked, QString::fromUtf8("El registro número %1 de la cadena no se puede leer.").arg(checked));
+            return fail(i, checked, tr("El registro número %1 de la cadena no se puede leer.").arg(checked));
 
         const QString number = r.get(r.cancellation ? QStringLiteral("IDFactura/NumSerieFacturaAnulada")
                                                      : QStringLiteral("IDFactura/NumSerieFactura"));
         const QString storedHash = storedHashOf(r);
         if (storedHash.isEmpty() || storedHash.compare(recomputedHash(r), Qt::CaseInsensitive) != 0)
-            return fail(i, checked, QString::fromUtf8("La huella del registro de la factura %1 no coincide con sus datos.").arg(number));
+            return fail(i, checked, tr("La huella del registro de la factura %1 no coincide con sus datos.").arg(number));
 
         // Each issuer is its own chain. A link to a huella this database does not hold
         // continues a record that is only at AEAT (a restored or older copy): counted, not
@@ -158,7 +163,7 @@ Result verify(const QStringList &recordXmls, const QSet<QString> *anchors, const
         } else
             linkOk = anchored;               // the head a sync moved back to
         if (!linkOk)
-            return fail(i, checked, QString::fromUtf8("El registro de la factura %1 no enlaza con el anterior.").arg(number));
+            return fail(i, checked, tr("El registro de la factura %1 no enlaza con el anterior.").arg(number));
 
         lastHash.insert(issuer, storedHash.toUpper());
     }
@@ -182,8 +187,8 @@ Result verifyTail(const QStringList &recordXmls, const QString &issuerNif, const
     if (tail != head) {
         out.ok = false;
         out.failedIndex = recordXmls.size();
-        out.problem = QString::fromUtf8("Falta el último registro de la cadena: la base de datos no guarda el registro "
-                                        "con el que enlazará el siguiente.");
+        out.problem = tr("Falta el último registro de la cadena: la base de datos no guarda "
+                         "el registro con el que enlazará el siguiente.");
     }
     return out;
 }

@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QStandardPaths>
 
+#include "aeathash.h"
 #include "verifactuconfig.h"
 #include "verifactumanager.h"
 #include "verifactuinvoice.h"
@@ -130,7 +131,7 @@ private slots:
         QVERIFY(c.getQrUrl().endsWith("/GetQrCode"));
 
         c.setEnvironment(VerifactuConfig::PRODUCTION);
-        QVERIFY(c.getValidationUrl().contains("www2.aeat"));
+        QVERIFY(c.getValidationUrl().startsWith("https://www2.agenciatributaria.gob.es/"));   // AEAT's production host, as AeatHash
         QVERIFY(!c.getValidationUrl().contains("prewww2"));
     }
 
@@ -182,6 +183,54 @@ private slots:
         // totalTaxAmount = 21 + 5 = 26; totalAmount = (100 + 50) + 26 = 176
         QCOMPARE(j.value("TotalTaxAmount").toDouble(), 26.0);
         QCOMPARE(j.value("TotalAmount").toDouble(), 176.0);
+    }
+
+    // Totals are exact cents, and right without a hand call to calculateTotals().
+    void test_invoiceTotalsAreRoundedCentsWithoutCalculateTotals()
+    {
+        const double pairs[][2] = { { 0.1, 0.2 }, { 10.10, 2.12 }, { 33.33, 7.00 }, { 0.07, 0.01 }, { 8.26, 1.73 } };
+        for (const auto &p : pairs) {
+            VerifactuInvoice inv;
+            inv.setInvoiceNumber("1");
+            inv.addTaxItem(vatItem(21.0, p[0], p[1]));
+            inv.addTaxItem(vatItem(21.0, p[1], p[0]));
+            const double cents = qRound64(p[0] * 100.0) + qRound64(p[1] * 100.0);
+            const double expectedTax = cents / 100.0;
+            const double expectedTotal = (cents + cents) / 100.0;
+            const QJsonObject j = inv.toJson();            // calculateTotals() never called
+            QCOMPARE(j.value("TotalTaxAmount").toDouble(), expectedTax);
+            QCOMPARE(j.value("TotalAmount").toDouble(), expectedTotal);
+            QCOMPARE(inv.getTotalAmount(), expectedTotal);
+            QCOMPARE(QString::number(j.value("TotalTaxAmount").toDouble(), 'g', 17), QString::number(expectedTax, 'g', 17));
+        }
+        VerifactuInvoice sum;
+        sum.addTaxItem(vatItem(21.0, 0.1, 0.0));
+        sum.addTaxItem(vatItem(21.0, 0.2, 0.0));
+        QCOMPARE(QString::number(sum.toJson().value("TotalAmount").toDouble(), 'g', 17), QStringLiteral("0.29999999999999999"));   // 0.3, not 0.30000000000000004
+    }
+
+    // A binary x.xx5 amount rounds as the direct client's record writes it, so the QR of
+    // either names the same total.
+    void test_invoiceTotalsRoundAsTheRecord()
+    {
+        for (const double v : { 1.005, -1.005, 2.675, -2.675 }) {
+            VerifactuInvoice inv;
+            inv.addTaxItem(vatItem(21.0, v, v));
+            QCOMPARE(QString::number(inv.getTotalAmount(), 'f', 2), AeatHash::amountText(2 * AeatHash::amountText(v).toDouble()));
+            QCOMPARE(QString::number(inv.toJson().value("TotalTaxAmount").toDouble(), 'f', 2), AeatHash::amountText(v));
+        }
+    }
+
+    // The error follows the current state, not the last failed check.
+    void test_configValidationErrorIsNotStale()
+    {
+        VerifactuConfig c;
+        QVERIFY(!c.isValid());
+        QVERIFY(!c.getValidationError().isEmpty());
+        c.setEmitterData("B12345678", "La Ideal");
+        c.setServiceKey("key");
+        QVERIFY(c.isValid());
+        QVERIFY(c.getValidationError().isEmpty());
     }
 
     void test_invoiceValidation()

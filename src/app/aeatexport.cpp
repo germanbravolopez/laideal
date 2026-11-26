@@ -35,7 +35,7 @@ PayloadInfo inspectPayload(const QString &payload)
         if (token == QXmlStreamReader::StartElement && info.invoiceDate.isEmpty()) {
             if (r.name().startsWith(u"FechaExpedicionFactura")) {
                 const QString text = r.readElementText();
-                if (QDate::fromString(text, "dd-MM-yyyy").isValid())
+                if (parseDbDate(text).isValid())
                     info.invoiceDate = text;
             }
         }
@@ -56,8 +56,8 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
     w.setAutoFormatting(true);
     w.writeStartDocument();
     w.writeStartElement("RegistrosFacturacionLaIdeal");
-    w.writeAttribute("fechaDesde", from.toString("dd-MM-yyyy"));
-    w.writeAttribute("fechaHasta", to.toString("dd-MM-yyyy"));
+    w.writeAttribute("fechaDesde", dbDateText(from));
+    w.writeAttribute("fechaHasta", dbDateText(to));
     w.writeAttribute("generadoEl", QDateTime::currentDateTime().toString(Qt::ISODate));
     w.writeAttribute("nif",        nif);
     w.writeAttribute("emisor",     issuerName);
@@ -66,7 +66,7 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
     static const QRegularExpression xmlDeclRx(QStringLiteral("^\\s*<\\?xml[^?]*\\?>\\s*"));
 
     const auto inRange = [&from, &to](const QString &ddMMyyyy) {
-        const QDate d = QDate::fromString(ddMMyyyy, "dd-MM-yyyy");
+        const QDate d = parseDbDate(ddMMyyyy);
         return d.isValid() && d >= from && d <= to;
     };
     // Writes the payload inside the open element: its raw bytes when it is a
@@ -102,6 +102,8 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
             w.writeAttribute("importe",   QString::number(r.importe, 'f', 2));
             w.writeAttribute("csv",       r.csv);
             w.writeAttribute("estado",    r.estado);
+            if (!r.environment.isEmpty())
+                w.writeAttribute("entorno", r.environment);      // a test-environment record has no tax effect
             if (!r.fechaAnulacion.isEmpty())
                 w.writeAttribute("fechaAnulacion", r.fechaAnulacion);
             if (!r.rectifiesNRecibo.isEmpty()) {
@@ -113,15 +115,18 @@ int writeAeatExportXml(QIODevice *out, const QVector<AeatExportRecord> &records,
             ++written;
         }
         // A cancellation is AEAT's own record, dated when it happened (a substituted
-        // invoice has none: its rectificativa is a Registro of its own). One made
-        // before 10.12 has no date (aeatExportRecords also blanks an unreadable one):
-        // it goes with its invoice, marked sinFecha.
+        // invoice has none: its rectificativa is a Registro of its own). One without a date
+        // (aeatExportRecords also blanks an unreadable one) goes with its invoice, marked sinFecha.
         const bool undatedCancel = r.fechaAnulacion.isEmpty() && inRange(r.fechaPago);
         if (r.estado == QLatin1String("ANULADA") && (inRange(r.fechaAnulacion) || undatedCancel)) {
             w.writeStartElement("Anulacion");
             w.writeAttribute("nRecibo",        r.nRecibo);
             w.writeAttribute("invoiceId",      r.invoiceId);
             w.writeAttribute("fechaPago",      r.fechaPago);
+            if (!r.environment.isEmpty())
+                w.writeAttribute("entorno", r.environment);
+            if (r.cancelXml.contains(QLatin1String("<AnulacionLocal")))
+                w.writeAttribute("local", "1");                  // in the books only: AEAT was not sent it
             if (undatedCancel)
                 w.writeAttribute("sinFecha", "1");
             else
