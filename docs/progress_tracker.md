@@ -25,9 +25,7 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 ## Open Issues
 
-| Issue | File | Notes |
-|-------|------|-------|
-| `aeat_direct_backend` failed twice on a loaded machine | `tests/test_aeat_direct_backend.cpp` | Seen on 26-11-2026 in two full runs with `-j4` while another build was running on the same machine; the failing case was not captured either time, and the suite passed alone and in every other run, CI included. It takes about 290 s of its 600 s limit. Next time it fails, keep the output (`ctest --output-on-failure`, or `build/test-results-aeat_direct_backend.xml`) to tell a timing assumption in one case from a slow machine; cases that wait on a fixed window are the first suspects. |
+None.
 
 ---
 

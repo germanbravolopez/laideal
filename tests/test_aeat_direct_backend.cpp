@@ -1293,9 +1293,10 @@ private slots:
             }
             AeatStore store(restoredDb, "pruebas");
             const int sentBefore = m_server->sentRecords().size();
-            FakeAeatServer::Reply lostAgain;
-            lostAgain.drop = true;
-            m_server->enqueue(lostAgain);                                     // the start's own resend fails too
+            // The start's own resend fails too, and so does every retry until the sync has
+            // answered: how long the sync takes against the retry delay decides nothing.
+            m_server->setSubmissionsUnavailable(true);
+            const auto sendAgain = qScopeGuard([this] { m_server->setSubmissionsUnavailable(false); });
             const int requestsBefore = m_server->requests().size();
             AeatDirectBackend restored(c, restoredDb);
             QTRY_VERIFY_WITH_TIMEOUT(m_server->requests().size() > requestsBefore, 10000);
@@ -1305,6 +1306,7 @@ private slots:
             QTRY_VERIFY_WITH_TIMEOUT(done, 30000);
             QVERIFY2(!ok && message.contains("pendientes de enviar a la AEAT (factura 2)"), qPrintable(message));
             QVERIFY(!restored.chainReady());
+            m_server->setSubmissionsUnavailable(false);
             // The retry sends "2"; the sync then repeats on its own and restarts the chain.
             QTRY_VERIFY_WITH_TIMEOUT(restored.chainReady(), 40000);
             QCOMPARE(store.pendingCount("89890001K"), 0);
@@ -1418,8 +1420,15 @@ private slots:
             QSqlDatabase dbB = QSqlDatabase::addDatabase("QSQLITE", "aeat_pair_b");
             dbA.setDatabaseName(m_dir.filePath(QString("pair_a_%1_%2.db").arg(m_dbCounter).arg(++m_otherCounter)));
             dbB.setDatabaseName(m_dir.filePath(QString("pair_b_%1_%2.db").arg(m_dbCounter).arg(m_otherCounter)));
-            AeatDirectBackend a(config(), dbA), b(config(), dbB);
+            // Each keeps its own number, also on a later attempt, when AEAT already holds records.
+            AeatDirectBackend::Config own = config();
+            own.adoptInstallationNumber = false;
+            AeatDirectBackend a(own, dbA), b(own, dbB);
             QSignalSpy heardA(&a, &VerifactuBackend::requestFinished), heardB(&b, &VerifactuBackend::requestFinished);
+            if (!sync(a) || !sync(b))
+                qWarning() << "registerTogether: no chain sync";
+            while (QTime::currentTime().msec() > 150)                         // a whole second ahead
+                QTest::qWait(10);
             a.submitInvoiceAsync(ticket(first, 10));
             b.submitInvoiceAsync(ticket(second, 10));
             if (!QTest::qWaitFor([&] { return heardA.size() == 1 && heardB.size() == 1; }, 30000))
@@ -1450,7 +1459,7 @@ private slots:
                 if (r.invoiceNumber == newNumber)
                     newRecord = r;
             }
-        } while (secondOf(oldRecord) != secondOf(newRecord) && ++attempt < 4);
+        } while (secondOf(oldRecord) != secondOf(newRecord) && ++attempt < 8);
         QVERIFY2(secondOf(oldRecord) == secondOf(newRecord), "the two records never fell in the same second");
         QVERIFY(oldRecord.installationNumber != newRecord.installationNumber);
 

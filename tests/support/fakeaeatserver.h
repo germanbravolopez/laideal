@@ -107,6 +107,9 @@ public:
     void setQueryByMonth(bool on) { m_queryByMonth = on; }
     // The next submission (queries are answered) is dropped without registering its records.
     void dropNextSubmission() { m_dropNextSubmission = true; }
+    // While on, every submission is dropped like that (queries are answered): a test decides
+    // when sending works again, whatever the number of retries meanwhile.
+    void setSubmissionsUnavailable(bool on) { m_submissionsUnavailable = on; }
     // Query replies give the records' huellas in lower case.
     void setQueryHashesLowerCase(bool on) { m_queryHashesLowerCase = on; }
     // The next request gets `reply` instead of the default answer.
@@ -147,6 +150,7 @@ private:
     bool m_queryShowsCancellersSystem = false;
     bool m_queriesUnavailable = false;
     bool m_dropNextSubmission = false;
+    bool m_submissionsUnavailable = false;
     bool m_queryHashesLowerCase = false;
     int m_counter = 0;
 };

@@ -193,7 +193,7 @@ void FakeAeatServer::handle(QTcpSocket *socket)
     m_buffers.remove(socket);
     m_requests << request;
 
-    if (m_dropNextSubmission && request.kind == QLatin1String("RegFactu")) {
+    if ((m_dropNextSubmission || m_submissionsUnavailable) && request.kind == QLatin1String("RegFactu")) {
         m_dropNextSubmission = false;
         socket->abort();
         return;

@@ -66,7 +66,7 @@ The single workflow `.github/workflows/ci.yml` calls the same `make.ps1` targets
 - **No test reaches a real host.** CTest sets `LAIDEAL_TEST=1` for every test; with it the AEAT and gateway transports refuse any host but this machine (`src/verifactu/testhostguard.h`).
 - **Application type.** `QTEST_GUILESS_MAIN` by default; `QTEST_MAIN` with `QT_QPA_PLATFORM=offscreen` (a CTest `ENVIRONMENT` property) when a `QPixmap`, widget or header is involved.
 - **Prove a new test can fail**: break the production line it guards, watch it fail, restore.
-- **Hangs fail fast.** Every test has a 120 s CTest `TIMEOUT` (end of `tests/CMakeLists.txt`) except `sql_lite` (300 s), `aeat_direct_backend` and `e2e_app` (600 s each: many fixed AEAT delays and about 75 fake-AEAT scenarios, minutes on a CI runner).
+- **Hangs fail fast.** Every test has a 120 s CTest `TIMEOUT` (end of `tests/CMakeLists.txt`) except `sql_lite` and `e2e_app` (600 s each) and `aeat_direct_backend` (900 s: 95 fake-AEAT scenarios with many fixed AEAT delays, about 290 s on a quiet machine and up to 480 s on a saturated one).
 - **Executable names** must not contain `update`, `setup` or `install`: Windows' UAC heuristic flags them and CTest fails with `BAD_COMMAND` (hence `test_versioncompare` for the updater).
 
 ### Seams
