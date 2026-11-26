@@ -490,7 +490,7 @@ set_tests_properties(aeat_direct_backend PROPERTIES TIMEOUT 600)
 set_tests_properties(e2e_app PROPERTIES TIMEOUT 600)
 
 # Tools of the UI smoke test (tests/ui, docs/testing/ui_smoke.md), not CTest suites:
-# the fake AEAT as its own process, and the reader of the ESC/POS bytes the FILE-port
+# the fake AEAT as its own process, and the reader of the ESC/POS bytes the TCP/IP (RAW) port
 # printer captures.
 add_executable(fake_aeat_server tools/fake_aeat_server.cpp
     support/fakeaeatserver.h

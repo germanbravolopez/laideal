@@ -1,200 +1,75 @@
 # printing (`src/printing/`)
 
-Direct **ESC/POS** thermal printing for the Epson TM-T20III (and any ESC/POS
-printer). This library replaced the old Excel/QXlsx/`cscript` path: it builds the
-receipt as a byte stream and sends it **RAW** through the Windows print spooler —
-no Excel, no QXlsx, no COM, no `.vbs`, no Epson SDK (only `winspool`, which ships
-with Windows). Background and design: [`printer/`](printer/README.md); a rendered
-[sample recibo + factura](printer/README.md#sample-rendered-output) (PNG, from the
-`test_ticket_preview` output) shows what the layout looks like.
+Direct ESC/POS thermal printing for the Epson TM-T20III (and any ESC/POS printer). It builds the receipt as a byte stream and sends it RAW through the Windows spooler: no Excel, no COM, no Epson SDK (only `winspool`). Callers: [`imprimir`](imprimir.md). Background and design: [`printer/`](printer/README.md), with a rendered [sample recibo + factura](printer/README.md#sample-rendered-output).
 
-## Source files
+Built as the static lib `printing` (links `Qt::Gui` for `QImage`, and `winspool` on Windows). `imprimir` links it; `appsettings` links it for `StatusApiPrinter::runDiagnosticsBounded`. Tests: `tests/test_escpos.cpp` (exact bytes, PC858 table, column math, rendered fragments, ASB decode), see [unit suites](../testing/unit_suites.md). `ThermalPrinter` and `StatusApiPrinter` are integration-only.
 
-- `escposbuilder.h/cpp` — pure ESC/POS byte builder + PC858 transcode
-- `ticketrenderer.h/cpp` — `TicketData` → receipt/invoice layout
-- `thermalprinter.h/cpp` — Win32 RAW spooler transport (stub off Windows)
-- `printerstatus.h/cpp` — pure ASB status-word decoder (`PrinterStatus`)
-- `statusapiprinter.h/cpp` — optional Epson Status API transport (dynamically
-  loaded `EPSStmApi.dll`; stub off Windows)
+## Pieces
 
-Built as the static lib `printing` (links `Qt::Gui` for `QImage`, and `winspool`
-on Windows). `imprimir` links it, and `appsettings` links it for
-`StatusApiPrinter::runDiagnosticsBounded` (the settings dialog's diagnostic button).
-
-## Three pieces with clean seams
-
-```
-EscPosBuilder   pure: accumulates a QByteArray of ESC/POS commands. No I/O, no
-                GUI event loop -> fully unit-testable (assert exact bytes).
-TicketRenderer  pure: maps a TicketData (header fields, garment rows, totals,
-                QR image, flags) onto an EscPosBuilder -> same input, same bytes.
-ThermalPrinter  transport: writes a QByteArray to a Windows printer queue as RAW
-                spool data. The only host-specific, non-portable piece.
-```
-
-`EscPosBuilder`, `TicketRenderer` and `PrinterStatus` are covered by
-`tests/test_escpos.cpp` (exact control bytes, the PC858 transcode, the
-column-width math, the rendered receipt/invoice fragments, and the ASB status
-decode). `ThermalPrinter` and `StatusApiPrinter` are integration-only (Win32 /
-Epson DLL).
+| File | Role |
+|------|------|
+| `escposbuilder.h/cpp` | Pure: accumulates ESC/POS bytes, PC858 transcode. No I/O |
+| `ticketrenderer.h/cpp` | Pure: `TicketData` to receipt / invoice bytes; same input, same bytes |
+| `thermalprinter.h/cpp` | Win32 RAW spooler transport (stub off Windows) |
+| `printerqueue.h/cpp` | `PrinterQueue::defaultName()`: the one default-printer lookup (empty if none, always empty off Windows), used by both transports |
+| `printerstatus.h/cpp` | Pure ASB status-word decoder (`PrinterStatus`) |
+| `statusapiprinter.h/cpp` | Optional Epson Status API transport (`EPSStmApi.dll` loaded dynamically; stub off Windows) |
 
 ## EscPosBuilder
 
-Chainable builder. Tracks the current font + paper width so `columns()` returns
-the usable character count (dots / char width: Font A = 12 dots, Font B = 9), and
-the padding helpers space-pad to that width.
+Chainable. It tracks the current font and paper width, so `columns()` is the usable character count (dots / char width: Font A 12 dots, Font B 9) and the padding helpers pad to it.
 
 | Method | ESC/POS | Notes |
 |--------|---------|-------|
-| `init()` | `ESC @` + `ESC t 19` | reset + select code page PC858 |
-| `align(a)` | `ESC a n` | Left / Center / Right |
-| `bold(on)` | `ESC E n` | |
-| `font(f)` | `ESC M n` | A (48 cols @80mm) / B (64); updates `columns()` |
-| `doubleSize(on)` | `GS ! 0x11` / `0x00` | double width+height |
-| `text(s)` / `line(s)` | PC858 bytes (+ LF) | transcodes the QString |
-| `feed(n)` | `ESC d n` | `n` is clamped to 255; nothing for `n <= 0` |
-| `lineSpacing(dots)` / `defaultLineSpacing()` | `ESC 3 n` / `ESC 2` | tighten the vertical pitch (e.g. the dense legal block) / restore the ~1/6" default |
-| `rule(c)` | full-width row of `c` | `=` (double-ish) / `-` (thin) |
-| `paragraph(s)` | word-wrap to `columns()` | |
-| `leftRight(l, r)` | label + right-justified value | one full line |
-| `garmentRow(qty, name, amt)` | 3-column table row | name wraps; continuation rows blank qty/amt |
-| `rasterImage(img)` | `GS v 0` | 1bpp, MSB-first, thresholded on luminance (never dithered) |
-| `cut(n)` | `ESC d n` + `GS V 66 0` | feed clear of cutter, partial cut |
+| `init()` | `ESC @` + `ESC t 19` | reset, select PC858 |
+| `align(a)`, `bold(on)`, `font(f)`, `doubleSize(on)` | `ESC a`, `ESC E`, `ESC M`, `GS !` | font A is 48 columns at 80 mm, B 64; `font` updates `columns()` |
+| `text(s)` / `line(s)` | PC858 bytes (+ LF) | |
+| `feed(n)` | `ESC d n` | clamped to 255; nothing for `n <= 0` |
+| `lineSpacing(dots)` / `defaultLineSpacing()` | `ESC 3 n` / `ESC 2` | tighten the pitch for the dense legal block / restore |
+| `rule(c)` | full-width row of `c` | |
+| `paragraph(s)` | word-wrap to `columns()` | `wrapText` measures the folded text (an ellipsis prints as three dots) |
+| `leftRight(l, r)` | label + right-justified value | one line |
+| `garmentRow(qty, name, amt)` | 3-column row | the name wraps; an amount wider than its column is never cut: it is printed whole on its own line |
+| `rasterImage(img)` | `GS v 0` | 1bpp, MSB-first, thresholded on luminance (never dithered); the QR goes out this way |
+| `cut(n)` | `ESC d n` + `GS V 66 0` | feed, partial cut |
 
-### Code page (the error-prone bit)
+### Code page
 
-ESC/POS prints single-byte code-page bytes, not UTF-8. `EscPosBuilder::toCp858()`
-transcodes a `QString` to **PC858** (CP850 + the euro sign), selected on the
-device with `ESC t 19`. ASCII passes through; the Spanish glyphs actually
-used (`ñ Ñ á é í ó ú ¿ ¡ €` + accented capitals, etc.) and the common extras (`² ³ ¹` for
-m2, `× ± § ® µ`, Nordic and Portuguese letters, `ß`, `¢ ¥`) map via an explicit table;
-typographic dashes, curly quotes, `…` and the no-break space are folded to their ASCII
-form; anything else becomes `?`, and C0 control characters (ESC, GS, ...) in printed text become a space, so a typed name can never inject a printer command. The table is checked against hard-coded CP858 values (`test_cp858TableAgainstReference`); `Ì` is 0xDE (0xDD, the broken bar, until October 2026). An explicit table (not Qt's `QStringConverter`, which
-in Qt 6 supports only UTF/Latin-1, **not** CP858) keeps it correct and unit-tested.
-The numbering follows the published CP850/858 chart; confirming it on a printed
-code-page chart of the physical unit is still worthwhile (self-check ticket).
+`toCp858()` transcodes a `QString` to PC858 (CP850 plus the euro sign) with an explicit table, since Qt 6's `QStringConverter` has no CP858. ASCII passes through; the Spanish letters and `€`, the common extras (`² ³ ¹ × ± § ® µ`, Nordic and Portuguese letters, `ß ¢ ¥`) map via the table; typographic dashes, curly quotes, `…` and the no-break space fold to ASCII; anything else becomes `?`; C0 control characters (ESC, GS ...) become a space, so a typed name can never inject a printer command. The table is checked against reference CP858 values (`test_cp858TableAgainstReference`); confirming it on a printed code-page chart of the shop unit is still worthwhile.
 
 ## TicketRenderer
 
-`static QByteArray render(const TicketData &d, int paperDots)`. `TicketData` is
-plain data (no DB, no widgets) so `imprimir` assembles it from the query model
-and tests feed synthetic rows. Reproduces the historical Excel layout (header →
-identity → garment table → totals → payment/copy marker → QR → legal policy →
-timestamp → cut) within the printer's column width. The header lines are wrapped here
-(the shop name at half the columns, being double-size), not left to the firmware. The
-factura IVA split is `splitGross` (the Verifactu record's math: base in cents, IVA the
-rest) so the printed base + IVA add back to the total; the rate prints with its natural
-decimals (`IVA (21%)`, `IVA (10,5%)`).
+`static QByteArray render(const TicketData &d, int paperDots)`. `TicketData` is plain data (no DB, no widgets): `imprimir` fills it from the query model, tests feed synthetic rows. The block order is documented in [imprimir](imprimir.md#ticket-layout).
 
-The Verifactu parts of `TicketData`: `qr` (an image, null = none), `verifactuVerifiable`
-(print the leyenda below it, on two Font A lines), `issueDate` (the "Fecha de expedición"
-of a factura), `voidedMarker` / `voidedDate` (a cancelled or rectified invoice: heading,
-note, no QR) and `timestamp` (print time, supplied by the caller).
-`TicketRenderer::printableQr(image, paperDots)` is the QR sizing the Orden HAC/1177/2024
-(art. 20-21) requires: it reads the symbol's modules from whatever pixmap AEAT's answer or
-`AeatQr` produced and redraws them at whole dots per module, 30-40 mm (240-320 dots), with
-a 4-module quiet zone, never wider than the paper (`Imprimir` passes `paperDots()`).
+- Header lines are wrapped here (the shop name at half the columns, being double-size), not by the firmware.
+- The factura IVA split is `splitGross` (the Verifactu record's math), so printed base + IVA add back to the total; the rate prints with its natural decimals (`IVA (21%)`, `IVA (10,5%)`).
+- Verifactu fields of `TicketData`: `qr` (null = none), `verifactuVerifiable` (the leyenda, two Font A lines), `issueDate`, `voidedMarker` / `voidedDate` (heading and note, no QR), `timestamp` (supplied by the caller).
+- `printableQr(image, paperDots)` is the QR sizing the Orden HAC/1177/2024 (art. 20-21) requires: it reads the symbol's modules from whatever pixmap it gets and redraws them at whole dots per module, 30-40 mm (240-320 dots), with a 4-module quiet zone, never wider than the paper. It returns a null image for a symbol it cannot read (`Imprimir` then prints the original as received).
 
 ## ThermalPrinter
 
-`static bool send(const QByteArray &escpos, const QString &queueName, QString *err)`.
-On Windows: `OpenPrinterW` → `StartDocPrinterW` (datatype `RAW`) →
-`StartPagePrinter` → `WritePrinter` → `EndPagePrinter` → `EndDocPrinter` →
-`ClosePrinter`. An empty `queueName` uses `GetDefaultPrinterW`; an empty payload is refused. Returns `false`
-with a human-readable `*err` (from `FormatMessage`) instead of throwing. Off
-Windows it compiles to a stub that returns `false`, so the builder/renderer (and
-their tests) stay cross-platform.
+`static bool send(const QByteArray &escpos, const QString &queueName, QString *err)`. Windows: `OpenPrinterW`, `StartDocPrinterW` (datatype `RAW`), `StartPagePrinter`, `WritePrinter`, `EndPagePrinter`, `EndDocPrinter`, `ClosePrinter`. An empty `queueName` uses `PrinterQueue::defaultName()`; an empty payload is refused. It returns `false` with a readable `*err` (from `FormatMessage`) instead of throwing. Off Windows it is a stub returning `false`, so builder, renderer and tests stay cross-platform.
 
-## PrinterStatus + StatusApiPrinter (optional Status API path)
+## Status API path (optional)
 
-An opt-in layer (setting `print.use_status_api`) that reads device status around
-printing — paper out / near end, cover open, cutter / mechanical / unrecoverable
-error. The ESC/POS payload is identical to the RAW path; only the transport
-differs (dossier option B, [`printer/02_control_methods.md`](printer/02_control_methods.md)).
+Behind `print.use_status_api` (default off): reads device status around printing (paper out / near end, cover open, cutter / mechanical / unrecoverable error). The payload is identical to RAW, only the transport differs ([option B](printer/02_control_methods.md)).
 
-- **`PrinterStatus`** — pure. `PrinterStatus::fromAsb(quint32)` decodes the
-  Epson **ASB** (Automatic Status Back) 32-bit word into named flags
-  (`paperEnd`, `paperNearEnd`, `coverOpen`, `cutterError`, …) plus
-  `hasError()` / `hasWarning()` / `isFatal()` and a Spanish `summary()` ("Sin
-  papel", "Tapa abierta", "Papel casi agotado", "Impresora lista", …).
-  `isFatal()` is the **fatal vs recoverable** split: fatal = cutter / mechanical
-  / unrecoverable (block printing); cover-open and paper-end are recoverable
-  (warn but let the spooler hold the job). `offline` and `drawerOpen` are decoded for
-  diagnostics only: nothing acts on them. Unit-tested.
-- **`StatusApiPrinter::sendAndReadStatus(bytes, queue, *status, *err)`** —
-  Win32. Loads `EPSStmApi.dll` **dynamically** (`LoadLibrary`/`GetProcAddress`,
-  so there is no build-time SDK dependency), then
-  `BiOpenMonPrinter(2, queue)` → **`BiGetStatus` (read status first)** →
-  `BiDirectIOEx` (send) → `BiCloseMonPrinter`. Status is read **before** the
-  send because `BiGetStatus` returns the cached ASB (cover-open / paper-out) and
-  succeeds even offline, whereas the `BiDirectIOEx` send returns `ERR_ACCESS`
-  (-80) when the cover is open — a send-first design would only ever see a bare
-  send failure, never the reason (APD6 Status API manual: "confirm the printer
-  can print before printing"). On a **fatal** status the send is skipped and the
-  function returns `false`. Returns `false` *without a real send* if the DLL/API
-  is unavailable or the queue can't be opened, so `Imprimir::printTicket` falls
-  back to the RAW path (enabling the flag never stops printing). The status read
-  is best-effort: a send can succeed with `status.valid == false`.
-- **`StatusApiPrinter::sendAndReadStatusBounded(..., timeoutMs)`** — a watchdog
-  wrapper `Imprimir::printTicket` calls instead of the raw `sendAndReadStatus`.
-  It runs the (potentially blocking) Epson DLL calls on a **detached worker
-  thread** and waits at most `timeoutMs` (**10 s**). If the DLL doesn't return - a
-  printer **firmware/driver quirk can hang `BiOpenMonPrinter` indefinitely** (seen
-  on the shop TM-T20III until the APD6 was reinstalled) - the UI thread stops
-  waiting, returns `false` with an invalid status, and the caller falls back to
-  RAW, so the POS never freezes. After the first timeout the API is **latched off
-  for the process** (a static flag) so every later print goes straight to RAW. A
-  stuck worker is abandoned (its `shared_ptr` result slot keeps it memory-safe).
-  **Calibration matters**: the watchdog must stay *well above* the real worst case
-  or it false-trips on a normal offline print (which suppresses the warning). That
-  worst case is the `BiDirectIOEx` send failing on an open cover / no paper - it
-  returns `ERR_ACCESS` after the **DLL's own internal ~5 s** (it does *not* honour
-  our 2500 ms `BiDirectIOEx` timeout on the `-80` path), ~5.5 s total with
-  open+close. So the watchdog is **10 s** (a genuine hang is indefinite; the wide
-  margin distinguishes the two). Two earlier miscalibrations, for the record: a
-  4 s watchdog under a 5 s send timeout, then a 6 s watchdog only ~0.3 s above the
-  real ~5.5 s offline send - both risked false-tripping and hiding the warning.
-- **`StatusApiPrinter::runDiagnosticsBounded(queue, timeoutMs)`** — a diagnostic
-  (behind the same watchdog) that opens the printer and calls each Status API
-  function in turn - `BiOpenMonPrinter` -> `BiGetStatus` -> `BiGetType` ->
-  `BiDirectIOEx` (a real-time `DLE EOT 1` status request, no printing) ->
-  `BiCloseMonPrinter` - logging (`[diag]`) a line **before and after** each call
-  with elapsed ms, and returns a report. A hang shows as the last `->` line with
-  no result after it; the report ends with a "BLOQUEO" note naming the culprit
-  call. Wired to the **"Probar Status API (diagnóstico)"** button in
-  `SettingsDialog` (General tab, next to the checkbox) to pinpoint a
-  firmware-induced hang without freezing the UI. `appsettings` links `printing`
-  for this.
-- **`Imprimir::printTicket` decision**: fatal (status valid) → warn + **return**
-  (no RAW, operator fixes and reprints); a decoded recoverable error / near-end →
-  warn + **fall through to RAW** (spooler queues the ticket, prints once the cover
-  is closed / paper replaced); **send refused but status did not decode to a known
-  fault** (`status.valid && !sent`) → generic "no se pudo enviar, comprueba tapa /
-  papel / conexión" warning + RAW; clean send → done. A missing DLL leaves
-  `status.valid == false`, so those machines stay silent and just use RAW.
+- **`PrinterStatus`** (pure): `fromAsb(quint32)` decodes the Epson ASB word into named flags (`paperEnd`, `paperNearEnd`, `coverOpen`, `cutterError`, `mechanicalError`, `unrecoverableError`, `noResponse`, `offline`), plus `hasError()`, `hasWarning()`, `isFatal()` and a Spanish `summary()`. Fatal means cutter / mechanical / unrecoverable (block printing); cover open and paper end are recoverable (warn, let the spooler hold the job). `offline` is for diagnostics only.
+- **`sendAndReadStatus(bytes, queue, *status, *err, gate)`** (Win32): loads the DLL dynamically, then `BiOpenMonPrinter(2, queue)`, `BiGetStatus` (read first), `BiDirectIOEx` (send), `BiCloseMonPrinter`. Status is read before sending because `BiGetStatus` returns the cached ASB even offline, whereas the send fails with `ERR_ACCESS` (-80) on an open cover. A fatal status skips the send and returns `false`. It returns `false` without sending if the DLL is missing or the queue cannot be opened, so the caller falls back to RAW. A `StatusApiSendGate` lets a watchdog stop a worker that has not started sending.
+- **`sendAndReadStatusBounded(..., timeoutMs, &mayStillPrint)`**: runs the DLL calls on a detached worker and waits at most `timeoutMs` (`Imprimir` passes 10 s). On timeout it returns `false` with an invalid status and the API is latched off for the process, so later prints go straight to RAW. A worker abandoned before its send never sends; one abandoned inside the send sets `mayStillPrint` and the caller must not resend by RAW. The 10 s sits well above the real worst case (a send failing on an open cover or no paper returns after the DLL's own ~5 s, ~5.5 s with open and close), so a normal offline print never false-trips.
+- **`runDiagnosticsBounded(queue, timeoutMs)`**: opens the printer and calls each API function in turn (`BiOpenMonPrinter`, `BiGetStatus`, `BiGetType`, `BiDirectIOEx` real-time status, `BiCloseMonPrinter`), logging `[diag]` before and after each with elapsed ms. A hang shows as the last `->` line with no result and a "BLOQUEO" note. Wired to the **Probar Status API (diagnóstico)** button (Settings, General tab).
 
-> Hardware finding (shop TM-T20III, APD6 Status API installed): an **open cover
-> is reported as `ASB_NO_RESPONSE` (raw ASB `0x1`, decoded as `PrinterStatus::noResponse`,
-> summary "La impresora no responde: tapa abierta, apagada o sin conexión"), NOT
-> `ASB_COVER_OPEN` (0x20)** -
-> the printer goes offline, `BiGetStatus` succeeds but says "no response", and the
-> `BiDirectIOEx` send fails with `ERR_ACCESS` (-80). So we cannot get a specific
-> "Tapa abierta" from this unit; the warning is instead keyed off the **send
-> failure** (ground truth for "can't print now") whenever we reached a valid
-> status. `StatusApiPrinter` logs the raw ASB word (`qDebug`) so the ready /
-> paper-out values can still be mapped to specific messages if they turn out to
-> decode cleanly. Specific-bit decode (`fromAsb`) is kept for units/states that do
-> report it.
+`Imprimir::printTicket` decision: fatal status goes to a warning and stops (no RAW); a recoverable error or near-end warns and falls through to RAW (the spooler prints once the cover is closed or paper replaced); a refused send with a status that decoded to no known fault gives a generic "no se pudo enviar" warning and RAW; a clean send is done. A missing DLL leaves `status.valid == false`: silent, RAW only.
+
+Hardware finding (shop TM-T20III with APD6): an open cover is reported as `ASB_NO_RESPONSE` (raw ASB `0x1`, `PrinterStatus::noResponse`, summary "La impresora no responde: tapa abierta, apagada o sin conexión"), not `ASB_COVER_OPEN`. The warning is therefore keyed off the send failure whenever a valid status was reached. The raw ASB word is logged for nonzero values; the specific-bit decode is kept for units that report it.
 
 ## Settings consumed (by `imprimir`)
 
-| Setting | Getter | Use |
-|---------|--------|-----|
+| Key | Getter | Use |
+|-----|--------|-----|
 | `print.printer_name` | `printerName()` | RAW target queue; empty = default printer |
-| `print.paper_width_mm` | `paperWidthMm()` | 80 → 576 dots, 58 → 420 (default 80) |
+| `print.paper_width_mm` | `paperWidthMm()` | 80: 576 dots, 58: 420 (default 80) |
 | `print.enable` | `enablePrinting()` | gates the actual send |
-| `print.use_status_api` | `useStatusApi()` | route via Epson Status API + read status (default off) |
+| `print.use_status_api` | `useStatusApi()` | route via the Status API (default off) |
 
-All keys are editable in `SettingsDialog` → General (printer combo populated
-from `QPrinterInfo::availablePrinterNames()`, paper-width combo, and the Status
-API checkbox).
+All are editable in Settings, General.

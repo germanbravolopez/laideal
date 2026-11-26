@@ -1,119 +1,115 @@
 # sql_lite (`src/sql_lite/`)
 
-Stateless free-function database API. Every module includes `sql_lite.h`. Functions open the connection through `ConnectionScope` and close it on return only if they opened it - callers pass a `QSqlDatabase &db` reference owned by their window, and one they hold open stays open (also in the closure functions `quarterIsClosed`, `closeQuarter`, `reopenQuarter`, `quarterClosures`, `closedQuarterKeys`, `quarterHasMovements`; `test_closureFunctions_leaveOpenConnectionOpen`).
+Stateless free-function database API; every module includes `sql_lite.h`. Schema: [architecture.md](../architecture.md). Verifactu rules: [verifactu/README.md](verifactu/README.md).
 
-## Source files
+Source: `sql_lite.h/cpp`, and `ingresos_schema.h` (`INGRESOS_COL_*` column indices, `INGRESOS_IMPORTE_VALUE`, `INGRESOS_ESTADO_ANULADO` / `_RECOGIDO` / `_EN_TIENDA`, `INGRESOS_PAGADO_SI` / `_NO`; `test_ingresosSchema_matchesColumnIndices` keeps the indices in step with the real table).
 
-- `src/sql_lite/sql_lite.h`
-- `src/sql_lite/sql_lite.cpp`
-- `src/sql_lite/ingresos_schema.h` - `INGRESOS_COL_*` column indices, `INGRESOS_ESTADO_ANULADO`, `INGRESOS_IMPORTE_VALUE`; `test_ingresosSchema_matchesColumnIndices` keeps them in step with the real table
+## Conventions
 
-## DB path
+- **Connection**: every function opens through `ConnectionScope` and closes on return only if it opened (a caller's open connection, e.g. a table model's, stays open: `test_closureFunctions_leaveOpenConnectionOpen`). Declare the scope before any `QSqlQuery`.
+- **Path**: `main()` calls `setDbPath(AppSettings::dbPath())`; code reads `dbPath()`. The path lives in `~/.laideal_settings.json` (`db.path`); if empty or missing, `main()` opens `SettingsDialog` first.
+- **SQL**: prepared statements with named parameters only, never concatenation.
+- **No UI**: no `QMessageBox` (links Qt Gui only). A failure is logged and returned; the window shows it.
+- **Fail closed**: listings and numbering take `bool *ok` (`incomeTicketsBetweenDates`, `expensesBetweenDates`, `regularizationsBetweenDates`, `annualDetailsByQuarter`, `readMaxValueInColumnFromTable`, `nextTicketNumber`, `nextRectificationNumber`, `nextVerifactuInvoiceSeq`, `ticketHasPaidGarment`, `ticketHeader`, `rectifiedDifferences`, `differenceRectificationCount`, `liveRectificationOf`): false means the read failed, never "empty period" or "number 1". `nextTicketNumber` returns 0 then.
+- **Amounts**: stored as `"28.41"` through `moneyText`. Every amount writer (`insertGarmentRow(s)`, the three `update...` amount writers, `splitGarmentRow`, `storeChargedGarments`, `insertExpenseInvoice`) refuses an unreadable amount (`acceptAmount`, built on `moneyParse`), never storing it as 0.
+- **Closed quarters**: the check runs inside the INSERT / UPDATE statement (`closedQuarterSql`, a `NOT EXISTS` on the row's quarter; `kUnlockedWhere`), so it cannot race. Writers that change an amount also use `kAmountEditableWhere`: unpaid, never sent to AEAT, unlocked. A date that is empty or malformed is in no quarter.
+- **Single sources**: income / expense figures come from the listings below (the report sums the same rows); `kIngresosIncomeWhere` and `kTotalsExcludedEstados` define "counts as income".
+- `sql_lite` reads AeatStore's `aeat_records` only in `pendingAeatRecordCount` and `aeatInvoiceNumbersOfTicket` (`test_aeat_store` runs them against the real table).
 
-```cpp
-#define DB_PATH dbPath()   // expands to the runtime-configured path
-```
+## Dates, money, text helpers (pure)
 
-Set once at startup by `main()`:
-```cpp
-AppSettings *settings = AppSettings::instance();
-settings->load();
-setDbPath(settings->dbPath());
-```
+| Function | Purpose |
+|----------|---------|
+| `kDbDateFormat`, `parseDbDate(text)`, `dbDateText(date)` | The stored `dd-MM-yyyy` text and its two conversions (invalid `QDate` for other text). |
+| `quarterOfMonth`, `quarterFirstDay`, `quarterLastDay`, `quarterKey(q, y)` / `quarterKey(date)` | Quarter arithmetic; the key is `year * 10 + quarter`. |
+| `roundToCents`, `moneyText(double/QString)` | Round half away from zero (28.405 -> 28.41); format `"28.41"`, text may use a decimal comma. |
+| `moneyParse(text, &value)` | Strict: sign, digits, one separator. `"1.234,50"`, `"abc"`, `""` refused. |
+| `parseDecimal(text, &ok)` | Lenient typed decimal with comma (size, quantity). |
+| `displayMoney`, `displayEuro`, `displayDecimal` | Display with the decimal comma (`displayEuro` adds the euro sign); storage and AEAT keep the dot. |
+| `garmentImporte(qty, size, unitPrice)` | Line price: quantity x unit price, times a non-zero size, >= 0, rounded to cents. Shared by MainWindow, AddGarment, Recogida. |
+| `garmentUnmeasured(garment, size)` | An "m2" garment with no usable size: 0,00 and not chargeable. |
+| `expenseIvaRate(stored)` | Whole-number rate from the TEXT `gastos.iva`, else -1. |
+| `removeSpecialChars` | Accent-insensitive name matching. |
+| `verifactuInvoiceId(n, seq)`, `verifactuDisplayInvoiceId(ids, fallback)` | InvoiceID (`n` for seq 0, `n-seq` otherwise); the id to print (first non-empty among the rows). |
+| `garmentIsLocallyVoidable`, `garmentExcludedFromTotals` | Row-state predicates (unpaid and unsent; ANULADA / RECTIFICADA). |
+| `genHash16()` | 16-character row hash. |
 
-The actual path is stored in `~/.laideal_settings.json` under the `db.path` key and is configured via Archivo → Configuración. If the path is empty or the file does not exist, `main()` opens `SettingsDialog` before constructing `MainWindow`.
+## Migration
 
-## Function reference
+`migrateDatabase(db, rewriteData = true)` returns false when a step failed (logged, the run goes on). It is idempotent and runs at every start, so each repair filters out rows it already rewrote and stays a cheap single scan. Each step is a function over a shared `MigrationRun`; multi-row steps go through `runAllOrNone` (one transaction, all rows or none). Steps in the order the code runs them:
 
-| Function | Returns | Purpose |
-|----------|---------|---------|
-| `migrateDatabase(db)` | `bool` (false when a step failed) | Creates the base tables on an empty file (`kBaseSchema`, `CREATE TABLE IF NOT EXISTS`: a fresh install), keeps a connection the caller had open, logs each "review manually" notice once (`migration_notes`), runs every multi-row repair in a transaction, adds the `(n_recibo, hash)` unique index once the hashes are repaired and the two Req. 1 guard triggers. Adds the `verifactu_*` columns to `ingresos` via `ALTER TABLE ADD COLUMN`, then runs the `SIN COBRAR` backfill (unpaid rows that carry a paid sibling's AEAT invoice (ENVIADA + the same CSV, written by the pre-10.10 first-payment write-back) cleared to SIN COBRAR / ANULADA (12.2 repair, so the guard trigger lets them be charged); unpaid rows stamped `'PENDIENTE'` by the pre-10.9 `saveTicket`). Its steps: base tables, `accounting_closures` (and the one-time carry-over of the old `edit_lock` closures), the `verifactu_*` / `fecha_anulacion` columns, the guard triggers, then (only with `rewriteData`, after a copy of the database exists) the row repairs - 10.9 `SIN COBRAR` relabel, 10.12 void-date move (only rows without a `fecha_anulacion`), 10.12 unpaid-remainder repair, 12.2 stamped-unpaid repair, 11.0 split relink, 12.0 duplicate-hash repair, comma-decimal fix and the casing step - the three-decimal rounding; every repair filters out the rows it already rewrote, so a second run changes nothing. The repairs run at **every start** on purpose (an older version opening the DB after an upgrade - a rollback, an old copy of the exe - writes the old shapes again, and a run-once flag would never repair them), so each must stay cheap: all are single table scans (~15 ms each on the shop DB, ~20 000 rows), and the split relink is one self-join on which SQLite builds a temporary index (~50 ms; it was three correlated subqueries per candidate row, ~0.75 s). Scoped to the literal `'PENDIENTE'`: NULL/`''` rows (legacy payments) are left alone. Since 11.0 it also relinks garments split off a paid row by the old Separar prendas (paid, empty estado) to the one `ENVIADA` invoice of the ticket with the same `fecha_pago`, `prenda` and `servicio`, copying its `verifactu_*` columns; a match with a cancelled / rectified invoice or with two invoices is only logged (`qWarning`), since relinking it would move income between periods. Every row it does relink is logged too (ticket, hash, amount, payment date): a payment made with Verifactu off by a version before 8.5 on the same day, garment and service would match the same way and can be found there. It also rounds to cents the open amounts (unpaid, never sent, unlocked) that an older Recogida m2 edit stored with three or four decimals - the way they will be charged; paid amounts stay as stored |
-| `aeatPendingRecordCount(db, environment)` | `int` | Records the direct AEAT client generated in `environment` (`pruebas` / `produccion`) and has not had confirmed (`aeat_records`, which exists only once the direct connection was used); 0 without it. The self-test's pre-production records never count for production |
-| `applySettledVerifactuResult(db, invoiceId, result)` | `int` | An AEAT outcome nobody waited for (direct client): applied to the paid rows of the event `invoiceId` names (`"31277"` / `"31277-1"`) through `updateTicketVerifactuFields`, which never rewrites a settled row. Rows updated, -1 when the id names no event. An accepted substitution rectificativa also marks its original RECTIFICADA, dated in an open period (`openPeriodDate`) |
-| `applySettledVerifactuCancellation(db, invoiceId, cancelDate, result)` | `int` | An accepted cancellation nobody waited for: `markInvoiceSeqCancelled` with the date moved to an open period. 1 marked, 2 already marked (its dialog did), 0 not marked, -1 when the id names no event (the self-test's `PRUEBA-...`). Leaves the connection as it found it |
-| `rectifiedTicketOf(db, nRecibo)` | `QString` | The ticket a rectificativa row corrects (`verifactu_rectifies_n_recibo`), or empty |
-| `refusedRectificationOf(db, original)` / `pendingRectificationOf(db, original)` | `QString` | The number of a rectificativa of `original` AEAT refused (paid row in `ERROR`; redone, it is resent under the same number) / still waiting for AEAT (`PENDIENTE`; until it settles the ticket is neither rectified nor cancelled again), or empty |
-| `pendingRectificationNumbers(db)` | `QStringList` | Every rectificativa row still `PENDIENTE` |
-| `markRectificationUnsent(db, number, reason)` / `markRectificationResent(db, number)` | `bool` | A `PENDIENTE` rectificativa nothing will send and no answer reached becomes `ERROR` with the reason (one the gateway answered without CSV stays `PENDIENTE`) / a refused one resent as it was, `PENDIENTE` again |
-| `nextTicketNumber(db, highestAtAeat, &ok)` | `int` | Next free ticket number: the higher of the stored maximum (numeric, so `"99999"` < `"100000"`) and `highestAtAeat`, plus one; 0 with `*ok` false when the maximum cannot be read - never 1 |
-| `nextVerifactuInvoiceSeq(db, ticket, aeatEnvironment)` | `int` | Next free `verifactu_invoice_seq` of a ticket: highest paid-row seq + 1 (0 with none), so a local-only payment still advances it, also past the `aeat_records` of that environment (`<n_recibo>-<seq>` ids, matched exactly, not by prefix; an empty environment counts all; no table: the paid-based value) |
-| `verifactuEventRecordXml(db, nRecibo, seq)` | `QString` | The stored AEAT record XML of one payment event (its paid rows), or empty |
-| `reconcileVerifactuFromAeat(db, nRecibo, seq, csv, url)` | `int` | Adopts the CSV / QR AEAT already holds for an event: a local `ERROR` / `PENDIENTE` (or NULL estado) paid row becomes `ENVIADA`. Rows updated; refuses an empty csv and never touches `ENVIADA` / `ANULADA` / `RECTIFICADA`. The caller must first confirm identity with `verifactuRemoteMatches()` |
-| `openPeriodDate(db, preferred)` | `QDate` | `preferred` when its quarter is open, else today, else the first day of the next open quarter: where a late change (a subtraction) may still be counted. Uses `quarterIsClosed` per candidate (`closedQuarterKeys` is the batch form) |
-| `garmentUnmeasured(garment, sizeText)` | `bool` | Pure: a garment priced by size (name contains `m2`) whose size is empty, 0 or unreadable: priced 0,00 and not chargeable until measured |
-| `readMaxValueInColumnFromTable(db, column, table)` | `int` | Max integer value in a column |
-| `readMaxNMinYearInColumnFromTable(db, maxNMin, column, table)` | `int` | Max (`true`) or min (`false`) year from a `dd-MM-yyyy` text column; rows whose year is not four digits (an empty date) are ignored, 0 when none |
-| `readColumnFromTable(db, column, table, orderByColumn)` | `QStringList` | All values in a column |
-| `readGarmentPrice(db, garment, service)` | `float` | Unit price for a garment (exact name, case-insensitive) + service (`Limp.` / `Plan.`); -1 when not found or stored with a comma, 0 for an unknown service |
-| `garmentImporte(quantityText, sizeText, unitPrice)` | `double` | Pure price math (no DB): comma-normalised `quantity * unitPrice`, times a non-zero size factor, clamped to `>= 0`, rounded to cents (the list price is re-rounded to cents first, since `readGarmentPrice` returns a float). Shared by `MainWindow`/`AddGarment` `setGarmentPrice` and Recogida's m2 size edit |
-| `roundToCents(value)` / `moneyText(value)` | `double` / `QString` | Money rounding: to cents, half away from zero, with a tolerance for binary error (28.405, stored as 28.40499… in a double, gives 28.41, the way AEAT received it). `moneyText` formats `"28.41"` and also takes text with a decimal comma. Every writer of `ingresos.importe` stores through it (`insertGarmentRow`, the three amount writers, `splitGarmentRow`) |
-| `displayMoney(value)` / `displayDecimal(stored)` | `QString` | What windows and printed tickets show: the decimal comma whatever the language (`"28,41"`, a size `"2,6"`), no thousands separator. Display only; storage, the maths and AEAT keep the dot |
-| `verifactuInvoiceId(nRecibo, seq)` | `QString` | Pure: AEAT InvoiceID for a payment event — bare `n_recibo` for seq 0, `<n_recibo>-<seq>` otherwise. Single source of truth used at submit / persist / cancel / reprint |
-| `verifactuDisplayInvoiceId(invoiceIds, fallback)` | `QString` | Pure: the InvoiceID to print for a ticket — first non-empty literal among the rows' `verifactu_invoice_id`, else the fallback (bare `n_recibo`). Backs `Imprimir::displayInvoiceId()`; scans (not row 0) so an unpaid row 0 of a multi-event ticket doesn't hide the real id |
-| `pendingVerifactuEvents(db, floorIso)` | `QVector<PendingVerifactuEvent>` | Startup-recovery feed: one `{n_recibo, seq, fechaPago, cliente, importe}` per `(n_recibo, verifactu_invoice_seq)` still PENDIENTE/empty **and paid** (`pagado = 'SI'` with a non-empty `fecha_pago`) whose earliest `fecha_pago` is on or after `floorIso` (like `refusedInvoices`; until 12.3 it was `fecha_recepcion`, which hid tickets received before the floor and paid after it), each with its own `SUM(importe)`. Since the `SIN COBRAR` split an unpaid row carries its own estado and the estado filter already drops it; the payment gate is kept as belt-and-braces because it also covers legacy NULL/`''` rows, which the backfill leaves untouched (issue #43). Grouping by seq (no seq=0 filter) surfaces partial-pay events for recovery. `fechaPago` is the original AEAT submission date a retry must reuse (date is part of the invoice identity); the floor gates on it too. Ordered `n_recibo DESC, seq`. Drives `PendingSubmitsDialog` |
-| `aeatExportRecords(db, from, to, records)` | `bool` | Exportar registros AEAT feed: one `{nRecibo, seq, invoiceId, fechaPago, importe, csv, estado, fechaAnulacion, rectifiesNRecibo, rectificationType, xml}` (plus `cancelXml`) per paid `(n_recibo, verifactu_invoice_seq)` event AEAT holds (stored `verifactu_xml` or a CSV), any estado, issued (earliest `fecha_pago` of the event) or cancelled (latest `fecha_anulacion`) between `from` and `to` inclusive - filtered on the event's own dates (`HAVING`), so a legacy invoice paid over several days is one record in one period; `importe` is the event's `SUM`, `invoiceId` the stored literal id (else `verifactuInvoiceId(n, seq)` for legacy rows); also grouped by CSV so two submissions never merge. Ordered by issue date, number, seq. Returns `false` when the query fails, so the menu reports an error instead of an empty file. Optional `int *undatedEvents` receives the number of such events with no readable `fecha_pago` (in no period at all), which the menu reports |
-| `removeSpecialChars(str)` | `QString` | Pure: strip diacritics/non-Latin1 marks (NFD → Latin-1 → drop `?`) for accent-insensitive name matching; case preserved. Used by `MainWindow::removeSpecialChar` |
-| `moneyParse(text, &value)` | `bool` | Strict amount reading: optional sign, digits, at most one decimal separator (dot or comma) with optional digits after it (the shop's older rows hold "6."). "1.234,50", "abc" and "" are refused, never read as 0: the amount writers (`updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte`, `updateGarmentServiceAndImporte`, `insertGarmentRow`) refuse them. The Verifactu feeds (`pendingVerifactuEvents`, `verifactuEventFor`, `submittedInvoiceEvents`, `aeatExportRecords`, `refusedInvoices`) sum `INGRESOS_IMPORTE_VALUE` (a legacy "5,50" is 5.50, not SQLite's 5) and round the totals to cents |
-| `selectFromWhereLike(db, item, table, col, search, exact, print)` | `QString` | Generic single-value lookup: `=` when exact, else a prefix with `%` and `_` taken literally |
-| `searchItemFromClient(db, item, client, print)` | `QString` | Lookup a field of the client with exactly this name (`clientes`): a prefix filled the form with another client's phone and address |
-| `readClientPhones(db, client)` | `QStringList` | `{tel_fijo, movil}` for an exact client name in one query (both empty if not found) |
-| `updateItemToClient(db, column, item, client)` | `bool` | Update a field for a client in `clientes` |
-| `addNewClient(db, name, telFijo, direccion, movil)` | `bool` | Insert a row into `clientes` |
-| `*ok` on the listings and the numbering | | `incomeTicketsBetweenDates`, `expensesBetweenDates`, `regularizationsBetweenDates`, `annualDetailsByQuarter`, `readMaxValueInColumnFromTable` and `nextTicketNumber` take an optional `bool *ok`, false when the query failed. An unreadable database is never an empty period (Contabilidad then writes no report and closes nothing) nor ticket number 1 (`nextTicketNumber` returns 0; MainWindow shows no number and refuses to save, Rectificar sends nothing). `readMaxValueInColumnFromTable` no longer pops a message box: the caller reports the failure |
-| `incomeTicketsBetweenDates(db, start, end)` | `QVector<IncomeTicketDetail>` | Contabilidad detail listing: one entry per paid `n_recibo` in `[start, end)` (cliente, first fecha_pago, summed importe, garment count), ordered by payment date. Filtered by `kIngresosIncomeWhere`. A comma-decimal garment is not summed but counted in `invalidAmounts`. It is the single source of the Contabilidad income figures. |
-| `expensesBetweenDates(db, start, end)` | `QVector<ExpenseDetail>` | Contabilidad detail listing: every `gastos` row in `[start, end)` (n_factura, empresa, servicio, fecha, iva, importe), ordered by date. A NULL `iva` is returned as `-1` so it is not mistaken for sin IVA. Filtered by `kGastosPeriodWhere`. A comma-decimal amount sets `invalidAmount` and is returned as 0. Single source of the Contabilidad gastos figures. |
-| `annualDetailsByQuarter(db, year)` | `QuarterlyDetails` | The two detail listings for a whole year, bucketed by quarter from one scan per table, for the annual report. Each bucket equals the per-quarter listing, asserted in `test_sql_lite`. |
-| `regularizationsBetweenDates(db, start, end)` | `QVector<RegularizationDetail>` | Paid `ANULADA` / `RECTIFICADA` tickets whose `fecha_anulacion` falls in `[start, end)`: cancellations / rectifications that Contabilidad subtracts in this period, while their payment period keeps them as income. One entry per `n_recibo`. `annualDetailsByQuarter` also fills `regularizations[4]`, bucketed by `fecha_anulacion`. A ticket with several cancelled payment events in one bucket is one entry keeping the **latest** payment date (by date), which lies in the period exactly when any of them does. |
-| `storeChargedGarments(db, nRecibo, amountByHash, paymentDate, seq, invoiceId)` | `bool` | Cobrar's store-first write (`PayDialog::storePayment`): the garments as paid + `PENDIENTE` with their seq, InvoiceID and amount in cents, in one transaction - all or none. False (nothing stored) when one was paid meanwhile, the date is in a closed quarter, or the database fails. |
-| `markPendingEventUnreconciled(db, nRecibo, seq)` | `bool` | Start-up recovery, *Marcar como error*: that event's empty / `PENDIENTE` rows become `ERROR` (a sibling event is left alone). |
-| `insertRectificativaRow` / `resetRefusedRectificativa` / `applyRectificativaResult` / `markRectificativaUnanswered` | | The rectificativa row of `RectifyInvoiceDialog` (`RectificativaRow`): inserted `PENDIENTE` (refused in a closed quarter, amount through `moneyText`); reset for the resend only while it is still `ERROR`; AEAT's answer stored with the dialog's estado, a refusal or an unknown outcome never rewriting an `ENVIADA` row (a late duplicate); `PENDIENTE` -> `ERROR` when its window closed unanswered. Since October 2026 no window writes `ingresos` with its own SQL. |
-| `markInvoiceSeqCancelled(db, nRecibo, seq, cancelDate, cancelXml = "")` | `bool` | `CancelInvoiceDialog` seam after an accepted AEAT cancellation: stores AEAT's cancellation record in `verifactu_cancel_xml` (never erased by a later empty one) and sets `verifactu_estado = 'ANULADA'` on that payment event's **paid** rows (`pagado = 'SI'`, the ones the invoice covered; unpaid garments sharing seq 0 stay chargeable), plus `fecha_anulacion = cancelDate`, never overwriting an existing date. Returns false if the UPDATE fails or matches no paid row. `migrateDatabase` repairs pre-10.12 data where this mark had also hit the unpaid remainder: those `ANULADA` rows go back to `SIN COBRAR` (unpaid `RECTIFICADA` rows are only logged for manual review, as an older substitution may have invoiced them). |
-| `markTicketRectified(db, nRecibo, rectificationDate)` | `bool` | `RectifyInvoiceDialog` seam after an accepted substitution rectificativa: `RECTIFICADA` on the ticket's **paid** rows, plus `fecha_anulacion = rectificationDate` (never overwritten). |
-| `ticketLastPaymentDate(db, nRecibo)` | `QDate` | Latest `fecha_pago` among the ticket's paid rows (invalid if none). `RectifyInvoiceDialog` refuses a rectificativa dated before it, so its subtraction can never land in a period that did not count the original. |
-| `quarterIsClosed(db, quarter, year)` / `quarterIsClosed(db, date)` | `bool` | The quarter has an open closure in `accounting_closures` (an invalid date: `false`). Like the other closure functions it leaves a connection that was already open open (Listado checks a gastos date while its table model reads through the same connection) |
-| `closeQuarter(db, quarter, year, reportFile)` / `reopenQuarter(db, quarter, year)` | `bool` | Append a closure / set `reopened_at` on the open one; `false` when the quarter is already in that state or the write failed |
-| `quarterClosures(db, quarter, year)` | `QVector<QuarterClosure>` | The quarter's close / reopen history, oldest first (`closedAt`, `reopenedAt`, `migrated`, `reportFile`) |
-| `closedQuarterKeys(db)` / `quarterKey(...)` | `QSet<int>` / `int` | Every closed quarter as `year * 10 + quarter`, for a view that checks many rows (Listado / GenListado gastos) |
-| `quarterHasMovements(db, quarter, year)` | `bool` | A payment (`fecha_pago`), cancellation (`fecha_anulacion`) or gasto (`fecha`) is dated in the quarter |
-| `insertExpenseInvoice(db, nFactura, servicio, descripcion, empresa, date, iva, importe)` | `bool` | Facturas' save: a `gastos` row with the next id (same statement), `importe` through `moneyText`; false when the date lies in a closed quarter (the statement's own `NOT closedQuarterSql` guard) or the insert fails |
-| `insertNewItemToTable(db, items, table)` | `bool` | Row insert for `clientes` / `prendas` / `proveedores` / `servicios` with explicit columns; another table or a wrong value count is refused (false, logged) |
-| `genHash16()` | `QString` | Generate a 16-char alphanumeric deduplication hash |
-| `updateTicketPickup(db, nRecibo, hash, fechaRecogida, estado)` | `bool` | RecogPrendas seam: set `fecha_recogida` + `estado` (PKU_YES; PKU_NO passes empty `fechaRecogida`); a row already `Anulado` is left alone |
-| `markTicketPickedUp(db, nRecibo, fechaRecogida)` | `bool` | "Recoger todo" seam: one `UPDATE ... SET estado='Recogido'` over the whole ticket, with `AND estado != 'Anulado'` so a voided garment is never revived to Recogido |
-| `updateTicketObservations(db, nRecibo, hash, observaciones)` | `bool` | RecogPrendas seam: set `observaciones` (OBSV) |
-| `refusedInvoices(db, floorIso)` / `refusedInvoiceCount(db, floorIso)` | `QVector<RefusedInvoice>` / `int` | Paid invoices (payment events) in `ERROR`, whose earliest payment is on or after the floor date (an empty or unreadable floor, or an unreadable payment date, hides nothing), newest first: ticket, seq, earliest payment date, amount, AEAT's reason, whether it is a rectificativa. The count is the list's size, so the red status bar and its list always agree |
-| `updateTicketSizeAndPrice(db, nRecibo, hash, size, importe)` | `bool` | RecogPrendas seam: set `size` + `importe` (SIZE_AND_PRICE). Like the other two amount writers (`updateGarmentQtyAndImporte`, `updateGarmentServiceAndImporte`) it stores `moneyText(importe)` (and a size typed with a comma with the dot) and only touches a row whose amount is still open, i.e. unpaid, not `ENVIADA` / `ERROR` / `ANULADA` / `RECTIFICADA` and not in a quarter closed by Contabilidad. A paid row is refused (`false`, logged), so the amounts of an invoice AEAT holds change only through Anular / Rectificar factura |
-| `splitGarmentRow(db, nRecibo, hash, nGarm)` | `QString` | RecogPrendas SEPARATE_GARM: moves `nGarm` garments (1 ≤ nGarm < cantidad) to a new row that copies every other column, `verifactu_*` included, in one transaction; the split-off part is the proportional `importe` in cents and the original keeps the exact remainder, so the rows add up to the stored amount and an older paid amount stored with three decimals is never re-rounded. Refused on a row locked by Contabilidad. Returns the new hash, empty when nothing was written |
-| `updateGarmentQtyAndImporte(db, nRecibo, hash, cantidad, importe)` | `bool` | RecogPrendas seam: set `cantidad` + `importe` (QTY) |
-| `insertGarmentRows(db, QList<IngresoGarmentRow>)` | `bool` | Insert the garments of a ticket in one transaction - all or none -, used by MainWindow `saveTicket` so a failed save leaves no partial ticket (which a retry would duplicate under the same number, or the start-up recovery would send to AEAT for part of its amount) |
-| `insertGarmentRow(db, IngresoGarmentRow)` | `bool` | Insert one `ingresos` garment row: `AddGarment` (fresh row: `"PENDIENTE"` when paid so the async submit can patch it, `"SIN COBRAR"` when not); `saveTicket` uses the all-or-none `insertGarmentRows`. `verifactuEstado` is the only verifactu_* column written |
-| `submittedInvoiceEvents(db, nRecibo, events)` | `bool` | Anular factura feed: one `{seq, invoiceId, importe, csv, estado, fechaPago}` per `verifactu_invoice_seq` of the ticket over its **paid** rows with an estado, `fechaPago` the event's earliest by date (the rule `verifactuEventFor` uses), the legacy InvoiceID rebuilt. One query for the whole ticket |
-| `verifactuEventFor(db, nRecibo, seq)` | `PendingVerifactuEvent` | One payment event's own submission data, over its **paid** rows only: `SUM(importe)` and the original `fecha_pago`. Empty `nRecibo` when no paid event exists for that seq. Backs `RecogPrendas::retryVerifactuSubmit`, which must re-submit that event's amount under `verifactuInvoiceId(n, seq)` on the date AEAT keyed it on — not the whole ticket under the bare `n_recibo` on the reception date |
-| `updateTicketVerifactuFields(db, nRecibo, result, seq)` | `int` | Writes an AEAT reply back onto a payment event's rows (csv / timestamp / estado / error / url_qr / xml / hash / invoice_id). Estado comes from `verifactuEstadoForResult()`, so a timeout / transport failure records **PENDIENTE and keeps its InvoiceID** (unknown outcome — AEAT may hold it) while only a definitive AEAT rejection becomes ERROR and clears the id. Scoped `WHERE n_recibo AND verifactu_invoice_seq AND pagado = 'SI'`. **The `pagado` predicate is load-bearing**: a ticket's *first* partial payment gets seq 0 (`nextVerifactuInvoiceSeq` counts paid rows, of which there are none yet) and the still-unpaid siblings are also seq 0, so scoping by seq alone stamped them ENVIADA + CSV for an invoice that never covered them. Shared by save-time submit, PayDialog, and both retry paths — all of which submit only paid rows Never rewrites a row that is already `ENVIADA`, `ANULADA` or `RECTIFICADA`. Returns the rows changed: 0 when the invoice was already settled (logged; MainWindow and Recogida then show "Respuesta de AEAT ... ignorada: la factura ya estaba registrada" and Recogida skips the AEAT query), -1 on a DB failure. |
-| `garmentIsLocallyVoidable(pagado, verifactuEstado)` | `bool` | Pure guard for VoidGarmentsDialog: true only when a row is unpaid (`pagado != "SI"`) AND never sent to AEAT — `verifactuEstadoIsUnsubmitted()`, i.e. SIN COBRAR / PENDIENTE / empty. A paid/ENVIADA row was registered at AEAT and must be cancelled via CancelInvoiceDialog instead |
-| `garmentExcludedFromTotals(verifactuEstado)` | `bool` | Pure: true for `ANULADA` / `RECTIFICADA`, the rows left out of every total. Built from the same `kTotalsExcludedEstados` list as the `kIngresosIncomeWhere` SQL, so the Recogida de Prendas `Importe total` and the Contabilidad income rule cannot drift apart. |
-| `voidGarmentRow(db, nRecibo, hash)` | `bool` | VoidGarmentsDialog seam: void one garment in place — `UPDATE ingresos SET estado='Anulado', verifactu_estado='ANULADA', fecha_anulacion = today, fecha_pago = fecha_recogida = ''` keyed by `(n_recibo, hash)`. The garment was never paid nor collected, so both of those dates stay empty; `pagado` is left untouched (`NO`). Caller gates the row through `garmentIsLocallyVoidable` first, and since 11.0 the UPDATE re-checks it (`kAmountEditableWhere`: unpaid, not sent / cancelled, unlocked) and returns false unless exactly one row changed. `migrateDatabase` moves the void date of pre-10.12 voids (stored in `fecha_pago`/`fecha_recogida`) into `fecha_anulacion` |
-| `ticketHasPaidGarment(db, nRecibo)` | `bool` | True if the ticket has any `pagado='SI'` row. AddGarment uses it to refuse appending garments to a paid (already AEAT-submitted) ticket |
-| `ticketAllGarmentsPaid(db, nRecibo)` | `bool` | True when **every** garment is `pagado='SI'` and there is at least one. Drives the `IMPORTE PAGADO` marker on a reprinted recibo, which shows the whole ticket total — "any paid" would mark a partially-paid ticket as settled in full. Strict `= 'SI'` so a blank never reads as paid |
+1. `migrateSchema`: base tables (`kBaseSchema`), the `verifactu_*` / `fecha_anulacion` columns, `accounting_closures` (`migrateAccountingClosures`, which carries over the old `edit_lock` closures once), the guard triggers.
+2. Only with `rewriteData` (false when no database copy could be taken first), the row repairs: `relabelUnpaidPending`, `moveVoidDates`, `reopenCancelledUnpaid`, `clearStampedUnpaid`, `relinkSplitRows`, `rehashDuplicates` (adds the `(n_recibo, hash)` unique index; before rounding), `roundOpenAmounts`, `fixCommaDecimals`, `normaliseEstadoCase`.
 
-## Usage pattern
+Rows that need a manual look are logged once (`migration_notes`).
 
-```cpp
-ConnectionScope scope(db);   // opens if closed; closes on return only what it opened
-QSqlQuery q(db);             // declared after the scope, so it goes first
-q.prepare("SELECT col FROM table WHERE id = :id");
-q.bindValue(":id", value);
-q.exec();
-```
+## Reads and numbering
 
-Every `sql_lite` function uses `ConnectionScope` (`sql_lite.h`): a connection the caller (or a window's model) holds open stays open, and early returns close correctly. `sql_lite` reads AeatStore's `aeat_records` table in two named helpers only (`pendingAeatRecordCount`, `aeatInvoiceNumbersOfTicket`); `test_aeat_store` runs them against the real table.
+| Function | Purpose |
+|----------|---------|
+| `readMaxValueInColumnFromTable`, `readMaxNMinYearInColumnFromTable`, `readColumnFromTable` | Numeric max; max/min four-digit year of a `dd-MM-yyyy` column; one column's values. |
+| `readGarmentPrice(db, garment, service)` | Unit price (`Limp.` / `Plan.`); -1 when not found or stored with a comma, 0 for an unknown service or a failed query. |
+| `selectFromWhereLike`, `searchItemFromClient`, `readClientPhones` | Single-value lookups (exact or literal prefix); `clientes` lookups are exact-name. |
+| `ticketHeader(db, n, &ok)` | `TicketHeader {found, client, receptionDate}`. |
+| `ticketHasPaidGarment(db, n, &ok)` | Any `pagado = 'SI'` row (AddGarment refuses a paid ticket); fails closed. |
+| `ticketAllGarmentsPaid` | Every row paid: the "IMPORTE PAGADO" marker on a reprint. |
+| `ticketLastPaymentDate` | Latest paid date (a rectificativa may not precede it). |
+| `nextTicketNumber(db, highestAtAeat, &ok)` | Above the stored numeric maximum and `highestAtAeat`; 0 with `*ok` false when unreadable. |
+| `nextRectificationNumber(db, highestAtAeat, &ok)` | Next `R-<n>` of the rectificativa series. |
+| `nextVerifactuInvoiceSeq(db, n, environment, &ok)` | Highest paid-row seq + 1 (0 with none), also past that environment's `aeat_records` ids (empty environment: all); `ok` false: do not charge. |
+| `aeatPendingRecordCount(db, environment)` | Records the direct client generated and AEAT has not confirmed; 0 without `aeat_records`. |
+| `aeatProductionStartIso(db)` | Day (ISO) the direct client first ran in production here, or empty. |
+| `verifactuRecoveryFloorIso(db, floorIso, directProduction)` | The floor the pending / refused lists apply: the setting, or the production start when later and in production. |
+| `verifactuEventRecordXml`, `verifactuEventFor` | One payment event's stored record XML; its own total and original `fecha_pago` (paid rows only), for a resend. |
 
-Always use named parameters (`:param`). Never build SQL by string concatenation — SQL injection risk.
+## Contabilidad listings and quarters
 
-## Accounting lock logic
+| Function | Purpose |
+|----------|---------|
+| `incomeTicketsBetweenDates(db, start, end, &ok)` | One entry per paid `n_recibo` in `[start, end)`; an unreadable amount is counted in `invalidAmounts`, not summed. |
+| `expensesBetweenDates` | Every `gastos` row in the range; NULL iva is -1; an unreadable amount sets `invalidAmount`. |
+| `regularizationsBetweenDates` | Paid ANULADA / RECTIFICADA tickets by `fecha_anulacion` (subtracted in that period; the payment period keeps the income). |
+| `annualDetailsByQuarter(db, year, &ok)` | The three listings for a year bucketed by quarter in one scan each (equal to the per-quarter listings). |
+| `quarterIsClosed(db, q, y)` / `(db, date)` | An open closure exists; a query that cannot run reads as closed; invalid date false. |
+| `closeQuarter`, `reopenQuarter`, `quarterClosures` | Append a closure / reopen the open one (false if already in that state) / the history. |
+| `closedQuarterKeys`, `quarterHasMovements`, `openPeriodDate(db, preferred)` | Keys of all closed quarters; anything dated in the quarter; the nearest open date for a late subtraction. |
 
-Contabilidad's quarterly close lives in the `accounting_closures` table (schema in `docs/architecture.md`), created by `migrateDatabase` (`migrateAccountingClosures`). The first time, in one transaction, it carries over every quarter the old per-row `edit_lock` flags closed (`origin = 'migration'`); after that `edit_lock` is never read, so a quarter reopened later is not closed again by stale flags. If that migration fails it is rolled back, logged as critical and retried at the next start.
+`accounting_closures` is append-only (triggers) with one open closure per quarter (partial unique index).
 
-`quarterIsClosed()` tells whether the quarter of a date is closed. A row is locked when its date (`ingresos.fecha_pago`, `gastos.fecha`) is in a closed quarter, so an unpaid row (no `fecha_pago`) never is; the writers also refuse such rows themselves (`kUnlockedWhere` / `closedQuarterSql`, a `NOT EXISTS` on the closure of the row's quarter). `quarterIsClosed` fails closed: a query that cannot run reads as closed. The opposite holds for dates: an empty or malformed one (an ISO `2026-03-15` is read by `substr(...,7,4)`) is in no quarter and counts as unlocked (`test_closedQuarterSql_isoDateIsUnlocked`). The table is append-only (triggers), and the partial unique index allows one open closure per quarter, so the database itself refuses a double close.
+## Verifactu state of `ingresos`
 
-The data layer shows nothing: no `QMessageBox` (it links Qt Gui, not Widgets); a failure is logged and returned, and the window shows it in its result panel.
+| Function | Purpose |
+|----------|---------|
+| `updateTicketVerifactuFields(db, n, result, seq)` | Writes an AEAT reply onto the paid rows of that event only (`pagado = 'SI'` is load-bearing: unpaid siblings share seq 0). Never rewrites ENVIADA / ANULADA / RECTIFICADA. Rows changed; 0 already settled; -1 failure. |
+| `applySettledVerifactuResult(db, invoiceId, result)` | An outcome nobody waited for, applied to the event the id names; an accepted substitution also marks the original RECTIFICADA in an open period. -1: id names no event. |
+| `applySettledVerifactuCancellation(db, invoiceId, date, result)` | Late accepted cancellation: 1 marked, 2 already marked, 0 not, -1 no event. |
+| `markInvoiceSeqCancelled(db, n, seq, date, cancelXml)` | ANULADA on the event's paid rows with `fecha_anulacion` (existing date kept); rows already ANULADA keep state and date, and an empty cancellation XML is filled. False when no paid row matched. |
+| `markTicketRectified(db, n, date)` | RECTIFICADA on the paid rows with `fecha_anulacion`. |
+| `markPendingEventUnreconciled(db, n, seq)` | Start-up "Marcar como error": that event's empty / PENDIENTE **paid** rows -> ERROR. |
+| `reconcileVerifactuFromAeat(db, n, seq, csv, url)` | Adopts AEAT's CSV / QR: ERROR / PENDIENTE paid rows -> ENVIADA; never touches ENVIADA / ANULADA / RECTIFICADA. Caller confirms identity first. |
+| `pendingVerifactuEvents(db, floorIso)` | Start-up recovery feed: paid events still PENDIENTE / empty, earliest `fecha_pago` on or after the floor. |
+| `refusedInvoices` / `refusedInvoiceCount(db, floorIso)` | Paid events in ERROR on or after the floor, newest first; the count is the list's size. |
+| `submittedInvoiceEvents(db, n, events)` | Anular factura feed: one entry per seq over paid rows with an estado. |
+| `aeatExportRecords(db, from, to, records, &undated)` | Export feed: events AEAT holds, issued or cancelled in the range; false on query failure. |
+
+### Rectificativas (`RectificativaRow`)
+
+`insertRectificativaRow` (PENDIENTE; refused in a closed quarter), `resetRefusedRectificativa` (only a row still in ERROR), `applyRectificativaResult` (a refusal never rewrites ENVIADA), `markRectificativaUnanswered` (PENDIENTE -> ERROR), `markRectificationUnsent`, `markRectificationResent`. Queries: `rectifiedTicketOf`, `liveRectificationOf`, `rectifiedDifferences`, `differenceRectificationCount`, `refusedRectificationOf`, `pendingRectificationOf`, `pendingRectificationNumbers`.
+
+## `ingresos` writers of the windows
+
+| Function | Caller and rule |
+|----------|-----------------|
+| `insertGarmentRow` / `insertGarmentRows` | AddGarment / `saveTicket`; the latter is all-or-none. `verifactuEstado` is the only `verifactu_*` column written (`PENDIENTE` paid, `SIN COBRAR` unpaid). |
+| `storeChargedGarments(db, n, amountByHash, date, seq, invoiceId)` | Cobrar: garments stored paid + PENDIENTE, all or none. False when one was paid meanwhile, was voided, the date is in a closed quarter, or the database fails. |
+| `updateTicketPickup`, `markTicketPickedUp` | Pickup date + estado (an `Anulado` row is left alone). |
+| `updateTicketObservations` | Notes. |
+| `updateTicketSizeAndPrice`, `updateGarmentQtyAndImporte`, `updateGarmentServiceAndImporte` | Amount edits, only while the amount is open; a paid row is refused (it changes only via Anular / Rectificar factura). |
+| `splitGarmentRow(db, n, hash, nGarm)` | Moves `nGarm` garments to a new row copying every other column (same invoice and estado); proportional cents, original keeps the remainder. Returns the new hash or empty. |
+| `voidGarmentRow` | Void in place (Anulado / ANULADA, `fecha_anulacion` today, dates emptied); re-checks it is unsent and exactly one row changed. |
+| `updateItemToClient`, `addNewClient`, `insertNewItemToTable` | `clientes` and the list tables (`clientes` / `prendas` / `proveedores` / `servicios`; other tables refused). |
+| `insertExpenseInvoice` | A `gastos` row with the next id; false in a closed quarter. |
+
+## Tests
+
+`test_sql_lite` (functions, listings, row state, migrations) and `test_aeat_store`. See [unit_suites.md](../testing/unit_suites.md).
