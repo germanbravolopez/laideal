@@ -216,14 +216,19 @@ VerifactuCoordinator::Notice VerifactuCoordinator::aeatEnvironmentNotice() const
     // real sales must never go there unnoticed.
     Notice notice;
     const bool direct = m_integration && m_integration->isDirect();
-    const QDate productionStart = direct ? m_integration->productionStartDate() : QDate();
-    // In production too: which AEAT the tickets go to is always in sight, with the day it began.
-    if (productionStart.isValid())
-        notice.text = MW_TR("AEAT: PRODUCCIÓN desde el %1").arg(dbDateText(productionStart));
-    else
-        notice.text = UiKit::warnHtml(MW_TR("AEAT: entorno de PRUEBAS (sin efectos tributarios)"));
+    notice.text = direct ? aeatEnvironmentText(m_integration->environmentName(), m_integration->productionStartDate())
+                         : aeatEnvironmentText(QString(), QDate());
     notice.visible = direct;
     return notice;
+}
+
+QString VerifactuCoordinator::aeatEnvironmentText(const QString &environmentName, const QDate &productionStart)
+{
+    // In production too: which AEAT the tickets go to is always in sight, with the day it began.
+    if (environmentName != QLatin1String("produccion"))
+        return UiKit::warnHtml(MW_TR("AEAT: entorno de PRUEBAS (sin efectos tributarios)"));
+    return productionStart.isValid() ? MW_TR("AEAT: PRODUCCIÓN desde el %1").arg(dbDateText(productionStart))
+                                     : MW_TR("AEAT: PRODUCCIÓN");
 }
 
 VerifactuCoordinator::Notice VerifactuCoordinator::unsentRecordsNotice() const

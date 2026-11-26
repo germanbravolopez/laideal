@@ -5132,6 +5132,33 @@ private slots:
         QCOMPARE(ticket->text(), first);
     }
 
+    // One click loads the row once (the highlight's change and the click are one gesture); one
+    // arrow key loads the next row once; a click on the row already loaded still reloads it.
+    void test_recogida_aClickLoadsTheRowOnce()
+    {
+        QVERIFY(E2e::seedGarment(m_db, "8135", "h8135a", "10.00", today()));
+        QVERIFY(E2e::seedGarment(m_db, "8136", "h8136a", "5.00", today()));
+        RecogPrendas rp(m_db);
+        rp.show();
+        rp.findChild<QLineEdit *>("le_search")->setText("cliente e2e");
+        QMetaObject::invokeMethod(&rp, "on_pb_search_clicked");
+        auto *view = rp.findChild<QTableView *>("tableView");
+        QCOMPARE(view->model()->rowCount(), 2);
+        const auto clickRow = [&](int row) {
+            QTest::mouseClick(view->viewport(), Qt::LeftButton, Qt::NoModifier,
+                              view->visualRect(view->model()->index(row, 0)).center());
+        };
+        rp.rowLoadCount = 0;
+        clickRow(0);
+        QCOMPARE(rp.rowLoadCount, 1);
+        clickRow(0);
+        QCOMPARE(rp.rowLoadCount, 2);
+        clickRow(1);
+        QCOMPARE(rp.rowLoadCount, 3);
+        QTest::keyClick(view, Qt::Key_Up);
+        QCOMPARE(rp.rowLoadCount, 4);
+    }
+
     // After Anular prendas the message names the ticket the dialog voided in, not the one
     // Recogida opened it on, when the operator searched another one there.
     void test_recogida_voidMessageNamesTheDialogsTicket()

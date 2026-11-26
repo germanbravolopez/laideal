@@ -577,6 +577,7 @@ void MainWindow::openSettings()
     dlg.setCertificateChoices(certificates);
     dlg.setDirectPendingCount(aeatPendingRecordCount(db, AppSettings::instance()->aeatDirectProduction()
                                                               ? QStringLiteral("produccion") : QStringLiteral("pruebas")));
+    dlg.setProductionRefusedCount(refusedInvoiceCount(db, recoveryFloorIso()));
     connect(&dlg, &SettingsDialog::aeatSelfTestRequested, &dlg,
             [this, &dlg](const QString &nif, const QString &name, const QString &thumbprint,
                          const QString &file, const QString &password) {

@@ -173,6 +173,41 @@ bool Imprimir::checkAnyItemPaid()
     return false;
 }
 
+QImage shrinkReceivedQr(const QImage &qr, int maxWidth)
+{
+    if (qr.isNull() || maxWidth <= 0 || qr.width() <= maxWidth)
+        return qr;
+    const QImage source = qr.convertToFormat(QImage::Format_RGB32);
+    const int width = source.width();
+    const int height = source.height();
+    const auto uniformBlocks = [&source, width, height](int factor) {
+        for (int y = 0; y < height; y += factor)
+            for (int x = 0; x < width; x += factor) {
+                const QRgb colour = source.pixel(x, y);
+                for (int dy = 0; dy < factor; ++dy)
+                    for (int dx = 0; dx < factor; ++dx)
+                        if (source.pixel(x + dx, y + dy) != colour)
+                            return false;
+            }
+        return true;
+    };
+    for (int factor = (width + maxWidth - 1) / maxWidth; factor < width; ++factor) {
+        if (width % factor != 0 || height % factor != 0 || !uniformBlocks(factor))
+            continue;
+        QImage out(width / factor, height / factor, QImage::Format_RGB32);
+        for (int y = 0; y < out.height(); ++y)
+            for (int x = 0; x < out.width(); ++x)
+                out.setPixel(x, y, source.pixel(x * factor, y * factor));
+        return out;
+    }
+    qWarning() << "Imprimir: QR resampled to fit the paper, no whole factor keeps its modules";
+    QImage out = source.scaled(maxWidth, maxWidth, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    for (int y = 0; y < out.height(); ++y)
+        for (int x = 0; x < out.width(); ++x)
+            out.setPixel(x, y, qGray(out.pixel(x, y)) < 128 ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+    return out;
+}
+
 QPixmap Imprimir::resolveQrCode()
 {
     if (!qrCode.isNull())
@@ -411,9 +446,7 @@ void Imprimir::buildTicket(bool copyForClient, bool addPayedInfo)
         if (d.qr.isNull()) {
             qWarning() << "Imprimir: QR not readable, printed as received";
             d.qr = qr.toImage();
-            // Never wider than the paper (modules stay crisp); one that fits is untouched.
-            if (d.qr.width() > paperDots())
-                d.qr = d.qr.scaled(paperDots(), paperDots(), Qt::KeepAspectRatio, Qt::FastTransformation);
+            d.qr = shrinkReceivedQr(d.qr, paperDots());   // never wider than the paper
         }
         // Disp. Final Primera RD 1007/2023: print the verification leyenda only
         // for rows AEAT actually accepted (estado = ENVIADA), never for tickets

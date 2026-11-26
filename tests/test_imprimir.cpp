@@ -33,6 +33,27 @@ class TestImprimir : public QObject
     QString m_transportError;
 
     // Presses the dialog's Imprimir button for a ticket; returns the result panel text.
+    // A symbol-like image: `modules` x `modules` pseudo-random modules of `scale` px, in a 4-module quiet zone.
+    static QImage blockImage(int modules, int scale, QVector<QVector<bool>> *matrix = nullptr)
+    {
+        const int total = modules + 8;
+        QImage img(total * scale, total * scale, QImage::Format_RGB32);
+        img.fill(Qt::white);
+        QVector<QVector<bool>> dark(modules, QVector<bool>(modules, false));
+        for (int y = 0; y < modules; ++y)
+            for (int x = 0; x < modules; ++x) {
+                dark[y][x] = ((x * 7 + y * 13 + x * y) % 5) < 2;
+                if (dark[y][x])
+                    for (int dy = 0; dy < scale; ++dy)
+                        for (int dx = 0; dx < scale; ++dx)
+                            img.setPixel((x + 4) * scale + dx, (y + 4) * scale + dy, qRgb(0, 0, 0));
+            }
+        if (matrix)
+            *matrix = dark;
+        return img;
+    }
+
+    // Presses the dialog's Imprimir button for a ticket; returns the result panel text.
     static QString press(Imprimir *dlg, const QString &ticket)
     {
         dlg->le_n_ticket->setText(ticket);
@@ -435,6 +456,38 @@ private slots:
         QVERIFY(m_popups->messages().isEmpty());
         dlg->close();
         QTRY_VERIFY(dlg.isNull());
+    }
+
+    // A symbol wider than the paper loses whole pixels per module: the same modules, smaller.
+    void test_receivedQrShrinksByAWholeFactor()
+    {
+        QVector<QVector<bool>> dark;
+        const QImage wide = blockImage(29, 24, &dark);               // 37 modules x 24 px = 888 px
+        QVERIFY(wide.width() > 576);
+        const QImage out = shrinkReceivedQr(wide, 576);
+        QVERIFY(out.width() <= 576 && out.width() < wide.width());
+        QCOMPARE(out.width() % 37, 0);
+        const int scale = out.width() / 37;
+        for (int y = 0; y < 29; ++y)
+            for (int x = 0; x < 29; ++x)
+                QCOMPARE(qGray(out.pixel((x + 4) * scale + scale / 2, (y + 4) * scale + scale / 2)) < 128, dark[y][x]);
+        QCOMPARE(shrinkReceivedQr(out, 576), out);                    // one that fits is untouched
+    }
+
+    // No exact factor (601 px is prime, so no block size tiles it): resampled, still black and white.
+    void test_receivedQrWithoutAWholeFactorStillFitsInBlackAndWhite()
+    {
+        QImage wide(601, 601, QImage::Format_RGB32);
+        for (int y = 0; y < wide.height(); ++y)
+            for (int x = 0; x < wide.width(); ++x)
+                wide.setPixel(x, y, ((x / 7 + y / 7) % 2) ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+        const QImage out = shrinkReceivedQr(wide, 576);
+        QVERIFY(!out.isNull() && out.width() <= 576 && out.width() > 0);
+        for (int y = 0; y < out.height(); ++y)
+            for (int x = 0; x < out.width(); ++x) {
+                const QRgb p = out.pixel(x, y);
+                QVERIFY(p == qRgb(0, 0, 0) || p == qRgb(255, 255, 255));
+            }
     }
 };
 

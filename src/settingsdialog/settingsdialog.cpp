@@ -459,6 +459,13 @@ bool SettingsDialog::confirmConnectionChange(const AppSettings *s)
                                 "antes de dejar la AEAT real.").arg(m_directPending));
         return false;
     }
+    // A refused production invoice would fall before the next start day and never be resendable.
+    if (leavingProduction && m_productionRefused > 0) {
+        QMessageBox::warning(this, tr("Conexión con la AEAT"),
+                             tr("Hay %1 factura(s) rechazada(s) por la AEAT real. Reenvíelas o anúlelas "
+                                "(aviso rojo de la barra de estado) antes de dejar la AEAT real.").arg(m_productionRefused));
+        return false;
+    }
     if (leavingProduction
         && QMessageBox::question(this, tr("Conexión con la AEAT"),
                                  tr("Las facturas dejarán de registrarse en la AEAT real. ¿Salir de PRODUCCIÓN?"),

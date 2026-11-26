@@ -45,6 +45,7 @@ public:
     MySortFilterProxyModel *proxyModel = nullptr;
     bool isCellClicked = false;
     int rowClickedCell = -1;
+    int rowLoadCount = 0;               // loadRow calls; only tests read it
 
     // Searches the ticket and selects its refused row of payment `seq` (any when -1, else its first row).
     void showTicket(const QString &nRecibo, int seq = -1);

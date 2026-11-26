@@ -29,6 +29,8 @@ public:
     // Records the direct connection generated and AEAT has not confirmed: while there
     // are any, the connection cannot be switched back to the gateway.
     void setDirectPendingCount(int count) { m_directPending = count; }
+    // Invoices the real AEAT refused (the red count of the status bar): production is not left behind them.
+    void setProductionRefusedCount(int count) { m_productionRefused = count; }
     // Run on accept when the direct connection goes to PRODUCTION, before the question:
     // the reason it cannot (certificate, no answer from the real AEAT), or empty. Given by
     // MainWindow (this module does not know AEAT); unset: nothing is checked.
@@ -106,6 +108,7 @@ private:
     bool       m_selfTestAllowed = true;
     QCheckBox *m_vDirectProduction = nullptr;     // direct connection: production AEAT (off: pre-production)
     int        m_directPending = 0;
+    int        m_productionRefused = 0;
     ProductionCheck m_productionCheck;
     QLabel    *m_vKeyUnreadable = nullptr;
     QLabel    *m_vCertPasswordUnreadable = nullptr;

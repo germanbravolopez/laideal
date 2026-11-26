@@ -211,6 +211,19 @@ private slots:
         QVERIFY(!m_coordinator->aeatEnvironmentNotice().visible);   // only the direct client has one
         QVERIFY(!m_coordinator->unsentRecordsNotice().visible);
     }
+
+    // A production client whose start day cannot be read still says PRODUCCIÓN, never PRUEBAS.
+    void test_environmentTextFollowsTheEnvironment()
+    {
+        const QDate day(2026, 11, 20);
+        const QString dated = VerifactuCoordinator::aeatEnvironmentText("produccion", day);
+        QVERIFY2(dated.contains("PRODUCCIÓN desde el 20-11-2026"), qPrintable(dated));
+        const QString undated = VerifactuCoordinator::aeatEnvironmentText("produccion", QDate());
+        QVERIFY2(undated.contains("PRODUCCIÓN") && !undated.contains("PRUEBAS") && !undated.contains("desde"),
+                 qPrintable(undated));
+        QVERIFY(VerifactuCoordinator::aeatEnvironmentText("pruebas", QDate()).contains("PRUEBAS"));
+        QVERIFY(VerifactuCoordinator::aeatEnvironmentText("pruebas", day).contains("PRUEBAS"));
+    }
 };
 
 QTEST_MAIN(TestVerifactuCoordinator)
