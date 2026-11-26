@@ -83,6 +83,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | | `aeatdirectbackend.*` | Direct client flow |
 | | `aeatrecord.*`, `aeathash.*`, `aeatqr.*`, `aeatresponse.*` | Records and envelopes, huella and QR URL, local QR, replies |
 | | `aeatstore.*`, `aeatchaincheck.*` | `aeat_*` tables, stored-chain verifier |
+| | `aeatchainsync.*` | The chain rules of a sync (`AeatChainSync::plan`): which record is the tip, restart, installation number; plain data, no store |
 | | `aeatcertificate.*`, `aeattransport.*` | Certificate (store or .pfx), WinHTTP SOAP |
 | | `aeatselftest.*`, `aeatconnectionprobe.*` | Test-environment rehearsal; query-only connection test |
 | | `producerdeclaration.*`, `testhostguard.h` | Declaración responsable (art. 15); under `LAIDEAL_TEST=1` the transports refuse any host but this machine |
@@ -107,7 +108,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | `mkdocs.yml`, `pyproject.toml` | Documentation site configuration and its tooling |
 | `releases/` | `package.ps1` (packaging recipe), `release.ps1` / `release.bat` (local fallback), `laideal.iss` (installer) |
 | `resources/` | `laideal.qrc` (icon, release notes, Qt translation), `laideal.rc.in`, `i18n/` |
-| `tests/CMakeLists.txt` | 34 CTest tests (`grep -c "add_test(NAME" tests/CMakeLists.txt`): Qt Test suites plus the `aeat_xsd` schema check. `updater_dialog` is the exe of `test_versiondialog.cpp`, `version_compare` the exe of `test_updater.cpp`. Each suite: [testing/unit_suites.md](testing/unit_suites.md) |
+| `tests/CMakeLists.txt` | 35 CTest tests (`grep -c "add_test(NAME" tests/CMakeLists.txt`): Qt Test suites plus the `aeat_xsd` schema check. `updater_dialog` is the exe of `test_versiondialog.cpp`, `version_compare` the exe of `test_updater.cpp`. Each suite: [testing/unit_suites.md](testing/unit_suites.md) |
 | `tests/support/` | Fake Verifactu and AEAT servers, `modalautocloser.h`, `modaldriver.h`, `testschema.h`, `e2efixture.h`, `escpospreview.h` |
 | `tests/tools/` | `fake_aeat_server`, `escpos_preview`, `aeat_query_dump` (saves AEAT's raw reply to a query; test environment, local use); built with the tests, not CTest suites |
 | `tests/ui/` | Python UI smoke test (`smoke.py`, `block_a.py` to `block_e.py`, `actions.py`, `laideal_ui.py`, `seed.py`, `printer.py`, `aeat_preproduction.py`) |

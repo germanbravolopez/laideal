@@ -25,6 +25,7 @@ One entry per CTest suite, grouped by module: the CTest name, the test file, the
 | `verifactu_response` (offscreen) | `test_verifactu_response.cpp` | `verifactu` | Gateway reply parsing (error and success shapes, huella, QR decode), query replies from captured real answers, matching a remote record, duplicate detection |
 | `aeat_hash` | `test_aeat_hash.cpp` | `verifactu` | The huella and QR URL against the official AEAT vectors; value trimming, two-decimal amounts, timestamps with a `+hh:mm` offset |
 | `aeat_chaincheck` | `test_aeat_chaincheck.cpp` | `verifactu` | `AeatChainCheck`: recomputed huellas, links per issuer, a chain restart, a restored copy's continuation |
+| `aeat_chain_sync` | `test_aeat_chain_sync.cpp` | `verifactu` | `AeatChainSync`: which record is the chain's tip from plain data - continuation, empty first sync, records before a restart, another system's records, a lost cancellation, adopting the installation number
 | `aeat_record` | `test_aeat_record.cpp` | `verifactu` | Element order and values of the alta, anulación and SOAP envelopes; writes the samples `aeat_xsd` validates |
 | `aeat_xsd` | `tests/aeat/validate_aeat_xml.py` | Python + lxml | The samples and the reply fixtures against AEAT's own XSDs (`tests/fixtures/aeat-xsd`); skipped without lxml |
 | `aeat_response` | `test_aeat_response.cpp` | `verifactu` | AEAT replies and faults and their mapping, query results, record summaries, the chain tip, a lost cancellation, picking the record of an invoice number |
@@ -59,4 +60,4 @@ One entry per CTest suite, grouped by module: the CTest name, the test file, the
 
 ---
 
-That is 31 suites here and 3 in [e2e.md](e2e.md): the 34 `add_test` entries of `tests/CMakeLists.txt`.
+That is 32 suites here and 3 in [e2e.md](e2e.md): the 35 `add_test` entries of `tests/CMakeLists.txt`.

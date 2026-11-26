@@ -25,6 +25,8 @@ set(PROJECT_SOURCES
     aeatstore.cpp
     aeatchaincheck.h
     aeatchaincheck.cpp
+    aeatchainsync.h
+    aeatchainsync.cpp
     aeatqr.h
     aeatqr.cpp
     aeatcertificate.h

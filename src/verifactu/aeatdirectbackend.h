@@ -248,14 +248,8 @@ private:
     QList<AeatResponse::RecordSummary> localCandidates();
     void syncFinished(bool ok, const QString &message);
     bool adoptTip(const QList<AeatResponse::RecordSummary> &candidates, QString *message);
-    // adoptTip's steps: the candidates the last chain restart leaves; the chain (unproven
-    // returned cancellations demoted, the current head added); the chain's number; the text.
-    QList<AeatResponse::RecordSummary> candidatesAfterRestart(const QList<AeatResponse::RecordSummary> &found);
-    QList<AeatResponse::RecordSummary> chainOf(QList<AeatResponse::RecordSummary> &candidates, const QSet<QString> &ours,
-                                               const AeatRecord::PreviousRecord &head) const;
-    bool adoptInstallationNumber(const QList<AeatResponse::RecordSummary> &chain, const AeatResponse::RecordSummary &tip,
-                                 QString *message);
-    QString continuationMessage(const AeatResponse::RecordSummary &tip);
+    // Stores the chain's installation number (empty: nothing to adopt) and makes it ours.
+    bool adoptInstallationNumber(const QString &chainNumber, QString *message);
     // Starts the issuer's chain again under a new NumeroInstalacion (a new SIF). Not while
     // records of the old chain are still to send: they go first, then the sync runs again.
     bool restartChain(const QString &cancelledInvoice, QString *message);

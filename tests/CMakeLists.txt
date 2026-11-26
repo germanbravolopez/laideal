@@ -183,6 +183,15 @@ target_link_libraries(test_aeat_chaincheck PRIVATE
 add_test(NAME aeat_chaincheck
     COMMAND test_aeat_chaincheck -o ${CMAKE_BINARY_DIR}/test-results-aeat_chaincheck.xml,junitxml -o -,txt)
 
+# AeatChainSync: which record is the chain's tip, from plain data. Pure.
+add_executable(test_aeat_chain_sync test_aeat_chain_sync.cpp)
+target_link_libraries(test_aeat_chain_sync PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    verifactu
+)
+add_test(NAME aeat_chain_sync
+    COMMAND test_aeat_chain_sync -o ${CMAKE_BINARY_DIR}/test-results-aeat_chain_sync.xml,junitxml -o -,txt)
+
 # AeatRecord: the direct client's records and SOAP envelopes. It also writes sample
 # envelopes into build/aeat-xml, which aeat_xsd validates against the official AEAT
 # schemas (tests/fixtures/aeat-xsd, unchanged) with Python + lxml - skipped when
