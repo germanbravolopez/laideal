@@ -111,6 +111,16 @@ QList<AeatCertificate::Info> AeatCertificate::personalCertificates()
     return out;
 }
 
+QString AeatCertificate::expiryProblem(const QDateTime &expiry, const QDateTime &now)
+{
+    // An unreadable date fails closed, with its own message.
+    if (!expiry.isValid())
+        return tr("No se puede leer la fecha de caducidad del certificado electrónico.");
+    if (expiry < now)
+        return tr("El certificado electrónico caducó el %1.").arg(expiry.toString(QLatin1String(AeatHash::kDateFormat)));
+    return QString();
+}
+
 bool AeatCertificate::accept(const void *context, QString *error)
 {
 #ifdef Q_OS_WIN
@@ -119,11 +129,8 @@ bool AeatCertificate::accept(const void *context, QString *error)
         *error = tr("El certificado %1 no tiene su clave privada disponible.").arg(info.subject);
         return false;
     }
-    if (info.expiry < QDateTime::currentDateTime()) {
-        *error = tr("El certificado electrónico caducó el %1.").arg(info.expiry.toString(QLatin1String(AeatHash::kDateFormat)));
-        return false;
-    }
-    return true;
+    *error = expiryProblem(info.expiry, QDateTime::currentDateTime());
+    return error->isEmpty();
 #else
     Q_UNUSED(context)
     *error = tr("El certificado electrónico solo se puede usar en Windows.");

@@ -157,10 +157,15 @@ private:
     QString m_emitterNif;
     QString m_emitterName;
     QString m_lastError;
-    QHash<QString, QString> m_inFlight;   // request id -> invoice id, until its answer
+    struct InFlight {
+        QString        invoiceId;
+        const QObject *backend;           // the backend that owes the answer
+    };
+    QHash<QString, InFlight> m_inFlight;  // request id -> its invoice and backend, until its answer
     QDateTime m_sessionStart;             // the first initialize(): later backends are the same session
 
     void loadEmitterConfiguration();
+    void dropInFlightOf(const QObject *backend);
     // Each returns true after setting m_lastError, when the operation must not go on.
     bool refusesChainedRecord(const char *operation);
     bool refusesUnconfigured(const char *operation);

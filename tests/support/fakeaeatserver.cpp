@@ -219,9 +219,19 @@ void FakeAeatServer::handle(QTcpSocket *socket)
                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
         guard->disconnectFromHost();
     };
-    if (reply.delayMs > 0)
+    if (reply.gated)
+        m_gated.append(send);
+    else if (reply.delayMs > 0)
         QTimer::singleShot(reply.delayMs, this, send);
     else
+        send();
+}
+
+void FakeAeatServer::releaseGated()
+{
+    const auto held = m_gated;
+    m_gated.clear();
+    for (const auto &send : held)
         send();
 }
 

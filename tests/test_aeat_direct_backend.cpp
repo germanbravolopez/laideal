@@ -5,12 +5,16 @@
 
 #include <QtTest>
 #include <QTcpServer>
+#include <QTcpSocket>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QSslKey>
 #include <QSslSocket>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 
 #include "aeatcertificate.h"
@@ -18,6 +22,10 @@
 #include "aeatselftest.h"
 #include "aeatconnectionprobe.h"
 #include "aeatdirectbackend.h"
+#include "appsettings.h"
+#include "verifactuintegration.h"
+#include "verifactumanager.h"
+#include "verifactuconfig.h"
 #include "aeatstore.h"
 #include "sql_lite.h"
 #include "fakeaeatserver.h"
@@ -455,13 +463,14 @@ private slots:
         QVERIFY(sync(backend));
         QSignalSpy settled(&backend, &AeatDirectBackend::recordSettled);
         m_server->enqueue({});                                            // the submission: duplicate
-        m_server->enqueue({ QByteArray(), 200, 2000 });                   // the verifying query, slow
+        m_server->enqueue({ QByteArray(), 200, 0, false, false, true });  // the verifying query, held
         const int before = m_server->requests().size();
         const QString id = backend.submitInvoiceAsync(ticket("530", 10));
         QTRY_VERIFY_WITH_TIMEOUT(queriesSince(before) == 1, 10000);
         AeatStore store(m_db, "pruebas");
         const AeatStore::Record record = store.latest(AeatStore::Kind::Registration, "530");
         QVERIFY(store.markOutcome(record.id, AeatStore::kRejected, QString(), "9999", "SETTLED"));
+        m_server->releaseGated();
         const VerifactuResult r = waitFor(backend, id);
         QCOMPARE(r.status, VerifactuResult::ERROR);
         QCOMPARE(r.errorDescription, QStringLiteral("SETTLED"));
@@ -2258,7 +2267,7 @@ private slots:
         {
             AeatDirectBackend backend(c, m_db);
             QVERIFY(sync(backend));
-            m_server->enqueue({ QByteArray(), 200, 2000 });                   // registered, answered late
+            m_server->enqueue({ QByteArray(), 200, 0, false, false, true });  // registered, answer held
             backend.submitInvoiceAsync(ticket("930", 10));
             QTRY_COMPARE_WITH_TIMEOUT(m_server->submissions().size(), 1, 10000);
         }                                                                     // replaced before the answer
@@ -2364,6 +2373,145 @@ private slots:
         // The personal store can be listed (whatever is installed on this machine).
         for (const AeatCertificate::Info &c : AeatCertificate::personalCertificates())
             QVERIFY(c.hasPrivateKey && c.thumbprint.size() == 40);
+    }
+
+    // AEAT's answer that cannot be written (the statement fails) is not "settled meanwhile":
+    // the record stays pending and its waiter hears a NETWORK_ERROR, not a stale PENDING.
+    void test_answerNotStoredIsNotSettledMeanwhile()
+    {
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(sync(backend));
+        QVERIFY(m_db.open());
+        QSqlQuery trigger(m_db);
+        QVERIFY2(trigger.exec("CREATE TRIGGER refuse_outcome BEFORE UPDATE ON aeat_records WHEN NEW.state <> OLD.state "
+                              "BEGIN SELECT RAISE(ABORT, 'forced'); END"), qPrintable(trigger.lastError().text()));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("markOutcome failed"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("could not be stored.*forced"));
+        const VerifactuResult r = waitFor(backend, backend.submitInvoiceAsync(ticket("540", 10)));
+        QCOMPARE(r.status, VerifactuResult::NETWORK_ERROR);
+        QVERIFY2(r.errorDescription.contains("no se pudo guardar"), qPrintable(r.errorDescription));
+        AeatStore store(m_db, "pruebas");
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "540").state, AeatStore::kPending);
+    }
+
+    // An unusable certificate answers the self-test at once, with the reason, instead of
+    // waiting minutes for a record nothing will send.
+    void test_selfTestFailsAtOnceWhenNothingCanSend()
+    {
+        AeatDirectBackend::setEndpointOverride("https://127.0.0.1:9/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
+        AeatStore(m_db, "pruebas").ensureSchema();
+        QVERIFY(AeatStore(m_db, "pruebas").markChainSynced("89890001K"));
+        AeatDirectBackend::Config c = config();
+        c.certificatePath = m_dir.filePath("missing.p12");
+        AeatSelfTest selfTest(c, m_db);
+        QStringList steps;
+        bool finished = false, ok = true;
+        connect(&selfTest, &AeatSelfTest::progress, [&](bool, const QString &t) { steps << t; });
+        connect(&selfTest, &AeatSelfTest::finished, [&](bool o) { finished = true; ok = o; });
+        selfTest.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 10000);
+        QVERIFY(!ok);
+        QVERIFY2(steps.last().contains("certificado") && !steps.last().contains("se enviará solo"), qPrintable(steps.last()));
+        QVERIFY2(!steps.join(" ").contains("se reintenta solo"), qPrintable(steps.join(" | ")));
+    }
+
+    // An unreadable expiry date fails closed with its own message, not "caducó el .".
+    void test_certificateUnreadableExpiryFailsClosed()
+    {
+        const QDateTime now(QDate(2026, 11, 26), QTime(10, 0));
+        const QString unreadable = AeatCertificate::expiryProblem(QDateTime(), now);
+        QVERIFY2(unreadable.contains("fecha de caducidad") && !unreadable.contains("caducó el"), qPrintable(unreadable));
+        QVERIFY(AeatCertificate::expiryProblem(now.addDays(-1), now).contains("caducó el 25-11-2026"));
+        QVERIFY(AeatCertificate::expiryProblem(now.addDays(1), now).isEmpty());
+    }
+
+    // The certificate's holder and NIF never reach the log: not when it is loaded, expired,
+    // used by a probe that fails, or reported by the backend that sends with it.
+    void test_certificateHolderNeverLogged()
+    {
+        static QStringList *logged = nullptr;
+        QStringList lines;
+        logged = &lines;
+        const QtMessageHandler original = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &m) {
+            if (logged)
+                *logged << m;
+        });
+        const auto restore = qScopeGuard([&] { qInstallMessageHandler(original); logged = nullptr; });
+
+        const QString dir = QStringLiteral(AEAT_CERT_DIR);
+        AeatDirectBackend::setEndpointOverride("https://127.0.0.1:9/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP");
+        AeatDirectBackend::Config c = config();
+        c.certificatePath = dir + "/test-client.p12";
+        c.certificatePassword = "prueba-laideal";
+        {
+            AeatDirectBackend backend(c, m_db);
+            QVERIFY(backend.sendingError().isEmpty());
+            QCOMPARE(backend.certificateInfo().nif, QStringLiteral("00000000T"));   // it was loaded
+            backend.submitInvoiceAsync(ticket("1", 10));
+            QTest::qWait(500);
+        }
+        AeatDirectBackend::Config expired = config();
+        expired.certificatePath = dir + "/expired-client.p12";
+        expired.certificatePassword = "prueba-laideal";
+        {
+            AeatDirectBackend backend(expired, m_db);
+            QVERIFY(!backend.sendingError().isEmpty());
+        }
+        AeatConnectionProbe::Settings settings;
+        settings.issuerNif = "89890001K";
+        settings.issuerName = "Tintorería La Ideal";
+        settings.certificatePath = c.certificatePath;
+        settings.certificatePassword = c.certificatePassword;
+        AeatConnectionProbe probe(settings);
+        QSignalSpy finished(&probe, &AeatConnectionProbe::finished);
+        probe.run();
+        QVERIFY(finished.count() == 1 || finished.wait(30000));
+        QVERIFY(!finished[0][0].toBool());
+
+        QVERIFY(!lines.isEmpty());
+        for (const QString &line : lines) {
+            QVERIFY2(!line.contains("PRUEBA LAIDEAL", Qt::CaseInsensitive), qPrintable(line));
+            QVERIFY2(!line.contains("00000000T"), qPrintable(line));
+        }
+    }
+
+    // The answer queued by a backend that is deleted at a re-initialise is never delivered:
+    // its invoice must not stay in flight for the session (gateway manager and direct client).
+    void test_reinitialiseDropsWhatNoBackendWillAnswer()
+    {
+        QFile settingsFile(m_dir.filePath("integration_settings.json"));
+        QVERIFY(settingsFile.open(QIODevice::WriteOnly));
+        settingsFile.write("{}");
+        settingsFile.close();
+        AppSettings *s = AppSettings::instance();
+        s->loadFrom(settingsFile.fileName());
+        s->setVerifactuNif("B00000000");
+        s->setVerifactuName("Tintoreria Test");
+        s->setVerifactuServiceKey("test-service-key");
+        s->setVerifactuProduction(false);
+        // A negative rate makes the invoice invalid: both backends answer it through a queue.
+        const auto submitInvalid = [](VerifactuIntegration &integration, const QString &number) {
+            return integration.submitSimplifiedInvoiceAsync(number, QDate::currentDate(), 10.0, -1.0, "x");
+        };
+        s->setVerifactuDirectAeat(false);
+        {
+            VerifactuIntegration integration;
+            QVERIFY(integration.initialize());
+            QVERIFY(!submitInvalid(integration, "1960").isEmpty());
+            QVERIFY(integration.isInFlight("1960"));
+            QVERIFY(integration.initialize());                  // replaced before the answer drains
+            QVERIFY(!integration.isInFlight("1960"));
+        }
+        s->setVerifactuDirectAeat(true);
+        {
+            VerifactuIntegration integration;
+            QVERIFY(integration.initialize(m_db));
+            QVERIFY(!submitInvalid(integration, "1961").isEmpty());
+            QVERIFY(integration.isInFlight("1961"));
+            QVERIFY(integration.initialize(m_db));
+            QVERIFY(!integration.isInFlight("1961"));
+        }
+        s->setVerifactuDirectAeat(false);
     }
 
     // A backend that cannot query says why, instead of an empty answer.

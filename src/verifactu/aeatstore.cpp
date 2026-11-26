@@ -610,6 +610,15 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         q.bindValue(":g", AeatHash::timestampText(built.generatedAt));
         ok = q.exec();
     }
+    // The row just inserted, read before the commit: a failed read then rolls back, never "stored but unknown".
+    if (ok) {
+        q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
+        q.bindValue(":id", id);
+        ok = q.exec() && q.next();
+        if (ok)
+            stored = readRecord(q);
+        q.finish();
+    }
     if (ok)
         ok = m_db.commit();
     if (!ok) {
@@ -617,16 +626,8 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         qWarning() << "AeatStore::append: record not stored -" << m_lastError;
         m_db.rollback();
         close(wasOpen);
-        return stored;
+        return Record();
     }
-    // The row just inserted, whatever other issuer holds the same number.
-    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
-    q.bindValue(":id", id);
-    if (q.exec() && q.next())
-        stored = readRecord(q);
-    else
-        m_lastError = q.lastError().text();
-    q.finish();
     close(wasOpen);
     return stored;
 }
@@ -669,6 +670,24 @@ AeatStore::Record AeatStore::latest(Kind kind, const QString &invoiceNumber, con
     q.bindValue(":k", kindText(kind));
     if (q.exec() && q.next())
         r = readRecord(q);
+    q.finish();
+    close(wasOpen);
+    return r;
+}
+
+AeatStore::Record AeatStore::byId(qint64 id)
+{
+    Record r;
+    bool wasOpen = false;
+    if (!open(&wasOpen))
+        return r;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
+    q.bindValue(":id", id);
+    if (q.exec() && q.next())
+        r = readRecord(q);
+    else
+        m_lastError = q.lastError().text();
     q.finish();
     close(wasOpen);
     return r;
@@ -798,9 +817,13 @@ bool AeatStore::markOutcome(qint64 id, const QString &state, const QString &csv,
     q.bindValue(":ec", text(errorCode));
     q.bindValue(":ed", text(errorDescription));
     q.bindValue(":id", id);
-    const bool ok = q.exec() && q.numRowsAffected() == 1;
-    if (!ok)
-        qWarning() << "AeatStore::markOutcome failed for record" << id << "-" << q.lastError().text();
+    const bool executed = q.exec();
+    const bool ok = executed && q.numRowsAffected() == 1;
+    // A statement error sets lastError; a row no longer pending leaves it alone (the caller tells them apart).
+    if (!executed) {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::markOutcome failed for record" << id << "-" << m_lastError;
+    }
     close(wasOpen);
     return ok;
 }

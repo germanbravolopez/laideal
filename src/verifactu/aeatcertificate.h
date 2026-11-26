@@ -44,6 +44,9 @@ public:
     // (or the certificate names no NIF).
     static QString representativeWarning(const QString &certificateNif, const QString &issuerNif);
 
+    // Why a certificate expiring at `expiry` cannot be used at `now` (also when the date is unreadable); empty when it can.
+    static QString expiryProblem(const QDateTime &expiry, const QDateTime &now);
+
     bool  isLoaded() const { return m_context != nullptr; }
     Info  info() const;
     // The Windows certificate context (PCCERT_CONTEXT), or nullptr.

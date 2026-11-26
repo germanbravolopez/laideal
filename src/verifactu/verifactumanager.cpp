@@ -1,5 +1,6 @@
 #include "verifactumanager.h"
 #include "testhostguard.h"
+#include "aeathash.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
 #include <QJsonDocument>
@@ -50,8 +51,12 @@ VerifactuResult VerifactuManager::networkErrorResult(QNetworkReply *reply, bool 
         gatewayMessage = body.value("ResultMessage").toString();
     if (gatewayMessage.isEmpty())
         gatewayMessage = body.value("message").toString();
-    if (!gatewayMessage.isEmpty())
+    if (!gatewayMessage.isEmpty()) {
+        constexpr int kMaxGatewayMessage = 300;
+        if (gatewayMessage.size() > kMaxGatewayMessage)
+            gatewayMessage = gatewayMessage.left(kMaxGatewayMessage) + "...";
         result.errorDescription += " - " + gatewayMessage;
+    }
     return result;
 }
 
@@ -239,7 +244,7 @@ QString VerifactuManager::getValidationUrl(const VerifactuInvoice &invoice) cons
 
     query.addQueryItem("nif", invoice.getSellerNIF());
     query.addQueryItem("numserie", invoice.getInvoiceNumber());
-    query.addQueryItem("fecha", invoice.getInvoiceDate().toString("dd-MM-yyyy"));
+    query.addQueryItem("fecha", invoice.getInvoiceDate().toString(QLatin1String(AeatHash::kDateFormat)));
     query.addQueryItem("importe", QString::number(invoice.getTotalAmount(), 'f', 2));
 
     url += "?" + query.toString();

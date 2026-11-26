@@ -1066,6 +1066,18 @@ void AeatDirectBackend::settleRecord(const AeatStore::Record &record, const QStr
         finishRecord(record, result, claimRecord);
         return;
     }
+    const AeatStore::Record stored = m_store.byId(record.id);
+    if (!stored.isValid() || stored.state == AeatStore::kPending) {
+        // The write failed (not "settled meanwhile"): the record stays pending and is sent again later.
+        qWarning() << "AeatDirectBackend: AEAT's answer for record" << record.id << "of" << record.invoiceNumber
+                   << "could not be stored -" << m_store.lastError();
+        VerifactuResult failed;
+        failed.status = VerifactuResult::NETWORK_ERROR;
+        failed.errorDescription = tr("La AEAT respondió, pero no se pudo guardar la respuesta: el registro sigue "
+                                     "pendiente y se volverá a enviar");
+        answerWaiters(record.id, failed);
+        return;
+    }
     qWarning() << "AeatDirectBackend: record" << record.id << "of" << record.invoiceNumber
                << "was no longer pending - AEAT's answer not applied";
     m_unverifiedDuplicates.remove(record.id);
@@ -1163,7 +1175,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     }
 
     m_nextSendAllowed = QDateTime::currentDateTime().addSecs(parsed.fault ? s_retryDelaySeconds : parsed.waitSeconds);
-    if (parsed.fault && sent.size() > 1) {
+    if (batchRefused) {
         isolateFaultedBatch(sent, parsed.faultText, reachedBefore);
         return;
     }

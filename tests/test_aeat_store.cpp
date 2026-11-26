@@ -177,8 +177,8 @@ private slots:
         QVERIFY(store.ensureSchema());
         const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
         QVERIFY(store.markOutcome(a.id, AeatStore::kAccepted, "A-CSV", "", ""));
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("markOutcome failed"));
         QVERIFY(!store.markOutcome(a.id, AeatStore::kRejected, "", "1100", "ImporteTotal"));
+        QVERIFY(store.lastError().isEmpty());                 // refused, not a failed statement
         const AeatStore::Record after = store.latest(AeatStore::Kind::Registration, "1");
         QCOMPARE(after.state, AeatStore::kAccepted);
         QCOMPARE(after.csv, QStringLiteral("A-CSV"));

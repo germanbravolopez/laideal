@@ -20,8 +20,8 @@ AeatSelfTest::AeatSelfTest(AeatDirectBackend::Config config, const QSqlDatabase 
     m_settleTimer.setSingleShot(true);
     connect(&m_settleTimer, &QTimer::timeout, this, [this] {
         disconnect(m_settled);
-        fail("waiting for AEAT", tr("%1: la AEAT no ha respondido en %2 minutos; el registro queda pendiente y se "
-                                    "enviará solo.").arg(m_invoiceNumber).arg(kSettleTimeoutMs / 60000));
+        fail("waiting for AEAT", tr("%1: la AEAT no ha respondido en %2 minutos; el registro de prueba queda "
+                                    "pendiente en el entorno de pruebas.").arg(m_invoiceNumber).arg(kSettleTimeoutMs / 60000));
     });
 }
 
@@ -64,6 +64,12 @@ bool AeatSelfTest::awaitSettlement(bool cancellation, const VerifactuResult &res
     if (!m_backend->holdsPendingRecord(cancellation ? AeatStore::Kind::Cancellation : AeatStore::Kind::Registration,
                                        m_invoiceNumber))
         return false;
+    // Nothing will send the record (an unusable certificate): waiting would only delay the failure.
+    if (!m_backend->sendingError().isEmpty()) {
+        fail("sending", tr("%1: no se puede enviar a la AEAT (%2). El registro de prueba queda pendiente y no se "
+                           "enviará hasta que se corrija.").arg(m_invoiceNumber, m_backend->sendingError()));
+        return true;
+    }
     emit progress(true, tr("%1 de %2: la AEAT aún no ha respondido (%3); se reintenta solo...")
                             .arg(cancellation ? tr("Anulación") : tr("Alta"), m_invoiceNumber, result.errorDescription));
     m_settled = connect(m_backend, &VerifactuBackend::recordSettled, this,

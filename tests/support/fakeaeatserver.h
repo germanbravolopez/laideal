@@ -9,6 +9,8 @@
 // before the next submission, and answers queries from what it registered.
 // Replies follow the official response schemas (see tests/fixtures/aeat-responses).
 
+#include <functional>
+
 #include <QByteArray>
 #include <QDateTime>
 #include <QHash>
@@ -61,6 +63,7 @@ public:
         int  delayMs = 0;
         bool drop = false;        // close the connection without answering
         bool dropAfterRegistering = false;   // register the records, then lose the answer
+        bool gated = false;       // hold the reply until releaseGated(), instead of a time
     };
 
     explicit FakeAeatServer(QObject *parent = nullptr);
@@ -69,6 +72,8 @@ public:
     bool start();
     QString url() const;
 
+    // Sends the replies held by a `gated` Reply.
+    void releaseGated();
     void setWaitSeconds(int seconds) { m_waitSeconds = seconds; }
     // Query replies without the records' Huella / chain block (both optional in the schema).
     void setQueryWithoutHashes(bool on) { m_queryWithoutHashes = on; }
@@ -135,6 +140,7 @@ private:
     QSet<QString> m_noHashFor;
     QSet<QString> m_hidden;
     int m_waitSeconds = 0;
+    QList<std::function<void()>> m_gated;
     bool m_queryWithoutHashes = false;
     bool m_queryWithoutSystem = false;
     bool m_queryHidesCancellation = false;

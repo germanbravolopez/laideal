@@ -119,7 +119,7 @@ private slots:
         AeatHash::RegistrationFields f;
         f.issuerNif = t.value("IDEmisorFactura");
         f.invoiceNumber = t.value("NumSerieFactura");
-        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), "dd-MM-yyyy");
+        f.issueDate = QDate::fromString(t.value("FechaExpedicionFactura"), QLatin1String(AeatHash::kDateFormat));
         f.invoiceType = t.value("TipoFactura");
         f.totalTax = t.value("CuotaTotal");
         f.totalAmount = t.value("ImporteTotal");

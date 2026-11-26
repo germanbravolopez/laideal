@@ -1,5 +1,6 @@
 #include "verifactuintegration.h"
 #include "aeatdirectbackend.h"
+#include "aeathash.h"
 #include "appsettings.h"
 #include <QDebug>
 #include <QNetworkReply>
@@ -18,17 +19,18 @@ VerifactuIntegration::~VerifactuIntegration()
 namespace {
 // An old gateway client keeps its signals until the replies it is still waiting for are
 // in, then goes: deleting it at once would drop a submit whose outcome is unknown.
-void retireManager(VerifactuManager *manager)
+// True when it was deleted now.
+bool retireManager(VerifactuManager *manager)
 {
     if (!manager)
-        return;
+        return true;
     auto running = [manager] {
         const auto replies = manager->findChildren<QNetworkReply *>();
         return std::any_of(replies.cbegin(), replies.cend(), [](QNetworkReply *r) { return r->isRunning(); });
     };
     if (!running()) {
         delete manager;
-        return;
+        return true;
     }
     // Deleted after the last in-flight reply has finished (and been handled); the
     // manager is gone by the time a later reply would ask again.
@@ -41,6 +43,7 @@ void retireManager(VerifactuManager *manager)
                 manager->deleteLater();
         }, Qt::QueuedConnection);
     }
+    return false;
 }
 } // namespace
 
@@ -50,8 +53,13 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
     // send the outbox and ignore each other's AEAT wait time).
     if (m_direct)
         m_direct->releaseWaiters();         // the windows still waiting hear an answer
+    const QObject *oldDirect = m_direct;
+    const QObject *oldManager = m_manager;
     delete m_direct;
-    retireManager(m_manager);
+    // A queued answer dies with its backend: what is still in flight for a deleted one never ends.
+    dropInFlightOf(oldDirect);
+    if (retireManager(m_manager))
+        dropInFlightOf(oldManager);
     m_direct = nullptr;
     m_manager = nullptr;
     m_backend = nullptr;
@@ -90,8 +98,7 @@ bool VerifactuIntegration::initialize(const QSqlDatabase &db)
         m_backend = m_manager;
     }
 
-    // m_inFlight stays: the old direct client released its waiters above (removing their entries) and a
-    // retired gateway manager still answers its running replies through the same handler.
+    // The entries of a retired gateway manager stay: its running replies end through the same handler.
     connect(m_backend, &VerifactuBackend::requestFinished, this,
             [this](const QString &requestId, const VerifactuResult &result) {
         m_inFlight.remove(requestId);
@@ -126,16 +133,22 @@ QString VerifactuIntegration::submitSimplifiedInvoiceAsync(
 
     const QString requestId = m_backend->submitInvoiceAsync(simplifiedInvoice(invoiceNumber, invoiceDate, taxBase, taxRate, description));
     if (!requestId.isEmpty())
-        m_inFlight.insert(requestId, invoiceNumber);
+        m_inFlight.insert(requestId, { invoiceNumber, m_backend });
     return requestId;
 }
 
 bool VerifactuIntegration::isInFlight(const QString &invoiceId) const
 {
     for (auto it = m_inFlight.cbegin(); it != m_inFlight.cend(); ++it)
-        if (it.value() == invoiceId)
+        if (it.value().invoiceId == invoiceId)
             return true;
     return false;
+}
+
+void VerifactuIntegration::dropInFlightOf(const QObject *backend)
+{
+    for (auto it = m_inFlight.begin(); it != m_inFlight.end();)
+        it = it.value().backend == backend ? m_inFlight.erase(it) : std::next(it);
 }
 
 QString VerifactuIntegration::cancelInvoiceAsync(
@@ -207,7 +220,7 @@ QString VerifactuIntegration::submitRectificationAsync(
     invoice.calculateTotals();
     const QString requestId = m_backend->submitInvoiceAsync(invoice);
     if (!requestId.isEmpty())
-        m_inFlight.insert(requestId, newInvoiceNumber);
+        m_inFlight.insert(requestId, { newInvoiceNumber, m_backend });
     return requestId;
 }
 
@@ -273,7 +286,7 @@ bool VerifactuIntegration::refusesBeforeProduction(const QString &invoiceNumber,
     if (!isBeforeProductionStart(invoiceDate))
         return false;
     m_lastError = tr("La factura %1 del %2 es anterior al paso a PRODUCCIÓN (%3): no se envía a la AEAT real.")
-                      .arg(invoiceNumber, invoiceDate.toString("dd-MM-yyyy"), productionStartDate().toString("dd-MM-yyyy"));
+                      .arg(invoiceNumber, AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));
     qWarning() << "VerifactuIntegration:" << operation << "refused for" << invoiceNumber << "- dated before production";
     return true;
 }
@@ -377,7 +390,7 @@ QString VerifactuIntegration::dateBeforeProductionReason(const QDate &invoiceDat
         return QString();
     return tr("La fecha %1 es anterior al paso a PRODUCCIÓN (%2): una factura nueva no puede llevarla, porque no "
               "se registraría en la AEAT real.")
-        .arg(invoiceDate.toString("dd-MM-yyyy"), productionStartDate().toString("dd-MM-yyyy"));
+        .arg(AeatHash::dateText(invoiceDate), AeatHash::dateText(productionStartDate()));
 }
 
 QString VerifactuIntegration::sendingError() const
