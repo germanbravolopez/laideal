@@ -63,7 +63,8 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | | `aeatexport.*`, `aeatexportdialog.*` | Exportar registros AEAT (XML) |
 | | `selfcheck.*`, `selfcheckdialog.*` | Comprobar tras actualizar |
 | | `instancelock.*` | One copy per database (`QLockFile`) |
-| `src/appsettings/` | `appsettings.*`, `settingsdialog.*`, `applanguage.*` | Settings, dialog, UI language |
+| `src/appsettings/` | `appsettings.*`, `applanguage.*` | Settings, UI language |
+| `src/settingsdialog/` | `settingsdialog.*` | Configuración dialog |
 | `src/logging/` | `applogger.*` | Debug log |
 | `src/sql_lite/` | `sql_lite.*`, `ingresos_schema.h` | Database functions, migrations, shared helpers, `ingresos` column indices |
 | `src/listado/` | `listado.*`, `insertnewitem.*`, `genlistado.*` | List viewer, insert dialog, list PDF |

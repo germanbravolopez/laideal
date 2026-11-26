@@ -91,7 +91,7 @@ add_executable(test_settingsdialog test_settingsdialog.cpp)
 target_link_libraries(test_settingsdialog PRIVATE
     Qt${QT_VERSION_MAJOR}::Test
     Qt${QT_VERSION_MAJOR}::Widgets
-    appsettings
+    settingsdialog
 )
 add_test(NAME settingsdialog
     COMMAND test_settingsdialog -o ${CMAKE_BINARY_DIR}/test-results-settingsdialog.xml,junitxml -o -,txt)

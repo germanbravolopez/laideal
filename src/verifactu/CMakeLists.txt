@@ -67,9 +67,7 @@ target_link_libraries(verifactu_types INTERFACE Qt${QT_VERSION_MAJOR}::Gui)   # 
 add_library(verifactu STATIC ${PROJECT_SOURCES})
 
 # Qt: the public headers expose QString, QPixmap and QSqlDatabase. appsettings is PUBLIC: the
-# tests include appsettings.h through verifactu. It links printing (StatusApiPrinter, the
-# "Probar Status API" diagnostic button in SettingsDialog), so anything linking verifactu
-# also links appsettings -> printing, although printing is otherwise used only by imprimir.
+# tests include appsettings.h through verifactu.
 target_link_libraries(verifactu
     PUBLIC
     Qt${QT_VERSION_MAJOR}::Core

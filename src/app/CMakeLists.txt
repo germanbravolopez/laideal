@@ -50,6 +50,7 @@ target_link_libraries(laideal_app
     Qt${QT_VERSION_MAJOR}::Sql
     logging
     appsettings
+    settingsdialog
     sql_lite
     imprimir
     listado

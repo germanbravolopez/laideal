@@ -27,7 +27,8 @@ MainWindow (src/app/, built in code, no .ui file)
 
 Shared:
   src/logging/      AppLogger: persistent debug log
-  src/appsettings/  AppSettings singleton, SettingsDialog, AppLanguage
+  src/appsettings/  AppSettings singleton, AppLanguage (leaf: links only Qt Core)
+  src/settingsdialog/  SettingsDialog (links appsettings, uikit, printing)
   src/sql_lite/     stateless database functions, schema, migrations, shared helpers
   src/reporthtml/   A4 PDF report scaffolding and the one PDF writer (Contabilidad, GenListado)
   src/uikit/        shared dialog style
@@ -40,7 +41,7 @@ Module references: [mainwindow](modules/mainwindow.md), [sql_lite](modules/sql_l
 
 - Each `src/<module>/` is a static library; `src/app/` builds `laideal_app` (everything but `main.cpp`) and the `laideal` executable, so the end-to-end bench can link and drive the windows.
 - `verifactu_types` is a header-only INTERFACE target (`verifactutypes.h`: estados, `VerifactuResult`, `splitGross`). `sql_lite`, `add_garment`, `facturas`, `contabilidad` and `printing` link only it, so the base layer never links the Verifactu library or Qt Network.
-- `printing` is also linked by `appsettings` (the "Probar Status API" button). `listado` links `contabilidad` (the IVA rates a gasto may have) and `tableview`.
+- `printing` is also linked by `settingsdialog` (the "Probar Status API" button). `listado` links `contabilidad` (the IVA rates a gasto may have) and `tableview`.
 - The app reaches the direct client through `VerifactuIntegration` only (`isDirect`, `holdsPendingRegistration`, `storedRegistrationOutcome`, `environmentName`, `sendingError`, `certificateExpiryWarning`, `verifyStoredChain`, `syncDirectChain`). `directBackend()` remains for the Configuración self-test, the AEAT export, the self-check and the tests.
 
 ## Modules without their own page
@@ -53,7 +54,7 @@ Module references: [mainwindow](modules/mainwindow.md), [sql_lite](modules/sql_l
 - The service key and the certificate password are encrypted at rest with Windows DPAPI (`dpapi:v1:<base64>`); setters encrypt, getters decrypt, `encryptSecretsAtRest()` upgrades legacy plaintext on load. If DPAPI fails the value stays plaintext with a `qWarning` and is retried at the next load. The blob is bound to the Windows user and machine, so a decrypt failure returns empty and the operator re-enters the secret.
 - The ingresos IVA rate is the constant `AppSettings::kIngresosIvaRate` (21 %), returned by `AppSettings::ivaRate()`; no key holds it.
 - `AppLanguage` (`applanguage.*`): `applyQtTranslations()` installs or removes Qt's `qtbase_es.qm`; `releaseNotesResource()` picks the bundled release-notes file; on first run `initialLanguage(installerChoice())` reads the installer's choice from `HKCU\Software\La Ideal\Language`.
-- `SettingsDialog`: code-built, four tabs, rebuilt on every open, writes the JSON on accept. Accepting warns without blocking where it can (missing database file, certificate not in the store, unreadable stored secret). The production switches ask for confirmation in and out.
+- `SettingsDialog` (`src/settingsdialog/`): code-built, four tabs, rebuilt on every open, writes the JSON on accept. Accepting warns without blocking where it can (missing database file, certificate not in the store, unreadable stored secret). The production switches ask for confirmation in and out.
 
 ### AppLogger (`src/logging/`)
 

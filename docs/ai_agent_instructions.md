@@ -21,7 +21,8 @@ Commands: [README](../README.md#build) (`.\make build`, `.\make test`, `.\make r
 | Facturas menu: cancel, rectify (R1-R5), export AEAT XML | `src/app/cancelinvoicedialog.*`, `rectifyinvoicedialog.*`, `aeatexport.*`, `aeatexportdialog.*` |
 | Start-up recovery: PENDIENTE rows, refused invoices | `src/app/pendingsubmitsdialog.*`, `refusedinvoicesdialog.*` |
 | Post-update check, one copy per database | `src/app/selfcheck*`, `src/app/instancelock.*` |
-| Settings, settings dialog, UI language | `src/appsettings/` |
+| Settings, UI language | `src/appsettings/` |
+| Settings dialog | `src/settingsdialog/` |
 | Debug log (`~/.laideal.log`) | `src/logging/` |
 | All database functions, schema, migrations, shared helpers | `src/sql_lite/sql_lite.*`, `ingresos_schema.h` |
 | Generic list viewer, insert dialog, list PDF | `src/listado/` |

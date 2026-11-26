@@ -2,7 +2,7 @@
 
 Direct ESC/POS thermal printing for the Epson TM-T20III (and any ESC/POS printer). It builds the receipt as a byte stream and sends it RAW through the Windows spooler: no Excel, no COM, no Epson SDK (only `winspool`). Callers: [`imprimir`](imprimir.md). Background and design: [`printer/`](printer/README.md), with a rendered [sample recibo + factura](printer/README.md#sample-rendered-output).
 
-Built as the static lib `printing` (links `Qt::Gui` for `QImage`, and `winspool` on Windows). `imprimir` links it; `appsettings` links it for `StatusApiPrinter::runDiagnosticsBounded`. Tests: `tests/test_escpos.cpp` (exact bytes, PC858 table, column math, rendered fragments, ASB decode), see [unit suites](../testing/unit_suites.md). `ThermalPrinter` and `StatusApiPrinter` are integration-only.
+Built as the static lib `printing` (links `Qt::Gui` for `QImage`, and `winspool` on Windows). `imprimir` links it; `settingsdialog` links it for `StatusApiPrinter::runDiagnosticsBounded`. Tests: `tests/test_escpos.cpp` (exact bytes, PC858 table, column math, rendered fragments, ASB decode), see [unit suites](../testing/unit_suites.md). `ThermalPrinter` and `StatusApiPrinter` are integration-only.
 
 ## Pieces
 
