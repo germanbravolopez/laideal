@@ -19,9 +19,10 @@ AeatConnectionProbe::AeatConnectionProbe(const Settings &settings, QObject *pare
     m_transport->setTimeoutMs(kProbeTimeoutMs);
 }
 
-void AeatConnectionProbe::fail(const QString &text)
+void AeatConnectionProbe::fail(const char *step, const QString &text)
 {
-    qWarning() << "AeatConnectionProbe:" << text;
+    // The text may name the certificate's holder and NIF: only the step goes to the log.
+    qWarning() << "AeatConnectionProbe: failed at the" << step << "step";
     emit progress(false, text);
     emit finished(false);
 }
@@ -29,7 +30,7 @@ void AeatConnectionProbe::fail(const QString &text)
 void AeatConnectionProbe::run()
 {
     if (m_settings.issuerNif.trimmed().isEmpty() || m_settings.issuerName.trimmed().isEmpty()) {
-        fail(tr("Falta el NIF o el nombre del emisor."));
+        fail("settings", tr("Falta el NIF o el nombre del emisor."));
         return;
     }
     const QString url = AeatDirectBackend::endpointUrl(m_settings.testEnvironment);
@@ -40,7 +41,7 @@ void AeatConnectionProbe::run()
             ? m_certificate.loadFromFile(m_settings.certificatePath, m_settings.certificatePassword, &error)
             : m_certificate.loadFromStore(m_settings.certificateThumbprint, &error);
         if (!loaded) {
-            fail(tr("Certificado: %1").arg(error));
+            fail("certificate", tr("Certificado: %1").arg(error));
             return;
         }
         const AeatCertificate::Info cert = m_certificate.info();
@@ -59,7 +60,7 @@ void AeatConnectionProbe::run()
         bool ok = false;
         const QString text = verdict(response, &ok);
         if (!ok) {
-            fail(text);
+            fail("query", text);
             return;
         }
         qDebug() << "AeatConnectionProbe: AEAT answered the query, HTTP" << response.httpStatus;

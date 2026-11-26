@@ -18,6 +18,8 @@ namespace {
 const char *const kSoapNs = "http://schemas.xmlsoap.org/soap/envelope/";
 const QString kDateFormat = QStringLiteral("dd-MM-yyyy");
 const QString kVersion = QStringLiteral("1.0");
+// The XSD needs a non-empty DescripcionOperacion: kInvoiceDescription's text (verifactutypes.h).
+const QString kDefaultDescription = QStringLiteral("Servicios de lavandería");
 
 QString dateText(const QDate &date)
 {
@@ -188,7 +190,8 @@ QString registrationXml(const Registration &r, const SystemInfo &system)
             w.end();
         }
     }
-    w.text(QStringLiteral("DescripcionOperacion"), r.description.left(500));
+    const QString description = r.description.trimmed().left(500).trimmed();
+    w.text(QStringLiteral("DescripcionOperacion"), description.isEmpty() ? kDefaultDescription : description);
     w.start(QStringLiteral("Desglose"));
     for (const TaxLine &line : r.taxLines) {
         w.start(QStringLiteral("DetalleDesglose"));

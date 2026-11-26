@@ -170,6 +170,50 @@ private slots:
         QCOMPARE(store.latest(AeatStore::Kind::Cancellation, "1").state, AeatStore::kAccepted);
     }
 
+    // A settled row is never rewritten: markOutcome refuses it and changes nothing.
+    void test_settledOutcomeNotRewritten()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("1", "AAA"));
+        QVERIFY(store.markOutcome(a.id, AeatStore::kAccepted, "A-CSV", "", ""));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("markOutcome failed"));
+        QVERIFY(!store.markOutcome(a.id, AeatStore::kRejected, "", "1100", "ImporteTotal"));
+        const AeatStore::Record after = store.latest(AeatStore::Kind::Registration, "1");
+        QCOMPARE(after.state, AeatStore::kAccepted);
+        QCOMPARE(after.csv, QStringLiteral("A-CSV"));
+        QVERIFY(after.errorCode.isEmpty());
+    }
+
+    // append returns the row it inserted, also when another issuer holds the same number.
+    void test_appendReturnsItsOwnRowUnderASharedNumber()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        const auto a = store.append(AeatStore::Kind::Registration, "89890001K", builder("7", "AAA"));
+        const auto b = store.append(AeatStore::Kind::Registration, "B11111111", builder("7", "BBB"));
+        QVERIFY(a.isValid() && b.isValid() && a.id != b.id);
+        QCOMPARE(a.issuerNif, QStringLiteral("89890001K"));
+        QCOMPARE(a.hash, QStringLiteral("AAA"));
+        QCOMPARE(b.issuerNif, QStringLiteral("B11111111"));
+        QCOMPARE(b.hash, QStringLiteral("BBB"));
+    }
+
+    // One "R-" series per database: the highest number of any issuer, a corrective's
+    // suffix ("R-10-1") read as its number.
+    void test_highestRectificationNumber()
+    {
+        AeatStore store(m_db, "pruebas");
+        QVERIFY(store.ensureSchema());
+        QCOMPARE(store.highestRectificationNumber(), 0);
+        for (const QString &n : { QStringLiteral("R-9"), QStringLiteral("R-10"), QStringLiteral("R-10-1"), QStringLiteral("31277") })
+            store.append(AeatStore::Kind::Registration, "89890001K", builder(n, "H" + n));
+        QCOMPARE(store.highestRectificationNumber(), 10);
+        store.append(AeatStore::Kind::Registration, "B11111111", builder("R-50", "HR50"));
+        QCOMPARE(store.highestRectificationNumber(), 50);
+        QCOMPARE(AeatStore(m_db, "produccion").highestRectificationNumber(), 0);
+    }
+
     // An unreadable chain is an error, never "no chain": nothing is appended.
     void test_unreadableChainRefused()
     {

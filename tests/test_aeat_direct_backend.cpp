@@ -308,6 +308,8 @@ private slots:
         QCOMPARE(m_server->submissions().at(1).records.size(), 3);        // the batch, refused whole
 
         AeatStore store(m_db, "pruebas");
+        for (const QString &n : { "2", "3", "4" })                         // AEAT judged none of them
+            QVERIFY2(!store.latest(AeatStore::Kind::Registration, n).reached, qPrintable(n));
         QTRY_VERIFY_WITH_TIMEOUT(store.pending(10).isEmpty(), 30000);
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "2").state, AeatStore::kAccepted);
         QCOMPARE(store.latest(AeatStore::Kind::Registration, "3").state, AeatStore::kRejected);
@@ -317,6 +319,26 @@ private slots:
         for (int i = 2; i < sends.size(); ++i)
             QCOMPARE(sends[i].records.size(), 1);                         // one by one after the fault
         QVERIFY(m_server->registered().contains("Alta:2") && m_server->registered().contains("Alta:4"));
+    }
+
+    // A batch refused whole never counts as having reached AEAT: the single resend of a
+    // record another database already registered is a duplicate, never claimed as ours
+    // (the query gives no huella to tell them apart).
+    void test_batchFaultMakesNoDuplicateOurs()
+    {
+        registerElsewhere({ "700" });
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        m_server->setWaitSeconds(2);
+        AeatDirectBackend backend(config(), m_db);
+        QVERIFY(waitFor(backend, backend.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        m_server->faultWhenSending("3");
+        m_server->setQueryWithoutHashes(true);
+        backend.submitInvoiceAsync(ticket("700", 10));
+        backend.submitInvoiceAsync(ticket("3", 30));
+        AeatStore store(m_db, "pruebas");
+        QTRY_VERIFY_WITH_TIMEOUT(store.latest(AeatStore::Kind::Registration, "700").state != AeatStore::kPending, 30000);
+        QCOMPARE(m_server->submissions().at(2).records.size(), 2);        // the batch, refused whole
+        QCOMPARE(store.latest(AeatStore::Kind::Registration, "700").state, AeatStore::kDuplicate);
     }
 
     // AEAT answers "duplicate" but holds the number with another amount (e.g. a reused
@@ -824,6 +846,9 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(finished, 30000);
         QVERIFY2(ok, qPrintable(steps.join(" | ")));
         QVERIFY(selfTest.invoiceNumber().startsWith("PRUEBA-"));
+        // To the millisecond: two runs in the same second never share the number.
+        QVERIFY2(QRegularExpression("^PRUEBA-\\d{17}$").match(selfTest.invoiceNumber()).hasMatch(),
+                 qPrintable(selfTest.invoiceNumber()));
         QVERIFY(m_server->registered().contains("Alta:" + selfTest.invoiceNumber()));
         QVERIFY(m_server->registered().contains("Anulacion:" + selfTest.invoiceNumber()));
         QVERIFY2(steps.join(" ").contains("Esperando"), qPrintable(steps.join(" | ")));
@@ -841,6 +866,45 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
         QVERIFY(!ok);
         QVERIFY2(steps.last().contains("Alta de") && steps.last().contains("1100"), qPrintable(steps.last()));
+    }
+
+    // A submission left without an answer is retried on its own: the self-test waits for
+    // that outcome instead of failing on the first NETWORK_ERROR.
+    void test_selfTestWaitsForTheRetry()
+    {
+        AeatDirectBackend::setRetryDelaySeconds(1);
+        AeatSelfTest selfTest(config(), m_db);
+        m_server->dropNextSubmission();
+        QStringList steps;
+        bool finished = false, ok = false;
+        connect(&selfTest, &AeatSelfTest::progress, [&](bool, const QString &t) { steps << t; });
+        connect(&selfTest, &AeatSelfTest::finished, [&](bool o) { finished = true; ok = o; });
+        selfTest.run();
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 60000);
+        QVERIFY2(ok, qPrintable(steps.join(" | ")));
+        QVERIFY(m_server->registered().contains("Anulacion:" + selfTest.invoiceNumber()));
+        QVERIFY(m_server->submissions().size() >= 3);                     // dropped, retried, cancellation
+    }
+
+    // A head whose stored huella differs only in case from AEAT's is the same record:
+    // the chain continues from it, unchanged.
+    void test_headDifferingOnlyInCaseKeepsTheTip()
+    {
+        {
+            AeatDirectBackend first(config(), m_db);
+            QVERIFY(waitFor(first, first.submitInvoiceAsync(ticket("1", 10))).isSuccess());
+        }
+        AeatStore store(m_db, "pruebas");
+        const QString head = store.chainHead("89890001K").hash;
+        QCOMPARE(head, head.toUpper());
+        m_server->setQueryHashesLowerCase(true);
+        AeatDirectBackend later(config(), m_db);
+        QString message;
+        bool ok = false;
+        later.syncChain([&](bool o, const QString &m) { ok = o; message = m; });
+        QTRY_VERIFY_WITH_TIMEOUT(!message.isEmpty(), 30000);
+        QVERIFY2(ok && message.contains("tras el registro 1"), qPrintable(message));
+        QCOMPARE(store.chainHead("89890001K").hash, head);
     }
 
     // A self-test in the shop's pre-production chain keeps the shop's chain marker: the

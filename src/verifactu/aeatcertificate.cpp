@@ -19,8 +19,9 @@ QString tr(const char *text)
 #ifdef Q_OS_WIN
 QDateTime fromFileTime(const FILETIME &ft)
 {
-    SYSTEMTIME st;
-    FileTimeToSystemTime(&ft, &st);
+    SYSTEMTIME st = {};
+    if (!FileTimeToSystemTime(&ft, &st))
+        return QDateTime();
     return QDateTime(QDate(st.wYear, st.wMonth, st.wDay), QTime(st.wHour, st.wMinute, st.wSecond), Qt::UTC).toLocalTime();
 }
 

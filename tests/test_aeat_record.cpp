@@ -267,6 +267,23 @@ private slots:
         writeSample("alta_long_issuer_name.xml", envelope);
     }
 
+    // DescripcionOperacion is trimmed before the 500-character cut, and an empty one
+    // falls back to the shop's description (the XSD needs content). Not in the huella.
+    void test_descriptionTrimmedCutAndNeverEmpty()
+    {
+        Registration r = ticket("30951", 8.26);
+        const QString hash = hashOf(r);
+        r.description = QString(10, QLatin1Char(' ')) + QString(495, QLatin1Char('D')) + QStringLiteral("xyz");
+        QHash<QString, QString> t;
+        names(registrationXml(r, system()), &t);
+        QCOMPARE(t.value("DescripcionOperacion"), QString(495, QLatin1Char('D')) + QStringLiteral("xyz"));
+        QCOMPARE(t.value("Huella"), hash);
+        r.description = QStringLiteral("   ");
+        t.clear();
+        names(registrationXml(r, system()), &t);
+        QCOMPARE(t.value("DescripcionOperacion"), QStringLiteral("Servicios de lavandería"));
+    }
+
     // The query asks for one month of the issuer, optionally one invoice.
     void test_queryEnvelope()
     {

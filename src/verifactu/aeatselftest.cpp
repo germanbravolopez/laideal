@@ -3,6 +3,10 @@
 #include <QDebug>
 #include <QTimer>
 
+namespace {
+const int kSettleTimeoutMs = 5 * 60 * 1000;   // a record left pending: how long AEAT's answer is awaited
+}
+
 AeatSelfTest::AeatSelfTest(AeatDirectBackend::Config config, const QSqlDatabase &db, QObject *parent)
     : QObject(parent)
 {
@@ -10,12 +14,19 @@ AeatSelfTest::AeatSelfTest(AeatDirectBackend::Config config, const QSqlDatabase 
     m_backend = new AeatDirectBackend(config, db, this);
     connect(m_backend, &VerifactuBackend::recordSettled, this, &AeatSelfTest::recordSettled);
     m_issueDate = QDate::currentDate();
-    m_invoiceNumber = QStringLiteral("PRUEBA-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss"));
+    m_invoiceNumber = QStringLiteral("PRUEBA-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmsszzz"));
+    m_settleTimer.setSingleShot(true);
+    connect(&m_settleTimer, &QTimer::timeout, this, [this] {
+        disconnect(m_settled);
+        fail("waiting for AEAT", tr("%1: la AEAT no ha respondido en %2 minutos; el registro queda pendiente y se "
+                                    "enviará solo.").arg(m_invoiceNumber).arg(kSettleTimeoutMs / 60000));
+    });
 }
 
-void AeatSelfTest::fail(const QString &text)
+void AeatSelfTest::fail(const char *step, const QString &text)
 {
-    qWarning() << "AeatSelfTest:" << text;
+    // The text may name the certificate's holder and NIF: only the step goes to the log.
+    qWarning() << "AeatSelfTest: failed at the" << step << "step";
     emit progress(false, text);
     emit finished(false);
 }
@@ -23,7 +34,7 @@ void AeatSelfTest::fail(const QString &text)
 void AeatSelfTest::run()
 {
     if (!m_backend->isConfigured()) {
-        fail(tr("Configuración: %1").arg(m_backend->configurationError()));
+        fail("configuration", tr("Configuración: %1").arg(m_backend->configurationError()));
         return;
     }
     const AeatCertificate::Info cert = m_backend->certificateInfo();
@@ -37,12 +48,37 @@ void AeatSelfTest::run()
                                  .arg(cert.nif, m_backend->issuerNif()));
     m_backend->syncChain([this](bool ok, const QString &message) {
         if (!ok) {
-            fail(tr("Cadena de registros: %1").arg(message));
+            fail("chain sync", tr("Cadena de registros: %1").arg(message));
             return;
         }
         emit progress(true, tr("Cadena de registros: %1").arg(message));
         submit();
     });
+}
+
+bool AeatSelfTest::awaitSettlement(bool cancellation, const VerifactuResult &result)
+{
+    // A record kept pending (no answer yet) is sent again on its own: its outcome decides.
+    if (result.status != VerifactuResult::PENDING && result.status != VerifactuResult::NETWORK_ERROR)
+        return false;
+    if (!m_backend->holdsPendingRecord(cancellation ? AeatStore::Kind::Cancellation : AeatStore::Kind::Registration,
+                                       m_invoiceNumber))
+        return false;
+    emit progress(true, tr("%1 de %2: la AEAT aún no ha respondido (%3); se reintenta solo...")
+                            .arg(cancellation ? tr("Anulación") : tr("Alta"), m_invoiceNumber, result.errorDescription));
+    m_settled = connect(m_backend, &VerifactuBackend::recordSettled, this,
+                        [this, cancellation](const QString &invoice, bool isCancellation, const VerifactuResult &r) {
+        if (invoice != m_invoiceNumber || isCancellation != cancellation)
+            return;
+        m_settleTimer.stop();
+        disconnect(m_settled);
+        if (cancellation)
+            cancellationAnswered(r);
+        else
+            registrationAnswered(r);
+    });
+    m_settleTimer.start(kSettleTimeoutMs);
+    return true;
 }
 
 void AeatSelfTest::submit()
@@ -65,14 +101,20 @@ void AeatSelfTest::submit()
             return;
         m_pendingRequest.clear();
         disconnect(m_backend, &VerifactuBackend::requestFinished, this, nullptr);
-        if (!r.isSuccess()) {
-            fail(tr("Alta de %1: %2 %3").arg(m_invoiceNumber, r.errorCode, r.errorDescription));
-            return;
-        }
-        emit progress(true, tr("Alta de %1 registrada por la AEAT, CSV %2.").arg(m_invoiceNumber, r.csv));
-        query();
+        if (!awaitSettlement(false, r))
+            registrationAnswered(r);
     });
     m_pendingRequest = m_backend->submitInvoiceAsync(invoice);
+}
+
+void AeatSelfTest::registrationAnswered(const VerifactuResult &r)
+{
+    if (!r.isSuccess()) {
+        fail("registration", tr("Alta de %1: %2 %3").arg(m_invoiceNumber, r.errorCode, r.errorDescription));
+        return;
+    }
+    emit progress(true, tr("Alta de %1 registrada por la AEAT, CSV %2.").arg(m_invoiceNumber, r.csv));
+    query();
 }
 
 void AeatSelfTest::query()
@@ -83,8 +125,8 @@ void AeatSelfTest::query()
         m_pendingRequest.clear();
         disconnect(m_backend, &VerifactuBackend::queryFinished, this, nullptr);
         if (!remote.hasUsableCsv() || qAbs(remote.totalAmount - 1.21) > 0.005) {
-            fail(tr("Consulta de %1: la AEAT no devuelve el registro aceptado (%2).")
-                     .arg(m_invoiceNumber, remote.found ? remote.statusResponse : tr("no encontrado")));
+            fail("query", tr("Consulta de %1: la AEAT no devuelve el registro aceptado (%2).")
+                              .arg(m_invoiceNumber, remote.found ? remote.statusResponse : tr("no encontrado")));
             return;
         }
         emit progress(true, tr("Consulta: la AEAT tiene %1 por %2 €.").arg(m_invoiceNumber, QString::number(remote.totalAmount, 'f', 2).replace('.', ',')));
@@ -103,12 +145,18 @@ void AeatSelfTest::cancel()
             return;
         m_pendingRequest.clear();
         disconnect(m_backend, &VerifactuBackend::requestFinished, this, nullptr);
-        if (!r.isSuccess()) {
-            fail(tr("Anulación de %1: %2 %3").arg(m_invoiceNumber, r.errorCode, r.errorDescription));
-            return;
-        }
-        emit progress(true, tr("Anulación de %1 registrada por la AEAT. La conexión directa funciona.").arg(m_invoiceNumber));
-        emit finished(true);
+        if (!awaitSettlement(true, r))
+            cancellationAnswered(r);
     });
     m_pendingRequest = m_backend->cancelInvoiceAsync(m_invoiceNumber, m_issueDate);
+}
+
+void AeatSelfTest::cancellationAnswered(const VerifactuResult &r)
+{
+    if (!r.isSuccess()) {
+        fail("cancellation", tr("Anulación de %1: %2 %3").arg(m_invoiceNumber, r.errorCode, r.errorDescription));
+        return;
+    }
+    emit progress(true, tr("Anulación de %1 registrada por la AEAT. La conexión directa funciona.").arg(m_invoiceNumber));
+    emit finished(true);
 }

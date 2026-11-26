@@ -189,10 +189,19 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
         // Whole seconds on both sides; in the restart's own second only a record AEAT
         // shows under the new number belongs to the new chain.
         const qint64 restartSecs = restartedAt.toSecsSinceEpoch();
+        int unreadable = 0;
         candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const AeatResponse::RecordSummary &c) {
-            const qint64 secs = QDateTime::fromString(c.generatedAt, Qt::ISODate).toSecsSinceEpoch();
+            const QDateTime generated = QDateTime::fromString(c.generatedAt, Qt::ISODate);
+            if (!generated.isValid()) {
+                ++unreadable;      // before or after the restart cannot be told: never a link
+                return true;
+            }
+            const qint64 secs = generated.toSecsSinceEpoch();
             return secs < restartSecs || (secs == restartSecs && c.installationNumber != restartNumber);
         }), candidates.end());
+        if (unreadable > 0)
+            qWarning() << "AeatDirectBackend:" << unreadable << "record(s) with an unreadable generation time left out of"
+                       << "the chain after its restart";
     }
     // A cancellation AEAT returned under one of our invoices is a link of our chain only
     // when it is proven ours: this database or the settings' marker hold its huella, or it
@@ -232,9 +241,9 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
     }
     QSet<QString> hashes;
     for (const AeatResponse::RecordSummary &c : chain)
-        hashes.insert(c.hash);
+        hashes.insert(c.hash.toUpper());
     // The current head takes part too: a newer record chains to it, or it is the tip.
-    if (!head.isFirst() && !hashes.contains(head.hash)) {
+    if (!head.isFirst() && !hashes.contains(head.hash.toUpper())) {
         AeatResponse::RecordSummary h;
         h.valid = true;
         h.issuerNif = m_config.issuerNif;
@@ -309,7 +318,7 @@ bool AeatDirectBackend::adoptTip(const QList<AeatResponse::RecordSummary> &found
                    << chainNumber << "(the chain's last record at AEAT)";
         m_config.system.installationNumber = chainNumber;
     }
-    if (tip->hash != head.hash) {
+    if (tip->hash.compare(head.hash, Qt::CaseInsensitive) != 0) {
         const AeatRecord::PreviousRecord moved{
             { m_config.issuerNif, tip->invoiceNumber, QDate::fromString(tip->issueDate, kDateFormat) }, tip->hash, tip->generatedAt };
         // The next record links to this huella: an anchor the chain verifier accepts.
@@ -458,7 +467,8 @@ void AeatDirectBackend::syncFinished(bool ok, const QString &message)
     m_lastSyncFailed = !ok;
     if (ok) {
         m_chainReady = true;
-        m_store.markChainSynced(m_config.issuerNif);
+        if (!m_store.markChainSynced(m_config.issuerNif))
+            qWarning() << "AeatDirectBackend: chain sync not recorded (the next start asks AEAT again) -" << m_store.lastError();
         saveChainMarker();
     }
     qDebug() << "AeatDirectBackend: chain sync" << (ok ? "done -" : "failed -") << message;
@@ -983,8 +993,10 @@ void AeatDirectBackend::finishRecord(const AeatStore::Record &record, const Veri
         emit requestFinished(requestId, answer);
     // Every definitive outcome, also when a dialog waited: it may have closed meanwhile
     // (the app never rewrites a settled row, so a second application changes nothing).
-    if (answer.status == VerifactuResult::SUCCESS || answer.status == VerifactuResult::ERROR)
+    if (answer.status == VerifactuResult::SUCCESS || answer.status == VerifactuResult::ERROR) {
+        m_unverifiedDuplicates.remove(record.id);
         emit recordSettled(record.invoiceNumber, record.kind == AeatStore::Kind::Cancellation, answer);
+    }
 }
 
 AeatChainCheck::Result AeatDirectBackend::verifyStoredChain()
@@ -1040,15 +1052,19 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
     QHash<qint64, bool> reachedBefore;
     for (const AeatStore::Record &r : m_store.pending(1000, m_config.issuerNif))
         reachedBefore.insert(r.id, r.reached);
+    // No AEAT answer, or AEAT's own service failed: the outcome is unknown, so the
+    // records stay pending and are sent unchanged again on their own.
+    const bool transient = !parsed.parsed || (parsed.fault && parsed.faultCode.contains(QLatin1String("Server")));
+    // A batch AEAT refused whole reached none of its records (isolateFaultedBatch reverts this send).
+    const bool batchRefused = !transient && parsed.fault && sent.size() > 1;
     for (qint64 id : sent) {
+        if (batchRefused)
+            continue;
         if (response.requestSent || parsed.parsed)
             m_store.markReached(id);
         else
             m_store.markNotSent(id);
     }
-    // No AEAT answer, or AEAT's own service failed: the outcome is unknown, so the
-    // records stay pending and are sent unchanged again on their own.
-    const bool transient = !parsed.parsed || (parsed.fault && parsed.faultCode.contains(QLatin1String("Server")));
     if (transient) {
         // A certificate that expired while the app was open: say so, instead of retrying forever.
         if (m_certificate.info().expiry.isValid() && m_certificate.info().expiry < QDateTime::currentDateTime()) {
@@ -1089,6 +1105,7 @@ void AeatDirectBackend::onSubmissionReply(const AeatTransport::Response &respons
         const AeatStore::Record record = pendingById.value(id);
         if (!record.isValid()) {
             // Settled meanwhile: its waiters still hear the invoice's stored answer.
+            m_unverifiedDuplicates.remove(id);
             const AeatStore::Record sentRecord = m_inFlightRecords.value(id);
             const AeatStore::Record now = m_store.latest(sentRecord.kind, sentRecord.invoiceNumber, m_config.issuerNif);
             if (m_waiters.contains(id))
@@ -1180,7 +1197,6 @@ void AeatDirectBackend::verifyDuplicate(const AeatStore::Record &record, const V
         // AEAT answers "duplicate" but its query never shows the record: after a few rounds
         // an ERROR to check by hand, never resend -> duplicate -> query for ever.
         if (query.parsed && !query.fault && !held && ++m_unverifiedDuplicates[record.id] >= kMaxUnverifiedDuplicates) {
-            m_unverifiedDuplicates.remove(record.id);
             VerifactuResult r = result;
             r.status = VerifactuResult::ERROR;
             r.csv.clear();

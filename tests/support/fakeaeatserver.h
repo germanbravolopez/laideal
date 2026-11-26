@@ -100,6 +100,10 @@ public:
     // Queries return only the records whose invoice date is in the asked month, as AEAT
     // does (off by default: most tests use fixed dates).
     void setQueryByMonth(bool on) { m_queryByMonth = on; }
+    // The next submission (queries are answered) is dropped without registering its records.
+    void dropNextSubmission() { m_dropNextSubmission = true; }
+    // Query replies give the records' huellas in lower case.
+    void setQueryHashesLowerCase(bool on) { m_queryHashesLowerCase = on; }
     // The next request gets `reply` instead of the default answer.
     void enqueue(const Reply &reply) { m_scripted.enqueue(reply); }
 
@@ -136,6 +140,8 @@ private:
     bool m_queryHidesCancellation = false;
     bool m_queryShowsCancellersSystem = false;
     bool m_queriesUnavailable = false;
+    bool m_dropNextSubmission = false;
+    bool m_queryHashesLowerCase = false;
     int m_counter = 0;
 };
 

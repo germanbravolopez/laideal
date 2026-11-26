@@ -294,8 +294,11 @@ bool AeatStore::setChainHead(const QString &issuerNif, const AeatRecord::Previou
     if (ok)
         qDebug() << "AeatStore: chain of" << issuerNif << "(" << m_environment << ") now continues after"
                  << head.invoice.invoiceNumber << head.hash;
-    else
-        qWarning() << "AeatStore::setChainHead failed -" << q.lastError().text();
+    else {
+        m_lastError = q.lastError().text();
+        qWarning() << "AeatStore::setChainHead failed -" << m_lastError;
+    }
+    q.finish();
     close(wasOpen);
     return ok;
 }
@@ -379,6 +382,9 @@ bool AeatStore::markChainSynced(const QString &issuerNif)
     q.bindValue(":n", issuerNif);
     q.bindValue(":t", QDateTime::currentDateTime().toString(Qt::ISODate));
     const bool ok = q.exec();
+    if (!ok)
+        m_lastError = q.lastError().text();
+    q.finish();
     close(wasOpen);
     return ok;
 }
@@ -613,9 +619,15 @@ AeatStore::Record AeatStore::append(Kind kind, const QString &issuerNif,
         close(wasOpen);
         return stored;
     }
+    // The row just inserted, whatever other issuer holds the same number.
+    q.prepare(QStringLiteral("SELECT %1 FROM aeat_records WHERE id = :id").arg(QLatin1String(kRecordColumns)));
+    q.bindValue(":id", id);
+    if (q.exec() && q.next())
+        stored = readRecord(q);
+    else
+        m_lastError = q.lastError().text();
+    q.finish();
     close(wasOpen);
-    stored = latest(kind, built.invoiceNumber);
-    Q_ASSERT(stored.id == id);
     return stored;
 }
 
@@ -777,7 +789,10 @@ bool AeatStore::markOutcome(qint64 id, const QString &state, const QString &csv,
     if (!open(&wasOpen))
         return false;
     QSqlQuery q(m_db);
-    q.prepare("UPDATE aeat_records SET state = :s, csv = :c, error_code = :ec, error_description = :ed WHERE id = :id");
+    // A settled row is never rewritten.
+    q.prepare("UPDATE aeat_records SET state = :s, csv = :c, error_code = :ec, error_description = :ed "
+              "WHERE id = :id AND state = :pending");
+    q.bindValue(":pending", kPending);
     q.bindValue(":s", state);
     q.bindValue(":c", text(csv));
     q.bindValue(":ec", text(errorCode));
