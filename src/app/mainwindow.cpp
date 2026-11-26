@@ -124,6 +124,8 @@ MainWindow::MainWindow(QWidget *parent)
                 QMetaObject::invokeMethod(this, [this, res]() {
                     BackupManager::recordSuccess(res);   // settings are written on the GUI thread
                     BackupManager::recordFailure(res);
+                    if (res.skipped)
+                        return;                          // another run is making the copy: not a failure
                     if (!res.success) {
                         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad automática."))
                                           + "<br>" + res.errorMessage.toHtmlEscaped());
@@ -478,7 +480,7 @@ void MainWindow::mainwindowInitialSettings()
         if (res.success) {
             AppSettings::instance()->setBackupLastVersion(version);
             BackupManager::recordSuccess(res);   // saves the settings
-        } else {
+        } else if (!res.skipped) {                    // skipped: a copy was made this very second
             BackupManager::recordFailure(res);
             rewriteData = false;
             startProblems << UiKit::errorHtml(tr("No se pudo hacer la copia de seguridad previa a la actualización: %1")
@@ -1943,6 +1945,10 @@ void MainWindow::on_actionHacer_copia_de_seguridad_triggered()
     BackupManager::recordSuccess(res);
     BackupManager::recordFailure(res);
 
+    if (res.skipped) {
+        m_result->setText(UiKit::warnHtml(res.errorMessage.toHtmlEscaped()));
+        return;
+    }
     if (!res.success) {
         m_result->setText(UiKit::errorHtml(tr("No se pudo crear la copia de seguridad."))
                           + "<br>" + res.errorMessage.toHtmlEscaped());

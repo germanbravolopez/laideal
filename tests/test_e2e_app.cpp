@@ -625,6 +625,11 @@ private slots:
                                     "'01-01-2026', 1, 'H774', '<x/>', '2026-01-01T10:00:00+01:00', 'ACEPTADO')"));
         }
         QVERIFY(direct.invoicePredatesProduction("774", QDate::currentDate()));
+        // A rectificativa dated before production is refused like any invoice.
+        QVERIFY(direct.submitRectificationAsync("R-771", yesterday, VerifactuInvoice::RECTIFICATION_R5,
+                                                VerifactuInvoice::BY_DIFFERENCES, -1.0, -0.21, 10.0, 2.10, 21.0,
+                                                "x", "771", yesterday).isEmpty());
+        QVERIFY2(direct.getLastError().contains("anterior al paso a PRODUCCI"), qPrintable(direct.getLastError()));
         // A new invoice is refused its date before anything is stored as paid.
         QVERIFY(direct.dateBeforeProductionReason(QDate::currentDate()).isEmpty());
         QVERIFY(direct.dateBeforeProductionReason(yesterday).contains("anterior al paso a PRODUCCI"));
@@ -2904,7 +2909,7 @@ private slots:
         QPointer<Imprimir> recibo = open(true, false);
         QVERIFY(press(recibo, "999").contains("No se ha encontrado el recibo"));
         QString text = press(recibo, "650");
-        QVERIFY2(text.contains("Recibo Nº 650 impreso (copia del cliente y del establecimiento)")
+        QVERIFY2(text.contains("Recibo Nº 650 preparado, no impreso")
                  && text.contains("impresión está desactivada"), qPrintable(text));
         recibo->close();
 
@@ -2916,7 +2921,7 @@ private slots:
         complete->findChild<QLineEdit *>("leDni")->setText("12345678Z");
         complete->findChild<QLineEdit *>("leAddress")->setText("Calle Mayor 1");
         text = press(complete, "650");
-        QVERIFY2(text.contains("Factura completa 650 impresa"), qPrintable(text));
+        QVERIFY2(text.contains("Factura completa 650 preparada, no impresa"), qPrintable(text));
         QVERIFY(complete->ticketBytes().contains("DNI: 12345678Z"));
         QVERIFY(complete->ticketBytes().contains("Calle Mayor 1"));
         complete->close();
@@ -2980,7 +2985,7 @@ private slots:
         auto *events = dlg.findChild<QComboBox *>("cbEvent");
         events->setCurrentIndex(events->count() - 1);
         QString text = press();
-        QVERIFY2(text.contains("Facturas impresas: 671.") && text.contains("No se han impreso: 671-1 (sin prendas pagadas)"),
+        QVERIFY2(text.contains("Facturas preparadas, no impresas: 671.") && text.contains("No se han impreso: 671-1 (sin prendas pagadas)"),
                  qPrintable(text));
 
         AppSettings *settings = AppSettings::instance();
@@ -3075,7 +3080,7 @@ private slots:
         QString text = press("860");
         QVERIFY2(text.contains("no tiene prendas que imprimir") && !text.contains("impreso"), qPrintable(text));
         text = press("861 ");
-        QVERIFY2(text.contains("Recibo Nº 861 impreso"), qPrintable(text));
+        QVERIFY2(text.contains("Recibo Nº 861 preparado, no impreso"), qPrintable(text));
         dlg->close();
 
         // The engine alone: rows of two payment events give no QR.
@@ -3251,7 +3256,7 @@ private slots:
         print.le_n_ticket->setText("670");
         QTest::keyClick(print.le_n_ticket, Qt::Key_Return);
         QCOMPARE(m_server.requestsTo("GetQrCode").size(), 1);               // one factura, one QR request
-        QVERIFY2(print.findChild<QLabel *>("lblResult")->text().contains("Factura 670 impresa"),
+        QVERIFY2(print.findChild<QLabel *>("lblResult")->text().contains("Factura 670 preparada, no impresa"),
                  qPrintable(print.findChild<QLabel *>("lblResult")->text()));
 
         QVERIFY(E2e::seedGarment(m_db, "2300", "h2300a", "10.00", today()));
