@@ -527,7 +527,9 @@ private slots:
             dlg.m_verifactu = &direct;
             dlg.findChild<QLineEdit *>("leTicketNum")->setText("760");
             QMetaObject::invokeMethod(&dlg, "onSearchClicked");
-            dlg.findChild<QComboBox *>("cbInvoiceType")->setCurrentIndex(4);      // R5
+            // R5 is the type offered: the shop's tickets are simplified invoices.
+            if (dlg.findChild<QComboBox *>("cbInvoiceType")->currentIndex() != 4)
+                return QStringLiteral("the dialog does not open on R5");
             dlg.findChild<QDoubleSpinBox *>("sbAmount")->setValue(amount);
             QMetaObject::invokeMethod(&dlg, "onRectifyClicked");
             QTest::qWaitFor([&dlg] { return !dlg.findChild<QLabel *>("lblResult")->text().contains("Enviando"); }, 15000);

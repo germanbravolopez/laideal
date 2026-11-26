@@ -32,7 +32,7 @@ VerifactuInvoice::InvoiceType invoiceTypeFromIndex(int idx)
         case 2 : return VerifactuInvoice::RECTIFICATION_R3;
         case 3 : return VerifactuInvoice::RECTIFICATION_R4;
         case 4 : return VerifactuInvoice::RECTIFICATION_R5;
-        default: return VerifactuInvoice::RECTIFICATION_R1;
+        default: return VerifactuInvoice::RECTIFICATION_R5;
     }
 }
 
@@ -79,7 +79,7 @@ RectifyInvoiceDialog::RectifyInvoiceDialog(const QSqlDatabase &database, QWidget
     m_cbInvoiceType->addItem("R3 - Créditos incobrables (art. 80.4 LIVA)");
     m_cbInvoiceType->addItem("R4 - Resto de causas");
     m_cbInvoiceType->addItem("R5 - Rectificación de factura simplificada");
-    m_cbInvoiceType->setCurrentIndex(0); // R1 most common
+    m_cbInvoiceType->setCurrentIndex(4); // R5: the shop's tickets are simplified invoices, and the only type the direct connection takes
     rowType->addWidget(m_cbInvoiceType, /*stretch*/ 1);
     formLayout->addLayout(rowType);
 
