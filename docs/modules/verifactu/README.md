@@ -235,7 +235,7 @@ One invoice per payment event `(n_recibo, verifactu_invoice_seq)`: `InvoiceID` i
 - A paid ticket submits the stored total and prints the factura with QR for the client and the recibo with IMPORTE PAGADO for the shop: at once with the direct client, else after waiting up to 3 s (no reply: both recibos, no QR). An async handler writes the reply into the rows.
 - Refused while the chain gate blocks, or Verifactu is not configured (paid tickets only), or the payment date is before production.
 
-### Añadir prendas (`AddGarment` -> `paidGarmentSaved` -> `MainWindow::verifactuSubmitInvoice`)
+### Añadir prendas (`AddGarment` -> `paidGarmentSaved` -> `VerifactuCoordinator::submitInvoice`)
 A garment added as paid (Tickets → Añadir nuevas prendas, or Añadir in Recogida) is the ticket's first invoice (tickets with a paid garment are refused, re-checked at save), submitted at once as seq 0 with its payment date. No bounded wait: the row stays `PENDIENTE` for the start-up recovery without a reply. Neither window opens while the chain gate blocks.
 
 ### Cobrar (`PayDialog::onCobrarClicked`)

@@ -40,34 +40,38 @@ on_pb_save_clicked          (m_saving blocks a second click while waiting for AE
   checkClientData           adds or updates the client, only for a stored ticket
   submitAndPrint
     unpaid:  printRecibo
-    paid:    verifactuSubmitInvoice (async, amount = stored total)
-             direct client: QR known at once (verifactuQrBeforeReply), print the factura
-             gateway:       waitForAeatReply (up to 3 s, window disabled), then print
+    paid:    coordinator submitInvoice (async, amount = stored total)
+             direct client: QR known at once (qrBeforeReply), print the factura
+             gateway:       coordinator waitForReply (up to 3 s, window disabled), then print
   resetAllContents
   savedMessage              ticket, client, garments, amount, paid or not, what printed, client note
 ```
 
-`onVerifactuRequestFinished` patches the rows' `verifactu_*` columns when the reply arrives (`updateTicketVerifactuFields`); a late success after a QR-less print says the factura is now printable (`m_pendingSubmits`, `printedWithoutQr`). `printRecibo` / `printFra` use `Imprimir` and print only when `AppSettings::enablePrinting()` is on.
+`VerifactuCoordinator::onRequestFinished` patches the rows' `verifactu_*` columns when the reply arrives (`updateTicketVerifactuFields`); a late success after a QR-less print says the factura is now printable (its pending map, `printedWithoutQr`). `printRecibo` / `printFra` use `Imprimir` and print only when `AppSettings::enablePrinting()` is on.
 
 ## Methods
 
 | Method | Purpose |
 |--------|---------|
 | `mainwindowInitialSettings` | Start-up: pre-migration backup, `migrateDatabase`, post-update notice, backup warning, table setup. |
-| `initializeVerifactu` | One `VerifactuIntegration` for the window's life (re-initialised after Configuración): warns if not configured (paid saves refused), `connectVerifactu`, `settlePendingRectifications`, and for the direct client its warnings, chain verification and sync (`continueDirectChain`). |
-| `connectVerifactu` / `onRecordSettled` | Once-only connections: outcomes nobody waited for still settle their rows; a finished chain sync refreshes the next number. |
-| `showPendingSubmits` | The start-up recovery dialog of PENDIENTE payments (`PendingSubmitsDialog`); retries through `verifactuSubmitInvoice(ticket, date, total, seq)`. Waits (retries every 2 s) while a modal dialog is open. |
+| `initializeVerifactu` | Initialises the coordinator's `VerifactuIntegration` (one for the window's life, re-initialised after Configuración): warns if not configured (paid saves refused), `settlePendingRectifications`, and for the direct client its warnings, chain verification and sync (`continueDirectChain`). |
+| `buildCoordinator` / `onRecordSettled` / `onChainChecked` | The window's handlers of the coordinator's signals, connected once: outcomes nobody waited for still settle their rows; a finished chain sync refreshes the next number. |
+| `showPendingSubmits` | The start-up recovery dialog of PENDIENTE payments (`PendingSubmitsDialog`); retries through the coordinator's `submitInvoice(ticket, date, total, seq)`. Waits (retries every 2 s) while a modal dialog is open. |
 | `recoveryFloorIso` | The floor for the pending / refused lists (see `verifactuRecoveryFloorIso`). |
 | `showRefusedInvoices`, `showVerifactuRejection`, `rejectionHtml` | The refused list behind the red count; a definitive refusal in the result panel. |
-| `openSettings` | Configuración dialog, and its connection tests (`checkAeatProduction`, `testGatewayConnection`, `runAeatSelfTest`, `runAeatConnectionTest`). |
+| `openSettings` | Configuración dialog; its connection tests (`checkAeatProduction`, `testGatewayConnection`, `runAeatSelfTest`, `runAeatConnectionTest`) are the coordinator's. |
 | `openListado(table, objectName, title)`, `openImprimir(isRecibo, isCompleteInvoice, title)` | One opener for the four Ver > Listado entries and the three Imprimir entries. |
 | `setNextTicketNumber`, `populateCbClient`, `repopulatePrendas`, `repopulateClientes` | Next `n_recibo` (via `nextTicketNumber`; unreadable: no number and saving refused) and the combos. |
+
+## VerifactuCoordinator (`verifactucoordinator.*`)
+
+A `QObject` child of the window with no form widget: owns the `VerifactuIntegration` (`integration()`, created by the first `initialize()`), the pending-submit map, the bounded wait and the four connection tests. User-visible strings keep the `MainWindow` translation context. The window calls `submitInvoice`, `qrBeforeReply`, `waitForReply`, `markPrintedWithoutQr`, `isWaitingForAeat` (`closeEvent` refuses a close meanwhile), `rejectionHtml` and the two status notices (`aeatEnvironmentNotice`, `unsentRecordsNotice`), and reacts to its signals: `statusMessage` (status bar), `submitRefused` (result panel), `submitSettled` (refused count), `aeatWaitStarted` / `aeatWaitFinished` (disable / restore the form and menu), and the relayed `recordSettled`, `unsentRecordsChanged`, `chainChecked`. Printing, the result panel and the chain continuation message stay in the window.
 
 ## Windows opened
 
 Each takes the `db` reference at open time: `Listado`, `RecogPrendas`, `Facturas`, `Contabilidad`, `Imprimir`, `AddGarment`, `CancelInvoiceDialog`, `RectifyInvoiceDialog`, `RefusedInvoicesDialog`, `AeatExportDialog`, `PendingSubmitsDialog` (start-up), `SelfCheckDialog`. `VoidGarmentsDialog` is opened from [RecogPrendas](recog_prendas.md).
 
-`AddGarment` gets its `InvoicingPolicy` from `invoicingPolicyOf(integration)` (why invoicing is blocked, the payment date's production limit, the AEAT environment); on `paidGarmentSaved` it calls `verifactuSubmitInvoice`. See [add_garment.md](add_garment.md).
+`AddGarment` gets its `InvoicingPolicy` from `invoicingPolicyOf(integration)` (why invoicing is blocked, the payment date's production limit, the AEAT environment); on `paidGarmentSaved` the window calls the coordinator's `submitInvoice`. See [add_garment.md](add_garment.md).
 
 | Dialog | Does |
 |--------|------|
@@ -97,4 +101,4 @@ Switches: `--settings <file>` (another settings file; no file after it is an err
 
 ## Tests
 
-`test_e2e_app` and `test_e2e_verifactu` drive the window (e.g. `test_mainWindow_failedInsertStopsTheSave`), `tests/ui` opens the menus, `test_selfcheck` and `test_instancelock` cover their files. See [testing](../testing/README.md).
+`test_verifactu_coordinator` covers the coordinator alone; `test_e2e_app` and `test_e2e_verifactu` drive the window (e.g. `test_mainWindow_failedInsertStopsTheSave`), `tests/ui` opens the menus, `test_selfcheck` and `test_instancelock` cover their files. See [testing](../testing/README.md).

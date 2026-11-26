@@ -427,6 +427,28 @@ add_test(NAME e2e_app
     COMMAND test_e2e_app -o ${CMAKE_BINARY_DIR}/test-results-e2e_app.xml,junitxml -o -,txt)
 set_tests_properties(e2e_app PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# VerifactuCoordinator (src/app) without the window: pending-submit bookkeeping,
+# the bounded wait for AEAT and the gateway connection test, against the fake
+# Verifactu server and a throwaway DB / settings.
+add_executable(test_verifactu_coordinator
+    test_verifactu_coordinator.cpp
+    support/fakeverifactuserver.h
+    support/fakeverifactuserver.cpp
+    support/modalautocloser.h
+    support/testschema.h
+)
+target_include_directories(test_verifactu_coordinator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/support
+)
+target_link_libraries(test_verifactu_coordinator PRIVATE
+    Qt${QT_VERSION_MAJOR}::Test
+    Qt${QT_VERSION_MAJOR}::Network
+    laideal_app
+)
+add_test(NAME verifactu_coordinator
+    COMMAND test_verifactu_coordinator -o ${CMAKE_BINARY_DIR}/test-results-verifactu_coordinator.xml,junitxml -o -,txt)
+set_tests_properties(verifactu_coordinator PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # imprimir: the print dialog / engine with the printer transport replaced
 # (ThermalPrinter::setTransport) - printer offline, copies sent, factura / completa
 # content, 58 mm - on a throwaway DB and settings. Never a real printer or AEAT.
