@@ -6,6 +6,7 @@
 #include <QSqlQueryModel>
 #include <QHash>
 
+#include "add_garment.h"
 #include "mysortfilterproxymodel.h"
 #include "sql_lite.h"
 
@@ -180,5 +181,9 @@ private:
     // sourceRow/sourceCol are sqlQueryModel coords, not proxy coords.
     void selectSourceRow(int sourceRow);
 };
+
+// What the Tickets -> Añadir nuevas prendas window asks Verifactu, from the integration
+// (null: nothing restricted except that a paid garment is refused).
+AddGarment::InvoicingPolicy invoicingPolicyOf(VerifactuIntegration *integration);
 
 #endif // RECOGPRENDAS_H

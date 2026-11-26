@@ -17,7 +17,7 @@
 #include <QTemporaryDir>
 
 #include "add_garment.h"
-#include "aeatreconcilesummary.h"   // Recogida's "Consultar en AEAT" text, a pure function
+#include "aeatreconcilesummary.cpp"   // Recogida's "Consultar en AEAT" text, a pure function: compiled in, this test does not link recog_prendas
 #include "sql_lite.h"
 #include "support/testschema.h"
 
@@ -79,7 +79,7 @@ private:
     void pay(AddGarment &dlg, bool paid = true) { dlg.findChild<QCheckBox *>("chkPagado")->setChecked(paid); }
     void save(AddGarment &dlg) { dlg.findChild<QPushButton *>("btnSave")->click(); }
     QString panel(AddGarment &dlg) { return dlg.findChild<QLabel *>("lblResult")->text(); }
-    static void allowInvoicing(AddGarment &dlg) { dlg.invoicingBlocked = [] { return QString(); }; }
+    static void allowInvoicing(AddGarment &dlg) { dlg.invoicing.invoicingBlocked = [] { return QString(); }; }
     int garmentRows() { return scalar("SELECT COUNT(*) FROM ingresos WHERE n_recibo = '100'").toInt(); }
 
 private slots:
@@ -278,13 +278,13 @@ private slots:
     void test_save_paidWithoutInvoicingCheck_refused()
     {
         seedTicket();
-        AddGarment dlg(m_db);                                       // invoicingBlocked unset
+        AddGarment dlg(m_db);                                       // invoicing.invoicingBlocked unset
         searchTicket(dlg);
         fillGarment(dlg);
         pay(dlg);
         save(dlg);
         QVERIFY2(panel(dlg).contains("Verifactu no está disponible"), qPrintable(panel(dlg)));
-        dlg.invoicingBlocked = [] { return QStringLiteral("Motivo de bloqueo"); };
+        dlg.invoicing.invoicingBlocked = [] { return QStringLiteral("Motivo de bloqueo"); };
         save(dlg);
         QVERIFY2(panel(dlg).contains("Motivo de bloqueo"), qPrintable(panel(dlg)));
         QCOMPARE(garmentRows(), 1);
@@ -319,10 +319,10 @@ private slots:
         seedTicket(QDate::currentDate().addDays(-5));
         AddGarment dlg(m_db);
         allowInvoicing(dlg);
-        dlg.invoiceDateRefused = [start](const QDate &date) {
+        dlg.invoicing.invoiceDateRefused = [start](const QDate &date) {
             return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
         };
-        dlg.productionStartDate = [start] { return start; };
+        dlg.invoicing.productionStartDate = [start] { return start; };
         searchTicket(dlg);
         fillGarment(dlg);
         pay(dlg);                                                   // paid today
@@ -337,10 +337,10 @@ private slots:
         seedTicket(QDate::currentDate().addDays(-5));
         AddGarment dlg(m_db);
         allowInvoicing(dlg);
-        dlg.invoiceDateRefused = [start](const QDate &date) {
+        dlg.invoicing.invoiceDateRefused = [start](const QDate &date) {
             return date < start ? QStringLiteral("Fecha anterior al paso a PRODUCCION") : QString();
         };
-        dlg.productionStartDate = [start] { return start; };
+        dlg.invoicing.productionStartDate = [start] { return start; };
         searchTicket(dlg);
         auto *payDate = dlg.findChild<QDateEdit *>("deFechaPago");
         QCOMPARE(payDate->minimumDate(), start);                    // not offered earlier
@@ -413,6 +413,20 @@ private slots:
         QCOMPARE(garmentRows(), 1);
     }
 
+    void test_search_unreadableHeader_isNotReportedAsNotFound()
+    {
+        seedTicket();
+        AddGarment dlg(m_db);
+        exec("ALTER TABLE ingresos RENAME COLUMN cliente TO cliente_off");
+        searchTicket(dlg);
+        const QString text = panel(dlg);
+        const bool found = dlg.ticketFound();
+        exec("ALTER TABLE ingresos RENAME COLUMN cliente_off TO cliente");
+        QVERIFY2(text.contains("No se pudo comprobar el recibo") && !text.contains("No se ha encontrado"),
+                 qPrintable(text));
+        QVERIFY(!found);
+    }
+
     void test_search_emptyNumber_saysItIsMissing()
     {
         AddGarment dlg(m_db);
@@ -431,7 +445,7 @@ private slots:
              "('pruebas', 'alta', '100'), ('produccion', 'alta', '100-4')");
         AddGarment dlg(m_db);
         allowInvoicing(dlg);
-        dlg.aeatEnvironment = [] { return QStringLiteral("pruebas"); };
+        dlg.invoicing.aeatEnvironment = [] { return QStringLiteral("pruebas"); };
         QSignalSpy paid(&dlg, &AddGarment::paidGarmentSaved);
         searchTicket(dlg);
         fillGarment(dlg);

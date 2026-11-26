@@ -2,6 +2,8 @@ add_library(recog_prendas STATIC
     recog_prendas.h
     recog_prendas.cpp
     aeatreconcilesummary.h
+    aeatreconcilesummary.cpp
+    invoicingpolicy.cpp
     pay_dialog.h
     pay_dialog.cpp
     voidgarmentsdialog.h
@@ -17,6 +19,6 @@ target_link_libraries(recog_prendas
     verifactu
     appsettings
     uikit
-    add_garment
 )
+target_link_libraries(recog_prendas PUBLIC add_garment)   # recog_prendas.h names AddGarment::InvoicingPolicy
 target_include_directories(recog_prendas INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

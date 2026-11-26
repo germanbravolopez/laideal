@@ -795,18 +795,7 @@ void RecogPrendas::on_pb_add_clicked()
     // The same window as Tickets -> Añadir nuevas prendas, on the selected ticket.
     // It deletes itself on close; window-modal over Recogida while it is open.
     auto *dlg = new AddGarment(db, this);
-    dlg->invoicingBlocked = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
-    };
-    dlg->invoiceDateRefused = [this](const QDate &date) {
-        return m_verifactuIntegration ? m_verifactuIntegration->dateBeforeProductionReason(date) : QString();
-    };
-    dlg->productionStartDate = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->productionStartDate() : QDate();
-    };
-    dlg->aeatEnvironment = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
-    };
+    dlg->invoicing = invoicingPolicyOf(m_verifactuIntegration);
     dlg->setWindowModality(Qt::WindowModal);
     m_notSentReason.clear();
     auto added = QSharedPointer<int>::create(0);
@@ -1326,12 +1315,6 @@ void RecogPrendas::adoptAeatRecord(const QString &ticketNum, int seq, const QStr
     }
 }
 
-// The status bar guesses plain or rich text: wrapped in a tag, escaped AEAT text shows as typed.
-static QString richStatus(const QString &escapedText)
-{
-    return QStringLiteral("<span>") + escapedText + QStringLiteral("</span>");
-}
-
 void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const VerifactuResult &result)
 {
     auto it = m_pendingSubmits.find(requestId);
@@ -1349,10 +1332,10 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
 
     // Nothing to reconcile either: AEAT already holds the invoice we have.
     if (changed <= 0) {
-        statusBar()->showMessage(richStatus(changed == 0
+        statusBar()->showMessage(changed == 0
             ? tr("Respuesta de AEAT para el ticket %1 ignorada: la factura ya estaba registrada")
-                  .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped())
-            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped())),
+                  .arg(verifactuInvoiceId(ticketNum, seq))
+            : tr("No se pudo guardar la respuesta de AEAT del ticket %1").arg(verifactuInvoiceId(ticketNum, seq)),
             15000);
         return;
     }
@@ -1361,16 +1344,15 @@ void RecogPrendas::onVerifactuRequestFinished(const QString &requestId, const Ve
         qDebug() << "Verifactu submit successful for ticket" << ticketNum << "- CSV:" << result.csv;
         // An adopted reply landed after the customer already got a QR-less recibo,
         // so say the factura can now be printed rather than just "enviado".
-        const QString invoiceId = verifactuInvoiceId(ticketNum, seq).toHtmlEscaped();
-        statusBar()->showMessage(richStatus(
+        const QString invoiceId = verifactuInvoiceId(ticketNum, seq);
+        statusBar()->showMessage(
             adopted ? tr("AEAT ha confirmado el ticket %1 - ya se puede imprimir la factura con QR").arg(invoiceId)
-                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(invoiceId, result.csv.toHtmlEscaped())),
+                    : tr("Ticket %1 enviado a AEAT (CSV: %2)").arg(invoiceId, result.csv),
             adopted ? 30000 : 10000);
     } else {
         qWarning() << "Verifactu submit failed for ticket" << ticketNum << "-" << result.errorDescription;
-        statusBar()->showMessage(richStatus(tr("Error al enviar ticket %1: %2")
-                                                .arg(verifactuInvoiceId(ticketNum, seq).toHtmlEscaped(),
-                                                     result.errorDescription.toHtmlEscaped())), 15000);
+        statusBar()->showMessage(tr("Error al enviar ticket %1: %2")
+                                        .arg(verifactuInvoiceId(ticketNum, seq), result.errorDescription), 15000);
         // A definitive refusal can come after the customer got the factura with its QR:
         // it stays in the panel until someone resends it.
         if (result.status == VerifactuResult::ERROR

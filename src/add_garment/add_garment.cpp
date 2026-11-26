@@ -210,7 +210,11 @@ void AddGarment::onSearchClicked()
     }
     bool headerOk = false;
     const TicketHeader header = ticketHeader(db, ticket, &headerOk);
-    if (!headerOk || !header.found) {
+    if (!headerOk) {
+        m_lblResult->setText(unreadableTicketRefusal());
+        return;
+    }
+    if (!header.found) {
         m_lblResult->setText(UiKit::warnHtml(tr("No se ha encontrado el recibo Nº %1.").arg(ticket.toHtmlEscaped())));
         return;
     }
@@ -240,7 +244,7 @@ void AddGarment::onSearchClicked()
     // Nor before the day production began: such an invoice would never reach the real AEAT.
     // The current minimum is a candidate too, so the reception date is never lowered.
     UiKit::limitDateRange(m_deFechaPago,
-                          { m_deFechaPago->minimumDate(), productionStartDate ? productionStartDate() : QDate() },
+                          { m_deFechaPago->minimumDate(), invoicing.productionStartDate ? invoicing.productionStartDate() : QDate() },
                           QDate::currentDate());
     populateGarments();
     m_grpTicket->setEnabled(true);
@@ -304,11 +308,11 @@ QString AddGarment::validationError()
         return UiKit::errorHtml(tr("El importe de la prenda es 0,00."))
                + "<br>" + tr("Compruebe la prenda, el servicio, la cantidad y el tamaño.");
     if (m_chkPagado->isChecked()) {                                 // a paid garment is an invoice
-        const QString blocked = invoicingBlocked ? invoicingBlocked()
+        const QString blocked = invoicing.invoicingBlocked ? invoicing.invoicingBlocked()
                                                  : tr("Verifactu no está disponible: no se puede cobrar.");
         if (!blocked.isEmpty())
             return UiKit::errorHtml(blocked);
-        const QString early = invoiceDateRefused ? invoiceDateRefused(m_deFechaPago->date()) : QString();
+        const QString early = invoicing.invoiceDateRefused ? invoicing.invoiceDateRefused(m_deFechaPago->date()) : QString();
         if (!early.isEmpty())
             return UiKit::errorHtml(early);
     }
@@ -382,7 +386,7 @@ bool AddGarment::saveGarment()
     // used for an invoice of it (a payment never stored as paid) is not reused.
     if (row.pagado == QLatin1String(INGRESOS_PAGADO_SI)) {
         bool seqOk = false;
-        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, aeatEnvironment ? aeatEnvironment() : QString(), &seqOk);
+        row.verifactuInvoiceSeq = nextVerifactuInvoiceSeq(db, row.nRecibo, invoicing.aeatEnvironment ? invoicing.aeatEnvironment() : QString(), &seqOk);
         if (!seqOk) {
             qWarning() << "AddGarment: invoice number unreadable for ticket" << row.nRecibo << "- nothing stored";
             m_saveError = UiKit::errorHtml(tr("No se pudo leer la numeración de facturas del recibo."))

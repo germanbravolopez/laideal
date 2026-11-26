@@ -1721,18 +1721,7 @@ void MainWindow::on_actionAnadir_nuevas_prendas_triggered()
     AddGarment *ui_add_garment;
     ui_add_garment = new AddGarment(db, this);
     ui_add_garment->setAttribute(Qt::WA_DeleteOnClose);
-    ui_add_garment->invoicingBlocked = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->invoicingBlockedReason() : QString();
-    };
-    ui_add_garment->invoiceDateRefused = [this](const QDate &date) {
-        return m_verifactuIntegration ? m_verifactuIntegration->dateBeforeProductionReason(date) : QString();
-    };
-    ui_add_garment->productionStartDate = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->productionStartDate() : QDate();
-    };
-    ui_add_garment->aeatEnvironment = [this] {
-        return m_verifactuIntegration ? m_verifactuIntegration->environmentName() : QString();
-    };
+    ui_add_garment->invoicing = invoicingPolicyOf(m_verifactuIntegration);
     // Submitted now, like a paid ticket on save; if AEAT does not answer, the row stays
     // PENDIENTE for the startup recovery.
     connect(ui_add_garment, &AddGarment::paidGarmentSaved, this,
