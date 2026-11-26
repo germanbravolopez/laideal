@@ -25,14 +25,14 @@ Signature currentSignature()
 {
     // j) the shop's address from the settings on purpose: the producer's contact address is
     // the same one (never in the source). The date is the day
-    // the producer signed the version that ships (12.6), set again for each such release.
+    // the producer signed the version that ships (12.7), set again for each such release.
     const AppSettings *s = AppSettings::instance();
     QStringList lines;
     for (const QString &line : { s->businessAddress().trimmed(), s->businessCity().trimmed() })
         if (!line.isEmpty())
             lines << line;
     const QString address = lines.join(QStringLiteral(", "));
-    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 11, 24),
+    return { address.isEmpty() ? QString() : address + QString::fromUtf8(", España"), QDate(2026, 11, 26),
              QString::fromUtf8("Granada, España") };
 }
 

@@ -11,7 +11,7 @@ Finished work, split out of [`progress_tracker.md`](progress_tracker.md) so the 
 
 ## Completed Milestones
 
-### Post-12.6 development — November 2026
+### Post-12.6 development — November 2026 (shipped in 12.7)
 
 - [x] **`aeat_direct_backend`: two cases that failed on a loaded machine** (26-11-2026; tests only, nothing under `src/`). Reproduced by running the suite with the processor saturated (two of three copies failed; eight plain copies at once did not, the suite is bound by its own waits). Two timing assumptions, both in the tests:
   - `test_restartWaitsForTheOldChainsUnsentRecords` expected the sync to refuse while record 2 was unsent, but only the first resend was lost: with a 2 s retry delay, a slow sync let the retry send the record first and the sync restarted the chain instead. `FakeAeatServer::setSubmissionsUnavailable(on)` now loses every submission until the test has seen the refusal, then turns sending back on.

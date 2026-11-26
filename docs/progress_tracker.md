@@ -14,18 +14,24 @@ Add new entries at the **top** of the relevant section. Do not keep an "In Progr
 
 **Branching**: `develop` for the work (directly or via short-lived branches), `master` only for releases (PR-only, protected), `hotfix/X.Y` from `master` for fixes to the released version (`CONTRIBUTING.md`, Development workflow)
 
-**Latest release**: [12.6](https://github.com/germanbravolopez/laideal/releases/tag/12.6) — the direct AEAT client adapted to AEAT's email answer of 24-11-2026: a database restored from a backup that lost a cancellation which may be the chain's last record starts a new chain under a new `NumeroInstalacion` with `PrimerRegistro = S` (art. 7.b of Orden HAC/1177/2024), and the chain check accepts that recorded restart (declaración responsable signed 24-11-2026). Also the root task runner `make.ps1`, which CI now runs. The shop installed it on 24-11-2026 and, on 25-11-2026, switched from the IreneSolutions gateway (TEST) to the **direct AEAT client in pre-production** (`verifactu.connection = aeat`, `aeat_direct_production = false`); the self-check report of 25-11-2026 is all CORRECTO.
+**Latest release**: [12.7](https://github.com/germanbravolopez/laideal/releases/tag/12.7) — the direct AEAT client ready for PRODUCTION (the shop only ticks the box: the app records the day production starts and sends the real AEAT nothing from before it), Configuración → Verifactu showing only the chosen connection's fields with *Probar conexión* for the direct one, the chain continuing from a cancellation AEAT's query proves ours (the restart of 12.6 kept for the rest), *Rectificar factura* opening on R5, and the fixes of a deep review of `src/` with its GitHub review round (declaración responsable signed 26-11-2026). Internally: `src/textformat/`, `VerifactuCoordinator` out of `MainWindow`, `AeatChainSync` out of `AeatDirectBackend`. Not yet installed at the shop, which runs 12.6 on the direct client in AEAT pre-production since 25-11-2026.
 
 
 <!-- Keep only the latest release here. Earlier releases are recorded in `completed_milestones.md`; do not accumulate a "Previous release" list under Current Status. -->
 
-**Next**: the shop works on the direct client in AEAT pre-production. Its first real records are still to be seen: until the switch (25-11-2026, 19:50) every ticket of the day went through the gateway, and the direct chain holds only the self-test's two records (alta + anulación, both accepted). Read the next shop log for the first paid ticket (ENVIADA with a CSV, the factura's QR on `prewww2.aeat.es`), the 60 s `TiempoEsperaEnvio` between sends at the counter, and the first Anular / Rectificar of a ticket the gateway registered. The work of 25/26-11-2026 on `develop` (the Verifactu tab, *Probar conexión*, the chain that continues from a cancellation AEAT returns, production readiness) waits for the next release. The switch to PRODUCTION is then one tick at the shop, parked in the Backlog until the owner sets a date (20-11-2026: much later).
+**Next**: install 12.7 at the shop (then *Comprobar tras actualizar*). Its first real records on the direct client in pre-production are still to be read in the shop log: the first paid ticket (ENVIADA with a CSV, the factura's QR on `prewww2.aeat.es`), the 60 s `TiempoEsperaEnvio` between sends at the counter, and the first Anular / Rectificar of a ticket the gateway registered. The switch to PRODUCTION is one tick at the shop, parked in the Backlog until the owner sets a date (20-11-2026: much later).
 
 ---
 
 ## Open Issues
 
-None.
+From the compliance audit of the 12.7 release (26-11-2026; nothing blocking). None can happen before the shop switches to PRODUCTION.
+
+| Issue | File | Notes |
+|-------|------|-------|
+| Switch day: a ticket the test environment refused can be resent to the real AEAT | `src/verifactu/verifactuintegration.cpp` (`refusesBeforeProduction`) | The boundary is a date. A ticket charged on the switch day before the switch, refused by the test environment (estado `ERROR`), is not "before production" by date, so *Reintentar* after the switch sends it to the real AEAT. Unsent (pending) records cannot be in this state: the switch is refused while any exist. Owner's decision: it is a real sale of a production day, so registering it there may be the right outcome; otherwise refuse it as Anular does (`acceptedInTestEnvironment`-style check on what was tried in the test environment). Record the decision in `docs/modules/verifactu/README.md`, Going to production. |
+| Production left and entered again moves its start day | `src/app/mainwindow.cpp` (`markProductionStarted`), `AeatStore::markStarted` | Deliberate (the comment says so), but a production invoice of the first stint that was refused and never resent is then dated before the new start and can no longer be sent. Leaving production is already refused while production records are unsent; a refused one is the gap. Keep the first start day, or refuse to leave while refused production invoices exist. |
+| A QR printed as received is shrunk without smoothing | `src/imprimir/imprimir.cpp` (the fallback when a QR cannot be redrawn) | A received QR wider than the paper is scaled with `Qt::FastTransformation`, which can damage its modules. Fallback path only (the app redraws its QR from the URL in the normal case). Scale by whole module steps or refuse to shrink, with a ticket-preview test that reads the result. |
 
 ---
 
