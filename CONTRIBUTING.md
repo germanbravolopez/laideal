@@ -13,7 +13,7 @@ One maintainer, mostly working with AI coding agents (Claude Code), for one shop
 
 1. Work on `develop`, or on a short-lived branch cut from it. Never commit on `master`.
 2. Cover the change with a test: a unit or end-to-end suite (`tests/`), or a UI smoke step (`tests/ui/`) for a window or flow. Run: [README §Tests](README.md#tests). Write: [`docs/testing/`](docs/testing/README.md).
-3. A change touching invoices, the `verifactu_*` columns, ticket numbering, row edits or deletes, or the printed QR also goes through the Verifactu compliance review ([`verifactu-requirements.md`](docs/modules/verifactu/verifactu-requirements.md), the `verifactu-compliance-auditor` agent).
+3. A change touching invoices, the `verifactu_*` columns, ticket numbering, row edits or deletes, or the printed QR is also reviewed against [`verifactu-requirements.md`](docs/modules/verifactu/verifactu-requirements.md); the `verifactu-compliance-auditor` agent runs on those changes at release time.
 4. Build, run `ctest` until green, update the docs (the [`/update-docs`](.claude/skills/update-docs/SKILL.md) checklist).
 5. Commit with a single-line message in the style of `git log`.
 

@@ -1,6 +1,6 @@
 ---
 name: verifactu-compliance-auditor
-description: Read-only legal-compliance reviewer for Verifactu (RD 1007/2023, Orden HAC/1177/2024). Checks a diff or a set of files against the ten requirements in docs/modules/verifactu/verifactu-requirements.md - record inalterability, correlative numbering, hash chain, retention, traceability, event log, export, QR and mandatory text, no dual-use. Use proactively before committing or releasing any change that touches src/verifactu/, ticket save/payment/cancellation/rectification, n_recibo numbering, the ingresos schema or verifactu_* columns, row edit/delete paths, backups, or the printed QR/legal text.
+description: Read-only legal-compliance reviewer for Verifactu (RD 1007/2023, Orden HAC/1177/2024). Checks a diff or a set of files against the ten requirements in docs/modules/verifactu/verifactu-requirements.md - record inalterability, correlative numbering, hash chain, retention, traceability, event log, export, QR and mandatory text, no dual-use. Use during /release (the release gate), or when the owner asks for it, on changes that touch src/verifactu/, ticket save/payment/cancellation/rectification, n_recibo numbering, the ingresos schema or verifactu_* columns, row edit/delete paths, backups, or the printed QR/legal text.
 tools: Read, Grep, Glob, Bash
 model: opus
 ---

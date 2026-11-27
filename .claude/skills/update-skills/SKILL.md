@@ -116,7 +116,7 @@ Invoke with the `Agent` tool (`subagent_type: "<name>"`) or `@agent-<name>` in c
 | `/debugging` | `.claude/skills/debugging/SKILL.md` | user + auto | Root-cause a reported bug and guard it with a regression test |
 | `dead-code-finder` | `.claude/agents/dead-code-finder.md` | subagent | Find methods declared in `src/` headers but never called |
 | `test-engineer` | `.claude/agents/test-engineer.md` | subagent | Write Qt Test coverage using the project seam patterns |
-| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | subagent (proactive) | Legal review of Verifactu-sensitive diffs |
+| `verifactu-compliance-auditor` | `.claude/agents/verifactu-compliance-auditor.md` | subagent (release gate) | Legal review of Verifactu-sensitive diffs, run during `/release` |
 | `guidelines-auditor` | `.claude/agents/guidelines-auditor.md` | subagent | Re-run the coding-guidelines audit |
 
 ## Rules

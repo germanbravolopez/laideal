@@ -58,7 +58,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Then state what the shop should check in the real app. If the fix touches invoices, estado, numbering or the printed QR, run the `verifactu-compliance-auditor` subagent on the diff before committing.
+Then state what the shop should check in the real app. If the fix touches invoices, estado, numbering or the printed QR, review that part of the diff against `docs/modules/verifactu/verifactu-requirements.md` before committing (the `verifactu-compliance-auditor` subagent runs only during `/release`).
 
 ## Red flags
 
