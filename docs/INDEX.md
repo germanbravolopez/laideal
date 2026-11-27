@@ -106,6 +106,7 @@ Subagents (`.claude/agents/<name>.md`, run with `Agent` and `subagent_type`): `d
 | `.github/actions/setup-toolchain/` | Qt, MinGW, Ninja, Inno Setup and ccache for every job |
 | `.github/scripts/Render-TestSummary.ps1` | Per-suite test report for the CI step summary |
 | `mkdocs.yml`, `pyproject.toml` | Documentation site configuration and its tooling |
+| `mkdocs_hooks.py` | Site build hook: publishes the root `README.md` and `CONTRIBUTING.md` as pages (Project section) and points every other link that leaves `docs/` at the repository on GitHub |
 | `releases/` | `package.ps1` (packaging recipe), `release.ps1` / `release.bat` (local fallback), `laideal.iss` (installer) |
 | `resources/` | `laideal.qrc` (icon, release notes, Qt translation), `laideal.rc.in`, `i18n/` |
 | `tests/CMakeLists.txt` | 35 CTest tests (`grep -c "add_test(NAME" tests/CMakeLists.txt`): Qt Test suites plus the `aeat_xsd` schema check. `updater_dialog` is the exe of `test_versiondialog.cpp`, `version_compare` the exe of `test_updater.cpp`. Each suite: [testing/unit_suites.md](testing/unit_suites.md) |

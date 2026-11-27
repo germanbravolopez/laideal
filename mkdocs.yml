@@ -43,6 +43,11 @@ theme:
 plugins:
   - search
 
+# Publishes the root README.md and CONTRIBUTING.md as pages and points the other
+# links that leave docs/ (src/, tests/, .claude/ ...) at the repository on GitHub.
+hooks:
+  - mkdocs_hooks.py
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -56,10 +61,9 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.details
 
-# Many docs link out to the C++ sources under src/ and to root-level files
-# (releases_notes.txt, .claude/...). Those live outside docs_dir, so MkDocs
-# cannot resolve them. Classify such links as warnings, not errors, so a plain
-# `mkdocs build` (non-strict) stays green while still surfacing real mistakes.
+# Links that leave docs/ are rewritten by mkdocs_hooks.py. What is left is
+# classified as a warning, not an error, so a plain `mkdocs build` (non-strict)
+# stays green while still surfacing real mistakes.
 validation:
   omitted_files: warn
   absolute_links: warn
@@ -85,6 +89,9 @@ nav:
       - Manual smoke test: testing/smoke_test.md
       - Automated UI smoke test: testing/ui_smoke.md
   - Index: INDEX.md
+  - Project:
+      - README: project/README.md
+      - Contributing: project/CONTRIBUTING.md
   - Modules:
       - MainWindow: modules/mainwindow.md
       - SQLite API: modules/sql_lite.md
